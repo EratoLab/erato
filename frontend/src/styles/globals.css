@@ -164,6 +164,10 @@
   --theme-fg-secondary: #374151;
   --theme-fg-muted: #6b7280;
   --theme-fg-accent: #1f2937; /* Monochrome accent text */
+  --theme-diff-added-fg: #1c6640;
+  --theme-diff-added-bg: #e6f3eb;
+  --theme-diff-removed-fg: #91354b;
+  --theme-diff-removed-bg: #fbe9ed;
 
   /* Primary action */
   --theme-action-primary-bg: #1f2937;
@@ -387,6 +391,10 @@
     --theme-fg-secondary: #e5e7eb;
     --theme-fg-muted: #9ca3af;
     --theme-fg-accent: #e5e7eb; /* Monochrome accent text */
+    --theme-diff-added-fg: #a7f3d0;
+    --theme-diff-added-bg: #143e2d;
+    --theme-diff-removed-fg: #fecdd3;
+    --theme-diff-removed-bg: #51212e;
 
     /* Primary action */
     --theme-action-primary-bg: #1f2937;
@@ -1514,4 +1522,41 @@ section[data-footnotes="true"] > .sr-only {
 
 .data-footnote-backref {
   display: none;
+}
+/* Exact text comparison is shared by hosts; themes own its semantic colours. */
+.text-comparison {
+  min-width: 0;
+  font-size: var(--theme-font-size-sm);
+  color: var(--theme-fg-primary);
+}
+.text-comparison [role="tabpanel"] {
+  padding-block: var(--theme-spacing-message-padding-y);
+}
+.text-comparison__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  margin-block: var(--theme-spacing-message-gap);
+}
+.text-comparison__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-spacing-message-gap);
+}
+.text-comparison__hint,
+.text-comparison__break {
+  color: var(--theme-fg-secondary);
+}
+.text-comparison__text del,
+.text-comparison__removed {
+  background: var(--theme-diff-removed-bg);
+  color: var(--theme-diff-removed-fg);
+  text-decoration: line-through;
+}
+.text-comparison__text ins,
+.text-comparison__added {
+  background: var(--theme-diff-added-bg);
+  color: var(--theme-diff-added-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

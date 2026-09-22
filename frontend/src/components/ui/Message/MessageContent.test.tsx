@@ -12,7 +12,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
-import { MessageContent } from "./MessageContent";
+import { MessageContent, useHostArtifact } from "./MessageContent";
 
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -1268,6 +1268,84 @@ describe("MessageContent", () => {
   });
 
   describe("host artifact envelope (hostArtifact prop)", () => {
+    it("renders a saved tool submission through the host card without an assistant text fence", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        const artifact = useHostArtifact();
+        return (
+          <div data-testid="submitted-card">
+            {artifact?.facetId}: {content}
+          </div>
+        );
+      };
+      try {
+        const tool = toolUseContent({});
+        const artifact = {
+          facetId: "editor",
+          renderMode: "suggestions" as const,
+          cardFenceLanguages: ["editor-draft"],
+          submittedCard: {
+            toolCallId: "tool-call-123",
+            language: "editor-draft",
+            content: "Saved draft",
+          },
+        };
+        const view = renderWithTheme(
+          <MessageContent content={[tool]} hostArtifact={artifact} />,
+        );
+        expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+          "editor: Saved draft",
+        );
+        view.unmount();
+        renderWithTheme(
+          <MessageContent
+            content={[{ ...tool, status: "error" }]}
+            hostArtifact={artifact}
+          />,
+        );
+        expect(screen.queryByTestId("submitted-card")).toBeNull();
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
+    it("renders one submitted card when a model also echoes the legacy fence", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        return <div data-testid="submitted-card">{content}</div>;
+      };
+      try {
+        renderWithTheme(
+          <MessageContent
+            content={[
+              ...textContent("```editor-draft\nOld echo\n```"),
+              toolUseContent({}),
+            ]}
+            hostArtifact={{
+              facetId: "editor",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["editor-draft"],
+              submittedCard: {
+                toolCallId: "tool-call-123",
+                language: "editor-draft",
+                content: "Accepted draft",
+              },
+            }}
+          />,
+        );
+        expect(screen.getAllByTestId("submitted-card")).toHaveLength(1);
+        expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+          "Accepted draft",
+        );
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
     it("treats a drifted email fence as the artifact via hostArtifact", () => {
       const { container } = renderWithTheme(
         <MessageContent

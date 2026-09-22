@@ -184,6 +184,16 @@ chat_provider_ids = ["test-token-limit"]
 # icon_32_path = "assets/ribbon-icon-32.png"
 # icon_80_path = "assets/ribbon-icon-80.png"
 #
+# # The SECOND add-in identity: the host-neutral document task-pane add-in,
+# # served at /office-addin/manifest-document.xml. Two add-ins in one catalog
+# # cannot share an id, so this block carries its own. Provider, support URL,
+# # ribbon labels and icons are inherited from the block above.
+# [integrations.ms_office.addin.document]
+# addin_id = "15a5d0e8-e96a-4e26-b6a1-bd8f429468c2"
+# [integrations.ms_office.addin.document.manifest]
+# display_name = "Erato for Documents"
+# description = "Erato AI assistant for Word documents"
+#
 # # Runtime hosting the Outlook launch event handlers. Required as soon as at
 # # least one launch event is configured, rejected when none are. Both paths are
 # # resolved against the deployment base URL, so they must start with "/" and

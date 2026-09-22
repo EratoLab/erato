@@ -754,6 +754,11 @@ msgid "officeAddin.settings.addin.clientActions.always.helper"
 msgstr "Realiza la acción sin preguntar. No se envía nada hasta que pulses Enviar en Outlook."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.settings.addin.clientActions.always.helper.word"
+msgstr "Escribe en el documento abierto sin preguntar. Los párrafos modificados desde tu solicitud se omiten, cada cambio se enumera después y una sola reversión deshace el lote."
+
+#. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.always.label"
 msgstr "Permitir siempre"
@@ -797,6 +802,11 @@ msgstr "No hay acciones sugeridas por el asistente disponibles en este momento."
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.addin.clientActions.intro"
 msgstr "Tus decisiones de la confirmación en el chat se guardan aquí y pueden cambiarse en cualquier momento. No se envía nada hasta que pulses Enviar en Outlook."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.settings.addin.clientActions.intro.word"
+msgstr "Tus decisiones de la confirmación en el chat se guardan aquí y se pueden cambiar en cualquier momento. Estas acciones escriben en el documento abierto de inmediato."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/BehaviorTabContent.tsx
@@ -954,6 +964,11 @@ msgid "officeAddin.settings.appearance.system.description.outlook"
 msgstr "Sigue tu tema de Outlook."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.system.description.word"
+msgstr "Usar el tema de Word."
+
+#. js-lingui-explicit-id
 #: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.audio.description"
 msgstr "Elige y prueba el micrófono que se usa para la entrada de voz en este complemento."
@@ -1002,6 +1017,16 @@ msgstr "Acciones de Outlook"
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.serversTools.outlookActions.caption"
 msgstr "Integrado en Outlook · este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.wordActions"
+msgstr "Acciones de Word"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.wordActions.caption"
+msgstr "Integrado en Word · este dispositivo"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -1636,6 +1661,1348 @@ msgstr "Leer tus chats de Teams requiere un inicio de sesión rápido."
 #: src/teams/providers/TeamsAuthProvider.tsx
 msgid "officeAddin.teams.signInToLoad.title"
 msgstr "Inicia sesión para cargar los chats de Teams"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: headings.length
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.afterOutline"
+msgstr "Propuesta · {0} encabezados"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.all"
+msgstr "Todos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.authoring.applied"
+msgstr "Reescritura del documento aplicada"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.authoring.apply"
+msgstr "Aplicar reescritura del documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.applying"
+msgstr "Aplicando y verificando la reescritura del documento…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.applyScope"
+msgstr "Aplica toda la estructura y el borrador. Si el documento de origen ha cambiado, el plan se detiene antes de escribir."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.backupDownloadFailed"
+msgstr "No se pudo descargar el original guardado. Sigue disponible en este panel."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: sourceHeadings.length
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.beforeOutline"
+msgstr "Original · {0} encabezados"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.budgetTimeout"
+msgstr "La comprobación del contexto del modelo agotó el tiempo de espera. Vuelve a enviar tu solicitud. No se modificó el documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.budgetUnavailable"
+msgstr "La comprobación del contexto del modelo falló. Vuelve a enviar tu solicitud. No se modificó el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.changed"
+msgstr "Reescrito"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.clearBody"
+msgstr "Se borrará el contenido principal y quedará el párrafo final vacío de Word."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: layout.columns ?? 1
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.columnCount"
+msgstr "{0} columnas"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: layout.columnSpacing
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.columnSpacing"
+msgstr "Separación de {0} pt"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.comment"
+msgstr "Comentario"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.compileFailed"
+msgstr "No se pudo preparar la estructura de Word propuesta. No se realizó ningún cambio. Solicita una nueva reescritura."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.consent"
+msgstr "¿Aplicar esta reescritura del documento?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.consentScope"
+msgstr "Aplicar toda la estructura y el borrador revisados arriba."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.continuousSection"
+msgstr "Continuar en la misma página"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.copied"
+msgstr "Borrador copiado."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.copy"
+msgstr "Copiar borrador"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.copyFailed"
+msgstr "No se pudo copiar el borrador."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: kept.length
+#. placeholder {1}: replaced.length
+#. placeholder {2}: removed.length
+#: src/word/components/WordDocumentPlanReview.tsx
+#: src/word/components/WordSavedPlanPreview.tsx
+msgid "officeAddin.word.authoring.counts"
+msgstr "{0} reutilizados · {1} reescritos · {2} eliminados · {added} añadidos"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: snapshot.read.size
+#. placeholder {1}: wordSourceReadRefs(snapshot).length
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.coverage"
+msgstr "{0} de {1} bloques de origen leídos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.defaultPages"
+msgstr "Páginas predeterminadas"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.documentScope"
+msgstr "Contenido y diseño del documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.downloadBody"
+msgstr "Descargar cuerpo original"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.downloadDocument"
+msgstr "Descargar documento original"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.draft"
+msgstr "Borrador completo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.emptyPart"
+msgstr "Vacío"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.endnote"
+msgstr "Nota al final"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.evenPages"
+msgstr "Páginas pares"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.evenSection"
+msgstr "Comenzar en la siguiente página par"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.expired"
+msgstr "Esta captura del documento ya no está activa. Incluye el documento en una nueva solicitud."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.failed"
+msgstr "No se pudo aplicar la reescritura. No se realizaron cambios en el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.filter"
+msgstr "Mostrar bloques de origen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.finalSection"
+msgstr "Sección final"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.firstPage"
+msgstr "Primera página"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.footer"
+msgstr "Pie de página"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.footerDistance"
+msgstr "Pie de página desde el borde inferior"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.footnote"
+msgstr "Nota al pie"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: item.source.join(", ")
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.from"
+msgstr "Origen: {0}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: group.items.length
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.groupCount"
+msgstr "{0} bloques"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.gutter"
+msgstr "Margen de encuadernación"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.header"
+msgstr "Encabezado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.headerDistance"
+msgstr "Encabezado desde el borde superior"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importedContent"
+msgstr "El cuerpo contiene contenido importado que Word aún no ha convertido en bloques de documento legibles."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.incomplete"
+msgstr "No se ha leído el documento completo para este plan. Solicita una nueva reescritura que lea todos los bloques de origen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.interrupted"
+msgstr "Word se detuvo durante la operación. El documento puede haber cambiado parcialmente. Revísalo antes de continuar; este plan no se ejecutará de nuevo."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.invalid"
+msgstr "El plan propuesto está incompleto o no es válido. Solicita un plan corregido; no se aplicó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.landscape"
+msgstr "Horizontal"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.locationChanged"
+msgstr "Este pasaje de origen ha cambiado o no se puede localizar de forma fiable."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.lockedContent"
+msgstr "Un control de contenido bloqueado impide reemplazar el cuerpo de este documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.marginBottom"
+msgstr "Margen inferior"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.marginLeft"
+msgstr "Margen izquierdo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.marginRight"
+msgstr "Margen derecho"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.marginTop"
+msgstr "Margen superior"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.missingContent"
+msgstr "Word no incluyó todo el contenido vinculado a este cuerpo. No se puede reestructurar porque esos objetos no podrían conservarse."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.modelBudget"
+msgstr "La reescritura completa no cabe en el contexto disponible del modelo seleccionado. Inicia un chat más corto o elige un modelo con más contexto."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeAnchored"
+msgstr "Contenido con anotaciones vinculadas"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordNativeBlockPreview.tsx
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeControl"
+msgstr "Control de contenido"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordNativeBlockPreview.tsx
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeField"
+msgstr "Campo del documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeImage"
+msgstr "Imagen o dibujo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordNativeBlockPreview.tsx
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.nativeObject"
+msgstr "Contenido nativo del documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeRetained"
+msgstr "Se conserva en Word con su contenido y formato nativos."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.nativeScope"
+msgstr "Revisa los cambios de texto y objetos a continuación. Comprueba la paginación y la apariencia finales en Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeSection"
+msgstr "Límite de sección"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordNativeBlockPreview.tsx
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeTable"
+msgstr "Tabla"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.new"
+msgstr "Contenido nuevo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.nextPageSection"
+msgstr "Comenzar en la página siguiente"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.noCapture"
+msgstr "Este panel no puede verificar el documento de origen de esta reescritura. Inclúyelo en una nueva solicitud."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.noHeadings"
+msgstr "Sin encabezados"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.notAllowed"
+msgstr "Esta acción no está disponible con la configuración actual."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.oddSection"
+msgstr "Comenzar en la siguiente página impar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.opening"
+msgstr "Contenido inicial"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.originalSource"
+msgstr "Origen original"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.outputUnverified"
+msgstr "Word aplicó cambios, pero no se pudo verificar el resultado. El original está guardado para recuperarlo."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: layout.width
+#. placeholder {1}: layout.height
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.pageDimensions"
+msgstr "Tamaño de página: {0} × {1} pt"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: layout.pageNumberStart
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.pageNumberStart"
+msgstr "La numeración de páginas empieza en {0}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: plan.stories?.length ?? 0
+#. placeholder {1}: plan.sections?.length ?? 0
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.partAndSectionCounts"
+msgstr "Partes del documento modificadas: {0} · Secciones configuradas: {1}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.parts"
+msgstr "Partes del documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.portrait"
+msgstr "Vertical"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.preparing"
+msgstr "Preparando una reescritura completa del documento…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.preservedStories"
+msgstr "Se conservan los encabezados, pies de página, notas y comentarios existentes. Esta propuesta modifica el cuerpo principal."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.proposedContent"
+msgstr "Contenido propuesto"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.protectedOperation"
+msgstr "Esta propuesta modifica o elimina contenido nativo protegido. Pide una propuesta revisada que conserve estos objetos y reescriba el texto que los rodea."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.readFailed"
+msgstr "Word no pudo leer el documento para esta operación. No se realizó ningún cambio."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.authoring.receiptScope"
+msgstr "El plan completo sigue disponible en los detalles."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.removed"
+msgstr "Eliminado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.restoreBody"
+msgstr "Restaurar cuerpo original"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.restoreDocument"
+msgstr "Restaurar documento original"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restoreUnverified"
+msgstr "Word no pudo verificar el documento restaurado. El original guardado sigue disponible para recuperarlo."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.reused"
+msgstr "Reutilizado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.reverting"
+msgstr "Comprobando y restaurando el documento…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.revertStale"
+msgstr "El documento cambió después de aplicar la reescritura. No se revirtió porque podría eliminar cambios posteriores."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.review"
+msgstr "Revisar reescritura del documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.sameFirstPage"
+msgstr "Usar el encabezado y pie de página habituales en la primera página"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.sameOddEvenPages"
+msgstr "Usar los mismos encabezados y pies de página en páginas pares e impares"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSavedPlanPreview.tsx
+msgid "officeAddin.word.authoring.savedDraft"
+msgstr "Reescritura del documento guardada"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSavedPlanPreview.tsx
+msgid "officeAddin.word.authoring.savedDraftSources"
+msgstr "El borrador enviado está guardado. El contenido original y los datos de imágenes no están disponibles en esta sesión; para aplicar los cambios se necesita una nueva solicitud con el documento."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: entry.source.length
+#: src/word/components/WordSavedPlanPreview.tsx
+msgid "officeAddin.word.authoring.savedRetainedBlocks"
+msgstr "{0} bloques originales conservados"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.scope"
+msgstr "Cuerpo principal del documento"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: label(section.after)
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.sectionAfter"
+msgstr "Termina después de {0}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.sectionLayout"
+msgstr "Secciones y diseño de página"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: index + 1
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.sectionNumber"
+msgstr "Sección {0}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.sectionOrder"
+msgstr "Esta propuesta reordena los límites de las secciones sin especificar su nuevo diseño. Pide un plan completo con las secciones ordenadas."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.separateFirstPage"
+msgstr "Encabezado y pie de página diferentes en la primera página"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSectionPlanPreview.tsx
+msgid "officeAddin.word.authoring.separateOddEvenPages"
+msgstr "Encabezados y pies de página diferentes en páginas pares e impares"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.sources"
+msgstr "Correspondencia con el origen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.stale"
+msgstr "El documento ha cambiado. No se aplicó nada. Envía una nueva solicitud para actualizar el plan."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.structure"
+msgstr "Estructura"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.tooLarge"
+msgstr "Este documento supera el límite actual de reescritura del documento completo. No se aplicará una reescritura parcial."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.tracking"
+msgstr "La reestructuración no está disponible con el estado actual del control de cambios. El complemento no ha cambiado esa configuración."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.unbalancedAnchors"
+msgstr "Un marcador o una anotación se extiende más allá del contenido capturado. Para reestructurarlo se necesita el intervalo completo."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.unbalancedFields"
+msgstr "Un campo del documento está incompleto en el contenido capturado. Para reestructurarlo se necesita el intervalo completo."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.unsupported"
+msgstr "Word no proporcionó una estructura editable completa para este documento. No se aplicó ninguna reescritura."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.unverifiedContent"
+msgstr "No se pudo verificar la estructura capturada del documento para reestructurarla."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.views"
+msgstr "Vistas de revisión del documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.wordDiagnostic"
+msgstr "Diagnóstico de Word"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.writeInterrupted"
+msgstr "Word no pudo completar la operación. El documento puede haber cambiado parcialmente. El original está guardado para recuperarlo."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.card.alwaysAllowLocked"
+msgstr "Tu organización exige confirmación cada vez que esta acción se ejecuta automáticamente."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.card.blocked.identity"
+msgstr "Esta respuesta se refiere a un documento distinto del que está abierto y no se puede aplicar aquí."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.card.blocked.noCapture"
+msgstr "Este panel ya no tiene la captura del documento usada para esta respuesta. Incluye el documento y vuelve a preguntar para aplicar cambios."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+#~ msgid "officeAddin.word.card.confirmEdits"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.card.confirmInsert"
+msgstr "Inserta el texto de abajo en el documento abierto, en la posición del cursor. Nunca se reemplaza un pasaje seleccionado."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.card.failed"
+msgstr "Word no aceptó el cambio. No se escribió nada en el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.card.inserted"
+msgstr "Insertado en el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+#~ msgid "officeAddin.word.card.revert"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+#~ msgid "officeAddin.word.card.revertDone"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+#~ msgid "officeAddin.word.card.working"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+#~ msgid "officeAddin.word.card.writeFailed"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.changed"
+msgstr "Documento incluido: ha cambiado desde el último envío"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.include"
+msgstr "Incluir este documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.included"
+msgstr "Documento incluido"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.includedPartial"
+msgstr "Documento incluido (parcial)"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: coverage.paragraphsSent
+#. placeholder {1}: coverage.paragraphsTotal
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.includedTruncated"
+msgstr "Documento incluido (primeros {0} de {1} párrafos)"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.newDocument"
+msgstr "Documento nuevo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.notIncluded"
+msgstr "Documento no incluido"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.clientActions.applyEdits"
+msgstr "Aplicar los cambios al documento"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.clientActions.insertAtCursor"
+msgstr "Insertar el texto en el cursor"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.copied"
+msgstr "¡Copiado!"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.copy"
+msgstr "Copiar informe"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.copyFailed"
+msgstr "No se pudo copiar el informe. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: edit.paragraph
+#. placeholder {0}: outcome.paragraph
+#: src/word/components/WordEditReport.tsx
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.report.paragraph"
+msgstr "Párrafo {0}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: edit.paragraph
+#. placeholder {0}: outcome.paragraph
+#. placeholder {1}: edit.through
+#. placeholder {1}: outcome.through
+#: src/word/components/WordEditReport.tsx
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.report.paragraphRange"
+msgstr "Párrafos {0}–{1}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.report.status.applied"
+msgstr "Aplicado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.changed"
+msgstr "Omitido: el párrafo cambió desde tu solicitud"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.failed"
+msgstr "Error: Word rechazó el cambio"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.overlapping"
+msgstr "Omitido: otro cambio de este lote ya lo abarca"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.partialOrdinal"
+msgstr "Omitido: el párrafo solo se envió parcialmente y no se puede reemplazar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.unknownOrdinal"
+msgstr "Omitido: el párrafo no formaba parte del contenido enviado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#~ msgid "officeAddin.word.review.added"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.allOutcomes"
+msgstr "Todos los resultados"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.allParagraphs"
+msgstr "Todos los párrafos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.review.appliedCount"
+msgstr "{applied} cambios aplicados"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.applyAll"
+msgstr "Aplicar los {total} cambios"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.applying"
+msgstr "Aplicando {total} cambios…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.applyOne"
+msgstr "Aplicar cambio"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.review.automatic"
+msgstr "Acción automática según tu ajuste «Permitir siempre»."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.batchScope"
+msgstr "Aplica los {total} cambios propuestos, incluidas las filas ocultas por los filtros. Los párrafos modificados se omitirán y se enumerarán."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.bodyRestored"
+msgstr "El contenido del documento se restauró al estado anterior a este lote."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#~ msgid "officeAddin.word.review.changes"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.clearedLocation"
+msgstr "Cursor movido al párrafo vaciado."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.clearRange"
+msgstr "Borrar texto y unir párrafos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.clearText"
+msgstr "Borrar texto del párrafo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.comparisonLabel"
+msgstr "Original al solicitar → reemplazo propuesto"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.consent"
+msgstr "¿Aplicar este lote?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.consentScope"
+msgstr "Aplicar al documento abierto los {total} cambios revisados arriba."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.coverage"
+msgstr "{complete} de {documentTotal} párrafos incluidos completos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.coverageLabel"
+msgstr "Cobertura del documento para esta solicitud"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: capture.paragraphsSent
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.coverageWindow"
+msgstr "Intervalo de la solicitud: párrafos 1–{0}. Solo se revisó el texto incluido."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.review.denied"
+msgstr "Propuesta rechazada. No se escribió nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#~ msgid "officeAddin.word.review.empty"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.emptyFilter"
+msgstr "Ningún cambio coincide con este filtro. El alcance del lote no ha cambiado."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.failed"
+msgstr "Error"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#~ msgid "officeAddin.word.review.fullComparison"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordSavedPlanPreview.tsx
+msgid "officeAddin.word.review.hideDetails"
+msgstr "Ocultar detalles"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.historical"
+msgstr "Original al solicitar / reemplazo propuesto en este lote. Los cambios posteriores en Word no se reflejan aquí."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.incomplete"
+msgstr "No se pudo completar el lote"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.insertConsent"
+msgstr "¿Insertar este texto?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.insertTitle"
+msgstr "Insertar texto"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.invalid"
+msgstr "Los cambios propuestos están incompletos o no son válidos. Solicita una propuesta corregida; no se aplicó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.keepText"
+msgstr "Conservar texto actual"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.locationChanged"
+msgstr "Este pasaje cambió o se movió. Ya no se puede verificar su ubicación exacta."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.locationUnavailable"
+msgstr "Ubicación no disponible"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.noExactLocation"
+msgstr "Este pasaje no se puede localizar de forma fiable a partir de este lote. La comparación sigue disponible."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.noOriginal"
+msgstr "La comparación con el original y la cobertura del documento no están disponibles tras recargar. El texto propuesto se muestra abajo."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.review.oneApplied"
+msgstr "1 cambio aplicado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.oneProposal"
+msgstr "1 cambio propuesto"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#~ msgid "officeAddin.word.review.original"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.outcomeFilter"
+msgstr "Resultado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.paragraphFilter"
+msgstr "Párrafos"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: capture.partialOrdinal
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.partial"
+msgstr "El párrafo {0} solo se incluyó parcialmente y no se puede reemplazar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.preparing"
+msgstr "Preparando cambios…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.proposalCount"
+msgstr "{total} cambios propuestos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.proposed"
+msgstr "Propuesto"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#~ msgid "officeAddin.word.review.removed"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.replaceText"
+msgstr "Reemplazo de texto · al solicitar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.restoreBody"
+msgstr "Restaurar contenido"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.review.restored"
+msgstr "Contenido del documento restaurado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertBatch"
+msgstr "Revertir lote"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.reverted"
+msgstr "Revertido"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.revertedComparison"
+msgstr "Comparación del lote revertido."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: applied + failed
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.revertedTotals"
+msgstr "{0} cambios revertidos · {skipped} omitidos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertExpired"
+msgstr "No se puede revertir este lote. Su captura de un solo uso ya se utilizó o fue reemplazada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertFailed"
+msgstr "No se pudo restaurar todo el contenido. Es posible que parte ya se haya restaurado. La reversión de un solo uso se ha consumido."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.reverting"
+msgstr "Restaurando el contenido del documento…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTitle"
+msgstr "¿Restaurar el contenido del documento?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertUnavailable"
+msgstr "No se puede revertir: la captura fue reemplazada, ya se utilizó o pertenece a otro documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertWarning"
+msgstr "¿Restaurar el contenido al estado anterior a este lote? Esto puede eliminar cambios posteriores."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.selected"
+msgstr "Pasaje seleccionado en Word. Esto puede cambiar la ubicación de inserción de una acción posterior."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordSavedPlanPreview.tsx
+msgid "officeAddin.word.review.showDetails"
+msgstr "Mostrar detalles"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.showInWord"
+msgstr "Mostrar en Word ↗"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: filtered.length
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.shown"
+msgstr "{0} de {total} mostrados"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.skipped"
+msgstr "Omitido"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#~ msgid "officeAddin.word.review.textViews"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.title"
+msgstr "Revisar cambios"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.review.totals"
+msgstr "{applied} aplicados · {skipped} omitidos · {failed} fallidos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.trackingOff"
+msgstr "Los cambios se aplican directamente. Erato no añade marcas de revisión."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.trackingOn"
+msgstr "El control de cambios de Word ya está activado. Word puede registrar estas modificaciones; Erato no cambiará esa configuración."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.trackingUnknown"
+msgstr "El estado del control de cambios de Word no está disponible. Erato no cambiará esa configuración."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.uncertainTotals"
+msgstr "{skipped} omitidos · {failed} escrituras sin confirmar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+#~ msgid "officeAddin.word.review.whitespace"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.writeFailed"
+msgstr "Word se detuvo al aplicar los cambios. Es posible que algunos ya estén en el documento. Revísalo antes de continuar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.bindingRemoved"
+msgstr "Quitar el vínculo a los datos del documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.bookmark"
+msgstr "Marcador"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.bothLocked"
+msgstr "El contenido está bloqueado; no se puede quitar el control."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.cellRetained"
+msgstr "Se conserva el contenido existente"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.contentLocked"
+msgstr "El contenido está bloqueado; se puede quitar el control."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.controlLocked"
+msgstr "El contenido se puede editar; no se puede quitar el control."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: value.tag
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.controlTag"
+msgstr "Etiqueta: {0}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.controlUnlocked"
+msgstr "El contenido se puede editar; se puede quitar el control."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.drawing"
+msgstr "Dibujo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.emptyCell"
+msgstr "Celda vacía"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.fieldCode"
+msgstr "Código de campo: {instruction}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.fieldInWord"
+msgstr "El valor se calcula en Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.image"
+msgstr "Imagen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.imageInWord"
+msgstr "La apariencia de la imagen se muestra en Word."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: value.widthPt
+#. placeholder {1}: value.heightPt
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.mediaDimensions"
+msgstr "{0} × {1} pt"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.objectChanges"
+msgstr "Cambios en el contenido existente"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.removeObject"
+msgstr "Quitar: {label}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.tableContents"
+msgstr "Contenido de la tabla"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.tableDimensions"
+msgstr "{rows} filas · {columnCount} columnas"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.unwrapObject"
+msgstr "Quitar {label} y conservar su contenido"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.updateObject"
+msgstr "Actualizar: {label}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.alwaysInsert"
+msgstr "Inserta texto en el cursor actual sin preguntar. Esta acción no tiene reversión de Erato; usa Deshacer en Word si es necesario."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.alwaysPlan"
+msgstr "Aplica la reescritura completa sin preguntar, solo si el documento sigue coincidiendo con el origen revisado. Se puede revertir en Erato mientras el documento aplicado no cambie."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.catalogRoute"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.copy"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.downloadButton"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.downloadManifest"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedAppsRoute"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.macUnsupported"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.openCatalogDocs"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.redirectUriInstruction"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.reviewManifest"
+msgstr ""
 
 # ==============================
 # Unstable IDs

@@ -1,0 +1,1408 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Word v1 · Component reuse audit</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #192d37;
+        --muted: #566874;
+        --line: #d8e1e5;
+        --paper: #fff;
+        --bg: #f3f6f7;
+        --accent: #126c65;
+        --reuse: #e6f3ef;
+        --new: #fff1d9;
+        --word: #eaf0fb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          16px/1.6 system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      a {
+        color: #116861;
+        text-underline-offset: 3px;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid #a040cb;
+        outline-offset: 3px;
+      }
+      header {
+        background: #173a40;
+        color: white;
+        padding: 52px max(24px, calc((100vw - 1180px) / 2)) 44px;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .eyebrow span {
+        opacity: 0.7;
+      }
+      h1 {
+        font-size: clamp(30px, 4vw, 49px);
+        line-height: 1.12;
+        letter-spacing: -0.035em;
+        margin: 16px 0 20px;
+        max-width: 920px;
+      }
+      header p {
+        max-width: 850px;
+        color: #d9e7e8;
+        font-size: 18px;
+      }
+      header .meta {
+        font-size: 13px;
+        margin-top: 25px;
+        color: #bdd2d5;
+      }
+      main {
+        max-width: 1228px;
+        margin: auto;
+        padding: 28px 24px 60px;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 24px;
+        padding: 0 0 24px;
+        font-size: 14px;
+      }
+      h2 {
+        font-size: 26px;
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+        margin: 0 0 12px;
+      }
+      h3 {
+        font-size: 18px;
+        line-height: 1.4;
+        margin: 0 0 10px;
+      }
+      p {
+        margin: 8px 0 16px;
+      }
+      section {
+        scroll-margin-top: 20px;
+        margin: 28px 0 48px;
+      }
+      .panel {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 24px;
+      }
+      .lead {
+        font-size: 18px;
+        max-width: 950px;
+      }
+      .muted,
+      .fine {
+        color: var(--muted);
+      }
+      .fine {
+        font-size: 13px;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-top: 22px;
+      }
+      .stat {
+        border-left: 3px solid var(--accent);
+        padding-left: 18px;
+      }
+      .stat b {
+        display: block;
+        font-size: 30px;
+        line-height: 1.2;
+      }
+      .stat span {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .three {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .lane {
+        border-radius: 14px;
+        padding: 24px;
+      }
+      .lane.reuse {
+        background: var(--reuse);
+      }
+      .lane.new {
+        background: var(--new);
+      }
+      .lane.word {
+        background: var(--word);
+      }
+      .tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 4px 8px;
+        border-radius: 5px;
+        white-space: nowrap;
+      }
+      .tag.reuse {
+        background: var(--reuse);
+        color: #216455;
+      }
+      .tag.new {
+        background: var(--new);
+        color: #815613;
+      }
+      .tag.word {
+        background: var(--word);
+        color: #385781;
+      }
+      .lane .tag {
+        padding: 0;
+        margin-bottom: 12px;
+      }
+      .lane ul {
+        padding-left: 19px;
+        margin: 12px 0;
+      }
+      .lane li {
+        margin-bottom: 7px;
+      }
+      .flow {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 0;
+        font-size: 14px;
+      }
+      .flow span {
+        padding: 9px 13px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      .flow b {
+        color: var(--accent);
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 18px 0;
+      }
+      .toolbar button {
+        border: 1px solid #bdcbd0;
+        border-radius: 8px;
+        background: white;
+        color: var(--ink);
+        padding: 7px 13px;
+        font-size: 14px;
+      }
+      .toolbar button[aria-pressed="true"] {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: white;
+      }
+      .tablewrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: white;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 14px;
+        text-align: left;
+      }
+      th {
+        background: #edf2f3;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.055em;
+      }
+      th,
+      td {
+        padding: 15px 17px;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td:first-child {
+        min-width: 185px;
+        font-weight: 650;
+      }
+      td code {
+        white-space: normal;
+      }
+      code {
+        font:
+          12px/1.5 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+        background: #eff3f4;
+        padding: 1px 4px;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      .two {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 24px;
+      }
+      .shots {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .shot {
+        margin: 0;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        min-width: 0;
+      }
+      .shot h3 {
+        font-size: 16px;
+      }
+      .shot a {
+        display: block;
+        background: #f7f9fa;
+        max-height: 570px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .shot figcaption {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .callout {
+        border-left: 4px solid #b27920;
+        background: #fff7e8;
+        padding: 18px 22px;
+        margin: 20px 0;
+      }
+      .callout strong {
+        display: block;
+      }
+      details {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin: 12px 0;
+        background: white;
+      }
+      summary {
+        cursor: pointer;
+        padding: 17px 20px;
+        font-weight: 650;
+      }
+      details > div {
+        padding: 0 20px 14px;
+      }
+      .steps {
+        counter-reset: step;
+        list-style: none;
+        padding: 0;
+      }
+      .steps li {
+        position: relative;
+        padding: 0 0 25px 48px;
+      }
+      .steps li:before {
+        counter-increment: step;
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: 2px;
+        width: 29px;
+        height: 29px;
+        background: var(--accent);
+        color: white;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .steps strong {
+        display: block;
+      }
+      .source {
+        font-size: 12px;
+        overflow-wrap: anywhere;
+        color: var(--muted);
+      }
+      .success {
+        color: #216455;
+        font-weight: 650;
+      }
+      .alert {
+        color: #855c1c;
+        font-weight: 650;
+      }
+      .foot {
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+        font-size: 13px;
+        color: var(--muted);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 850px) {
+        .three,
+        .two {
+          grid-template-columns: 1fr;
+        }
+        .stats {
+          gap: 10px;
+        }
+        .stat b {
+          font-size: 25px;
+        }
+        .panel {
+          padding: 19px;
+        }
+        main {
+          padding-inline: 16px;
+        }
+      }
+      @media (max-width: 540px) {
+        header {
+          padding: 32px 20px;
+        }
+        .stats {
+          grid-template-columns: 1fr;
+        }
+        .stat {
+          margin: 5px 0;
+        }
+        .shots {
+          grid-template-columns: 1fr;
+        }
+        th,
+        td {
+          padding: 12px;
+        }
+        .tablewrap table {
+          min-width: 620px;
+        }
+      }
+      @media print {
+        header {
+          background: white;
+          color: #192d37;
+          padding: 20px;
+        }
+        header p,
+        header .meta {
+          color: #566874;
+        }
+        nav,
+        .toolbar {
+          display: none;
+        }
+        main {
+          padding: 10px;
+        }
+        section {
+          break-inside: avoid;
+        }
+        .shot a {
+          max-height: none;
+        }
+        .three,
+        .two {
+          display: block;
+        }
+        .lane {
+          margin-bottom: 12px;
+        }
+      }
+      .two > *,
+      .three > * {
+        min-width: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="eyebrow">
+        Word v1 / Architecture review <span>· 18 September 2026</span>
+      </div>
+      <h1>Word review UI: component audit and implemented fixes.</h1>
+      <p>
+        This historical audit covers the UI added by the Word feature: review
+        panels, document actions, receipts, inclusion controls and Word action
+        settings. It also covers their focus, feedback and translation behavior.
+        The implementation and validation below show the completed adjustments.
+      </p>
+      <div class="meta">
+        Scoped adjustments implemented locally · Baseline audit: c6898b31 ·
+        Actual-component browser validation
+      </div>
+    </header>
+    <main>
+      <nav aria-label="Audit sections">
+        <a href="#second-pass">Second-pass findings</a
+        ><a href="#verdict">Finding</a
+        ><a href="#ownership">What belongs where</a
+        ><a href="#inventory">Component inventory</a
+        ><a href="#evidence">Visual evidence</a
+        ><a href="#safeguards">Migration safeguards</a
+        ><a href="#sequence">Recommended sequence</a
+        ><a href="README.md">Detailed source audit ↗</a>
+      </nav>
+
+      <section class="panel">
+        <div class="eyebrow">Implemented · Word feature only</div>
+        <h2>Shared controls now own the visuals</h2>
+        <p>
+          Word review buttons, cards, rows, tabs, chevrons and the document icon
+          reuse the frontend library. New shared <strong>Select</strong> and
+          <strong>TextComparison</strong> components fill the two actual gaps.
+          Word keeps document structure, source mapping, write checks, receipts
+          and recovery behavior.
+        </p>
+        <p>
+          <strong>Measured:</strong> changing theme tokens changes the review
+          card radius to 24px, select radius to 12px and button text to 22px.
+          Keyboard completion focuses the compact receipt. Filter selections
+          survive collapse. Both review modes fit 320px and 400px with German
+          labels in light/dark customer themes.
+        </p>
+        <p>
+          <a href="implementation.md">Implementation details and validation</a>
+          ·
+          <a href="evidence/implementation-browser.json">Behavior evidence</a> ·
+          <a href="evidence/implementation-theme.json">Theme evidence</a>
+        </p>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+          "
+        >
+          <figure>
+            <img
+              style="width: 100%; max-width: 400px"
+              src="evidence/implemented-paragraph-de-light-400.png"
+              alt="Implemented paragraph review with shared controls and German labels"
+            />
+            <figcaption>
+              41 proposed edits across a 320-paragraph source · customer light
+              theme
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              style="width: 100%; max-width: 320px"
+              src="evidence/implemented-paragraph-de-dark-320.png"
+              alt="Implemented paragraph review at 320 pixels in the customer dark theme"
+            />
+            <figcaption>Same review at 320px · customer dark theme</figcaption>
+          </figure>
+          <figure>
+            <img
+              style="width: 100%; max-width: 400px"
+              src="evidence/implemented-structure-de-light-400.png"
+              alt="Implemented structural document review in German"
+            />
+            <figcaption>
+              Full-document structure review · 320 source blocks
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          These render the actual components with a synthetic Word host. They do
+          not verify live Office.js execution. The remaining sections preserve
+          the original audit and its before-state screenshots.
+        </p>
+      </section>
+      <section id="second-pass" class="panel">
+        <div class="eyebrow">Double-check / completed before adjustment</div>
+        <h2 style="margin-top: 12px">
+          The follow-up is scoped to the new Word UI.
+        </h2>
+        <p>
+          The second pass traced surrounding code to verify reuse, but the
+          adjustment scope is the
+          <strong
+            >eight new Word component files and their direct
+            integrations</strong
+          >. General setup, sign-in and pre-existing library styling are
+          excluded. Shared-library work is limited to what the new Word controls
+          actually require.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Additional finding</th>
+                <th>Evidence</th>
+                <th>Correct owner / adjustment</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Focus is lost after applying</td>
+                <td>
+                  Keyboard Enter on either apply button leaves focus on
+                  <strong>BODY</strong>.
+                </td>
+                <td>
+                  Word must transfer owned focus to the completed result when it
+                  removes the confirmation. Preserve focus elsewhere during
+                  background operations.
+                </td>
+              </tr>
+              <tr>
+                <td>Standalone error and raw states differ</td>
+                <td>
+                  Invalid rewrite notice loses its scoped variables and border.
+                  Invalid paragraph proposal shows raw JSON without an
+                  explanation.
+                </td>
+                <td>
+                  Word states on shared surfaces. Existing SyntaxHighlightedCode
+                  and CollapsibleCodeBlock can handle technical detail.
+                </td>
+              </tr>
+              <tr>
+                <td>Copy feedback is inconsistent</td>
+                <td>
+                  Rejected Copy report produces no visible response; Copy draft
+                  shows a failure message.
+                </td>
+                <td>
+                  Keep document serialization local; use Button and explicit
+                  feedback. Keep this change within the Word action controls.
+                </td>
+              </tr>
+              <tr>
+                <td>Word overrides button typography</td>
+                <td>
+                  Shared font token set to 22px: reference Button is
+                  <strong>22px</strong>; Word consent and copy remain
+                  <strong>14px</strong>.
+                </td>
+                <td>
+                  Remove the broad inherited-font rule during the Word CSS
+                  cleanup.
+                </td>
+              </tr>
+              <tr>
+                <td>Translations remain empty</td>
+                <td>
+                  <strong>144 Word action/UI strings per language</strong> are
+                  untranslated in de/fr/es/pl; English is populated.
+                </td>
+                <td>
+                  Complete the new Word action/UI translations and validate
+                  their layouts. The nine setup strings are excluded from this
+                  count.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Confirmed:</strong> the checked 320px structural views,
+          insertion preview, expired snapshot, partial completion and Revert
+          warning had no page overflow or browser errors. That does not remove
+          the issues above.
+        </p>
+        <p class="fine">
+          Actual component source; Word/chat/policy mocked. Keyboard focus loss
+          reproduced with Enter. Live Office integration and translated layouts
+          are still acceptance work.
+          <a href="second-pass.md">Full second-pass analysis</a> ·
+          <a href="evidence/second-pass-browser.json">Browser observations</a> ·
+          <a href="evidence/second-pass-focus.json">Keyboard evidence</a> ·
+          <a href="evidence/second-pass-inventory.json"
+            >Context trace (inspection only)</a
+          >
+        </p>
+      </section>
+
+      <section id="verdict" class="panel">
+        <h2>This needs a component cleanup before more Word UI is added.</h2>
+        <p class="lead">
+          The main primitives already exist in the frontend library. We should
+          reuse them and remove the competing Word CSS. We do not need another
+          design direction or a Word-specific component kit.
+        </p>
+        <p>
+          Some Word colors already use shared tokens, so light/dark surfaces do
+          change. The gaps are control geometry, density, focus styling, diff
+          colors, and duplicated control behavior. The implementation introduced
+          these inconsistencies; updating the kit alone cannot resolve them.
+        </p>
+        <div class="stats">
+          <div class="stat">
+            <b>18</b
+            ><span
+              >native button source sites in the 8 Word component files</span
+            >
+          </div>
+          <div class="stat">
+            <b>3</b
+            ><span
+              >native select source sites without a shared select
+              component</span
+            >
+          </div>
+          <div class="stat">
+            <b>388 lines</b
+            ><span
+              >of Word review CSS; a mix of valid layout and duplicated
+              styling</span
+            >
+          </div>
+        </div>
+        <p class="fine">
+          Source-site counts are not rendered instance counts or a reuse
+          percentage. Native HTML remains appropriate for document content and
+          many semantic containers.
+        </p>
+      </section>
+
+      <section id="ownership">
+        <h2>Three ownership decisions</h2>
+        <p class="muted">
+          Shared primitives own appearance and interaction conventions. Word
+          owns what an edit means and how it reaches the document.
+        </p>
+        <div class="three">
+          <article class="lane reuse">
+            <div class="tag reuse">Reuse existing frontend</div>
+            <h3>Most of the visible controls</h3>
+            <ul>
+              <li><strong>Button:</strong> apply, copy, Revert, details</li>
+              <li><strong>TabRail:</strong> both sets of review views</li>
+              <li><strong>Card:</strong> review frame and receipt surface</li>
+              <li>
+                <strong>Row + DisclosureChevron:</strong> expandable edit rows
+              </li>
+              <li>
+                <strong>ActionConfirmationCard:</strong> permission decision
+              </li>
+              <li><strong>DocumentIcon:</strong> document inclusion control</li>
+            </ul>
+            <p class="fine">
+              Verified in source, deliberate shared exports, and the actual
+              built library exports.
+            </p>
+          </article>
+          <article class="lane new">
+            <div class="tag new">Add to frontend</div>
+            <h3>Two justified new primitives</h3>
+            <ul>
+              <li>
+                <strong>TextComparison / InlineDiff:</strong> exact original,
+                proposed and changed text
+              </li>
+              <li>
+                <strong>Native Select:</strong> a themed, labeled native filter
+                control
+              </li>
+            </ul>
+            <p>
+              Add dedicated added/removed theme tokens. If needed, extend the
+              shared permission card for compact embedding and Alert for
+              appropriate announcement behavior.
+            </p>
+            <p class="fine">
+              These are recommendations. No such new components were created in
+              this audit.
+            </p>
+          </article>
+          <article class="lane word">
+            <div class="tag word">Keep in Word / add-in core</div>
+            <h3>The document workflow</h3>
+            <ul>
+              <li>Original and proposed structure</li>
+              <li>Source references and coverage meaning</li>
+              <li>Full draft and source mapping</li>
+              <li>Applied / skipped / failed outcomes</li>
+              <li>Locate, apply and guarded Revert</li>
+              <li>Review state, stale-source checks and Office calls</li>
+            </ul>
+            <p class="fine">
+              Shared Office policy/settings orchestration belongs in add-in
+              core, already composed from frontend controls.
+            </p>
+          </article>
+        </div>
+        <div class="flow" aria-label="Recommended architecture">
+          <span>Word data + host actions</span><b>→</b
+          ><span>Word review composition</span><b>→</b
+          ><span>Frontend components</span><b>→</b
+          ><span>Shared tokens + theme CSS</span>
+        </div>
+      </section>
+
+      <section id="inventory">
+        <h2>Component-by-component decision</h2>
+        <div class="toolbar" aria-label="Filter ownership decisions">
+          <button type="button" data-filter="all" aria-pressed="true">
+            All areas</button
+          ><button type="button" data-filter="reuse" aria-pressed="false">
+            Reuse existing</button
+          ><button type="button" data-filter="new" aria-pressed="false">
+            New shared work</button
+          ><button type="button" data-filter="word" aria-pressed="false">
+            Keep local
+          </button>
+        </div>
+        <p id="filter-status" class="fine" role="status">
+          Showing all 15 areas.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>UI area</th>
+                <th>Current implementation</th>
+                <th>Decision and boundary</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-body">
+              <tr data-owner="reuse">
+                <td>
+                  Chat shell, input and settings<br /><span class="tag reuse"
+                    >Already shared</span
+                  >
+                </td>
+                <td>
+                  Shared ThemeProvider, MessageList, ChatInput, ModalBase,
+                  TabRail, settings panes, EntityRow and RadioCard.
+                </td>
+                <td>
+                  Keep this composition. The Office theme adapter correctly
+                  forwards system theme choice to the shared provider.
+                </td>
+              </tr>
+              <tr data-owner="reuse">
+                <td>
+                  Apply / copy / Revert / details<br /><span class="tag reuse"
+                    >Reuse Button</span
+                  >
+                </td>
+                <td>
+                  Raw buttons, copied <code>ACTION_BUTTON_CLASS</code> recipes,
+                  and Word CSS geometry.
+                </td>
+                <td>
+                  Use library Button with appropriate variants and busy/disabled
+                  states. Remove the copied recipes and descendant overrides, or
+                  they will still win.
+                </td>
+              </tr>
+              <tr data-owner="reuse">
+                <td>
+                  Review view switches<br /><span class="tag reuse"
+                    >Reuse TabRail</span
+                  >
+                </td>
+                <td>
+                  Paragraph comparison duplicates tab behavior. Structural views
+                  use a group of pressed buttons.
+                </td>
+                <td>
+                  Use controlled TabRail for both. Preserve panel IDs and
+                  selection. The paragraph tabs already support arrow keys;
+                  structural views would gain the common tab behavior.
+                </td>
+              </tr>
+              <tr data-owner="reuse">
+                <td>
+                  Frame and expandable rows<br /><span class="tag reuse"
+                    >Reuse Card / Row</span
+                  >
+                </td>
+                <td>
+                  Custom frame, fixed corners, bespoke row toggle and chevron.
+                  Structural sections use native details.
+                </td>
+                <td>
+                  Use Card surfaces and Row disclosures with DisclosureChevron.
+                  Keep Word content/layout local. Native details may remain; no
+                  need to replace sound HTML purely to add a component.
+                </td>
+              </tr>
+              <tr data-owner="reuse">
+                <td>
+                  Permission decision<br /><span class="tag reuse"
+                    >Keep shared card</span
+                  >
+                </td>
+                <td>
+                  ActionConfirmationCard is reused, but the Word feature adds
+                  overrides for its typography, spacing and focus.
+                </td>
+                <td>
+                  Remove the Word overrides and preserve focus when Word
+                  replaces the confirmation with a result. Reuse the existing
+                  shared component; its pre-existing geometry is outside this
+                  refactor.
+                </td>
+              </tr>
+              <tr data-owner="reuse">
+                <td>
+                  Document inclusion chip<br /><span class="tag reuse"
+                    >Reuse Button + icon</span
+                  >
+                </td>
+                <td>
+                  Raw toggle with token-based colors and a platform-dependent
+                  document emoji.
+                </td>
+                <td>
+                  Use shared Button with <code>aria-pressed</code> and
+                  DocumentIcon. The full-width placement, inclusion state,
+                  capture and labels stay in Word.
+                </td>
+              </tr>
+              <tr data-owner="new">
+                <td>
+                  Exact text comparison<br /><span class="tag new"
+                    >New shared primitive</span
+                  >
+                </td>
+                <td>
+                  Comparison renderer lives inside WordReviewPanel;
+                  <code>wordTextDiff</code> is already independent of Office.
+                </td>
+                <td>
+                  Extract pure TextComparison and diff utility; add semantic
+                  diff tokens. Preserve whitespace, Unicode,
+                  original-unavailable and large-diff fallback. No Office refs
+                  or write calls in frontend.
+                </td>
+              </tr>
+              <tr data-owner="new">
+                <td>
+                  Paragraph / status / source filters<br /><span class="tag new"
+                    >New native Select</span
+                  >
+                </td>
+                <td>
+                  Three native select sites, styled separately. No general
+                  native select was found in the public frontend UI.
+                </td>
+                <td>
+                  Add a small themed native Select using the existing
+                  field/label contract. A model selector or action menu is not
+                  an equivalent substitute.
+                </td>
+              </tr>
+              <tr data-owner="new">
+                <td>
+                  Errors, warnings and passive notices<br /><span
+                    class="tag new"
+                    >Small API gap</span
+                  >
+                </td>
+                <td>
+                  Local notice paragraphs with largely the same visual
+                  treatment.
+                </td>
+                <td>
+                  Use Alert for actual alerts. It currently hardcodes
+                  <code>role="alert"</code>; passive explanations and polite
+                  status updates need suitable semantics, not automatic
+                  assertive announcements.
+                </td>
+              </tr>
+              <tr data-owner="word">
+                <td>
+                  Completed receipt<br /><span class="tag word"
+                    >Compose locally first</span
+                  >
+                </td>
+                <td>
+                  Paragraph receipt is a component; structural receipt
+                  duplicates its markup and state interpretation.
+                </td>
+                <td>
+                  Consolidate presentation inside Word, using Card/Button.
+                  Consider a generic ActionResult only when another host needs
+                  the same contract. Permission granted must not mean edit
+                  succeeded.
+                </td>
+              </tr>
+              <tr data-owner="word">
+                <td>
+                  Coverage and status labels<br /><span class="tag word"
+                    >Local meaning</span
+                  >
+                </td>
+                <td>
+                  Native progress and spans; some success/error colors already
+                  follow tokens.
+                </td>
+                <td>
+                  Keep document counts and outcomes local. Tokenize progress
+                  accent. CountBadge is suitable only for numeric counts, not
+                  paragraph IDs or applied/skipped labels.
+                </td>
+              </tr>
+              <tr data-owner="word">
+                <td>
+                  Structure, draft and source mapping<br /><span
+                    class="tag word"
+                    >Word composition</span
+                  >
+                </td>
+                <td>
+                  Outline columns, grouped draft, source references, retained
+                  view/filter state and bounded scroll regions.
+                </td>
+                <td>
+                  Keep in Word and compose shared controls around the content.
+                  Heading/list previews and source identity encode document
+                  semantics.
+                </td>
+              </tr>
+              <tr data-owner="word">
+                <td>
+                  Host actions and policy integration<br /><span
+                    class="tag word"
+                    >Word + add-in core</span
+                  >
+                </td>
+                <td>
+                  HostCardCodeBlock registration, captures, Office calls, write
+                  gate, stored consent and result states.
+                </td>
+                <td>
+                  Keep the Word adapter and safeguards in Word; common Office
+                  client-action/settings orchestration stays in add-in core. No
+                  Word workflow needs to move into the kit.
+                </td>
+              </tr>
+              <tr data-owner="reuse">
+                <td>
+                  Preparing / invalid / technical detail<br /><span
+                    class="tag reuse"
+                    >Existing primitives</span
+                  >
+                </td>
+                <td>
+                  Some states render outside the review root; invalid paragraph
+                  data falls back to a custom raw fence.
+                </td>
+                <td>
+                  Use self-contained shared surfaces/status treatment.
+                  SyntaxHighlightedCode and CollapsibleCodeBlock are already
+                  exported. Distinguish incomplete streaming from a completed
+                  invalid proposal.
+                </td>
+              </tr>
+              <tr data-owner="word">
+                <td>
+                  Insertion and Revert variants<br /><span class="tag word"
+                    >Preserve contracts</span
+                  >
+                </td>
+                <td>
+                  Insertion is the third v1 action. Paragraph Revert has an
+                  inline overwrite warning; structural Revert checks whether the
+                  document changed.
+                </td>
+                <td>
+                  Standardize controls, keeping each action's scope and
+                  protection. Do not add batch-Revert promises to insertion or
+                  change an inline warning to a modal solely to reuse a
+                  component.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="evidence">
+        <h2>What the current components actually render</h2>
+        <p>
+          These are screenshots of the existing components under the current
+          custom theme, with a simulated Word host. They are
+          <strong>observations of the implementation</strong>, not replacement
+          mockups. The structural example has 320 source blocks; the paragraph
+          example has 41 proposed edits across a 320-paragraph source.
+        </p>
+        <div class="toolbar" aria-label="Choose screenshot theme">
+          <button type="button" data-theme="light" aria-pressed="true">
+            Light theme</button
+          ><button type="button" data-theme="dark" aria-pressed="false">
+            Dark theme
+          </button>
+        </div>
+        <div class="two">
+          <div class="shots">
+            <figure class="shot">
+              <h3>Full-document review</h3>
+              <a
+                id="structure-link"
+                href="evidence/structure-light.png"
+                target="_blank"
+                rel="noopener"
+                ><img
+                  id="structure-shot"
+                  src="evidence/structure-light.png"
+                  alt="Current structural rewrite card with custom tabs, shared consent buttons and a custom copy button"
+              /></a>
+              <figcaption>
+                Shared consent buttons are pills; Copy draft and the custom view
+                switches keep fixed corners. Scroll or open for the full
+                capture.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <h3>Paragraph review</h3>
+              <a
+                id="paragraph-link"
+                href="evidence/paragraph-light.png"
+                target="_blank"
+                rel="noopener"
+                ><img
+                  id="paragraph-shot"
+                  src="evidence/paragraph-light.png"
+                  alt="Current paragraph batch review with custom filters and inline text comparison"
+              /></a>
+              <figcaption>
+                Diff colors, select geometry and focus styling stay locally
+                defined, including in dark mode.
+              </figcaption>
+            </figure>
+          </div>
+          <div>
+            <h3>Measured theme propagation</h3>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Change applied</th>
+                    <th>Shared reference</th>
+                    <th>Current Word result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Card radius: 24 → 2px</td>
+                    <td class="success">24 → 2px</td>
+                    <td class="alert">Stays 10px</td>
+                  </tr>
+                  <tr>
+                    <td>Button radius: pill → 2px</td>
+                    <td class="success">Changes to 2px</td>
+                    <td class="alert">Copy stays 5px</td>
+                  </tr>
+                  <tr>
+                    <td>Control padding: 8/12 → 16/24px</td>
+                    <td class="success">Follows tokens</td>
+                    <td class="alert">Copy stays 6/10px</td>
+                  </tr>
+                  <tr>
+                    <td>Control minimum increases</td>
+                    <td class="success">28 → 52px</td>
+                    <td class="alert">Consent minimum stays 34px</td>
+                  </tr>
+                  <tr>
+                    <td>Focus token → purple</td>
+                    <td>Token set to #c026d3</td>
+                    <td class="alert">Copy outline stays blue</td>
+                  </tr>
+                  <tr>
+                    <td>Light → dark</td>
+                    <td class="success">Surfaces adapt</td>
+                    <td>
+                      Surfaces adapt too; removed-text colors remain fixed
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="fine">
+              Minimum height is the computed CSS minimum, not actual rendered
+              height. Values were read after color transitions settled.
+              <a href="evidence/theme-probe.json">Full measurements</a>.
+            </p>
+            <div class="callout">
+              <strong>Even shared components can be overridden.</strong
+              ><code>.word-review__footer button</code> fixes the minimum
+              height. <code>.word-review__consent</code> uses
+              <code>!important</code> padding. Simply importing Button will not
+              remove those conflicts.
+            </div>
+          </div>
+        </div>
+        <p class="fine">
+          Browser scope: Chromium, 400px viewport, actual Word and frontend
+          component source, current library/kit CSS, custom theme CSS and JSON
+          tokens. Word APIs, chat, policy and persistence mocked. No page errors
+          or horizontal page overflow in the checked cases. This does not verify
+          the installed Office session or its currently served assets.
+        </p>
+      </section>
+
+      <section id="safeguards">
+        <h2>Reuse must preserve the behavior we designed</h2>
+        <details open>
+          <summary>
+            Collapsing a completed card must retain state and remove hidden
+            controls from navigation.
+          </summary>
+          <div>
+            <p>
+              Word currently keeps the full review mounted with
+              <code>hidden</code>, retaining its filter and view. Shared Card's
+              default animated Collapse only clips content; its own
+              documentation notes that descendants remain in keyboard and
+              accessibility navigation. <code>unmountOnCollapse</code> solves
+              hiding but discards local state.
+            </p>
+            <p>
+              <strong>Use a shared surface with a retained hidden body</strong>,
+              or explicitly extend the shared disclosure contract to meet both
+              requirements. A direct switch to animated Collapse is not
+              equivalent.
+            </p>
+            <p class="source">
+              Card.tsx:95 · WordHostCardRenderer.tsx:441 ·
+              WordDocumentPlanCard.tsx:326
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Tabs need TabRail, not a row of standard Buttons.</summary>
+          <div>
+            <p>
+              The library deliberately renders its tabs without Button's
+              geometry hook, so customer pill styling does not turn every tab
+              into an action button. Use TabRail's controlled value, panel
+              relationships and keyboard behavior. Keep Word's panels and
+              long-document scrolling outside it.
+            </p>
+            <p class="source">
+              frontend/src/components/ui/Controls/TabRail.tsx:143
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>
+            A permission receipt and an execution result are different states.
+          </summary>
+          <div>
+            <p>
+              ActionConfirmationCard owns allow once / always allow / deny. Word
+              owns whether the permitted operation was applied, skipped,
+              blocked, failed or reverted. Its compact decision row must not
+              falsely report successful editing. A generic result surface can
+              accept outcome text and actions later; the Word state machine
+              stays local.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Comparison needs exact content and bounded work.</summary>
+          <div>
+            <p>
+              Keep the current whitespace and Unicode fidelity, paragraph-break
+              markers, original-unavailable state and complete Original/Proposed
+              views. Preserve the existing 80,000-character and 250,000-cell
+              comparison bounds when extracting the algorithm. Add added/removed
+              colors to the full theme contract with light/dark defaults;
+              document changes are not automatically errors or successes.
+            </p>
+            <p class="source">
+              office-addin/src/word/utils/wordTextDiff.ts:7 ·
+              WordReviewPanel.tsx:74
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Not every notice should interrupt a screen reader.</summary>
+          <div>
+            <p>
+              Shared Alert currently hardcodes <code>role="alert"</code>. Use it
+              for actionable alerts. Keep routine explanations passive and
+              progress/results politely announced where appropriate, or add an
+              explicit shared announcement API before broad migration.
+            </p>
+            <p class="source">
+              frontend/src/components/ui/Feedback/Alert.tsx:93
+            </p>
+          </div>
+        </details>
+        <div class="callout">
+          <strong>Also fix action-specific settings copy.</strong>The current
+          Always allow helper promises that changed paragraphs are skipped and a
+          single Revert undoes the batch. Full-document rewriting instead stops
+          the whole plan if its source changed, and guarded Revert refuses
+          subsequent edits. Supply the correct explanation per Word action
+          through the add-in settings API.
+        </div>
+      </section>
+
+      <section id="sequence" class="two">
+        <div>
+          <h2>Recommended implementation sequence</h2>
+          <ol class="steps">
+            <li>
+              <strong>Replace the duplicated primitives.</strong>Buttons, tabs,
+              frames, row disclosures and the document icon. Remove competing
+              Word geometry/focus/consent selectors at the same time.
+            </li>
+            <li>
+              <strong>Fill the actual shared gaps.</strong>Extract
+              TextComparison and its diff tokens; add a native Select. Make
+              small permission-card/Alert API extensions only where composition
+              cannot satisfy the existing contract.
+            </li>
+            <li>
+              <strong>Consolidate Word composition.</strong>Unify the two
+              receipts locally. Retain structure/source mapping, all action
+              safeguards and the review state. Correct the action-specific
+              settings explanation.
+            </li>
+            <li>
+              <strong>Validate theme propagation and behavior together.</strong
+              >Use actual shared components with representative long documents,
+              consent states, completed receipts, keyboard navigation and
+              changed theme tokens.
+            </li>
+          </ol>
+        </div>
+        <div class="panel">
+          <h2>What “done” should mean</h2>
+          <ul>
+            <li>
+              Default and custom theme; light and dark; larger text; 320px and
+              400px panes.
+            </li>
+            <li>
+              Both paragraph batches and full-document rewrites with many
+              changes.
+            </li>
+            <li>
+              Theme radius, spacing and focus changes reach every applicable
+              control.
+            </li>
+            <li>
+              Pending, applying, partial/complete, blocked, denied, collapsed,
+              expanded and reverted states remain understandable.
+            </li>
+            <li>
+              Hidden controls leave keyboard/accessibility navigation; filters
+              and view selection survive reopening.
+            </li>
+            <li>
+              Filters do not change the apply scope. Source checks and guarded
+              Revert remain unchanged.
+            </li>
+          </ul>
+          <p class="fine">
+            Existing Word card unit tests mock the confirmation component. They
+            are useful for domain behavior but cannot prove the real controls
+            inherit the theme. Add a focused browser integration check with
+            actual library components.
+          </p>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <p>
+          <strong>Analysis only.</strong> No application source, theme
+          configuration or running development server was changed. This
+          directory adds documentation and captured evidence.
+          <a href="README.md">Full audit with file references</a> ·
+          <a href="evidence/inventory.json">AST component inventory</a> ·
+          <a href="evidence/theme-probe.json">Browser measurements</a>
+        </p>
+        <p>
+          Public library exports were verified in
+          <code>frontend/dist-library/library.mjs</code>. Linked mode already
+          points at that local frontend build. The current differences can be
+          explained by the Word source and CSS; they do not require an
+          outdated-kit explanation.
+        </p>
+      </footer>
+    </main>
+    <script>
+      document.querySelectorAll("[data-filter]").forEach((button) =>
+        button.addEventListener("click", () => {
+          const filter = button.dataset.filter;
+          document
+            .querySelectorAll("[data-filter]")
+            .forEach((other) =>
+              other.setAttribute("aria-pressed", String(other === button)),
+            );
+          let count = 0;
+          document.querySelectorAll("#inventory-body tr").forEach((row) => {
+            row.hidden = filter !== "all" && row.dataset.owner !== filter;
+            if (!row.hidden) count++;
+          });
+          document.getElementById("filter-status").textContent =
+            filter === "all"
+              ? `Showing all ${count} areas.`
+              : `Showing ${count} areas: ${button.textContent.toLowerCase()}.`;
+        }),
+      );
+      document.querySelectorAll("[data-theme]").forEach((button) =>
+        button.addEventListener("click", () => {
+          const theme = button.dataset.theme;
+          document
+            .querySelectorAll("[data-theme]")
+            .forEach((other) =>
+              other.setAttribute("aria-pressed", String(other === button)),
+            );
+          for (const kind of ["structure", "paragraph"]) {
+            const src = `evidence/${kind}-${theme}.png`;
+            document.getElementById(`${kind}-shot`).src = src;
+            document.getElementById(`${kind}-link`).href = src;
+          }
+        }),
+      );
+    </script>
+  </body>
+</html>

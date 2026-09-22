@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "snapshot": "example-s7",
+  "scope": "body",
+  "entries": [
+    {
+      "kind": "insert",
+      "contextRefs": ["b4", "b5"],
+      "blocks": [
+        {
+          "id": "n1",
+          "type": "heading",
+          "level": 1,
+          "text": "Recommendation"
+        }
+      ]
+    },
+    {
+      "kind": "replace",
+      "source": ["b4", "b5"],
+      "blocks": [
+        {
+          "id": "n2",
+          "type": "paragraph",
+          "text": "Proceed with a two-region pilot in October; retain the existing support team during the pilot."
+        }
+      ]
+    },
+    {
+      "kind": "keep",
+      "source": ["b1"]
+    },
+    {
+      "kind": "replace",
+      "source": ["b2"],
+      "blocks": [
+        {
+          "id": "n3",
+          "type": "heading",
+          "level": 2,
+          "text": "Background"
+        },
+        {
+          "id": "n4",
+          "type": "paragraph",
+          "text": "The existing service operates in two regions."
+        }
+      ]
+    },
+    {
+      "kind": "keep",
+      "source": ["b6"]
+    }
+  ],
+  "deleted": [
+    {
+      "source": ["b3"],
+      "reason": "Remove the duplicated background sentence, as requested."
+    }
+  ],
+  "readToken": "example-read-proof"
+}

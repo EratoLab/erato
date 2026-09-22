@@ -1,0 +1,39 @@
+{
+  "archivedAt": "2026-09-22",
+  "sourceCommit": "0a14a6e61bffb95c116f055c6f45ec5fbc2e813a",
+  "archive": "word-v1-evidence.zip",
+  "sha256": "864b0fe0f8e20d06810f67bd5f0f0e70636b36dc4370d04c32688464928e8fb0",
+  "bytes": 5882187,
+  "files": [
+    {
+      "path": "2026-09-19/backend-e2e/reproduction-harness.zip",
+      "sha256": "e8759f961f1961f1f3b4f99c7b09db65ccb15ad24d89be81af3959dd2529d38b",
+      "bytes": 465284
+    },
+    {
+      "path": "2026-09-19/experiment-harness.zip",
+      "sha256": "94e7efa920737a47fe3e5a78fa978fff64bbe378ca318942b91d76b2e156f64a",
+      "bytes": 53844
+    },
+    {
+      "path": "2026-09-19/production-v1/native-production-evidence.zip",
+      "sha256": "9f790ce08ab4f79a10e6b1bc8fa580c5a7bc38a1fcb34ff17e670460385e8070",
+      "bytes": 462514
+    },
+    {
+      "path": "2026-09-20/structured/native-structured-evidence.zip",
+      "sha256": "54b1316adeaf4566c80147d26b8813a746474175a299996017bc3a023e0abc0c",
+      "bytes": 907814
+    },
+    {
+      "path": "2026-09-21/structured-rich/native-rich-evidence.zip",
+      "sha256": "b77e7c9f2f7b8e48d8f90eab826a41198bb592a549e0bc852813fa5e65113ba0",
+      "bytes": 3815279
+    },
+    {
+      "path": "2026-09-21/structured-rich/native-results.json",
+      "sha256": "0259d354dcf63f28cab7bd66dc206e54a8ebf10346ea8f17ab3f022893e5d118",
+      "bytes": 8658486
+    }
+  ]
+}

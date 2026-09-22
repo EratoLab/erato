@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "snapshot": "815a7413-69d6-4abd-a43a-c0e2020e639d",
+  "readToken": "d0312f4b-f999-4aa7-9e98-8d05177baa4d",
+  "scope": "body",
+  "entries": [
+    {
+      "kind": "replace",
+      "source": ["b3"],
+      "blocks": [
+        {
+          "id": "new-heading",
+          "type": "heading",
+          "level": 1,
+          "text": "Reorganized native fixture"
+        },
+        {
+          "id": "new-text",
+          "type": "paragraph",
+          "text": "ENRICHED: Background: the pilot starts in October."
+        }
+      ]
+    },
+    {
+      "kind": "keep",
+      "source": ["b4"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b1"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b2"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b5"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b6"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b7"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b8"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b9"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b10"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b11"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b12"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b13"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b14"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b15"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b16"]
+    }
+  ],
+  "deleted": []
+}

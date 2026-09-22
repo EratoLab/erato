@@ -1,0 +1,204 @@
+{
+  "allAssertionsPassed": true,
+  "method": "Independent Python XML/relationship/media-byte profiling of native body.getOoxml captures; no production comparator imports. This is body-package evidence, not a full DOCX snapshot.",
+  "checks": [
+    {
+      "check": "original body profile restored",
+      "before": 23,
+      "after": 25,
+      "passed": true
+    },
+    {
+      "check": "original body profile restored",
+      "before": 30,
+      "after": 32,
+      "passed": true
+    },
+    {
+      "check": "original body profile restored",
+      "before": 34,
+      "after": 36,
+      "passed": true
+    },
+    {
+      "check": "original body profile restored",
+      "before": 38,
+      "after": 40,
+      "passed": true
+    },
+    {
+      "check": "retained native objects and stories unchanged",
+      "before": 34,
+      "after": 35,
+      "passed": true
+    },
+    {
+      "check": "retained native objects and stories unchanged",
+      "before": 38,
+      "after": 39,
+      "passed": true
+    },
+    {
+      "check": "49 exact draft texts, 31 list items, 8 distinct list groups",
+      "passed": true
+    }
+  ],
+  "profiles": {
+    "23": {
+      "paragraphs": 11,
+      "tables": 0,
+      "images": 0,
+      "sections": 1,
+      "listItems": 0,
+      "comments": 0,
+      "notes": 0,
+      "fields": 0,
+      "links": 0,
+      "brokenRelationships": 0,
+      "fileBytes": 12093
+    },
+    "24": {
+      "paragraphs": 50,
+      "tables": 0,
+      "images": 0,
+      "sections": 1,
+      "listItems": 31,
+      "comments": 0,
+      "notes": 0,
+      "fields": 0,
+      "links": 0,
+      "brokenRelationships": 0,
+      "fileBytes": 14146
+    },
+    "25": {
+      "paragraphs": 11,
+      "tables": 0,
+      "images": 0,
+      "sections": 1,
+      "listItems": 0,
+      "comments": 0,
+      "notes": 0,
+      "fields": 0,
+      "links": 0,
+      "brokenRelationships": 0,
+      "fileBytes": 12530
+    },
+    "30": {
+      "paragraphs": 11,
+      "tables": 0,
+      "images": 0,
+      "sections": 1,
+      "listItems": 0,
+      "comments": 0,
+      "notes": 0,
+      "fields": 0,
+      "links": 0,
+      "brokenRelationships": 0,
+      "fileBytes": 12564
+    },
+    "31": {
+      "paragraphs": 50,
+      "tables": 0,
+      "images": 0,
+      "sections": 1,
+      "listItems": 31,
+      "comments": 0,
+      "notes": 0,
+      "fields": 0,
+      "links": 0,
+      "brokenRelationships": 0,
+      "fileBytes": 14562
+    },
+    "32": {
+      "paragraphs": 11,
+      "tables": 0,
+      "images": 0,
+      "sections": 1,
+      "listItems": 0,
+      "comments": 0,
+      "notes": 0,
+      "fields": 0,
+      "links": 0,
+      "brokenRelationships": 0,
+      "fileBytes": 12956
+    },
+    "34": {
+      "paragraphs": 20,
+      "tables": 1,
+      "images": 1,
+      "sections": 2,
+      "listItems": 2,
+      "comments": 1,
+      "notes": 1,
+      "fields": 1,
+      "links": 1,
+      "brokenRelationships": 0,
+      "fileBytes": 16572
+    },
+    "35": {
+      "paragraphs": 21,
+      "tables": 1,
+      "images": 1,
+      "sections": 2,
+      "listItems": 2,
+      "comments": 1,
+      "notes": 1,
+      "fields": 1,
+      "links": 1,
+      "brokenRelationships": 0,
+      "fileBytes": 16613
+    },
+    "36": {
+      "paragraphs": 20,
+      "tables": 1,
+      "images": 1,
+      "sections": 2,
+      "listItems": 2,
+      "comments": 1,
+      "notes": 1,
+      "fields": 1,
+      "links": 1,
+      "brokenRelationships": 0,
+      "fileBytes": 16591
+    },
+    "38": {
+      "paragraphs": 340,
+      "tables": 1,
+      "images": 1,
+      "sections": 2,
+      "listItems": 2,
+      "comments": 1,
+      "notes": 1,
+      "fields": 1,
+      "links": 1,
+      "brokenRelationships": 0,
+      "fileBytes": 22892
+    },
+    "39": {
+      "paragraphs": 341,
+      "tables": 1,
+      "images": 1,
+      "sections": 2,
+      "listItems": 2,
+      "comments": 1,
+      "notes": 1,
+      "fields": 1,
+      "links": 1,
+      "brokenRelationships": 0,
+      "fileBytes": 22965
+    },
+    "40": {
+      "paragraphs": 340,
+      "tables": 1,
+      "images": 1,
+      "sections": 2,
+      "listItems": 2,
+      "comments": 1,
+      "notes": 1,
+      "fields": 1,
+      "links": 1,
+      "brokenRelationships": 0,
+      "fileBytes": 22901
+    }
+  }
+}

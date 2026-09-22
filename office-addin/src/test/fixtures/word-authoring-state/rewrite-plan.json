@@ -1,0 +1,376 @@
+{
+  "version": 1,
+  "snapshot": "3f5f02a0-e5d1-4290-9601-776d50a88927",
+  "readToken": "a650b2cc-1e08-4dba-b45c-0bb755b4dd68",
+  "scope": "body",
+  "entries": [
+    {
+      "kind": "replace",
+      "source": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6",
+        "b7",
+        "b8",
+        "b9",
+        "b10",
+        "b11"
+      ],
+      "blocks": [
+        {
+          "type": "heading",
+          "level": 1,
+          "text": "Absatz in Microsoft Word einfügen – Anleitung und Qualitätscheck",
+          "id": "n1"
+        },
+        {
+          "type": "paragraph",
+          "text": "Dieses Dokument beschreibt die Vorbereitung, das Einfügen und die Formatierung. Prüfe am Ende Inhalt, Struktur und Lesbarkeit.",
+          "id": "n2"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "1. Ziel und Kontext",
+          "id": "n3"
+        },
+        {
+          "type": "paragraph",
+          "text": "Absätze enthalten Text und Formatinformationen. Nutze passende Formatvorlagen für ein einheitliches Dokument.",
+          "id": "n4"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "2. Welche Unterstützung brauchst Du?",
+          "id": "n5"
+        },
+        {
+          "type": "paragraph",
+          "text": "Wähle eine der folgenden Optionen:",
+          "id": "n6"
+        },
+        {
+          "type": "list-item",
+          "list": "choices",
+          "level": 0,
+          "ordered": false,
+          "text": "Option A: Du fügst den Absatz selbst ein.",
+          "id": "n7"
+        },
+        {
+          "type": "list-item",
+          "list": "choices",
+          "level": 0,
+          "ordered": false,
+          "text": "Option B: Ich überarbeite Inhalt und Struktur.",
+          "id": "n8"
+        },
+        {
+          "type": "paragraph",
+          "text": "Eine konsistente Überarbeitung spart Zeit.",
+          "id": "n9"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "3. Option A – Absatz selbst einfügen (Schritt für Schritt)",
+          "id": "n10"
+        },
+        {
+          "type": "heading",
+          "level": 3,
+          "text": "3.1 Vorbereitung",
+          "id": "n11"
+        },
+        {
+          "type": "list-item",
+          "list": "prep",
+          "level": 0,
+          "ordered": false,
+          "text": "Öffne das Dokument in Microsoft Word.",
+          "id": "n12"
+        },
+        {
+          "type": "list-item",
+          "list": "prep",
+          "level": 0,
+          "ordered": false,
+          "text": "Blende bei Bedarf Formatierungszeichen ein: Start → Absatz → ¶.",
+          "id": "n13"
+        },
+        {
+          "type": "list-item",
+          "list": "prep",
+          "level": 0,
+          "ordered": false,
+          "text": "Kläre, ob Du eine Überschrift, Fließtext oder einen Listeneintrag brauchst.",
+          "id": "n14"
+        },
+        {
+          "type": "heading",
+          "level": 3,
+          "text": "3.2 Einfügen",
+          "id": "n15"
+        },
+        {
+          "type": "list-item",
+          "list": "steps",
+          "level": 0,
+          "ordered": true,
+          "text": "Klicke an die gewünschte Stelle.",
+          "id": "n16"
+        },
+        {
+          "type": "list-item",
+          "list": "steps",
+          "level": 0,
+          "ordered": true,
+          "text": "Füge den Text ein (Strg+V / Cmd+V).",
+          "id": "n17"
+        },
+        {
+          "type": "list-item",
+          "list": "steps",
+          "level": 0,
+          "ordered": true,
+          "text": "Nutze bei Bedarf Nur Text übernehmen.",
+          "id": "n18"
+        },
+        {
+          "type": "list-item",
+          "list": "steps",
+          "level": 0,
+          "ordered": true,
+          "text": "Enter erzeugt einen Absatz; Shift+Enter einen Zeilenumbruch.",
+          "id": "n19"
+        },
+        {
+          "type": "heading",
+          "level": 3,
+          "text": "3.3 Formatierung (damit es schöner aussieht)",
+          "id": "n20"
+        },
+        {
+          "type": "paragraph",
+          "text": "Nutze konsistente Formatvorlagen statt wiederholter manueller Anpassungen.",
+          "id": "n21"
+        },
+        {
+          "type": "list-item",
+          "list": "format",
+          "level": 0,
+          "ordered": false,
+          "text": "Wende die passende Formatvorlage an.",
+          "id": "n22"
+        },
+        {
+          "type": "list-item",
+          "list": "format",
+          "level": 0,
+          "ordered": false,
+          "text": "Nutze echte Listenfunktionen.",
+          "id": "n23"
+        },
+        {
+          "type": "list-item",
+          "list": "format",
+          "level": 0,
+          "ordered": false,
+          "text": "Prüfe Abstände und Einzüge.",
+          "id": "n24"
+        },
+        {
+          "type": "list-item",
+          "list": "format",
+          "level": 0,
+          "ordered": false,
+          "text": "Vereinheitliche Schreibweisen und Fachbegriffe.",
+          "id": "n25"
+        },
+        {
+          "type": "heading",
+          "level": 3,
+          "text": "3.4 Qualitätscheck vor Versand",
+          "id": "n26"
+        },
+        {
+          "type": "list-item",
+          "list": "qc",
+          "level": 0,
+          "ordered": false,
+          "text": "Lies den Text vollständig durch.",
+          "id": "n27"
+        },
+        {
+          "type": "list-item",
+          "list": "qc",
+          "level": 0,
+          "ordered": false,
+          "text": "Prüfe die Überschriften-Logik.",
+          "id": "n28"
+        },
+        {
+          "type": "list-item",
+          "list": "qc",
+          "level": 0,
+          "ordered": false,
+          "text": "Prüfe Listen und Nummerierung.",
+          "id": "n29"
+        },
+        {
+          "type": "list-item",
+          "list": "qc",
+          "level": 0,
+          "ordered": false,
+          "text": "Prüfe Rechtschreibung und Grammatik.",
+          "id": "n30"
+        },
+        {
+          "type": "list-item",
+          "list": "qc",
+          "level": 0,
+          "ordered": false,
+          "text": "Speichere die Datei oder exportiere bei Bedarf ein PDF.",
+          "id": "n31"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "4. Option B – Inhalt, Struktur und Format",
+          "id": "n32"
+        },
+        {
+          "type": "paragraph",
+          "text": "Eine vollständige Überarbeitung berücksichtigt Zweck und Zielgruppe.",
+          "id": "n33"
+        },
+        {
+          "type": "list-item",
+          "list": "binfo",
+          "level": 0,
+          "ordered": false,
+          "text": "Liefere den Text.",
+          "id": "n34"
+        },
+        {
+          "type": "list-item",
+          "list": "binfo",
+          "level": 0,
+          "ordered": false,
+          "text": "Bestimme die Zielposition.",
+          "id": "n35"
+        },
+        {
+          "type": "list-item",
+          "list": "binfo",
+          "level": 0,
+          "ordered": false,
+          "text": "Kläre Zweck und Zielgruppe.",
+          "id": "n36"
+        },
+        {
+          "type": "list-item",
+          "list": "binfo",
+          "level": 0,
+          "ordered": false,
+          "text": "Wähle den gewünschten Ton.",
+          "id": "n37"
+        },
+        {
+          "type": "list-item",
+          "list": "binfo",
+          "level": 0,
+          "ordered": false,
+          "text": "Nenne Vorgaben und Pflichtformulierungen.",
+          "id": "n38"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "5. Häufige Probleme (und schnelle Lösungen)",
+          "id": "n39"
+        },
+        {
+          "type": "list-item",
+          "list": "trouble",
+          "level": 0,
+          "ordered": false,
+          "text": "Formatierung: Nur Text übernehmen und Formatvorlage anwenden.",
+          "id": "n40"
+        },
+        {
+          "type": "list-item",
+          "list": "trouble",
+          "level": 0,
+          "ordered": false,
+          "text": "Nummerierung: Nummerierung fortsetzen nutzen.",
+          "id": "n41"
+        },
+        {
+          "type": "list-item",
+          "list": "trouble",
+          "level": 0,
+          "ordered": false,
+          "text": "Abstände: Absatzabstände statt Leerzeilen.",
+          "id": "n42"
+        },
+        {
+          "type": "list-item",
+          "list": "trouble",
+          "level": 0,
+          "ordered": false,
+          "text": "Kopfzeile: Zurück in den Dokumenttext klicken.",
+          "id": "n43"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "6. Kurz-Checkliste (30 Sekunden)",
+          "id": "n44"
+        },
+        {
+          "type": "list-item",
+          "list": "short",
+          "level": 0,
+          "ordered": false,
+          "text": "Cursor richtig platziert",
+          "id": "n45"
+        },
+        {
+          "type": "list-item",
+          "list": "short",
+          "level": 0,
+          "ordered": false,
+          "text": "Text eingefügt",
+          "id": "n46"
+        },
+        {
+          "type": "list-item",
+          "list": "short",
+          "level": 0,
+          "ordered": false,
+          "text": "Formatvorlage angewendet",
+          "id": "n47"
+        },
+        {
+          "type": "list-item",
+          "list": "short",
+          "level": 0,
+          "ordered": false,
+          "text": "Rechtschreibung geprüft und gespeichert",
+          "id": "n48"
+        },
+        {
+          "type": "paragraph",
+          "text": "Passe den letzten Durchgang an Deine Zielgruppe und Deinen Anlass an.",
+          "id": "n49"
+        }
+      ]
+    }
+  ],
+  "deleted": []
+}

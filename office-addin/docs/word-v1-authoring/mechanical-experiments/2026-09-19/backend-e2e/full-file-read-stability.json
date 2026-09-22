@@ -1,0 +1,44 @@
+[
+  {
+    "before": 2,
+    "after": 3,
+    "changedDocxParts": [
+      "docProps/app.xml",
+      "word/document.xml",
+      "word/endnotes.xml",
+      "word/footnotes.xml",
+      "word/settings.xml"
+    ]
+  },
+  {
+    "before": 8,
+    "after": 9,
+    "changedDocxParts": [
+      "docProps/app.xml",
+      "word/document.xml",
+      "word/endnotes.xml",
+      "word/footnotes.xml",
+      "word/settings.xml"
+    ]
+  },
+  {
+    "before": 17,
+    "after": 18,
+    "changedDocxParts": [
+      "docProps/app.xml",
+      "word/endnotes.xml",
+      "word/footnotes.xml",
+      "word/settings.xml"
+    ]
+  },
+  {
+    "before": 22,
+    "after": 23,
+    "changedDocxParts": [
+      "docProps/app.xml",
+      "word/endnotes.xml",
+      "word/footnotes.xml",
+      "word/settings.xml"
+    ]
+  }
+]

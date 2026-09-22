@@ -1,0 +1,150 @@
+{
+  "host": "Word Mac 16.113.1",
+  "allAssertionsPassed": true,
+  "cases": ["mixed-content", "long-restructure", "full-clear"],
+  "fullDocxRecoveriesAfterUndoClear": 3,
+  "commands": [
+    {
+      "id": 30,
+      "op": "document-docx",
+      "ok": true,
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 174,
+      "totalMs": 810,
+      "debugSnapshotPaths": [],
+      "docxPath": "30.docx",
+      "ooxmlPath": "30.xml"
+    },
+    {
+      "id": 31,
+      "op": "production-apply",
+      "ok": true,
+      "productionResult": {
+        "status": "applied",
+        "recoveryAvailable": true,
+        "afterFingerprint": "4ff852403a82c2cca33bb49d112686bf1039c28223c293a1f68b03e406f50f59"
+      },
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 875,
+      "totalMs": 1411,
+      "debugSnapshotPaths": [],
+      "docxPath": "31.docx",
+      "ooxmlPath": "31.xml"
+    },
+    {
+      "id": 32,
+      "op": "production-restore",
+      "ok": true,
+      "productionResult": {
+        "status": "reverted"
+      },
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 314,
+      "totalMs": 852,
+      "debugSnapshotPaths": [],
+      "docxPath": "32.docx",
+      "ooxmlPath": "32.xml"
+    },
+    {
+      "id": 33,
+      "op": "document-docx",
+      "ok": true,
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 112,
+      "totalMs": 1222,
+      "debugSnapshotPaths": [],
+      "docxPath": "33.docx",
+      "ooxmlPath": "33.xml"
+    },
+    {
+      "id": 34,
+      "op": "production-apply",
+      "ok": true,
+      "productionResult": {
+        "status": "applied",
+        "recoveryAvailable": true,
+        "afterFingerprint": "61b061f644a3a425376e9156b7208dcb6514fc58ff305d5afe7cca559b43f250"
+      },
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 1512,
+      "totalMs": 1913,
+      "debugSnapshotPaths": [],
+      "docxPath": "34.docx",
+      "ooxmlPath": "34.xml"
+    },
+    {
+      "id": 35,
+      "op": "production-restore",
+      "ok": true,
+      "productionResult": {
+        "status": "reverted"
+      },
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 370,
+      "totalMs": 1485,
+      "debugSnapshotPaths": [],
+      "docxPath": "35.docx",
+      "ooxmlPath": "35.xml"
+    },
+    {
+      "id": 36,
+      "op": "document-docx",
+      "ok": true,
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 152,
+      "totalMs": 690,
+      "debugSnapshotPaths": [],
+      "docxPath": "36.docx",
+      "ooxmlPath": "36.xml"
+    },
+    {
+      "id": 37,
+      "op": "production-apply",
+      "ok": true,
+      "productionResult": {
+        "status": "applied",
+        "recoveryAvailable": true,
+        "afterFingerprint": "65642c5710576fb272ca3987f4d379d06a2713744666d7011a39924a21bbde72"
+      },
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 889,
+      "totalMs": 1255,
+      "debugSnapshotPaths": [],
+      "docxPath": "37.docx",
+      "ooxmlPath": "37.xml"
+    },
+    {
+      "id": 38,
+      "op": "production-restore",
+      "ok": true,
+      "productionResult": {
+        "status": "reverted"
+      },
+      "tracking": "Off",
+      "fingerprintError": null,
+      "writeMs": 394,
+      "totalMs": 947,
+      "debugSnapshotPaths": [],
+      "docxPath": "38.docx",
+      "ooxmlPath": "38.xml"
+    }
+  ],
+  "officeJsHostVersion": "16.113.917.1",
+  "date": "2026-09-19",
+  "model": "No new model calls; deterministic proposals exercise the production client",
+  "productionBundleSha256": "21e29f11c4e5493c893cdd1b945a5b6e5b666b7ef7199e8c50710cebcb763d4f",
+  "interruptedClearRecovery": {
+    "failedCommand": 28,
+    "recoveryCommand": 29,
+    "restoredProfileEqualsOriginal": true,
+    "cause": "Test omitted required note separator records and retained comment extension metadata; corrected fixture clears user content while keeping valid native definitions."
+  }
+}

@@ -169,10 +169,16 @@ export function buildMcpToolsSection({
           message: "Allow write operations",
         }),
         description: pausesHostActions
-          ? t({
-              id: "chatInput.connectors.allowWrites.descriptionWithHostActions",
+          ? // Host-neutral on purpose: every Office.js host that proposes
+            // actions of its own inherits this one string through the shared
+            // composer, so naming Outlook (or its Reply and Send buttons)
+            // would be wrong in a Word or Teams pane. The id moved with the
+            // wording so the existing de/fr/es/pl translations — which all
+            // name Outlook — are re-translated rather than silently kept.
+            t({
+              id: "chatInput.connectors.allowWrites.descriptionHostActions",
               message:
-                "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send.",
+                "Off, only tools the server marks read-only are offered. Also pauses actions in the host application.",
             })
           : t({
               id: "chatInput.connectors.allowWrites.description",

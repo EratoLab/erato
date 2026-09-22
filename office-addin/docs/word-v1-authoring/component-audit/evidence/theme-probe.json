@@ -1,0 +1,450 @@
+{
+  "context": "Actual Word review and frontend component source in isolated Chromium fixture. Word API, chat, policy and persistence mocked. Theme tokens from Open WebUI Like theme.json applied using ThemeProvider mapping; actual theme.css loaded. Not a live Office session or deployed asset verification.",
+  "tokenMappings": 128,
+  "measurements": [
+    {
+      "label": "Structural review / light",
+      "values": {
+        "wordCard": {
+          "label": "Review document rewriteMain document body320 of 320 source b",
+          "geometry": null,
+          "radius": "10px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "14px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "sharedCard": {
+          "label": "Shared library reference",
+          "geometry": null,
+          "radius": "24px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "16px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "sharedButton": {
+          "label": "Shared library reference",
+          "geometry": "sm",
+          "radius": "9999px",
+          "padding": "8px 12px",
+          "minHeight": "28px",
+          "fontSize": "14px",
+          "background": "rgb(247, 247, 245)",
+          "color": "rgb(55, 65, 81)",
+          "accent": "auto",
+          "outline": "rgb(55, 65, 81)"
+        },
+        "consentButton": {
+          "label": "Apply document rewrite",
+          "geometry": "sm",
+          "radius": "9999px",
+          "padding": "8px 12px",
+          "minHeight": "34px",
+          "fontSize": "14px",
+          "background": "rgb(17, 24, 39)",
+          "color": "rgb(255, 255, 255)",
+          "accent": "auto",
+          "outline": "rgb(255, 255, 255)"
+        },
+        "wordAction": {
+          "label": "Copy draft",
+          "geometry": null,
+          "radius": "5px",
+          "padding": "6px 10px",
+          "minHeight": "34px",
+          "fontSize": "14px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "authoringTab": {
+          "label": "Structure",
+          "geometry": null,
+          "radius": "5px",
+          "padding": "6.4px",
+          "minHeight": "auto",
+          "fontSize": "12.8px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        }
+      },
+      "overflow": false
+    },
+    {
+      "label": "Structural review / dark",
+      "values": {
+        "wordCard": {
+          "label": "Review document rewriteMain document body320 of 320 source b",
+          "geometry": null,
+          "radius": "10px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "14px",
+          "background": "rgb(11, 13, 16)",
+          "color": "rgb(243, 244, 246)",
+          "accent": "auto",
+          "outline": "rgb(243, 244, 246)"
+        },
+        "sharedCard": {
+          "label": "Shared library reference",
+          "geometry": null,
+          "radius": "24px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "16px",
+          "background": "rgb(11, 13, 16)",
+          "color": "rgb(243, 244, 246)",
+          "accent": "auto",
+          "outline": "rgb(243, 244, 246)"
+        },
+        "sharedButton": {
+          "label": "Shared library reference",
+          "geometry": "sm",
+          "radius": "9999px",
+          "padding": "8px 12px",
+          "minHeight": "28px",
+          "fontSize": "14px",
+          "background": "rgb(17, 19, 23)",
+          "color": "rgb(209, 213, 219)",
+          "accent": "auto",
+          "outline": "rgb(209, 213, 219)"
+        },
+        "consentButton": {
+          "label": "Apply document rewrite",
+          "geometry": "sm",
+          "radius": "9999px",
+          "padding": "8px 12px",
+          "minHeight": "34px",
+          "fontSize": "14px",
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "wordAction": {
+          "label": "Copy draft",
+          "geometry": null,
+          "radius": "5px",
+          "padding": "6px 10px",
+          "minHeight": "34px",
+          "fontSize": "14px",
+          "background": "rgb(11, 13, 16)",
+          "color": "rgb(243, 244, 246)",
+          "accent": "auto",
+          "outline": "rgb(243, 244, 246)"
+        },
+        "authoringTab": {
+          "label": "Structure",
+          "geometry": null,
+          "radius": "5px",
+          "padding": "6.4px",
+          "minHeight": "auto",
+          "fontSize": "12.8px",
+          "background": "rgb(11, 13, 16)",
+          "color": "rgb(243, 244, 246)",
+          "accent": "auto",
+          "outline": "rgb(243, 244, 246)"
+        }
+      },
+      "overflow": false
+    },
+    {
+      "label": "Structural review / deliberate geometry and focus token override",
+      "values": {
+        "wordCard": {
+          "label": "Review document rewriteMain document body320 of 320 source b",
+          "geometry": null,
+          "radius": "10px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "14px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "sharedCard": {
+          "label": "Shared library reference",
+          "geometry": null,
+          "radius": "2px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "16px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "sharedButton": {
+          "label": "Shared library reference",
+          "geometry": "sm",
+          "radius": "2px",
+          "padding": "16px 24px",
+          "minHeight": "52px",
+          "fontSize": "14px",
+          "background": "rgb(247, 247, 245)",
+          "color": "rgb(55, 65, 81)",
+          "accent": "auto",
+          "outline": "rgb(55, 65, 81)"
+        },
+        "consentButton": {
+          "label": "Apply document rewrite",
+          "geometry": "sm",
+          "radius": "2px",
+          "padding": "16px 24px",
+          "minHeight": "34px",
+          "fontSize": "14px",
+          "background": "rgb(17, 24, 39)",
+          "color": "rgb(255, 255, 255)",
+          "accent": "auto",
+          "outline": "rgb(255, 255, 255)"
+        },
+        "wordAction": {
+          "label": "Copy draft",
+          "geometry": null,
+          "radius": "5px",
+          "padding": "6px 10px",
+          "minHeight": "34px",
+          "fontSize": "14px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(15, 108, 189)"
+        },
+        "authoringTab": {
+          "label": "Structure",
+          "geometry": null,
+          "radius": "5px",
+          "padding": "6.4px",
+          "minHeight": "auto",
+          "fontSize": "12.8px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        }
+      },
+      "overflow": false
+    },
+    {
+      "label": "Paragraph review / light",
+      "values": {
+        "wordCard": {
+          "label": "Review edits41 proposed edits107 of 320 paragraphs included ",
+          "geometry": null,
+          "radius": "10px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "14px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "sharedCard": {
+          "label": "Shared library reference",
+          "geometry": null,
+          "radius": "24px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "16px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "sharedButton": {
+          "label": "Shared library reference",
+          "geometry": "sm",
+          "radius": "9999px",
+          "padding": "8px 12px",
+          "minHeight": "28px",
+          "fontSize": "14px",
+          "background": "rgb(247, 247, 245)",
+          "color": "rgb(55, 65, 81)",
+          "accent": "auto",
+          "outline": "rgb(55, 65, 81)"
+        },
+        "consentButton": {
+          "label": "Apply all 41 edits",
+          "geometry": "sm",
+          "radius": "9999px",
+          "padding": "8px 12px",
+          "minHeight": "34px",
+          "fontSize": "14px",
+          "background": "rgb(17, 24, 39)",
+          "color": "rgb(255, 255, 255)",
+          "accent": "auto",
+          "outline": "rgb(255, 255, 255)"
+        },
+        "comparisonTab": {
+          "label": "Changes",
+          "geometry": null,
+          "radius": "4px",
+          "padding": "6px 2px",
+          "minHeight": "auto",
+          "fontSize": "13px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "removed": {
+          "label": "on·a·",
+          "geometry": null,
+          "radius": "0px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "14px",
+          "background": "rgb(251, 233, 237)",
+          "color": "rgb(145, 53, 75)",
+          "accent": "auto",
+          "outline": "rgb(145, 53, 75)"
+        },
+        "select": {
+          "label": "All paragraphs1–2526–5051–7576–100",
+          "geometry": null,
+          "radius": "5px",
+          "padding": "7px",
+          "minHeight": "auto",
+          "fontSize": "13px",
+          "background": "rgb(252, 252, 251)",
+          "color": "rgb(55, 65, 81)",
+          "accent": "auto",
+          "outline": "rgb(55, 65, 81)"
+        },
+        "progress": {
+          "label": "",
+          "geometry": null,
+          "radius": "0px",
+          "padding": "0px",
+          "minHeight": "auto",
+          "fontSize": "13px",
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(55, 65, 81)",
+          "accent": "rgb(15, 108, 189)",
+          "outline": "rgb(55, 65, 81)"
+        }
+      },
+      "overflow": false
+    },
+    {
+      "label": "Paragraph review / dark",
+      "values": {
+        "wordCard": {
+          "label": "Review edits41 proposed edits107 of 320 paragraphs included ",
+          "geometry": null,
+          "radius": "10px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "14px",
+          "background": "rgb(11, 13, 16)",
+          "color": "rgb(243, 244, 246)",
+          "accent": "auto",
+          "outline": "rgb(243, 244, 246)"
+        },
+        "sharedCard": {
+          "label": "Shared library reference",
+          "geometry": null,
+          "radius": "24px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "16px",
+          "background": "rgb(11, 13, 16)",
+          "color": "rgb(243, 244, 246)",
+          "accent": "auto",
+          "outline": "rgb(243, 244, 246)"
+        },
+        "sharedButton": {
+          "label": "Shared library reference",
+          "geometry": "sm",
+          "radius": "9999px",
+          "padding": "8px 12px",
+          "minHeight": "28px",
+          "fontSize": "14px",
+          "background": "rgb(17, 19, 23)",
+          "color": "rgb(209, 213, 219)",
+          "accent": "auto",
+          "outline": "rgb(209, 213, 219)"
+        },
+        "consentButton": {
+          "label": "Apply all 41 edits",
+          "geometry": "sm",
+          "radius": "9999px",
+          "padding": "8px 12px",
+          "minHeight": "34px",
+          "fontSize": "14px",
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(17, 24, 39)",
+          "accent": "auto",
+          "outline": "rgb(17, 24, 39)"
+        },
+        "comparisonTab": {
+          "label": "Changes",
+          "geometry": null,
+          "radius": "4px",
+          "padding": "6px 2px",
+          "minHeight": "auto",
+          "fontSize": "13px",
+          "background": "rgb(11, 13, 16)",
+          "color": "rgb(243, 244, 246)",
+          "accent": "auto",
+          "outline": "rgb(243, 244, 246)"
+        },
+        "removed": {
+          "label": "on·a·",
+          "geometry": null,
+          "radius": "0px",
+          "padding": "0px",
+          "minHeight": "0px",
+          "fontSize": "14px",
+          "background": "rgb(251, 233, 237)",
+          "color": "rgb(145, 53, 75)",
+          "accent": "auto",
+          "outline": "rgb(145, 53, 75)"
+        },
+        "select": {
+          "label": "All paragraphs1–2526–5051–7576–100",
+          "geometry": null,
+          "radius": "5px",
+          "padding": "7px",
+          "minHeight": "auto",
+          "fontSize": "13px",
+          "background": "rgb(11, 13, 16)",
+          "color": "rgb(209, 213, 219)",
+          "accent": "auto",
+          "outline": "rgb(209, 213, 219)"
+        },
+        "progress": {
+          "label": "",
+          "geometry": null,
+          "radius": "0px",
+          "padding": "0px",
+          "minHeight": "auto",
+          "fontSize": "13px",
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(209, 213, 219)",
+          "accent": "rgb(15, 108, 189)",
+          "outline": "rgb(209, 213, 219)"
+        }
+      },
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "focus": {
+    "focusVisible": true,
+    "outline": "rgb(15, 108, 189) solid 2px",
+    "themeFocus": "#c026d3"
+  }
+}

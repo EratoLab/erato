@@ -2288,8 +2288,13 @@ msgstr "Wyłączone: oferowane są tylko narzędzia, które serwer oznacza jako 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
-msgstr "Wyłączone: oferowane są tylko narzędzia, które serwer oznacza jako tylko do odczytu. Wstrzymuje także akcje programu Outlook, takie jak Odpowiedz i Wyślij."
+msgid "chatInput.connectors.allowWrites.descriptionHostActions"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
+#~ msgstr "Wyłączone: oferowane są tylko narzędzia, które serwer oznacza jako tylko do odczytu. Wstrzymuje także akcje programu Outlook, takie jak Odpowiedz i Wyślij."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -4736,6 +4741,51 @@ msgstr "Indeksowanie skrzynek pocztowych"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.upgrade"
 msgstr "Zaktualizuj Desktop Sidecar, aby skonfigurować indeksowanie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.added"
+msgstr "+ Dodano"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.changes"
+msgstr "Zmiany"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.empty"
+msgstr "Pusty tekst"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.fullComparison"
+msgstr "Wyświetlono pełne teksty dla tej dużej zmiany."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.original"
+msgstr "Oryginał"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.proposed"
+msgstr "Propozycja"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.removed"
+msgstr "− Usunięto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.textViews"
+msgstr "Porównanie tekstu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.whitespace"
+msgstr "· spacja · ↵ podział akapitu · ⇥ tabulator przy zmianie"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx

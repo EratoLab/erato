@@ -16,6 +16,7 @@ import { AddinSetupRoute } from "./pages/AddinSetupPage";
 
 const OutlookApp = lazy(() => import("./outlook/OutlookApp"));
 const TeamsApp = lazy(() => import("./teams/TeamsApp"));
+const WordApp = lazy(() => import("./word/WordApp"));
 
 injectFrontendEnv();
 
@@ -46,6 +47,14 @@ ReactDOM.createRoot(rootElement).render(
           element={
             <Suspense fallback={null}>
               <TeamsApp />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/word"
+          element={
+            <Suspense fallback={null}>
+              <WordApp />
             </Suspense>
           }
         />

@@ -16,10 +16,17 @@ import { UserSettingsTabContent } from "./UserSettingsTabContent";
 type SettingsTab = "appearance" | "user" | "audio" | "serversTools" | "host";
 
 export interface AddinSettingsHostContribution {
-  tabLabel: string;
-  heading: string;
-  description: string;
-  content: ReactNode;
+  /**
+   * The host tab's four fields travel together: a host either contributes a
+   * tab or it does not. They are optional because a host may contribute ONLY
+   * an entity to the shared "MCP & Apps" pane (Word does), and forcing it to
+   * declare a heading for a tab it has no content for would spawn an empty
+   * tab. The tab is gated on `content`, not on the contribution existing.
+   */
+  tabLabel?: string;
+  heading?: string;
+  description?: string;
+  content?: ReactNode;
   systemDescription?: string;
   appearanceNotice?: ReactNode;
   /**
@@ -62,7 +69,7 @@ export function AddinSettingsDialogCore({
       "user",
       ...(audioSettingsEnabled ? (["audio"] as const) : []),
       ...(serversToolsTabEnabled ? (["serversTools"] as const) : []),
-      ...(hostContribution ? (["host"] as const) : []),
+      ...(hostContribution?.content != null ? (["host"] as const) : []),
     ],
     [audioSettingsEnabled, serversToolsTabEnabled, hostContribution],
   );
@@ -270,7 +277,7 @@ export function AddinSettingsDialogCore({
             </section>
           ) : null}
 
-          {hostContribution ? (
+          {hostContribution?.content != null ? (
             <section
               id={panelIds.host}
               role="tabpanel"

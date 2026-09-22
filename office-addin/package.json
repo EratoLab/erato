@@ -22,6 +22,7 @@
     "lint:strict": "eslint . --max-warnings=0",
     "preview": "vite preview",
     "office:validate": "office-addin-manifest validate manifests/manifest.xml",
+    "office:validate:document": "office-addin-manifest validate manifests/manifest-document.xml",
     "office:validate:unified": "office-addin-manifest validate manifests/manifest.json",
     "office:validate:rendered": "node scripts/validate-rendered-manifest.mjs",
     "typecheck": "tsc --noEmit",

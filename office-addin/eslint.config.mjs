@@ -35,6 +35,7 @@ const eslintConfig = [
       globals: {
         Office: "readonly",
         OfficeRuntime: "readonly",
+        Word: "readonly",
         React: "readonly",
         JSX: "readonly",
         URL: "readonly",
@@ -162,6 +163,8 @@ const eslintConfig = [
                 "**/Teams*",
                 "**/teams/**",
                 "@microsoft/teams-js",
+                "**/Word*",
+                "**/word/**",
               ],
               message:
                 "Host-neutral core files must receive host behavior through explicit components or props.",
@@ -173,11 +176,11 @@ const eslintConfig = [
         "error",
         {
           name: "Office",
-          message: "Office.js is owned by the Outlook composition.",
+          message: "Office.js is owned by the Office.js host compositions.",
         },
         {
           name: "OfficeRuntime",
-          message: "Office.js is owned by the Outlook composition.",
+          message: "Office.js is owned by the Office.js host compositions.",
         },
       ],
     },
@@ -203,6 +206,8 @@ const eslintConfig = [
                 "!**/test/mocks/outlook/**",
                 "**/teams/**",
                 "!**/test/mocks/teams/**",
+                "**/word/**",
+                "!**/test/mocks/word/**",
               ],
               message:
                 "The shared ring must not depend on a host module; move shared code out or invert the dependency.",
@@ -228,9 +233,11 @@ const eslintConfig = [
                 "**/sessionPolicy/**",
                 "**/useOffice*",
                 "**/useOutlook*",
+                "**/Word*",
+                "**/word/**",
               ],
               message:
-                "The Teams composition is a peer of the Outlook one: only one host SDK and one set of registry overrides per document.",
+                "The Teams composition is a peer of the Outlook and Word ones: only one host SDK and one set of registry overrides per document.",
             },
           ],
         },
@@ -239,11 +246,11 @@ const eslintConfig = [
         "error",
         {
           name: "Office",
-          message: "Office.js is owned by the Outlook composition.",
+          message: "Office.js is owned by the Office.js host compositions.",
         },
         {
           name: "OfficeRuntime",
-          message: "Office.js is owned by the Outlook composition.",
+          message: "Office.js is owned by the Office.js host compositions.",
         },
       ],
     },
@@ -256,9 +263,44 @@ const eslintConfig = [
         {
           patterns: [
             {
-              group: ["**/Teams*", "**/teams/**", "@microsoft/teams-js"],
+              group: [
+                "**/Teams*",
+                "**/teams/**",
+                "@microsoft/teams-js",
+                "**/Word*",
+                "**/word/**",
+              ],
               message:
-                "The Outlook composition is a peer of the Teams one: only one host SDK and one set of registry overrides per document.",
+                "The Outlook composition is a peer of the Teams and Word ones: only one host SDK and one set of registry overrides per document.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Word is an Office.js host, so unlike the Teams zone this one deliberately
+    // does NOT ban Office/OfficeRuntime, `**/OfficeProvider`,
+    // `**/OfficeThemeProvider` or `**/useOffice*`: the Word composition
+    // consumes all of them from the shared ring.
+    files: ["src/word/**/*.ts", "src/word/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/Outlook*",
+                "**/outlook/**",
+                "**/sessionPolicy/**",
+                "**/useOutlook*",
+                "**/Teams*",
+                "**/teams/**",
+                "@microsoft/teams-js",
+              ],
+              message:
+                "The Word composition is a peer of the Outlook and Teams ones: only one host SDK and one set of registry overrides per document.",
             },
           ],
         },

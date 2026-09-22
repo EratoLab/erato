@@ -5035,6 +5035,14 @@ pub struct MsOfficeAddinConfig {
     #[serde(default)]
     pub manifest: MsOfficeAddinManifestConfig,
 
+    // The second add-in identity: the host-neutral document task-pane add-in
+    // (Word today; Excel and PowerPoint later join the same catalog entry).
+    // Non-optional with its own distinct default id, so a deployment that
+    // declares no `[integrations.ms_office.addin.document]` block still boots
+    // and still passes the duplicate-id check.
+    #[serde(default)]
+    pub document: MsOfficeAddinDocumentConfig,
+
     #[serde(default)]
     pub default_settings: MsOfficeAddinDefaultSettings,
 
@@ -5089,6 +5097,7 @@ impl Default for MsOfficeAddinConfig {
             serve_bundle_legacy_path: default_ms_office_addin_serve_bundle_legacy_path(),
             frontend_bundle_path: default_ms_office_addin_frontend_bundle_path(),
             manifest: MsOfficeAddinManifestConfig::default(),
+            document: MsOfficeAddinDocumentConfig::default(),
             default_settings: MsOfficeAddinDefaultSettings::default(),
             launch_event_runtime: None,
             launch_events: Vec::new(),
@@ -5105,6 +5114,7 @@ impl MsOfficeAddinConfig {
         }
 
         self.manifest.validate()?;
+        self.document.validate(&self.addin_id)?;
         self.validate_launch_events()?;
 
         Ok(())
@@ -5150,6 +5160,90 @@ impl MsOfficeAddinConfig {
                 ));
             }
             declared_events.push(launch_event.event);
+        }
+
+        Ok(())
+    }
+}
+
+/// Identity and naming of the document task-pane add-in, a SECOND Office
+/// add-in served from the same deployment as the mail add-in. Two add-ins in
+/// one catalog cannot share an `<Id>`, and "Erato for Documents" cannot come
+/// out of the placeholder that names the mail add-in, so both are configured
+/// here. Every other manifest scalar (provider, support URL, ribbon labels,
+/// icons) is composed from the mail block at render time — serde `default`
+/// gives struct defaults, never cross-block inheritance, so a full nested
+/// manifest struct here would silently ignore per-customer branding.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinDocumentConfig {
+    #[serde(default = "default_ms_office_addin_document_id")]
+    pub addin_id: String,
+
+    #[serde(default)]
+    pub manifest: MsOfficeAddinDocumentManifestConfig,
+}
+
+impl Default for MsOfficeAddinDocumentConfig {
+    fn default() -> Self {
+        Self {
+            addin_id: default_ms_office_addin_document_id(),
+            manifest: MsOfficeAddinDocumentManifestConfig::default(),
+        }
+    }
+}
+
+impl MsOfficeAddinDocumentConfig {
+    /// `mail_addin_id` is the mail add-in's id: the two identities must differ,
+    /// or a catalog holding both rejects the second.
+    pub fn validate(&self, mail_addin_id: &str) -> Result<(), Report> {
+        if self.addin_id.trim().is_empty() {
+            return Err(eyre!(
+                "Microsoft Office document add-in id cannot be empty when the add-in is configured."
+            ));
+        }
+        if self.addin_id.trim() == mail_addin_id.trim() {
+            return Err(eyre!(
+                "Microsoft Office document add-in id must differ from `integrations.ms_office.addin.addin_id`; two add-ins in one catalog cannot share an id."
+            ));
+        }
+
+        self.manifest.validate()
+    }
+}
+
+/// The manifest scalars that are genuinely document-scoped. Everything else is
+/// inherited from `MsOfficeAddinManifestConfig` when the manifest is rendered.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinDocumentManifestConfig {
+    // Add-in display name shown by Word.
+    #[serde(default = "default_ms_office_addin_document_manifest_display_name")]
+    pub display_name: String,
+
+    // Add-in description shown by Word.
+    #[serde(default = "default_ms_office_addin_document_manifest_description")]
+    pub description: String,
+}
+
+impl Default for MsOfficeAddinDocumentManifestConfig {
+    fn default() -> Self {
+        Self {
+            display_name: default_ms_office_addin_document_manifest_display_name(),
+            description: default_ms_office_addin_document_manifest_description(),
+        }
+    }
+}
+
+impl MsOfficeAddinDocumentManifestConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        for (key, value) in [
+            ("display_name", &self.display_name),
+            ("description", &self.description),
+        ] {
+            if value.trim().is_empty() {
+                return Err(eyre!(
+                    "Microsoft Office document add-in manifest field `{key}` cannot be empty."
+                ));
+            }
         }
 
         Ok(())
@@ -5261,6 +5355,20 @@ fn default_ms_office_addin_msal_authority() -> String {
 
 fn default_ms_office_addin_id() -> String {
     "ee94d041-bd77-446c-8854-421648f50e7c".to_string()
+}
+
+/// A distinct compile-time constant, never generated: the document add-in's
+/// catalog identity must be stable across deployments and across restarts.
+fn default_ms_office_addin_document_id() -> String {
+    "15a5d0e8-e96a-4e26-b6a1-bd8f429468c2".to_string()
+}
+
+fn default_ms_office_addin_document_manifest_display_name() -> String {
+    "Erato for Documents".to_string()
+}
+
+fn default_ms_office_addin_document_manifest_description() -> String {
+    "Erato AI assistant for Word documents".to_string()
 }
 
 fn default_ms_office_addin_serve_bundle_legacy_path() -> bool {

@@ -2288,8 +2288,13 @@ msgstr "Off, only tools the server marks read-only are offered."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
-msgstr "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send."
+msgid "chatInput.connectors.allowWrites.descriptionHostActions"
+msgstr "Off, only tools the server marks read-only are offered. Also pauses actions in the host application."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
+#~ msgstr "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -4736,6 +4741,51 @@ msgstr "Mailbox indexing"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.upgrade"
 msgstr "Update the desktop sidecar to configure indexing."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.added"
+msgstr "+ Added"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.changes"
+msgstr "Changes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.empty"
+msgstr "Empty text"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.fullComparison"
+msgstr "Showing the complete texts for this large change."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.original"
+msgstr "Original"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.proposed"
+msgstr "Proposed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.removed"
+msgstr "− Removed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.textViews"
+msgstr "Text comparison"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.whitespace"
+msgstr "· space · ↵ paragraph break · ⇥ tab when changed"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx

@@ -1,0 +1,16 @@
+[
+  {
+    "case": "paragraph",
+    "activation": "keyboard Enter",
+    "focusTag": "BODY",
+    "focusInsideReview": false,
+    "hiddenButtonsVisible": false
+  },
+  {
+    "case": "structural",
+    "activation": "keyboard Enter",
+    "focusTag": "BODY",
+    "focusInsideReview": false,
+    "hiddenButtonsVisible": false
+  }
+]

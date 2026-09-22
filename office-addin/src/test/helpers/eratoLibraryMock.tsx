@@ -115,7 +115,17 @@ const createStoreStub = <S,>(readState: () => S) =>
   );
 
 export const DEFAULT_STUBS = {
+  useMessagingStore: {
+    getState: () => ({
+      activeStreamKey: "__new_chat__",
+      getStreaming: () => ({ currentMessageId: null, isStreaming: false }),
+      streamKeyAliases: {},
+    }),
+    subscribe: () => noop,
+  },
   useMcpBrowserAuthorization: () => noop,
+  Select: StubPassthrough,
+  TextComparison: StubNothing,
   useThemedIcon: () => null,
   getChatUrl: () => "",
   ModelSelector: StubNothing,

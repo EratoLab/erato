@@ -348,6 +348,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ResolvedIcon",
   "Row",
   "RowProps",
+  "Select",
+  "SelectProps",
   "ShareIcon",
   "SidebarBand",
   "SidebarBandEdge",
@@ -363,6 +365,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "TabRail",
   "TabRailOption",
   "TabRailProps",
+  "TextComparison",
+  "TextComparisonView",
   "ThemeProvider",
   "ThemeProviderProps",
   "ThreadMessageCard",
@@ -392,3 +396,9 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "useMessageAttachmentFiles",
   "useThemedIcon",
 ] as const;
+
+export { Select, type SelectProps } from "@/components/ui/Input/Select";
+export {
+  TextComparison,
+  type TextComparisonView,
+} from "@/components/ui/Message/TextComparison";

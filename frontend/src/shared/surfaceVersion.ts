@@ -10,7 +10,7 @@ export const ERATO_SHARED_SURFACE_VERSION = 1;
 
 // Bump on purely additive growth of the surface, so a kit can require a name
 // that exists without demanding a new major.
-export const ERATO_SHARED_SURFACE_MINOR = 14;
+export const ERATO_SHARED_SURFACE_MINOR = 16;
 
 /**
  * Per extension point, the minor at which that point's contract last grew a

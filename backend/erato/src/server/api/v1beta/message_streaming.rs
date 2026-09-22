@@ -319,25 +319,20 @@ fn openai_responses_reasoning_replay_model_matches(
 }
 
 async fn collect_reasoning_replay_messages(
-    app_state: &AppState,
-    policy: &PolicyEngine,
-    subject: &Subject,
+    message_repo: &impl MessageRepository,
     just_submitted_user_message_id: &Uuid,
     current_chat_provider_id: &str,
     compat_no_replay_summary: bool,
 ) -> Result<Vec<OpenAiResponsesReasoningReplayMessage>, Report> {
-    let mut current_message = get_message_by_id(
-        &app_state.db,
-        policy,
-        subject,
-        just_submitted_user_message_id,
-    )
-    .await?;
+    // Token estimates provide an unsaved draft through a synthetic repository.
+    // All history traversal must use that same repository, including replay.
+    let mut current_message = message_repo
+        .get_message_by_id(just_submitted_user_message_id)
+        .await?;
     let mut replay_messages = Vec::new();
 
     while let Some(previous_message_id) = current_message.previous_message_id {
-        current_message =
-            get_message_by_id(&app_state.db, policy, subject, &previous_message_id).await?;
+        current_message = message_repo.get_message_by_id(&previous_message_id).await?;
         let parsed_message = MessageSchema::validate(&current_message.raw_message)?;
         if parsed_message.role != MessageRole::Assistant {
             continue;
@@ -3403,9 +3398,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         chat_request = chat_request.with_store(false);
         if !did_prior_assistant_chat_provider_change {
             let reasoning_replay_messages = collect_reasoning_replay_messages(
-                app_state,
-                policy,
-                &me_profile_input.subject,
+                message_repo,
                 &user_input.just_submitted_user_message_id,
                 chat_provider_id.as_str(),
                 effective_model_settings.compat_no_replay_summary,

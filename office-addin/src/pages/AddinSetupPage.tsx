@@ -9,8 +9,10 @@ const EXCHANGE_ADDIN_DOCS_URL =
   "https://learn.microsoft.com/en-us/exchange/install-or-remove-outlook-add-ins-2013-help";
 const EXCHANGE_LIMIT_ACCESS_DOCS_URL =
   "https://learn.microsoft.com/en-us/exchange/manage-user-access-to-add-ins-2013-help#use-the-exchange-management-shell-to-limit-add-in-availability-to-specific-users";
+const SHAREPOINT_CATALOG_DOCS_URL =
+  "https://learn.microsoft.com/en-us/office/dev/add-ins/publish/publish-task-pane-and-content-add-ins-to-an-add-in-catalog";
 
-type OfficeProduct = "outlook" | "excel" | "powerpoint";
+type OfficeProduct = "outlook" | "word" | "excel" | "powerpoint";
 type ExchangeSetup = "exchange-online" | "exchange-server";
 
 type ProductOption = {
@@ -27,9 +29,17 @@ type ExchangeSetupOption = {
 
 const PRODUCT_OPTIONS: ProductOption[] = [
   { id: "outlook", label: "Outlook", selectable: true },
+  { id: "word", label: "Word", selectable: true },
   { id: "excel", label: "Excel", selectable: false },
   { id: "powerpoint", label: "PowerPoint", selectable: false },
 ];
+
+/**
+ * The document task-pane add-in is a SECOND add-in with its own manifest and
+ * its own catalog identity — the Exchange-setup axis does not apply to it,
+ * because there is no mailbox involved.
+ */
+const DOCUMENT_MANIFEST_PATH = "manifest-document.xml";
 
 const EXCHANGE_SETUP_OPTIONS: ExchangeSetupOption[] = [
   {
@@ -52,11 +62,36 @@ export function AddinSetupRoute() {
   );
 }
 
-function getManifestUrl(exchangeSetup: ExchangeSetup): string {
+function getManifestPath(
+  product: OfficeProduct,
+  exchangeSetup: ExchangeSetup,
+): string {
+  if (product === "word") {
+    return DOCUMENT_MANIFEST_PATH;
+  }
   const selectedSetup =
     EXCHANGE_SETUP_OPTIONS.find((option) => option.id === exchangeSetup) ??
     EXCHANGE_SETUP_OPTIONS[0];
-  return new URL(selectedSetup.manifestPath, window.location.href).toString();
+  return selectedSetup.manifestPath;
+}
+
+/**
+ * The name the file is SAVED under, which follows the product alone. The
+ * Exchange axis selects a different manifest to fetch, but both Outlook
+ * variants are uploaded as `manifest.xml` and the on-screen copy says so.
+ */
+function getDownloadFilename(product: OfficeProduct): string {
+  return product === "word" ? DOCUMENT_MANIFEST_PATH : "manifest.xml";
+}
+
+function getManifestUrl(
+  product: OfficeProduct,
+  exchangeSetup: ExchangeSetup,
+): string {
+  return new URL(
+    getManifestPath(product, exchangeSetup),
+    window.location.href,
+  ).toString();
 }
 
 function getSpaRedirectUri(): string {
@@ -82,7 +117,7 @@ export function AddinSetupPage() {
         setError(null);
 
         const response = await window.fetch(
-          getManifestUrl(selectedExchangeSetup),
+          getManifestUrl(selectedProduct, selectedExchangeSetup),
           {
             signal: abortController.signal,
           },
@@ -118,7 +153,7 @@ export function AddinSetupPage() {
     return () => {
       abortController.abort();
     };
-  }, [selectedExchangeSetup]);
+  }, [selectedProduct, selectedExchangeSetup]);
 
   function handleDownload() {
     const blob = new Blob([manifestXml], { type: "application/xml" });
@@ -126,7 +161,7 @@ export function AddinSetupPage() {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = "manifest.xml";
+    link.download = getDownloadFilename(selectedProduct);
     link.click();
 
     window.URL.revokeObjectURL(url);
@@ -145,7 +180,14 @@ export function AddinSetupPage() {
             </Trans>
           </h1>
           <p className="office-setup-copy">
-            {selectedExchangeSetup === "exchange-online" ? (
+            {selectedProduct === "word" ? (
+              <Trans id="officeAddin.word.setup.copy">
+                Download the XML below as <code>manifest-document.xml</code>,
+                then deploy it through the Integrated apps portal or a
+                SharePoint app catalog. This is a second add-in, separate from
+                the Outlook one.
+              </Trans>
+            ) : selectedExchangeSetup === "exchange-online" ? (
               <Trans id="officeAddin.setup.exchangeOnline.copy">
                 Download the XML below as <code>manifest.xml</code>, then upload
                 it in Microsoft 365 admin center under Integrated Apps.
@@ -167,7 +209,9 @@ export function AddinSetupPage() {
           onSelectProduct={setSelectedProduct}
         />
 
-        {selectedExchangeSetup === "exchange-online" ? (
+        {selectedProduct === "word" ? (
+          <WordInstructions spaRedirectUri={spaRedirectUri} />
+        ) : selectedExchangeSetup === "exchange-online" ? (
           <ExchangeOnlineInstructions spaRedirectUri={spaRedirectUri} />
         ) : (
           <ExchangeServerInstructions />
@@ -180,11 +224,40 @@ export function AddinSetupPage() {
             disabled={isLoading || !manifestXml}
             className="office-setup-button"
           >
-            <Trans id="officeAddin.setup.downloadButton">
-              Download manifest.xml
-            </Trans>
+            {selectedProduct === "word" ? (
+              <Trans id="officeAddin.word.setup.downloadButton">
+                Download manifest-document.xml
+              </Trans>
+            ) : (
+              <Trans id="officeAddin.setup.downloadButton">
+                Download manifest.xml
+              </Trans>
+            )}
           </button>
-          {selectedExchangeSetup === "exchange-online" ? (
+          {selectedProduct === "word" ? (
+            <>
+              <a
+                href={INTEGRATED_APPS_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="office-setup-button office-setup-button--secondary"
+              >
+                <Trans id="officeAddin.setup.openIntegratedApps">
+                  Open Integrated Apps
+                </Trans>
+              </a>
+              <a
+                href={SHAREPOINT_CATALOG_DOCS_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="office-setup-button office-setup-button--secondary"
+              >
+                <Trans id="officeAddin.word.setup.openCatalogDocs">
+                  Open app catalog docs
+                </Trans>
+              </a>
+            </>
+          ) : selectedExchangeSetup === "exchange-online" ? (
             <a
               href={INTEGRATED_APPS_URL}
               target="_blank"
@@ -316,6 +389,74 @@ function SetupSelectors({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Word has no Exchange-setup axis: the delivery route is decided by the
+ * customer's mailbox and licence combination, not by a manifest variant.
+ * Copy is split under `officeAddin.word.*` rather than sharing Outlook's ids,
+ * because the two diverge in substance, not only in wording.
+ */
+function WordInstructions({ spaRedirectUri }: { spaRedirectUri: string }) {
+  return (
+    <ol className="office-setup-steps">
+      <li>
+        <Trans id="officeAddin.word.setup.redirectUriInstruction">
+          In the Entra ID app registration, add the SPA redirect URI. Word on
+          the web will not sign in without it:
+        </Trans>
+        <CopyableCodeField content={spaRedirectUri} />
+      </li>
+      <li>
+        <Trans id="officeAddin.word.setup.reviewManifest">
+          Review the generated document manifest XML below. It is a separate
+          add-in from the Outlook one and carries its own id.
+        </Trans>
+      </li>
+      <li>
+        <Trans id="officeAddin.word.setup.downloadManifest">
+          Download it as <code>manifest-document.xml</code>.
+        </Trans>
+      </li>
+      <li>
+        <Trans id="officeAddin.word.setup.integratedAppsRoute">
+          If your users have Exchange Online mailboxes <em>and</em> a
+          subscription Office licence, upload it in{" "}
+          <a
+            href={INTEGRATED_APPS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="office-setup-link"
+          >
+            Integrated Apps
+          </a>
+          .
+        </Trans>
+      </li>
+      <li>
+        <Trans id="officeAddin.word.setup.catalogRoute">
+          For every other combination, upload it to a{" "}
+          <a
+            href={SHAREPOINT_CATALOG_DOCS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="office-setup-link"
+          >
+            SharePoint app catalog
+          </a>
+          . Add-ins deployed that way have no ribbon button, so users open Erato
+          from the add-ins list; everything is reachable inside the pane.
+        </Trans>
+      </li>
+      <li>
+        <Trans id="officeAddin.word.setup.macUnsupported">
+          Word on Mac is not supported for on-premises mailboxes: the SharePoint
+          app catalog does not cover the Mac desktop client. Point those users
+          at Word for the web through a SharePoint Online catalog instead.
+        </Trans>
+      </li>
+    </ol>
   );
 }
 

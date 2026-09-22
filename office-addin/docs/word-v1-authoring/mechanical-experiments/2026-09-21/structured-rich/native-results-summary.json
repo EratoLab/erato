@@ -1,0 +1,516 @@
+{
+  "source": {
+    "path": "native-results.json",
+    "sha256": "0259d354dcf63f28cab7bd66dc206e54a8ebf10346ea8f17ab3f022893e5d118"
+  },
+  "description": "Derived from the archived native results without rerunning Word. Fingerprints are SHA-256 hashes; block, story and section inventories are counts. All other result fields are unchanged.",
+  "cases": [
+    {
+      "case": "formatting",
+      "source": 110,
+      "apply": {
+        "id": 111,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "d7fbbeacbf702e401d21d9d53a24174ed00dff8f87603c97d14bbc67515abde3",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1452,
+        "docxPath": "111.docx",
+        "ooxmlPath": "111.xml"
+      },
+      "revert": {
+        "id": 112,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "0d0734c6a608c1cf1a726e6dc15725b028cb2ed77d4da7dd2bdfa79606e538c3",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1039,
+        "docxPath": "112.docx",
+        "ooxmlPath": "112.xml"
+      }
+    },
+    {
+      "case": "table-edit",
+      "source": 114,
+      "apply": {
+        "id": 115,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "17aa4ede8a88259419724ffcfaf91420df04418d28580e310842df13d5ecd34e",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1445,
+        "docxPath": "115.docx",
+        "ooxmlPath": "115.xml"
+      },
+      "revert": {
+        "id": 116,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "738c96109ab937c091885696df677b1d8258454e1f442b4ee57bef6b64c0acc2",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1062,
+        "docxPath": "116.docx",
+        "ooxmlPath": "116.xml"
+      }
+    },
+    {
+      "case": "stories-layout",
+      "source": 118,
+      "apply": {
+        "id": 119,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "e6fd75cd0dfd2463f0df5dd9895bfdbd433ea6e6fd64485fe6d4e25b021f8fb6",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 9,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1539,
+        "docxPath": "119.docx",
+        "ooxmlPath": "119.xml"
+      },
+      "revert": {
+        "id": 120,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "5af33545d399dc48768088c98ce1d670fcf52505a67f4aee666abba82ff8a74a",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1168,
+        "docxPath": "120.docx",
+        "ooxmlPath": "120.xml"
+      }
+    },
+    {
+      "case": "all-content-families",
+      "source": 122,
+      "apply": {
+        "id": 123,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "2dc5ed7bf70471a99cfbdf3b09888c3cc03164a350bec4d3b0c21bdc8a289b1c",
+        "issueDetails": [],
+        "blockCount": 10,
+        "storyCount": 7,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1445,
+        "docxPath": "123.docx",
+        "ooxmlPath": "123.xml"
+      },
+      "revert": {
+        "id": 124,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "6f4a12b52f0306e88b2934bd62bd3cd7b661abbd671a181f11039ad42e69954f",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1110,
+        "docxPath": "124.docx",
+        "ooxmlPath": "124.xml"
+      }
+    },
+    {
+      "case": "full-clear",
+      "source": 126,
+      "apply": {
+        "id": 127,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "6b72e1b9a728e3e34aee00e1eb32dfef78b8433f77c596b16fdd6febdc40a8bb",
+        "issueDetails": [],
+        "blockCount": 1,
+        "storyCount": 2,
+        "sectionCount": 1,
+        "writes": 1,
+        "totalMs": 1883,
+        "docxPath": "127.docx",
+        "ooxmlPath": "127.xml"
+      },
+      "revert": {
+        "id": 128,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "c3da7128d5a65628dfe1a1c353d20ee34d5b839abc4d041686446125c8b8a94b",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1622,
+        "docxPath": "128.docx",
+        "ooxmlPath": "128.xml"
+      }
+    },
+    {
+      "case": "locked-controls",
+      "source": 63,
+      "apply": {
+        "id": 64,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "022d661fe348ec41f83de7e2b299170729f497ce4f131f7839a79c6525c0bf06",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1730,
+        "docxPath": "64.docx",
+        "ooxmlPath": "64.xml"
+      },
+      "revert": {
+        "id": 65,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "b9e574452fd2bd925f1c3092b1d3831cf85014a10cd2aa3a0a19249a7a1c9bb9",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1365,
+        "docxPath": "65.docx",
+        "ooxmlPath": "65.xml"
+      }
+    },
+    {
+      "case": "clear-locked-controls",
+      "source": 66,
+      "apply": {
+        "id": 67,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "be3d12c8daa6bc5901242788ca0828ca3c64e7ba35d974efe8327ab080c98e43",
+        "issueDetails": [],
+        "blockCount": 1,
+        "storyCount": 2,
+        "sectionCount": 1,
+        "writes": 1,
+        "totalMs": 1829,
+        "docxPath": "67.docx",
+        "ooxmlPath": "67.xml"
+      },
+      "revert": {
+        "id": 68,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "b9e574452fd2bd925f1c3092b1d3831cf85014a10cd2aa3a0a19249a7a1c9bb9",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1123,
+        "docxPath": "68.docx",
+        "ooxmlPath": "68.xml"
+      }
+    },
+    {
+      "case": "long-document-undo-cleared",
+      "source": 75,
+      "apply": {
+        "id": 76,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "3f0792ecd17b0a08650863c33f959d16979461f628604aa370029ece8755d6b8",
+        "issueDetails": [],
+        "blockCount": 368,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 3033,
+        "docxPath": "76.docx",
+        "ooxmlPath": "76.xml"
+      },
+      "revert": {
+        "id": 77,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "45a2e3d6677623d5c368b71078b1116e91f284d7497513716202af68a48759e0",
+        "issueDetails": [],
+        "blockCount": 335,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 2099,
+        "docxPath": "77.docx",
+        "ooxmlPath": "77.xml"
+      }
+    },
+    {
+      "case": "interrupted-after-native-write",
+      "source": 79,
+      "apply": {
+        "id": 80,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "interrupted",
+          "diagnostic": {
+            "stage": "write",
+            "reason": "host-error",
+            "officeCode": "GeneralException",
+            "officeLocation": "Document.insertFileFromBase64"
+          },
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "3dd1d0625e635b11d41abdc6065e6d30a4d7712d05d0fff86986c7983a507001",
+        "issueDetails": [],
+        "blockCount": 10,
+        "storyCount": 7,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1296,
+        "docxPath": "80.docx",
+        "ooxmlPath": "80.xml"
+      },
+      "revert": {
+        "id": 81,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "f79afcc4971976104ab587298d522d27b1d6a8e7763fd7dec55ed2d2315425b2",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1160,
+        "docxPath": "81.docx",
+        "ooxmlPath": "81.xml"
+      }
+    },
+    {
+      "case": "fresh-document",
+      "source": 97,
+      "apply": {
+        "id": 98,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "b4ed2314a7cdf0ec1899a4f7f54ed66719f31e1c75d86eb0e30d4ceec4f71344",
+        "issueDetails": [],
+        "blockCount": 14,
+        "storyCount": 7,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1499,
+        "docxPath": "98.docx",
+        "ooxmlPath": "98.xml"
+      },
+      "revert": {
+        "id": 99,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "f34811ba47784c0c4a8346b3a1d6ae1e832ebeb4d4dc2ac2fa50cf954f89735c",
+        "issueDetails": [],
+        "blockCount": 2,
+        "storyCount": 0,
+        "sectionCount": 1,
+        "writes": 1,
+        "totalMs": 1066,
+        "docxPath": "99.docx",
+        "ooxmlPath": "99.xml"
+      }
+    },
+    {
+      "case": "native-edit",
+      "source": 106,
+      "apply": {
+        "id": 107,
+        "ok": true,
+        "backupBeforeWrite": true,
+        "productionResult": {
+          "status": "applied",
+          "beforeSaved": true,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "290a4a9e14ae5ccc08893898402aa8c78261e9fd90f5ba271edc712df4d0680c",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1416,
+        "docxPath": "107.docx",
+        "ooxmlPath": "107.xml"
+      },
+      "revert": {
+        "id": 108,
+        "ok": true,
+        "productionResult": {
+          "status": "reverted",
+          "beforeSaved": false,
+          "postStateObserved": true
+        },
+        "fingerprintSha256": "625c647d4ab584f300dbe89380c05578020f690678a6e96a9190e29771ebcad9",
+        "issueDetails": [],
+        "blockCount": 15,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 1,
+        "totalMs": 1037,
+        "docxPath": "108.docx",
+        "ooxmlPath": "108.xml"
+      }
+    },
+    {
+      "case": "stale-apply",
+      "result": {
+        "id": 84,
+        "ok": true,
+        "productionResult": {
+          "status": "stale",
+          "diagnostic": {
+            "stage": "preflight",
+            "reason": "source-changed"
+          },
+          "beforeSaved": false,
+          "postStateObserved": false
+        },
+        "fingerprintSha256": "6a35aac2ccd34acdf7d3dc7b9bbca2ed1680a8bf4f0f76121a3394bdf45a36c6",
+        "issueDetails": [],
+        "blockCount": 16,
+        "storyCount": 6,
+        "sectionCount": 2,
+        "writes": 0,
+        "totalMs": 1277,
+        "docxPath": "84.docx",
+        "ooxmlPath": "84.xml"
+      }
+    },
+    {
+      "case": "stale-revert",
+      "result": {
+        "id": 89,
+        "ok": true,
+        "productionResult": {
+          "status": "stale",
+          "diagnostic": {
+            "stage": "preflight",
+            "reason": "source-changed"
+          },
+          "beforeSaved": false,
+          "postStateObserved": false
+        },
+        "fingerprintSha256": "3cdef82d7f22e37371e81d6859ef2c67918697c7170f8f482cde951f01accb20",
+        "issueDetails": [],
+        "blockCount": 11,
+        "storyCount": 7,
+        "sectionCount": 2,
+        "writes": 0,
+        "totalMs": 622,
+        "docxPath": "89.docx",
+        "ooxmlPath": "89.xml"
+      }
+    }
+  ]
+}

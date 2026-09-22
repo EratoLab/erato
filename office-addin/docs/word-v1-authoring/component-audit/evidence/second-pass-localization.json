@@ -1,0 +1,152 @@
+{
+  "en": {
+    "authoring": {
+      "total": 48,
+      "missing": 0
+    },
+    "card": {
+      "total": 6,
+      "missing": 0
+    },
+    "chip": {
+      "total": 7,
+      "missing": 0
+    },
+    "clientActions": {
+      "total": 2,
+      "missing": 0
+    },
+    "report": {
+      "total": 10,
+      "missing": 0
+    },
+    "review": {
+      "total": 71,
+      "missing": 0
+    },
+    "setup": {
+      "total": 9,
+      "missing": 0
+    }
+  },
+  "de": {
+    "authoring": {
+      "total": 48,
+      "missing": 48
+    },
+    "card": {
+      "total": 6,
+      "missing": 6
+    },
+    "chip": {
+      "total": 7,
+      "missing": 7
+    },
+    "clientActions": {
+      "total": 2,
+      "missing": 2
+    },
+    "report": {
+      "total": 10,
+      "missing": 10
+    },
+    "review": {
+      "total": 71,
+      "missing": 71
+    },
+    "setup": {
+      "total": 9,
+      "missing": 9
+    }
+  },
+  "es": {
+    "authoring": {
+      "total": 48,
+      "missing": 48
+    },
+    "card": {
+      "total": 6,
+      "missing": 6
+    },
+    "chip": {
+      "total": 7,
+      "missing": 7
+    },
+    "clientActions": {
+      "total": 2,
+      "missing": 2
+    },
+    "report": {
+      "total": 10,
+      "missing": 10
+    },
+    "review": {
+      "total": 71,
+      "missing": 71
+    },
+    "setup": {
+      "total": 9,
+      "missing": 9
+    }
+  },
+  "fr": {
+    "authoring": {
+      "total": 48,
+      "missing": 48
+    },
+    "card": {
+      "total": 6,
+      "missing": 6
+    },
+    "chip": {
+      "total": 7,
+      "missing": 7
+    },
+    "clientActions": {
+      "total": 2,
+      "missing": 2
+    },
+    "report": {
+      "total": 10,
+      "missing": 10
+    },
+    "review": {
+      "total": 71,
+      "missing": 71
+    },
+    "setup": {
+      "total": 9,
+      "missing": 9
+    }
+  },
+  "pl": {
+    "authoring": {
+      "total": 48,
+      "missing": 48
+    },
+    "card": {
+      "total": 6,
+      "missing": 6
+    },
+    "chip": {
+      "total": 7,
+      "missing": 7
+    },
+    "clientActions": {
+      "total": 2,
+      "missing": 2
+    },
+    "report": {
+      "total": 10,
+      "missing": 10
+    },
+    "review": {
+      "total": 71,
+      "missing": 71
+    },
+    "setup": {
+      "total": 9,
+      "missing": 9
+    }
+  }
+}

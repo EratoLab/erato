@@ -89,6 +89,12 @@ export interface HostArtifact {
    */
   cardFenceLanguages?: readonly string[];
   /**
+   * A host-validated draft restored from a successful tool call. Reuses the
+   * host card renderer without requiring an assistant-text fence. This is a
+   * review hint only; the host still owns consent and live-state write gates.
+   */
+  submittedCard?: { toolCallId: string; language: string; content: string };
+  /**
    * Replaces the default set of drifted fence tags rescued as the email
    * artifact when `bodyFormat` is present (the default covers the tags
    * newer models normalize `erato-email` to: `""`, `email`, `erato`,
@@ -122,7 +128,7 @@ export interface HostArtifact {
   alwaysAskClientActions?: string[];
   /**
    * The client action the model proposed for this message via the
-   * `propose_client_action` tool, already validated by the host against
+   * `propose_client_action` tool or an accepted submission, already validated by the host against
    * {@link HostArtifact.allowedClientActions} and the tool-call status.
    * Used as a render hint (e.g. which button is primary) — auto-surfaced
    * only under `auto_prompt` presentation and the user's local approval

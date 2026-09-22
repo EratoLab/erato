@@ -1,0 +1,17 @@
+{
+  "host": {
+    "host": "Word",
+    "version": "16.113.917.1",
+    "platform": "Mac"
+  },
+  "wordVersion": "16.113.1",
+  "dates": ["2026-09-20", "2026-09-21"],
+  "fixtureDocument": "/private/tmp/erato-word-structured-20260920/erato-structured-validation.docx",
+  "productionInterface": "typed structured JSON compiled by production host code",
+  "nativeTransport": "Document.insertFileFromBase64 with exact DOCX backup",
+  "nativeModelBackendTested": false,
+  "nativeConsentUiTested": false,
+  "windowsWebTested": false,
+  "nativeCaseCount": 13,
+  "independentRestorationCount": 11
+}

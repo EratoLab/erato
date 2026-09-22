@@ -1,0 +1,136 @@
+{
+  "scope": "Actual components, isolated Chromium fixture; mocked Word, policy and chat. No live Office or installed asset checks.",
+  "checks": [
+    {
+      "name": "Typography token change to 22px",
+      "sharedButton": "22px",
+      "consentButton": "14px",
+      "copyButton": "14px",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "Shared permission card radius",
+      "radius": "6px",
+      "cardToken": "2px",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "320px structural light / Structure",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "320px structural light / Full draft",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "320px structural light / Source mapping",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "320px structural light / source mapping with 20px root",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "320px structural dark / Structure",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "320px structural dark / Full draft",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "320px structural dark / Source mapping",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "320px structural dark / source mapping with 20px root",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "Malformed structural proposal",
+      "text": "The proposed document plan is incomplete or invalid. Ask for a corrected plan; nothing was applied.",
+      "insideReview": false,
+      "reviewMuted": "",
+      "reviewLine": "",
+      "borderLeftWidth": "0px",
+      "pageOverflow": false,
+      "cardWidth": null
+    },
+    {
+      "name": "Generating structural proposal",
+      "status": "Preparing a complete document rewrite…",
+      "pageOverflow": false,
+      "cardWidth": null
+    },
+    {
+      "name": "Malformed paragraph proposal",
+      "raw": "{invalid edits",
+      "alerts": 0,
+      "pageOverflow": false,
+      "cardWidth": null
+    },
+    {
+      "name": "Insert at cursor preview and consent",
+      "buttons": ["Insert the text at the cursor", "Always allow", "Deny"],
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "Expired paragraph capture",
+      "notice": [
+        "Original comparison and document coverage are unavailable after reload. The proposed text is shown below.",
+        "This pane no longer has the document snapshot this answer was written against. Include the document and ask again to apply changes."
+      ],
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "Completed paragraph batch with three skipped",
+      "receipt": "38 edits applied\n38 applied · 3 skipped · 0 failed",
+      "focus": {
+        "tag": "BODY",
+        "text": "38 edits applied38 applied · 3 skipped · 0 failedReview edits38 edits "
+      },
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "Paragraph copy failure",
+      "visibleFeedbackChanged": false,
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "Paragraph Revert confirmation",
+      "confirmation": "Restore the document body to just before this batch? This can remove later changes to the body.\nKeep current text\nRestore body",
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "Structural copy failure",
+      "visibleFailure": true,
+      "pageOverflow": false,
+      "cardWidth": 304
+    },
+    {
+      "name": "Structural completion focus",
+      "focus": {
+        "tag": "BODY",
+        "text": "Actual review component · 320 source paragraphs · simulated Word hostD"
+      },
+      "pageOverflow": false,
+      "cardWidth": 304
+    }
+  ],
+  "errors": []
+}

@@ -1,5 +1,5 @@
 use super::api::v1beta::ApiV1ApiDoc;
-use crate::config::MsOfficeAddinConfig;
+use crate::config::{MsOfficeAddinConfig, MsOfficeAddinManifestConfig};
 use crate::distribution::frontend_bundles::OfficeAddinFrontendBundle;
 use crate::distribution::runtime::translation_filename;
 use crate::frontend_environment::DeploymentVersion;
@@ -45,6 +45,10 @@ const OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER: &str = "{{OFFICE_ADDIN_MANIFEST
 const OFFICE_ADDIN_ID_PLACEHOLDER: &str = "{{OFFICE_ADDIN_ID}}";
 const OFFICE_ADDIN_MANIFEST_FILE_NAME: &str = "manifest.xml";
 const OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME: &str = "manifest-exchange-server.xml";
+/// The document task-pane variant: a SECOND add-in identity served from the
+/// same deployment, host-neutral by design (Word today, Excel/PowerPoint
+/// later in the same catalog entry).
+const OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME: &str = "manifest-document.xml";
 // The launch event placeholders sit in element-only content models
 // (`Host`, `DesktopFormFactor`, `bt:Urls`), where bare character data is not
 // schema-valid. Wrapping them in XML comments keeps the shipped template
@@ -314,7 +318,26 @@ fn render_office_addin_manifest(
     manifest_name: &str,
     deployment_version: Option<&str>,
 ) -> String {
-    let manifest_config = &addin_config.manifest;
+    // The document variant renders from the second identity: its own `<Id>`
+    // and its own display name and description, with every remaining scalar
+    // (provider, support URL, ribbon labels, icon paths) composed from the
+    // mail block so per-customer branding still reaches it. Serde `default`
+    // gives struct defaults, never cross-block inheritance, so this
+    // composition has to be explicit.
+    let is_document_manifest = manifest_name == OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME;
+    let document_manifest_config = is_document_manifest.then(|| MsOfficeAddinManifestConfig {
+        display_name: addin_config.document.manifest.display_name.clone(),
+        description: addin_config.document.manifest.description.clone(),
+        ..addin_config.manifest.clone()
+    });
+    let manifest_config = document_manifest_config
+        .as_ref()
+        .unwrap_or(&addin_config.manifest);
+    let addin_id = if is_document_manifest {
+        &addin_config.document.addin_id
+    } else {
+        &addin_config.addin_id
+    };
     let normalized_base_url = base_url.trim_end_matches('/');
     let office_addin_base_url =
         format!("{normalized_base_url}{OFFICE_ADDIN_MANIFEST_FRONTEND_MOUNT_PATH}");
@@ -330,7 +353,7 @@ fn render_office_addin_manifest(
     let rendered = template
         .replace("{{BASE_URL}}", base_url)
         .replace("{{OFFICE_ADDIN_BASE_URL}}", &office_addin_base_url)
-        .replace(OFFICE_ADDIN_ID_PLACEHOLDER, &addin_config.addin_id)
+        .replace(OFFICE_ADDIN_ID_PLACEHOLDER, addin_id)
         .replace(OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER, &manifest_version)
         .replace(
             "{{OFFICE_ADDIN_ASSET_BASE_URL}}",
@@ -637,6 +660,34 @@ async fn office_addin_exchange_server_manifest(
     .await
 }
 
+/// Get the document task-pane Office add-in manifest with runtime URL substitutions.
+#[utoipa::path(
+    get,
+    path = "office-addin/manifest-document.xml",
+    params(OfficeAddinManifestQuery),
+    responses(
+        (status = OK, description = "Rendered document task-pane Office add-in manifest", body = str, content_type = "application/xml"),
+        (status = NOT_FOUND, description = "Office add-in is disabled or manifest is unavailable", body = str),
+        (status = BAD_REQUEST, description = "Invalid base_url query parameter", body = str),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to render manifest", body = str)
+    )
+)]
+async fn office_addin_document_manifest(
+    State(app_state): State<AppState>,
+    Extension(deployment_version): Extension<DeploymentVersion>,
+    headers: HeaderMap,
+    Query(query): Query<OfficeAddinManifestQuery>,
+) -> Response {
+    office_addin_manifest_response(
+        app_state,
+        deployment_version,
+        headers,
+        query,
+        OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME,
+    )
+    .await
+}
+
 async fn favicon(State(app_state): State<AppState>, path: &'static str) -> Response {
     for candidate in app_state
         .distribution
@@ -754,6 +805,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/office-addin/manifest-exchange-server.xml",
             get(office_addin_exchange_server_manifest),
         )
+        .route(
+            "/office-addin/manifest-document.xml",
+            get(office_addin_document_manifest),
+        )
         .nest("/api/v1beta", crate::server::api::v1beta::router(app_state));
 
     #[cfg(all(feature = "profiling", target_os = "linux"))]
@@ -773,6 +828,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         health,
         office_addin_manifest,
         office_addin_exchange_server_manifest,
+        office_addin_document_manifest,
         crate::server::license_notices::license_notices
     ),
     nest(
@@ -793,6 +849,7 @@ E.g. the chats route scoped under there will only list the chats created by the 
 mod tests {
     use super::*;
     use crate::config::{
+        MsOfficeAddinDocumentConfig, MsOfficeAddinDocumentManifestConfig,
         MsOfficeAddinLaunchEventConfig, MsOfficeAddinLaunchEventRuntimeConfig,
         MsOfficeAddinLaunchEventType, MsOfficeAddinManifestConfig,
     };
@@ -1014,6 +1071,133 @@ mod tests {
                 None,
             )
         );
+    }
+
+    /// The document task-pane template's structural invariants, asserted on the
+    /// file as it ships. Each of these is load-bearing for a delivery route:
+    /// the host declaration decides which app offers the add-in, the top-level
+    /// requirement is the activation floor, and a `<Requirements>` child inside
+    /// `<VersionOverrides>` would gate the commands node against the SharePoint
+    /// catalog route.
+    #[test]
+    fn office_addin_document_manifest_template_declares_the_word_task_pane_shape() {
+        let template = stock_manifest_template(OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME);
+
+        assert!(template.contains(r#"xsi:type="TaskPaneApp""#));
+        assert_eq!(template.matches("<Host Name=").count(), 1);
+        assert!(template.contains(r#"<Host Name="Document" />"#));
+        assert!(template.contains(r#"<Set Name="WordApi" MinVersion="1.7" />"#));
+        assert!(template.contains("<Permissions>ReadWriteDocument</Permissions>"));
+
+        // No <Requirements> inside <VersionOverrides>: the only requirement
+        // block in the file is the top-level activation floor.
+        assert_eq!(template.matches("<Requirements>").count(), 1);
+        let version_overrides = template
+            .split_once("<VersionOverrides")
+            .expect("template carries a VersionOverrides element")
+            .1;
+        assert!(!version_overrides.contains("<Requirements>"));
+
+        for placeholder in OFFICE_ADDIN_MANIFEST_LAUNCH_EVENT_PLACEHOLDERS {
+            assert!(
+                !template.contains(placeholder),
+                "the document template must not carry {placeholder}"
+            );
+        }
+    }
+
+    #[test]
+    fn render_office_addin_document_manifest_uses_the_second_identity_and_the_word_route() {
+        let template = stock_manifest_template(OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME);
+        let config = MsOfficeAddinConfig {
+            document: MsOfficeAddinDocumentConfig {
+                addin_id: "document-addin-id".to_string(),
+                manifest: MsOfficeAddinDocumentManifestConfig {
+                    display_name: "Erato for Documents".to_string(),
+                    description: "Erato AI assistant for Word documents".to_string(),
+                },
+            },
+            ..addin_config(MsOfficeAddinManifestConfig::default())
+        };
+
+        let rendered = render_office_addin_manifest(
+            &template,
+            "https://app.example.com/base",
+            &config,
+            OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME,
+            None,
+        );
+
+        // Every placeholder is substituted.
+        assert!(
+            !rendered.contains("{{"),
+            "unsubstituted placeholder in: {rendered}"
+        );
+        // The document identity, not the mail one.
+        assert!(rendered.contains("<Id>document-addin-id</Id>"));
+        assert!(!rendered.contains("custom-addin-id"));
+        assert!(rendered.contains(r#"<DisplayName DefaultValue="Erato for Documents" />"#));
+        // Scalars with no document-scoped override are composed from the mail
+        // block, so per-customer branding still reaches this manifest.
+        assert!(rendered.contains(&format!(
+            r#"<ProviderName>{}</ProviderName>"#,
+            MsOfficeAddinManifestConfig::default().provider_name
+        )));
+        // SourceLocation resolves to the route the pane is served from.
+        assert!(rendered.contains(
+            r#"<SourceLocation DefaultValue="https://app.example.com/base/office-addin/word" />"#
+        ));
+        assert!(rendered.contains(
+            r#"<bt:Url id="taskPaneUrl" DefaultValue="https://app.example.com/base/office-addin/word" />"#
+        ));
+        assert!(!rendered.contains("localhost:3002"));
+    }
+
+    /// The document variant is excluded from launch events by manifest name,
+    /// the same way the Exchange Server variant is: a deployment that
+    /// configures launch events renders none into it.
+    #[test]
+    fn render_office_addin_document_manifest_never_emits_launch_events() {
+        let template = stock_manifest_template(OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME);
+        let rendered = render_office_addin_manifest(
+            &template,
+            "https://app.example.com/base",
+            &addin_config_with_launch_events(&["onNewMessageComposeHandler"]),
+            OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME,
+            None,
+        );
+
+        assert!(!rendered.contains("LaunchEvent"));
+        assert!(!rendered.contains("<Runtimes>"));
+    }
+
+    /// The mail manifest keeps the mail identity even after the document block
+    /// exists: the two identities must never cross over.
+    #[test]
+    fn render_office_addin_mail_manifest_keeps_the_mail_identity() {
+        let template = stock_manifest_template(OFFICE_ADDIN_MANIFEST_FILE_NAME);
+        let config = MsOfficeAddinConfig {
+            document: MsOfficeAddinDocumentConfig {
+                addin_id: "document-addin-id".to_string(),
+                manifest: MsOfficeAddinDocumentManifestConfig {
+                    display_name: "Erato for Documents".to_string(),
+                    description: "Erato AI assistant for Word documents".to_string(),
+                },
+            },
+            ..addin_config(MsOfficeAddinManifestConfig::default())
+        };
+
+        let rendered = render_office_addin_manifest(
+            &template,
+            "https://app.example.com/base",
+            &config,
+            OFFICE_ADDIN_MANIFEST_FILE_NAME,
+            None,
+        );
+
+        assert!(rendered.contains("<Id>custom-addin-id</Id>"));
+        assert!(!rendered.contains("document-addin-id"));
+        assert!(!rendered.contains("Erato for Documents"));
     }
 
     /// The Exchange Server variant is excluded by manifest name, not merely by
