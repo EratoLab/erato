@@ -3,6 +3,8 @@ import clsx from "clsx";
 import React, { memo } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import rehypeKatex from "rehype-katex";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
@@ -46,6 +48,26 @@ import type { HostArtifact } from "@/types/chat";
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
 import type { AssistantMention } from "@/utils/chat/assistantMentions";
 import type { Components } from "react-markdown";
+
+// Sanitize author HTML before KaTeX generates its trusted markup. Keep only
+// the math classes and internal link protocols needed by our renderers.
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    code: [["className", /^language-./, "math-inline", "math-display"]],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src ?? []), "erato-file"],
+    href: [
+      ...(defaultSchema.protocols?.href ?? []),
+      "erato-file",
+      "erato-mention",
+    ],
+  },
+};
 
 interface MessageContentProps {
   content: ContentPart[];
@@ -557,8 +579,9 @@ const autolinkEratoFiles = (text: string): string => {
   });
 };
 
-const FOOTNOTE_DEFINITION_ID_REGEX = /^(?:user-content-)?fn-(.+)$/;
-const FOOTNOTE_REFERENCE_ID_REGEX = /^(?:user-content-)?fnref-(.+)$/;
+// Both remark and the HTML sanitizer can add the clobber-protection prefix.
+const FOOTNOTE_DEFINITION_ID_REGEX = /^(?:user-content-)*fn-(.+)$/;
+const FOOTNOTE_REFERENCE_ID_REGEX = /^(?:user-content-)*fnref-(.+)$/;
 
 const rewriteFootnoteValue = (
   value: string | undefined,
@@ -869,6 +892,10 @@ export const MessageContent = memo(function MessageContent({
             onFileLinkPreview?.(resolvedEratoFile.previewFile);
           }}
           {...props}
+          data-footnote-ref={
+            // rehype-raw converts the generated boolean attribute to "".
+            "data-footnote-ref" in props ? true : undefined
+          }
         >
           {children}
         </a>
@@ -1147,6 +1174,7 @@ export const MessageContent = memo(function MessageContent({
       // react-markdown may pass data-footnotes in different ways
       const sectionProps = props as Record<string, unknown>;
       const isFootnotes =
+        sectionProps["data-footnotes"] === "" ||
         sectionProps["data-footnotes"] === "true" ||
         sectionProps["data-footnotes"] === true ||
         sectionProps["dataFootnotes"] === "true" ||
@@ -1162,7 +1190,10 @@ export const MessageContent = memo(function MessageContent({
             className="mt-6 border-t border-theme-border pt-4"
             data-footnotes="true"
           >
-            <h2 className="mb-3 font-heading text-lg font-semibold text-theme-fg-primary">
+            <h2
+              id="user-content-footnote-label"
+              className="mb-3 font-heading text-lg font-semibold text-theme-fg-primary"
+            >
               {t({ id: "chat.message.footnotes", message: "Footnotes" })}
             </h2>
             {/* Filter out the auto-generated h2 from children */}
@@ -1170,7 +1201,8 @@ export const MessageContent = memo(function MessageContent({
               (child) =>
                 !React.isValidElement(child) ||
                 (child.type !== "h2" &&
-                  (child.props as { id?: string }).id !== "footnote-label"),
+                  (child.props as { id?: string }).id !==
+                    "user-content-footnote-label"),
             )}
           </section>
         );
@@ -1221,15 +1253,29 @@ export const MessageContent = memo(function MessageContent({
         <HostArtifactContext.Provider value={hostArtifact ?? null}>
           <Markdown
             remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeKatex]}
+            rehypePlugins={[
+              rehypeRaw,
+              [rehypeSanitize, markdownSanitizeSchema],
+              rehypeKatex,
+            ]}
             components={components}
-            urlTransform={(url) =>
+            urlTransform={(url, key, node) => {
+              // Sanitization prefixes IDs to prevent DOM clobbering; keep
+              // generated footnote links pointed at those prefixed IDs.
+              if (
+                key === "href" &&
+                url.startsWith("#") &&
+                (node.properties.dataFootnoteRef !== undefined ||
+                  node.properties.dataFootnoteBackref !== undefined)
+              ) {
+                return `#user-content-${url.slice(1)}`;
+              }
               // eslint-disable-next-line lingui/no-unlocalized-strings
-              url.startsWith("erato-file://") ||
-              url.startsWith(ERATO_MENTION_SCHEME)
+              return url.startsWith("erato-file://") ||
+                url.startsWith(ERATO_MENTION_SCHEME)
                 ? url
-                : defaultUrlTransform(url)
-            }
+                : defaultUrlTransform(url);
+            }}
             // Handle incomplete markdown patterns gracefully
             skipHtml={false}
             unwrapDisallowed={false}

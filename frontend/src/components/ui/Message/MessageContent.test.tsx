@@ -236,6 +236,133 @@ describe("MessageContent", () => {
     window.localStorage.clear();
   });
 
+  it.each(["<br>", "<br/>", "<br />"])(
+    "renders %s as line breaks in Markdown table cells",
+    (lineBreak) => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent(
+            `| Task | Notes |\n| :--- | :--- |\n| Design review | Review results${lineBreak}Approve design${lineBreak}Send files |`,
+          )}
+        />,
+      );
+
+      const cell = screen.getByRole("cell", {
+        name: "Review results Approve design Send files",
+      });
+      expect(cell.querySelectorAll("br")).toHaveLength(2);
+      expect(Array.from(cell.childNodes, (node) => node.textContent)).toEqual([
+        "Review results",
+        "",
+        "Approve design",
+        "",
+        "Send files",
+      ]);
+    },
+  );
+
+  it("renders allowed inline HTML while sanitizing unsafe HTML", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          '<strong onclick="alert(1)">Bold</strong> <em>Emphasis</em> <a href="https://example.com">Safe link</a> <a href="javascript:alert(1)">Unsafe link</a> <a href="data:text/html,unsafe">Data link</a> <img src="javascript:alert(1)" onerror="alert(1)" /> <script>alert(1)</script><iframe src="https://example.com"></iframe>',
+        )}
+      />,
+    );
+
+    expect(screen.getByText("Bold").tagName).toBe("STRONG");
+    expect(screen.getByText("Emphasis").tagName).toBe("EM");
+    expect(screen.getByRole("link", { name: "Safe link" })).toHaveAttribute(
+      "href",
+      "https://example.com",
+    );
+    expect(screen.getByText("Unsafe link")).toHaveAttribute(
+      "href",
+      "#missing-link-target",
+    );
+    expect(screen.getByText("Data link")).toHaveAttribute(
+      "href",
+      "#missing-link-target",
+    );
+    expect(
+      container.querySelector("script, iframe, [onclick], [onerror]"),
+    ).toBeNull();
+    expect(container.querySelector('img[src^="javascript:"]')).toBeNull();
+    expect(container).not.toHaveTextContent("alert(1)");
+  });
+
+  it("keeps HTML in inline and fenced code literal", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "`<br>`\n\n```html\n<strong>Example</strong><br /><script>alert(1)</script>\n```",
+        )}
+      />,
+    );
+
+    expect(container.querySelector("p code")).toHaveTextContent("<br>");
+    expect(container.querySelector("pre")).toHaveTextContent(
+      "<strong>Example</strong><br /><script>alert(1)</script>",
+    );
+    expect(container.querySelector("br, script")).toBeNull();
+  });
+
+  it("preserves footnote targets and back references after sanitization", () => {
+    const { container } = renderWithTheme(
+      <MessageContent content={textContent("A note[^1].\n\n[^1]: Details.")} />,
+    );
+
+    const links = container.querySelectorAll(
+      "a[data-footnote-ref], a[data-footnote-backref]",
+    );
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      const target = link.getAttribute("href")!.slice(1);
+      expect(container.querySelector(`[id="${target}"]`)).toBeInTheDocument();
+    }
+    expect(screen.getAllByRole("heading", { name: "Footnotes" })).toHaveLength(
+      1,
+    );
+  });
+
+  it("keeps sanitized footnotes scoped to each message", () => {
+    const { container } = renderWithTheme(
+      <>
+        {["first", "second"].map((messageId) => (
+          <MessageContent
+            key={messageId}
+            messageId={messageId}
+            content={textContent("A note[^1].\n\n[^1]: Details.")}
+          />
+        ))}
+      </>,
+    );
+
+    const references = container.querySelectorAll(
+      'a[data-footnote-ref="true"]',
+    );
+    expect(references).toHaveLength(2);
+    for (const [index, messageId] of ["first", "second"].entries()) {
+      expect(references[index]).toHaveAttribute(
+        "href",
+        `#message-${messageId}-fn-1`,
+      );
+      expect(references[index]).toHaveAttribute(
+        "id",
+        `message-${messageId}-fnref-1`,
+      );
+      expect(references[index]).not.toHaveAttribute("target");
+      expect(
+        container.querySelectorAll(`[id="message-${messageId}-fn-1"]`),
+      ).toHaveLength(1);
+      expect(
+        container.querySelector(
+          `a[data-footnote-backref][href="#message-${messageId}-fnref-1"]`,
+        ),
+      ).toBeInTheDocument();
+    }
+  });
+
   it("adopts the theme typography hooks for headings and inline code", () => {
     const { container } = renderWithTheme(
       <MessageContent
