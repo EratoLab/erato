@@ -3855,6 +3855,21 @@ msgstr "Nie można otworzyć katalogu danych sidecara."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.denied"
+msgstr "Dostęp do aplikacji lokalnych zablokowany"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.description"
+msgstr "Przeglądarka zablokowała dostęp do aplikacji lokalnych. To uprawnienie jest wymagane do połączenia z Desktop Sidecar. Otwórz uprawnienia tej witryny za pomocą ikony obok paska adresu i zezwól na dostęp do aplikacji lokalnych lub sieci lokalnej albo zresetuj to uprawnienie, a następnie spróbuj ponownie. Przeglądarka nie może ponownie wyświetlić prośby o uprawnienie, dopóki dostęp jest zablokowany."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.retry"
+msgstr "Ponów próbę dostępu do aplikacji lokalnych"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.retry"
 msgstr ""
 

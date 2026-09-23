@@ -3855,6 +3855,21 @@ msgstr "Could not open the sidecar data directory."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.denied"
+msgstr "Local application access blocked"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.description"
+msgstr "The browser has blocked access to local applications. This permission is required to connect to the desktop sidecar. Open this site's permissions using the icon next to the address bar and allow or reset local application or local network access, then retry. The browser cannot show the prompt again while access is blocked."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.retry"
+msgstr "Retry local application access"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.retry"
 msgstr "Retry connection"
 
