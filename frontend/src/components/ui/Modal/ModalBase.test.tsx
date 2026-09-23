@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ModalBase } from "./ModalBase";
@@ -9,8 +9,9 @@ afterEach(() => {
 
 describe("ModalBase", () => {
   it("renders stable overlay and shell hooks when open", () => {
+    const onClose = vi.fn();
     render(
-      <ModalBase isOpen={true} onClose={vi.fn()} title="Theme Settings">
+      <ModalBase isOpen={true} onClose={onClose} title="Theme Settings">
         <div>Modal content</div>
       </ModalBase>,
     );
@@ -27,15 +28,14 @@ describe("ModalBase", () => {
     expect(dialog.className).toContain("w-full");
     expect(closeButton.className).toContain("focus-ring-tight");
     expect(closeButton.className).not.toContain("p-1");
-    expect(closeButton.getAttribute("style")).toContain(
-      "right: var(--theme-spacing-modal-padding)",
-    );
-    expect(closeButton.getAttribute("style")).toContain(
-      "top: var(--theme-spacing-modal-padding)",
-    );
+    expect(closeButton).toHaveClass("modal-close-geometry");
     expect(overlay).toBeTruthy();
     expect(overlay).toHaveClass("modal-overlay-skin");
     expect(overlay?.getAttribute("style") ?? "").toBe("");
     expect(overlay?.className).not.toContain("backdrop-blur-sm");
+    fireEvent.click(closeButton);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

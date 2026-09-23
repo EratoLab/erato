@@ -1,16 +1,35 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
 import { fetchProfile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { OutlookSourceNavigationProvider } from "@/providers/OutlookSourceNavigationProvider";
 
 import { ClientToolFileApprovals } from "./ClientToolFileApproval";
 
-import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  OutlookFileProvenance,
+  UserProfile,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchProfile: vi.fn(),
+}));
+vi.mock("@/providers/DesktopSidecarProvider", () => ({
+  useDesktopSidecar: () => ({
+    snapshot: {
+      state: "ready",
+      discoveryExtensions: {
+        "x-erato-outlook-navigation": {
+          version: 1,
+          target: "classicOutlook",
+          launchUriPrefix: "erato-launch://outlook/open?reference=",
+          maxReferenceBytes: 16384,
+        },
+      },
+    },
+  }),
 }));
 vi.mock("../FileUpload/AttachmentTile", () => ({
   AttachmentTile: ({
@@ -70,14 +89,19 @@ it("previews local bytes and returns only selected files", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Preview first.txt" }));
   expect(create).toHaveBeenCalledWith(files[0]);
   expect(screen.getByTestId("preview")).toHaveTextContent("blob:local-preview");
-  fireEvent.click(screen.getByRole("button", { name: "Preview first.txt" }));
+  expect(
+    screen.getByRole("dialog", { name: "Preview: first.txt" }),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Close modal" }));
   expect(screen.queryByTestId("preview")).not.toBeInTheDocument();
   expect(revoke).toHaveBeenCalledWith("blob:local-preview");
   expect(screen.getByRole("checkbox", { name: "first.txt" })).toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "Preview first.txt" }));
   expect(screen.getByTestId("preview")).toBeInTheDocument();
+  fireEvent.keyDown(document, { key: "Escape" });
   fireEvent.click(screen.getByRole("button", { name: "Preview second.txt" }));
   expect(create).toHaveBeenLastCalledWith(files[1]);
+  fireEvent.click(screen.getByRole("button", { name: "Close modal" }));
   fireEvent.click(screen.getByRole("checkbox", { name: "second.txt" }));
   fireEvent.click(
     screen.getByRole("button", { name: "Upload selected files" }),
@@ -85,6 +109,68 @@ it("previews local bytes and returns only selected files", async () => {
   expect(await result).toEqual(new Set([files[0]]));
   expect(revoke).toHaveBeenCalledWith("blob:local-preview");
 });
+it.each(["office", "desktop"])(
+  "opens the containing email through %s before consent without approving or selecting files",
+  async (host) => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:local-preview");
+    const parent = {
+      external_ids: [
+        { key: "ews_id", value: "containing-email" },
+        { key: "email_message_id", value: "<parent@example.test>" },
+      ],
+      mailbox: { emailAddress: "shared@example.test" },
+    };
+    const provenance: OutlookFileProvenance = {
+      version: 1,
+      origins: [{ topLevelParent: parent }],
+    };
+    const open = vi.fn(async () => {});
+    const settled = vi.fn();
+    render(
+      <OutlookSourceNavigationProvider
+        navigator={host === "office" ? { canOpen: () => true, open } : null}
+      >
+        <Harness />
+      </OutlookSourceNavigationProvider>,
+    );
+    let result!: Promise<ReadonlySet<File>>;
+    await act(async () => {
+      result = approveFiles(files, context, new Map([[files[0], provenance]]));
+      void result.then(settled);
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "first.txt" }));
+    const role = host === "office" ? "button" : "link";
+    const action = screen.getByRole(role, { name: "Open in Outlook" });
+    if (host === "desktop") {
+      const encoded = action.getAttribute("href")!.split("reference=")[1];
+      expect(
+        JSON.parse(
+          globalThis.atob(encoded.replaceAll("-", "+").replaceAll("_", "/")),
+        ),
+      ).toEqual(parent);
+      action.addEventListener("click", (event) => event.preventDefault());
+    }
+    await act(async () => {
+      fireEvent.click(action);
+    });
+    if (host === "office") expect(open).toHaveBeenCalledExactlyOnceWith(parent);
+    expect(settled).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("checkbox", { name: "first.txt" }),
+    ).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Preview first.txt" }));
+    expect(
+      within(screen.getByRole("dialog")).getByRole(role, {
+        name: "Open in Outlook",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(settled).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Reject all" }));
+    expect(await result).toEqual(new Set());
+  },
+);
 it.each(["never_allow", "always_allow"] as const)(
   "honors backend policy %s without prompting",
   async (policy) => {

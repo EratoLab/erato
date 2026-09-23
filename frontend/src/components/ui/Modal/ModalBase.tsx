@@ -96,21 +96,19 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       >
         {/* Optional Header */}
         {title && (
-          <div className="modal-section-geometry shrink-0 border-b border-theme-border">
+          <div className="modal-section-geometry flex shrink-0 items-start gap-3 border-b border-theme-border">
             <h2
               id="modal-title"
-              className="font-heading text-lg font-semibold text-theme-fg-primary"
+              className="min-w-0 flex-1 break-words font-heading text-lg font-semibold text-theme-fg-primary"
             >
               {title}
             </h2>
-            {/* Simple Close Button — positioned using the same modal padding token */}
+            {/* Keep the close control beside long titles, including in add-in panes. */}
             <button
               onClick={onClose}
-              className="modal-close-geometry focus-ring-tight absolute text-theme-fg-muted hover:bg-theme-bg-secondary"
+              className="modal-close-geometry focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary"
               style={{
                 padding: "var(--theme-spacing-modal-close-button-padding)",
-                right: "var(--theme-spacing-modal-padding)",
-                top: "var(--theme-spacing-modal-padding)",
               }}
               aria-label={t`Close modal`}
             >

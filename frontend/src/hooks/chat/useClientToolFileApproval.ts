@@ -27,6 +27,7 @@ export function useClientToolFileApproval() {
     async (
       files: File[],
       context: ClientToolCallContext,
+      outlookProvenance?: ClientToolFileApprovalRequest["outlookProvenance"],
     ): Promise<ReadonlySet<File>> => {
       const { signal, chatId } = context;
       signal?.throwIfAborted();
@@ -43,6 +44,7 @@ export function useClientToolFileApproval() {
         const request: ClientToolFileApprovalRequest = {
           id: nextRequestId++,
           files,
+          outlookProvenance,
           selected: new Set(files),
           context,
           finish: (approved) => {

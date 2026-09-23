@@ -6584,6 +6584,7 @@ msgstr "Preview of {filename}"
 msgid "Preview unavailable: this email could not be parsed."
 msgstr "Preview unavailable: this email could not be parsed."
 
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview:"
 msgstr "Preview:"

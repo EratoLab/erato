@@ -8,6 +8,10 @@ import {
 } from "./chatTools";
 import { resolveSidecarMailboxId } from "./mailboxAccess";
 
+import type {
+  SidecarAttachmentUpload,
+  SidecarChatToolOptions,
+} from "./chatTools";
 import type { OutlookGetConversationV1Result } from "@erato/desktop-sidecar-protocol";
 
 const mailboxId = "a".repeat(32);
@@ -46,9 +50,13 @@ function setup(responses: Record<string, unknown>) {
   });
   // Exercise actual pinned request AND result validators, without discovery.
   const supports = vi.spyOn(client, "supports").mockReturnValue(true);
-  const uploadAttachment = vi.fn(async () => ({ id: "uploaded-file" }));
+  const uploadAttachment = vi.fn<SidecarAttachmentUpload>(async () => ({
+    id: "uploaded-file",
+  }));
   const options = {
-    approveFiles: vi.fn(async (files: File[]) => new Set(files)),
+    approveFiles: vi.fn<SidecarChatToolOptions["approveFiles"]>(
+      async (files) => new Set(files),
+    ),
     uploadAttachment,
     uploadsEnabled: true,
     maxUploadBytes: 1000,
@@ -88,10 +96,31 @@ describe("shared desktop sidecar tools", () => {
       external_ids: [{ key: "ews_id", value: `${name}-ews` }],
     }));
     const env = setup({ "outlook.get_conversation.v1": data });
+    env.options.approveFiles.mockImplementation(
+      async (files, _context, provenance) => {
+        expect(env.uploadAttachment).not.toHaveBeenCalled();
+        for (const [index, name] of ["first", "second"].entries()) {
+          expect(
+            provenance?.get(files[index])?.origins[0].topLevelParent,
+          ).toMatchObject({
+            external_ids: [
+              { key: "ews_id", value: `${name}-ews` },
+              { key: "email_message_id", value: `<${name}@example.test>` },
+            ],
+            mailbox: { mailboxId },
+          });
+        }
+        return new Set(files);
+      },
+    );
     await env
       .tools()[1]
       .execute({ ...anchor, includeAttachments: true }, context);
     expect(env.uploadAttachment).toHaveBeenCalledTimes(2);
+    const consentProvenance = env.options.approveFiles.mock.calls[0][2];
+    for (const [file, , , , provenance] of env.uploadAttachment.mock.calls) {
+      expect(provenance).toBe(consentProvenance?.get(file));
+    }
     for (const [index, name] of ["first", "second"].entries()) {
       expect(env.uploadAttachment).toHaveBeenNthCalledWith(
         index + 1,
@@ -166,6 +195,21 @@ describe("shared desktop sidecar tools", () => {
       });
       env.supports.mockImplementation(
         (method) => mailboxDiscovery || method !== "outlook.list_mailboxes.v1",
+      );
+      env.options.approveFiles.mockImplementation(
+        async (files, _context, provenance) => {
+          expect(env.uploadAttachment).not.toHaveBeenCalled();
+          expect(provenance?.get(files[0])?.origins[0].topLevelParent).toEqual({
+            ...topLevelParent,
+            mailbox: {
+              mailboxId,
+              ...(mailboxDiscovery
+                ? { emailAddress: "shared@example.test" }
+                : {}),
+            },
+          });
+          return new Set(files);
+        },
       );
       const tools = env.tools();
       expect(await tools[0].execute({ text: "note" })).toMatchObject({

@@ -48,6 +48,7 @@ export interface SidecarChatToolOptions {
   approveFiles: (
     files: File[],
     context: ClientToolCallContext,
+    outlookProvenance?: ReadonlyMap<File, OutlookFileProvenance>,
   ) => Promise<ReadonlySet<File>>;
   uploadsEnabled: boolean;
   maxUploadBytes: number;
@@ -275,15 +276,30 @@ export function createSidecarChatTools(
         const mailbox = outlookMailboxReference(
           conversation.mailbox ?? { id: mailboxId },
         );
+        const attachmentProvenance = new Map<object, OutlookFileProvenance>();
         for (const message of conversation.messages) {
           for (const attachment of message.attachments) {
             if (attachment.topLevelParent?.documentId) {
               rememberMailbox(attachment.topLevelParent.documentId, mailbox);
             }
+            const provenance = outlookFileProvenance(
+              hasMessageIdentity(attachment)
+                ? outlookMessageReference(attachment, mailbox)
+                : undefined,
+              attachment.topLevelParent
+                ? outlookMessageReference(attachment.topLevelParent, mailbox)
+                : outlookMessageReference(
+                    message,
+                    mailbox,
+                    message.internetMessageId,
+                  ),
+            );
+            if (provenance) attachmentProvenance.set(attachment, provenance);
           }
         }
         // Keep bytes local until the user has reviewed the complete selection.
         const localFiles = new Map<object, File>();
+        const fileProvenance = new Map<File, OutlookFileProvenance>();
         const preparationFailures = new Map<object, string>();
         let previewBytes = options.maxUploadBytes;
         if (
@@ -317,12 +333,16 @@ export function createSidecarChatTools(
                   preparationFailures.set(attachment, "size_limit");
                   continue;
                 }
-                localFiles.set(
-                  attachment,
-                  new File([bytes], attachment.name ?? "attachment", {
+                const file = new File(
+                  [bytes],
+                  attachment.name ?? "attachment",
+                  {
                     type: attachment.contentType ?? "application/octet-stream",
-                  }),
+                  },
                 );
+                localFiles.set(attachment, file);
+                const provenance = attachmentProvenance.get(attachment);
+                if (provenance) fileProvenance.set(file, provenance);
                 previewBytes -= bytes.length;
               } catch {
                 preparationFailures.set(attachment, "upload_failed");
@@ -332,7 +352,11 @@ export function createSidecarChatTools(
         }
         const approvedFiles =
           localFiles.size && context
-            ? await options.approveFiles([...localFiles.values()], context)
+            ? await options.approveFiles(
+                [...localFiles.values()],
+                context,
+                fileProvenance,
+              )
             : new Set<File>();
         context?.signal?.throwIfAborted();
         const fileUploadIds: string[] = [];
@@ -358,18 +382,7 @@ export function createSidecarChatTools(
             const externalIdEwsId = attachment.external_ids?.find(
               (id) => id.key === "ews_id",
             )?.value;
-            const provenance = outlookFileProvenance(
-              hasMessageIdentity(attachment)
-                ? outlookMessageReference(attachment, mailbox)
-                : undefined,
-              attachment.topLevelParent
-                ? outlookMessageReference(attachment.topLevelParent, mailbox)
-                : outlookMessageReference(
-                    message,
-                    mailbox,
-                    message.internetMessageId,
-                  ),
-            );
+            const provenance = attachmentProvenance.get(attachment);
             // Equal bytes can belong to distinct Outlook items. Preserve their identities.
             const uploadKey =
               attachment.sha256 && provenance
@@ -613,15 +626,6 @@ export function createSidecarChatTools(
           throw new Error("The document exceeds the upload size limit.");
         }
         const file = new File([bytes], filename, { type: mimeType });
-        const approved = await options.approveFiles([file], context);
-        context.signal?.throwIfAborted();
-        if (!approved.has(file)) {
-          return {
-            ok: false,
-            error:
-              "The user rejected uploading this file. Do not retry without their permission.",
-          };
-        }
         let mailbox = documentMailboxes.get(args.documentId);
         if (
           mailbox?.mailboxId &&
@@ -657,6 +661,19 @@ export function createSidecarChatTools(
             ? outlookMessageReference(topLevelParent, mailbox)
             : undefined,
         );
+        const approved = await options.approveFiles(
+          [file],
+          context,
+          new Map(provenance ? [[file, provenance]] : []),
+        );
+        context.signal?.throwIfAborted();
+        if (!approved.has(file)) {
+          return {
+            ok: false,
+            error:
+              "The user rejected uploading this file. Do not retry without their permission.",
+          };
+        }
         const uploaded = await options.uploadAttachment(
           file,
           context.chatId,
