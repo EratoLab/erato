@@ -4838,6 +4838,20 @@ msgstr "Elige cuándo puede el asistente usar contenido de este dispositivo. Los
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.permissions.title"
 msgstr "Permisos de herramientas"
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.denied"
+msgstr "Acceso a aplicaciones locales bloqueado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.description"
+msgstr "El navegador ha bloqueado el acceso a las aplicaciones locales. Este permiso es necesario para conectarse al Desktop Sidecar. Abra los permisos de este sitio mediante el icono junto a la barra de direcciones y permita o restablezca el acceso a las aplicaciones locales o a la red local. Después, vuelva a intentarlo. El navegador no puede volver a mostrar la solicitud mientras el acceso esté bloqueado."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permission.retry"
+msgstr "Reintentar el acceso a aplicaciones locales"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
