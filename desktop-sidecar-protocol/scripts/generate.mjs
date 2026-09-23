@@ -330,6 +330,16 @@ const typeTargets = [
     "SidecarConfigureV1Result",
   ],
   [
+    "schemas/methods/sidecar-open-data-directory-v1-params.schema.json",
+    "sidecar-open-data-directory-v1-params.ts",
+    "SidecarOpenDataDirectoryV1Params",
+  ],
+  [
+    "schemas/methods/sidecar-open-data-directory-v1-result.schema.json",
+    "sidecar-open-data-directory-v1-result.ts",
+    "SidecarOpenDataDirectoryV1Result",
+  ],
+  [
     "schemas/methods/sidecar-restart-v1-params.schema.json",
     "sidecar-restart-v1-params.ts",
     "SidecarRestartV1Params",
@@ -581,6 +591,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-params.schema.json",
   validateDiagnosticsEchoV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-result.schema.json",
+  validateSidecarOpenDataDirectoryV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-params.schema.json",
+  validateSidecarOpenDataDirectoryV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-result.schema.json",
   validateSidecarRestartV1Params:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json",
   validateSidecarRestartV1Result:

@@ -84,6 +84,28 @@
       "clientVersions": ["2.0"],
       "sidecarVersions": ["1.0"],
       "errorKind": "incompatible_protocol"
+    },
+    {
+      "name": "current client and previous sidecar without open data directory",
+      "clientVersions": ["1.0"],
+      "sidecarVersions": ["1.0"],
+      "clientCompiledMethods": [
+        "diagnostics.echo.v1",
+        "sidecar.open_data_directory.v1"
+      ],
+      "sidecarAdvertisedMethods": ["diagnostics.echo.v1"],
+      "supportsOpenDataDirectory": false
+    },
+    {
+      "name": "previous client and current sidecar with additive open data directory",
+      "clientVersions": ["1.0"],
+      "sidecarVersions": ["1.0"],
+      "clientCompiledMethods": ["diagnostics.echo.v1"],
+      "sidecarAdvertisedMethods": [
+        "diagnostics.echo.v1",
+        "sidecar.open_data_directory.v1"
+      ],
+      "supportsOpenDataDirectory": false
     }
   ]
 }

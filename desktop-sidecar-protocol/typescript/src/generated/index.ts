@@ -63,6 +63,8 @@ export type { DiagnosticsEchoV1Result } from "./diagnostics-echo-v1-result.js";
 export type { SidecarConfiguration } from "./sidecar-configuration.js";
 export type { SidecarConfigureV1Params } from "./sidecar-configure-v1-params.js";
 export type { SidecarConfigureV1Result } from "./sidecar-configure-v1-result.js";
+export type { SidecarOpenDataDirectoryV1Params } from "./sidecar-open-data-directory-v1-params.js";
+export type { SidecarOpenDataDirectoryV1Result } from "./sidecar-open-data-directory-v1-result.js";
 export type { SidecarRestartV1Params } from "./sidecar-restart-v1-params.js";
 export type { SidecarRestartV1Result } from "./sidecar-restart-v1-result.js";
 export type { OutlookListMailboxesV1Params } from "./outlook-list-mailboxes-v1-params.js";

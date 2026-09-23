@@ -24692,11 +24692,11 @@ validate94.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarRestartV1Params = validate95;
-const schema130 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json","title":"SidecarRestartV1Params","type":"object","properties":{},"additionalProperties":true};
+export const validateSidecarOpenDataDirectoryV1Params = validate95;
+const schema130 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-params.schema.json","title":"SidecarOpenDataDirectoryV1Params","type":"object","properties":{},"additionalProperties":true};
 
 function validate95(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
-/*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json" */;
+/*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -24715,10 +24715,78 @@ validate95.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarRestartV1Result = validate96;
-const schema131 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json","title":"SidecarRestartV1Result","type":"object","required":["accepted"],"properties":{"accepted":{"type":"boolean"}},"additionalProperties":true};
+export const validateSidecarOpenDataDirectoryV1Result = validate96;
+const schema131 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-result.schema.json","title":"SidecarOpenDataDirectoryV1Result","type":"object","required":["opened"],"properties":{"opened":{"type":"boolean"}},"additionalProperties":true};
 
 function validate96(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+/*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-result.schema.json" */;
+let vErrors = null;
+let errors = 0;
+if(data && typeof data == "object" && !Array.isArray(data)){
+if(data.opened === undefined){
+const err0 = {instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: "opened"},message:"must have required property '"+"opened"+"'"};
+if(vErrors === null){
+vErrors = [err0];
+}
+else {
+vErrors.push(err0);
+}
+errors++;
+}
+if(data.opened !== undefined){
+if(typeof data.opened !== "boolean"){
+const err1 = {instancePath:instancePath+"/opened",schemaPath:"#/properties/opened/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(vErrors === null){
+vErrors = [err1];
+}
+else {
+vErrors.push(err1);
+}
+errors++;
+}
+}
+}
+else {
+const err2 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err2];
+}
+else {
+vErrors.push(err2);
+}
+errors++;
+}
+validate96.errors = vErrors;
+return errors === 0;
+}
+
+export const validateSidecarRestartV1Params = validate97;
+const schema132 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json","title":"SidecarRestartV1Params","type":"object","properties":{},"additionalProperties":true};
+
+function validate97(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+/*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json" */;
+let vErrors = null;
+let errors = 0;
+if(data && typeof data == "object" && !Array.isArray(data)){
+}
+else {
+const err0 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err0];
+}
+else {
+vErrors.push(err0);
+}
+errors++;
+}
+validate97.errors = vErrors;
+return errors === 0;
+}
+
+export const validateSidecarRestartV1Result = validate98;
+const schema133 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json","title":"SidecarRestartV1Result","type":"object","required":["accepted"],"properties":{"accepted":{"type":"boolean"}},"additionalProperties":true};
+
+function validate98(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24756,14 +24824,14 @@ vErrors.push(err2);
 }
 errors++;
 }
-validate96.errors = vErrors;
+validate98.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarConfigureV1Params = validate97;
-const schema132 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json","title":"SidecarConfigureV1Params","type":"object","required":["user_configuration","organization_configuration"],"properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"additionalProperties":true};
+export const validateSidecarConfigureV1Params = validate99;
+const schema134 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json","title":"SidecarConfigureV1Params","type":"object","required":["user_configuration","organization_configuration"],"properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"additionalProperties":true};
 
-function validate97(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate99(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25261,14 +25329,14 @@ vErrors.push(err40);
 }
 errors++;
 }
-validate97.errors = vErrors;
+validate99.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarConfigureV1Result = validate98;
-const schema135 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json","title":"SidecarConfigureV1Result","type":"object","additionalProperties":true};
+export const validateSidecarConfigureV1Result = validate100;
+const schema137 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json","title":"SidecarConfigureV1Result","type":"object","additionalProperties":true};
 
-function validate98(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate100(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25284,14 +25352,14 @@ vErrors.push(err0);
 }
 errors++;
 }
-validate98.errors = vErrors;
+validate100.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookListMailboxesV1Params = validate99;
-const schema136 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json","title":"OutlookListMailboxesV1Params","type":"object","properties":{},"additionalProperties":true};
+export const validateOutlookListMailboxesV1Params = validate101;
+const schema138 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json","title":"OutlookListMailboxesV1Params","type":"object","properties":{},"additionalProperties":true};
 
-function validate99(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate101(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25307,17 +25375,17 @@ vErrors.push(err0);
 }
 errors++;
 }
-validate99.errors = vErrors;
+validate101.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookListMailboxesV1Result = validate100;
-const schema137 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-result.schema.json","title":"OutlookListMailboxesV1Result","type":"object","required":["mailboxes","warnings"],"properties":{"mailboxes":{"type":"array","items":{"$ref":"../outlook/mailbox.schema.json"},"maxItems":1024},"warnings":{"type":"array","items":{"$ref":"../outlook/listing-warning.schema.json"},"maxItems":1024}},"additionalProperties":true};
-const schema138 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox.schema.json","title":"OutlookMailbox","description":"A mailbox or message store available through the local Outlook installation.","type":"object","required":["id","displayName","source"],"properties":{"id":{"description":"Short opaque mailbox identifier. It is unique for the current sidecar runtime and logically stable across restarts while the Outlook profile and store identity remain unchanged.","type":"string","pattern":"^[0-9a-f]{32}$"},"displayName":{"type":"string","minLength":1,"maxLength":1024},"emailAddress":{"type":"string","minLength":1,"maxLength":1024},"profileName":{"description":"Name of the Outlook profile containing this mailbox. Omitted when the platform or standalone store has no profile concept.","type":"string","minLength":1,"maxLength":1024},"source":{"description":"Implementation-defined local Outlook storage source. Known values include pst, ost, macOsProfile, and windowsOutlook.","type":"string","minLength":1,"maxLength":128}},"additionalProperties":true};
-const schema139 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/listing-warning.schema.json","title":"OutlookListingWarning","description":"A local Outlook source that could not be inspected without hiding successful results.","type":"object","required":["message"],"properties":{"path":{"type":"string","minLength":1,"maxLength":32768},"message":{"type":"string","minLength":1,"maxLength":4096}},"additionalProperties":true};
+export const validateOutlookListMailboxesV1Result = validate102;
+const schema139 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-result.schema.json","title":"OutlookListMailboxesV1Result","type":"object","required":["mailboxes","warnings"],"properties":{"mailboxes":{"type":"array","items":{"$ref":"../outlook/mailbox.schema.json"},"maxItems":1024},"warnings":{"type":"array","items":{"$ref":"../outlook/listing-warning.schema.json"},"maxItems":1024}},"additionalProperties":true};
+const schema140 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox.schema.json","title":"OutlookMailbox","description":"A mailbox or message store available through the local Outlook installation.","type":"object","required":["id","displayName","source"],"properties":{"id":{"description":"Short opaque mailbox identifier. It is unique for the current sidecar runtime and logically stable across restarts while the Outlook profile and store identity remain unchanged.","type":"string","pattern":"^[0-9a-f]{32}$"},"displayName":{"type":"string","minLength":1,"maxLength":1024},"emailAddress":{"type":"string","minLength":1,"maxLength":1024},"profileName":{"description":"Name of the Outlook profile containing this mailbox. Omitted when the platform or standalone store has no profile concept.","type":"string","minLength":1,"maxLength":1024},"source":{"description":"Implementation-defined local Outlook storage source. Known values include pst, ost, macOsProfile, and windowsOutlook.","type":"string","minLength":1,"maxLength":128}},"additionalProperties":true};
+const schema141 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/listing-warning.schema.json","title":"OutlookListingWarning","description":"A local Outlook source that could not be inspected without hiding successful results.","type":"object","required":["message"],"properties":{"path":{"type":"string","minLength":1,"maxLength":32768},"message":{"type":"string","minLength":1,"maxLength":4096}},"additionalProperties":true};
 const pattern70 = new RegExp("^[0-9a-f]{32}$", "u");
 
-function validate100(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate102(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25710,14 +25778,14 @@ vErrors.push(err32);
 }
 errors++;
 }
-validate100.errors = vErrors;
+validate102.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookListEmailsV1Params = validate101;
-const schema140 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-params.schema.json","title":"OutlookListEmailsV1Params","type":"object","required":["mailboxId"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"}},"additionalProperties":true};
+export const validateOutlookListEmailsV1Params = validate103;
+const schema142 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-params.schema.json","title":"OutlookListEmailsV1Params","type":"object","required":["mailboxId"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"}},"additionalProperties":true};
 
-function validate101(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate103(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25768,15 +25836,15 @@ vErrors.push(err3);
 }
 errors++;
 }
-validate101.errors = vErrors;
+validate103.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookListEmailsV1Result = validate102;
-const schema141 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json","title":"OutlookListEmailsV1Result","description":"Up to 50 of the newest locally indexed emails in the selected mailbox.","type":"object","required":["mailbox","emails"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"emails":{"type":"array","items":{"$ref":"../outlook/email-summary.schema.json"},"maxItems":50}},"additionalProperties":true};
-const schema143 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/email-summary.schema.json","title":"OutlookEmailSummary","description":"Metadata for one locally indexed Outlook email.","type":"object","required":["id"],"properties":{"id":{"description":"Source-specific stable message identifier.","type":"string","minLength":1,"maxLength":32768},"subject":{"type":"string","maxLength":32768},"senderName":{"type":"string","maxLength":4096},"senderEmailAddress":{"type":"string","maxLength":4096},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"internetMessageId":{"type":"string","maxLength":32768}},"additionalProperties":true};
+export const validateOutlookListEmailsV1Result = validate104;
+const schema143 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json","title":"OutlookListEmailsV1Result","description":"Up to 50 of the newest locally indexed emails in the selected mailbox.","type":"object","required":["mailbox","emails"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"emails":{"type":"array","items":{"$ref":"../outlook/email-summary.schema.json"},"maxItems":50}},"additionalProperties":true};
+const schema145 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/email-summary.schema.json","title":"OutlookEmailSummary","description":"Metadata for one locally indexed Outlook email.","type":"object","required":["id"],"properties":{"id":{"description":"Source-specific stable message identifier.","type":"string","minLength":1,"maxLength":32768},"subject":{"type":"string","maxLength":32768},"senderName":{"type":"string","maxLength":4096},"senderEmailAddress":{"type":"string","maxLength":4096},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"internetMessageId":{"type":"string","maxLength":32768}},"additionalProperties":true};
 
-function validate102(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate104(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -26243,14 +26311,14 @@ vErrors.push(err38);
 }
 errors++;
 }
-validate102.errors = vErrors;
+validate104.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookGetConversationV1Params = validate103;
-const schema144 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json","title":"OutlookGetConversationV1Params","type":"object","required":["mailboxId","anchor"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"anchor":{"description":"The message the conversation is resolved from.","type":"object","required":["internetMessageId"],"properties":{"internetMessageId":{"description":"RFC 5322 Message-ID of the anchor message, including angle brackets, as reported by outlook.list_emails.v1. Not the Office.js conversationId.","type":"string","minLength":1,"maxLength":32768}},"additionalProperties":true},"maxMessages":{"description":"Cap on the number of returned messages. When the conversation has more, the result is reported as partial.","type":"integer","minimum":1,"maximum":1000}},"additionalProperties":true};
+export const validateOutlookGetConversationV1Params = validate105;
+const schema146 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json","title":"OutlookGetConversationV1Params","type":"object","required":["mailboxId","anchor"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"anchor":{"description":"The message the conversation is resolved from.","type":"object","required":["internetMessageId"],"properties":{"internetMessageId":{"description":"RFC 5322 Message-ID of the anchor message, including angle brackets, as reported by outlook.list_emails.v1. Not the Office.js conversationId.","type":"string","minLength":1,"maxLength":32768}},"additionalProperties":true},"maxMessages":{"description":"Cap on the number of returned messages. When the conversation has more, the result is reported as partial.","type":"integer","minimum":1,"maximum":1000}},"additionalProperties":true};
 
-function validate103(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate105(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -26406,20 +26474,20 @@ vErrors.push(err12);
 }
 errors++;
 }
-validate103.errors = vErrors;
+validate105.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookGetConversationV1Result = validate104;
-const schema145 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json","title":"OutlookGetConversationV1Result","description":"The messages of the anchored conversation, oldest first, with bodies and attachment bytes carried inline.","type":"object","required":["state","messages"],"properties":{"state":{"description":"Completeness of the conversation. ok means every message and byte reference was produced; partial means some were omitted (see warnings), for example because maxMessages was reached or an attachment could not be read.","type":"string","minLength":1,"maxLength":32},"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"messages":{"type":"array","items":{"$ref":"../outlook/conversation-message.schema.json"}},"warnings":{"type":"array","items":{"$ref":"../outlook/conversation-warning.schema.json"}}},"additionalProperties":true};
-const schema155 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-warning.schema.json","title":"OutlookConversationWarning","description":"A part of a conversation that could not be represented fully, without hiding the rest.","type":"object","required":["code"],"properties":{"code":{"description":"Stable machine-readable warning code. Known values include truncated, attachment_unavailable, and embedded_attachments_omitted.","type":"string","minLength":1,"maxLength":128},"message":{"type":"string","minLength":1,"maxLength":4096},"internetMessageId":{"description":"The message the warning is about, when it is message-scoped.","type":"string","maxLength":32768}},"additionalProperties":true};
-const schema147 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json","title":"OutlookConversationMessage","description":"One message of an Outlook conversation, with its body and attachment bytes carried inline.","type":"object","required":["attachments"],"properties":{"internetMessageId":{"type":"string","maxLength":32768},"subject":{"type":"string","maxLength":32768},"from":{"$ref":"../outlook/message-recipient.schema.json"},"to":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"cc":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"sentAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"isDraft":{"description":"True when the message is an unsent draft.","type":"boolean"},"conversationIndex":{"description":"Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.","type":"string","maxLength":8192},"body":{"$ref":"../outlook/message-body.schema.json"},"attachments":{"type":"array","items":{"$ref":"../outlook/attachment-reference.schema.json"}},"external_ids":{"$ref":"../source/external-ids.schema.json"}},"additionalProperties":true};
-const schema148 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-recipient.schema.json","title":"OutlookMessageRecipient","description":"One recipient of an Outlook message.","type":"object","properties":{"name":{"description":"Display name, when present.","type":"string","maxLength":4096},"emailAddress":{"description":"SMTP address. Omitted when only a non-routable Exchange address is stored locally.","type":"string","maxLength":4096}},"additionalProperties":true};
-const schema151 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-body.schema.json","title":"OutlookMessageBody","description":"A message body carried inline in the JSON-RPC result. The sidecar decodes the stored bytes to text using the message code page before sending.","type":"object","required":["contentType","content"],"properties":{"contentType":{"description":"Media type of the body, for example text/html or text/plain.","type":"string","maxLength":256},"content":{"description":"The decoded body text.","type":"string"}},"additionalProperties":true};
-const schema152 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json","title":"OutlookAttachmentReference","description":"Metadata and inline bytes for one attachment. When the bytes are available they are base64-encoded in contentBytes; otherwise unavailableReason explains why.","type":"object","properties":{"name":{"description":"File name, when present.","type":"string","maxLength":4096},"contentType":{"description":"Media type of the bytes. Embedded messages are reported as message/rfc822.","type":"string","maxLength":256},"size":{"description":"Exact length of the attachment bytes.","type":"integer","minimum":0},"isInline":{"description":"True when the attachment is referenced from the message body by contentId.","type":"boolean"},"contentId":{"description":"Content-ID for an inline attachment, without angle brackets.","type":"string","maxLength":4096},"sha256":{"description":"Lowercase hex SHA-256 of the attachment bytes, useful for de-duplicating attachments repeated across thread messages.","type":"string","pattern":"^[a-f0-9]{64}$"},"contentBytes":{"description":"Base64-encoded attachment bytes, present when the bytes are available.","type":"string"},"unavailableReason":{"description":"Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.","type":"string","minLength":1,"maxLength":128},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"additionalProperties":true};
+export const validateOutlookGetConversationV1Result = validate106;
+const schema147 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json","title":"OutlookGetConversationV1Result","description":"The messages of the anchored conversation, oldest first, with bodies and attachment bytes carried inline.","type":"object","required":["state","messages"],"properties":{"state":{"description":"Completeness of the conversation. ok means every message and byte reference was produced; partial means some were omitted (see warnings), for example because maxMessages was reached or an attachment could not be read.","type":"string","minLength":1,"maxLength":32},"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"messages":{"type":"array","items":{"$ref":"../outlook/conversation-message.schema.json"}},"warnings":{"type":"array","items":{"$ref":"../outlook/conversation-warning.schema.json"}}},"additionalProperties":true};
+const schema157 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-warning.schema.json","title":"OutlookConversationWarning","description":"A part of a conversation that could not be represented fully, without hiding the rest.","type":"object","required":["code"],"properties":{"code":{"description":"Stable machine-readable warning code. Known values include truncated, attachment_unavailable, and embedded_attachments_omitted.","type":"string","minLength":1,"maxLength":128},"message":{"type":"string","minLength":1,"maxLength":4096},"internetMessageId":{"description":"The message the warning is about, when it is message-scoped.","type":"string","maxLength":32768}},"additionalProperties":true};
+const schema149 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json","title":"OutlookConversationMessage","description":"One message of an Outlook conversation, with its body and attachment bytes carried inline.","type":"object","required":["attachments"],"properties":{"internetMessageId":{"type":"string","maxLength":32768},"subject":{"type":"string","maxLength":32768},"from":{"$ref":"../outlook/message-recipient.schema.json"},"to":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"cc":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"sentAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"isDraft":{"description":"True when the message is an unsent draft.","type":"boolean"},"conversationIndex":{"description":"Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.","type":"string","maxLength":8192},"body":{"$ref":"../outlook/message-body.schema.json"},"attachments":{"type":"array","items":{"$ref":"../outlook/attachment-reference.schema.json"}},"external_ids":{"$ref":"../source/external-ids.schema.json"}},"additionalProperties":true};
+const schema150 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-recipient.schema.json","title":"OutlookMessageRecipient","description":"One recipient of an Outlook message.","type":"object","properties":{"name":{"description":"Display name, when present.","type":"string","maxLength":4096},"emailAddress":{"description":"SMTP address. Omitted when only a non-routable Exchange address is stored locally.","type":"string","maxLength":4096}},"additionalProperties":true};
+const schema153 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-body.schema.json","title":"OutlookMessageBody","description":"A message body carried inline in the JSON-RPC result. The sidecar decodes the stored bytes to text using the message code page before sending.","type":"object","required":["contentType","content"],"properties":{"contentType":{"description":"Media type of the body, for example text/html or text/plain.","type":"string","maxLength":256},"content":{"description":"The decoded body text.","type":"string"}},"additionalProperties":true};
+const schema154 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json","title":"OutlookAttachmentReference","description":"Metadata and inline bytes for one attachment. When the bytes are available they are base64-encoded in contentBytes; otherwise unavailableReason explains why.","type":"object","properties":{"name":{"description":"File name, when present.","type":"string","maxLength":4096},"contentType":{"description":"Media type of the bytes. Embedded messages are reported as message/rfc822.","type":"string","maxLength":256},"size":{"description":"Exact length of the attachment bytes.","type":"integer","minimum":0},"isInline":{"description":"True when the attachment is referenced from the message body by contentId.","type":"boolean"},"contentId":{"description":"Content-ID for an inline attachment, without angle brackets.","type":"string","maxLength":4096},"sha256":{"description":"Lowercase hex SHA-256 of the attachment bytes, useful for de-duplicating attachments repeated across thread messages.","type":"string","pattern":"^[a-f0-9]{64}$"},"contentBytes":{"description":"Base64-encoded attachment bytes, present when the bytes are available.","type":"string"},"unavailableReason":{"description":"Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.","type":"string","minLength":1,"maxLength":128},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"additionalProperties":true};
 const pattern75 = new RegExp("^[a-f0-9]{64}$", "u");
 
-function validate106(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate108(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -26738,12 +26806,12 @@ vErrors.push(err24);
 }
 errors++;
 }
-validate106.errors = vErrors;
+validate108.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate105(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate107(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -27219,8 +27287,8 @@ let data20 = data.attachments;
 if(Array.isArray(data20)){
 const len2 = data20.length;
 for(let i2=0; i2<len2; i2++){
-if(!(validate106(data20[i2], {instancePath:instancePath+"/attachments/" + i2,parentData:data20,parentDataProperty:i2,rootData}))){
-vErrors = vErrors === null ? validate106.errors : vErrors.concat(validate106.errors);
+if(!(validate108(data20[i2], {instancePath:instancePath+"/attachments/" + i2,parentData:data20,parentDataProperty:i2,rootData}))){
+vErrors = vErrors === null ? validate108.errors : vErrors.concat(validate108.errors);
 errors = vErrors.length;
 }
 }
@@ -27360,12 +27428,12 @@ vErrors.push(err47);
 }
 errors++;
 }
-validate105.errors = vErrors;
+validate107.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate104(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate106(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -27640,8 +27708,8 @@ let data7 = data.messages;
 if(Array.isArray(data7)){
 const len0 = data7.length;
 for(let i0=0; i0<len0; i0++){
-if(!(validate105(data7[i0], {instancePath:instancePath+"/messages/" + i0,parentData:data7,parentDataProperty:i0,rootData}))){
-vErrors = vErrors === null ? validate105.errors : vErrors.concat(validate105.errors);
+if(!(validate107(data7[i0], {instancePath:instancePath+"/messages/" + i0,parentData:data7,parentDataProperty:i0,rootData}))){
+vErrors = vErrors === null ? validate107.errors : vErrors.concat(validate107.errors);
 errors = vErrors.length;
 }
 }
@@ -27804,14 +27872,14 @@ vErrors.push(err35);
 }
 errors++;
 }
-validate104.errors = vErrors;
+validate106.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarProgressV1Params = validate110;
-const schema156 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-params.schema.json","title":"SidecarProgressV1Params","description":"Names the pending request whose on-device progress the client wants to observe. The request is identified by the JSON-RPC request ID the client generated for it; visibility is scoped to the Origin that issued that request.","type":"object","required":["requestId"],"properties":{"requestId":{"$ref":"../common.schema.json#/definitions/RequestId"}},"additionalProperties":true};
+export const validateSidecarProgressV1Params = validate112;
+const schema158 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-params.schema.json","title":"SidecarProgressV1Params","description":"Names the pending request whose on-device progress the client wants to observe. The request is identified by the JSON-RPC request ID the client generated for it; visibility is scoped to the Origin that issued that request.","type":"object","required":["requestId"],"properties":{"requestId":{"$ref":"../common.schema.json#/definitions/RequestId"}},"additionalProperties":true};
 
-function validate110(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate112(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -27924,16 +27992,16 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate110.errors = vErrors;
+validate112.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarProgressV1Result = validate111;
-const schema158 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json","title":"SidecarProgressV1Result","description":"A point-in-time view of one request's on-device progress. `trace` carries the same append-only event log a result may embed, so a client that applies steps by `sequence` (last one wins) renders a polled log and a complete log identically.","type":"object","required":["state"],"properties":{"state":{"description":"Where the named request is in its lifecycle. Known values are running, finished, and unknown. Receivers treat unrecognized values as running.","type":"string","minLength":1,"maxLength":64},"trace":{"description":"The sidecar's step log for the named request so far. Metadata only — never message content. Absent when the request is unknown or recorded no steps.","$ref":"../outlook/local-trace.schema.json"}},"additionalProperties":true};
-const schema159 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace.schema.json","title":"SidecarLocalTrace","description":"The sidecar's internal on-device steps for one request, as an append-only event log. Protocol 1.0 delivers the whole log with the result; a future delivery mode may append to it incrementally, and a client that applies steps by `sequence` (last one wins) renders both identically. Contains no message content, so it can be shown even when the user declines to share the result.","type":"object","required":["steps"],"properties":{"steps":{"type":"array","items":{"$ref":"../outlook/local-trace-step.schema.json"},"maxItems":32},"totalDurationMs":{"type":"integer","minimum":0}},"additionalProperties":true};
-const schema160 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace-step.schema.json","title":"SidecarLocalTraceStep","description":"One internal on-device processing step, shaped as an event: a stable `sequence` identity carrying a status that may evolve. Metadata only: never message content, snippets, or file names.","type":"object","required":["sequence","id","status"],"properties":{"sequence":{"description":"Stable identity of this step within the request, and its ordering key. A later step with the same sequence supersedes an earlier one, so the same payload works whether the log arrives complete or is appended to over time.","type":"integer","minimum":0},"id":{"description":"Step identifier. Known values include expandQuery, buildIndex, match, and summarize. Receivers ignore unknown values and render them by their raw id.","type":"string","minLength":1,"maxLength":128},"status":{"description":"Step outcome. Known values include running, ok, skipped, degraded, and error. Receivers treat unknown values as running.","type":"string","minLength":1,"maxLength":64},"parentSequence":{"description":"Sequence of the step this one runs inside, when the sidecar nests work (for example a tool call made during a local model turn). Absent for top-level steps.","type":"integer","minimum":0},"startedAtOffsetMs":{"description":"Milliseconds between the start of the request and the start of this step, so a client can order and place steps identically in both delivery modes.","type":"integer","minimum":0},"durationMs":{"type":"integer","minimum":0},"model":{"description":"Identifier of the local model this step used, when it used one.","type":"string","minLength":1,"maxLength":256},"cacheHit":{"description":"Whether this step was served from a local cache (for example the in-memory mailbox index).","type":"boolean"},"detail":{"description":"Short non-sensitive note — the sidecar's counterpart of a progress message: why a step was skipped or degraded, or what it is doing.","type":"string","maxLength":512},"counts":{"description":"Item counts keyed by an open string. Known keys include keywordsIn, keywordsOut, messagesScanned, matched, and hitsReturned.","type":"object","maxProperties":16,"additionalProperties":{"type":"integer","minimum":0}}},"additionalProperties":true};
+export const validateSidecarProgressV1Result = validate113;
+const schema160 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json","title":"SidecarProgressV1Result","description":"A point-in-time view of one request's on-device progress. `trace` carries the same append-only event log a result may embed, so a client that applies steps by `sequence` (last one wins) renders a polled log and a complete log identically.","type":"object","required":["state"],"properties":{"state":{"description":"Where the named request is in its lifecycle. Known values are running, finished, and unknown. Receivers treat unrecognized values as running.","type":"string","minLength":1,"maxLength":64},"trace":{"description":"The sidecar's step log for the named request so far. Metadata only — never message content. Absent when the request is unknown or recorded no steps.","$ref":"../outlook/local-trace.schema.json"}},"additionalProperties":true};
+const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace.schema.json","title":"SidecarLocalTrace","description":"The sidecar's internal on-device steps for one request, as an append-only event log. Protocol 1.0 delivers the whole log with the result; a future delivery mode may append to it incrementally, and a client that applies steps by `sequence` (last one wins) renders both identically. Contains no message content, so it can be shown even when the user declines to share the result.","type":"object","required":["steps"],"properties":{"steps":{"type":"array","items":{"$ref":"../outlook/local-trace-step.schema.json"},"maxItems":32},"totalDurationMs":{"type":"integer","minimum":0}},"additionalProperties":true};
+const schema162 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace-step.schema.json","title":"SidecarLocalTraceStep","description":"One internal on-device processing step, shaped as an event: a stable `sequence` identity carrying a status that may evolve. Metadata only: never message content, snippets, or file names.","type":"object","required":["sequence","id","status"],"properties":{"sequence":{"description":"Stable identity of this step within the request, and its ordering key. A later step with the same sequence supersedes an earlier one, so the same payload works whether the log arrives complete or is appended to over time.","type":"integer","minimum":0},"id":{"description":"Step identifier. Known values include expandQuery, buildIndex, match, and summarize. Receivers ignore unknown values and render them by their raw id.","type":"string","minLength":1,"maxLength":128},"status":{"description":"Step outcome. Known values include running, ok, skipped, degraded, and error. Receivers treat unknown values as running.","type":"string","minLength":1,"maxLength":64},"parentSequence":{"description":"Sequence of the step this one runs inside, when the sidecar nests work (for example a tool call made during a local model turn). Absent for top-level steps.","type":"integer","minimum":0},"startedAtOffsetMs":{"description":"Milliseconds between the start of the request and the start of this step, so a client can order and place steps identically in both delivery modes.","type":"integer","minimum":0},"durationMs":{"type":"integer","minimum":0},"model":{"description":"Identifier of the local model this step used, when it used one.","type":"string","minLength":1,"maxLength":256},"cacheHit":{"description":"Whether this step was served from a local cache (for example the in-memory mailbox index).","type":"boolean"},"detail":{"description":"Short non-sensitive note — the sidecar's counterpart of a progress message: why a step was skipped or degraded, or what it is doing.","type":"string","maxLength":512},"counts":{"description":"Item counts keyed by an open string. Known keys include keywordsIn, keywordsOut, messagesScanned, matched, and hitsReturned.","type":"object","maxProperties":16,"additionalProperties":{"type":"integer","minimum":0}}},"additionalProperties":true};
 
-function validate112(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate114(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -28347,12 +28415,12 @@ vErrors.push(err33);
 }
 errors++;
 }
-validate112.errors = vErrors;
+validate114.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate111(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate113(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -28403,8 +28471,8 @@ errors++;
 }
 }
 if(data.trace !== undefined){
-if(!(validate112(data.trace, {instancePath:instancePath+"/trace",parentData:data,parentDataProperty:"trace",rootData}))){
-vErrors = vErrors === null ? validate112.errors : vErrors.concat(validate112.errors);
+if(!(validate114(data.trace, {instancePath:instancePath+"/trace",parentData:data,parentDataProperty:"trace",rootData}))){
+vErrors = vErrors === null ? validate114.errors : vErrors.concat(validate114.errors);
 errors = vErrors.length;
 }
 }
@@ -28419,14 +28487,14 @@ vErrors.push(err4);
 }
 errors++;
 }
-validate111.errors = vErrors;
+validate113.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookSearchEmailsV1Params = validate114;
-const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json","title":"OutlookSearchEmailsV1Params","type":"object","required":["mailboxId","query"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"query":{"description":"Natural-language or keyword query. The sidecar may expand it into additional local search terms.","type":"string","minLength":1,"maxLength":1024},"limit":{"description":"Maximum number of hits to return. Defaults to 10.","type":"integer","minimum":1,"maximum":50},"includeAttachments":{"description":"Also match against attachment file names and locally extractable attachment text. Defaults to true.","type":"boolean"},"summarize":{"description":"Produce a locally generated plain-text summary of the hits when a local model is configured. Defaults to true.","type":"boolean"}},"additionalProperties":true};
+export const validateOutlookSearchEmailsV1Params = validate116;
+const schema163 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json","title":"OutlookSearchEmailsV1Params","type":"object","required":["mailboxId","query"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"query":{"description":"Natural-language or keyword query. The sidecar may expand it into additional local search terms.","type":"string","minLength":1,"maxLength":1024},"limit":{"description":"Maximum number of hits to return. Defaults to 10.","type":"integer","minimum":1,"maximum":50},"includeAttachments":{"description":"Also match against attachment file names and locally extractable attachment text. Defaults to true.","type":"boolean"},"summarize":{"description":"Produce a locally generated plain-text summary of the hits when a local model is configured. Defaults to true.","type":"boolean"}},"additionalProperties":true};
 
-function validate114(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate116(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -28581,15 +28649,15 @@ vErrors.push(err12);
 }
 errors++;
 }
-validate114.errors = vErrors;
+validate116.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookSearchEmailsV1Result = validate115;
-const schema162 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-result.schema.json","title":"OutlookSearchEmailsV1Result","description":"Locally matched emails for a query, with an optional locally generated summary. Search and summarization both run entirely on the device.","type":"object","required":["mailbox","hits"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"hits":{"type":"array","items":{"$ref":"../outlook/search-hit.schema.json"},"maxItems":50},"totalMatched":{"description":"Number of matching messages before the limit was applied.","type":"integer","minimum":0},"summary":{"description":"Plain-text summary of the hits generated by a local model. Absent when summarization was not requested or no local model is available.","type":"string","maxLength":32768},"summaryModel":{"description":"Identifier of the local model that generated the summary, for user-facing transparency.","type":"string","minLength":1,"maxLength":256},"expandedKeywords":{"description":"Search terms actually used after local query expansion.","type":"array","items":{"type":"string","minLength":1,"maxLength":256},"maxItems":32},"warnings":{"description":"Local sources or messages that could not be inspected without hiding successful results.","type":"array","items":{"$ref":"../outlook/listing-warning.schema.json"}},"trace":{"description":"Metadata about the sidecar's internal on-device steps (durations, models, item counts). Never contains message content.","$ref":"../outlook/local-trace.schema.json"}},"additionalProperties":true};
-const schema164 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/search-hit.schema.json","title":"OutlookSearchHit","description":"One locally matched email for an outlook.search_emails.v1 query.","type":"object","required":["email"],"properties":{"email":{"$ref":"../outlook/email-summary.schema.json"},"snippet":{"description":"Short plain-text excerpt around the strongest match. Never a full message body.","type":"string","maxLength":2048},"matchedIn":{"description":"Fields the query matched. Known values include subject, body, sender, attachmentName, and attachmentContent. Receivers ignore unknown values.","type":"array","items":{"type":"string","minLength":1,"maxLength":128},"maxItems":16},"matchedAttachmentNames":{"description":"File names of attachments whose name or extracted text matched the query.","type":"array","items":{"type":"string","minLength":1,"maxLength":1024},"maxItems":64}},"additionalProperties":true};
+export const validateOutlookSearchEmailsV1Result = validate117;
+const schema164 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-result.schema.json","title":"OutlookSearchEmailsV1Result","description":"Locally matched emails for a query, with an optional locally generated summary. Search and summarization both run entirely on the device.","type":"object","required":["mailbox","hits"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"hits":{"type":"array","items":{"$ref":"../outlook/search-hit.schema.json"},"maxItems":50},"totalMatched":{"description":"Number of matching messages before the limit was applied.","type":"integer","minimum":0},"summary":{"description":"Plain-text summary of the hits generated by a local model. Absent when summarization was not requested or no local model is available.","type":"string","maxLength":32768},"summaryModel":{"description":"Identifier of the local model that generated the summary, for user-facing transparency.","type":"string","minLength":1,"maxLength":256},"expandedKeywords":{"description":"Search terms actually used after local query expansion.","type":"array","items":{"type":"string","minLength":1,"maxLength":256},"maxItems":32},"warnings":{"description":"Local sources or messages that could not be inspected without hiding successful results.","type":"array","items":{"$ref":"../outlook/listing-warning.schema.json"}},"trace":{"description":"Metadata about the sidecar's internal on-device steps (durations, models, item counts). Never contains message content.","$ref":"../outlook/local-trace.schema.json"}},"additionalProperties":true};
+const schema166 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/search-hit.schema.json","title":"OutlookSearchHit","description":"One locally matched email for an outlook.search_emails.v1 query.","type":"object","required":["email"],"properties":{"email":{"$ref":"../outlook/email-summary.schema.json"},"snippet":{"description":"Short plain-text excerpt around the strongest match. Never a full message body.","type":"string","maxLength":2048},"matchedIn":{"description":"Fields the query matched. Known values include subject, body, sender, attachmentName, and attachmentContent. Receivers ignore unknown values.","type":"array","items":{"type":"string","minLength":1,"maxLength":128},"maxItems":16},"matchedAttachmentNames":{"description":"File names of attachments whose name or extracted text matched the query.","type":"array","items":{"type":"string","minLength":1,"maxLength":1024},"maxItems":64}},"additionalProperties":true};
 
-function validate116(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate118(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/search-hit.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -28957,12 +29025,12 @@ vErrors.push(err29);
 }
 errors++;
 }
-validate116.errors = vErrors;
+validate118.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate115(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate117(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -29212,8 +29280,8 @@ errors++;
 }
 const len0 = data6.length;
 for(let i0=0; i0<len0; i0++){
-if(!(validate116(data6[i0], {instancePath:instancePath+"/hits/" + i0,parentData:data6,parentDataProperty:i0,rootData}))){
-vErrors = vErrors === null ? validate116.errors : vErrors.concat(validate116.errors);
+if(!(validate118(data6[i0], {instancePath:instancePath+"/hits/" + i0,parentData:data6,parentDataProperty:i0,rootData}))){
+vErrors = vErrors === null ? validate118.errors : vErrors.concat(validate118.errors);
 errors = vErrors.length;
 }
 }
@@ -29487,8 +29555,8 @@ errors++;
 }
 }
 if(data.trace !== undefined){
-if(!(validate112(data.trace, {instancePath:instancePath+"/trace",parentData:data,parentDataProperty:"trace",rootData}))){
-vErrors = vErrors === null ? validate112.errors : vErrors.concat(validate112.errors);
+if(!(validate114(data.trace, {instancePath:instancePath+"/trace",parentData:data,parentDataProperty:"trace",rootData}))){
+vErrors = vErrors === null ? validate114.errors : vErrors.concat(validate114.errors);
 errors = vErrors.length;
 }
 }
@@ -29503,14 +29571,14 @@ vErrors.push(err43);
 }
 errors++;
 }
-validate115.errors = vErrors;
+validate117.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesListV1Params = validate119;
-const schema167 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json","title":"SourcesListV1Params","type":"object","additionalProperties":false};
+export const validateSourcesListV1Params = validate121;
+const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json","title":"SourcesListV1Params","type":"object","additionalProperties":false};
 
-function validate119(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate121(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -29536,15 +29604,15 @@ vErrors.push(err1);
 }
 errors++;
 }
-validate119.errors = vErrors;
+validate121.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesListV1Result = validate120;
-const schema168 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":false};
-const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"locator":{"type":"object"},"enabled":{"type":"boolean"},"discoveryCursor":{"type":["object","null"]},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":false};
+export const validateSourcesListV1Result = validate122;
+const schema170 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":false};
+const schema171 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"locator":{"type":"object"},"enabled":{"type":"boolean"},"discoveryCursor":{"type":["object","null"]},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":false};
 
-function validate120(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate122(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -29669,7 +29737,7 @@ vErrors.push(err10);
 errors++;
 }
 for(const key1 in data1){
-if(!(func45.call(schema169.properties, key1))){
+if(!(func45.call(schema171.properties, key1))){
 const err11 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err11];
@@ -29783,7 +29851,7 @@ errors++;
 if(data1.discoveryCursor !== undefined){
 let data7 = data1.discoveryCursor;
 if((!(data7 && typeof data7 == "object" && !Array.isArray(data7))) && (data7 !== null)){
-const err20 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
+const err20 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema171.properties.discoveryCursor.type},message:"must be object,null"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -29796,7 +29864,7 @@ errors++;
 if(data1.completedScanId !== undefined){
 let data8 = data1.completedScanId;
 if((typeof data8 !== "string") && (data8 !== null)){
-const err21 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
+const err21 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema171.properties.completedScanId.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -29821,7 +29889,7 @@ errors++;
 if(data1.lastSuccessAt !== undefined){
 let data9 = data1.lastSuccessAt;
 if((typeof data9 !== "string") && (data9 !== null)){
-const err23 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
+const err23 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema171.properties.lastSuccessAt.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -29846,7 +29914,7 @@ errors++;
 if(data1.lastErrorCode !== undefined){
 let data10 = data1.lastErrorCode;
 if((typeof data10 !== "string") && (data10 !== null)){
-const err25 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
+const err25 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema171.properties.lastErrorCode.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -29891,14 +29959,14 @@ vErrors.push(err28);
 }
 errors++;
 }
-validate120.errors = vErrors;
+validate122.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesGetFolderHierarchyV1Params = validate121;
-const schema170 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json","title":"SourcesGetFolderHierarchyV1Params","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"}},"required":["sourceId"],"additionalProperties":false};
+export const validateSourcesGetFolderHierarchyV1Params = validate123;
+const schema172 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json","title":"SourcesGetFolderHierarchyV1Params","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"}},"required":["sourceId"],"additionalProperties":false};
 
-function validate121(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate123(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -29961,15 +30029,15 @@ vErrors.push(err4);
 }
 errors++;
 }
-validate121.errors = vErrors;
+validate123.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesGetFolderHierarchyV1Result = validate122;
-const schema171 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json","title":"SourcesGetFolderHierarchyV1Result","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"nodes":{"type":"array","items":{"$ref":"../source/folder-hierarchy-node.schema.json"}}},"required":["sourceId","nodes"],"additionalProperties":false};
-const schema172 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/folder-hierarchy-node.schema.json","title":"SourceFolderHierarchyNode","type":"object","properties":{"nodeId":{"type":"string","minLength":1},"parentNodeId":{"type":["string","null"]},"name":{"type":"string"},"pathName":{"type":"string"},"artificialRoot":{"type":"boolean"},"directLeafChildren":{"type":"integer","minimum":0},"totalLeafChildren":{"type":"integer","minimum":0},"directChildNodes":{"type":"integer","minimum":0}},"required":["nodeId","parentNodeId","name","pathName","artificialRoot","directLeafChildren","totalLeafChildren","directChildNodes"],"additionalProperties":false};
+export const validateSourcesGetFolderHierarchyV1Result = validate124;
+const schema173 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json","title":"SourcesGetFolderHierarchyV1Result","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"nodes":{"type":"array","items":{"$ref":"../source/folder-hierarchy-node.schema.json"}}},"required":["sourceId","nodes"],"additionalProperties":false};
+const schema174 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/folder-hierarchy-node.schema.json","title":"SourceFolderHierarchyNode","type":"object","properties":{"nodeId":{"type":"string","minLength":1},"parentNodeId":{"type":["string","null"]},"name":{"type":"string"},"pathName":{"type":"string"},"artificialRoot":{"type":"boolean"},"directLeafChildren":{"type":"integer","minimum":0},"totalLeafChildren":{"type":"integer","minimum":0},"directChildNodes":{"type":"integer","minimum":0}},"required":["nodeId","parentNodeId","name","pathName","artificialRoot","directLeafChildren","totalLeafChildren","directChildNodes"],"additionalProperties":false};
 
-function validate122(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate124(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -30158,7 +30226,7 @@ errors++;
 if(data2.parentNodeId !== undefined){
 let data4 = data2.parentNodeId;
 if((typeof data4 !== "string") && (data4 !== null)){
-const err16 = {instancePath:instancePath+"/nodes/" + i0+"/parentNodeId",schemaPath:"../source/folder-hierarchy-node.schema.json/properties/parentNodeId/type",keyword:"type",params:{type: schema172.properties.parentNodeId.type},message:"must be string,null"};
+const err16 = {instancePath:instancePath+"/nodes/" + i0+"/parentNodeId",schemaPath:"../source/folder-hierarchy-node.schema.json/properties/parentNodeId/type",keyword:"type",params:{type: schema174.properties.parentNodeId.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -30314,14 +30382,14 @@ vErrors.push(err28);
 }
 errors++;
 }
-validate122.errors = vErrors;
+validate124.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesGetDocumentV1Params = validate123;
-const schema173 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json","title":"SourcesGetDocumentV1Params","type":"object","properties":{"documentId":{"type":"string","format":"uuid"},"subject_scope":{"type":"string","enum":["subject","subject_with_thread"],"default":"subject"}},"required":["documentId"],"additionalProperties":false};
+export const validateSourcesGetDocumentV1Params = validate125;
+const schema175 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json","title":"SourcesGetDocumentV1Params","type":"object","properties":{"documentId":{"type":"string","format":"uuid"},"subject_scope":{"type":"string","enum":["subject","subject_with_thread"],"default":"subject"}},"required":["documentId"],"additionalProperties":false};
 
-function validate123(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate125(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -30386,7 +30454,7 @@ vErrors.push(err4);
 errors++;
 }
 if(!((data1 === "subject") || (data1 === "subject_with_thread"))){
-const err5 = {instancePath:instancePath+"/subject_scope",schemaPath:"#/properties/subject_scope/enum",keyword:"enum",params:{allowedValues: schema173.properties.subject_scope.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/subject_scope",schemaPath:"#/properties/subject_scope/enum",keyword:"enum",params:{allowedValues: schema175.properties.subject_scope.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -30407,14 +30475,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate123.errors = vErrors;
+validate125.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesGetDocumentV1Result = validate124;
-const schema174 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json","title":"SourcesGetDocumentV1Result","type":"object","properties":{"filename":{"type":"string","minLength":1},"mimeType":{"type":"string","minLength":1},"contentBase64":{"type":"string","pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["filename","mimeType","contentBase64"],"additionalProperties":false};
+export const validateSourcesGetDocumentV1Result = validate126;
+const schema176 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json","title":"SourcesGetDocumentV1Result","type":"object","properties":{"filename":{"type":"string","minLength":1},"mimeType":{"type":"string","minLength":1},"contentBase64":{"type":"string","pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["filename","mimeType","contentBase64"],"additionalProperties":false};
 
-function validate124(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate126(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -30666,7 +30734,7 @@ vErrors.push(err19);
 }
 errors++;
 }
-validate124.errors = vErrors;
+validate126.errors = vErrors;
 return errors === 0;
 }
 

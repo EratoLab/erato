@@ -13,7 +13,7 @@ import { ClientToolFileApprovalSetting } from "./ClientToolFileApprovalSetting";
 import { EntityRow } from "./EntityRow";
 import { Button } from "../Controls/Button";
 import { SidecarIndexingControls } from "../DesktopSidecar/SidecarIndexingCard";
-import { ComputerIcon } from "../icons";
+import { ComputerIcon, FolderIcon } from "../icons";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Desktop-sidecar URL protocol.
 const DESKTOP_SIDECAR_LAUNCH_URL = "erato-launch://launch";
@@ -51,6 +51,8 @@ function DesktopSidecarEntityRow({
   defaultExpanded: boolean;
 }) {
   const { client, snapshot } = useDesktopSidecar();
+  const [openingDataDirectory, setOpeningDataDirectory] = useState(false);
+  const [openDataDirectoryError, setOpenDataDirectoryError] = useState(false);
   const connected = snapshot.state === "ready";
   const connecting = snapshot.state === "discovering";
 
@@ -110,7 +112,38 @@ function DesktopSidecarEntityRow({
       {connected &&
         !snapshot.localDelegation &&
         client?.supports("indexing.status.v1") && <SidecarIndexingControls />}
+      {openDataDirectoryError ? (
+        <p role="alert" className="text-sm text-theme-error-fg">
+          {t({
+            id: "preferences.dialog.desktopSidecar.openDataDirectory.error",
+            message: "Could not open the sidecar data directory.",
+          })}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
+        {connected &&
+        !snapshot.localDelegation &&
+        client?.supports("sidecar.open_data_directory.v1") ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<FolderIcon className="size-4" />}
+            loading={openingDataDirectory}
+            onClick={() => {
+              setOpeningDataDirectory(true);
+              setOpenDataDirectoryError(false);
+              void client
+                .invoke("sidecar.open_data_directory.v1", {})
+                .catch(() => setOpenDataDirectoryError(true))
+                .finally(() => setOpeningDataDirectory(false));
+            }}
+          >
+            {t({
+              id: "preferences.dialog.desktopSidecar.openDataDirectory",
+              message: "Open data directory",
+            })}
+          </Button>
+        ) : null}
         <Button
           variant="secondary"
           size="sm"

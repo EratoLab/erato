@@ -3845,6 +3845,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.openDataDirectory"
+msgstr "Abrir directorio de datos"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.openDataDirectory.error"
+msgstr "No se pudo abrir el directorio de datos del sidecar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.retry"
 msgstr ""
 

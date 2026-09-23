@@ -270,7 +270,9 @@ and one slot; independent extraction/reweighting work consumes its own.
 `indexing.status.v1.effectiveConfiguration` reports the resolved values. Existing
 `sidecar.configure.v1` retains its empty success result for compatibility.
 
-## 12. Sidecar restart
+## 12. Sidecar actions
+
+### Restart
 
 The `sidecar.restart.v1` capability requests a process restart for development
 and operational workflows. A successful result contains `accepted: true`. The
@@ -286,6 +288,14 @@ MUST treat the current ready data as stale and rediscover after the endpoint is
 available again; the replacement sidecar has a new instance ID. Implementations
 MUST reject the request with a protocol error rather than returning
 `accepted: false` when restart cannot be scheduled.
+
+### Open the data directory
+
+`sidecar.open_data_directory.v1` opens the sidecar's per-user data directory in
+the platform file manager. It takes an empty object and returns `{ "opened":
+true }` only after the operating system accepts the open request. Failure to
+launch the file manager MUST return `sidecar_internal`; implementations MUST
+not return the directory path to the client.
 
 ## 13. Local Outlook actions
 
@@ -851,5 +861,5 @@ unsupported provenance versions, rather than interpret them as version 1.
 ## Strict local delegation (reserved)
 
 [DELEGATION.md](./DELEGATION.md) defines the strict snapshot profile and its
-closed schemas. Version 0.1.27 reserves these methods with disabled availability;
+closed schemas. Version 0.1.28 reserves these methods with disabled availability;
 shipping their schemas does not qualify any implementation or enable delegation.

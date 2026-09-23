@@ -1,8 +1,8 @@
 # Strict snapshot delegation, contract v1
 
-Status: reserved, disabled. ERMAIN-862 / ERDSCAR-9. Package 0.1.27 extends
-0.1.25; the latter is identical in both repositories and retains `external_ids`
-and `topLevelParent`. Transport protocol remains 1.0. This document is the
+Status: reserved, disabled. ERMAIN-862 / ERDSCAR-9. Package 0.1.28 extends
+main's 0.1.27 contract, preserving Outlook provenance and the data-directory
+action. Transport protocol remains 1.0. This document is the
 shared design record. It does not certify a security implementation.
 
 ## Scope decision (2026-09-22)
