@@ -5592,7 +5592,7 @@ msgstr "Token-Limit wird erreicht"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Approved evidence is ready to upload"
-msgstr ""
+msgstr "Freigegebene Belege können hochgeladen werden"
 
 #: src/pages/AssistantsListPage.tsx
 #~ msgid "Archive"
@@ -5815,7 +5815,7 @@ msgstr "Wartende Nachricht abbrechen"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Cancel task"
-msgstr ""
+msgstr "Aufgabe abbrechen"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
@@ -5911,7 +5911,7 @@ msgstr "Seitenleiste einklappen"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Collecting evidence on this device"
-msgstr ""
+msgstr "Belege werden auf diesem Gerät gesammelt"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Completed"
@@ -5957,7 +5957,7 @@ msgstr "Die Kontextnutzung überschreitet die Modellkapazität. Der Assistent ka
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Continuing the original task"
-msgstr ""
+msgstr "Die ursprüngliche Aufgabe wird fortgesetzt"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Conversational"
@@ -6199,7 +6199,7 @@ msgstr "Tokennutzung wird geschätzt..."
 
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "Evidence sharing requires review in the desktop app for each package."
-msgstr ""
+msgstr "Zum Teilen muss jedes Belegpaket in der Desktop-App geprüft werden."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
@@ -6403,23 +6403,23 @@ msgstr "Laden..."
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local collection could not finish"
-msgstr ""
+msgstr "Das lokale Sammeln der Belege konnte nicht abgeschlossen werden"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local research"
-msgstr ""
+msgstr "Lokale Recherche"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local research tasks"
-msgstr ""
+msgstr "Lokale Rechercheaufgaben"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local task cancelled"
-msgstr ""
+msgstr "Lokale Aufgabe abgebrochen"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local task expired"
-msgstr ""
+msgstr "Lokale Aufgabe abgelaufen"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Locale Detection Test"
@@ -6570,7 +6570,7 @@ msgstr "Menü öffnen"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Open original task"
-msgstr ""
+msgstr "Ursprüngliche Aufgabe öffnen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
@@ -6642,7 +6642,7 @@ msgstr "Lokales Postfach lesen"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Ready for review in the desktop app"
-msgstr ""
+msgstr "Bereit zur Prüfung in der Desktop-App"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -6738,11 +6738,11 @@ msgstr "Erneuter Versuch..."
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
-msgstr ""
+msgstr "Prüfen und wählen Sie die Belege in der Desktop-App aus. Das Sammeln wird fortgesetzt, wenn dieser Bereich geschlossen wird. Das Hochladen und die Fortsetzung in der Cloud warten, bis Sie angemeldet zurückkehren."
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Review in desktop app"
-msgstr ""
+msgstr "In der Desktop-App prüfen"
 
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 #~ msgid "Running"
@@ -6802,7 +6802,7 @@ msgstr ""
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Sharing declined on this device"
-msgstr ""
+msgstr "Freigabe auf diesem Gerät abgelehnt"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"
@@ -7199,11 +7199,11 @@ msgstr "Tools werden verwendet"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Waiting for the desktop app to reconnect"
-msgstr ""
+msgstr "Warten auf die erneute Verbindung mit der Desktop-App"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Waiting for the device that accepted this task"
-msgstr ""
+msgstr "Warten auf das Gerät, das diese Aufgabe angenommen hat"
 
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Yes"

@@ -5592,7 +5592,7 @@ msgstr "Limite de tokens bientôt atteinte"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Approved evidence is ready to upload"
-msgstr ""
+msgstr "Les éléments probants approuvés sont prêts à être envoyés"
 
 #: src/pages/AssistantsListPage.tsx
 #~ msgid "Archive"
@@ -5815,7 +5815,7 @@ msgstr ""
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Cancel task"
-msgstr ""
+msgstr "Annuler la tâche"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
@@ -5911,7 +5911,7 @@ msgstr "réduire la barre latérale"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Collecting evidence on this device"
-msgstr ""
+msgstr "Collecte des éléments probants sur cet appareil"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Completed"
@@ -5957,7 +5957,7 @@ msgstr "L'utilisation du contexte dépasse la capacité du modèle. L'assistant 
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Continuing the original task"
-msgstr ""
+msgstr "Reprise de la tâche initiale"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Conversational"
@@ -6199,7 +6199,7 @@ msgstr "Estimation de l'utilisation des tokens..."
 
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "Evidence sharing requires review in the desktop app for each package."
-msgstr ""
+msgstr "Le partage des éléments probants nécessite la vérification de chaque lot dans l’application de bureau."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
@@ -6403,23 +6403,23 @@ msgstr "Chargement..."
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local collection could not finish"
-msgstr ""
+msgstr "La collecte locale n’a pas pu être terminée"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local research"
-msgstr ""
+msgstr "Recherche locale"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local research tasks"
-msgstr ""
+msgstr "Tâches de recherche locale"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local task cancelled"
-msgstr ""
+msgstr "Tâche locale annulée"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Local task expired"
-msgstr ""
+msgstr "Tâche locale expirée"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Locale Detection Test"
@@ -6570,7 +6570,7 @@ msgstr "Ouvrir le menu"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Open original task"
-msgstr ""
+msgstr "Ouvrir la tâche initiale"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
@@ -6642,7 +6642,7 @@ msgstr "Lire la boîte aux lettres locale"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Ready for review in the desktop app"
-msgstr ""
+msgstr "Prêt pour vérification dans l’application de bureau"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -6738,11 +6738,11 @@ msgstr "Nouvelle tentative..."
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
-msgstr ""
+msgstr "Vérifiez et sélectionnez les éléments probants dans l’application de bureau. La collecte se poursuit si ce volet se ferme ; l’envoi et la reprise dans le cloud attendent votre retour avec une session connectée."
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Review in desktop app"
-msgstr ""
+msgstr "Vérifier dans l’application de bureau"
 
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 #~ msgid "Running"
@@ -6802,7 +6802,7 @@ msgstr ""
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Sharing declined on this device"
-msgstr ""
+msgstr "Partage refusé sur cet appareil"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"
@@ -7199,11 +7199,11 @@ msgstr "Utilisation d'outils"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Waiting for the desktop app to reconnect"
-msgstr ""
+msgstr "En attente de la reconnexion de l’application de bureau"
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Waiting for the device that accepted this task"
-msgstr ""
+msgstr "En attente de l’appareil qui a accepté cette tâche"
 
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Yes"
