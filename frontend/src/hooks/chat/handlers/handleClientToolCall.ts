@@ -24,7 +24,9 @@ interface HandleClientToolCallDeps {
  * Runs the registered executor for a `client_tool_call` and POSTs the outcome to
  * resume the suspended turn. Execute-once by `tool_call_id` (a resumestream
  * replay re-emits the event); a missing/throwing executor still POSTs an error
- * so the backend recovers instead of parking to timeout.
+ * so the backend recovers instead of parking to timeout. Strict native tools are
+ * the exception: their results and errors remain local, and a stale legacy call
+ * expires on the backend rather than uploading private native information.
  */
 export async function handleClientToolCall(
   responseData: MessageSubmitStreamingResponseClientToolCall & {

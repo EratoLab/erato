@@ -135,6 +135,76 @@ export type ApprovalItem = {
   tool_name: string;
 };
 
+export type ApprovedExport = {
+  /**
+   * @maximum 9007199254740991
+   * @minimum 0
+   */
+  approvedAt: number;
+  artifacts: any[];
+  binding: {
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    accountId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    attemptId: string;
+    /**
+     * @maxLength 2048
+     * @minLength 1
+     */
+    backendOrigin: string;
+    /**
+     * @pattern ^[A-Za-z0-9_-]{32,128}$
+     */
+    deviceId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    jobId: string;
+    /**
+     * @pattern ^sha256:[a-f0-9]{64}$
+     */
+    planDigest: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    taskId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    toolCallId: string;
+  };
+  /**
+   * @maximum 9007199254740991
+   * @minimum 0
+   */
+  expiresAt: number;
+  /**
+   * @pattern ^[A-Za-z0-9_-]{32,128}$
+   */
+  exportId: string;
+  /**
+   * @pattern ^[A-Za-z0-9_-]{32,128}$
+   */
+  grantId: string;
+  /**
+   * @pattern ^sha256:[a-f0-9]{64}$
+   */
+  manifestDigest: string;
+  /**
+   * @pattern ^[A-Za-z0-9_-]{32,128}$
+   */
+  snapshotId: string;
+};
+
 /**
  * Response from the archive all chats endpoint
  */
@@ -1925,7 +1995,46 @@ export type GlobalFacetSettings = {
 };
 
 export type JobResponse = {
-  binding?: null | undefined;
+  binding?: {
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    accountId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    attemptId: string;
+    /**
+     * @maxLength 2048
+     * @minLength 1
+     */
+    backendOrigin: string;
+    /**
+     * @pattern ^[A-Za-z0-9_-]{32,128}$
+     */
+    deviceId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    jobId: string;
+    /**
+     * @pattern ^sha256:[a-f0-9]{64}$
+     */
+    planDigest: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    taskId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    toolCallId: string;
+  };
   /**
    * @format uuid
    */
@@ -1938,11 +2047,54 @@ export type JobResponse = {
    * @format uuid
    */
   messageId: string;
-  plan: void;
-  receipt?: null | undefined;
-  serverOutcome?: null | undefined;
-  state: string;
+  plan: {
+    /**
+     * @maximum 300
+     * @minimum 1
+     */
+    executionSeconds: number;
+    /**
+     * @maximum 9007199254740991
+     * @minimum 0
+     */
+    expiresAt: number;
+    /**
+     * @maximum 20
+     * @minimum 1
+     */
+    maxArtifacts: number;
+    /**
+     * @maximum 12582912
+     * @minimum 1
+     */
+    maxBytes: number;
+    /**
+     * @maximum 100
+     * @minimum 1
+     */
+    maxHits: number;
+    operation: "collect_evidence";
+    /**
+     * @maxItems 8
+     * @minItems 1
+     * @uniqueItems true
+     */
+    queryVariants: string[];
+  };
+  receipt?: string;
+  serverOutcome?: {
+    status: "cancelled" | "expired";
+  };
+  state: JobState;
 };
+
+export type JobState =
+  | "waiting_for_local_result"
+  | "awaiting_authenticated_resume"
+  | "continuing"
+  | "completed"
+  | "cancelled"
+  | "expired";
 
 /**
  * Request to link an external file (SharePoint, Google Drive, etc.)
@@ -2562,7 +2714,7 @@ export type PendingResponse = {
   /**
    * @format uuid
    */
-  next?: null | undefined;
+  next?: string;
 };
 
 /**

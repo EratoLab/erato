@@ -763,3 +763,22 @@ describe("sidecar document retrieval", () => {
     });
   });
 });
+
+it("blocks legacy tool execution for a present but unavailable delegation declaration", async () => {
+  const f = setup({});
+  vi.spyOn(f.client, "getSnapshot").mockReturnValue({
+    ...f.client.getSnapshot(),
+    state: "ready",
+    localDelegation: { enforcement: "unavailable" },
+    strictLocalDelegation: false,
+  });
+  for (const tool of f.tools()) {
+    expect(tool.isAvailable()).toBe(false);
+    expect(await tool.execute({}, context)).toEqual({
+      ok: true,
+      disposition: "local_only",
+    });
+  }
+  expect(f.request).not.toHaveBeenCalled();
+  expect(f.uploadAttachment).not.toHaveBeenCalled();
+});

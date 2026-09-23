@@ -278,6 +278,10 @@ describe("durable shared local coordinator", () => {
     const a = f.create();
     const b = f.create();
     await Promise.all([a.reconcile(), b.reconcile()]);
+    expect(f.api.complete).toHaveBeenCalled();
+    expect(
+      f.invoke.mock.calls.some(([method]) => method === "local_exports.ack.v1"),
+    ).toBe(true);
     for (const call of f.api.complete.mock.calls)
       expect(call[1]).toEqual(f.approved);
     expect(
@@ -293,4 +297,124 @@ describe("durable shared local coordinator", () => {
     a.dispose();
     b.dispose();
   });
+});
+
+it("uses status for cached handles and does not resume an already continuing job", async () => {
+  const f = fixture();
+  const coordinator = f.create();
+  await coordinator.reconcile();
+  await coordinator.reconcile();
+  expect(f.api.claim).toHaveBeenCalledTimes(1);
+  expect(
+    f.invoke.mock.calls.filter(([method]) => method === "local_tasks.start.v1"),
+  ).toHaveLength(1);
+  expect(
+    f.invoke.mock.calls.filter(
+      ([method]) => method === "local_tasks.status.v1",
+    ),
+  ).toHaveLength(1);
+  f.job.state = "continuing";
+  await coordinator.reconcile();
+  expect(f.api.resume).not.toHaveBeenCalled();
+  coordinator.dispose();
+});
+it("stops after cloud disablement", async () => {
+  const f = fixture();
+  f.api.pending.mockResolvedValue({
+    enabled: false,
+    accountId: "account",
+    jobs: [],
+    next: null,
+  });
+  const coordinator = f.create();
+  await coordinator.reconcile();
+  await coordinator.reconcile();
+  expect(f.api.pending).toHaveBeenCalledTimes(1);
+  expect(f.invoke).not.toHaveBeenCalled();
+  expect(coordinator.enabled).toBe(false);
+  coordinator.dispose();
+});
+it("leaves discovery and backoff to the provider", async () => {
+  const f = fixture();
+  vi.spyOn(f.native, "getSnapshot").mockReturnValue({
+    ...f.native.getSnapshot(),
+    state: "error",
+    strictLocalDelegation: false,
+  });
+  const coordinator = f.create();
+  await coordinator.reconcile();
+  await coordinator.reconcile();
+  expect(f.native.discover).not.toHaveBeenCalled();
+  expect(f.invoke).not.toHaveBeenCalled();
+  coordinator.dispose();
+});
+it("does not use an unavailable delegation declaration as consent or legacy fallback", async () => {
+  const f = fixture();
+  vi.spyOn(f.native, "getSnapshot").mockReturnValue({
+    ...f.native.getSnapshot(),
+    state: "ready",
+    strictLocalDelegation: false,
+    localDelegation: { enforcement: "unavailable" },
+  });
+  const coordinator = f.create();
+  await coordinator.reconcile();
+  await coordinator.review("job");
+  expect(f.invoke).not.toHaveBeenCalled();
+  expect(f.api.complete).not.toHaveBeenCalled();
+  coordinator.dispose();
+});
+it("opens native review after fresh authorization and reconciles the approved package", async () => {
+  const f = fixture();
+  const coordinator = f.create();
+  await coordinator.reconcile();
+  const original = f.invoke.getMockImplementation()!;
+  f.invoke.mockImplementation(async (method) => {
+    if (method === "local_tasks.review.v1") f.approve();
+    return original(method);
+  });
+  await coordinator.review("job");
+  expect(f.api.claim).toHaveBeenCalledTimes(2);
+  expect(f.invoke).toHaveBeenCalledWith(
+    "local_tasks.review.v1",
+    expect.objectContaining({ handle: "h".repeat(43) }),
+    expect.anything(),
+  );
+  expect(f.api.complete).toHaveBeenCalledWith(
+    "job",
+    f.approved,
+    expect.any(AbortSignal),
+  );
+  expect(f.api.resume).toHaveBeenCalledTimes(1);
+  coordinator.dispose();
+});
+it("queues cancellation refresh behind an in-flight poll", async () => {
+  const f = fixture();
+  let release!: () => void;
+  const stale = { ...f.job };
+  f.api.pending.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            enabled: true,
+            accountId: "account",
+            jobs: [stale],
+            next: null,
+          });
+      }),
+  );
+  const coordinator = f.create();
+  const tick = coordinator.reconcile();
+  const cancellation = coordinator.cancel("job");
+  await vi.waitFor(() => expect(f.api.cancel).toHaveBeenCalledTimes(1));
+  release();
+  await Promise.all([tick, cancellation]);
+  expect(f.api.pending).toHaveBeenCalledTimes(2);
+  expect(f.invoke).toHaveBeenCalledWith(
+    "local_tasks.cancel.v1",
+    expect.objectContaining({ binding: f.job.binding }),
+    expect.anything(),
+  );
+  expect(f.views()).toEqual([]);
+  coordinator.dispose();
 });

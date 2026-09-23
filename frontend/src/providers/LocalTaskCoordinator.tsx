@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
-import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { useProfileApi } from "@/hooks/profile/useProfileApi";
@@ -7,7 +8,9 @@ import {
   LocalTaskCoordinator as Coordinator,
   localTaskApi,
 } from "@/lib/desktopSidecar/localTaskCoordinator";
+import { getChatUrl } from "@/utils/chat/urlUtils";
 
+import { useDelegatedRunOpener } from "./DelegatedRunOpenProvider";
 import { useDesktopSidecar } from "./DesktopSidecarProvider";
 
 import type {
@@ -45,14 +48,24 @@ function label(state: LocalTaskViewState): string {
 /** Shared authenticated shell UI. Views contain cloud IDs and fixed local state
  * only; the native app owns previews, selection and the approval decision. */
 export function LocalTaskCoordinator() {
-  const { client, snapshot } = useDesktopSidecar();
+  const { client } = useDesktopSidecar();
+  const openRun = useDelegatedRunOpener();
   const { profile, error, refreshProfile } = useProfileApi();
   const [views, setViews] = useState<LocalTaskView[]>([]);
-  const coordinator = useRef<Coordinator | null>(null);
-  const accountId = !error ? profile?.id : undefined;
+  const [coordinator, setCoordinator] = useState<Coordinator | null>(null);
+  const status =
+    error && typeof error === "object" && "status" in error
+      ? error.status
+      : undefined;
+  // Retain cached identity during transient profile failures. Auth failures and
+  // the coordinator's authoritative account comparison still dispose old work.
+  const accountId = status === 401 || status === 403 ? undefined : profile?.id;
   useEffect(() => {
     setViews([]);
-    if (!accountId) return;
+    if (!accountId) {
+      setCoordinator(null);
+      return;
+    }
     const instance = new Coordinator(
       accountId,
       client,
@@ -62,24 +75,29 @@ export function LocalTaskCoordinator() {
         void refreshProfile();
       },
     );
-    coordinator.current = instance;
-    const reconcile = () => {
-      if (!document.hidden) void instance.reconcile();
-    };
-    reconcile();
-    const timer = window.setInterval(reconcile, 10_000);
-    window.addEventListener("focus", reconcile);
-    window.addEventListener("online", reconcile);
-    document.addEventListener("visibilitychange", reconcile);
+    setCoordinator(instance);
     return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", reconcile);
-      window.removeEventListener("online", reconcile);
-      document.removeEventListener("visibilitychange", reconcile);
       instance.dispose();
-      coordinator.current = null;
     };
-  }, [accountId, client, snapshot.instanceId, refreshProfile]);
+  }, [accountId, client, refreshProfile]);
+  useQuery({
+    queryKey: ["local-delegation-coordinator", accountId],
+    enabled: !!coordinator && coordinator.accountId === accountId,
+    queryFn: async () => {
+      await coordinator?.reconcile();
+      // Cache only cloud enablement. Native statuses, handles and approved bytes
+      // stay out of the query cache and any automatic query-error reporting.
+      return { enabled: coordinator?.enabled ?? false };
+    },
+    refetchInterval: (query) =>
+      query.state.data?.enabled === false ? false : 10_000,
+    refetchOnWindowFocus: (query) =>
+      query.state.data?.enabled === false ? false : "always",
+    refetchOnReconnect: (query) =>
+      query.state.data?.enabled === false ? false : "always",
+    retry: false,
+    gcTime: 0,
+  });
   if (!views.length) return null;
   return (
     <aside
@@ -90,12 +108,24 @@ export function LocalTaskCoordinator() {
       <p className="mb-3 text-sm text-theme-fg-secondary">{t`Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in.`}</p>
       {views.map((view) => (
         <div key={view.id} className="mb-3 border-t border-theme-border pt-3">
-          <a
-            href={`/chat/${encodeURIComponent(view.chatId)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm underline"
-          >{t`Open original task`}</a>
+          {openRun ? (
+            <button
+              type="button"
+              onClick={() => openRun(view.chatId)}
+              className="text-sm underline"
+            >
+              {t`Open original task`}
+            </button>
+          ) : (
+            <a
+              href={getChatUrl(view.chatId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm underline"
+            >
+              {t`Open original task`}
+            </a>
+          )}
           <p className="my-2 text-sm" role="status">
             {label(view.state)}
           </p>
@@ -105,7 +135,7 @@ export function LocalTaskCoordinator() {
                 variant="primary"
                 size="sm"
                 onClick={() => {
-                  void coordinator.current?.review(view.id);
+                  void coordinator?.review(view.id);
                 }}
               >{t`Review in desktop app`}</Button>
             )}
@@ -113,7 +143,7 @@ export function LocalTaskCoordinator() {
               variant="secondary"
               size="sm"
               onClick={() => {
-                void coordinator.current?.cancel(view.id);
+                void coordinator?.cancel(view.id);
               }}
             >{t`Cancel task`}</Button>
           </div>

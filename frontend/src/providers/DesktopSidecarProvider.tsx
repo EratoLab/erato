@@ -97,25 +97,38 @@ export function DesktopSidecarProvider({
       clientInfo: resolvedClientInfo,
     });
     let disposed = false;
+    let discovering = false;
     const unsubscribe = client.subscribe(() => {
-      if (!disposed) setValue({ client, snapshot: client.getSnapshot() });
+      if (!disposed) {
+        setValue({ client, snapshot: client.getSnapshot() });
+        if (retryDiscovery && client.getSnapshot().state === "error")
+          void run();
+      }
     });
     setValue({ client, snapshot: client.getSnapshot() });
 
     const run = async (): Promise<void> => {
-      let retryDelayMs = 1_000;
-      while (!disposed) {
-        try {
-          await client.discover(abortController.signal);
-          return;
-        } catch {
-          // State and the typed error are exposed through the context snapshot.
+      if (discovering || disposed) return;
+      discovering = true;
+      try {
+        let retryDelayMs = 1_000;
+        // Cleanup can change disposed while discovery or backoff awaits.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        while (!disposed) {
+          try {
+            await client.discover(abortController.signal);
+            return;
+          } catch {
+            // State and the typed error are exposed through the context snapshot.
+          }
+          if (abortController.signal.aborted || !retryDiscovery) return;
+          await abortableDelay(retryDelayMs, abortController.signal).catch(
+            () => undefined,
+          );
+          retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
         }
-        if (abortController.signal.aborted || !retryDiscovery) return;
-        await abortableDelay(retryDelayMs, abortController.signal).catch(
-          () => undefined,
-        );
-        retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
+      } finally {
+        discovering = false;
       }
     };
     void run();
@@ -152,6 +165,8 @@ export function DesktopSidecarConfigurationSync() {
     if (
       !client ||
       snapshot.state !== "ready" ||
+      // Any delegation declaration blocks legacy content, even if strict support
+      // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
       Boolean(snapshot.localDelegation) ||
       !client.supports("sidecar.configure.v1") ||
       !organizationConfiguration

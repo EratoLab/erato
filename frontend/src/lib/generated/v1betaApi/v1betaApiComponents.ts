@@ -4247,19 +4247,19 @@ export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse,>(
   });
 };
 
-export type ContextError = Fetcher.ErrorWrapper<undefined>;
+export type LocalDelegationContextError = Fetcher.ErrorWrapper<undefined>;
 
-export type ContextVariables = {
+export type LocalDelegationContextVariables = {
   body: Schemas.ContextRequest;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchContext = (
-  variables: ContextVariables,
+export const fetchLocalDelegationContext = (
+  variables: LocalDelegationContextVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
     Schemas.AssertionResponse,
-    ContextError,
+    LocalDelegationContextError,
     Schemas.ContextRequest,
     {},
     {},
@@ -4271,12 +4271,12 @@ export const fetchContext = (
     signal,
   });
 
-export const useContext = (
+export const useLocalDelegationContext = (
   options?: Omit<
     reactQuery.UseMutationOptions<
       Schemas.AssertionResponse,
-      ContextError,
-      ContextVariables
+      LocalDelegationContextError,
+      LocalDelegationContextVariables
     >,
     "mutationFn"
   >,
@@ -4284,37 +4284,55 @@ export const useContext = (
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
     Schemas.AssertionResponse,
-    ContextError,
-    ContextVariables
+    LocalDelegationContextError,
+    LocalDelegationContextVariables
   >({
-    mutationFn: (variables: ContextVariables) =>
-      fetchContext(deepMerge(fetcherOptions, variables)),
+    mutationFn: (variables: LocalDelegationContextVariables) =>
+      fetchLocalDelegationContext(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
 
-export type PendingError = Fetcher.ErrorWrapper<undefined>;
+export type LocalDelegationPendingQueryParams = {
+  /**
+   * @format uuid
+   */
+  after?: string;
+};
 
-export type PendingVariables = V1betaApiContext["fetcherOptions"];
+export type LocalDelegationPendingError = Fetcher.ErrorWrapper<undefined>;
 
-export const fetchPending = (
-  variables: PendingVariables,
+export type LocalDelegationPendingVariables = {
+  queryParams?: LocalDelegationPendingQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationPending = (
+  variables: LocalDelegationPendingVariables,
   signal?: AbortSignal,
 ) =>
-  v1betaApiFetch<Schemas.PendingResponse, PendingError, undefined, {}, {}, {}>({
+  v1betaApiFetch<
+    Schemas.PendingResponse,
+    LocalDelegationPendingError,
+    undefined,
+    {},
+    LocalDelegationPendingQueryParams,
+    {}
+  >({
     url: "/api/v1beta/me/local-delegation/jobs",
     method: "get",
     ...variables,
     signal,
   });
 
-export function pendingQuery(variables: PendingVariables): {
+export function localDelegationPendingQuery(
+  variables: LocalDelegationPendingVariables,
+): {
   queryKey: reactQuery.QueryKey;
   queryFn: (options: QueryFnOptions) => Promise<Schemas.PendingResponse>;
 };
 
-export function pendingQuery(
-  variables: PendingVariables | reactQuery.SkipToken,
+export function localDelegationPendingQuery(
+  variables: LocalDelegationPendingVariables | reactQuery.SkipToken,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn:
@@ -4322,51 +4340,66 @@ export function pendingQuery(
     | reactQuery.SkipToken;
 };
 
-export function pendingQuery(
-  variables: PendingVariables | reactQuery.SkipToken,
+export function localDelegationPendingQuery(
+  variables: LocalDelegationPendingVariables | reactQuery.SkipToken,
 ) {
   return {
     queryKey: queryKeyFn({
       path: "/api/v1beta/me/local-delegation/jobs",
-      operationId: "pending",
+      operationId: "localDelegationPending",
       variables,
     }),
     queryFn:
       variables === reactQuery.skipToken
         ? reactQuery.skipToken
-        : ({ signal }: QueryFnOptions) => fetchPending(variables, signal),
+        : ({ signal }: QueryFnOptions) =>
+            fetchLocalDelegationPending(variables, signal),
   };
 }
 
-export const useSuspensePending = <TData = Schemas.PendingResponse,>(
-  variables: PendingVariables,
+export const useSuspenseLocalDelegationPending = <
+  TData = Schemas.PendingResponse,
+>(
+  variables: LocalDelegationPendingVariables,
   options?: Omit<
-    reactQuery.UseQueryOptions<Schemas.PendingResponse, PendingError, TData>,
+    reactQuery.UseQueryOptions<
+      Schemas.PendingResponse,
+      LocalDelegationPendingError,
+      TData
+    >,
     "queryKey" | "queryFn" | "initialData"
   >,
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useSuspenseQuery<
     Schemas.PendingResponse,
-    PendingError,
+    LocalDelegationPendingError,
     TData
   >({
-    ...pendingQuery(deepMerge(fetcherOptions, variables)),
+    ...localDelegationPendingQuery(deepMerge(fetcherOptions, variables)),
     ...options,
     ...queryOptions,
   });
 };
 
-export const usePending = <TData = Schemas.PendingResponse,>(
-  variables: PendingVariables | reactQuery.SkipToken,
+export const useLocalDelegationPending = <TData = Schemas.PendingResponse,>(
+  variables: LocalDelegationPendingVariables | reactQuery.SkipToken,
   options?: Omit<
-    reactQuery.UseQueryOptions<Schemas.PendingResponse, PendingError, TData>,
+    reactQuery.UseQueryOptions<
+      Schemas.PendingResponse,
+      LocalDelegationPendingError,
+      TData
+    >,
     "queryKey" | "queryFn" | "initialData"
   >,
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
-  return reactQuery.useQuery<Schemas.PendingResponse, PendingError, TData>({
-    ...pendingQuery(
+  return reactQuery.useQuery<
+    Schemas.PendingResponse,
+    LocalDelegationPendingError,
+    TData
+  >({
+    ...localDelegationPendingQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -4376,63 +4409,84 @@ export const usePending = <TData = Schemas.PendingResponse,>(
   });
 };
 
-export type CancelPathParams = {
+export type LocalDelegationCancelPathParams = {
   /**
    * @format uuid
    */
   id: string;
 };
 
-export type CancelError = Fetcher.ErrorWrapper<undefined>;
+export type LocalDelegationCancelError = Fetcher.ErrorWrapper<undefined>;
 
-export type CancelVariables = {
-  pathParams: CancelPathParams;
+export type LocalDelegationCancelVariables = {
+  pathParams: LocalDelegationCancelPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchCancel = (variables: CancelVariables, signal?: AbortSignal) =>
-  v1betaApiFetch<undefined, CancelError, undefined, {}, {}, CancelPathParams>({
+export const fetchLocalDelegationCancel = (
+  variables: LocalDelegationCancelVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    LocalDelegationCancelError,
+    undefined,
+    {},
+    {},
+    LocalDelegationCancelPathParams
+  >({
     url: "/api/v1beta/me/local-delegation/jobs/{id}/cancel",
     method: "post",
     ...variables,
     signal,
   });
 
-export const useCancel = (
+export const useLocalDelegationCancel = (
   options?: Omit<
-    reactQuery.UseMutationOptions<undefined, CancelError, CancelVariables>,
+    reactQuery.UseMutationOptions<
+      undefined,
+      LocalDelegationCancelError,
+      LocalDelegationCancelVariables
+    >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
-  return reactQuery.useMutation<undefined, CancelError, CancelVariables>({
-    mutationFn: (variables: CancelVariables) =>
-      fetchCancel(deepMerge(fetcherOptions, variables)),
+  return reactQuery.useMutation<
+    undefined,
+    LocalDelegationCancelError,
+    LocalDelegationCancelVariables
+  >({
+    mutationFn: (variables: LocalDelegationCancelVariables) =>
+      fetchLocalDelegationCancel(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
 
-export type ClaimPathParams = {
+export type LocalDelegationClaimPathParams = {
   /**
    * @format uuid
    */
   id: string;
 };
 
-export type ClaimError = Fetcher.ErrorWrapper<undefined>;
+export type LocalDelegationClaimError = Fetcher.ErrorWrapper<undefined>;
 
-export type ClaimVariables = {
+export type LocalDelegationClaimVariables = {
   body: Schemas.ClaimRequest;
-  pathParams: ClaimPathParams;
+  pathParams: LocalDelegationClaimPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchClaim = (variables: ClaimVariables, signal?: AbortSignal) =>
+export const fetchLocalDelegationClaim = (
+  variables: LocalDelegationClaimVariables,
+  signal?: AbortSignal,
+) =>
   v1betaApiFetch<
     Schemas.ClaimResponse,
-    ClaimError,
+    LocalDelegationClaimError,
     Schemas.ClaimRequest,
     {},
     {},
-    ClaimPathParams
+    LocalDelegationClaimPathParams
   >({
     url: "/api/v1beta/me/local-delegation/jobs/{id}/claim",
     method: "post",
@@ -4440,12 +4494,12 @@ export const fetchClaim = (variables: ClaimVariables, signal?: AbortSignal) =>
     signal,
   });
 
-export const useClaim = (
+export const useLocalDelegationClaim = (
   options?: Omit<
     reactQuery.UseMutationOptions<
       Schemas.ClaimResponse,
-      ClaimError,
-      ClaimVariables
+      LocalDelegationClaimError,
+      LocalDelegationClaimVariables
     >,
     "mutationFn"
   >,
@@ -4453,40 +4507,40 @@ export const useClaim = (
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
     Schemas.ClaimResponse,
-    ClaimError,
-    ClaimVariables
+    LocalDelegationClaimError,
+    LocalDelegationClaimVariables
   >({
-    mutationFn: (variables: ClaimVariables) =>
-      fetchClaim(deepMerge(fetcherOptions, variables)),
+    mutationFn: (variables: LocalDelegationClaimVariables) =>
+      fetchLocalDelegationClaim(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
 
-export type CompletePathParams = {
+export type LocalDelegationCompletePathParams = {
   /**
    * @format uuid
    */
   id: string;
 };
 
-export type CompleteError = Fetcher.ErrorWrapper<undefined>;
+export type LocalDelegationCompleteError = Fetcher.ErrorWrapper<undefined>;
 
-export type CompleteVariables = {
-  body?: Record<string, any>;
-  pathParams: CompletePathParams;
+export type LocalDelegationCompleteVariables = {
+  body: Schemas.ApprovedExport;
+  pathParams: LocalDelegationCompletePathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchComplete = (
-  variables: CompleteVariables,
+export const fetchLocalDelegationComplete = (
+  variables: LocalDelegationCompleteVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
     Schemas.ReceiptResponse,
-    CompleteError,
-    Record<string, any>,
+    LocalDelegationCompleteError,
+    Schemas.ApprovedExport,
     {},
     {},
-    CompletePathParams
+    LocalDelegationCompletePathParams
   >({
     url: "/api/v1beta/me/local-delegation/jobs/{id}/complete",
     method: "post",
@@ -4494,12 +4548,12 @@ export const fetchComplete = (
     signal,
   });
 
-export const useComplete = (
+export const useLocalDelegationComplete = (
   options?: Omit<
     reactQuery.UseMutationOptions<
       Schemas.ReceiptResponse,
-      CompleteError,
-      CompleteVariables
+      LocalDelegationCompleteError,
+      LocalDelegationCompleteVariables
     >,
     "mutationFn"
   >,
@@ -4507,46 +4561,64 @@ export const useComplete = (
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
     Schemas.ReceiptResponse,
-    CompleteError,
-    CompleteVariables
+    LocalDelegationCompleteError,
+    LocalDelegationCompleteVariables
   >({
-    mutationFn: (variables: CompleteVariables) =>
-      fetchComplete(deepMerge(fetcherOptions, variables)),
+    mutationFn: (variables: LocalDelegationCompleteVariables) =>
+      fetchLocalDelegationComplete(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
 
-export type ResumePathParams = {
+export type LocalDelegationResumePathParams = {
   /**
    * @format uuid
    */
   id: string;
 };
 
-export type ResumeError = Fetcher.ErrorWrapper<undefined>;
+export type LocalDelegationResumeError = Fetcher.ErrorWrapper<undefined>;
 
-export type ResumeVariables = {
-  pathParams: ResumePathParams;
+export type LocalDelegationResumeVariables = {
+  pathParams: LocalDelegationResumePathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchResume = (variables: ResumeVariables, signal?: AbortSignal) =>
-  v1betaApiFetch<undefined, ResumeError, undefined, {}, {}, ResumePathParams>({
+export const fetchLocalDelegationResume = (
+  variables: LocalDelegationResumeVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    LocalDelegationResumeError,
+    undefined,
+    {},
+    {},
+    LocalDelegationResumePathParams
+  >({
     url: "/api/v1beta/me/local-delegation/jobs/{id}/resume",
     method: "post",
     ...variables,
     signal,
   });
 
-export const useResume = (
+export const useLocalDelegationResume = (
   options?: Omit<
-    reactQuery.UseMutationOptions<undefined, ResumeError, ResumeVariables>,
+    reactQuery.UseMutationOptions<
+      undefined,
+      LocalDelegationResumeError,
+      LocalDelegationResumeVariables
+    >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
-  return reactQuery.useMutation<undefined, ResumeError, ResumeVariables>({
-    mutationFn: (variables: ResumeVariables) =>
-      fetchResume(deepMerge(fetcherOptions, variables)),
+  return reactQuery.useMutation<
+    undefined,
+    LocalDelegationResumeError,
+    LocalDelegationResumeVariables
+  >({
+    mutationFn: (variables: LocalDelegationResumeVariables) =>
+      fetchLocalDelegationResume(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
@@ -7978,8 +8050,8 @@ export type QueryOperation =
     }
   | {
       path: "/api/v1beta/me/local-delegation/jobs";
-      operationId: "pending";
-      variables: PendingVariables | reactQuery.SkipToken;
+      operationId: "localDelegationPending";
+      variables: LocalDelegationPendingVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/mcp-tool-approval-settings";

@@ -1,6 +1,14 @@
 /* eslint-disable lingui/no-unlocalized-strings -- Internal protocol states and fixed, non-telemetry errors. */
-import { v1betaApiFetch } from "@/lib/generated/v1betaApi/v1betaApiFetcher";
+import {
+  fetchLocalDelegationPending,
+  fetchLocalDelegationContext,
+  fetchLocalDelegationClaim,
+  fetchLocalDelegationComplete,
+  fetchLocalDelegationResume,
+  fetchLocalDelegationCancel,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import type { JobResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   ApprovedLocalExport,
   DesktopSidecarClient,
@@ -13,7 +21,7 @@ export interface CloudLocalJob {
   id: string;
   chatId: string;
   messageId: string;
-  state: string;
+  state: JobResponse["state"];
   binding: LocalTaskBinding | null;
   plan: LocalTaskPlan;
   receipt: string | null;
@@ -47,40 +55,40 @@ export interface LocalTaskApi {
   resume(id: string, signal: AbortSignal): Promise<unknown>;
   cancel(id: string, signal: AbortSignal): Promise<unknown>;
 }
-function request<T>(
-  path: string,
-  method: string,
-  signal: AbortSignal,
-  body?: object,
-): Promise<T> {
-  return v1betaApiFetch<T, unknown, object | undefined, object, object, object>(
-    { url: `/api/v1beta/me/local-delegation/${path}`, method, signal, body },
-  );
+function cloudJob(job: JobResponse): CloudLocalJob {
+  const first = job.plan.queryVariants.at(0);
+  const rest = job.plan.queryVariants.slice(1);
+  if (first === undefined) throw new Error("Invalid local task plan");
+  return {
+    ...job,
+    plan: { ...job.plan, queryVariants: [first, ...rest] },
+    binding: job.binding ?? null,
+    receipt: job.receipt ?? null,
+    serverOutcome: job.serverOutcome ?? null,
+  };
 }
 export const localTaskApi: LocalTaskApi = {
   pending: (after, signal) =>
-    request(
-      `jobs${after ? `?after=${encodeURIComponent(after)}` : ""}`,
-      "GET",
-      signal,
+    fetchLocalDelegationPending({ queryParams: { after } }, signal).then(
+      (page) => ({
+        ...page,
+        jobs: page.jobs.map(cloudJob),
+        next: page.next ?? null,
+      }),
     ),
   context: (deviceId, challenge, signal) =>
-    request("context", "POST", signal, { deviceId, challenge }),
+    fetchLocalDelegationContext({ body: { deviceId, challenge } }, signal),
   claim: (id, deviceId, signal) =>
-    request(`jobs/${encodeURIComponent(id)}/claim`, "POST", signal, {
-      deviceId,
-    }),
-  complete: (id, approved, signal) =>
-    request(
-      `jobs/${encodeURIComponent(id)}/complete`,
-      "POST",
+    fetchLocalDelegationClaim(
+      { pathParams: { id }, body: { deviceId } },
       signal,
-      approved,
-    ),
+    ).then((claim) => ({ ...claim, job: cloudJob(claim.job) })),
+  complete: (id, body, signal) =>
+    fetchLocalDelegationComplete({ pathParams: { id }, body }, signal),
   resume: (id, signal) =>
-    request(`jobs/${encodeURIComponent(id)}/resume`, "POST", signal),
+    fetchLocalDelegationResume({ pathParams: { id } }, signal),
   cancel: (id, signal) =>
-    request(`jobs/${encodeURIComponent(id)}/cancel`, "POST", signal),
+    fetchLocalDelegationCancel({ pathParams: { id } }, signal),
 };
 export type LocalTaskViewState =
   | LocalTaskStatus["state"]
@@ -94,7 +102,12 @@ export interface LocalTaskView {
   messageId: string;
   state: LocalTaskViewState;
 }
-type Context = { contextHandle: string; expiresAt: number; deviceId: string };
+type Context = {
+  contextHandle: string;
+  expiresAt: number;
+  deviceId: string;
+  instanceId?: string | null;
+};
 function sameBinding(a: LocalTaskBinding, b: LocalTaskBinding): boolean {
   return (
     Object.keys(b).every(
@@ -114,7 +127,12 @@ export class LocalTaskCoordinator {
   readonly #handles = new Map<string, string>();
   readonly #acknowledged = new Set<string>();
   #context: Context | undefined;
-  #reconciling = false;
+  #reconciling: Promise<void> | undefined;
+  #refreshRequested = false;
+  #enabled = true;
+  get enabled(): boolean {
+    return this.#enabled;
+  }
   constructor(
     readonly accountId: string,
     private readonly native: DesktopSidecarClient | null,
@@ -147,16 +165,20 @@ export class LocalTaskCoordinator {
   }
   async #localContext(): Promise<Context> {
     this.#check();
-    if (this.native && this.native.getSnapshot().state !== "ready")
-      await this.native.discover(this.#abort.signal);
-    this.#check();
+    // Discovery and retry backoff belong to DesktopSidecarProvider.
     if (
       !this.native?.getSnapshot().strictLocalDelegation ||
       this.native.getSnapshot().state !== "ready"
     )
       throw new Error("Local review unavailable");
-    if (this.#context && this.#context.expiresAt > Date.now() / 1000 + 15)
+    if (
+      this.#context &&
+      this.#context.expiresAt > Date.now() / 1000 + 15 &&
+      this.#context.instanceId === this.native.getSnapshot().instanceId
+    )
       return this.#context;
+    this.#context = undefined;
+    this.#handles.clear();
     const options = { signal: this.#abort.signal };
     const challenge = await this.native.invoke(
       "local_contexts.challenge.v1",
@@ -176,7 +198,11 @@ export class LocalTaskCoordinator {
       options,
     );
     this.#check();
-    return (this.#context = { ...bound, deviceId: challenge.deviceId });
+    return (this.#context = {
+      ...bound,
+      deviceId: challenge.deviceId,
+      instanceId: this.native.getSnapshot().instanceId,
+    });
   }
   #nativeClient(): DesktopSidecarClient {
     if (!this.native) throw new Error("Local sidecar unavailable");
@@ -218,9 +244,30 @@ export class LocalTaskCoordinator {
     this.#jobs.set(job.id, claimed.job);
     return { job: claimed.job, ...local };
   }
-  async reconcile(): Promise<void> {
-    if (this.#reconciling || this.#abort.signal.aborted) return;
-    this.#reconciling = true;
+  reconcile(): Promise<void> {
+    if (this.#abort.signal.aborted || !this.#enabled) return Promise.resolve();
+    this.#refreshRequested = true;
+    if (this.#reconciling) return this.#reconciling;
+    this.#reconciling = this.#drainRefreshes();
+    return this.#reconciling;
+  }
+  async #drainRefreshes(): Promise<void> {
+    try {
+      do {
+        this.#refreshRequested = false;
+        await this.#reconcileOnce();
+      } while (
+        // Other requests can set this flag while reconciliation is awaiting I/O.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        this.#refreshRequested &&
+        this.#enabled &&
+        !this.#abort.signal.aborted
+      );
+    } finally {
+      this.#reconciling = undefined;
+    }
+  }
+  async #reconcileOnce(): Promise<void> {
     try {
       const seen = new Set<string>();
       let after: string | undefined;
@@ -233,7 +280,11 @@ export class LocalTaskCoordinator {
           this.accountChanged();
           return;
         }
+        this.#enabled = page.enabled;
         if (!page.enabled) {
+          this.#jobs.clear();
+          this.#handles.clear();
+          this.#context = undefined;
           this.#views.clear();
           this.#emit();
           return;
@@ -244,10 +295,8 @@ export class LocalTaskCoordinator {
           this.#jobs.set(job.id, job);
           // An authenticated returning frontend can resume already accepted work
           // even when the original native device is disconnected.
-          if (
-            job.state === "awaiting_authenticated_resume" ||
-            job.state === "continuing"
-          ) {
+          if (job.state === "continuing") this.#view(job, "continuing");
+          if (job.state === "awaiting_authenticated_resume") {
             this.#view(job, job.state);
             try {
               await this.api.resume(job.id, this.#abort.signal);
@@ -279,8 +328,6 @@ export class LocalTaskCoordinator {
       this.#emit();
     } catch {
       /* Authentication/connection recovery is retried by the shell. */
-    } finally {
-      this.#reconciling = false;
     }
   }
   async #reconcileNative(original: CloudLocalJob): Promise<void> {
@@ -306,7 +353,19 @@ export class LocalTaskCoordinator {
       this.#views.delete(original.id);
       return;
     }
-    const { job, handle, state } = await this.#claim(original, context);
+    const cached = this.#handles.get(original.id);
+    const local = cached
+      ? {
+          job: original,
+          ...(await this.#nativeClient().invoke(
+            "local_tasks.status.v1",
+            { contextHandle: context.contextHandle, handle: cached },
+            { signal: this.#abort.signal },
+          )),
+        }
+      : await this.#claim(original, context);
+    this.#check();
+    const { job, handle, state } = local;
     const params = { contextHandle: context.contextHandle, handle };
     if (job.receipt) {
       await this.#nativeClient().invoke(

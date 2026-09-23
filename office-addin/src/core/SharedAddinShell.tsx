@@ -2,7 +2,6 @@ import {
   ApiProvider,
   DesktopSidecarProvider,
   DesktopSidecarClientTools,
-  LocalTaskCoordinator,
   FeatureConfigProvider,
   GenerationStatusPoller,
   I18nProvider,
@@ -73,7 +72,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
           listing the pane reads. `isAuthenticated` stays true across
           transient refresh failures, so this does not remount and re-seed. */}
       <DesktopSidecarClientTools />
-      <LocalTaskCoordinator />
       <GenerationStatusPoller seedOnMount />
     </>
   );

@@ -92,7 +92,11 @@ describe("AuthGate", () => {
 
     expect(screen.getByTestId("app")).toBeInTheDocument();
     expect(screen.getByTestId("sidecar-tools")).toBeInTheDocument();
-    expect(screen.getByTestId("local-task-coordinator")).toBeInTheDocument();
+    // The coordinator belongs to AddinChatCore's run opener, below this gate.
+    // Mounting another here would duplicate polling and lose in-pane navigation.
+    expect(
+      screen.queryByTestId("local-task-coordinator"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("generation-poller")).toHaveAttribute(
       "data-seed",
       "true",

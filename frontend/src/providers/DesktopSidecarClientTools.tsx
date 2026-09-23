@@ -49,6 +49,8 @@ export function DesktopSidecarClientTools() {
         return uploaded;
       },
     });
+    // Any delegation declaration blocks legacy content, even if strict support
+    // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
     const unguard = registerLocalOnlyClientTools(
       tools.map((tool) => tool.name),
       () => Boolean(client.getSnapshot().localDelegation),
