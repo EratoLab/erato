@@ -6149,6 +6149,10 @@ msgstr "Bearbeitet"
 msgid "Email"
 msgstr ""
 
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Email {number}"
+msgstr "E-Mail {number}"
+
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Email preview"
 msgstr ""
@@ -6520,6 +6524,10 @@ msgstr "Es kann nur eine Nachricht in die Warteschlange gestellt werden. Beim Er
 msgid "Open"
 msgstr "Öffnen"
 
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Open in Outlook"
+msgstr "In Outlook öffnen"
+
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Open in Teams"
 msgstr "In Teams öffnen"
@@ -6528,10 +6536,18 @@ msgstr "In Teams öffnen"
 msgid "Open menu"
 msgstr "Menü öffnen"
 
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Opening this source email is unavailable on this device."
+msgstr "Die ursprüngliche E-Mail kann auf diesem Gerät nicht geöffnet werden."
+
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.prompt-optimizer.tooltip"
 msgstr "Prompt optimieren"
+
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Outlook could not open this email. It may have been moved, deleted, or be unavailable in this mailbox."
+msgstr "Outlook konnte diese E-Mail nicht öffnen. Sie wurde möglicherweise verschoben oder gelöscht oder ist in diesem Postfach nicht verfügbar."
 
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
 #~ msgid "Output"
@@ -6803,6 +6819,10 @@ msgstr "Etwas ist schiefgelaufen"
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Something went wrong while loading the chat interface."
 msgstr "Beim Laden der Chat-Oberfläche ist ein Fehler aufgetreten."
+
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Source email"
+msgstr "Ursprüngliche E-Mail"
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Start audio mode"

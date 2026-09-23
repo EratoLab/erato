@@ -145,6 +145,8 @@ export interface SidecarSnapshot {
   serverInfo: { name: string; version: string } | null;
   instanceId: string | null;
   catalogue: { revision: string; digest: string } | null;
+  /** Discovery extensions, exposed only after schema and digest validation. */
+  discoveryExtensions?: Readonly<Record<string, unknown>>;
   capabilities: ReadonlyMap<string, SidecarCapability>;
   error: SidecarClientError | null;
 }
@@ -572,6 +574,11 @@ export class DesktopSidecarClient {
         serverInfo: result.serverInfo,
         instanceId: result.instanceId,
         catalogue,
+        discoveryExtensions: Object.fromEntries(
+          Object.entries(result.document).filter(([key]) =>
+            key.startsWith("x-"),
+          ),
+        ),
         capabilities,
         error: null,
       });
@@ -820,6 +827,7 @@ export class DesktopSidecarClient {
     this.#setSnapshot({
       ...this.#snapshot,
       state: "error",
+      discoveryExtensions: undefined,
       capabilities: EMPTY_CAPABILITIES,
       error,
     });

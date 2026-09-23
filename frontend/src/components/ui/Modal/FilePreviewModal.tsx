@@ -6,6 +6,7 @@ import {
   FilePreviewContent,
   resolvePreviewKind,
 } from "@/components/ui/FilePreview/FilePreviewContent";
+import { OutlookSourceAction } from "@/components/ui/FilePreview/OutlookSourceAction";
 
 import { ModalBase } from "./ModalBase";
 
@@ -75,6 +76,12 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
   const actionButtons = (
     <div className="mt-4 flex flex-wrap justify-center gap-3">
+      {!isUnavailableMissingPermissions && (
+        <OutlookSourceAction
+          key={file.id}
+          provenance={file.outlook_provenance}
+        />
+      )}
       {!isUnavailableMissingPermissions && file.download_url && (
         <Button
           // eslint-disable-next-line lingui/no-unlocalized-strings

@@ -6149,6 +6149,10 @@ msgstr "Editado"
 msgid "Email"
 msgstr ""
 
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Email {number}"
+msgstr "Correo {number}"
+
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Email preview"
 msgstr ""
@@ -6520,6 +6524,10 @@ msgstr ""
 msgid "Open"
 msgstr "Abrir"
 
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Open in Outlook"
+msgstr "Abrir en Outlook"
+
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Open in Teams"
 msgstr "Abrir en Teams"
@@ -6528,10 +6536,18 @@ msgstr "Abrir en Teams"
 msgid "Open menu"
 msgstr "Abrir menú"
 
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Opening this source email is unavailable on this device."
+msgstr "No se puede abrir el correo de origen en este dispositivo."
+
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.prompt-optimizer.tooltip"
 msgstr "Optimizar el prompt"
+
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Outlook could not open this email. It may have been moved, deleted, or be unavailable in this mailbox."
+msgstr "Outlook no pudo abrir este correo. Es posible que se haya movido o eliminado, o que no esté disponible en este buzón."
 
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
 #~ msgid "Output"
@@ -6803,6 +6819,10 @@ msgstr "Algo salió mal"
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Something went wrong while loading the chat interface."
 msgstr "Algo salió mal al cargar la interfaz de chat."
+
+#: src/components/ui/FilePreview/OutlookSourceAction.tsx
+msgid "Source email"
+msgstr "Correo de origen"
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Start audio mode"

@@ -15,6 +15,7 @@ import { OfficeThemeProvider } from "../providers/OfficeThemeProvider";
 import { OutlookAuthProvider } from "./providers/OutlookAuthProvider";
 import { OutlookEmailSourceProvider } from "./providers/OutlookEmailSourceProvider";
 import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
+import { OutlookNavigationProvider } from "./providers/OutlookNavigationProvider";
 
 // The route module resolves before React renders its default export. Registry
 // consumers can therefore memoize safely on their first render.
@@ -32,9 +33,11 @@ function OutlookProviders({ children }: { children: React.ReactNode }) {
   const { host } = useOffice();
   if (host !== "Outlook") return <>{children}</>;
   return (
-    <OutlookMailItemProvider>
-      <OutlookEmailSourceProvider>{children}</OutlookEmailSourceProvider>
-    </OutlookMailItemProvider>
+    <OutlookNavigationProvider>
+      <OutlookMailItemProvider>
+        <OutlookEmailSourceProvider>{children}</OutlookEmailSourceProvider>
+      </OutlookMailItemProvider>
+    </OutlookNavigationProvider>
   );
 }
 

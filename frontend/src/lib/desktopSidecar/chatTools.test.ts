@@ -80,6 +80,172 @@ function conversation(): OutlookGetConversationV1Result {
 }
 
 describe("shared desktop sidecar tools", () => {
+  it("keeps each conversation message's identity when equal attachment bytes have different parents", async () => {
+    const data = conversation();
+    data.messages = ["first", "second"].map((name) => ({
+      ...data.messages[0],
+      internetMessageId: `<${name}@example.test>`,
+      external_ids: [{ key: "ews_id", value: `${name}-ews` }],
+    }));
+    const env = setup({ "outlook.get_conversation.v1": data });
+    await env
+      .tools()[1]
+      .execute({ ...anchor, includeAttachments: true }, context);
+    expect(env.uploadAttachment).toHaveBeenCalledTimes(2);
+    for (const [index, name] of ["first", "second"].entries()) {
+      expect(env.uploadAttachment).toHaveBeenNthCalledWith(
+        index + 1,
+        expect.any(File),
+        "chat",
+        undefined,
+        undefined,
+        {
+          version: 1,
+          origins: [
+            {
+              topLevelParent: {
+                external_ids: [
+                  { key: "ews_id", value: `${name}-ews` },
+                  { key: "email_message_id", value: `<${name}@example.test>` },
+                ],
+                mailbox: { mailboxId },
+              },
+            },
+          ],
+        },
+      );
+    }
+  });
+
+  it.each([true, false])(
+    "persists an attachment export's outer parent and verified search mailbox (mailbox discovery: %s)",
+    async (mailboxDiscovery) => {
+      const documentId = "11111111-1111-4111-8111-111111111111";
+      const topLevelParent = {
+        external_ids: [{ key: "ews_id", value: "outer-mail" }],
+      };
+      const env = setup({
+        "search.query.v1": {
+          hits: [
+            {
+              documentId,
+              mailboxId,
+              topLevelParent,
+              chunkId: null,
+              score: 1,
+              kind: "file",
+              title: null,
+              sender: null,
+              date: null,
+              mimeType: "text/plain",
+              conversationKey: null,
+            },
+          ],
+          elapsedMs: 0,
+          blocksRead: 0,
+          candidatesScored: 0,
+        },
+        "sources.get_document.v1": {
+          filename: "note.txt",
+          mimeType: "text/plain",
+          contentBase64: globalThis.btoa("note"),
+          external_ids: [],
+          topLevelParent,
+        },
+        "outlook.list_mailboxes.v1": {
+          mailboxes: [
+            {
+              id: mailboxId,
+              emailAddress: "shared@example.test",
+              source: "windows-classic",
+              displayName: "Shared",
+            },
+          ],
+          warnings: [],
+        },
+      });
+      env.supports.mockImplementation(
+        (method) => mailboxDiscovery || method !== "outlook.list_mailboxes.v1",
+      );
+      const tools = env.tools();
+      expect(await tools[0].execute({ text: "note" })).toMatchObject({
+        ok: true,
+      });
+      const tool = tools.find(
+        (tool) => tool.name === GET_SIDECAR_DOCUMENT_TOOL,
+      )!;
+      expect(await tool.execute({ documentId }, context)).toMatchObject({
+        ok: true,
+      });
+      expect(env.uploadAttachment).toHaveBeenCalledWith(
+        expect.any(File),
+        "chat",
+        undefined,
+        undefined,
+        {
+          version: 1,
+          origins: [
+            {
+              topLevelParent: {
+                ...topLevelParent,
+                mailbox: {
+                  mailboxId,
+                  ...(mailboxDiscovery
+                    ? { emailAddress: "shared@example.test" }
+                    : {}),
+                },
+              },
+            },
+          ],
+        },
+      );
+    },
+  );
+
+  it("keeps mailbox scope when exporting a parent observed in a conversation", async () => {
+    const documentId = "11111111-1111-4111-8111-111111111111";
+    const data = conversation();
+    data.messages[0].attachments[0].topLevelParent = {
+      documentId,
+      external_ids: [{ key: "ews_id", value: "parent" }],
+    };
+    const env = setup({
+      "outlook.get_conversation.v1": data,
+      "sources.get_document.v1": {
+        filename: "parent.eml",
+        mimeType: "message/rfc822",
+        contentBase64: globalThis.btoa("mail"),
+        external_ids: [{ key: "ews_id", value: "parent" }],
+      },
+    });
+    env.supports.mockImplementation(
+      (method) => method !== "outlook.list_mailboxes.v1",
+    );
+    const tools = env.tools();
+    await tools[1].execute(anchor);
+    await tools
+      .find((tool) => tool.name === GET_SIDECAR_DOCUMENT_TOOL)!
+      .execute({ documentId }, context);
+    expect(env.uploadAttachment).toHaveBeenCalledWith(
+      expect.any(File),
+      "chat",
+      undefined,
+      "parent",
+      {
+        version: 1,
+        origins: [
+          {
+            document: {
+              documentId,
+              external_ids: [{ key: "ews_id", value: "parent" }],
+              mailbox: { mailboxId },
+            },
+          },
+        ],
+      },
+    );
+  });
+
   it("uploads only individually approved attachments, including duplicate hashes", async () => {
     const data = conversation();
     data.messages[0].attachments[0].external_ids = [
@@ -104,6 +270,7 @@ describe("shared desktop sidecar tools", () => {
       "chat",
       undefined,
       "approved-ews-id",
+      expect.objectContaining({ version: 1 }),
     );
     expect(result).toMatchObject({
       ok: true,
@@ -303,6 +470,7 @@ describe("shared desktop sidecar tools", () => {
       "chat",
       undefined,
       undefined,
+      expect.objectContaining({ version: 1 }),
     );
     expect(outcome).toMatchObject({
       ok: true,
@@ -462,6 +630,7 @@ describe("shared desktop sidecar tools", () => {
         "chat",
         undefined,
         expected,
+        expect.objectContaining({ version: 1 }),
       );
     },
   );
@@ -491,6 +660,7 @@ describe("shared desktop sidecar tools", () => {
         "chat",
         undefined,
         id,
+        expect.objectContaining({ version: 1 }),
       );
     }
   });
@@ -653,6 +823,10 @@ describe("sidecar document retrieval", () => {
         "chat",
         signal,
         undefined,
+        {
+          version: 1,
+          origins: [{ document: { documentId, external_ids: [] } }],
+        },
       );
       expect(JSON.parse(env.request.mock.calls[0][0]).params).toEqual(args);
       expect(JSON.stringify(outcome)).not.toContain(document.contentBase64);
@@ -687,6 +861,7 @@ describe("sidecar document retrieval", () => {
           "chat",
           undefined,
           expected,
+          expect.objectContaining({ version: 1 }),
         );
       }
     },

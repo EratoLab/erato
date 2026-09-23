@@ -322,6 +322,7 @@ export const AddinChatInput = forwardRef<
     removeEmailBody,
     removeAttachment,
     resolveSelectedFilesForSend,
+    getFileProvenance,
     parentReplyContext,
     isLoadingParentReplyContext,
     stagedEmails,
@@ -1069,21 +1070,24 @@ export const AddinChatInput = forwardRef<
 
         attemptedFileNames = filesToUpload.map((file) => file.name);
 
-        const formData = new FormData();
-        filesToUpload.forEach((file) => {
-          formData.append("file", file, file.name);
-        });
-
         const idToken = getIdToken();
-        const result = await fetchUploadFile({
-          queryParams: chatId ? { chat_id: chatId } : {},
-          body: formData as never,
-          headers: {
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-        });
-
-        resolvedFileIds = result.files.map((file) => file.id);
+        // Multipart provenance applies to the whole request. Keep each source
+        // separate so dropped mail never inherits the open thread's identity.
+        for (const file of filesToUpload) {
+          const formData = new FormData();
+          const provenance = getFileProvenance(file);
+          if (provenance)
+            formData.append("outlook_provenance", JSON.stringify(provenance));
+          formData.append("file", file, file.name);
+          const result = await fetchUploadFile({
+            queryParams: chatId ? { chat_id: chatId } : {},
+            body: formData as never,
+            headers: {
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+          });
+          resolvedFileIds.push(...result.files.map((uploaded) => uploaded.id));
+        }
       } catch (error) {
         if (error instanceof EmailTrimError) {
           // The untrimmed original would ship what the user removed.
@@ -1161,6 +1165,7 @@ export const AddinChatInput = forwardRef<
       replyFromReadAvailable,
       resolvedParts,
       resolveSelectedFilesForSend,
+      getFileProvenance,
       restoreDraft,
       scheduleFacetAvailable,
       shouldUseSuggestedEmailSource,

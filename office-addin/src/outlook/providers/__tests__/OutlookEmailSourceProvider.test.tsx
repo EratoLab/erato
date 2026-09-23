@@ -210,6 +210,37 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
     expect(sent).toEqual([trimmed]);
   });
 
+  it("captures the thread subject's EWS ID and shared mailbox without attributing unrelated files to it", async () => {
+    primeReadModeThread(makeThread());
+    mockUseOutlookMailItem.mockReturnValue({
+      ...mockUseOutlookMailItem(),
+      sharedContext: {
+        owner: "shared@example.test",
+        targetMailbox: "shared@example.test",
+      },
+      isLoadingSharedContext: false,
+    });
+    renderProvider();
+    const [file] = await captured!.resolveSelectedFilesForSend();
+    expect(captured!.getFileProvenance(file)).toEqual({
+      version: 1,
+      origins: [
+        {
+          document: {
+            external_ids: [
+              { key: "ews_id", value: "item-1" },
+              { key: "email_message_id", value: "<m2@x>" },
+            ],
+            mailbox: { emailAddress: "shared@example.test" },
+          },
+        },
+      ],
+    });
+    expect(
+      captured!.getFileProvenance(new File(["unrelated"], file.name)),
+    ).toBeUndefined();
+  });
+
   it("holds a failed forward trim as threadTrimError and refuses the send until it is undone", async () => {
     // The trimmer cannot walk these bytes, yet the nested list still offers a part to dismiss.
     primeReadModeThread(
