@@ -1,15 +1,15 @@
 # Strict snapshot delegation, contract v1
 
-Status: reserved, disabled. ERMAIN-862 / ERDSCAR-9. Package 0.1.28 extends
+Status: reserved, disabled. Package 0.1.28 extends
 main's 0.1.27 contract, preserving Outlook provenance and the data-directory
 action. Transport protocol remains 1.0. This document is the
 shared design record. It does not certify a security implementation.
 
-## Scope decision (2026-09-22)
+## Execution scope
 
-The owner removed OS/process confinement and a new signed macOS sandbox
-application from these issues, following Max's guidance. Trust the installed
-native implementation. Enforce exact approval in native review/export APIs and
+This profile trusts the installed native implementation and does not require a
+new signed macOS sandbox application or OS/process confinement. Enforce exact
+approval in native review/export APIs and
 keep unapproved content out of the ordinary frontend and backend through those
 checks. This profile does not claim OS-enforced egress prevention or protection
 from compromised native code. Sandbox probes are not a delivery prerequisite.
@@ -192,20 +192,20 @@ bearer tokens; their signatures confer no backend API access.
 
 ## Backend continuation authorization decision
 
-The task feature supports **one backend replica only**, as confirmed by the
-owner on 2026-09-22. Multiple concurrent backend replicas and their qualification
-are outside this work. Reuse the existing task lifecycle and generation ownership;
+The task feature supports **one backend replica only**. Multiple concurrent
+backend replicas and their qualification are outside this profile. Reuse the existing task lifecycle and generation ownership;
 multiple frontend panes still require idempotent requests.
 
-Choose **live re-authentication on resume** for v1. ERMAIN-759's stored-principal
+Choose **live re-authentication on resume** for v1. The stored-principal
 design is not assumed implemented. No access/refresh token is persisted. Receipt
 acceptance leaves a logged continuation intent, even if no generation can start.
 An authenticated frontend's later resume request freshly revalidates the
 subject/permissions and resumes through the existing chat-generation lifecycle.
-A worker runs under that live authorized context. After process loss or expired
-lease it returns to `awaiting_authenticated_resume`; a database-only sweeper must
+The existing streaming generation loop runs under that live authorized context,
+preserving normal stream events, guardrails, accounting and tracing. After
+process loss or expired lease it returns to `awaiting_authenticated_resume`; a database-only sweeper must
 not reconstruct authority from a user ID. Upload and cloud continuation can wait
-for an authenticated frontend to return, as the issues explicitly allow.
+for an authenticated frontend to return.
 
 Checkpoint before releasing generation: model replay context, assistant message
 and pending tool call, completed sibling calls/results, pending batch order,
@@ -218,8 +218,8 @@ scheduler is introduced.
 Persisted progress after a crash advances the same checkpoint. Never use live
 oneshots or UNLOGGED generation commands as the source of truth.
 
-Coordinate parent result delivery with `task_delivery.rs` and ERMAIN-762.
-ERMAIN-765's orphan reconciliation must recognize this durable parked state as
+Coordinate parent result delivery with `task_delivery.rs`.
+Orphan reconciliation must recognize this durable parked state as
 live pending work. Archive/cancel/withdraw atomically fence continuation and
 reject late results; do not reinterpret them as current attempts. A dedicated
 read-only child tool requires explicit scope/depth/budget authorization; generic
@@ -239,14 +239,14 @@ Then qualify native process death at every persistence boundary, immutable
 selection/source mutation, account/device/job mismatch, expiry/cancel races,
 lost receipts, duplicate uploads, pane closure and single-backend restart recovery.
 Contract/mock tests alone do not meet these exit conditions. Strict delegation
-stays disabled until both issues' implementation and qualification are complete.
+stays disabled until the paired implementations and qualification are complete.
 
 ## Initial backend execution scope
 
 The first integration offers `local_collect_evidence` only to explicitly opted-in
 asynchronous task children at depth one, with a positive frozen client-call
 budget and an exclusive local-research tool scope. The task's selected facet must
-name `local/collect_evidence` exactly. Wildcards, ordinary chats, assistant mentions,
+name `erato/local_collect_evidence` exactly. Wildcards, ordinary chats, assistant mentions,
 awaited children, adopted runs, MCP tools and general Office actions do not acquire
 this capability. Async results use the existing durable parent-delivery/rearm path.
 This initial scope avoids claiming restart-safe execution of arbitrary external

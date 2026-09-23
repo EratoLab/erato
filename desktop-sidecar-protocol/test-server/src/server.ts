@@ -397,7 +397,7 @@ export class MockSidecar {
     if (/^local_(?:contexts|tasks|exports)\./.test(message.method)) {
       return rpcError(
         message.id,
-        -32001,
+        -32011,
         "Strict local delegation is unavailable.",
         {
           kind: "capability_unavailable",

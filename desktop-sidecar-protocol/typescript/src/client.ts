@@ -1,4 +1,7 @@
-import { supportsStrictLocalDelegation } from "./localDelegation.js";
+import {
+  localDelegationContracts,
+  supportsStrictLocalDelegation,
+} from "./localDelegation.js";
 import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
   validateCancelResult,
@@ -46,24 +49,6 @@ import {
   validateSourcesListV1Result,
   validateSourcesGetFolderHierarchyV1Params,
   validateSourcesGetFolderHierarchyV1Result,
-  validateLocalContextsChallengeV1Params,
-  validateLocalContextsChallengeV1Result,
-  validateLocalContextsBindV1Params,
-  validateLocalContextsBindV1Result,
-  validateLocalTasksStartV1Params,
-  validateLocalTasksStartV1Result,
-  validateLocalTasksStatusV1Params,
-  validateLocalTasksStatusV1Result,
-  validateLocalTasksCancelV1Params,
-  validateLocalTasksCancelV1Result,
-  validateLocalTasksReviewV1Params,
-  validateLocalTasksReviewV1Result,
-  validateLocalExportsStatusV1Params,
-  validateLocalExportsStatusV1Result,
-  validateLocalExportsReadV1Params,
-  validateLocalExportsReadV1Result,
-  validateLocalExportsAckV1Params,
-  validateLocalExportsAckV1Result,
   type Validator,
 } from "./generated/validators.mjs";
 
@@ -237,42 +222,7 @@ interface JsonRpcResponse {
 }
 
 const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
-  "local_contexts.challenge.v1": {
-    validateParams: validateLocalContextsChallengeV1Params,
-    validateResult: validateLocalContextsChallengeV1Result,
-  },
-  "local_contexts.bind.v1": {
-    validateParams: validateLocalContextsBindV1Params,
-    validateResult: validateLocalContextsBindV1Result,
-  },
-  "local_tasks.start.v1": {
-    validateParams: validateLocalTasksStartV1Params,
-    validateResult: validateLocalTasksStartV1Result,
-  },
-  "local_tasks.status.v1": {
-    validateParams: validateLocalTasksStatusV1Params,
-    validateResult: validateLocalTasksStatusV1Result,
-  },
-  "local_tasks.cancel.v1": {
-    validateParams: validateLocalTasksCancelV1Params,
-    validateResult: validateLocalTasksCancelV1Result,
-  },
-  "local_tasks.review.v1": {
-    validateParams: validateLocalTasksReviewV1Params,
-    validateResult: validateLocalTasksReviewV1Result,
-  },
-  "local_exports.status.v1": {
-    validateParams: validateLocalExportsStatusV1Params,
-    validateResult: validateLocalExportsStatusV1Result,
-  },
-  "local_exports.read.v1": {
-    validateParams: validateLocalExportsReadV1Params,
-    validateResult: validateLocalExportsReadV1Result,
-  },
-  "local_exports.ack.v1": {
-    validateParams: validateLocalExportsAckV1Params,
-    validateResult: validateLocalExportsAckV1Result,
-  },
+  ...localDelegationContracts,
 
   "diagnostics.echo.v1": {
     validateParams: validateDiagnosticsEchoV1Params,
@@ -612,7 +562,9 @@ export class DesktopSidecarClient {
         await this.discover().catch(() => undefined);
       } else if (
         clientError.kind === "malformed_message" ||
-        clientError.kind === "invalid_result"
+        clientError.kind === "invalid_result" ||
+        (method.startsWith("local_") &&
+          ["transport_error", "timeout"].includes(clientError.kind))
       ) {
         this.#failReadiness(clientError);
       }
@@ -635,6 +587,7 @@ export class DesktopSidecarClient {
 
   async #runDiscovery(signal?: AbortSignal): Promise<void> {
     this.#setSnapshot({
+      ...this.#snapshot,
       state: "discovering",
       protocolVersion: null,
       serverInfo: null,

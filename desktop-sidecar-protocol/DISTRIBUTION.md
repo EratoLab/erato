@@ -224,6 +224,9 @@ manifest completely describes the six-target filesystem example in Section 1:
 - `platform.abi` is the relevant ABI or runtime family.
 - `default_file` is the file ID selected when a request does not specify one.
 - `files` lists every file available for this target.
+- `local_delegation_profile` optionally declares `strict_snapshot_v1` support;
+  omitted/null means unsupported. It is a compatibility declaration from the
+  trusted artifact publisher, not a host qualification or integrity assertion.
 
 ### File fields
 
@@ -509,6 +512,7 @@ define:
 
 These concerns MAY affect how bytes are produced or verified, but they MUST NOT
 add signing/integrity fields to this manifest or write derived files into the artifact root.
+The optional compatibility field below does not carry signing or integrity metadata.
 
 ## Strict delegation packaging gate
 
@@ -525,12 +529,17 @@ The personalized bootstrap uses `content_release: "strict_snapshot_v1"` and a
 (public Ed25519 base64url keys by key ID). Backend signing private keys MUST NOT
 be included. Unsupported review platforms or missing/invalid trust policy fail
 startup closed. Do not personalize older bootstrap-v1 binaries with this
-requirement: unknown fields were historically ignored.
+requirement: unknown fields are ignored under bootstrap v1. The trusted manifest
+profile is therefore checked before personalization; strict requirements must
+never be inferred from bootstrap fields injected into an unmarked artifact.
+Supporting binaries recognize these fields and must reject an unsupported
+`content_release` value or invalid `local_delegation` policy before listening.
 
 Native exact-snapshot delegation requires bundled inert review assets, private
 review-to-store communication and tested consent/export/recovery behavior.
-The owner removed OS sandbox qualification and a new signed macOS application
-from this scope. Existing installer/personalization validation still applies;
+This profile trusts installed native code and does not require OS sandbox
+qualification or a new signed macOS application. Existing installer/personalization
+validation still applies;
 do not broaden archive allowlists to arbitrary contents or strip existing
 signatures. Capability discovery declares trust in installed native code, not
 OS-enforced egress isolation. No rollout setting is enabled by the contract alone.

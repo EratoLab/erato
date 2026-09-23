@@ -27,6 +27,9 @@ const documents = Object.fromEntries(
     ]),
   ),
 );
+documents.common = await readJson(
+  path.join(root, "schemas/common.schema.json"),
+);
 const generated = `${JSON.stringify(documents, null, 2)}\n`;
 if (process.argv.includes("--check")) {
   if ((await readFile(output, "utf8")) !== generated) {

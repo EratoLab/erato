@@ -40,8 +40,7 @@
         "maxLength": 128
       },
       "planDigest": {
-        "type": "string",
-        "pattern": "^sha256:[a-f0-9]{64}$"
+        "$ref": "../common.schema.json#/definitions/Digest"
       }
     },
     "required": [
@@ -249,8 +248,7 @@
         "pattern": "^[A-Za-z0-9_-]{32,128}$"
       },
       "manifestDigest": {
-        "type": "string",
-        "pattern": "^sha256:[a-f0-9]{64}$"
+        "$ref": "../common.schema.json#/definitions/Digest"
       },
       "receiptId": {
         "type": "string",
@@ -295,8 +293,7 @@
         "pattern": "^[A-Za-z0-9_-]{32,128}$"
       },
       "manifestDigest": {
-        "type": "string",
-        "pattern": "^sha256:[a-f0-9]{64}$"
+        "$ref": "../common.schema.json#/definitions/Digest"
       },
       "approvedAt": {
         "type": "integer",
@@ -334,8 +331,7 @@
               ]
             },
             "sha256": {
-              "type": "string",
-              "pattern": "^sha256:[a-f0-9]{64}$"
+              "$ref": "../common.schema.json#/definitions/Digest"
             },
             "byteLength": {
               "type": "integer",
@@ -371,5 +367,73 @@
       "artifacts"
     ],
     "additionalProperties": false
+  },
+  "common": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://schemas.erato.ai/desktop-sidecar/v1/common.schema.json",
+    "title": "CommonProtocolTypes",
+    "definitions": {
+      "ProtocolVersion": {
+        "type": "string",
+        "pattern": "^[1-9][0-9]*\\.[0-9]+$"
+      },
+      "RequestId": {
+        "oneOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          {
+            "type": "integer"
+          }
+        ]
+      },
+      "Digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "Revision": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "ProductInfo": {
+        "type": "object",
+        "required": [
+          "name",
+          "version"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "additionalProperties": true
+      },
+      "CatalogueIdentity": {
+        "type": "object",
+        "required": [
+          "revision",
+          "digest"
+        ],
+        "properties": {
+          "revision": {
+            "$ref": "#/definitions/Revision"
+          },
+          "digest": {
+            "$ref": "#/definitions/Digest"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
   }
 }

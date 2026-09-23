@@ -30,15 +30,7 @@ export interface LocalTaskPlan {
    * @minItems 1
    * @maxItems 8
    */
-  queryVariants:
-    | [string]
-    | [string, string]
-    | [string, string, string]
-    | [string, string, string, string]
-    | [string, string, string, string, string]
-    | [string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string, string];
+  queryVariants: [string, ...string[]];
   maxHits: number;
   maxArtifacts: number;
   maxBytes: number;

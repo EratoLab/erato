@@ -4,6 +4,7 @@ import { supportsStrictLocalDelegation } from "../typescript/src/localDelegation
 import { MockSidecar } from "../test-server/src/server.js";
 import {
   validateLocalTaskStatus,
+  validateDiscoverResult,
   validateLocalTasksStartV1Params,
   validateLocalTasksCancelV1Params,
   validateLocalTasksReviewV1Params,
@@ -61,6 +62,19 @@ describe("strict local delegation contract", () => {
     expect(
       methods.some((m: { name: string }) => /approve|grant/.test(m.name)),
     ).toBe(false);
+  });
+
+  it("keeps discovery available for unknown declarations without authorizing delegation", () => {
+    for (const patch of [
+      { futureCapability: true },
+      { enforcement: "future" },
+      { profile: "strict_snapshot_v2" },
+    ]) {
+      const result = discovery();
+      result.localDelegation = { ...result.localDelegation, ...patch };
+      expect(validateDiscoverResult(result)).toBe(true);
+      expect(supportsStrictLocalDelegation(result)).toBe(false);
+    }
   });
 
   it("requires the exact security declaration and the complete enabled catalogue", () => {
@@ -213,6 +227,7 @@ describe("strict local delegation contract", () => {
       });
       const body = await response.text();
       expect(body).not.toContain("SECRET_MARKER");
+      expect(JSON.parse(body).error.code).toBe(-32011);
       expect(JSON.parse(body).error.data.reasonCode).toBe(
         "local_delegation_not_enabled",
       );

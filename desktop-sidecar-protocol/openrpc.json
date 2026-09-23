@@ -992,7 +992,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     },
     {
       "name": "local_contexts.bind.v1",
@@ -1020,7 +1040,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     },
     {
       "name": "local_tasks.start.v1",
@@ -1048,7 +1088,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     },
     {
       "name": "local_tasks.status.v1",
@@ -1076,7 +1136,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     },
     {
       "name": "local_tasks.cancel.v1",
@@ -1104,7 +1184,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     },
     {
       "name": "local_tasks.review.v1",
@@ -1132,7 +1232,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     },
     {
       "name": "local_exports.status.v1",
@@ -1160,7 +1280,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     },
     {
       "name": "local_exports.read.v1",
@@ -1188,7 +1328,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     },
     {
       "name": "local_exports.ack.v1",
@@ -1216,7 +1376,27 @@
           "state": "disabled",
           "reasonCode": "local_delegation_not_enabled"
         }
-      }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ]
     }
   ],
   "components": {
@@ -1271,6 +1451,6 @@
   },
   "x-erato-catalogue": {
     "revision": "12",
-    "digest": "sha256:02f5d8d8ea9c678473f6ca7dac63d5aa7e041cfb5f42a98c3d476a9db10dfcd1"
+    "digest": "sha256:3eb6056a923cfb29e56f993c27d3c15a09653fd1d4731ef063e3bd7f6ecc6765"
   }
 }

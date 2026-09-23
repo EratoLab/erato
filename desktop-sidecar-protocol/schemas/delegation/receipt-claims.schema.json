@@ -20,8 +20,7 @@
       "pattern": "^[A-Za-z0-9_-]{32,128}$"
     },
     "manifestDigest": {
-      "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+      "$ref": "../common.schema.json#/definitions/Digest"
     },
     "receiptId": {
       "type": "string",

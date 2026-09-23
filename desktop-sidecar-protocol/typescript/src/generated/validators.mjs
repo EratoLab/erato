@@ -1,6 +1,7 @@
 "use strict";
 export const validateLocalTaskBinding = validate10;
-const schema11 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/binding.schema.json","title":"LocalTaskBinding","type":"object","properties":{"backendOrigin":{"type":"string","minLength":1,"maxLength":2048},"accountId":{"type":"string","minLength":1,"maxLength":128},"deviceId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"taskId":{"type":"string","minLength":1,"maxLength":128},"jobId":{"type":"string","minLength":1,"maxLength":128},"attemptId":{"type":"string","minLength":1,"maxLength":128},"toolCallId":{"type":"string","minLength":1,"maxLength":128},"planDigest":{"type":"string","pattern":"^sha256:[a-f0-9]{64}$"}},"required":["backendOrigin","accountId","deviceId","taskId","jobId","attemptId","toolCallId","planDigest"],"additionalProperties":false};
+const schema11 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/binding.schema.json","title":"LocalTaskBinding","type":"object","properties":{"backendOrigin":{"type":"string","minLength":1,"maxLength":2048},"accountId":{"type":"string","minLength":1,"maxLength":128},"deviceId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"taskId":{"type":"string","minLength":1,"maxLength":128},"jobId":{"type":"string","minLength":1,"maxLength":128},"attemptId":{"type":"string","minLength":1,"maxLength":128},"toolCallId":{"type":"string","minLength":1,"maxLength":128},"planDigest":{"$ref":"../common.schema.json#/definitions/Digest"}},"required":["backendOrigin","accountId","deviceId","taskId","jobId","attemptId","toolCallId","planDigest"],"additionalProperties":false};
+const schema13 = {"type":"string","pattern":"^sha256:[a-f0-9]{64}$"};
 const func2 = (value) => Array.from(value).length;
 const pattern0 = new RegExp("^[A-Za-z0-9_-]{32,128}$", "u");
 const pattern1 = new RegExp("^sha256:[a-f0-9]{64}$", "u");
@@ -341,7 +342,7 @@ if(data.planDigest !== undefined){
 let data7 = data.planDigest;
 if(typeof data7 === "string"){
 if(!pattern1.test(data7)){
-const err29 = {instancePath:instancePath+"/planDigest",schemaPath:"#/properties/planDigest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
+const err29 = {instancePath:instancePath+"/planDigest",schemaPath:"../common.schema.json#/definitions/Digest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -352,7 +353,7 @@ errors++;
 }
 }
 else {
-const err30 = {instancePath:instancePath+"/planDigest",schemaPath:"#/properties/planDigest/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err30 = {instancePath:instancePath+"/planDigest",schemaPath:"../common.schema.json#/definitions/Digest/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -377,10 +378,10 @@ validate10.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTaskPlan = validate11;
-const schema12 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/plan.schema.json","title":"LocalTaskPlan","type":"object","properties":{"operation":{"const":"collect_evidence"},"queryVariants":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":512}},"maxHits":{"type":"integer","minimum":1,"maximum":100},"maxArtifacts":{"type":"integer","minimum":1,"maximum":20},"maxBytes":{"type":"integer","minimum":1,"maximum":12582912},"executionSeconds":{"type":"integer","minimum":1,"maximum":300},"expiresAt":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["operation","queryVariants","maxHits","maxArtifacts","maxBytes","executionSeconds","expiresAt"],"additionalProperties":false};
+export const validateLocalTaskPlan = validate12;
+const schema14 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/plan.schema.json","title":"LocalTaskPlan","type":"object","properties":{"operation":{"const":"collect_evidence"},"queryVariants":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":512}},"maxHits":{"type":"integer","minimum":1,"maximum":100},"maxArtifacts":{"type":"integer","minimum":1,"maximum":20},"maxBytes":{"type":"integer","minimum":1,"maximum":12582912},"executionSeconds":{"type":"integer","minimum":1,"maximum":300},"expiresAt":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["operation","queryVariants","maxHits","maxArtifacts","maxBytes","executionSeconds","expiresAt"],"additionalProperties":false};
 
-function validate11(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate12(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/delegation/plan.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -760,14 +761,14 @@ vErrors.push(err31);
 }
 errors++;
 }
-validate11.errors = vErrors;
+validate12.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTaskStatus = validate12;
-const schema13 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/status.schema.json","title":"LocalTaskStatus","type":"object","properties":{"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"state":{"enum":["queued","running","ready_for_review","approved","acknowledged","declined","cancelled","expired","failed"]}},"required":["handle","state"],"additionalProperties":false};
+export const validateLocalTaskStatus = validate13;
+const schema15 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/status.schema.json","title":"LocalTaskStatus","type":"object","properties":{"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"state":{"enum":["queued","running","ready_for_review","approved","acknowledged","declined","cancelled","expired","failed"]}},"required":["handle","state"],"additionalProperties":false};
 
-function validate12(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate13(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/delegation/status.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -832,7 +833,7 @@ errors++;
 if(data.state !== undefined){
 let data1 = data.state;
 if(!(((((((((data1 === "queued") || (data1 === "running")) || (data1 === "ready_for_review")) || (data1 === "approved")) || (data1 === "acknowledged")) || (data1 === "declined")) || (data1 === "cancelled")) || (data1 === "expired")) || (data1 === "failed"))){
-const err5 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/enum",keyword:"enum",params:{allowedValues: schema13.properties.state.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/enum",keyword:"enum",params:{allowedValues: schema15.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -853,14 +854,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate12.errors = vErrors;
+validate13.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalDelegationSecurity = validate13;
-const schema14 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json","title":"LocalDelegationSecurity","type":"object","properties":{"profile":{"const":"strict_snapshot_v1"},"enforcement":{"enum":["unavailable","enforced"]},"contextAuthentication":{"const":"pinned_backend_assertion_v1"},"consent":{"const":"native_exact_snapshot"},"recovery":{"const":"durable_receipt_v1"},"trustModel":{"const":"installed_native_code"}},"required":["profile","enforcement","contextAuthentication","consent","recovery","trustModel"],"additionalProperties":false};
+export const validateLocalDelegationSecurity = validate14;
+const schema16 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json","title":"LocalDelegationSecurity","type":"object","properties":{"profile":{"const":"strict_snapshot_v1"},"enforcement":{"enum":["unavailable","enforced"]},"contextAuthentication":{"const":"pinned_backend_assertion_v1"},"consent":{"const":"native_exact_snapshot"},"recovery":{"const":"durable_receipt_v1"},"trustModel":{"const":"installed_native_code"}},"required":["profile","enforcement","contextAuthentication","consent","recovery","trustModel"],"additionalProperties":false};
 
-function validate13(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate14(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -952,7 +953,7 @@ errors++;
 if(data.enforcement !== undefined){
 let data1 = data.enforcement;
 if(!((data1 === "unavailable") || (data1 === "enforced"))){
-const err8 = {instancePath:instancePath+"/enforcement",schemaPath:"#/properties/enforcement/enum",keyword:"enum",params:{allowedValues: schema14.properties.enforcement.enum},message:"must be equal to one of the allowed values"};
+const err8 = {instancePath:instancePath+"/enforcement",schemaPath:"#/properties/enforcement/enum",keyword:"enum",params:{allowedValues: schema16.properties.enforcement.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -1021,15 +1022,15 @@ vErrors.push(err13);
 }
 errors++;
 }
-validate13.errors = vErrors;
+validate14.errors = vErrors;
 return errors === 0;
 }
 
-export const validateApprovedLocalExport = validate14;
-const schema15 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/approved-export.schema.json","title":"ApprovedLocalExport","type":"object","properties":{"binding":{"$ref":"../delegation/binding.schema.json"},"exportId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"snapshotId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"grantId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"manifestDigest":{"type":"string","pattern":"^sha256:[a-f0-9]{64}$"},"approvedAt":{"type":"integer","minimum":0,"maximum":9007199254740991},"expiresAt":{"type":"integer","minimum":0,"maximum":9007199254740991},"artifacts":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"artifactId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"filename":{"type":"string","minLength":1,"maxLength":255},"mediaType":{"enum":["text/plain","message/rfc822","application/octet-stream","application/json","application/pdf"]},"sha256":{"type":"string","pattern":"^sha256:[a-f0-9]{64}$"},"byteLength":{"type":"integer","minimum":0,"maximum":12582912},"contentBase64":{"type":"string","maxLength":16777216,"pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"}},"required":["artifactId","filename","mediaType","sha256","byteLength","contentBase64"],"additionalProperties":false}}},"required":["binding","exportId","snapshotId","grantId","manifestDigest","approvedAt","expiresAt","artifacts"],"additionalProperties":false};
-const pattern11 = new RegExp("^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$", "u");
+export const validateApprovedLocalExport = validate15;
+const schema17 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/approved-export.schema.json","title":"ApprovedLocalExport","type":"object","properties":{"binding":{"$ref":"../delegation/binding.schema.json"},"exportId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"snapshotId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"grantId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"manifestDigest":{"$ref":"../common.schema.json#/definitions/Digest"},"approvedAt":{"type":"integer","minimum":0,"maximum":9007199254740991},"expiresAt":{"type":"integer","minimum":0,"maximum":9007199254740991},"artifacts":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"artifactId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"filename":{"type":"string","minLength":1,"maxLength":255},"mediaType":{"enum":["text/plain","message/rfc822","application/octet-stream","application/json","application/pdf"]},"sha256":{"$ref":"../common.schema.json#/definitions/Digest"},"byteLength":{"type":"integer","minimum":0,"maximum":12582912},"contentBase64":{"type":"string","maxLength":16777216,"pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"}},"required":["artifactId","filename","mediaType","sha256","byteLength","contentBase64"],"additionalProperties":false}}},"required":["binding","exportId","snapshotId","grantId","manifestDigest","approvedAt","expiresAt","artifacts"],"additionalProperties":false};
+const pattern9 = new RegExp("^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$", "u");
 
-function validate14(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate15(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/delegation/approved-export.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -1127,10 +1128,16 @@ errors++;
 }
 }
 if(data.binding !== undefined){
-let data0 = data.binding;
-if(data0 && typeof data0 == "object" && !Array.isArray(data0)){
-if(data0.backendOrigin === undefined){
-const err9 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "backendOrigin"},message:"must have required property '"+"backendOrigin"+"'"};
+if(!(validate10(data.binding, {instancePath:instancePath+"/binding",parentData:data,parentDataProperty:"binding",rootData}))){
+vErrors = vErrors === null ? validate10.errors : vErrors.concat(validate10.errors);
+errors = vErrors.length;
+}
+}
+if(data.exportId !== undefined){
+let data1 = data.exportId;
+if(typeof data1 === "string"){
+if(!pattern0.test(data1)){
+const err9 = {instancePath:instancePath+"/exportId",schemaPath:"#/properties/exportId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -1139,8 +1146,9 @@ vErrors.push(err9);
 }
 errors++;
 }
-if(data0.accountId === undefined){
-const err10 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "accountId"},message:"must have required property '"+"accountId"+"'"};
+}
+else {
+const err10 = {instancePath:instancePath+"/exportId",schemaPath:"#/properties/exportId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err10];
 }
@@ -1149,8 +1157,12 @@ vErrors.push(err10);
 }
 errors++;
 }
-if(data0.deviceId === undefined){
-const err11 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "deviceId"},message:"must have required property '"+"deviceId"+"'"};
+}
+if(data.snapshotId !== undefined){
+let data2 = data.snapshotId;
+if(typeof data2 === "string"){
+if(!pattern0.test(data2)){
+const err11 = {instancePath:instancePath+"/snapshotId",schemaPath:"#/properties/snapshotId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -1159,8 +1171,9 @@ vErrors.push(err11);
 }
 errors++;
 }
-if(data0.taskId === undefined){
-const err12 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "taskId"},message:"must have required property '"+"taskId"+"'"};
+}
+else {
+const err12 = {instancePath:instancePath+"/snapshotId",schemaPath:"#/properties/snapshotId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err12];
 }
@@ -1169,8 +1182,12 @@ vErrors.push(err12);
 }
 errors++;
 }
-if(data0.jobId === undefined){
-const err13 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "jobId"},message:"must have required property '"+"jobId"+"'"};
+}
+if(data.grantId !== undefined){
+let data3 = data.grantId;
+if(typeof data3 === "string"){
+if(!pattern0.test(data3)){
+const err13 = {instancePath:instancePath+"/grantId",schemaPath:"#/properties/grantId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -1179,8 +1196,9 @@ vErrors.push(err13);
 }
 errors++;
 }
-if(data0.attemptId === undefined){
-const err14 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "attemptId"},message:"must have required property '"+"attemptId"+"'"};
+}
+else {
+const err14 = {instancePath:instancePath+"/grantId",schemaPath:"#/properties/grantId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err14];
 }
@@ -1189,8 +1207,12 @@ vErrors.push(err14);
 }
 errors++;
 }
-if(data0.toolCallId === undefined){
-const err15 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "toolCallId"},message:"must have required property '"+"toolCallId"+"'"};
+}
+if(data.manifestDigest !== undefined){
+let data4 = data.manifestDigest;
+if(typeof data4 === "string"){
+if(!pattern1.test(data4)){
+const err15 = {instancePath:instancePath+"/manifestDigest",schemaPath:"../common.schema.json#/definitions/Digest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err15];
 }
@@ -1199,8 +1221,9 @@ vErrors.push(err15);
 }
 errors++;
 }
-if(data0.planDigest === undefined){
-const err16 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "planDigest"},message:"must have required property '"+"planDigest"+"'"};
+}
+else {
+const err16 = {instancePath:instancePath+"/manifestDigest",schemaPath:"../common.schema.json#/definitions/Digest/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -1209,9 +1232,11 @@ vErrors.push(err16);
 }
 errors++;
 }
-for(const key1 in data0){
-if(!((((((((key1 === "backendOrigin") || (key1 === "accountId")) || (key1 === "deviceId")) || (key1 === "taskId")) || (key1 === "jobId")) || (key1 === "attemptId")) || (key1 === "toolCallId")) || (key1 === "planDigest"))){
-const err17 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
+}
+if(data.approvedAt !== undefined){
+let data5 = data.approvedAt;
+if(!(((typeof data5 == "number") && (!(data5 % 1) && !isNaN(data5))) && (isFinite(data5)))){
+const err17 = {instancePath:instancePath+"/approvedAt",schemaPath:"#/properties/approvedAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -1220,12 +1245,9 @@ vErrors.push(err17);
 }
 errors++;
 }
-}
-if(data0.backendOrigin !== undefined){
-let data1 = data0.backendOrigin;
-if(typeof data1 === "string"){
-if(func2(data1) > 2048){
-const err18 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/maxLength",keyword:"maxLength",params:{limit: 2048},message:"must NOT have more than 2048 characters"};
+if((typeof data5 == "number") && (isFinite(data5))){
+if(data5 > 9007199254740991 || isNaN(data5)){
+const err18 = {instancePath:instancePath+"/approvedAt",schemaPath:"#/properties/approvedAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -1234,8 +1256,8 @@ vErrors.push(err18);
 }
 errors++;
 }
-if(func2(data1) < 1){
-const err19 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data5 < 0 || isNaN(data5)){
+const err19 = {instancePath:instancePath+"/approvedAt",schemaPath:"#/properties/approvedAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -1245,8 +1267,11 @@ vErrors.push(err19);
 errors++;
 }
 }
-else {
-const err20 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data.expiresAt !== undefined){
+let data6 = data.expiresAt;
+if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
+const err20 = {instancePath:instancePath+"/expiresAt",schemaPath:"#/properties/expiresAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -1255,12 +1280,9 @@ vErrors.push(err20);
 }
 errors++;
 }
-}
-if(data0.accountId !== undefined){
-let data2 = data0.accountId;
-if(typeof data2 === "string"){
-if(func2(data2) > 128){
-const err21 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data6 == "number") && (isFinite(data6))){
+if(data6 > 9007199254740991 || isNaN(data6)){
+const err21 = {instancePath:instancePath+"/expiresAt",schemaPath:"#/properties/expiresAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -1269,8 +1291,8 @@ vErrors.push(err21);
 }
 errors++;
 }
-if(func2(data2) < 1){
-const err22 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data6 < 0 || isNaN(data6)){
+const err22 = {instancePath:instancePath+"/expiresAt",schemaPath:"#/properties/expiresAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -1280,8 +1302,12 @@ vErrors.push(err22);
 errors++;
 }
 }
-else {
-const err23 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data.artifacts !== undefined){
+let data7 = data.artifacts;
+if(Array.isArray(data7)){
+if(data7.length > 20){
+const err23 = {instancePath:instancePath+"/artifacts",schemaPath:"#/properties/artifacts/maxItems",keyword:"maxItems",params:{limit: 20},message:"must NOT have more than 20 items"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -1290,12 +1316,8 @@ vErrors.push(err23);
 }
 errors++;
 }
-}
-if(data0.deviceId !== undefined){
-let data3 = data0.deviceId;
-if(typeof data3 === "string"){
-if(!pattern0.test(data3)){
-const err24 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
+if(data7.length < 1){
+const err24 = {instancePath:instancePath+"/artifacts",schemaPath:"#/properties/artifacts/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -1304,9 +1326,12 @@ vErrors.push(err24);
 }
 errors++;
 }
-}
-else {
-const err25 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const len0 = data7.length;
+for(let i0=0; i0<len0; i0++){
+let data8 = data7[i0];
+if(data8 && typeof data8 == "object" && !Array.isArray(data8)){
+if(data8.artifactId === undefined){
+const err25 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "artifactId"},message:"must have required property '"+"artifactId"+"'"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -1315,12 +1340,8 @@ vErrors.push(err25);
 }
 errors++;
 }
-}
-if(data0.taskId !== undefined){
-let data4 = data0.taskId;
-if(typeof data4 === "string"){
-if(func2(data4) > 128){
-const err26 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(data8.filename === undefined){
+const err26 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "filename"},message:"must have required property '"+"filename"+"'"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -1329,8 +1350,8 @@ vErrors.push(err26);
 }
 errors++;
 }
-if(func2(data4) < 1){
-const err27 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data8.mediaType === undefined){
+const err27 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "mediaType"},message:"must have required property '"+"mediaType"+"'"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -1339,9 +1360,8 @@ vErrors.push(err27);
 }
 errors++;
 }
-}
-else {
-const err28 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data8.sha256 === undefined){
+const err28 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "sha256"},message:"must have required property '"+"sha256"+"'"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -1350,12 +1370,8 @@ vErrors.push(err28);
 }
 errors++;
 }
-}
-if(data0.jobId !== undefined){
-let data5 = data0.jobId;
-if(typeof data5 === "string"){
-if(func2(data5) > 128){
-const err29 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(data8.byteLength === undefined){
+const err29 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "byteLength"},message:"must have required property '"+"byteLength"+"'"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -1364,8 +1380,8 @@ vErrors.push(err29);
 }
 errors++;
 }
-if(func2(data5) < 1){
-const err30 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data8.contentBase64 === undefined){
+const err30 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "contentBase64"},message:"must have required property '"+"contentBase64"+"'"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -1374,9 +1390,9 @@ vErrors.push(err30);
 }
 errors++;
 }
-}
-else {
-const err31 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+for(const key1 in data8){
+if(!((((((key1 === "artifactId") || (key1 === "filename")) || (key1 === "mediaType")) || (key1 === "sha256")) || (key1 === "byteLength")) || (key1 === "contentBase64"))){
+const err31 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -1386,11 +1402,11 @@ vErrors.push(err31);
 errors++;
 }
 }
-if(data0.attemptId !== undefined){
-let data6 = data0.attemptId;
-if(typeof data6 === "string"){
-if(func2(data6) > 128){
-const err32 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(data8.artifactId !== undefined){
+let data9 = data8.artifactId;
+if(typeof data9 === "string"){
+if(!pattern0.test(data9)){
+const err32 = {instancePath:instancePath+"/artifacts/" + i0+"/artifactId",schemaPath:"#/properties/artifacts/items/properties/artifactId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -1399,8 +1415,9 @@ vErrors.push(err32);
 }
 errors++;
 }
-if(func2(data6) < 1){
-const err33 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+else {
+const err33 = {instancePath:instancePath+"/artifacts/" + i0+"/artifactId",schemaPath:"#/properties/artifacts/items/properties/artifactId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -1410,8 +1427,11 @@ vErrors.push(err33);
 errors++;
 }
 }
-else {
-const err34 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data8.filename !== undefined){
+let data10 = data8.filename;
+if(typeof data10 === "string"){
+if(func2(data10) > 255){
+const err34 = {instancePath:instancePath+"/artifacts/" + i0+"/filename",schemaPath:"#/properties/artifacts/items/properties/filename/maxLength",keyword:"maxLength",params:{limit: 255},message:"must NOT have more than 255 characters"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -1420,12 +1440,8 @@ vErrors.push(err34);
 }
 errors++;
 }
-}
-if(data0.toolCallId !== undefined){
-let data7 = data0.toolCallId;
-if(typeof data7 === "string"){
-if(func2(data7) > 128){
-const err35 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(func2(data10) < 1){
+const err35 = {instancePath:instancePath+"/artifacts/" + i0+"/filename",schemaPath:"#/properties/artifacts/items/properties/filename/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -1434,8 +1450,9 @@ vErrors.push(err35);
 }
 errors++;
 }
-if(func2(data7) < 1){
-const err36 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+else {
+const err36 = {instancePath:instancePath+"/artifacts/" + i0+"/filename",schemaPath:"#/properties/artifacts/items/properties/filename/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -1445,8 +1462,10 @@ vErrors.push(err36);
 errors++;
 }
 }
-else {
-const err37 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data8.mediaType !== undefined){
+let data11 = data8.mediaType;
+if(!(((((data11 === "text/plain") || (data11 === "message/rfc822")) || (data11 === "application/octet-stream")) || (data11 === "application/json")) || (data11 === "application/pdf"))){
+const err37 = {instancePath:instancePath+"/artifacts/" + i0+"/mediaType",schemaPath:"#/properties/artifacts/items/properties/mediaType/enum",keyword:"enum",params:{allowedValues: schema17.properties.artifacts.items.properties.mediaType.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -1456,11 +1475,11 @@ vErrors.push(err37);
 errors++;
 }
 }
-if(data0.planDigest !== undefined){
-let data8 = data0.planDigest;
-if(typeof data8 === "string"){
-if(!pattern1.test(data8)){
-const err38 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
+if(data8.sha256 !== undefined){
+let data12 = data8.sha256;
+if(typeof data12 === "string"){
+if(!pattern1.test(data12)){
+const err38 = {instancePath:instancePath+"/artifacts/" + i0+"/sha256",schemaPath:"../common.schema.json#/definitions/Digest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -1471,7 +1490,7 @@ errors++;
 }
 }
 else {
-const err39 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err39 = {instancePath:instancePath+"/artifacts/" + i0+"/sha256",schemaPath:"../common.schema.json#/definitions/Digest/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -1481,9 +1500,10 @@ vErrors.push(err39);
 errors++;
 }
 }
-}
-else {
-const err40 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data8.byteLength !== undefined){
+let data13 = data8.byteLength;
+if(!(((typeof data13 == "number") && (!(data13 % 1) && !isNaN(data13))) && (isFinite(data13)))){
+const err40 = {instancePath:instancePath+"/artifacts/" + i0+"/byteLength",schemaPath:"#/properties/artifacts/items/properties/byteLength/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -1492,12 +1512,9 @@ vErrors.push(err40);
 }
 errors++;
 }
-}
-if(data.exportId !== undefined){
-let data9 = data.exportId;
-if(typeof data9 === "string"){
-if(!pattern0.test(data9)){
-const err41 = {instancePath:instancePath+"/exportId",schemaPath:"#/properties/exportId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
+if((typeof data13 == "number") && (isFinite(data13))){
+if(data13 > 12582912 || isNaN(data13)){
+const err41 = {instancePath:instancePath+"/artifacts/" + i0+"/byteLength",schemaPath:"#/properties/artifacts/items/properties/byteLength/maximum",keyword:"maximum",params:{comparison: "<=", limit: 12582912},message:"must be <= 12582912"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -1506,9 +1523,8 @@ vErrors.push(err41);
 }
 errors++;
 }
-}
-else {
-const err42 = {instancePath:instancePath+"/exportId",schemaPath:"#/properties/exportId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data13 < 0 || isNaN(data13)){
+const err42 = {instancePath:instancePath+"/artifacts/" + i0+"/byteLength",schemaPath:"#/properties/artifacts/items/properties/byteLength/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -1518,11 +1534,12 @@ vErrors.push(err42);
 errors++;
 }
 }
-if(data.snapshotId !== undefined){
-let data10 = data.snapshotId;
-if(typeof data10 === "string"){
-if(!pattern0.test(data10)){
-const err43 = {instancePath:instancePath+"/snapshotId",schemaPath:"#/properties/snapshotId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
+}
+if(data8.contentBase64 !== undefined){
+let data14 = data8.contentBase64;
+if(typeof data14 === "string"){
+if(func2(data14) > 16777216){
+const err43 = {instancePath:instancePath+"/artifacts/" + i0+"/contentBase64",schemaPath:"#/properties/artifacts/items/properties/contentBase64/maxLength",keyword:"maxLength",params:{limit: 16777216},message:"must NOT have more than 16777216 characters"};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -1531,9 +1548,8 @@ vErrors.push(err43);
 }
 errors++;
 }
-}
-else {
-const err44 = {instancePath:instancePath+"/snapshotId",schemaPath:"#/properties/snapshotId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(!pattern9.test(data14)){
+const err44 = {instancePath:instancePath+"/artifacts/" + i0+"/contentBase64",schemaPath:"#/properties/artifacts/items/properties/contentBase64/pattern",keyword:"pattern",params:{pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},message:"must match pattern \""+"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"+"\""};
 if(vErrors === null){
 vErrors = [err44];
 }
@@ -1543,11 +1559,8 @@ vErrors.push(err44);
 errors++;
 }
 }
-if(data.grantId !== undefined){
-let data11 = data.grantId;
-if(typeof data11 === "string"){
-if(!pattern0.test(data11)){
-const err45 = {instancePath:instancePath+"/grantId",schemaPath:"#/properties/grantId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
+else {
+const err45 = {instancePath:instancePath+"/artifacts/" + i0+"/contentBase64",schemaPath:"#/properties/artifacts/items/properties/contentBase64/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err45];
 }
@@ -1557,8 +1570,9 @@ vErrors.push(err45);
 errors++;
 }
 }
+}
 else {
-const err46 = {instancePath:instancePath+"/grantId",schemaPath:"#/properties/grantId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err46 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err46];
 }
@@ -1568,11 +1582,9 @@ vErrors.push(err46);
 errors++;
 }
 }
-if(data.manifestDigest !== undefined){
-let data12 = data.manifestDigest;
-if(typeof data12 === "string"){
-if(!pattern1.test(data12)){
-const err47 = {instancePath:instancePath+"/manifestDigest",schemaPath:"#/properties/manifestDigest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
+}
+else {
+const err47 = {instancePath:instancePath+"/artifacts",schemaPath:"#/properties/artifacts/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err47];
 }
@@ -1582,8 +1594,9 @@ vErrors.push(err47);
 errors++;
 }
 }
+}
 else {
-const err48 = {instancePath:instancePath+"/manifestDigest",schemaPath:"#/properties/manifestDigest/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err48 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err48];
 }
@@ -1592,387 +1605,14 @@ vErrors.push(err48);
 }
 errors++;
 }
-}
-if(data.approvedAt !== undefined){
-let data13 = data.approvedAt;
-if(!(((typeof data13 == "number") && (!(data13 % 1) && !isNaN(data13))) && (isFinite(data13)))){
-const err49 = {instancePath:instancePath+"/approvedAt",schemaPath:"#/properties/approvedAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err49];
-}
-else {
-vErrors.push(err49);
-}
-errors++;
-}
-if((typeof data13 == "number") && (isFinite(data13))){
-if(data13 > 9007199254740991 || isNaN(data13)){
-const err50 = {instancePath:instancePath+"/approvedAt",schemaPath:"#/properties/approvedAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err50];
-}
-else {
-vErrors.push(err50);
-}
-errors++;
-}
-if(data13 < 0 || isNaN(data13)){
-const err51 = {instancePath:instancePath+"/approvedAt",schemaPath:"#/properties/approvedAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err51];
-}
-else {
-vErrors.push(err51);
-}
-errors++;
-}
-}
-}
-if(data.expiresAt !== undefined){
-let data14 = data.expiresAt;
-if(!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))){
-const err52 = {instancePath:instancePath+"/expiresAt",schemaPath:"#/properties/expiresAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err52];
-}
-else {
-vErrors.push(err52);
-}
-errors++;
-}
-if((typeof data14 == "number") && (isFinite(data14))){
-if(data14 > 9007199254740991 || isNaN(data14)){
-const err53 = {instancePath:instancePath+"/expiresAt",schemaPath:"#/properties/expiresAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err53];
-}
-else {
-vErrors.push(err53);
-}
-errors++;
-}
-if(data14 < 0 || isNaN(data14)){
-const err54 = {instancePath:instancePath+"/expiresAt",schemaPath:"#/properties/expiresAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err54];
-}
-else {
-vErrors.push(err54);
-}
-errors++;
-}
-}
-}
-if(data.artifacts !== undefined){
-let data15 = data.artifacts;
-if(Array.isArray(data15)){
-if(data15.length > 20){
-const err55 = {instancePath:instancePath+"/artifacts",schemaPath:"#/properties/artifacts/maxItems",keyword:"maxItems",params:{limit: 20},message:"must NOT have more than 20 items"};
-if(vErrors === null){
-vErrors = [err55];
-}
-else {
-vErrors.push(err55);
-}
-errors++;
-}
-if(data15.length < 1){
-const err56 = {instancePath:instancePath+"/artifacts",schemaPath:"#/properties/artifacts/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"};
-if(vErrors === null){
-vErrors = [err56];
-}
-else {
-vErrors.push(err56);
-}
-errors++;
-}
-const len0 = data15.length;
-for(let i0=0; i0<len0; i0++){
-let data16 = data15[i0];
-if(data16 && typeof data16 == "object" && !Array.isArray(data16)){
-if(data16.artifactId === undefined){
-const err57 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "artifactId"},message:"must have required property '"+"artifactId"+"'"};
-if(vErrors === null){
-vErrors = [err57];
-}
-else {
-vErrors.push(err57);
-}
-errors++;
-}
-if(data16.filename === undefined){
-const err58 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "filename"},message:"must have required property '"+"filename"+"'"};
-if(vErrors === null){
-vErrors = [err58];
-}
-else {
-vErrors.push(err58);
-}
-errors++;
-}
-if(data16.mediaType === undefined){
-const err59 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "mediaType"},message:"must have required property '"+"mediaType"+"'"};
-if(vErrors === null){
-vErrors = [err59];
-}
-else {
-vErrors.push(err59);
-}
-errors++;
-}
-if(data16.sha256 === undefined){
-const err60 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "sha256"},message:"must have required property '"+"sha256"+"'"};
-if(vErrors === null){
-vErrors = [err60];
-}
-else {
-vErrors.push(err60);
-}
-errors++;
-}
-if(data16.byteLength === undefined){
-const err61 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "byteLength"},message:"must have required property '"+"byteLength"+"'"};
-if(vErrors === null){
-vErrors = [err61];
-}
-else {
-vErrors.push(err61);
-}
-errors++;
-}
-if(data16.contentBase64 === undefined){
-const err62 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/required",keyword:"required",params:{missingProperty: "contentBase64"},message:"must have required property '"+"contentBase64"+"'"};
-if(vErrors === null){
-vErrors = [err62];
-}
-else {
-vErrors.push(err62);
-}
-errors++;
-}
-for(const key2 in data16){
-if(!((((((key2 === "artifactId") || (key2 === "filename")) || (key2 === "mediaType")) || (key2 === "sha256")) || (key2 === "byteLength")) || (key2 === "contentBase64"))){
-const err63 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"};
-if(vErrors === null){
-vErrors = [err63];
-}
-else {
-vErrors.push(err63);
-}
-errors++;
-}
-}
-if(data16.artifactId !== undefined){
-let data17 = data16.artifactId;
-if(typeof data17 === "string"){
-if(!pattern0.test(data17)){
-const err64 = {instancePath:instancePath+"/artifacts/" + i0+"/artifactId",schemaPath:"#/properties/artifacts/items/properties/artifactId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
-if(vErrors === null){
-vErrors = [err64];
-}
-else {
-vErrors.push(err64);
-}
-errors++;
-}
-}
-else {
-const err65 = {instancePath:instancePath+"/artifacts/" + i0+"/artifactId",schemaPath:"#/properties/artifacts/items/properties/artifactId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err65];
-}
-else {
-vErrors.push(err65);
-}
-errors++;
-}
-}
-if(data16.filename !== undefined){
-let data18 = data16.filename;
-if(typeof data18 === "string"){
-if(func2(data18) > 255){
-const err66 = {instancePath:instancePath+"/artifacts/" + i0+"/filename",schemaPath:"#/properties/artifacts/items/properties/filename/maxLength",keyword:"maxLength",params:{limit: 255},message:"must NOT have more than 255 characters"};
-if(vErrors === null){
-vErrors = [err66];
-}
-else {
-vErrors.push(err66);
-}
-errors++;
-}
-if(func2(data18) < 1){
-const err67 = {instancePath:instancePath+"/artifacts/" + i0+"/filename",schemaPath:"#/properties/artifacts/items/properties/filename/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err67];
-}
-else {
-vErrors.push(err67);
-}
-errors++;
-}
-}
-else {
-const err68 = {instancePath:instancePath+"/artifacts/" + i0+"/filename",schemaPath:"#/properties/artifacts/items/properties/filename/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err68];
-}
-else {
-vErrors.push(err68);
-}
-errors++;
-}
-}
-if(data16.mediaType !== undefined){
-let data19 = data16.mediaType;
-if(!(((((data19 === "text/plain") || (data19 === "message/rfc822")) || (data19 === "application/octet-stream")) || (data19 === "application/json")) || (data19 === "application/pdf"))){
-const err69 = {instancePath:instancePath+"/artifacts/" + i0+"/mediaType",schemaPath:"#/properties/artifacts/items/properties/mediaType/enum",keyword:"enum",params:{allowedValues: schema15.properties.artifacts.items.properties.mediaType.enum},message:"must be equal to one of the allowed values"};
-if(vErrors === null){
-vErrors = [err69];
-}
-else {
-vErrors.push(err69);
-}
-errors++;
-}
-}
-if(data16.sha256 !== undefined){
-let data20 = data16.sha256;
-if(typeof data20 === "string"){
-if(!pattern1.test(data20)){
-const err70 = {instancePath:instancePath+"/artifacts/" + i0+"/sha256",schemaPath:"#/properties/artifacts/items/properties/sha256/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
-if(vErrors === null){
-vErrors = [err70];
-}
-else {
-vErrors.push(err70);
-}
-errors++;
-}
-}
-else {
-const err71 = {instancePath:instancePath+"/artifacts/" + i0+"/sha256",schemaPath:"#/properties/artifacts/items/properties/sha256/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err71];
-}
-else {
-vErrors.push(err71);
-}
-errors++;
-}
-}
-if(data16.byteLength !== undefined){
-let data21 = data16.byteLength;
-if(!(((typeof data21 == "number") && (!(data21 % 1) && !isNaN(data21))) && (isFinite(data21)))){
-const err72 = {instancePath:instancePath+"/artifacts/" + i0+"/byteLength",schemaPath:"#/properties/artifacts/items/properties/byteLength/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err72];
-}
-else {
-vErrors.push(err72);
-}
-errors++;
-}
-if((typeof data21 == "number") && (isFinite(data21))){
-if(data21 > 12582912 || isNaN(data21)){
-const err73 = {instancePath:instancePath+"/artifacts/" + i0+"/byteLength",schemaPath:"#/properties/artifacts/items/properties/byteLength/maximum",keyword:"maximum",params:{comparison: "<=", limit: 12582912},message:"must be <= 12582912"};
-if(vErrors === null){
-vErrors = [err73];
-}
-else {
-vErrors.push(err73);
-}
-errors++;
-}
-if(data21 < 0 || isNaN(data21)){
-const err74 = {instancePath:instancePath+"/artifacts/" + i0+"/byteLength",schemaPath:"#/properties/artifacts/items/properties/byteLength/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err74];
-}
-else {
-vErrors.push(err74);
-}
-errors++;
-}
-}
-}
-if(data16.contentBase64 !== undefined){
-let data22 = data16.contentBase64;
-if(typeof data22 === "string"){
-if(func2(data22) > 16777216){
-const err75 = {instancePath:instancePath+"/artifacts/" + i0+"/contentBase64",schemaPath:"#/properties/artifacts/items/properties/contentBase64/maxLength",keyword:"maxLength",params:{limit: 16777216},message:"must NOT have more than 16777216 characters"};
-if(vErrors === null){
-vErrors = [err75];
-}
-else {
-vErrors.push(err75);
-}
-errors++;
-}
-if(!pattern11.test(data22)){
-const err76 = {instancePath:instancePath+"/artifacts/" + i0+"/contentBase64",schemaPath:"#/properties/artifacts/items/properties/contentBase64/pattern",keyword:"pattern",params:{pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},message:"must match pattern \""+"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"+"\""};
-if(vErrors === null){
-vErrors = [err76];
-}
-else {
-vErrors.push(err76);
-}
-errors++;
-}
-}
-else {
-const err77 = {instancePath:instancePath+"/artifacts/" + i0+"/contentBase64",schemaPath:"#/properties/artifacts/items/properties/contentBase64/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err77];
-}
-else {
-vErrors.push(err77);
-}
-errors++;
-}
-}
-}
-else {
-const err78 = {instancePath:instancePath+"/artifacts/" + i0,schemaPath:"#/properties/artifacts/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err78];
-}
-else {
-vErrors.push(err78);
-}
-errors++;
-}
-}
-}
-else {
-const err79 = {instancePath:instancePath+"/artifacts",schemaPath:"#/properties/artifacts/type",keyword:"type",params:{type: "array"},message:"must be array"};
-if(vErrors === null){
-vErrors = [err79];
-}
-else {
-vErrors.push(err79);
-}
-errors++;
-}
-}
-}
-else {
-const err80 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err80];
-}
-else {
-vErrors.push(err80);
-}
-errors++;
-}
-validate14.errors = vErrors;
+validate15.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalExportReceiptClaims = validate15;
-const schema17 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/receipt-claims.schema.json","title":"LocalExportReceiptClaims","type":"object","properties":{"iss":{"type":"string","minLength":1,"maxLength":2048},"aud":{"const":"erato-local-export-receipt-v1"},"binding":{"$ref":"../delegation/binding.schema.json"},"exportId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"manifestDigest":{"type":"string","pattern":"^sha256:[a-f0-9]{64}$"},"receiptId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"acceptedAt":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["iss","aud","binding","exportId","manifestDigest","receiptId","acceptedAt"],"additionalProperties":false};
+export const validateLocalExportReceiptClaims = validate17;
+const schema20 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/receipt-claims.schema.json","title":"LocalExportReceiptClaims","type":"object","properties":{"iss":{"type":"string","minLength":1,"maxLength":2048},"aud":{"const":"erato-local-export-receipt-v1"},"binding":{"$ref":"../delegation/binding.schema.json"},"exportId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"manifestDigest":{"$ref":"../common.schema.json#/definitions/Digest"},"receiptId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"acceptedAt":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["iss","aud","binding","exportId","manifestDigest","receiptId","acceptedAt"],"additionalProperties":false};
 
-function validate15(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate17(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/delegation/receipt-claims.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -2107,10 +1747,16 @@ errors++;
 }
 }
 if(data.binding !== undefined){
-let data2 = data.binding;
-if(data2 && typeof data2 == "object" && !Array.isArray(data2)){
-if(data2.backendOrigin === undefined){
-const err12 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "backendOrigin"},message:"must have required property '"+"backendOrigin"+"'"};
+if(!(validate10(data.binding, {instancePath:instancePath+"/binding",parentData:data,parentDataProperty:"binding",rootData}))){
+vErrors = vErrors === null ? validate10.errors : vErrors.concat(validate10.errors);
+errors = vErrors.length;
+}
+}
+if(data.exportId !== undefined){
+let data3 = data.exportId;
+if(typeof data3 === "string"){
+if(!pattern0.test(data3)){
+const err12 = {instancePath:instancePath+"/exportId",schemaPath:"#/properties/exportId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err12];
 }
@@ -2119,8 +1765,9 @@ vErrors.push(err12);
 }
 errors++;
 }
-if(data2.accountId === undefined){
-const err13 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "accountId"},message:"must have required property '"+"accountId"+"'"};
+}
+else {
+const err13 = {instancePath:instancePath+"/exportId",schemaPath:"#/properties/exportId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -2129,8 +1776,12 @@ vErrors.push(err13);
 }
 errors++;
 }
-if(data2.deviceId === undefined){
-const err14 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "deviceId"},message:"must have required property '"+"deviceId"+"'"};
+}
+if(data.manifestDigest !== undefined){
+let data4 = data.manifestDigest;
+if(typeof data4 === "string"){
+if(!pattern1.test(data4)){
+const err14 = {instancePath:instancePath+"/manifestDigest",schemaPath:"../common.schema.json#/definitions/Digest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err14];
 }
@@ -2139,8 +1790,9 @@ vErrors.push(err14);
 }
 errors++;
 }
-if(data2.taskId === undefined){
-const err15 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "taskId"},message:"must have required property '"+"taskId"+"'"};
+}
+else {
+const err15 = {instancePath:instancePath+"/manifestDigest",schemaPath:"../common.schema.json#/definitions/Digest/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err15];
 }
@@ -2149,8 +1801,12 @@ vErrors.push(err15);
 }
 errors++;
 }
-if(data2.jobId === undefined){
-const err16 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "jobId"},message:"must have required property '"+"jobId"+"'"};
+}
+if(data.receiptId !== undefined){
+let data5 = data.receiptId;
+if(typeof data5 === "string"){
+if(!pattern0.test(data5)){
+const err16 = {instancePath:instancePath+"/receiptId",schemaPath:"#/properties/receiptId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -2159,8 +1815,9 @@ vErrors.push(err16);
 }
 errors++;
 }
-if(data2.attemptId === undefined){
-const err17 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "attemptId"},message:"must have required property '"+"attemptId"+"'"};
+}
+else {
+const err17 = {instancePath:instancePath+"/receiptId",schemaPath:"#/properties/receiptId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -2169,8 +1826,11 @@ vErrors.push(err17);
 }
 errors++;
 }
-if(data2.toolCallId === undefined){
-const err18 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "toolCallId"},message:"must have required property '"+"toolCallId"+"'"};
+}
+if(data.acceptedAt !== undefined){
+let data6 = data.acceptedAt;
+if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
+const err18 = {instancePath:instancePath+"/acceptedAt",schemaPath:"#/properties/acceptedAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -2179,8 +1839,9 @@ vErrors.push(err18);
 }
 errors++;
 }
-if(data2.planDigest === undefined){
-const err19 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "planDigest"},message:"must have required property '"+"planDigest"+"'"};
+if((typeof data6 == "number") && (isFinite(data6))){
+if(data6 > 9007199254740991 || isNaN(data6)){
+const err19 = {instancePath:instancePath+"/acceptedAt",schemaPath:"#/properties/acceptedAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -2189,9 +1850,8 @@ vErrors.push(err19);
 }
 errors++;
 }
-for(const key1 in data2){
-if(!((((((((key1 === "backendOrigin") || (key1 === "accountId")) || (key1 === "deviceId")) || (key1 === "taskId")) || (key1 === "jobId")) || (key1 === "attemptId")) || (key1 === "toolCallId")) || (key1 === "planDigest"))){
-const err20 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
+if(data6 < 0 || isNaN(data6)){
+const err20 = {instancePath:instancePath+"/acceptedAt",schemaPath:"#/properties/acceptedAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -2201,11 +1861,10 @@ vErrors.push(err20);
 errors++;
 }
 }
-if(data2.backendOrigin !== undefined){
-let data3 = data2.backendOrigin;
-if(typeof data3 === "string"){
-if(func2(data3) > 2048){
-const err21 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/maxLength",keyword:"maxLength",params:{limit: 2048},message:"must NOT have more than 2048 characters"};
+}
+}
+else {
+const err21 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -2214,395 +1873,15 @@ vErrors.push(err21);
 }
 errors++;
 }
-if(func2(data3) < 1){
-const err22 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err22];
-}
-else {
-vErrors.push(err22);
-}
-errors++;
-}
-}
-else {
-const err23 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err23];
-}
-else {
-vErrors.push(err23);
-}
-errors++;
-}
-}
-if(data2.accountId !== undefined){
-let data4 = data2.accountId;
-if(typeof data4 === "string"){
-if(func2(data4) > 128){
-const err24 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err24];
-}
-else {
-vErrors.push(err24);
-}
-errors++;
-}
-if(func2(data4) < 1){
-const err25 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err25];
-}
-else {
-vErrors.push(err25);
-}
-errors++;
-}
-}
-else {
-const err26 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err26];
-}
-else {
-vErrors.push(err26);
-}
-errors++;
-}
-}
-if(data2.deviceId !== undefined){
-let data5 = data2.deviceId;
-if(typeof data5 === "string"){
-if(!pattern0.test(data5)){
-const err27 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
-if(vErrors === null){
-vErrors = [err27];
-}
-else {
-vErrors.push(err27);
-}
-errors++;
-}
-}
-else {
-const err28 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err28];
-}
-else {
-vErrors.push(err28);
-}
-errors++;
-}
-}
-if(data2.taskId !== undefined){
-let data6 = data2.taskId;
-if(typeof data6 === "string"){
-if(func2(data6) > 128){
-const err29 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err29];
-}
-else {
-vErrors.push(err29);
-}
-errors++;
-}
-if(func2(data6) < 1){
-const err30 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err30];
-}
-else {
-vErrors.push(err30);
-}
-errors++;
-}
-}
-else {
-const err31 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err31];
-}
-else {
-vErrors.push(err31);
-}
-errors++;
-}
-}
-if(data2.jobId !== undefined){
-let data7 = data2.jobId;
-if(typeof data7 === "string"){
-if(func2(data7) > 128){
-const err32 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err32];
-}
-else {
-vErrors.push(err32);
-}
-errors++;
-}
-if(func2(data7) < 1){
-const err33 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err33];
-}
-else {
-vErrors.push(err33);
-}
-errors++;
-}
-}
-else {
-const err34 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err34];
-}
-else {
-vErrors.push(err34);
-}
-errors++;
-}
-}
-if(data2.attemptId !== undefined){
-let data8 = data2.attemptId;
-if(typeof data8 === "string"){
-if(func2(data8) > 128){
-const err35 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err35];
-}
-else {
-vErrors.push(err35);
-}
-errors++;
-}
-if(func2(data8) < 1){
-const err36 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err36];
-}
-else {
-vErrors.push(err36);
-}
-errors++;
-}
-}
-else {
-const err37 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err37];
-}
-else {
-vErrors.push(err37);
-}
-errors++;
-}
-}
-if(data2.toolCallId !== undefined){
-let data9 = data2.toolCallId;
-if(typeof data9 === "string"){
-if(func2(data9) > 128){
-const err38 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err38];
-}
-else {
-vErrors.push(err38);
-}
-errors++;
-}
-if(func2(data9) < 1){
-const err39 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err39];
-}
-else {
-vErrors.push(err39);
-}
-errors++;
-}
-}
-else {
-const err40 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err40];
-}
-else {
-vErrors.push(err40);
-}
-errors++;
-}
-}
-if(data2.planDigest !== undefined){
-let data10 = data2.planDigest;
-if(typeof data10 === "string"){
-if(!pattern1.test(data10)){
-const err41 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
-if(vErrors === null){
-vErrors = [err41];
-}
-else {
-vErrors.push(err41);
-}
-errors++;
-}
-}
-else {
-const err42 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err42];
-}
-else {
-vErrors.push(err42);
-}
-errors++;
-}
-}
-}
-else {
-const err43 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err43];
-}
-else {
-vErrors.push(err43);
-}
-errors++;
-}
-}
-if(data.exportId !== undefined){
-let data11 = data.exportId;
-if(typeof data11 === "string"){
-if(!pattern0.test(data11)){
-const err44 = {instancePath:instancePath+"/exportId",schemaPath:"#/properties/exportId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
-if(vErrors === null){
-vErrors = [err44];
-}
-else {
-vErrors.push(err44);
-}
-errors++;
-}
-}
-else {
-const err45 = {instancePath:instancePath+"/exportId",schemaPath:"#/properties/exportId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err45];
-}
-else {
-vErrors.push(err45);
-}
-errors++;
-}
-}
-if(data.manifestDigest !== undefined){
-let data12 = data.manifestDigest;
-if(typeof data12 === "string"){
-if(!pattern1.test(data12)){
-const err46 = {instancePath:instancePath+"/manifestDigest",schemaPath:"#/properties/manifestDigest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
-if(vErrors === null){
-vErrors = [err46];
-}
-else {
-vErrors.push(err46);
-}
-errors++;
-}
-}
-else {
-const err47 = {instancePath:instancePath+"/manifestDigest",schemaPath:"#/properties/manifestDigest/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err47];
-}
-else {
-vErrors.push(err47);
-}
-errors++;
-}
-}
-if(data.receiptId !== undefined){
-let data13 = data.receiptId;
-if(typeof data13 === "string"){
-if(!pattern0.test(data13)){
-const err48 = {instancePath:instancePath+"/receiptId",schemaPath:"#/properties/receiptId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
-if(vErrors === null){
-vErrors = [err48];
-}
-else {
-vErrors.push(err48);
-}
-errors++;
-}
-}
-else {
-const err49 = {instancePath:instancePath+"/receiptId",schemaPath:"#/properties/receiptId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err49];
-}
-else {
-vErrors.push(err49);
-}
-errors++;
-}
-}
-if(data.acceptedAt !== undefined){
-let data14 = data.acceptedAt;
-if(!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))){
-const err50 = {instancePath:instancePath+"/acceptedAt",schemaPath:"#/properties/acceptedAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err50];
-}
-else {
-vErrors.push(err50);
-}
-errors++;
-}
-if((typeof data14 == "number") && (isFinite(data14))){
-if(data14 > 9007199254740991 || isNaN(data14)){
-const err51 = {instancePath:instancePath+"/acceptedAt",schemaPath:"#/properties/acceptedAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err51];
-}
-else {
-vErrors.push(err51);
-}
-errors++;
-}
-if(data14 < 0 || isNaN(data14)){
-const err52 = {instancePath:instancePath+"/acceptedAt",schemaPath:"#/properties/acceptedAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err52];
-}
-else {
-vErrors.push(err52);
-}
-errors++;
-}
-}
-}
-}
-else {
-const err53 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err53];
-}
-else {
-vErrors.push(err53);
-}
-errors++;
-}
-validate15.errors = vErrors;
+validate17.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalContextClaims = validate16;
-const schema19 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/context-claims.schema.json","title":"LocalContextClaims","type":"object","properties":{"iss":{"type":"string","minLength":1,"maxLength":2048},"aud":{"const":"erato-local-context-v1"},"sub":{"type":"string","minLength":1,"maxLength":128},"origin":{"type":"string","minLength":1,"maxLength":2048},"deviceId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"challenge":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"jti":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"iat":{"type":"integer","minimum":0,"maximum":9007199254740991},"exp":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["iss","aud","sub","origin","deviceId","challenge","jti","iat","exp"],"additionalProperties":false};
-const func45 = Object.prototype.hasOwnProperty;
+export const validateLocalContextClaims = validate19;
+const schema22 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/context-claims.schema.json","title":"LocalContextClaims","type":"object","properties":{"iss":{"type":"string","minLength":1,"maxLength":2048},"aud":{"const":"erato-local-context-v1"},"sub":{"type":"string","minLength":1,"maxLength":128},"origin":{"type":"string","minLength":1,"maxLength":2048},"deviceId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"challenge":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"jti":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"iat":{"type":"integer","minimum":0,"maximum":9007199254740991},"exp":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["iss","aud","sub","origin","deviceId","challenge","jti","iat","exp"],"additionalProperties":false};
+const func21 = Object.prototype.hasOwnProperty;
 
-function validate16(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate19(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/delegation/context-claims.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -2698,7 +1977,7 @@ vErrors.push(err8);
 errors++;
 }
 for(const key0 in data){
-if(!(func45.call(schema19.properties, key0))){
+if(!(func21.call(schema22.properties, key0))){
 const err9 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err9];
@@ -2982,14 +2261,14 @@ vErrors.push(err32);
 }
 errors++;
 }
-validate16.errors = vErrors;
+validate19.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalJobClaims = validate17;
-const schema20 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/job-claims.schema.json","title":"LocalJobClaims","type":"object","properties":{"iss":{"type":"string","minLength":1,"maxLength":2048},"aud":{"const":"erato-local-job-v1"},"sub":{"type":"string","minLength":1,"maxLength":128},"origin":{"type":"string","minLength":1,"maxLength":2048},"binding":{"$ref":"../delegation/binding.schema.json"},"jti":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"iat":{"type":"integer","minimum":0,"maximum":9007199254740991},"exp":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["iss","aud","sub","origin","binding","jti","iat","exp"],"additionalProperties":false};
+export const validateLocalJobClaims = validate20;
+const schema23 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/job-claims.schema.json","title":"LocalJobClaims","type":"object","properties":{"iss":{"type":"string","minLength":1,"maxLength":2048},"aud":{"const":"erato-local-job-v1"},"sub":{"type":"string","minLength":1,"maxLength":128},"origin":{"type":"string","minLength":1,"maxLength":2048},"binding":{"$ref":"../delegation/binding.schema.json"},"jti":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"iat":{"type":"integer","minimum":0,"maximum":9007199254740991},"exp":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["iss","aud","sub","origin","binding","jti","iat","exp"],"additionalProperties":false};
 
-function validate17(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/delegation/job-claims.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -3204,10 +2483,16 @@ errors++;
 }
 }
 if(data.binding !== undefined){
-let data4 = data.binding;
-if(data4 && typeof data4 == "object" && !Array.isArray(data4)){
-if(data4.backendOrigin === undefined){
-const err19 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "backendOrigin"},message:"must have required property '"+"backendOrigin"+"'"};
+if(!(validate10(data.binding, {instancePath:instancePath+"/binding",parentData:data,parentDataProperty:"binding",rootData}))){
+vErrors = vErrors === null ? validate10.errors : vErrors.concat(validate10.errors);
+errors = vErrors.length;
+}
+}
+if(data.jti !== undefined){
+let data5 = data.jti;
+if(typeof data5 === "string"){
+if(!pattern0.test(data5)){
+const err19 = {instancePath:instancePath+"/jti",schemaPath:"#/properties/jti/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -3216,8 +2501,9 @@ vErrors.push(err19);
 }
 errors++;
 }
-if(data4.accountId === undefined){
-const err20 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "accountId"},message:"must have required property '"+"accountId"+"'"};
+}
+else {
+const err20 = {instancePath:instancePath+"/jti",schemaPath:"#/properties/jti/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -3226,8 +2512,11 @@ vErrors.push(err20);
 }
 errors++;
 }
-if(data4.deviceId === undefined){
-const err21 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "deviceId"},message:"must have required property '"+"deviceId"+"'"};
+}
+if(data.iat !== undefined){
+let data6 = data.iat;
+if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
+const err21 = {instancePath:instancePath+"/iat",schemaPath:"#/properties/iat/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -3236,8 +2525,9 @@ vErrors.push(err21);
 }
 errors++;
 }
-if(data4.taskId === undefined){
-const err22 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "taskId"},message:"must have required property '"+"taskId"+"'"};
+if((typeof data6 == "number") && (isFinite(data6))){
+if(data6 > 9007199254740991 || isNaN(data6)){
+const err22 = {instancePath:instancePath+"/iat",schemaPath:"#/properties/iat/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -3246,8 +2536,8 @@ vErrors.push(err22);
 }
 errors++;
 }
-if(data4.jobId === undefined){
-const err23 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "jobId"},message:"must have required property '"+"jobId"+"'"};
+if(data6 < 0 || isNaN(data6)){
+const err23 = {instancePath:instancePath+"/iat",schemaPath:"#/properties/iat/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -3256,8 +2546,12 @@ vErrors.push(err23);
 }
 errors++;
 }
-if(data4.attemptId === undefined){
-const err24 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "attemptId"},message:"must have required property '"+"attemptId"+"'"};
+}
+}
+if(data.exp !== undefined){
+let data7 = data.exp;
+if(!(((typeof data7 == "number") && (!(data7 % 1) && !isNaN(data7))) && (isFinite(data7)))){
+const err24 = {instancePath:instancePath+"/exp",schemaPath:"#/properties/exp/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -3266,8 +2560,9 @@ vErrors.push(err24);
 }
 errors++;
 }
-if(data4.toolCallId === undefined){
-const err25 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "toolCallId"},message:"must have required property '"+"toolCallId"+"'"};
+if((typeof data7 == "number") && (isFinite(data7))){
+if(data7 > 9007199254740991 || isNaN(data7)){
+const err25 = {instancePath:instancePath+"/exp",schemaPath:"#/properties/exp/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -3276,8 +2571,8 @@ vErrors.push(err25);
 }
 errors++;
 }
-if(data4.planDigest === undefined){
-const err26 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "planDigest"},message:"must have required property '"+"planDigest"+"'"};
+if(data7 < 0 || isNaN(data7)){
+const err26 = {instancePath:instancePath+"/exp",schemaPath:"#/properties/exp/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -3286,9 +2581,11 @@ vErrors.push(err26);
 }
 errors++;
 }
-for(const key1 in data4){
-if(!((((((((key1 === "backendOrigin") || (key1 === "accountId")) || (key1 === "deviceId")) || (key1 === "taskId")) || (key1 === "jobId")) || (key1 === "attemptId")) || (key1 === "toolCallId")) || (key1 === "planDigest"))){
-const err27 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
+}
+}
+}
+else {
+const err27 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -3297,393 +2594,14 @@ vErrors.push(err27);
 }
 errors++;
 }
-}
-if(data4.backendOrigin !== undefined){
-let data5 = data4.backendOrigin;
-if(typeof data5 === "string"){
-if(func2(data5) > 2048){
-const err28 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/maxLength",keyword:"maxLength",params:{limit: 2048},message:"must NOT have more than 2048 characters"};
-if(vErrors === null){
-vErrors = [err28];
-}
-else {
-vErrors.push(err28);
-}
-errors++;
-}
-if(func2(data5) < 1){
-const err29 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err29];
-}
-else {
-vErrors.push(err29);
-}
-errors++;
-}
-}
-else {
-const err30 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err30];
-}
-else {
-vErrors.push(err30);
-}
-errors++;
-}
-}
-if(data4.accountId !== undefined){
-let data6 = data4.accountId;
-if(typeof data6 === "string"){
-if(func2(data6) > 128){
-const err31 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err31];
-}
-else {
-vErrors.push(err31);
-}
-errors++;
-}
-if(func2(data6) < 1){
-const err32 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err32];
-}
-else {
-vErrors.push(err32);
-}
-errors++;
-}
-}
-else {
-const err33 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err33];
-}
-else {
-vErrors.push(err33);
-}
-errors++;
-}
-}
-if(data4.deviceId !== undefined){
-let data7 = data4.deviceId;
-if(typeof data7 === "string"){
-if(!pattern0.test(data7)){
-const err34 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
-if(vErrors === null){
-vErrors = [err34];
-}
-else {
-vErrors.push(err34);
-}
-errors++;
-}
-}
-else {
-const err35 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err35];
-}
-else {
-vErrors.push(err35);
-}
-errors++;
-}
-}
-if(data4.taskId !== undefined){
-let data8 = data4.taskId;
-if(typeof data8 === "string"){
-if(func2(data8) > 128){
-const err36 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err36];
-}
-else {
-vErrors.push(err36);
-}
-errors++;
-}
-if(func2(data8) < 1){
-const err37 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err37];
-}
-else {
-vErrors.push(err37);
-}
-errors++;
-}
-}
-else {
-const err38 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err38];
-}
-else {
-vErrors.push(err38);
-}
-errors++;
-}
-}
-if(data4.jobId !== undefined){
-let data9 = data4.jobId;
-if(typeof data9 === "string"){
-if(func2(data9) > 128){
-const err39 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err39];
-}
-else {
-vErrors.push(err39);
-}
-errors++;
-}
-if(func2(data9) < 1){
-const err40 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err40];
-}
-else {
-vErrors.push(err40);
-}
-errors++;
-}
-}
-else {
-const err41 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err41];
-}
-else {
-vErrors.push(err41);
-}
-errors++;
-}
-}
-if(data4.attemptId !== undefined){
-let data10 = data4.attemptId;
-if(typeof data10 === "string"){
-if(func2(data10) > 128){
-const err42 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err42];
-}
-else {
-vErrors.push(err42);
-}
-errors++;
-}
-if(func2(data10) < 1){
-const err43 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err43];
-}
-else {
-vErrors.push(err43);
-}
-errors++;
-}
-}
-else {
-const err44 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err44];
-}
-else {
-vErrors.push(err44);
-}
-errors++;
-}
-}
-if(data4.toolCallId !== undefined){
-let data11 = data4.toolCallId;
-if(typeof data11 === "string"){
-if(func2(data11) > 128){
-const err45 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
-if(vErrors === null){
-vErrors = [err45];
-}
-else {
-vErrors.push(err45);
-}
-errors++;
-}
-if(func2(data11) < 1){
-const err46 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err46];
-}
-else {
-vErrors.push(err46);
-}
-errors++;
-}
-}
-else {
-const err47 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err47];
-}
-else {
-vErrors.push(err47);
-}
-errors++;
-}
-}
-if(data4.planDigest !== undefined){
-let data12 = data4.planDigest;
-if(typeof data12 === "string"){
-if(!pattern1.test(data12)){
-const err48 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
-if(vErrors === null){
-vErrors = [err48];
-}
-else {
-vErrors.push(err48);
-}
-errors++;
-}
-}
-else {
-const err49 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err49];
-}
-else {
-vErrors.push(err49);
-}
-errors++;
-}
-}
-}
-else {
-const err50 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err50];
-}
-else {
-vErrors.push(err50);
-}
-errors++;
-}
-}
-if(data.jti !== undefined){
-let data13 = data.jti;
-if(typeof data13 === "string"){
-if(!pattern0.test(data13)){
-const err51 = {instancePath:instancePath+"/jti",schemaPath:"#/properties/jti/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
-if(vErrors === null){
-vErrors = [err51];
-}
-else {
-vErrors.push(err51);
-}
-errors++;
-}
-}
-else {
-const err52 = {instancePath:instancePath+"/jti",schemaPath:"#/properties/jti/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err52];
-}
-else {
-vErrors.push(err52);
-}
-errors++;
-}
-}
-if(data.iat !== undefined){
-let data14 = data.iat;
-if(!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))){
-const err53 = {instancePath:instancePath+"/iat",schemaPath:"#/properties/iat/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err53];
-}
-else {
-vErrors.push(err53);
-}
-errors++;
-}
-if((typeof data14 == "number") && (isFinite(data14))){
-if(data14 > 9007199254740991 || isNaN(data14)){
-const err54 = {instancePath:instancePath+"/iat",schemaPath:"#/properties/iat/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err54];
-}
-else {
-vErrors.push(err54);
-}
-errors++;
-}
-if(data14 < 0 || isNaN(data14)){
-const err55 = {instancePath:instancePath+"/iat",schemaPath:"#/properties/iat/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err55];
-}
-else {
-vErrors.push(err55);
-}
-errors++;
-}
-}
-}
-if(data.exp !== undefined){
-let data15 = data.exp;
-if(!(((typeof data15 == "number") && (!(data15 % 1) && !isNaN(data15))) && (isFinite(data15)))){
-const err56 = {instancePath:instancePath+"/exp",schemaPath:"#/properties/exp/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err56];
-}
-else {
-vErrors.push(err56);
-}
-errors++;
-}
-if((typeof data15 == "number") && (isFinite(data15))){
-if(data15 > 9007199254740991 || isNaN(data15)){
-const err57 = {instancePath:instancePath+"/exp",schemaPath:"#/properties/exp/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err57];
-}
-else {
-vErrors.push(err57);
-}
-errors++;
-}
-if(data15 < 0 || isNaN(data15)){
-const err58 = {instancePath:instancePath+"/exp",schemaPath:"#/properties/exp/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err58];
-}
-else {
-vErrors.push(err58);
-}
-errors++;
-}
-}
-}
-}
-else {
-const err59 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err59];
-}
-else {
-vErrors.push(err59);
-}
-errors++;
-}
-validate17.errors = vErrors;
+validate20.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalContextsChallengeV1Params = validate18;
-const schema22 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-params.schema.json","title":"LocalContextsChallengeV1Params","type":"object","properties":{},"required":[],"additionalProperties":false};
+export const validateLocalContextsChallengeV1Params = validate22;
+const schema24 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-params.schema.json","title":"LocalContextsChallengeV1Params","type":"object","properties":{},"required":[],"additionalProperties":false};
 
-function validate18(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate22(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -3709,14 +2627,14 @@ vErrors.push(err1);
 }
 errors++;
 }
-validate18.errors = vErrors;
+validate22.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalContextsChallengeV1Result = validate19;
-const schema23 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-result.schema.json","title":"LocalContextsChallengeV1Result","type":"object","properties":{"challenge":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"deviceId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"expiresAt":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["challenge","deviceId","expiresAt"],"additionalProperties":false};
+export const validateLocalContextsChallengeV1Result = validate23;
+const schema25 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-result.schema.json","title":"LocalContextsChallengeV1Result","type":"object","properties":{"challenge":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"deviceId":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"expiresAt":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["challenge","deviceId","expiresAt"],"additionalProperties":false};
 
-function validate19(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate23(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -3859,15 +2777,15 @@ vErrors.push(err11);
 }
 errors++;
 }
-validate19.errors = vErrors;
+validate23.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalContextsBindV1Params = validate20;
-const schema24 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-params.schema.json","title":"LocalContextsBindV1Params","type":"object","properties":{"assertion":{"type":"string","minLength":32,"maxLength":16384,"pattern":"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"}},"required":["assertion"],"additionalProperties":false};
-const pattern25 = new RegExp("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$", "u");
+export const validateLocalContextsBindV1Params = validate24;
+const schema26 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-params.schema.json","title":"LocalContextsBindV1Params","type":"object","properties":{"assertion":{"type":"string","minLength":32,"maxLength":16384,"pattern":"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"}},"required":["assertion"],"additionalProperties":false};
+const pattern19 = new RegExp("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$", "u");
 
-function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate24(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -3917,7 +2835,7 @@ vErrors.push(err3);
 }
 errors++;
 }
-if(!pattern25.test(data0)){
+if(!pattern19.test(data0)){
 const err4 = {instancePath:instancePath+"/assertion",schemaPath:"#/properties/assertion/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},message:"must match pattern \""+"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"+"\""};
 if(vErrors === null){
 vErrors = [err4];
@@ -3950,14 +2868,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate20.errors = vErrors;
+validate24.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalContextsBindV1Result = validate21;
-const schema25 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-result.schema.json","title":"LocalContextsBindV1Result","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"expiresAt":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["contextHandle","expiresAt"],"additionalProperties":false};
+export const validateLocalContextsBindV1Result = validate25;
+const schema27 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-result.schema.json","title":"LocalContextsBindV1Result","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"expiresAt":{"type":"integer","minimum":0,"maximum":9007199254740991}},"required":["contextHandle","expiresAt"],"additionalProperties":false};
 
-function validate21(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate25(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -4065,14 +2983,14 @@ vErrors.push(err8);
 }
 errors++;
 }
-validate21.errors = vErrors;
+validate25.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTasksStartV1Params = validate22;
-const schema26 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-params.schema.json","title":"LocalTasksStartV1Params","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"binding":{"$ref":"../delegation/binding.schema.json"},"plan":{"$ref":"../delegation/plan.schema.json"},"authorization":{"type":"string","minLength":32,"maxLength":16384,"pattern":"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"}},"required":["contextHandle","binding","plan","authorization"],"additionalProperties":false};
+export const validateLocalTasksStartV1Params = validate26;
+const schema28 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-params.schema.json","title":"LocalTasksStartV1Params","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"binding":{"$ref":"../delegation/binding.schema.json"},"plan":{"$ref":"../delegation/plan.schema.json"},"authorization":{"type":"string","minLength":32,"maxLength":16384,"pattern":"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"}},"required":["contextHandle","binding","plan","authorization"],"additionalProperties":false};
 
-function validate22(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate26(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -4155,10 +3073,16 @@ errors++;
 }
 }
 if(data.binding !== undefined){
-let data1 = data.binding;
-if(data1 && typeof data1 == "object" && !Array.isArray(data1)){
-if(data1.backendOrigin === undefined){
-const err7 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "backendOrigin"},message:"must have required property '"+"backendOrigin"+"'"};
+if(!(validate10(data.binding, {instancePath:instancePath+"/binding",parentData:data,parentDataProperty:"binding",rootData}))){
+vErrors = vErrors === null ? validate10.errors : vErrors.concat(validate10.errors);
+errors = vErrors.length;
+}
+}
+if(data.plan !== undefined){
+let data2 = data.plan;
+if(data2 && typeof data2 == "object" && !Array.isArray(data2)){
+if(data2.operation === undefined){
+const err7 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "operation"},message:"must have required property '"+"operation"+"'"};
 if(vErrors === null){
 vErrors = [err7];
 }
@@ -4167,8 +3091,8 @@ vErrors.push(err7);
 }
 errors++;
 }
-if(data1.accountId === undefined){
-const err8 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "accountId"},message:"must have required property '"+"accountId"+"'"};
+if(data2.queryVariants === undefined){
+const err8 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "queryVariants"},message:"must have required property '"+"queryVariants"+"'"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -4177,8 +3101,8 @@ vErrors.push(err8);
 }
 errors++;
 }
-if(data1.deviceId === undefined){
-const err9 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "deviceId"},message:"must have required property '"+"deviceId"+"'"};
+if(data2.maxHits === undefined){
+const err9 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxHits"},message:"must have required property '"+"maxHits"+"'"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -4187,8 +3111,8 @@ vErrors.push(err9);
 }
 errors++;
 }
-if(data1.taskId === undefined){
-const err10 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "taskId"},message:"must have required property '"+"taskId"+"'"};
+if(data2.maxArtifacts === undefined){
+const err10 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxArtifacts"},message:"must have required property '"+"maxArtifacts"+"'"};
 if(vErrors === null){
 vErrors = [err10];
 }
@@ -4197,8 +3121,8 @@ vErrors.push(err10);
 }
 errors++;
 }
-if(data1.jobId === undefined){
-const err11 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "jobId"},message:"must have required property '"+"jobId"+"'"};
+if(data2.maxBytes === undefined){
+const err11 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxBytes"},message:"must have required property '"+"maxBytes"+"'"};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -4207,8 +3131,8 @@ vErrors.push(err11);
 }
 errors++;
 }
-if(data1.attemptId === undefined){
-const err12 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "attemptId"},message:"must have required property '"+"attemptId"+"'"};
+if(data2.executionSeconds === undefined){
+const err12 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "executionSeconds"},message:"must have required property '"+"executionSeconds"+"'"};
 if(vErrors === null){
 vErrors = [err12];
 }
@@ -4217,8 +3141,8 @@ vErrors.push(err12);
 }
 errors++;
 }
-if(data1.toolCallId === undefined){
-const err13 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "toolCallId"},message:"must have required property '"+"toolCallId"+"'"};
+if(data2.expiresAt === undefined){
+const err13 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "expiresAt"},message:"must have required property '"+"expiresAt"+"'"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -4227,8 +3151,9 @@ vErrors.push(err13);
 }
 errors++;
 }
-if(data1.planDigest === undefined){
-const err14 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "planDigest"},message:"must have required property '"+"planDigest"+"'"};
+for(const key1 in data2){
+if(!(((((((key1 === "operation") || (key1 === "queryVariants")) || (key1 === "maxHits")) || (key1 === "maxArtifacts")) || (key1 === "maxBytes")) || (key1 === "executionSeconds")) || (key1 === "expiresAt"))){
+const err14 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err14];
 }
@@ -4237,9 +3162,10 @@ vErrors.push(err14);
 }
 errors++;
 }
-for(const key1 in data1){
-if(!((((((((key1 === "backendOrigin") || (key1 === "accountId")) || (key1 === "deviceId")) || (key1 === "taskId")) || (key1 === "jobId")) || (key1 === "attemptId")) || (key1 === "toolCallId")) || (key1 === "planDigest"))){
-const err15 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
+}
+if(data2.operation !== undefined){
+if("collect_evidence" !== data2.operation){
+const err15 = {instancePath:instancePath+"/plan/operation",schemaPath:"../delegation/plan.schema.json/properties/operation/const",keyword:"const",params:{allowedValue: "collect_evidence"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err15];
 }
@@ -4249,11 +3175,11 @@ vErrors.push(err15);
 errors++;
 }
 }
-if(data1.backendOrigin !== undefined){
-let data2 = data1.backendOrigin;
-if(typeof data2 === "string"){
-if(func2(data2) > 2048){
-const err16 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/maxLength",keyword:"maxLength",params:{limit: 2048},message:"must NOT have more than 2048 characters"};
+if(data2.queryVariants !== undefined){
+let data4 = data2.queryVariants;
+if(Array.isArray(data4)){
+if(data4.length > 8){
+const err16 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/maxItems",keyword:"maxItems",params:{limit: 8},message:"must NOT have more than 8 items"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -4262,8 +3188,8 @@ vErrors.push(err16);
 }
 errors++;
 }
-if(func2(data2) < 1){
-const err17 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data4.length < 1){
+const err17 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -4272,9 +3198,12 @@ vErrors.push(err17);
 }
 errors++;
 }
-}
-else {
-const err18 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const len0 = data4.length;
+for(let i0=0; i0<len0; i0++){
+let data5 = data4[i0];
+if(typeof data5 === "string"){
+if(func2(data5) > 512){
+const err18 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/maxLength",keyword:"maxLength",params:{limit: 512},message:"must NOT have more than 512 characters"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -4283,12 +3212,8 @@ vErrors.push(err18);
 }
 errors++;
 }
-}
-if(data1.accountId !== undefined){
-let data3 = data1.accountId;
-if(typeof data3 === "string"){
-if(func2(data3) > 128){
-const err19 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(func2(data5) < 1){
+const err19 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -4297,8 +3222,9 @@ vErrors.push(err19);
 }
 errors++;
 }
-if(func2(data3) < 1){
-const err20 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+else {
+const err20 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -4308,8 +3234,18 @@ vErrors.push(err20);
 errors++;
 }
 }
-else {
-const err21 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+let i1 = data4.length;
+let j0;
+if(i1 > 1){
+const indices0 = {};
+for(;i1--;){
+let item0 = data4[i1];
+if(typeof item0 !== "string"){
+continue;
+}
+if(typeof indices0[item0] == "number"){
+j0 = indices0[item0];
+const err21 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/uniqueItems",keyword:"uniqueItems",params:{i: i1, j: j0},message:"must NOT have duplicate items (items ## "+j0+" and "+i1+" are identical)"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -4317,13 +3253,14 @@ else {
 vErrors.push(err21);
 }
 errors++;
+break;
+}
+indices0[item0] = i1;
 }
 }
-if(data1.deviceId !== undefined){
-let data4 = data1.deviceId;
-if(typeof data4 === "string"){
-if(!pattern0.test(data4)){
-const err22 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
+}
+else {
+const err22 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -4333,8 +3270,10 @@ vErrors.push(err22);
 errors++;
 }
 }
-else {
-const err23 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data2.maxHits !== undefined){
+let data6 = data2.maxHits;
+if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
+const err23 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -4343,12 +3282,9 @@ vErrors.push(err23);
 }
 errors++;
 }
-}
-if(data1.taskId !== undefined){
-let data5 = data1.taskId;
-if(typeof data5 === "string"){
-if(func2(data5) > 128){
-const err24 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data6 == "number") && (isFinite(data6))){
+if(data6 > 100 || isNaN(data6)){
+const err24 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/maximum",keyword:"maximum",params:{comparison: "<=", limit: 100},message:"must be <= 100"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -4357,8 +3293,8 @@ vErrors.push(err24);
 }
 errors++;
 }
-if(func2(data5) < 1){
-const err25 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data6 < 1 || isNaN(data6)){
+const err25 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -4368,8 +3304,11 @@ vErrors.push(err25);
 errors++;
 }
 }
-else {
-const err26 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data2.maxArtifacts !== undefined){
+let data7 = data2.maxArtifacts;
+if(!(((typeof data7 == "number") && (!(data7 % 1) && !isNaN(data7))) && (isFinite(data7)))){
+const err26 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -4378,12 +3317,9 @@ vErrors.push(err26);
 }
 errors++;
 }
-}
-if(data1.jobId !== undefined){
-let data6 = data1.jobId;
-if(typeof data6 === "string"){
-if(func2(data6) > 128){
-const err27 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data7 == "number") && (isFinite(data7))){
+if(data7 > 20 || isNaN(data7)){
+const err27 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/maximum",keyword:"maximum",params:{comparison: "<=", limit: 20},message:"must be <= 20"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -4392,8 +3328,8 @@ vErrors.push(err27);
 }
 errors++;
 }
-if(func2(data6) < 1){
-const err28 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data7 < 1 || isNaN(data7)){
+const err28 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -4403,8 +3339,11 @@ vErrors.push(err28);
 errors++;
 }
 }
-else {
-const err29 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data2.maxBytes !== undefined){
+let data8 = data2.maxBytes;
+if(!(((typeof data8 == "number") && (!(data8 % 1) && !isNaN(data8))) && (isFinite(data8)))){
+const err29 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -4413,12 +3352,9 @@ vErrors.push(err29);
 }
 errors++;
 }
-}
-if(data1.attemptId !== undefined){
-let data7 = data1.attemptId;
-if(typeof data7 === "string"){
-if(func2(data7) > 128){
-const err30 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data8 == "number") && (isFinite(data8))){
+if(data8 > 12582912 || isNaN(data8)){
+const err30 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 12582912},message:"must be <= 12582912"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -4427,8 +3363,8 @@ vErrors.push(err30);
 }
 errors++;
 }
-if(func2(data7) < 1){
-const err31 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data8 < 1 || isNaN(data8)){
+const err31 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -4438,8 +3374,11 @@ vErrors.push(err31);
 errors++;
 }
 }
-else {
-const err32 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data2.executionSeconds !== undefined){
+let data9 = data2.executionSeconds;
+if(!(((typeof data9 == "number") && (!(data9 % 1) && !isNaN(data9))) && (isFinite(data9)))){
+const err32 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -4448,12 +3387,9 @@ vErrors.push(err32);
 }
 errors++;
 }
-}
-if(data1.toolCallId !== undefined){
-let data8 = data1.toolCallId;
-if(typeof data8 === "string"){
-if(func2(data8) > 128){
-const err33 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data9 == "number") && (isFinite(data9))){
+if(data9 > 300 || isNaN(data9)){
+const err33 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 300},message:"must be <= 300"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -4462,8 +3398,8 @@ vErrors.push(err33);
 }
 errors++;
 }
-if(func2(data8) < 1){
-const err34 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data9 < 1 || isNaN(data9)){
+const err34 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -4473,8 +3409,11 @@ vErrors.push(err34);
 errors++;
 }
 }
-else {
-const err35 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data2.expiresAt !== undefined){
+let data10 = data2.expiresAt;
+if(!(((typeof data10 == "number") && (!(data10 % 1) && !isNaN(data10))) && (isFinite(data10)))){
+const err35 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -4483,12 +3422,9 @@ vErrors.push(err35);
 }
 errors++;
 }
-}
-if(data1.planDigest !== undefined){
-let data9 = data1.planDigest;
-if(typeof data9 === "string"){
-if(!pattern1.test(data9)){
-const err36 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
+if((typeof data10 == "number") && (isFinite(data10))){
+if(data10 > 9007199254740991 || isNaN(data10)){
+const err36 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -4497,9 +3433,8 @@ vErrors.push(err36);
 }
 errors++;
 }
-}
-else {
-const err37 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data10 < 0 || isNaN(data10)){
+const err37 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -4510,8 +3445,9 @@ errors++;
 }
 }
 }
+}
 else {
-const err38 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err38 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -4521,11 +3457,11 @@ vErrors.push(err38);
 errors++;
 }
 }
-if(data.plan !== undefined){
-let data10 = data.plan;
-if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
-if(data10.operation === undefined){
-const err39 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "operation"},message:"must have required property '"+"operation"+"'"};
+if(data.authorization !== undefined){
+let data11 = data.authorization;
+if(typeof data11 === "string"){
+if(func2(data11) > 16384){
+const err39 = {instancePath:instancePath+"/authorization",schemaPath:"#/properties/authorization/maxLength",keyword:"maxLength",params:{limit: 16384},message:"must NOT have more than 16384 characters"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -4534,8 +3470,8 @@ vErrors.push(err39);
 }
 errors++;
 }
-if(data10.queryVariants === undefined){
-const err40 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "queryVariants"},message:"must have required property '"+"queryVariants"+"'"};
+if(func2(data11) < 32){
+const err40 = {instancePath:instancePath+"/authorization",schemaPath:"#/properties/authorization/minLength",keyword:"minLength",params:{limit: 32},message:"must NOT have fewer than 32 characters"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -4544,8 +3480,8 @@ vErrors.push(err40);
 }
 errors++;
 }
-if(data10.maxHits === undefined){
-const err41 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxHits"},message:"must have required property '"+"maxHits"+"'"};
+if(!pattern19.test(data11)){
+const err41 = {instancePath:instancePath+"/authorization",schemaPath:"#/properties/authorization/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},message:"must match pattern \""+"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"+"\""};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -4554,8 +3490,9 @@ vErrors.push(err41);
 }
 errors++;
 }
-if(data10.maxArtifacts === undefined){
-const err42 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxArtifacts"},message:"must have required property '"+"maxArtifacts"+"'"};
+}
+else {
+const err42 = {instancePath:instancePath+"/authorization",schemaPath:"#/properties/authorization/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -4564,8 +3501,10 @@ vErrors.push(err42);
 }
 errors++;
 }
-if(data10.maxBytes === undefined){
-const err43 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxBytes"},message:"must have required property '"+"maxBytes"+"'"};
+}
+}
+else {
+const err43 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -4574,396 +3513,14 @@ vErrors.push(err43);
 }
 errors++;
 }
-if(data10.executionSeconds === undefined){
-const err44 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "executionSeconds"},message:"must have required property '"+"executionSeconds"+"'"};
-if(vErrors === null){
-vErrors = [err44];
-}
-else {
-vErrors.push(err44);
-}
-errors++;
-}
-if(data10.expiresAt === undefined){
-const err45 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "expiresAt"},message:"must have required property '"+"expiresAt"+"'"};
-if(vErrors === null){
-vErrors = [err45];
-}
-else {
-vErrors.push(err45);
-}
-errors++;
-}
-for(const key2 in data10){
-if(!(((((((key2 === "operation") || (key2 === "queryVariants")) || (key2 === "maxHits")) || (key2 === "maxArtifacts")) || (key2 === "maxBytes")) || (key2 === "executionSeconds")) || (key2 === "expiresAt"))){
-const err46 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"};
-if(vErrors === null){
-vErrors = [err46];
-}
-else {
-vErrors.push(err46);
-}
-errors++;
-}
-}
-if(data10.operation !== undefined){
-if("collect_evidence" !== data10.operation){
-const err47 = {instancePath:instancePath+"/plan/operation",schemaPath:"../delegation/plan.schema.json/properties/operation/const",keyword:"const",params:{allowedValue: "collect_evidence"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err47];
-}
-else {
-vErrors.push(err47);
-}
-errors++;
-}
-}
-if(data10.queryVariants !== undefined){
-let data12 = data10.queryVariants;
-if(Array.isArray(data12)){
-if(data12.length > 8){
-const err48 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/maxItems",keyword:"maxItems",params:{limit: 8},message:"must NOT have more than 8 items"};
-if(vErrors === null){
-vErrors = [err48];
-}
-else {
-vErrors.push(err48);
-}
-errors++;
-}
-if(data12.length < 1){
-const err49 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"};
-if(vErrors === null){
-vErrors = [err49];
-}
-else {
-vErrors.push(err49);
-}
-errors++;
-}
-const len0 = data12.length;
-for(let i0=0; i0<len0; i0++){
-let data13 = data12[i0];
-if(typeof data13 === "string"){
-if(func2(data13) > 512){
-const err50 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/maxLength",keyword:"maxLength",params:{limit: 512},message:"must NOT have more than 512 characters"};
-if(vErrors === null){
-vErrors = [err50];
-}
-else {
-vErrors.push(err50);
-}
-errors++;
-}
-if(func2(data13) < 1){
-const err51 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err51];
-}
-else {
-vErrors.push(err51);
-}
-errors++;
-}
-}
-else {
-const err52 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err52];
-}
-else {
-vErrors.push(err52);
-}
-errors++;
-}
-}
-let i1 = data12.length;
-let j0;
-if(i1 > 1){
-const indices0 = {};
-for(;i1--;){
-let item0 = data12[i1];
-if(typeof item0 !== "string"){
-continue;
-}
-if(typeof indices0[item0] == "number"){
-j0 = indices0[item0];
-const err53 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/uniqueItems",keyword:"uniqueItems",params:{i: i1, j: j0},message:"must NOT have duplicate items (items ## "+j0+" and "+i1+" are identical)"};
-if(vErrors === null){
-vErrors = [err53];
-}
-else {
-vErrors.push(err53);
-}
-errors++;
-break;
-}
-indices0[item0] = i1;
-}
-}
-}
-else {
-const err54 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/type",keyword:"type",params:{type: "array"},message:"must be array"};
-if(vErrors === null){
-vErrors = [err54];
-}
-else {
-vErrors.push(err54);
-}
-errors++;
-}
-}
-if(data10.maxHits !== undefined){
-let data14 = data10.maxHits;
-if(!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))){
-const err55 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err55];
-}
-else {
-vErrors.push(err55);
-}
-errors++;
-}
-if((typeof data14 == "number") && (isFinite(data14))){
-if(data14 > 100 || isNaN(data14)){
-const err56 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/maximum",keyword:"maximum",params:{comparison: "<=", limit: 100},message:"must be <= 100"};
-if(vErrors === null){
-vErrors = [err56];
-}
-else {
-vErrors.push(err56);
-}
-errors++;
-}
-if(data14 < 1 || isNaN(data14)){
-const err57 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
-if(vErrors === null){
-vErrors = [err57];
-}
-else {
-vErrors.push(err57);
-}
-errors++;
-}
-}
-}
-if(data10.maxArtifacts !== undefined){
-let data15 = data10.maxArtifacts;
-if(!(((typeof data15 == "number") && (!(data15 % 1) && !isNaN(data15))) && (isFinite(data15)))){
-const err58 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err58];
-}
-else {
-vErrors.push(err58);
-}
-errors++;
-}
-if((typeof data15 == "number") && (isFinite(data15))){
-if(data15 > 20 || isNaN(data15)){
-const err59 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/maximum",keyword:"maximum",params:{comparison: "<=", limit: 20},message:"must be <= 20"};
-if(vErrors === null){
-vErrors = [err59];
-}
-else {
-vErrors.push(err59);
-}
-errors++;
-}
-if(data15 < 1 || isNaN(data15)){
-const err60 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
-if(vErrors === null){
-vErrors = [err60];
-}
-else {
-vErrors.push(err60);
-}
-errors++;
-}
-}
-}
-if(data10.maxBytes !== undefined){
-let data16 = data10.maxBytes;
-if(!(((typeof data16 == "number") && (!(data16 % 1) && !isNaN(data16))) && (isFinite(data16)))){
-const err61 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err61];
-}
-else {
-vErrors.push(err61);
-}
-errors++;
-}
-if((typeof data16 == "number") && (isFinite(data16))){
-if(data16 > 12582912 || isNaN(data16)){
-const err62 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 12582912},message:"must be <= 12582912"};
-if(vErrors === null){
-vErrors = [err62];
-}
-else {
-vErrors.push(err62);
-}
-errors++;
-}
-if(data16 < 1 || isNaN(data16)){
-const err63 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
-if(vErrors === null){
-vErrors = [err63];
-}
-else {
-vErrors.push(err63);
-}
-errors++;
-}
-}
-}
-if(data10.executionSeconds !== undefined){
-let data17 = data10.executionSeconds;
-if(!(((typeof data17 == "number") && (!(data17 % 1) && !isNaN(data17))) && (isFinite(data17)))){
-const err64 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err64];
-}
-else {
-vErrors.push(err64);
-}
-errors++;
-}
-if((typeof data17 == "number") && (isFinite(data17))){
-if(data17 > 300 || isNaN(data17)){
-const err65 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 300},message:"must be <= 300"};
-if(vErrors === null){
-vErrors = [err65];
-}
-else {
-vErrors.push(err65);
-}
-errors++;
-}
-if(data17 < 1 || isNaN(data17)){
-const err66 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
-if(vErrors === null){
-vErrors = [err66];
-}
-else {
-vErrors.push(err66);
-}
-errors++;
-}
-}
-}
-if(data10.expiresAt !== undefined){
-let data18 = data10.expiresAt;
-if(!(((typeof data18 == "number") && (!(data18 % 1) && !isNaN(data18))) && (isFinite(data18)))){
-const err67 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err67];
-}
-else {
-vErrors.push(err67);
-}
-errors++;
-}
-if((typeof data18 == "number") && (isFinite(data18))){
-if(data18 > 9007199254740991 || isNaN(data18)){
-const err68 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err68];
-}
-else {
-vErrors.push(err68);
-}
-errors++;
-}
-if(data18 < 0 || isNaN(data18)){
-const err69 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err69];
-}
-else {
-vErrors.push(err69);
-}
-errors++;
-}
-}
-}
-}
-else {
-const err70 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err70];
-}
-else {
-vErrors.push(err70);
-}
-errors++;
-}
-}
-if(data.authorization !== undefined){
-let data19 = data.authorization;
-if(typeof data19 === "string"){
-if(func2(data19) > 16384){
-const err71 = {instancePath:instancePath+"/authorization",schemaPath:"#/properties/authorization/maxLength",keyword:"maxLength",params:{limit: 16384},message:"must NOT have more than 16384 characters"};
-if(vErrors === null){
-vErrors = [err71];
-}
-else {
-vErrors.push(err71);
-}
-errors++;
-}
-if(func2(data19) < 32){
-const err72 = {instancePath:instancePath+"/authorization",schemaPath:"#/properties/authorization/minLength",keyword:"minLength",params:{limit: 32},message:"must NOT have fewer than 32 characters"};
-if(vErrors === null){
-vErrors = [err72];
-}
-else {
-vErrors.push(err72);
-}
-errors++;
-}
-if(!pattern25.test(data19)){
-const err73 = {instancePath:instancePath+"/authorization",schemaPath:"#/properties/authorization/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},message:"must match pattern \""+"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"+"\""};
-if(vErrors === null){
-vErrors = [err73];
-}
-else {
-vErrors.push(err73);
-}
-errors++;
-}
-}
-else {
-const err74 = {instancePath:instancePath+"/authorization",schemaPath:"#/properties/authorization/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err74];
-}
-else {
-vErrors.push(err74);
-}
-errors++;
-}
-}
-}
-else {
-const err75 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err75];
-}
-else {
-vErrors.push(err75);
-}
-errors++;
-}
-validate22.errors = vErrors;
+validate26.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTasksStartV1Result = validate23;
-const schema29 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-result.schema.json","title":"LocalTasksStartV1Result","$ref":"../delegation/status.schema.json"};
+export const validateLocalTasksStartV1Result = validate28;
+const schema30 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-result.schema.json","title":"LocalTasksStartV1Result","$ref":"../delegation/status.schema.json"};
 
-function validate23(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate28(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -5028,7 +3585,7 @@ errors++;
 if(data.state !== undefined){
 let data1 = data.state;
 if(!(((((((((data1 === "queued") || (data1 === "running")) || (data1 === "ready_for_review")) || (data1 === "approved")) || (data1 === "acknowledged")) || (data1 === "declined")) || (data1 === "cancelled")) || (data1 === "expired")) || (data1 === "failed"))){
-const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema13.properties.state.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema15.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -5049,14 +3606,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate23.errors = vErrors;
+validate28.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTasksStatusV1Params = validate24;
-const schema31 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-params.schema.json","title":"LocalTasksStatusV1Params","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"}},"required":["contextHandle","handle"],"additionalProperties":false};
+export const validateLocalTasksStatusV1Params = validate29;
+const schema32 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-params.schema.json","title":"LocalTasksStatusV1Params","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"}},"required":["contextHandle","handle"],"additionalProperties":false};
 
-function validate24(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate29(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -5154,14 +3711,14 @@ vErrors.push(err7);
 }
 errors++;
 }
-validate24.errors = vErrors;
+validate29.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTasksStatusV1Result = validate25;
-const schema32 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-result.schema.json","title":"LocalTasksStatusV1Result","$ref":"../delegation/status.schema.json"};
+export const validateLocalTasksStatusV1Result = validate30;
+const schema33 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-result.schema.json","title":"LocalTasksStatusV1Result","$ref":"../delegation/status.schema.json"};
 
-function validate25(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate30(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -5226,7 +3783,7 @@ errors++;
 if(data.state !== undefined){
 let data1 = data.state;
 if(!(((((((((data1 === "queued") || (data1 === "running")) || (data1 === "ready_for_review")) || (data1 === "approved")) || (data1 === "acknowledged")) || (data1 === "declined")) || (data1 === "cancelled")) || (data1 === "expired")) || (data1 === "failed"))){
-const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema13.properties.state.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema15.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -5247,14 +3804,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate25.errors = vErrors;
+validate30.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTasksCancelV1Params = validate26;
-const schema34 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-params.schema.json","title":"LocalTasksCancelV1Params","oneOf":[{"type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"}},"required":["contextHandle","handle"],"additionalProperties":false},{"type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"binding":{"$ref":"../delegation/binding.schema.json"},"plan":{"$ref":"../delegation/plan.schema.json"}},"required":["contextHandle","binding","plan"],"additionalProperties":false}],"description":"Cancel by opaque handle, or atomically create/cancel a logical binding tombstone after a lost start acknowledgement. Binding cancellation never starts collection."};
+export const validateLocalTasksCancelV1Params = validate31;
+const schema35 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-params.schema.json","title":"LocalTasksCancelV1Params","oneOf":[{"type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"}},"required":["contextHandle","handle"],"additionalProperties":false},{"type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"binding":{"$ref":"../delegation/binding.schema.json"},"plan":{"$ref":"../delegation/plan.schema.json"}},"required":["contextHandle","binding","plan"],"additionalProperties":false}],"description":"Cancel by opaque handle, or atomically create/cancel a logical binding tombstone after a lost start acknowledgement. Binding cancellation never starts collection."};
 
-function validate26(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate31(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -5431,10 +3988,16 @@ errors++;
 }
 }
 if(data.binding !== undefined){
-let data3 = data.binding;
-if(data3 && typeof data3 == "object" && !Array.isArray(data3)){
-if(data3.backendOrigin === undefined){
-const err14 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "backendOrigin"},message:"must have required property '"+"backendOrigin"+"'"};
+if(!(validate10(data.binding, {instancePath:instancePath+"/binding",parentData:data,parentDataProperty:"binding",rootData}))){
+vErrors = vErrors === null ? validate10.errors : vErrors.concat(validate10.errors);
+errors = vErrors.length;
+}
+}
+if(data.plan !== undefined){
+let data4 = data.plan;
+if(data4 && typeof data4 == "object" && !Array.isArray(data4)){
+if(data4.operation === undefined){
+const err14 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "operation"},message:"must have required property '"+"operation"+"'"};
 if(vErrors === null){
 vErrors = [err14];
 }
@@ -5443,8 +4006,8 @@ vErrors.push(err14);
 }
 errors++;
 }
-if(data3.accountId === undefined){
-const err15 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "accountId"},message:"must have required property '"+"accountId"+"'"};
+if(data4.queryVariants === undefined){
+const err15 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "queryVariants"},message:"must have required property '"+"queryVariants"+"'"};
 if(vErrors === null){
 vErrors = [err15];
 }
@@ -5453,8 +4016,8 @@ vErrors.push(err15);
 }
 errors++;
 }
-if(data3.deviceId === undefined){
-const err16 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "deviceId"},message:"must have required property '"+"deviceId"+"'"};
+if(data4.maxHits === undefined){
+const err16 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxHits"},message:"must have required property '"+"maxHits"+"'"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -5463,8 +4026,8 @@ vErrors.push(err16);
 }
 errors++;
 }
-if(data3.taskId === undefined){
-const err17 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "taskId"},message:"must have required property '"+"taskId"+"'"};
+if(data4.maxArtifacts === undefined){
+const err17 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxArtifacts"},message:"must have required property '"+"maxArtifacts"+"'"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -5473,8 +4036,8 @@ vErrors.push(err17);
 }
 errors++;
 }
-if(data3.jobId === undefined){
-const err18 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "jobId"},message:"must have required property '"+"jobId"+"'"};
+if(data4.maxBytes === undefined){
+const err18 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxBytes"},message:"must have required property '"+"maxBytes"+"'"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -5483,8 +4046,8 @@ vErrors.push(err18);
 }
 errors++;
 }
-if(data3.attemptId === undefined){
-const err19 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "attemptId"},message:"must have required property '"+"attemptId"+"'"};
+if(data4.executionSeconds === undefined){
+const err19 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "executionSeconds"},message:"must have required property '"+"executionSeconds"+"'"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -5493,8 +4056,8 @@ vErrors.push(err19);
 }
 errors++;
 }
-if(data3.toolCallId === undefined){
-const err20 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "toolCallId"},message:"must have required property '"+"toolCallId"+"'"};
+if(data4.expiresAt === undefined){
+const err20 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "expiresAt"},message:"must have required property '"+"expiresAt"+"'"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -5503,8 +4066,9 @@ vErrors.push(err20);
 }
 errors++;
 }
-if(data3.planDigest === undefined){
-const err21 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/required",keyword:"required",params:{missingProperty: "planDigest"},message:"must have required property '"+"planDigest"+"'"};
+for(const key2 in data4){
+if(!(((((((key2 === "operation") || (key2 === "queryVariants")) || (key2 === "maxHits")) || (key2 === "maxArtifacts")) || (key2 === "maxBytes")) || (key2 === "executionSeconds")) || (key2 === "expiresAt"))){
+const err21 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -5513,9 +4077,10 @@ vErrors.push(err21);
 }
 errors++;
 }
-for(const key2 in data3){
-if(!((((((((key2 === "backendOrigin") || (key2 === "accountId")) || (key2 === "deviceId")) || (key2 === "taskId")) || (key2 === "jobId")) || (key2 === "attemptId")) || (key2 === "toolCallId")) || (key2 === "planDigest"))){
-const err22 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"};
+}
+if(data4.operation !== undefined){
+if("collect_evidence" !== data4.operation){
+const err22 = {instancePath:instancePath+"/plan/operation",schemaPath:"../delegation/plan.schema.json/properties/operation/const",keyword:"const",params:{allowedValue: "collect_evidence"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -5525,11 +4090,11 @@ vErrors.push(err22);
 errors++;
 }
 }
-if(data3.backendOrigin !== undefined){
-let data4 = data3.backendOrigin;
-if(typeof data4 === "string"){
-if(func2(data4) > 2048){
-const err23 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/maxLength",keyword:"maxLength",params:{limit: 2048},message:"must NOT have more than 2048 characters"};
+if(data4.queryVariants !== undefined){
+let data6 = data4.queryVariants;
+if(Array.isArray(data6)){
+if(data6.length > 8){
+const err23 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/maxItems",keyword:"maxItems",params:{limit: 8},message:"must NOT have more than 8 items"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -5538,8 +4103,8 @@ vErrors.push(err23);
 }
 errors++;
 }
-if(func2(data4) < 1){
-const err24 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data6.length < 1){
+const err24 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -5548,9 +4113,12 @@ vErrors.push(err24);
 }
 errors++;
 }
-}
-else {
-const err25 = {instancePath:instancePath+"/binding/backendOrigin",schemaPath:"../delegation/binding.schema.json/properties/backendOrigin/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const len0 = data6.length;
+for(let i0=0; i0<len0; i0++){
+let data7 = data6[i0];
+if(typeof data7 === "string"){
+if(func2(data7) > 512){
+const err25 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/maxLength",keyword:"maxLength",params:{limit: 512},message:"must NOT have more than 512 characters"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -5559,12 +4127,8 @@ vErrors.push(err25);
 }
 errors++;
 }
-}
-if(data3.accountId !== undefined){
-let data5 = data3.accountId;
-if(typeof data5 === "string"){
-if(func2(data5) > 128){
-const err26 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(func2(data7) < 1){
+const err26 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -5573,8 +4137,9 @@ vErrors.push(err26);
 }
 errors++;
 }
-if(func2(data5) < 1){
-const err27 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+else {
+const err27 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -5584,8 +4149,18 @@ vErrors.push(err27);
 errors++;
 }
 }
-else {
-const err28 = {instancePath:instancePath+"/binding/accountId",schemaPath:"../delegation/binding.schema.json/properties/accountId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+let i1 = data6.length;
+let j0;
+if(i1 > 1){
+const indices0 = {};
+for(;i1--;){
+let item0 = data6[i1];
+if(typeof item0 !== "string"){
+continue;
+}
+if(typeof indices0[item0] == "number"){
+j0 = indices0[item0];
+const err28 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/uniqueItems",keyword:"uniqueItems",params:{i: i1, j: j0},message:"must NOT have duplicate items (items ## "+j0+" and "+i1+" are identical)"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -5593,13 +4168,14 @@ else {
 vErrors.push(err28);
 }
 errors++;
+break;
+}
+indices0[item0] = i1;
 }
 }
-if(data3.deviceId !== undefined){
-let data6 = data3.deviceId;
-if(typeof data6 === "string"){
-if(!pattern0.test(data6)){
-const err29 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
+}
+else {
+const err29 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -5609,8 +4185,10 @@ vErrors.push(err29);
 errors++;
 }
 }
-else {
-const err30 = {instancePath:instancePath+"/binding/deviceId",schemaPath:"../delegation/binding.schema.json/properties/deviceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data4.maxHits !== undefined){
+let data8 = data4.maxHits;
+if(!(((typeof data8 == "number") && (!(data8 % 1) && !isNaN(data8))) && (isFinite(data8)))){
+const err30 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -5619,12 +4197,9 @@ vErrors.push(err30);
 }
 errors++;
 }
-}
-if(data3.taskId !== undefined){
-let data7 = data3.taskId;
-if(typeof data7 === "string"){
-if(func2(data7) > 128){
-const err31 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data8 == "number") && (isFinite(data8))){
+if(data8 > 100 || isNaN(data8)){
+const err31 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/maximum",keyword:"maximum",params:{comparison: "<=", limit: 100},message:"must be <= 100"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -5633,8 +4208,8 @@ vErrors.push(err31);
 }
 errors++;
 }
-if(func2(data7) < 1){
-const err32 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data8 < 1 || isNaN(data8)){
+const err32 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -5644,8 +4219,11 @@ vErrors.push(err32);
 errors++;
 }
 }
-else {
-const err33 = {instancePath:instancePath+"/binding/taskId",schemaPath:"../delegation/binding.schema.json/properties/taskId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data4.maxArtifacts !== undefined){
+let data9 = data4.maxArtifacts;
+if(!(((typeof data9 == "number") && (!(data9 % 1) && !isNaN(data9))) && (isFinite(data9)))){
+const err33 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -5654,12 +4232,9 @@ vErrors.push(err33);
 }
 errors++;
 }
-}
-if(data3.jobId !== undefined){
-let data8 = data3.jobId;
-if(typeof data8 === "string"){
-if(func2(data8) > 128){
-const err34 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data9 == "number") && (isFinite(data9))){
+if(data9 > 20 || isNaN(data9)){
+const err34 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/maximum",keyword:"maximum",params:{comparison: "<=", limit: 20},message:"must be <= 20"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -5668,8 +4243,8 @@ vErrors.push(err34);
 }
 errors++;
 }
-if(func2(data8) < 1){
-const err35 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data9 < 1 || isNaN(data9)){
+const err35 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -5679,8 +4254,11 @@ vErrors.push(err35);
 errors++;
 }
 }
-else {
-const err36 = {instancePath:instancePath+"/binding/jobId",schemaPath:"../delegation/binding.schema.json/properties/jobId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data4.maxBytes !== undefined){
+let data10 = data4.maxBytes;
+if(!(((typeof data10 == "number") && (!(data10 % 1) && !isNaN(data10))) && (isFinite(data10)))){
+const err36 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -5689,12 +4267,9 @@ vErrors.push(err36);
 }
 errors++;
 }
-}
-if(data3.attemptId !== undefined){
-let data9 = data3.attemptId;
-if(typeof data9 === "string"){
-if(func2(data9) > 128){
-const err37 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data10 == "number") && (isFinite(data10))){
+if(data10 > 12582912 || isNaN(data10)){
+const err37 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 12582912},message:"must be <= 12582912"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -5703,8 +4278,8 @@ vErrors.push(err37);
 }
 errors++;
 }
-if(func2(data9) < 1){
-const err38 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data10 < 1 || isNaN(data10)){
+const err38 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -5714,8 +4289,11 @@ vErrors.push(err38);
 errors++;
 }
 }
-else {
-const err39 = {instancePath:instancePath+"/binding/attemptId",schemaPath:"../delegation/binding.schema.json/properties/attemptId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data4.executionSeconds !== undefined){
+let data11 = data4.executionSeconds;
+if(!(((typeof data11 == "number") && (!(data11 % 1) && !isNaN(data11))) && (isFinite(data11)))){
+const err39 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -5724,12 +4302,9 @@ vErrors.push(err39);
 }
 errors++;
 }
-}
-if(data3.toolCallId !== undefined){
-let data10 = data3.toolCallId;
-if(typeof data10 === "string"){
-if(func2(data10) > 128){
-const err40 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if((typeof data11 == "number") && (isFinite(data11))){
+if(data11 > 300 || isNaN(data11)){
+const err40 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 300},message:"must be <= 300"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -5738,8 +4313,8 @@ vErrors.push(err40);
 }
 errors++;
 }
-if(func2(data10) < 1){
-const err41 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data11 < 1 || isNaN(data11)){
+const err41 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -5749,8 +4324,11 @@ vErrors.push(err41);
 errors++;
 }
 }
-else {
-const err42 = {instancePath:instancePath+"/binding/toolCallId",schemaPath:"../delegation/binding.schema.json/properties/toolCallId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data4.expiresAt !== undefined){
+let data12 = data4.expiresAt;
+if(!(((typeof data12 == "number") && (!(data12 % 1) && !isNaN(data12))) && (isFinite(data12)))){
+const err42 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -5759,12 +4337,9 @@ vErrors.push(err42);
 }
 errors++;
 }
-}
-if(data3.planDigest !== undefined){
-let data11 = data3.planDigest;
-if(typeof data11 === "string"){
-if(!pattern1.test(data11)){
-const err43 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
+if((typeof data12 == "number") && (isFinite(data12))){
+if(data12 > 9007199254740991 || isNaN(data12)){
+const err43 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -5773,9 +4348,8 @@ vErrors.push(err43);
 }
 errors++;
 }
-}
-else {
-const err44 = {instancePath:instancePath+"/binding/planDigest",schemaPath:"../delegation/binding.schema.json/properties/planDigest/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data12 < 0 || isNaN(data12)){
+const err44 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err44];
 }
@@ -5786,8 +4360,9 @@ errors++;
 }
 }
 }
+}
 else {
-const err45 = {instancePath:instancePath+"/binding",schemaPath:"../delegation/binding.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err45 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err45];
 }
@@ -5797,393 +4372,14 @@ vErrors.push(err45);
 errors++;
 }
 }
-if(data.plan !== undefined){
-let data12 = data.plan;
-if(data12 && typeof data12 == "object" && !Array.isArray(data12)){
-if(data12.operation === undefined){
-const err46 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "operation"},message:"must have required property '"+"operation"+"'"};
+}
+else {
+const err46 = {instancePath,schemaPath:"#/oneOf/1/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err46];
 }
 else {
 vErrors.push(err46);
-}
-errors++;
-}
-if(data12.queryVariants === undefined){
-const err47 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "queryVariants"},message:"must have required property '"+"queryVariants"+"'"};
-if(vErrors === null){
-vErrors = [err47];
-}
-else {
-vErrors.push(err47);
-}
-errors++;
-}
-if(data12.maxHits === undefined){
-const err48 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxHits"},message:"must have required property '"+"maxHits"+"'"};
-if(vErrors === null){
-vErrors = [err48];
-}
-else {
-vErrors.push(err48);
-}
-errors++;
-}
-if(data12.maxArtifacts === undefined){
-const err49 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxArtifacts"},message:"must have required property '"+"maxArtifacts"+"'"};
-if(vErrors === null){
-vErrors = [err49];
-}
-else {
-vErrors.push(err49);
-}
-errors++;
-}
-if(data12.maxBytes === undefined){
-const err50 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "maxBytes"},message:"must have required property '"+"maxBytes"+"'"};
-if(vErrors === null){
-vErrors = [err50];
-}
-else {
-vErrors.push(err50);
-}
-errors++;
-}
-if(data12.executionSeconds === undefined){
-const err51 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "executionSeconds"},message:"must have required property '"+"executionSeconds"+"'"};
-if(vErrors === null){
-vErrors = [err51];
-}
-else {
-vErrors.push(err51);
-}
-errors++;
-}
-if(data12.expiresAt === undefined){
-const err52 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/required",keyword:"required",params:{missingProperty: "expiresAt"},message:"must have required property '"+"expiresAt"+"'"};
-if(vErrors === null){
-vErrors = [err52];
-}
-else {
-vErrors.push(err52);
-}
-errors++;
-}
-for(const key3 in data12){
-if(!(((((((key3 === "operation") || (key3 === "queryVariants")) || (key3 === "maxHits")) || (key3 === "maxArtifacts")) || (key3 === "maxBytes")) || (key3 === "executionSeconds")) || (key3 === "expiresAt"))){
-const err53 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key3},message:"must NOT have additional properties"};
-if(vErrors === null){
-vErrors = [err53];
-}
-else {
-vErrors.push(err53);
-}
-errors++;
-}
-}
-if(data12.operation !== undefined){
-if("collect_evidence" !== data12.operation){
-const err54 = {instancePath:instancePath+"/plan/operation",schemaPath:"../delegation/plan.schema.json/properties/operation/const",keyword:"const",params:{allowedValue: "collect_evidence"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err54];
-}
-else {
-vErrors.push(err54);
-}
-errors++;
-}
-}
-if(data12.queryVariants !== undefined){
-let data14 = data12.queryVariants;
-if(Array.isArray(data14)){
-if(data14.length > 8){
-const err55 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/maxItems",keyword:"maxItems",params:{limit: 8},message:"must NOT have more than 8 items"};
-if(vErrors === null){
-vErrors = [err55];
-}
-else {
-vErrors.push(err55);
-}
-errors++;
-}
-if(data14.length < 1){
-const err56 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"};
-if(vErrors === null){
-vErrors = [err56];
-}
-else {
-vErrors.push(err56);
-}
-errors++;
-}
-const len0 = data14.length;
-for(let i0=0; i0<len0; i0++){
-let data15 = data14[i0];
-if(typeof data15 === "string"){
-if(func2(data15) > 512){
-const err57 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/maxLength",keyword:"maxLength",params:{limit: 512},message:"must NOT have more than 512 characters"};
-if(vErrors === null){
-vErrors = [err57];
-}
-else {
-vErrors.push(err57);
-}
-errors++;
-}
-if(func2(data15) < 1){
-const err58 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err58];
-}
-else {
-vErrors.push(err58);
-}
-errors++;
-}
-}
-else {
-const err59 = {instancePath:instancePath+"/plan/queryVariants/" + i0,schemaPath:"../delegation/plan.schema.json/properties/queryVariants/items/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err59];
-}
-else {
-vErrors.push(err59);
-}
-errors++;
-}
-}
-let i1 = data14.length;
-let j0;
-if(i1 > 1){
-const indices0 = {};
-for(;i1--;){
-let item0 = data14[i1];
-if(typeof item0 !== "string"){
-continue;
-}
-if(typeof indices0[item0] == "number"){
-j0 = indices0[item0];
-const err60 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/uniqueItems",keyword:"uniqueItems",params:{i: i1, j: j0},message:"must NOT have duplicate items (items ## "+j0+" and "+i1+" are identical)"};
-if(vErrors === null){
-vErrors = [err60];
-}
-else {
-vErrors.push(err60);
-}
-errors++;
-break;
-}
-indices0[item0] = i1;
-}
-}
-}
-else {
-const err61 = {instancePath:instancePath+"/plan/queryVariants",schemaPath:"../delegation/plan.schema.json/properties/queryVariants/type",keyword:"type",params:{type: "array"},message:"must be array"};
-if(vErrors === null){
-vErrors = [err61];
-}
-else {
-vErrors.push(err61);
-}
-errors++;
-}
-}
-if(data12.maxHits !== undefined){
-let data16 = data12.maxHits;
-if(!(((typeof data16 == "number") && (!(data16 % 1) && !isNaN(data16))) && (isFinite(data16)))){
-const err62 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err62];
-}
-else {
-vErrors.push(err62);
-}
-errors++;
-}
-if((typeof data16 == "number") && (isFinite(data16))){
-if(data16 > 100 || isNaN(data16)){
-const err63 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/maximum",keyword:"maximum",params:{comparison: "<=", limit: 100},message:"must be <= 100"};
-if(vErrors === null){
-vErrors = [err63];
-}
-else {
-vErrors.push(err63);
-}
-errors++;
-}
-if(data16 < 1 || isNaN(data16)){
-const err64 = {instancePath:instancePath+"/plan/maxHits",schemaPath:"../delegation/plan.schema.json/properties/maxHits/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
-if(vErrors === null){
-vErrors = [err64];
-}
-else {
-vErrors.push(err64);
-}
-errors++;
-}
-}
-}
-if(data12.maxArtifacts !== undefined){
-let data17 = data12.maxArtifacts;
-if(!(((typeof data17 == "number") && (!(data17 % 1) && !isNaN(data17))) && (isFinite(data17)))){
-const err65 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err65];
-}
-else {
-vErrors.push(err65);
-}
-errors++;
-}
-if((typeof data17 == "number") && (isFinite(data17))){
-if(data17 > 20 || isNaN(data17)){
-const err66 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/maximum",keyword:"maximum",params:{comparison: "<=", limit: 20},message:"must be <= 20"};
-if(vErrors === null){
-vErrors = [err66];
-}
-else {
-vErrors.push(err66);
-}
-errors++;
-}
-if(data17 < 1 || isNaN(data17)){
-const err67 = {instancePath:instancePath+"/plan/maxArtifacts",schemaPath:"../delegation/plan.schema.json/properties/maxArtifacts/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
-if(vErrors === null){
-vErrors = [err67];
-}
-else {
-vErrors.push(err67);
-}
-errors++;
-}
-}
-}
-if(data12.maxBytes !== undefined){
-let data18 = data12.maxBytes;
-if(!(((typeof data18 == "number") && (!(data18 % 1) && !isNaN(data18))) && (isFinite(data18)))){
-const err68 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err68];
-}
-else {
-vErrors.push(err68);
-}
-errors++;
-}
-if((typeof data18 == "number") && (isFinite(data18))){
-if(data18 > 12582912 || isNaN(data18)){
-const err69 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 12582912},message:"must be <= 12582912"};
-if(vErrors === null){
-vErrors = [err69];
-}
-else {
-vErrors.push(err69);
-}
-errors++;
-}
-if(data18 < 1 || isNaN(data18)){
-const err70 = {instancePath:instancePath+"/plan/maxBytes",schemaPath:"../delegation/plan.schema.json/properties/maxBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
-if(vErrors === null){
-vErrors = [err70];
-}
-else {
-vErrors.push(err70);
-}
-errors++;
-}
-}
-}
-if(data12.executionSeconds !== undefined){
-let data19 = data12.executionSeconds;
-if(!(((typeof data19 == "number") && (!(data19 % 1) && !isNaN(data19))) && (isFinite(data19)))){
-const err71 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err71];
-}
-else {
-vErrors.push(err71);
-}
-errors++;
-}
-if((typeof data19 == "number") && (isFinite(data19))){
-if(data19 > 300 || isNaN(data19)){
-const err72 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 300},message:"must be <= 300"};
-if(vErrors === null){
-vErrors = [err72];
-}
-else {
-vErrors.push(err72);
-}
-errors++;
-}
-if(data19 < 1 || isNaN(data19)){
-const err73 = {instancePath:instancePath+"/plan/executionSeconds",schemaPath:"../delegation/plan.schema.json/properties/executionSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
-if(vErrors === null){
-vErrors = [err73];
-}
-else {
-vErrors.push(err73);
-}
-errors++;
-}
-}
-}
-if(data12.expiresAt !== undefined){
-let data20 = data12.expiresAt;
-if(!(((typeof data20 == "number") && (!(data20 % 1) && !isNaN(data20))) && (isFinite(data20)))){
-const err74 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err74];
-}
-else {
-vErrors.push(err74);
-}
-errors++;
-}
-if((typeof data20 == "number") && (isFinite(data20))){
-if(data20 > 9007199254740991 || isNaN(data20)){
-const err75 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err75];
-}
-else {
-vErrors.push(err75);
-}
-errors++;
-}
-if(data20 < 0 || isNaN(data20)){
-const err76 = {instancePath:instancePath+"/plan/expiresAt",schemaPath:"../delegation/plan.schema.json/properties/expiresAt/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err76];
-}
-else {
-vErrors.push(err76);
-}
-errors++;
-}
-}
-}
-}
-else {
-const err77 = {instancePath:instancePath+"/plan",schemaPath:"../delegation/plan.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err77];
-}
-else {
-vErrors.push(err77);
-}
-errors++;
-}
-}
-}
-else {
-const err78 = {instancePath,schemaPath:"#/oneOf/1/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err78];
-}
-else {
-vErrors.push(err78);
 }
 errors++;
 }
@@ -6199,12 +4395,12 @@ passing0 = 1;
 }
 }
 if(!valid0){
-const err79 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err47 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err79];
+vErrors = [err47];
 }
 else {
-vErrors.push(err79);
+vErrors.push(err47);
 }
 errors++;
 }
@@ -6219,14 +4415,14 @@ vErrors = null;
 }
 }
 }
-validate26.errors = vErrors;
+validate31.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTasksCancelV1Result = validate27;
+export const validateLocalTasksCancelV1Result = validate33;
 const schema37 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-result.schema.json","title":"LocalTasksCancelV1Result","$ref":"../delegation/status.schema.json"};
 
-function validate27(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate33(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -6291,7 +4487,7 @@ errors++;
 if(data.state !== undefined){
 let data1 = data.state;
 if(!(((((((((data1 === "queued") || (data1 === "running")) || (data1 === "ready_for_review")) || (data1 === "approved")) || (data1 === "acknowledged")) || (data1 === "declined")) || (data1 === "cancelled")) || (data1 === "expired")) || (data1 === "failed"))){
-const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema13.properties.state.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema15.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -6312,14 +4508,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate27.errors = vErrors;
+validate33.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTasksReviewV1Params = validate28;
+export const validateLocalTasksReviewV1Params = validate34;
 const schema39 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-review-v1-params.schema.json","title":"LocalTasksReviewV1Params","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"}},"required":["contextHandle","handle"],"additionalProperties":false};
 
-function validate28(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate34(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-review-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -6417,14 +4613,14 @@ vErrors.push(err7);
 }
 errors++;
 }
-validate28.errors = vErrors;
+validate34.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalTasksReviewV1Result = validate29;
+export const validateLocalTasksReviewV1Result = validate35;
 const schema40 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-review-v1-result.schema.json","title":"LocalTasksReviewV1Result","$ref":"../delegation/status.schema.json"};
 
-function validate29(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate35(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-review-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -6489,7 +4685,7 @@ errors++;
 if(data.state !== undefined){
 let data1 = data.state;
 if(!(((((((((data1 === "queued") || (data1 === "running")) || (data1 === "ready_for_review")) || (data1 === "approved")) || (data1 === "acknowledged")) || (data1 === "declined")) || (data1 === "cancelled")) || (data1 === "expired")) || (data1 === "failed"))){
-const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema13.properties.state.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema15.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -6510,14 +4706,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate29.errors = vErrors;
+validate35.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalExportsStatusV1Params = validate30;
+export const validateLocalExportsStatusV1Params = validate36;
 const schema42 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-status-v1-params.schema.json","title":"LocalExportsStatusV1Params","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"}},"required":["contextHandle","handle"],"additionalProperties":false};
 
-function validate30(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate36(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-status-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -6615,14 +4811,14 @@ vErrors.push(err7);
 }
 errors++;
 }
-validate30.errors = vErrors;
+validate36.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalExportsStatusV1Result = validate31;
+export const validateLocalExportsStatusV1Result = validate37;
 const schema43 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-status-v1-result.schema.json","title":"LocalExportsStatusV1Result","$ref":"../delegation/status.schema.json"};
 
-function validate31(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate37(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-status-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -6687,7 +4883,7 @@ errors++;
 if(data.state !== undefined){
 let data1 = data.state;
 if(!(((((((((data1 === "queued") || (data1 === "running")) || (data1 === "ready_for_review")) || (data1 === "approved")) || (data1 === "acknowledged")) || (data1 === "declined")) || (data1 === "cancelled")) || (data1 === "expired")) || (data1 === "failed"))){
-const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema13.properties.state.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema15.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -6708,14 +4904,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate31.errors = vErrors;
+validate37.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalExportsReadV1Params = validate32;
+export const validateLocalExportsReadV1Params = validate38;
 const schema45 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-read-v1-params.schema.json","title":"LocalExportsReadV1Params","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"}},"required":["contextHandle","handle"],"additionalProperties":false};
 
-function validate32(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate38(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-read-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -6813,29 +5009,29 @@ vErrors.push(err7);
 }
 errors++;
 }
-validate32.errors = vErrors;
+validate38.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalExportsReadV1Result = validate33;
+export const validateLocalExportsReadV1Result = validate39;
 const schema46 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-read-v1-result.schema.json","title":"LocalExportsReadV1Result","$ref":"../delegation/approved-export.schema.json"};
 
-function validate33(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate39(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-read-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
-if(!(validate14(data, {instancePath,parentData,parentDataProperty,rootData}))){
-vErrors = vErrors === null ? validate14.errors : vErrors.concat(validate14.errors);
+if(!(validate15(data, {instancePath,parentData,parentDataProperty,rootData}))){
+vErrors = vErrors === null ? validate15.errors : vErrors.concat(validate15.errors);
 errors = vErrors.length;
 }
-validate33.errors = vErrors;
+validate39.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalExportsAckV1Params = validate35;
+export const validateLocalExportsAckV1Params = validate41;
 const schema47 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-params.schema.json","title":"LocalExportsAckV1Params","type":"object","properties":{"contextHandle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"receipt":{"type":"string","minLength":32,"maxLength":16384,"pattern":"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"}},"required":["contextHandle","handle","receipt"],"additionalProperties":false};
 
-function validate35(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate41(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -6955,7 +5151,7 @@ vErrors.push(err9);
 }
 errors++;
 }
-if(!pattern25.test(data2)){
+if(!pattern19.test(data2)){
 const err10 = {instancePath:instancePath+"/receipt",schemaPath:"#/properties/receipt/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},message:"must match pattern \""+"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"+"\""};
 if(vErrors === null){
 vErrors = [err10];
@@ -6988,14 +5184,14 @@ vErrors.push(err12);
 }
 errors++;
 }
-validate35.errors = vErrors;
+validate41.errors = vErrors;
 return errors === 0;
 }
 
-export const validateLocalExportsAckV1Result = validate36;
+export const validateLocalExportsAckV1Result = validate42;
 const schema48 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-result.schema.json","title":"LocalExportsAckV1Result","$ref":"../delegation/status.schema.json"};
 
-function validate36(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate42(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -7060,7 +5256,7 @@ errors++;
 if(data.state !== undefined){
 let data1 = data.state;
 if(!(((((((((data1 === "queued") || (data1 === "running")) || (data1 === "ready_for_review")) || (data1 === "approved")) || (data1 === "acknowledged")) || (data1 === "declined")) || (data1 === "cancelled")) || (data1 === "expired")) || (data1 === "failed"))){
-const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema13.properties.state.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/state",schemaPath:"../delegation/status.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema15.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -7081,21 +5277,21 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate36.errors = vErrors;
+validate42.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookFileProvenance = validate37;
+export const validateOutlookFileProvenance = validate43;
 const schema50 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/file-provenance.schema.json","title":"OutlookFileProvenance","description":"Versioned Outlook source metadata for an uploaded file. Multiple origins preserve distinct containing messages when identical bytes are deduplicated. This standalone contract does not add a field to existing v1 RPC responses.","type":"object","properties":{"version":{"type":"integer","const":1},"origins":{"type":"array","minItems":1,"items":{"type":"object","properties":{"document":{"description":"The uploaded email's own message reference. Omit for an ordinary file attachment with no message identity. For a thread export, identifies the requested subject only.","allOf":[{"$ref":"./message-reference.schema.json"}]},"topLevelParent":{"description":"The outermost containing mailbox message. Never substitute this reference for the uploaded document's own identity.","allOf":[{"$ref":"./message-reference.schema.json"}]}},"additionalProperties":false,"minProperties":1}}},"required":["version","origins"],"additionalProperties":false};
 const schema51 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-reference.schema.json","title":"OutlookMessageReference","description":"A reference to one Outlook message, preserving its own identifiers and mailbox context. This is metadata, not an instruction or proof that the item is accessible.","type":"object","properties":{"documentId":{"description":"Originating sidecar catalog UUID, when indexed. Requires resolution against that catalog and is not portable across devices.","type":"string","format":"uuid"},"external_ids":{"allOf":[{"$ref":"../source/external-ids.schema.json"},{"type":"array","items":{"type":"object","properties":{"key":{},"value":{}},"if":{"properties":{"key":{"enum":["outlook_entry_id","outlook_store_id"]}},"required":["key"]},"then":{"properties":{"value":{"type":"string","pattern":"^(?:[0-9a-fA-F]{2})+$"}}}}}]},"mailbox":{"$ref":"./mailbox-reference.schema.json"}},"required":["external_ids"],"anyOf":[{"required":["documentId"],"properties":{"documentId":{"description":"Originating sidecar catalog UUID, when indexed. Requires resolution against that catalog and is not portable across devices.","type":"string","format":"uuid"}}},{"properties":{"external_ids":{"type":"array","minItems":1}}}],"additionalProperties":false};
 const schema52 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/external-ids.schema.json","title":"DocumentExternalIds","description":"Externally relatable identifiers for the document. Identifier keys are open-ended so new identifier kinds do not require a protocol change.","type":"array","items":{"type":"object","properties":{"key":{"type":"string","minLength":1},"value":{"type":"string","minLength":1}},"required":["key","value"],"additionalProperties":false}};
 const schema53 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox-reference.schema.json","title":"OutlookMailboxReference","description":"Mailbox context captured with a message reference. Local IDs are scoped to the originating Outlook installation; emailAddress identifies the mailbox owner, including a shared mailbox, not necessarily the signed-in user.","type":"object","properties":{"mailboxId":{"description":"Local sidecar mailbox ID. Both the compact Outlook RPC spelling and the UUID spelling used by search are accepted. Not a Microsoft Graph mailbox ID or a portable device identity.","type":"string","pattern":"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},"emailAddress":{"description":"SMTP address of the mailbox owning the referenced item, when known.","type":"string","minLength":1,"maxLength":1024,"pattern":"\\S"},"profileName":{"description":"Name of the originating Outlook profile, when available. A profile name alone does not identify a mailbox.","type":"string","minLength":1,"maxLength":1024,"pattern":"\\S"}},"anyOf":[{"required":["mailboxId"],"properties":{"mailboxId":{"description":"Local sidecar mailbox ID. Both the compact Outlook RPC spelling and the UUID spelling used by search are accepted. Not a Microsoft Graph mailbox ID or a portable device identity.","type":"string","pattern":"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"}}},{"required":["emailAddress"],"properties":{"emailAddress":{"description":"SMTP address of the mailbox owning the referenced item, when known.","type":"string","minLength":1,"maxLength":1024,"pattern":"\\S"}}}],"additionalProperties":false};
 const formats0 = /^(?:urn:uuid:)?[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-const pattern53 = new RegExp("^(?:[0-9a-fA-F]{2})+$", "u");
-const pattern54 = new RegExp("^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", "u");
-const pattern55 = new RegExp("\\S", "u");
+const pattern43 = new RegExp("^(?:[0-9a-fA-F]{2})+$", "u");
+const pattern44 = new RegExp("^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", "u");
+const pattern45 = new RegExp("\\S", "u");
 
-function validate38(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate44(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-reference.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -7405,7 +5601,7 @@ if(data7 && typeof data7 == "object" && !Array.isArray(data7)){
 if(data7.value !== undefined){
 let data9 = data7.value;
 if(typeof data9 === "string"){
-if(!pattern53.test(data9)){
+if(!pattern43.test(data9)){
 const err21 = {instancePath:instancePath+"/external_ids/" + i1+"/value",schemaPath:"#/properties/external_ids/allOf/1/items/then/properties/value/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{2})+$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{2})+$"+"\""};
 if(vErrors === null){
 vErrors = [err21];
@@ -7483,7 +5679,7 @@ errors++;
 if(data10.mailboxId !== undefined){
 let data11 = data10.mailboxId;
 if(typeof data11 === "string"){
-if(!pattern54.test(data11)){
+if(!pattern44.test(data11)){
 const err27 = {instancePath:instancePath+"/mailbox/mailboxId",schemaPath:"./mailbox-reference.schema.json/anyOf/0/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},message:"must match pattern \""+"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err27];
@@ -7544,7 +5740,7 @@ vErrors.push(err31);
 }
 errors++;
 }
-if(!pattern55.test(data12)){
+if(!pattern45.test(data12)){
 const err32 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"./mailbox-reference.schema.json/anyOf/1/properties/emailAddress/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err32];
@@ -7607,7 +5803,7 @@ errors++;
 if(data10.mailboxId !== undefined){
 let data13 = data10.mailboxId;
 if(typeof data13 === "string"){
-if(!pattern54.test(data13)){
+if(!pattern44.test(data13)){
 const err36 = {instancePath:instancePath+"/mailbox/mailboxId",schemaPath:"./mailbox-reference.schema.json/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},message:"must match pattern \""+"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err36];
@@ -7652,7 +5848,7 @@ vErrors.push(err39);
 }
 errors++;
 }
-if(!pattern55.test(data14)){
+if(!pattern45.test(data14)){
 const err40 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"./mailbox-reference.schema.json/properties/emailAddress/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err40];
@@ -7697,7 +5893,7 @@ vErrors.push(err43);
 }
 errors++;
 }
-if(!pattern55.test(data15)){
+if(!pattern45.test(data15)){
 const err44 = {instancePath:instancePath+"/mailbox/profileName",schemaPath:"./mailbox-reference.schema.json/properties/profileName/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err44];
@@ -7742,12 +5938,12 @@ vErrors.push(err47);
 }
 errors++;
 }
-validate38.errors = vErrors;
+validate44.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate37(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate43(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/file-provenance.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -7847,14 +6043,14 @@ errors++;
 }
 }
 if(data2.document !== undefined){
-if(!(validate38(data2.document, {instancePath:instancePath+"/origins/" + i0+"/document",parentData:data2,parentDataProperty:"document",rootData}))){
-vErrors = vErrors === null ? validate38.errors : vErrors.concat(validate38.errors);
+if(!(validate44(data2.document, {instancePath:instancePath+"/origins/" + i0+"/document",parentData:data2,parentDataProperty:"document",rootData}))){
+vErrors = vErrors === null ? validate44.errors : vErrors.concat(validate44.errors);
 errors = vErrors.length;
 }
 }
 if(data2.topLevelParent !== undefined){
-if(!(validate38(data2.topLevelParent, {instancePath:instancePath+"/origins/" + i0+"/topLevelParent",parentData:data2,parentDataProperty:"topLevelParent",rootData}))){
-vErrors = vErrors === null ? validate38.errors : vErrors.concat(validate38.errors);
+if(!(validate44(data2.topLevelParent, {instancePath:instancePath+"/origins/" + i0+"/topLevelParent",parentData:data2,parentDataProperty:"topLevelParent",rootData}))){
+vErrors = vErrors === null ? validate44.errors : vErrors.concat(validate44.errors);
 errors = vErrors.length;
 }
 }
@@ -7893,14 +6089,14 @@ vErrors.push(err10);
 }
 errors++;
 }
-validate37.errors = vErrors;
+validate43.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingBenchmarkListV1Params = validate41;
+export const validateIndexingBenchmarkListV1Params = validate47;
 const schema54 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-params.schema.json","title":"IndexingBenchmarkListV1Params","type":"object","properties":{"limit":{"type":"integer","minimum":1,"maximum":100,"default":50},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0}},"required":[],"additionalProperties":false};
 
-function validate41(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate47(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -7998,16 +6194,16 @@ vErrors.push(err7);
 }
 errors++;
 }
-validate41.errors = vErrors;
+validate47.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingBenchmarkListV1Result = validate42;
+export const validateIndexingBenchmarkListV1Result = validate48;
 const schema55 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-result.schema.json","title":"IndexingBenchmarkListV1Result","type":"object","properties":{"runs":{"type":"array","maxItems":100,"items":{"type":"object","properties":{"runId":{"type":"string","format":"uuid"},"mailboxId":{"type":"string","pattern":"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},"mode":{"type":"string","enum":["fiveMinutes","fullMailbox"]},"state":{"type":"string","enum":["preparing","running","completed","failed"]},"startedAt":{"type":"string","format":"date-time"},"finishedAt":{"type":["string","null"],"format":"date-time"}},"required":["runId","mailboxId","mode","state","startedAt","finishedAt"],"additionalProperties":false}},"nextOffset":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991}},"required":["runs","nextOffset"],"additionalProperties":false};
 const formats6 = { validate: (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value) && !Number.isNaN(Date.parse(value)) };
-const pattern59 = new RegExp("^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$", "u");
+const pattern49 = new RegExp("^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$", "u");
 
-function validate42(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate48(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -8161,7 +6357,7 @@ errors++;
 if(data1.mailboxId !== undefined){
 let data3 = data1.mailboxId;
 if(typeof data3 === "string"){
-if(!pattern59.test(data3)){
+if(!pattern49.test(data3)){
 const err13 = {instancePath:instancePath+"/runs/" + i0+"/mailboxId",schemaPath:"#/properties/runs/items/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err13];
@@ -8349,14 +6545,14 @@ vErrors.push(err28);
 }
 errors++;
 }
-validate42.errors = vErrors;
+validate48.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingBenchmarkStartV1Params = validate43;
+export const validateIndexingBenchmarkStartV1Params = validate49;
 const schema56 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-start-v1-params.schema.json","title":"IndexingBenchmarkStartV1Params","type":"object","properties":{"mailboxId":{"type":"string","pattern":"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},"mode":{"type":"string","enum":["fiveMinutes","fullMailbox"],"default":"fiveMinutes"}},"required":["mailboxId"],"additionalProperties":false};
 
-function validate43(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate49(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-start-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -8386,7 +6582,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data0 = data.mailboxId;
 if(typeof data0 === "string"){
-if(!pattern59.test(data0)){
+if(!pattern49.test(data0)){
 const err2 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err2];
@@ -8442,14 +6638,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate43.errors = vErrors;
+validate49.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingBenchmarkStartV1Result = validate44;
+export const validateIndexingBenchmarkStartV1Result = validate50;
 const schema57 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-start-v1-result.schema.json","title":"IndexingBenchmarkStartV1Result","type":"object","properties":{"runId":{"type":"string","format":"uuid"},"mailboxId":{"type":"string","pattern":"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},"mode":{"type":"string","enum":["fiveMinutes","fullMailbox"]},"state":{"type":"string","enum":["preparing","running","completed","failed"]},"parallelism":{"type":"integer","minimum":1},"elapsedSeconds":{"type":"number","minimum":0},"discoveredDocuments":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedDocuments":{"type":"integer","minimum":0,"maximum":9007199254740991},"failedDocuments":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedByType":{"type":"object","additionalProperties":{"type":"integer","minimum":0,"maximum":9007199254740991}},"mailboxBytes":{"type":"integer","minimum":0,"maximum":9007199254740991},"emailsWithUnknownSize":{"type":"integer","minimum":0,"maximum":9007199254740991},"discoveryComplete":{"type":"boolean"},"timedOut":{"type":"boolean"},"error":{"type":["string","null"]},"startedAt":{"type":"string","format":"date-time"},"finishedAt":{"type":["string","null"],"format":"date-time"}},"required":["runId","mailboxId","mode","state","parallelism","elapsedSeconds","discoveredDocuments","indexedDocuments","failedDocuments","indexedByType","mailboxBytes","emailsWithUnknownSize","discoveryComplete","timedOut","error","startedAt","finishedAt"],"additionalProperties":false};
 
-function validate44(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate50(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-start-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -8625,7 +6821,7 @@ vErrors.push(err16);
 errors++;
 }
 for(const key0 in data){
-if(!(func45.call(schema57.properties, key0))){
+if(!(func21.call(schema57.properties, key0))){
 const err17 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err17];
@@ -8664,7 +6860,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data1 = data.mailboxId;
 if(typeof data1 === "string"){
-if(!pattern59.test(data1)){
+if(!pattern49.test(data1)){
 const err20 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err20];
@@ -9105,14 +7301,14 @@ vErrors.push(err56);
 }
 errors++;
 }
-validate44.errors = vErrors;
+validate50.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingBenchmarkStatusV1Params = validate45;
+export const validateIndexingBenchmarkStatusV1Params = validate51;
 const schema58 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-status-v1-params.schema.json","title":"IndexingBenchmarkStatusV1Params","type":"object","properties":{"runId":{"type":"string","format":"uuid"}},"required":["runId"],"additionalProperties":false};
 
-function validate45(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate51(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-status-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -9175,14 +7371,14 @@ vErrors.push(err4);
 }
 errors++;
 }
-validate45.errors = vErrors;
+validate51.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingBenchmarkStatusV1Result = validate46;
+export const validateIndexingBenchmarkStatusV1Result = validate52;
 const schema59 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-status-v1-result.schema.json","title":"IndexingBenchmarkStatusV1Result","type":"object","properties":{"runId":{"type":"string","format":"uuid"},"mailboxId":{"type":"string","pattern":"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},"mode":{"type":"string","enum":["fiveMinutes","fullMailbox"]},"state":{"type":"string","enum":["preparing","running","completed","failed"]},"parallelism":{"type":"integer","minimum":1},"elapsedSeconds":{"type":"number","minimum":0},"discoveredDocuments":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedDocuments":{"type":"integer","minimum":0,"maximum":9007199254740991},"failedDocuments":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedByType":{"type":"object","additionalProperties":{"type":"integer","minimum":0,"maximum":9007199254740991}},"mailboxBytes":{"type":"integer","minimum":0,"maximum":9007199254740991},"emailsWithUnknownSize":{"type":"integer","minimum":0,"maximum":9007199254740991},"discoveryComplete":{"type":"boolean"},"timedOut":{"type":"boolean"},"error":{"type":["string","null"]},"startedAt":{"type":"string","format":"date-time"},"finishedAt":{"type":["string","null"],"format":"date-time"}},"required":["runId","mailboxId","mode","state","parallelism","elapsedSeconds","discoveredDocuments","indexedDocuments","failedDocuments","indexedByType","mailboxBytes","emailsWithUnknownSize","discoveryComplete","timedOut","error","startedAt","finishedAt"],"additionalProperties":false};
 
-function validate46(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate52(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-status-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -9358,7 +7554,7 @@ vErrors.push(err16);
 errors++;
 }
 for(const key0 in data){
-if(!(func45.call(schema59.properties, key0))){
+if(!(func21.call(schema59.properties, key0))){
 const err17 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err17];
@@ -9397,7 +7593,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data1 = data.mailboxId;
 if(typeof data1 === "string"){
-if(!pattern59.test(data1)){
+if(!pattern49.test(data1)){
 const err20 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err20];
@@ -9838,14 +8034,14 @@ vErrors.push(err56);
 }
 errors++;
 }
-validate46.errors = vErrors;
+validate52.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingStartV1Params = validate47;
+export const validateIndexingStartV1Params = validate53;
 const schema60 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-params.schema.json","title":"IndexingStartV1Params","type":"object","properties":{"rebuild":{"type":"object","properties":{"k1":{"type":"number","exclusiveMinimum":0},"b":{"type":"number","minimum":0,"maximum":1},"indexedAvgdl":{"type":"number","exclusiveMinimum":0},"maxTextBytes":{"type":"integer","minimum":1,"maximum":67108864}},"required":[],"additionalProperties":false}},"required":[],"additionalProperties":false};
 
-function validate47(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate53(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -10020,11 +8216,11 @@ vErrors.push(err13);
 }
 errors++;
 }
-validate47.errors = vErrors;
+validate53.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingStartV1Result = validate48;
+export const validateIndexingStartV1Result = validate54;
 const schema61 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-result.schema.json","title":"IndexingStartV1Result","$ref":"./indexing-status-v1-result.schema.json"};
 const schema62 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json","title":"IndexingStatusV1Result","type":"object","properties":{"configuration":{"description":"Persisted layers for editing configuration without losing unrelated settings. Updated sidecars include both layers; absent on older servers.","type":"object","properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"required":["user_configuration","organization_configuration"],"additionalProperties":true},"sampledAt":{"type":"string","format":"date-time"},"sessionId":{"type":"string","minLength":1},"uptimeSeconds":{"type":"number","minimum":0},"state":{"type":"string","enum":["running","stopping","stopped","blocked"]},"effectiveConfiguration":{"$ref":"#/definitions/EffectiveIndexingConfiguration"},"resources":{"$ref":"#/definitions/Resources"},"generations":{"type":"array","items":{"$ref":"#/definitions/Generation"}},"discovery":{"type":"array","items":{"$ref":"#/definitions/DiscoverySource"}},"search":{"$ref":"#/definitions/SearchStatistics"},"resetInProgress":{"type":"boolean","default":false,"description":"True while a full reset is draining activity or deleting files. State is stopping during reset. Optional; absence means false."},"indexingDirectory":{"type":"string","minLength":1,"pattern":"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)","description":"Absolute local filesystem path of the sidecar-managed indexing root, in the sidecar OS native path syntax (not a URI). Report it even before initialization or after reset, without creating the directory. Updated implementations must include it; optional in the wire schema for compatibility with older v1 servers."}},"required":["sampledAt","sessionId","uptimeSeconds","state","effectiveConfiguration","resources","generations","discovery","search"],"additionalProperties":true,"definitions":{"EffectiveIndexingConfiguration":{"type":"object","properties":{"parallelism":{"type":"integer","minimum":1,"maximum":9007199254740991},"documentsPerMinute":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["parallelism","documentsPerMinute"],"additionalProperties":true},"UnavailableMetric":{"type":"object","properties":{"metric":{"type":"string","minLength":1},"reason":{"type":"string","minLength":1}},"required":["metric","reason"],"additionalProperties":true,"description":"Metric is a dotted path relative to its containing section. Every unavailable null measurement must have an entry; zero means an observed zero."},"ProcessResources":{"type":"object","properties":{"processCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"cpuCoresUsed":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"memoryResidentBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"memoryResidentPeakBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"diskReadBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"diskWriteBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["processCount","cpuCoresUsed","memoryResidentBytes","memoryResidentPeakBytes","diskReadBytesPerSecond","diskWriteBytesPerSecond","unavailableMetrics"],"additionalProperties":true,"description":"Sidecar measurements include search and discovery. Worker measurements aggregate extraction children, including CPU/I/O accrued by children that exit between samples. Resident sums may double-count shared pages; peak is the maximum simultaneously observed aggregate since process startup."},"DiskUsage":{"type":"object","properties":{"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]}},"required":["allocatedBytes","logicalBytes"],"additionalProperties":true},"Resources":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"sidecar":{"$ref":"#/definitions/ProcessResources"},"extractionWorkers":{"$ref":"#/definitions/ProcessResources"},"disk":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"availableBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"breakdown":{"type":"object","properties":{"control":{"$ref":"#/definitions/DiskUsage"},"catalog":{"$ref":"#/definitions/DiskUsage"},"activeIndex":{"$ref":"#/definitions/DiskUsage"},"buildingIndex":{"$ref":"#/definitions/DiskUsage"},"retiredIndexes":{"$ref":"#/definitions/DiskUsage"},"wal":{"$ref":"#/definitions/DiskUsage"},"temporary":{"$ref":"#/definitions/DiskUsage"}},"required":["control","catalog","activeIndex","buildingIndex","retiredIndexes","wal","temporary"],"additionalProperties":true},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["sampledAt","allocatedBytes","logicalBytes","availableBytes","breakdown","unavailableMetrics"],"additionalProperties":true},"liveExtractionWorkers":{"type":"array","description":"Individual currently live workers. Their memory sums can double-count shared pages. Aggregate CPU/I/O above also includes workers that exited during the sample.","items":{"type":"object","properties":{"processId":{"type":"integer","minimum":1,"maximum":9007199254740991},"sampledAt":{"type":"string","format":"date-time"},"resources":{"$ref":"#/definitions/ProcessResources"}},"required":["processId","sampledAt","resources"],"additionalProperties":true}}},"required":["sampledAt","observationSeconds","sidecar","extractionWorkers","disk","liveExtractionWorkers"],"additionalProperties":true},"ThroughputWindow":{"type":"object","properties":{"targetWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"emptyPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unindexablePerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"completedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"attemptsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"retriesPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"deletionsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"extractedTextBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["targetWindowSeconds","observationSeconds","sampleCount","indexedPerMinute","emptyPerMinute","unindexablePerMinute","completedPerMinute","attemptsPerMinute","retriesPerMinute","deletionsPerMinute","extractedTextBytesPerSecond","unavailableReason"],"additionalProperties":true},"Backlog":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"discoveryComplete":{"type":"boolean"},"remaining":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"ready":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"inProgress":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"retryDeferred":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"blocked":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"firstTime":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"updates":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","discoveryComplete","remaining","ready","inProgress","retryDeferred","blocked","firstTime","updates","unavailableReason"],"additionalProperties":true,"description":"Counts concern current eligible revisions, not queue entries. remaining = ready + inProgress + retryDeferred + blocked = firstTime + updates. Incomplete discovery still permits exact counts for known work. Terminal outcomes and deletion-only cleanup are excluded."},"Eta":{"type":"object","properties":{"state":{"type":"string","enum":["available","unavailable"]},"estimatedRemainingSeconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"estimatedCompletionAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"basis":{"const":"knownBacklog"},"rateWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","estimatedRemainingSeconds","estimatedCompletionAt","basis","rateWindowSeconds","observationSeconds","sampleCount","unavailableReason"],"additionalProperties":true,"allOf":[{"if":{"properties":{"state":{"const":"available"}},"required":["state"]},"then":{"properties":{"estimatedRemainingSeconds":{"type":"number","minimum":0},"estimatedCompletionAt":{"type":"string","format":"date-time"},"unavailableReason":{"type":"null"}}},"else":{"properties":{"estimatedRemainingSeconds":{"type":"null"},"estimatedCompletionAt":{"type":"null"},"unavailableReason":{"type":"string","minLength":1}}}}]},"Coverage":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"knownEligible":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"emptyCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"stale":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"neverProcessed":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"pendingDeletions":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","knownEligible","indexedCurrent","emptyCurrent","unindexableCurrent","stale","neverProcessed","pendingDeletions","unavailableReason"],"additionalProperties":true,"description":"knownEligible is the sum of the five mutually exclusive revision states. stale means an older receipt exists, including an older failed receipt. pendingDeletions is separate. These counts do not imply discovery is complete."},"DepthBoundary":{"type":"object","properties":{"at":{"type":"string","format":"date-time"},"inclusive":{"type":"boolean"}},"required":["at","inclusive"],"additionalProperties":true,"description":"All known eligible dated documents between this boundary and the snapshot are covered; inclusive says whether documents exactly at the boundary are included. An old pending document makes an exclusive boundary possible without rounding timestamps."},"Depth":{"type":"object","properties":{"state":{"type":"string","enum":["applicable","notApplicable","unknown"]},"dateBasis":{"anyOf":[{"type":"string","enum":["emailReceivedAtThenSentAt","parentEmailReceivedAtThenSentAt","sourceDefined"]},{"type":"null"}]},"sourceDateField":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"discoveryComplete":{"type":"boolean"},"oldestIndexedDocumentAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"fullyIndexedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"processedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"pendingDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"undatedDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","dateBasis","sourceDateField","discoveryComplete","oldestIndexedDocumentAt","fullyIndexedSince","processedSince","pendingDocuments","unindexableDocuments","undatedDocuments","unavailableReason"],"additionalProperties":true,"description":"Only applicable to chronologically prioritized kinds. fullyIndexedSince requires current indexed/empty receipts; processedSince also accepts current terminal failures. Unknown dates are excluded from the boundary and counted explicitly. Oldest indexed date alone makes no coverage claim."},"Latency":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["observationSeconds","sampleCount","p50Seconds","p95Seconds","unavailableReason"],"additionalProperties":true,"description":"Freshness is measured from discovery of a revision until its first searchable commit. Retry attempts do not reset the start; failed/empty/deleted revisions are excluded."},"ErrorCount":{"type":"object","properties":{"code":{"type":"string","minLength":1},"count":{"type":"integer","minimum":0,"maximum":9007199254740991},"lastOccurredAt":{"type":"string","format":"date-time"}},"required":["code","count","lastOccurredAt"],"additionalProperties":true},"ErrorWindow":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"attemptFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"terminalFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"byCode":{"type":"array","items":{"$ref":"#/definitions/ErrorCount"}},"truncated":{"type":"boolean"}},"required":["observationSeconds","attemptFailures","terminalFailures","byCode","truncated"],"additionalProperties":true,"description":"Bounded recent error-code histogram, without content or filesystem paths. Counts include all failures even when byCode is truncated."},"Segment":{"type":"object","properties":{"kind":{"type":"string","enum":["email","file","teams_message"]},"sourceId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"fileType":{"anyOf":[{"type":"string","enum":["pdf","office","text","image","email","archive","other"]},{"type":"null"}]},"throughput":{"type":"array","items":{"$ref":"#/definitions/ThroughputWindow"}},"backlog":{"$ref":"#/definitions/Backlog"},"eta":{"$ref":"#/definitions/Eta"},"coverage":{"$ref":"#/definitions/Coverage"},"depth":{"$ref":"#/definitions/Depth"},"freshness":{"$ref":"#/definitions/Latency"},"errors":{"$ref":"#/definitions/ErrorWindow"}},"required":["kind","sourceId","mailboxId","fileType","throughput","backlog","eta","coverage","depth","freshness","errors"],"additionalProperties":true,"description":"Null source/mailbox denotes an all-source aggregate. Non-null scopes are independent views, not additional documents. Null fileType denotes all file types; breakdowns apply only to file rows. There must be one 60-second and one 300-second throughput window per segment."},"Generation":{"type":"object","properties":{"instanceId":{"type":"string","minLength":1},"role":{"type":"string","enum":["active","building"]},"sampledAt":{"type":"string","format":"date-time"},"segments":{"type":"array","items":{"$ref":"#/definitions/Segment"}},"chunks":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"terms":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"observedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["instanceId","role","sampledAt","segments","chunks","terms","indexedAvgdl","observedAvgdl","unavailableReason"],"additionalProperties":true,"description":"Active and building counters have independent revision receipts. Never sum generations to estimate mailbox progress. An extraction shared across generations can appear in both generation throughput views."},"DiscoverySource":{"type":"object","properties":{"sourceId":{"type":"string","minLength":1},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"state":{"type":"string","enum":["notStarted","scanning","complete","failed","disabled"]},"discoveryComplete":{"type":"boolean"},"scanStartedAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"lastSuccessfulScanAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"discoveredDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"accessible":{"type":"boolean"},"lastErrorCode":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sourceId","mailboxId","state","discoveryComplete","scanStartedAt","lastSuccessfulScanAt","discoveredDocuments","accessible","lastErrorCode"],"additionalProperties":true,"description":"discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."},"SearchStatistics":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"queryCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"errorCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"inFlight":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","observationSeconds","queryCount","errorCount","inFlight","p50LatencyMilliseconds","p95LatencyMilliseconds","unavailableReason"],"additionalProperties":true}}};
 const schema63 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/configuration/sidecar-configuration.schema.json","title":"SidecarConfiguration","description":"An extensible configuration layer. Unknown properties must be accepted and preserved.","type":"object","properties":{"indexing_mailboxes":{"description":"Mailbox indexing overrides. Priority is explicit and independent of array order: lower numbers are processed first, with mailbox ID as a deterministic tie-breaker. Unlisted mailboxes remain enabled with priority 9007199254740991. Null inherits the other layer; an empty array explicitly uses defaults. Mailbox IDs must be unique. Disabling stops new discovery and processing but retains existing searchable data; in-flight work may finish.","type":["array","null"],"items":{"type":"object","properties":{"mailbox_id":{"type":"string","format":"uuid"},"enabled":{"type":"boolean"},"priority":{"description":"Indexing priority; lower numbers are processed first. Array order has no effect.","type":"integer","minimum":0,"maximum":9007199254740991}},"required":["mailbox_id","enabled","priority"],"additionalProperties":true}},"show_tray_icon":{"description":"Whether the sidecar should show its system tray icon. Null leaves the decision to the other configuration layer or the sidecar default.","type":["boolean","null"]},"indexing_parallelism":{"type":["integer","null"],"minimum":1,"maximum":9007199254740991,"description":"Maximum documents concurrently processed across all kinds and generations, including extraction and commit. Lowering it lets in-flight documents finish and prevents excess new starts. Null or absence inherits the other layer; the sidecar default is 1. Zero is invalid and does not pause indexing."},"indexing_documents_per_minute":{"type":["integer","null"],"minimum":1,"maximum":9007199254740991,"description":"Global maximum document-processing starts per rolling 60 seconds, shared by all workers, kinds and generations. Retry attempts consume this budget; one extraction shared by generations consumes it once. Deletion-only cleanup does not consume it. Null or absence inherits the other layer; the sidecar default is 40. Zero is invalid and does not pause indexing."}},"additionalProperties":true};
@@ -10036,7 +8232,7 @@ const schema69 = {"type":"object","properties":{"allocatedBytes":{"anyOf":[{"typ
 const schema68 = {"type":"object","properties":{"metric":{"type":"string","minLength":1},"reason":{"type":"string","minLength":1}},"required":["metric","reason"],"additionalProperties":true,"description":"Metric is a dotted path relative to its containing section. Every unavailable null measurement must have an entry; zero means an observed zero."};
 const schema67 = {"type":"object","properties":{"processCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"cpuCoresUsed":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"memoryResidentBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"memoryResidentPeakBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"diskReadBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"diskWriteBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["processCount","cpuCoresUsed","memoryResidentBytes","memoryResidentPeakBytes","diskReadBytesPerSecond","diskWriteBytesPerSecond","unavailableMetrics"],"additionalProperties":true,"description":"Sidecar measurements include search and discovery. Worker measurements aggregate extraction children, including CPU/I/O accrued by children that exit between samples. Resident sums may double-count shared pages; peak is the maximum simultaneously observed aggregate since process startup."};
 
-function validate51(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate57(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -10607,12 +8803,12 @@ vErrors.push(err40);
 }
 errors++;
 }
-validate51.errors = vErrors;
+validate57.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate50(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate56(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -10727,14 +8923,14 @@ errors++;
 }
 }
 if(data.sidecar !== undefined){
-if(!(validate51(data.sidecar, {instancePath:instancePath+"/sidecar",parentData:data,parentDataProperty:"sidecar",rootData}))){
-vErrors = vErrors === null ? validate51.errors : vErrors.concat(validate51.errors);
+if(!(validate57(data.sidecar, {instancePath:instancePath+"/sidecar",parentData:data,parentDataProperty:"sidecar",rootData}))){
+vErrors = vErrors === null ? validate57.errors : vErrors.concat(validate57.errors);
 errors = vErrors.length;
 }
 }
 if(data.extractionWorkers !== undefined){
-if(!(validate51(data.extractionWorkers, {instancePath:instancePath+"/extractionWorkers",parentData:data,parentDataProperty:"extractionWorkers",rootData}))){
-vErrors = vErrors === null ? validate51.errors : vErrors.concat(validate51.errors);
+if(!(validate57(data.extractionWorkers, {instancePath:instancePath+"/extractionWorkers",parentData:data,parentDataProperty:"extractionWorkers",rootData}))){
+vErrors = vErrors === null ? validate57.errors : vErrors.concat(validate57.errors);
 errors = vErrors.length;
 }
 }
@@ -12659,8 +10855,8 @@ errors++;
 }
 }
 if(data36.resources !== undefined){
-if(!(validate51(data36.resources, {instancePath:instancePath+"/liveExtractionWorkers/" + i1+"/resources",parentData:data36,parentDataProperty:"resources",rootData}))){
-vErrors = vErrors === null ? validate51.errors : vErrors.concat(validate51.errors);
+if(!(validate57(data36.resources, {instancePath:instancePath+"/liveExtractionWorkers/" + i1+"/resources",parentData:data36,parentDataProperty:"resources",rootData}))){
+vErrors = vErrors === null ? validate57.errors : vErrors.concat(validate57.errors);
 errors = vErrors.length;
 }
 }
@@ -12699,7 +10895,7 @@ vErrors.push(err151);
 }
 errors++;
 }
-validate50.errors = vErrors;
+validate56.errors = vErrors;
 return errors === 0;
 }
 
@@ -12713,7 +10909,7 @@ const schema86 = {"type":"object","properties":{"observationSeconds":{"type":"nu
 const schema83 = {"type":"object","properties":{"state":{"type":"string","enum":["applicable","notApplicable","unknown"]},"dateBasis":{"anyOf":[{"type":"string","enum":["emailReceivedAtThenSentAt","parentEmailReceivedAtThenSentAt","sourceDefined"]},{"type":"null"}]},"sourceDateField":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"discoveryComplete":{"type":"boolean"},"oldestIndexedDocumentAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"fullyIndexedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"processedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"pendingDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"undatedDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","dateBasis","sourceDateField","discoveryComplete","oldestIndexedDocumentAt","fullyIndexedSince","processedSince","pendingDocuments","unindexableDocuments","undatedDocuments","unavailableReason"],"additionalProperties":true,"description":"Only applicable to chronologically prioritized kinds. fullyIndexedSince requires current indexed/empty receipts; processedSince also accepts current terminal failures. Unknown dates are excluded from the boundary and counted explicitly. Oldest indexed date alone makes no coverage claim."};
 const schema84 = {"type":"object","properties":{"at":{"type":"string","format":"date-time"},"inclusive":{"type":"boolean"}},"required":["at","inclusive"],"additionalProperties":true,"description":"All known eligible dated documents between this boundary and the snapshot are covered; inclusive says whether documents exactly at the boundary are included. An old pending document makes an exclusive boundary possible without rounding timestamps."};
 
-function validate58(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate64(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -13589,14 +11785,14 @@ vErrors.push(err61);
 }
 errors++;
 }
-validate58.errors = vErrors;
+validate64.errors = vErrors;
 return errors === 0;
 }
 
 const schema87 = {"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"attemptFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"terminalFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"byCode":{"type":"array","items":{"$ref":"#/definitions/ErrorCount"}},"truncated":{"type":"boolean"}},"required":["observationSeconds","attemptFailures","terminalFailures","byCode","truncated"],"additionalProperties":true,"description":"Bounded recent error-code histogram, without content or filesystem paths. Counts include all failures even when byCode is truncated."};
 const schema88 = {"type":"object","properties":{"code":{"type":"string","minLength":1},"count":{"type":"integer","minimum":0,"maximum":9007199254740991},"lastOccurredAt":{"type":"string","format":"date-time"}},"required":["code","count","lastOccurredAt"],"additionalProperties":true};
 
-function validate60(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate66(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -13914,12 +12110,12 @@ vErrors.push(err26);
 }
 errors++;
 }
-validate60.errors = vErrors;
+validate66.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate57(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate63(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -17148,8 +15344,8 @@ errors++;
 }
 }
 if(data.depth !== undefined){
-if(!(validate58(data.depth, {instancePath:instancePath+"/depth",parentData:data,parentDataProperty:"depth",rootData}))){
-vErrors = vErrors === null ? validate58.errors : vErrors.concat(validate58.errors);
+if(!(validate64(data.depth, {instancePath:instancePath+"/depth",parentData:data,parentDataProperty:"depth",rootData}))){
+vErrors = vErrors === null ? validate64.errors : vErrors.concat(validate64.errors);
 errors = vErrors.length;
 }
 }
@@ -17477,8 +15673,8 @@ errors++;
 }
 }
 if(data.errors !== undefined){
-if(!(validate60(data.errors, {instancePath:instancePath+"/errors",parentData:data,parentDataProperty:"errors",rootData}))){
-vErrors = vErrors === null ? validate60.errors : vErrors.concat(validate60.errors);
+if(!(validate66(data.errors, {instancePath:instancePath+"/errors",parentData:data,parentDataProperty:"errors",rootData}))){
+vErrors = vErrors === null ? validate66.errors : vErrors.concat(validate66.errors);
 errors = vErrors.length;
 }
 }
@@ -17493,12 +15689,12 @@ vErrors.push(err252);
 }
 errors++;
 }
-validate57.errors = vErrors;
+validate63.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate56(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate62(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -17670,8 +15866,8 @@ let data3 = data.segments;
 if(Array.isArray(data3)){
 const len0 = data3.length;
 for(let i0=0; i0<len0; i0++){
-if(!(validate57(data3[i0], {instancePath:instancePath+"/segments/" + i0,parentData:data3,parentDataProperty:i0,rootData}))){
-vErrors = vErrors === null ? validate57.errors : vErrors.concat(validate57.errors);
+if(!(validate63(data3[i0], {instancePath:instancePath+"/segments/" + i0,parentData:data3,parentDataProperty:i0,rootData}))){
+vErrors = vErrors === null ? validate63.errors : vErrors.concat(validate63.errors);
 errors = vErrors.length;
 }
 }
@@ -18048,13 +16244,13 @@ vErrors.push(err38);
 }
 errors++;
 }
-validate56.errors = vErrors;
+validate62.errors = vErrors;
 return errors === 0;
 }
 
-const pattern63 = new RegExp("^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)", "u");
+const pattern53 = new RegExp("^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)", "u");
 
-function validate49(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate55(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -18850,8 +17046,8 @@ errors++;
 }
 }
 if(data.resources !== undefined){
-if(!(validate50(data.resources, {instancePath:instancePath+"/resources",parentData:data,parentDataProperty:"resources",rootData}))){
-vErrors = vErrors === null ? validate50.errors : vErrors.concat(validate50.errors);
+if(!(validate56(data.resources, {instancePath:instancePath+"/resources",parentData:data,parentDataProperty:"resources",rootData}))){
+vErrors = vErrors === null ? validate56.errors : vErrors.concat(validate56.errors);
 errors = vErrors.length;
 }
 }
@@ -18860,8 +17056,8 @@ let data27 = data.generations;
 if(Array.isArray(data27)){
 const len2 = data27.length;
 for(let i2=0; i2<len2; i2++){
-if(!(validate56(data27[i2], {instancePath:instancePath+"/generations/" + i2,parentData:data27,parentDataProperty:i2,rootData}))){
-vErrors = vErrors === null ? validate56.errors : vErrors.concat(validate56.errors);
+if(!(validate62(data27[i2], {instancePath:instancePath+"/generations/" + i2,parentData:data27,parentDataProperty:i2,rootData}))){
+vErrors = vErrors === null ? validate62.errors : vErrors.concat(validate62.errors);
 errors = vErrors.length;
 }
 }
@@ -19883,7 +18079,7 @@ vErrors.push(err141);
 }
 errors++;
 }
-if(!pattern63.test(data50)){
+if(!pattern53.test(data50)){
 const err142 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/pattern",keyword:"pattern",params:{pattern: "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"},message:"must match pattern \""+"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"+"\""};
 if(vErrors === null){
 vErrors = [err142];
@@ -19916,27 +18112,27 @@ vErrors.push(err144);
 }
 errors++;
 }
-validate49.errors = vErrors;
+validate55.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate48(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate54(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
-if(!(validate49(data, {instancePath,parentData,parentDataProperty,rootData}))){
-vErrors = vErrors === null ? validate49.errors : vErrors.concat(validate49.errors);
+if(!(validate55(data, {instancePath,parentData,parentDataProperty,rootData}))){
+vErrors = vErrors === null ? validate55.errors : vErrors.concat(validate55.errors);
 errors = vErrors.length;
 }
-validate48.errors = vErrors;
+validate54.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingStopV1Params = validate65;
+export const validateIndexingStopV1Params = validate71;
 const schema91 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-stop-v1-params.schema.json","title":"IndexingStopV1Params","type":"object","properties":{},"required":[],"additionalProperties":false};
 
-function validate65(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate71(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-stop-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -19962,30 +18158,30 @@ vErrors.push(err1);
 }
 errors++;
 }
-validate65.errors = vErrors;
+validate71.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingStopV1Result = validate66;
+export const validateIndexingStopV1Result = validate72;
 const schema92 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-stop-v1-result.schema.json","title":"IndexingStopV1Result","$ref":"./indexing-status-v1-result.schema.json"};
 
-function validate66(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate72(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-stop-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
-if(!(validate49(data, {instancePath,parentData,parentDataProperty,rootData}))){
-vErrors = vErrors === null ? validate49.errors : vErrors.concat(validate49.errors);
+if(!(validate55(data, {instancePath,parentData,parentDataProperty,rootData}))){
+vErrors = vErrors === null ? validate55.errors : vErrors.concat(validate55.errors);
 errors = vErrors.length;
 }
-validate66.errors = vErrors;
+validate72.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSearchQueryV1Params = validate68;
+export const validateSearchQueryV1Params = validate74;
 const schema93 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-params.schema.json","title":"SearchQueryV1Params","type":"object","properties":{"text":{"type":"string","maxLength":4096,"default":""},"limit":{"type":"integer","minimum":1,"maximum":100,"default":20},"metadata_filters":{"type":"array","items":{"$ref":"./search-metadata-filter.schema.json"}},"filters":{"type":"object","properties":{"sender":{"type":"string"},"sourceId":{"type":"string","format":"uuid"},"mailboxId":{"type":"string"},"dateFrom":{"type":"integer"},"dateTo":{"type":"integer"},"fileType":{"type":"string"},"kind":{"enum":["email","file","teams_message"],"type":"string"}},"required":[],"additionalProperties":false}},"required":[],"additionalProperties":false};
 const schema94 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-filter.schema.json","title":"SearchMetadataFilter","type":"object","properties":{"field":{"type":"string","minLength":1},"operator":{"type":"string","minLength":1},"value":{}},"required":["field","operator","value"],"additionalProperties":false};
 
-function validate68(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate74(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -20333,16 +18529,16 @@ vErrors.push(err27);
 }
 errors++;
 }
-validate68.errors = vErrors;
+validate74.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSearchQueryV1Result = validate69;
+export const validateSearchQueryV1Result = validate75;
 const schema95 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json","title":"SearchQueryV1Result","type":"object","properties":{"hits":{"type":"array","items":{"type":"object","properties":{"documentId":{"type":"string"},"uri":{"description":"A URI identifying the document, ideally an externally retrievable URL.","type":"string","format":"uri","minLength":1},"external_ids":{"$ref":"../source/external-ids.schema.json"},"chunkId":{"type":["string","null"]},"score":{"type":"number"},"kind":{"type":"string"},"title":{"type":["string","null"]},"sender":{"type":["string","null"]},"mailboxId":{"type":["string","null"]},"date":{"type":["integer","null"]},"mimeType":{"type":["string","null"]},"conversationKey":{"type":["string","null"]},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["documentId","chunkId","score","kind","title","sender","mailboxId","date","mimeType","conversationKey"],"additionalProperties":false}},"elapsedMs":{"type":"integer","minimum":0},"blocksRead":{"type":"integer","minimum":0},"candidatesScored":{"type":"integer","minimum":0}},"required":["hits","elapsedMs","blocksRead","candidatesScored"],"additionalProperties":false};
 const formats62 = (value) => /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/)?[^\s]*$/i.test(value);
 const schema97 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/top-level-parent.schema.json","title":"TopLevelParent","description":"The outermost containing document, never a folder. External IDs belong to that parent, not to the attachment.","type":"object","properties":{"documentId":{"type":"string","format":"uuid","description":"Catalog UUID, when indexed; can be passed to sources.get_document.v1."},"external_ids":{"$ref":"./external-ids.schema.json"}},"required":["external_ids"],"additionalProperties":false};
 
-function validate70(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate76(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/source/top-level-parent.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -20518,12 +18714,12 @@ vErrors.push(err13);
 }
 errors++;
 }
-validate70.errors = vErrors;
+validate76.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate69(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate75(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -20688,7 +18884,7 @@ vErrors.push(err14);
 errors++;
 }
 for(const key1 in data1){
-if(!(func45.call(schema95.properties.hits.items.properties, key1))){
+if(!(func21.call(schema95.properties.hits.items.properties, key1))){
 const err15 = {instancePath:instancePath+"/hits/" + i0,schemaPath:"#/properties/hits/items/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err15];
@@ -20976,8 +19172,8 @@ errors++;
 }
 }
 if(data1.topLevelParent !== undefined){
-if(!(validate70(data1.topLevelParent, {instancePath:instancePath+"/hits/" + i0+"/topLevelParent",parentData:data1,parentDataProperty:"topLevelParent",rootData}))){
-vErrors = vErrors === null ? validate70.errors : vErrors.concat(validate70.errors);
+if(!(validate76(data1.topLevelParent, {instancePath:instancePath+"/hits/" + i0+"/topLevelParent",parentData:data1,parentDataProperty:"topLevelParent",rootData}))){
+vErrors = vErrors === null ? validate76.errors : vErrors.concat(validate76.errors);
 errors = vErrors.length;
 }
 }
@@ -21091,14 +19287,14 @@ vErrors.push(err46);
 }
 errors++;
 }
-validate69.errors = vErrors;
+validate75.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSearchMetadataFieldsV1Params = validate72;
+export const validateSearchMetadataFieldsV1Params = validate78;
 const schema99 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-fields-v1-params.schema.json","title":"SearchMetadataFieldsV1Params","type":"object","additionalProperties":false};
 
-function validate72(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate78(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-fields-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -21124,14 +19320,14 @@ vErrors.push(err1);
 }
 errors++;
 }
-validate72.errors = vErrors;
+validate78.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSearchMetadataFieldsV1Result = validate73;
+export const validateSearchMetadataFieldsV1Result = validate79;
 const schema100 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-fields-v1-result.schema.json","title":"SearchMetadataFieldsV1Result","type":"object","properties":{"fields":{"type":"array","items":{"type":"object","properties":{"field":{"type":"string","minLength":1},"operators":{"type":"array","items":{"type":"string","minLength":1},"minItems":1},"type":{"type":"string","minLength":1},"description":{"type":"string"},"applicable_kinds":{"type":"array","items":{"type":"string","minLength":1},"minItems":1}},"required":["field","operators","type","description","applicable_kinds"],"additionalProperties":false}}},"required":["fields"],"additionalProperties":false};
 
-function validate73(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate79(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-fields-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -21426,14 +19622,14 @@ vErrors.push(err23);
 }
 errors++;
 }
-validate73.errors = vErrors;
+validate79.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingResetV1Result = validate74;
+export const validateIndexingResetV1Result = validate80;
 const schema101 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-result.schema.json","title":"IndexingResetV1Result","description":"Returned only after processing has stopped, database handles have closed, and every managed indexing file has been removed. Does not merely acknowledge scheduling a reset.","type":"object","properties":{"completed":{"const":true},"completedAt":{"type":"string","format":"date-time"},"state":{"const":"stopped"}},"required":["completed","completedAt","state"],"additionalProperties":true};
 
-function validate74(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate80(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -21528,14 +19724,14 @@ vErrors.push(err7);
 }
 errors++;
 }
-validate74.errors = vErrors;
+validate80.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingResetV1Params = validate75;
+export const validateIndexingResetV1Params = validate81;
 const schema102 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-params.schema.json","title":"IndexingResetV1Params","description":"Fully reset all indexing storage managed by this sidecar for the current OS user. No mailbox, generation, or filesystem-path selector is supported. This command deletes index data; it is not a generation rebuild.","type":"object","properties":{},"additionalProperties":true};
 
-function validate75(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate81(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -21551,16 +19747,16 @@ vErrors.push(err0);
 }
 errors++;
 }
-validate75.errors = vErrors;
+validate81.errors = vErrors;
 return errors === 0;
 }
 
-export const validateIndexingStatusV1Result = validate49;
+export const validateIndexingStatusV1Result = validate55;
 
-export const validateIndexingStatusV1Params = validate76;
+export const validateIndexingStatusV1Params = validate82;
 const schema103 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-params.schema.json","title":"IndexingStatusV1Params","type":"object","properties":{"includeSourceBreakdowns":{"type":"boolean","default":true},"includeFileTypeBreakdowns":{"type":"boolean","default":true}},"required":[],"additionalProperties":true};
 
-function validate76(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate82(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -21600,17 +19796,17 @@ vErrors.push(err2);
 }
 errors++;
 }
-validate76.errors = vErrors;
+validate82.errors = vErrors;
 return errors === 0;
 }
 
-export const validateJsonRpcEnvelope = validate77;
+export const validateJsonRpcEnvelope = validate83;
 const schema104 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/json-rpc-envelope.schema.json","title":"JsonRpcEnvelope","oneOf":[{"$ref":"#/definitions/Request"},{"$ref":"#/definitions/Notification"},{"$ref":"#/definitions/SuccessResponse"},{"$ref":"#/definitions/ErrorResponse"}],"definitions":{"Request":{"type":"object","required":["jsonrpc","method","id"],"properties":{"jsonrpc":{"const":"2.0"},"method":{"type":"string","minLength":1},"params":{"oneOf":[{"type":"object"},{"type":"array"}]},"id":{"$ref":"../common.schema.json#/definitions/RequestId"},"x-erato-deadline-at":{"type":"string","format":"date-time"}},"additionalProperties":true},"Notification":{"type":"object","required":["jsonrpc","method"],"not":{"required":["id"],"properties":{"id":true}},"properties":{"jsonrpc":{"const":"2.0"},"method":{"type":"string","minLength":1},"params":{"oneOf":[{"type":"object"},{"type":"array"}]}},"additionalProperties":true},"SuccessResponse":{"type":"object","required":["jsonrpc","result","id"],"not":{"required":["error"],"properties":{"error":true}},"properties":{"jsonrpc":{"const":"2.0"},"result":true,"id":{"$ref":"../common.schema.json#/definitions/RequestId"}},"additionalProperties":true},"ErrorResponse":{"type":"object","required":["jsonrpc","error","id"],"not":{"required":["result"],"properties":{"result":true}},"properties":{"jsonrpc":{"const":"2.0"},"error":{"type":"object","required":["code","message"],"properties":{"code":{"type":"integer"},"message":{"type":"string"},"data":true},"additionalProperties":true},"id":{"oneOf":[{"$ref":"../common.schema.json#/definitions/RequestId"},{"type":"null"}]}},"additionalProperties":true}}};
-const schema108 = {"type":"object","required":["jsonrpc","method"],"not":{"required":["id"],"properties":{"id":true}},"properties":{"jsonrpc":{"const":"2.0"},"method":{"type":"string","minLength":1},"params":{"oneOf":[{"type":"object"},{"type":"array"}]}},"additionalProperties":true};
+const schema107 = {"type":"object","required":["jsonrpc","method"],"not":{"required":["id"],"properties":{"id":true}},"properties":{"jsonrpc":{"const":"2.0"},"method":{"type":"string","minLength":1},"params":{"oneOf":[{"type":"object"},{"type":"array"}]}},"additionalProperties":true};
 const schema105 = {"type":"object","required":["jsonrpc","method","id"],"properties":{"jsonrpc":{"const":"2.0"},"method":{"type":"string","minLength":1},"params":{"oneOf":[{"type":"object"},{"type":"array"}]},"id":{"$ref":"../common.schema.json#/definitions/RequestId"},"x-erato-deadline-at":{"type":"string","format":"date-time"}},"additionalProperties":true};
-const schema107 = {"oneOf":[{"type":"string","minLength":1,"maxLength":128},{"type":"integer"}]};
+const schema106 = {"oneOf":[{"type":"string","minLength":1,"maxLength":128},{"type":"integer"}]};
 
-function validate78(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate84(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -21869,13 +20065,13 @@ vErrors.push(err16);
 }
 errors++;
 }
-validate78.errors = vErrors;
+validate84.errors = vErrors;
 return errors === 0;
 }
 
-const schema109 = {"type":"object","required":["jsonrpc","result","id"],"not":{"required":["error"],"properties":{"error":true}},"properties":{"jsonrpc":{"const":"2.0"},"result":true,"id":{"$ref":"../common.schema.json#/definitions/RequestId"}},"additionalProperties":true};
+const schema108 = {"type":"object","required":["jsonrpc","result","id"],"not":{"required":["error"],"properties":{"error":true}},"properties":{"jsonrpc":{"const":"2.0"},"result":true,"id":{"$ref":"../common.schema.json#/definitions/RequestId"}},"additionalProperties":true};
 
-function validate81(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate86(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 const _errs1 = errors;
@@ -22056,13 +20252,13 @@ vErrors.push(err11);
 }
 errors++;
 }
-validate81.errors = vErrors;
+validate86.errors = vErrors;
 return errors === 0;
 }
 
-const schema111 = {"type":"object","required":["jsonrpc","error","id"],"not":{"required":["result"],"properties":{"result":true}},"properties":{"jsonrpc":{"const":"2.0"},"error":{"type":"object","required":["code","message"],"properties":{"code":{"type":"integer"},"message":{"type":"string"},"data":true},"additionalProperties":true},"id":{"oneOf":[{"$ref":"../common.schema.json#/definitions/RequestId"},{"type":"null"}]}},"additionalProperties":true};
+const schema110 = {"type":"object","required":["jsonrpc","error","id"],"not":{"required":["result"],"properties":{"result":true}},"properties":{"jsonrpc":{"const":"2.0"},"error":{"type":"object","required":["code","message"],"properties":{"code":{"type":"integer"},"message":{"type":"string"},"data":true},"additionalProperties":true},"id":{"oneOf":[{"$ref":"../common.schema.json#/definitions/RequestId"},{"type":"null"}]}},"additionalProperties":true};
 
-function validate83(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate88(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 const _errs1 = errors;
@@ -22355,12 +20551,12 @@ vErrors.push(err18);
 }
 errors++;
 }
-validate83.errors = vErrors;
+validate88.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate77(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate83(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/json-rpc-envelope.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -22368,8 +20564,8 @@ const _errs0 = errors;
 let valid0 = false;
 let passing0 = null;
 const _errs1 = errors;
-if(!(validate78(data, {instancePath,parentData,parentDataProperty,rootData}))){
-vErrors = vErrors === null ? validate78.errors : vErrors.concat(validate78.errors);
+if(!(validate84(data, {instancePath,parentData,parentDataProperty,rootData}))){
+vErrors = vErrors === null ? validate84.errors : vErrors.concat(validate84.errors);
 errors = vErrors.length;
 }
 var _valid0 = _errs1 === errors;
@@ -22560,8 +20756,8 @@ valid0 = true;
 passing0 = 1;
 }
 const _errs17 = errors;
-if(!(validate81(data, {instancePath,parentData,parentDataProperty,rootData}))){
-vErrors = vErrors === null ? validate81.errors : vErrors.concat(validate81.errors);
+if(!(validate86(data, {instancePath,parentData,parentDataProperty,rootData}))){
+vErrors = vErrors === null ? validate86.errors : vErrors.concat(validate86.errors);
 errors = vErrors.length;
 }
 var _valid0 = _errs17 === errors;
@@ -22575,8 +20771,8 @@ valid0 = true;
 passing0 = 2;
 }
 const _errs18 = errors;
-if(!(validate83(data, {instancePath,parentData,parentDataProperty,rootData}))){
-vErrors = vErrors === null ? validate83.errors : vErrors.concat(validate83.errors);
+if(!(validate88(data, {instancePath,parentData,parentDataProperty,rootData}))){
+vErrors = vErrors === null ? validate88.errors : vErrors.concat(validate88.errors);
 errors = vErrors.length;
 }
 var _valid0 = _errs18 === errors;
@@ -22613,18 +20809,18 @@ vErrors = null;
 }
 }
 }
-validate77.errors = vErrors;
+validate83.errors = vErrors;
 return errors === 0;
 }
 
-export const validateDiscoverParams = validate85;
-const schema113 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-params.schema.json","title":"DiscoverParams","type":"object","required":["protocolVersions","clientInfo","host","os"],"properties":{"protocolVersions":{"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/definitions/ProtocolVersion"}},"clientInfo":{"$ref":"../common.schema.json#/definitions/ProductInfo"},"host":{"type":"object","required":["application","runtime"],"properties":{"application":{"type":"string","minLength":1,"maxLength":128},"applicationVersion":{"type":"string","maxLength":128},"runtime":{"type":"string","minLength":1,"maxLength":128},"runtimeVersion":{"type":"string","maxLength":128}},"additionalProperties":true},"os":{"type":"object","required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"version":{"type":"string","maxLength":128},"architecture":{"type":"string","maxLength":64}},"additionalProperties":true}},"additionalProperties":true};
-const schema114 = {"type":"string","pattern":"^[1-9][0-9]*\\.[0-9]+$"};
-const schema115 = {"type":"object","required":["name","version"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"version":{"type":"string","minLength":1,"maxLength":128}},"additionalProperties":true};
-const pattern64 = new RegExp("^[1-9][0-9]*\\.[0-9]+$", "u");
+export const validateDiscoverParams = validate90;
+const schema112 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-params.schema.json","title":"DiscoverParams","type":"object","required":["protocolVersions","clientInfo","host","os"],"properties":{"protocolVersions":{"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/definitions/ProtocolVersion"}},"clientInfo":{"$ref":"../common.schema.json#/definitions/ProductInfo"},"host":{"type":"object","required":["application","runtime"],"properties":{"application":{"type":"string","minLength":1,"maxLength":128},"applicationVersion":{"type":"string","maxLength":128},"runtime":{"type":"string","minLength":1,"maxLength":128},"runtimeVersion":{"type":"string","maxLength":128}},"additionalProperties":true},"os":{"type":"object","required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"version":{"type":"string","maxLength":128},"architecture":{"type":"string","maxLength":64}},"additionalProperties":true}},"additionalProperties":true};
+const schema113 = {"type":"string","pattern":"^[1-9][0-9]*\\.[0-9]+$"};
+const schema114 = {"type":"object","required":["name","version"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"version":{"type":"string","minLength":1,"maxLength":128}},"additionalProperties":true};
+const pattern54 = new RegExp("^[1-9][0-9]*\\.[0-9]+$", "u");
 const func0 = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-function validate85(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate90(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -22686,7 +20882,7 @@ const len0 = data0.length;
 for(let i0=0; i0<len0; i0++){
 let data1 = data0[i0];
 if(typeof data1 === "string"){
-if(!pattern64.test(data1)){
+if(!pattern54.test(data1)){
 const err5 = {instancePath:instancePath+"/protocolVersions/" + i0,schemaPath:"../common.schema.json#/definitions/ProtocolVersion/pattern",keyword:"pattern",params:{pattern: "^[1-9][0-9]*\\.[0-9]+$"},message:"must match pattern \""+"^[1-9][0-9]*\\.[0-9]+$"+"\""};
 if(vErrors === null){
 vErrors = [err5];
@@ -23121,22 +21317,21 @@ vErrors.push(err40);
 }
 errors++;
 }
-validate85.errors = vErrors;
+validate90.errors = vErrors;
 return errors === 0;
 }
 
-export const validateDiscoverResult = validate86;
-const schema116 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-result.schema.json","title":"DiscoverResult","type":"object","required":["protocolVersion","serverInfo","instanceId","document"],"properties":{"protocolVersion":{"$ref":"../common.schema.json#/definitions/ProtocolVersion"},"serverInfo":{"$ref":"../common.schema.json#/definitions/ProductInfo"},"instanceId":{"type":"string","minLength":1,"maxLength":256},"document":{"$ref":"./discovery-document.schema.json"},"localDelegation":{"$ref":"../delegation/security.schema.json"}},"additionalProperties":true};
-const schema119 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discovery-document.schema.json","title":"DiscoveryDocument","type":"object","required":["openrpc","info","methods","x-erato-catalogue"],"properties":{"openrpc":{"type":"string","pattern":"^1\\.4\\.[0-9]+$"},"info":{"type":"object","required":["title","version"],"properties":{"title":{"type":"string","minLength":1},"version":{"type":"string","minLength":1}},"additionalProperties":true},"methods":{"type":"array","items":{"type":"object","required":["name","params","result"],"properties":{"name":{"type":"string","minLength":1},"params":{"type":"array"},"result":{"type":"object"},"x-erato-capability":{"$ref":"../capabilities/capability.schema.json"}},"additionalProperties":true}},"x-erato-catalogue":{"$ref":"../common.schema.json#/definitions/CatalogueIdentity"}},"additionalProperties":true};
-const schema120 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/capabilities/capability.schema.json","title":"CapabilityDescriptor","type":"object","required":["id","major","method","availability"],"properties":{"id":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},"major":{"type":"integer","minimum":1},"method":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"},"availability":{"oneOf":[{"type":"object","required":["state"],"properties":{"state":{"const":"enabled"}},"additionalProperties":true},{"type":"object","required":["state","reasonCode"],"properties":{"state":{"const":"disabled"},"reasonCode":{"type":"string","minLength":1,"maxLength":128}},"additionalProperties":true},{"type":"object","required":["state"],"properties":{"state":{"type":"string","not":{"enum":["enabled","disabled"]}}},"additionalProperties":true}]}},"additionalProperties":true};
-const pattern66 = new RegExp("^1\\.4\\.[0-9]+$", "u");
-const pattern67 = new RegExp("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$", "u");
-const pattern68 = new RegExp("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$", "u");
-const schema121 = {"type":"object","required":["revision","digest"],"properties":{"revision":{"$ref":"#/definitions/Revision"},"digest":{"$ref":"#/definitions/Digest"}},"additionalProperties":true};
-const schema122 = {"type":"string","minLength":1,"maxLength":128};
-const schema123 = {"type":"string","pattern":"^sha256:[a-f0-9]{64}$"};
+export const validateDiscoverResult = validate91;
+const schema115 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-result.schema.json","title":"DiscoverResult","type":"object","required":["protocolVersion","serverInfo","instanceId","document"],"properties":{"protocolVersion":{"$ref":"../common.schema.json#/definitions/ProtocolVersion"},"serverInfo":{"$ref":"../common.schema.json#/definitions/ProductInfo"},"instanceId":{"type":"string","minLength":1,"maxLength":256},"document":{"$ref":"./discovery-document.schema.json"},"localDelegation":{"type":"object","description":"Opaque security declaration. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.","additionalProperties":true}},"additionalProperties":true};
+const schema118 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discovery-document.schema.json","title":"DiscoveryDocument","type":"object","required":["openrpc","info","methods","x-erato-catalogue"],"properties":{"openrpc":{"type":"string","pattern":"^1\\.4\\.[0-9]+$"},"info":{"type":"object","required":["title","version"],"properties":{"title":{"type":"string","minLength":1},"version":{"type":"string","minLength":1}},"additionalProperties":true},"methods":{"type":"array","items":{"type":"object","required":["name","params","result"],"properties":{"name":{"type":"string","minLength":1},"params":{"type":"array"},"result":{"type":"object"},"x-erato-capability":{"$ref":"../capabilities/capability.schema.json"}},"additionalProperties":true}},"x-erato-catalogue":{"$ref":"../common.schema.json#/definitions/CatalogueIdentity"}},"additionalProperties":true};
+const schema119 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/capabilities/capability.schema.json","title":"CapabilityDescriptor","type":"object","required":["id","major","method","availability"],"properties":{"id":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},"major":{"type":"integer","minimum":1},"method":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"},"availability":{"oneOf":[{"type":"object","required":["state"],"properties":{"state":{"const":"enabled"}},"additionalProperties":true},{"type":"object","required":["state","reasonCode"],"properties":{"state":{"const":"disabled"},"reasonCode":{"type":"string","minLength":1,"maxLength":128}},"additionalProperties":true},{"type":"object","required":["state"],"properties":{"state":{"type":"string","not":{"enum":["enabled","disabled"]}}},"additionalProperties":true}]}},"additionalProperties":true};
+const pattern56 = new RegExp("^1\\.4\\.[0-9]+$", "u");
+const pattern57 = new RegExp("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$", "u");
+const pattern58 = new RegExp("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$", "u");
+const schema120 = {"type":"object","required":["revision","digest"],"properties":{"revision":{"$ref":"#/definitions/Revision"},"digest":{"$ref":"#/definitions/Digest"}},"additionalProperties":true};
+const schema121 = {"type":"string","minLength":1,"maxLength":128};
 
-function validate88(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate93(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
@@ -23231,12 +21426,12 @@ vErrors.push(err7);
 }
 errors++;
 }
-validate88.errors = vErrors;
+validate93.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate87(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate92(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discovery-document.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -23284,7 +21479,7 @@ errors++;
 if(data.openrpc !== undefined){
 let data0 = data.openrpc;
 if(typeof data0 === "string"){
-if(!pattern66.test(data0)){
+if(!pattern56.test(data0)){
 const err4 = {instancePath:instancePath+"/openrpc",schemaPath:"#/properties/openrpc/pattern",keyword:"pattern",params:{pattern: "^1\\.4\\.[0-9]+$"},message:"must match pattern \""+"^1\\.4\\.[0-9]+$"+"\""};
 if(vErrors === null){
 vErrors = [err4];
@@ -23524,7 +21719,7 @@ errors++;
 if(data9.id !== undefined){
 let data10 = data9.id;
 if(typeof data10 === "string"){
-if(!pattern67.test(data10)){
+if(!pattern57.test(data10)){
 const err24 = {instancePath:instancePath+"/methods/" + i0+"/x-erato-capability/id",schemaPath:"../capabilities/capability.schema.json/properties/id/pattern",keyword:"pattern",params:{pattern: "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},message:"must match pattern \""+"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"+"\""};
 if(vErrors === null){
 vErrors = [err24];
@@ -23574,7 +21769,7 @@ errors++;
 if(data9.method !== undefined){
 let data12 = data9.method;
 if(typeof data12 === "string"){
-if(!pattern68.test(data12)){
+if(!pattern58.test(data12)){
 const err28 = {instancePath:instancePath+"/methods/" + i0+"/x-erato-capability/method",schemaPath:"../capabilities/capability.schema.json/properties/method/pattern",keyword:"pattern",params:{pattern: "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"},message:"must match pattern \""+"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"+"\""};
 if(vErrors === null){
 vErrors = [err28];
@@ -23872,8 +22067,8 @@ errors++;
 }
 }
 if(data["x-erato-catalogue"] !== undefined){
-if(!(validate88(data["x-erato-catalogue"], {instancePath:instancePath+"/x-erato-catalogue",parentData:data,parentDataProperty:"x-erato-catalogue",rootData}))){
-vErrors = vErrors === null ? validate88.errors : vErrors.concat(validate88.errors);
+if(!(validate93(data["x-erato-catalogue"], {instancePath:instancePath+"/x-erato-catalogue",parentData:data,parentDataProperty:"x-erato-catalogue",rootData}))){
+vErrors = vErrors === null ? validate93.errors : vErrors.concat(validate93.errors);
 errors = vErrors.length;
 }
 }
@@ -23888,12 +22083,12 @@ vErrors.push(err49);
 }
 errors++;
 }
-validate87.errors = vErrors;
+validate92.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate86(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate91(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -23941,7 +22136,7 @@ errors++;
 if(data.protocolVersion !== undefined){
 let data0 = data.protocolVersion;
 if(typeof data0 === "string"){
-if(!pattern64.test(data0)){
+if(!pattern54.test(data0)){
 const err4 = {instancePath:instancePath+"/protocolVersion",schemaPath:"../common.schema.json#/definitions/ProtocolVersion/pattern",keyword:"pattern",params:{pattern: "^[1-9][0-9]*\\.[0-9]+$"},message:"must match pattern \""+"^[1-9][0-9]*\\.[0-9]+$"+"\""};
 if(vErrors === null){
 vErrors = [err4];
@@ -24104,16 +22299,17 @@ errors++;
 }
 }
 if(data.document !== undefined){
-if(!(validate87(data.document, {instancePath:instancePath+"/document",parentData:data,parentDataProperty:"document",rootData}))){
-vErrors = vErrors === null ? validate87.errors : vErrors.concat(validate87.errors);
+if(!(validate92(data.document, {instancePath:instancePath+"/document",parentData:data,parentDataProperty:"document",rootData}))){
+vErrors = vErrors === null ? validate92.errors : vErrors.concat(validate92.errors);
 errors = vErrors.length;
 }
 }
 if(data.localDelegation !== undefined){
 let data6 = data.localDelegation;
 if(data6 && typeof data6 == "object" && !Array.isArray(data6)){
-if(data6.profile === undefined){
-const err18 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/required",keyword:"required",params:{missingProperty: "profile"},message:"must have required property '"+"profile"+"'"};
+}
+else {
+const err18 = {instancePath:instancePath+"/localDelegation",schemaPath:"#/properties/localDelegation/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -24122,8 +22318,10 @@ vErrors.push(err18);
 }
 errors++;
 }
-if(data6.enforcement === undefined){
-const err19 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/required",keyword:"required",params:{missingProperty: "enforcement"},message:"must have required property '"+"enforcement"+"'"};
+}
+}
+else {
+const err19 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -24132,162 +22330,14 @@ vErrors.push(err19);
 }
 errors++;
 }
-if(data6.contextAuthentication === undefined){
-const err20 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/required",keyword:"required",params:{missingProperty: "contextAuthentication"},message:"must have required property '"+"contextAuthentication"+"'"};
-if(vErrors === null){
-vErrors = [err20];
-}
-else {
-vErrors.push(err20);
-}
-errors++;
-}
-if(data6.consent === undefined){
-const err21 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/required",keyword:"required",params:{missingProperty: "consent"},message:"must have required property '"+"consent"+"'"};
-if(vErrors === null){
-vErrors = [err21];
-}
-else {
-vErrors.push(err21);
-}
-errors++;
-}
-if(data6.recovery === undefined){
-const err22 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/required",keyword:"required",params:{missingProperty: "recovery"},message:"must have required property '"+"recovery"+"'"};
-if(vErrors === null){
-vErrors = [err22];
-}
-else {
-vErrors.push(err22);
-}
-errors++;
-}
-if(data6.trustModel === undefined){
-const err23 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/required",keyword:"required",params:{missingProperty: "trustModel"},message:"must have required property '"+"trustModel"+"'"};
-if(vErrors === null){
-vErrors = [err23];
-}
-else {
-vErrors.push(err23);
-}
-errors++;
-}
-for(const key0 in data6){
-if(!((((((key0 === "profile") || (key0 === "enforcement")) || (key0 === "contextAuthentication")) || (key0 === "consent")) || (key0 === "recovery")) || (key0 === "trustModel"))){
-const err24 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
-if(vErrors === null){
-vErrors = [err24];
-}
-else {
-vErrors.push(err24);
-}
-errors++;
-}
-}
-if(data6.profile !== undefined){
-if("strict_snapshot_v1" !== data6.profile){
-const err25 = {instancePath:instancePath+"/localDelegation/profile",schemaPath:"../delegation/security.schema.json/properties/profile/const",keyword:"const",params:{allowedValue: "strict_snapshot_v1"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err25];
-}
-else {
-vErrors.push(err25);
-}
-errors++;
-}
-}
-if(data6.enforcement !== undefined){
-let data8 = data6.enforcement;
-if(!((data8 === "unavailable") || (data8 === "enforced"))){
-const err26 = {instancePath:instancePath+"/localDelegation/enforcement",schemaPath:"../delegation/security.schema.json/properties/enforcement/enum",keyword:"enum",params:{allowedValues: schema14.properties.enforcement.enum},message:"must be equal to one of the allowed values"};
-if(vErrors === null){
-vErrors = [err26];
-}
-else {
-vErrors.push(err26);
-}
-errors++;
-}
-}
-if(data6.contextAuthentication !== undefined){
-if("pinned_backend_assertion_v1" !== data6.contextAuthentication){
-const err27 = {instancePath:instancePath+"/localDelegation/contextAuthentication",schemaPath:"../delegation/security.schema.json/properties/contextAuthentication/const",keyword:"const",params:{allowedValue: "pinned_backend_assertion_v1"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err27];
-}
-else {
-vErrors.push(err27);
-}
-errors++;
-}
-}
-if(data6.consent !== undefined){
-if("native_exact_snapshot" !== data6.consent){
-const err28 = {instancePath:instancePath+"/localDelegation/consent",schemaPath:"../delegation/security.schema.json/properties/consent/const",keyword:"const",params:{allowedValue: "native_exact_snapshot"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err28];
-}
-else {
-vErrors.push(err28);
-}
-errors++;
-}
-}
-if(data6.recovery !== undefined){
-if("durable_receipt_v1" !== data6.recovery){
-const err29 = {instancePath:instancePath+"/localDelegation/recovery",schemaPath:"../delegation/security.schema.json/properties/recovery/const",keyword:"const",params:{allowedValue: "durable_receipt_v1"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err29];
-}
-else {
-vErrors.push(err29);
-}
-errors++;
-}
-}
-if(data6.trustModel !== undefined){
-if("installed_native_code" !== data6.trustModel){
-const err30 = {instancePath:instancePath+"/localDelegation/trustModel",schemaPath:"../delegation/security.schema.json/properties/trustModel/const",keyword:"const",params:{allowedValue: "installed_native_code"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err30];
-}
-else {
-vErrors.push(err30);
-}
-errors++;
-}
-}
-}
-else {
-const err31 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err31];
-}
-else {
-vErrors.push(err31);
-}
-errors++;
-}
-}
-}
-else {
-const err32 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err32];
-}
-else {
-vErrors.push(err32);
-}
-errors++;
-}
-validate86.errors = vErrors;
+validate91.errors = vErrors;
 return errors === 0;
 }
 
-export const validateCancelParams = validate91;
-const schema125 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/cancel-params.schema.json","title":"CancelParams","type":"object","required":["requestId","reason"],"properties":{"requestId":{"$ref":"../common.schema.json#/definitions/RequestId"},"reason":{"type":"string","minLength":1,"maxLength":64}},"additionalProperties":true};
+export const validateCancelParams = validate96;
+const schema123 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/cancel-params.schema.json","title":"CancelParams","type":"object","required":["requestId","reason"],"properties":{"requestId":{"$ref":"../common.schema.json#/definitions/RequestId"},"reason":{"type":"string","minLength":1,"maxLength":64}},"additionalProperties":true};
 
-function validate91(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate96(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/cancel-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24445,14 +22495,14 @@ vErrors.push(err10);
 }
 errors++;
 }
-validate91.errors = vErrors;
+validate96.errors = vErrors;
 return errors === 0;
 }
 
-export const validateCancelResult = validate92;
-const schema127 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/cancel-result.schema.json","title":"CancelResult","type":"object","required":["accepted"],"properties":{"accepted":{"type":"boolean"}},"additionalProperties":true};
+export const validateCancelResult = validate97;
+const schema125 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/cancel-result.schema.json","title":"CancelResult","type":"object","required":["accepted"],"properties":{"accepted":{"type":"boolean"}},"additionalProperties":true};
 
-function validate92(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate97(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/cancel-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24490,16 +22540,16 @@ vErrors.push(err2);
 }
 errors++;
 }
-validate92.errors = vErrors;
+validate97.errors = vErrors;
 return errors === 0;
 }
 
-export const validateDiscoveryDocument = validate87;
+export const validateDiscoveryDocument = validate92;
 
-export const validateDiagnosticsEchoV1Params = validate93;
-const schema128 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-params.schema.json","title":"DiagnosticsEchoV1Params","type":"object","required":["message"],"properties":{"message":{"type":"string","maxLength":4096},"delayMs":{"description":"Artificial pause before the sidecar answers, in milliseconds, so long-call mechanics — progress polling and cancellation — can be exercised without a real long-running capability. Sidecars report the pause as a `delay` trace step and MAY cap it lower.","type":"integer","minimum":0,"maximum":60000}},"additionalProperties":true};
+export const validateDiagnosticsEchoV1Params = validate98;
+const schema126 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-params.schema.json","title":"DiagnosticsEchoV1Params","type":"object","required":["message"],"properties":{"message":{"type":"string","maxLength":4096},"delayMs":{"description":"Artificial pause before the sidecar answers, in milliseconds, so long-call mechanics — progress polling and cancellation — can be exercised without a real long-running capability. Sidecars report the pause as a `delay` trace step and MAY cap it lower.","type":"integer","minimum":0,"maximum":60000}},"additionalProperties":true};
 
-function validate93(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate98(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24585,14 +22635,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate93.errors = vErrors;
+validate98.errors = vErrors;
 return errors === 0;
 }
 
-export const validateDiagnosticsEchoV1Result = validate94;
-const schema129 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-result.schema.json","title":"DiagnosticsEchoV1Result","type":"object","required":["message","sidecarInstanceId"],"properties":{"message":{"type":"string","maxLength":4096},"sidecarInstanceId":{"type":"string","minLength":1,"maxLength":256}},"additionalProperties":true};
+export const validateDiagnosticsEchoV1Result = validate99;
+const schema127 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-result.schema.json","title":"DiagnosticsEchoV1Result","type":"object","required":["message","sidecarInstanceId"],"properties":{"message":{"type":"string","maxLength":4096},"sidecarInstanceId":{"type":"string","minLength":1,"maxLength":256}},"additionalProperties":true};
 
-function validate94(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate99(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24688,14 +22738,14 @@ vErrors.push(err7);
 }
 errors++;
 }
-validate94.errors = vErrors;
+validate99.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarOpenDataDirectoryV1Params = validate95;
-const schema130 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-params.schema.json","title":"SidecarOpenDataDirectoryV1Params","type":"object","properties":{},"additionalProperties":true};
+export const validateSidecarOpenDataDirectoryV1Params = validate100;
+const schema128 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-params.schema.json","title":"SidecarOpenDataDirectoryV1Params","type":"object","properties":{},"additionalProperties":true};
 
-function validate95(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate100(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24711,14 +22761,14 @@ vErrors.push(err0);
 }
 errors++;
 }
-validate95.errors = vErrors;
+validate100.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarOpenDataDirectoryV1Result = validate96;
-const schema131 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-result.schema.json","title":"SidecarOpenDataDirectoryV1Result","type":"object","required":["opened"],"properties":{"opened":{"type":"boolean"}},"additionalProperties":true};
+export const validateSidecarOpenDataDirectoryV1Result = validate101;
+const schema129 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-result.schema.json","title":"SidecarOpenDataDirectoryV1Result","type":"object","required":["opened"],"properties":{"opened":{"type":"boolean"}},"additionalProperties":true};
 
-function validate96(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate101(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24756,14 +22806,14 @@ vErrors.push(err2);
 }
 errors++;
 }
-validate96.errors = vErrors;
+validate101.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarRestartV1Params = validate97;
-const schema132 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json","title":"SidecarRestartV1Params","type":"object","properties":{},"additionalProperties":true};
+export const validateSidecarRestartV1Params = validate102;
+const schema130 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json","title":"SidecarRestartV1Params","type":"object","properties":{},"additionalProperties":true};
 
-function validate97(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate102(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24779,14 +22829,14 @@ vErrors.push(err0);
 }
 errors++;
 }
-validate97.errors = vErrors;
+validate102.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarRestartV1Result = validate98;
-const schema133 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json","title":"SidecarRestartV1Result","type":"object","required":["accepted"],"properties":{"accepted":{"type":"boolean"}},"additionalProperties":true};
+export const validateSidecarRestartV1Result = validate103;
+const schema131 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json","title":"SidecarRestartV1Result","type":"object","required":["accepted"],"properties":{"accepted":{"type":"boolean"}},"additionalProperties":true};
 
-function validate98(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate103(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -24824,14 +22874,14 @@ vErrors.push(err2);
 }
 errors++;
 }
-validate98.errors = vErrors;
+validate103.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarConfigureV1Params = validate99;
-const schema134 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json","title":"SidecarConfigureV1Params","type":"object","required":["user_configuration","organization_configuration"],"properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"additionalProperties":true};
+export const validateSidecarConfigureV1Params = validate104;
+const schema132 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json","title":"SidecarConfigureV1Params","type":"object","required":["user_configuration","organization_configuration"],"properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"additionalProperties":true};
 
-function validate99(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate104(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25329,14 +23379,14 @@ vErrors.push(err40);
 }
 errors++;
 }
-validate99.errors = vErrors;
+validate104.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarConfigureV1Result = validate100;
-const schema137 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json","title":"SidecarConfigureV1Result","type":"object","additionalProperties":true};
+export const validateSidecarConfigureV1Result = validate105;
+const schema135 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json","title":"SidecarConfigureV1Result","type":"object","additionalProperties":true};
 
-function validate100(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate105(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25352,14 +23402,14 @@ vErrors.push(err0);
 }
 errors++;
 }
-validate100.errors = vErrors;
+validate105.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookListMailboxesV1Params = validate101;
-const schema138 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json","title":"OutlookListMailboxesV1Params","type":"object","properties":{},"additionalProperties":true};
+export const validateOutlookListMailboxesV1Params = validate106;
+const schema136 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json","title":"OutlookListMailboxesV1Params","type":"object","properties":{},"additionalProperties":true};
 
-function validate101(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate106(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25375,17 +23425,17 @@ vErrors.push(err0);
 }
 errors++;
 }
-validate101.errors = vErrors;
+validate106.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookListMailboxesV1Result = validate102;
-const schema139 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-result.schema.json","title":"OutlookListMailboxesV1Result","type":"object","required":["mailboxes","warnings"],"properties":{"mailboxes":{"type":"array","items":{"$ref":"../outlook/mailbox.schema.json"},"maxItems":1024},"warnings":{"type":"array","items":{"$ref":"../outlook/listing-warning.schema.json"},"maxItems":1024}},"additionalProperties":true};
-const schema140 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox.schema.json","title":"OutlookMailbox","description":"A mailbox or message store available through the local Outlook installation.","type":"object","required":["id","displayName","source"],"properties":{"id":{"description":"Short opaque mailbox identifier. It is unique for the current sidecar runtime and logically stable across restarts while the Outlook profile and store identity remain unchanged.","type":"string","pattern":"^[0-9a-f]{32}$"},"displayName":{"type":"string","minLength":1,"maxLength":1024},"emailAddress":{"type":"string","minLength":1,"maxLength":1024},"profileName":{"description":"Name of the Outlook profile containing this mailbox. Omitted when the platform or standalone store has no profile concept.","type":"string","minLength":1,"maxLength":1024},"source":{"description":"Implementation-defined local Outlook storage source. Known values include pst, ost, macOsProfile, and windowsOutlook.","type":"string","minLength":1,"maxLength":128}},"additionalProperties":true};
-const schema141 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/listing-warning.schema.json","title":"OutlookListingWarning","description":"A local Outlook source that could not be inspected without hiding successful results.","type":"object","required":["message"],"properties":{"path":{"type":"string","minLength":1,"maxLength":32768},"message":{"type":"string","minLength":1,"maxLength":4096}},"additionalProperties":true};
-const pattern70 = new RegExp("^[0-9a-f]{32}$", "u");
+export const validateOutlookListMailboxesV1Result = validate107;
+const schema137 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-result.schema.json","title":"OutlookListMailboxesV1Result","type":"object","required":["mailboxes","warnings"],"properties":{"mailboxes":{"type":"array","items":{"$ref":"../outlook/mailbox.schema.json"},"maxItems":1024},"warnings":{"type":"array","items":{"$ref":"../outlook/listing-warning.schema.json"},"maxItems":1024}},"additionalProperties":true};
+const schema138 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox.schema.json","title":"OutlookMailbox","description":"A mailbox or message store available through the local Outlook installation.","type":"object","required":["id","displayName","source"],"properties":{"id":{"description":"Short opaque mailbox identifier. It is unique for the current sidecar runtime and logically stable across restarts while the Outlook profile and store identity remain unchanged.","type":"string","pattern":"^[0-9a-f]{32}$"},"displayName":{"type":"string","minLength":1,"maxLength":1024},"emailAddress":{"type":"string","minLength":1,"maxLength":1024},"profileName":{"description":"Name of the Outlook profile containing this mailbox. Omitted when the platform or standalone store has no profile concept.","type":"string","minLength":1,"maxLength":1024},"source":{"description":"Implementation-defined local Outlook storage source. Known values include pst, ost, macOsProfile, and windowsOutlook.","type":"string","minLength":1,"maxLength":128}},"additionalProperties":true};
+const schema139 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/listing-warning.schema.json","title":"OutlookListingWarning","description":"A local Outlook source that could not be inspected without hiding successful results.","type":"object","required":["message"],"properties":{"path":{"type":"string","minLength":1,"maxLength":32768},"message":{"type":"string","minLength":1,"maxLength":4096}},"additionalProperties":true};
+const pattern60 = new RegExp("^[0-9a-f]{32}$", "u");
 
-function validate102(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate107(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25460,7 +23510,7 @@ errors++;
 if(data1.id !== undefined){
 let data2 = data1.id;
 if(typeof data2 === "string"){
-if(!pattern70.test(data2)){
+if(!pattern60.test(data2)){
 const err6 = {instancePath:instancePath+"/mailboxes/" + i0+"/id",schemaPath:"../outlook/mailbox.schema.json/properties/id/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err6];
@@ -25778,14 +23828,14 @@ vErrors.push(err32);
 }
 errors++;
 }
-validate102.errors = vErrors;
+validate107.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookListEmailsV1Params = validate103;
-const schema142 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-params.schema.json","title":"OutlookListEmailsV1Params","type":"object","required":["mailboxId"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"}},"additionalProperties":true};
+export const validateOutlookListEmailsV1Params = validate108;
+const schema140 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-params.schema.json","title":"OutlookListEmailsV1Params","type":"object","required":["mailboxId"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"}},"additionalProperties":true};
 
-function validate103(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate108(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25803,7 +23853,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data0 = data.mailboxId;
 if(typeof data0 === "string"){
-if(!pattern70.test(data0)){
+if(!pattern60.test(data0)){
 const err1 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err1];
@@ -25836,15 +23886,15 @@ vErrors.push(err3);
 }
 errors++;
 }
-validate103.errors = vErrors;
+validate108.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookListEmailsV1Result = validate104;
-const schema143 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json","title":"OutlookListEmailsV1Result","description":"Up to 50 of the newest locally indexed emails in the selected mailbox.","type":"object","required":["mailbox","emails"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"emails":{"type":"array","items":{"$ref":"../outlook/email-summary.schema.json"},"maxItems":50}},"additionalProperties":true};
-const schema145 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/email-summary.schema.json","title":"OutlookEmailSummary","description":"Metadata for one locally indexed Outlook email.","type":"object","required":["id"],"properties":{"id":{"description":"Source-specific stable message identifier.","type":"string","minLength":1,"maxLength":32768},"subject":{"type":"string","maxLength":32768},"senderName":{"type":"string","maxLength":4096},"senderEmailAddress":{"type":"string","maxLength":4096},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"internetMessageId":{"type":"string","maxLength":32768}},"additionalProperties":true};
+export const validateOutlookListEmailsV1Result = validate109;
+const schema141 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json","title":"OutlookListEmailsV1Result","description":"Up to 50 of the newest locally indexed emails in the selected mailbox.","type":"object","required":["mailbox","emails"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"emails":{"type":"array","items":{"$ref":"../outlook/email-summary.schema.json"},"maxItems":50}},"additionalProperties":true};
+const schema143 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/email-summary.schema.json","title":"OutlookEmailSummary","description":"Metadata for one locally indexed Outlook email.","type":"object","required":["id"],"properties":{"id":{"description":"Source-specific stable message identifier.","type":"string","minLength":1,"maxLength":32768},"subject":{"type":"string","maxLength":32768},"senderName":{"type":"string","maxLength":4096},"senderEmailAddress":{"type":"string","maxLength":4096},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"internetMessageId":{"type":"string","maxLength":32768}},"additionalProperties":true};
 
-function validate104(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate109(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -25905,7 +23955,7 @@ errors++;
 if(data0.id !== undefined){
 let data1 = data0.id;
 if(typeof data1 === "string"){
-if(!pattern70.test(data1)){
+if(!pattern60.test(data1)){
 const err5 = {instancePath:instancePath+"/mailbox/id",schemaPath:"../outlook/mailbox.schema.json/properties/id/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err5];
@@ -26311,14 +24361,14 @@ vErrors.push(err38);
 }
 errors++;
 }
-validate104.errors = vErrors;
+validate109.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookGetConversationV1Params = validate105;
-const schema146 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json","title":"OutlookGetConversationV1Params","type":"object","required":["mailboxId","anchor"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"anchor":{"description":"The message the conversation is resolved from.","type":"object","required":["internetMessageId"],"properties":{"internetMessageId":{"description":"RFC 5322 Message-ID of the anchor message, including angle brackets, as reported by outlook.list_emails.v1. Not the Office.js conversationId.","type":"string","minLength":1,"maxLength":32768}},"additionalProperties":true},"maxMessages":{"description":"Cap on the number of returned messages. When the conversation has more, the result is reported as partial.","type":"integer","minimum":1,"maximum":1000}},"additionalProperties":true};
+export const validateOutlookGetConversationV1Params = validate110;
+const schema144 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json","title":"OutlookGetConversationV1Params","type":"object","required":["mailboxId","anchor"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"anchor":{"description":"The message the conversation is resolved from.","type":"object","required":["internetMessageId"],"properties":{"internetMessageId":{"description":"RFC 5322 Message-ID of the anchor message, including angle brackets, as reported by outlook.list_emails.v1. Not the Office.js conversationId.","type":"string","minLength":1,"maxLength":32768}},"additionalProperties":true},"maxMessages":{"description":"Cap on the number of returned messages. When the conversation has more, the result is reported as partial.","type":"integer","minimum":1,"maximum":1000}},"additionalProperties":true};
 
-function validate105(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate110(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -26346,7 +24396,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data0 = data.mailboxId;
 if(typeof data0 === "string"){
-if(!pattern70.test(data0)){
+if(!pattern60.test(data0)){
 const err2 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err2];
@@ -26474,20 +24524,20 @@ vErrors.push(err12);
 }
 errors++;
 }
-validate105.errors = vErrors;
+validate110.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookGetConversationV1Result = validate106;
-const schema147 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json","title":"OutlookGetConversationV1Result","description":"The messages of the anchored conversation, oldest first, with bodies and attachment bytes carried inline.","type":"object","required":["state","messages"],"properties":{"state":{"description":"Completeness of the conversation. ok means every message and byte reference was produced; partial means some were omitted (see warnings), for example because maxMessages was reached or an attachment could not be read.","type":"string","minLength":1,"maxLength":32},"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"messages":{"type":"array","items":{"$ref":"../outlook/conversation-message.schema.json"}},"warnings":{"type":"array","items":{"$ref":"../outlook/conversation-warning.schema.json"}}},"additionalProperties":true};
-const schema157 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-warning.schema.json","title":"OutlookConversationWarning","description":"A part of a conversation that could not be represented fully, without hiding the rest.","type":"object","required":["code"],"properties":{"code":{"description":"Stable machine-readable warning code. Known values include truncated, attachment_unavailable, and embedded_attachments_omitted.","type":"string","minLength":1,"maxLength":128},"message":{"type":"string","minLength":1,"maxLength":4096},"internetMessageId":{"description":"The message the warning is about, when it is message-scoped.","type":"string","maxLength":32768}},"additionalProperties":true};
-const schema149 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json","title":"OutlookConversationMessage","description":"One message of an Outlook conversation, with its body and attachment bytes carried inline.","type":"object","required":["attachments"],"properties":{"internetMessageId":{"type":"string","maxLength":32768},"subject":{"type":"string","maxLength":32768},"from":{"$ref":"../outlook/message-recipient.schema.json"},"to":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"cc":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"sentAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"isDraft":{"description":"True when the message is an unsent draft.","type":"boolean"},"conversationIndex":{"description":"Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.","type":"string","maxLength":8192},"body":{"$ref":"../outlook/message-body.schema.json"},"attachments":{"type":"array","items":{"$ref":"../outlook/attachment-reference.schema.json"}},"external_ids":{"$ref":"../source/external-ids.schema.json"}},"additionalProperties":true};
-const schema150 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-recipient.schema.json","title":"OutlookMessageRecipient","description":"One recipient of an Outlook message.","type":"object","properties":{"name":{"description":"Display name, when present.","type":"string","maxLength":4096},"emailAddress":{"description":"SMTP address. Omitted when only a non-routable Exchange address is stored locally.","type":"string","maxLength":4096}},"additionalProperties":true};
-const schema153 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-body.schema.json","title":"OutlookMessageBody","description":"A message body carried inline in the JSON-RPC result. The sidecar decodes the stored bytes to text using the message code page before sending.","type":"object","required":["contentType","content"],"properties":{"contentType":{"description":"Media type of the body, for example text/html or text/plain.","type":"string","maxLength":256},"content":{"description":"The decoded body text.","type":"string"}},"additionalProperties":true};
-const schema154 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json","title":"OutlookAttachmentReference","description":"Metadata and inline bytes for one attachment. When the bytes are available they are base64-encoded in contentBytes; otherwise unavailableReason explains why.","type":"object","properties":{"name":{"description":"File name, when present.","type":"string","maxLength":4096},"contentType":{"description":"Media type of the bytes. Embedded messages are reported as message/rfc822.","type":"string","maxLength":256},"size":{"description":"Exact length of the attachment bytes.","type":"integer","minimum":0},"isInline":{"description":"True when the attachment is referenced from the message body by contentId.","type":"boolean"},"contentId":{"description":"Content-ID for an inline attachment, without angle brackets.","type":"string","maxLength":4096},"sha256":{"description":"Lowercase hex SHA-256 of the attachment bytes, useful for de-duplicating attachments repeated across thread messages.","type":"string","pattern":"^[a-f0-9]{64}$"},"contentBytes":{"description":"Base64-encoded attachment bytes, present when the bytes are available.","type":"string"},"unavailableReason":{"description":"Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.","type":"string","minLength":1,"maxLength":128},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"additionalProperties":true};
-const pattern75 = new RegExp("^[a-f0-9]{64}$", "u");
+export const validateOutlookGetConversationV1Result = validate111;
+const schema145 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json","title":"OutlookGetConversationV1Result","description":"The messages of the anchored conversation, oldest first, with bodies and attachment bytes carried inline.","type":"object","required":["state","messages"],"properties":{"state":{"description":"Completeness of the conversation. ok means every message and byte reference was produced; partial means some were omitted (see warnings), for example because maxMessages was reached or an attachment could not be read.","type":"string","minLength":1,"maxLength":32},"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"messages":{"type":"array","items":{"$ref":"../outlook/conversation-message.schema.json"}},"warnings":{"type":"array","items":{"$ref":"../outlook/conversation-warning.schema.json"}}},"additionalProperties":true};
+const schema155 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-warning.schema.json","title":"OutlookConversationWarning","description":"A part of a conversation that could not be represented fully, without hiding the rest.","type":"object","required":["code"],"properties":{"code":{"description":"Stable machine-readable warning code. Known values include truncated, attachment_unavailable, and embedded_attachments_omitted.","type":"string","minLength":1,"maxLength":128},"message":{"type":"string","minLength":1,"maxLength":4096},"internetMessageId":{"description":"The message the warning is about, when it is message-scoped.","type":"string","maxLength":32768}},"additionalProperties":true};
+const schema147 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json","title":"OutlookConversationMessage","description":"One message of an Outlook conversation, with its body and attachment bytes carried inline.","type":"object","required":["attachments"],"properties":{"internetMessageId":{"type":"string","maxLength":32768},"subject":{"type":"string","maxLength":32768},"from":{"$ref":"../outlook/message-recipient.schema.json"},"to":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"cc":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"sentAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"isDraft":{"description":"True when the message is an unsent draft.","type":"boolean"},"conversationIndex":{"description":"Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.","type":"string","maxLength":8192},"body":{"$ref":"../outlook/message-body.schema.json"},"attachments":{"type":"array","items":{"$ref":"../outlook/attachment-reference.schema.json"}},"external_ids":{"$ref":"../source/external-ids.schema.json"}},"additionalProperties":true};
+const schema148 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-recipient.schema.json","title":"OutlookMessageRecipient","description":"One recipient of an Outlook message.","type":"object","properties":{"name":{"description":"Display name, when present.","type":"string","maxLength":4096},"emailAddress":{"description":"SMTP address. Omitted when only a non-routable Exchange address is stored locally.","type":"string","maxLength":4096}},"additionalProperties":true};
+const schema151 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-body.schema.json","title":"OutlookMessageBody","description":"A message body carried inline in the JSON-RPC result. The sidecar decodes the stored bytes to text using the message code page before sending.","type":"object","required":["contentType","content"],"properties":{"contentType":{"description":"Media type of the body, for example text/html or text/plain.","type":"string","maxLength":256},"content":{"description":"The decoded body text.","type":"string"}},"additionalProperties":true};
+const schema152 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json","title":"OutlookAttachmentReference","description":"Metadata and inline bytes for one attachment. When the bytes are available they are base64-encoded in contentBytes; otherwise unavailableReason explains why.","type":"object","properties":{"name":{"description":"File name, when present.","type":"string","maxLength":4096},"contentType":{"description":"Media type of the bytes. Embedded messages are reported as message/rfc822.","type":"string","maxLength":256},"size":{"description":"Exact length of the attachment bytes.","type":"integer","minimum":0},"isInline":{"description":"True when the attachment is referenced from the message body by contentId.","type":"boolean"},"contentId":{"description":"Content-ID for an inline attachment, without angle brackets.","type":"string","maxLength":4096},"sha256":{"description":"Lowercase hex SHA-256 of the attachment bytes, useful for de-duplicating attachments repeated across thread messages.","type":"string","pattern":"^[a-f0-9]{64}$"},"contentBytes":{"description":"Base64-encoded attachment bytes, present when the bytes are available.","type":"string"},"unavailableReason":{"description":"Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.","type":"string","minLength":1,"maxLength":128},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"additionalProperties":true};
+const pattern65 = new RegExp("^[a-f0-9]{64}$", "u");
 
-function validate108(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate113(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -26607,7 +24657,7 @@ errors++;
 if(data.sha256 !== undefined){
 let data5 = data.sha256;
 if(typeof data5 === "string"){
-if(!pattern75.test(data5)){
+if(!pattern65.test(data5)){
 const err9 = {instancePath:instancePath+"/sha256",schemaPath:"#/properties/sha256/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err9];
@@ -26790,8 +24840,8 @@ errors++;
 }
 }
 if(data.topLevelParent !== undefined){
-if(!(validate70(data.topLevelParent, {instancePath:instancePath+"/topLevelParent",parentData:data,parentDataProperty:"topLevelParent",rootData}))){
-vErrors = vErrors === null ? validate70.errors : vErrors.concat(validate70.errors);
+if(!(validate76(data.topLevelParent, {instancePath:instancePath+"/topLevelParent",parentData:data,parentDataProperty:"topLevelParent",rootData}))){
+vErrors = vErrors === null ? validate76.errors : vErrors.concat(validate76.errors);
 errors = vErrors.length;
 }
 }
@@ -26806,12 +24856,12 @@ vErrors.push(err24);
 }
 errors++;
 }
-validate108.errors = vErrors;
+validate113.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate107(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate112(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -27287,8 +25337,8 @@ let data20 = data.attachments;
 if(Array.isArray(data20)){
 const len2 = data20.length;
 for(let i2=0; i2<len2; i2++){
-if(!(validate108(data20[i2], {instancePath:instancePath+"/attachments/" + i2,parentData:data20,parentDataProperty:i2,rootData}))){
-vErrors = vErrors === null ? validate108.errors : vErrors.concat(validate108.errors);
+if(!(validate113(data20[i2], {instancePath:instancePath+"/attachments/" + i2,parentData:data20,parentDataProperty:i2,rootData}))){
+vErrors = vErrors === null ? validate113.errors : vErrors.concat(validate113.errors);
 errors = vErrors.length;
 }
 }
@@ -27428,12 +25478,12 @@ vErrors.push(err47);
 }
 errors++;
 }
-validate107.errors = vErrors;
+validate112.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate106(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate111(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -27529,7 +25579,7 @@ errors++;
 if(data1.id !== undefined){
 let data2 = data1.id;
 if(typeof data2 === "string"){
-if(!pattern70.test(data2)){
+if(!pattern60.test(data2)){
 const err8 = {instancePath:instancePath+"/mailbox/id",schemaPath:"../outlook/mailbox.schema.json/properties/id/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err8];
@@ -27708,8 +25758,8 @@ let data7 = data.messages;
 if(Array.isArray(data7)){
 const len0 = data7.length;
 for(let i0=0; i0<len0; i0++){
-if(!(validate107(data7[i0], {instancePath:instancePath+"/messages/" + i0,parentData:data7,parentDataProperty:i0,rootData}))){
-vErrors = vErrors === null ? validate107.errors : vErrors.concat(validate107.errors);
+if(!(validate112(data7[i0], {instancePath:instancePath+"/messages/" + i0,parentData:data7,parentDataProperty:i0,rootData}))){
+vErrors = vErrors === null ? validate112.errors : vErrors.concat(validate112.errors);
 errors = vErrors.length;
 }
 }
@@ -27872,14 +25922,14 @@ vErrors.push(err35);
 }
 errors++;
 }
-validate106.errors = vErrors;
+validate111.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarProgressV1Params = validate112;
-const schema158 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-params.schema.json","title":"SidecarProgressV1Params","description":"Names the pending request whose on-device progress the client wants to observe. The request is identified by the JSON-RPC request ID the client generated for it; visibility is scoped to the Origin that issued that request.","type":"object","required":["requestId"],"properties":{"requestId":{"$ref":"../common.schema.json#/definitions/RequestId"}},"additionalProperties":true};
+export const validateSidecarProgressV1Params = validate117;
+const schema156 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-params.schema.json","title":"SidecarProgressV1Params","description":"Names the pending request whose on-device progress the client wants to observe. The request is identified by the JSON-RPC request ID the client generated for it; visibility is scoped to the Origin that issued that request.","type":"object","required":["requestId"],"properties":{"requestId":{"$ref":"../common.schema.json#/definitions/RequestId"}},"additionalProperties":true};
 
-function validate112(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate117(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -27992,16 +26042,16 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate112.errors = vErrors;
+validate117.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSidecarProgressV1Result = validate113;
-const schema160 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json","title":"SidecarProgressV1Result","description":"A point-in-time view of one request's on-device progress. `trace` carries the same append-only event log a result may embed, so a client that applies steps by `sequence` (last one wins) renders a polled log and a complete log identically.","type":"object","required":["state"],"properties":{"state":{"description":"Where the named request is in its lifecycle. Known values are running, finished, and unknown. Receivers treat unrecognized values as running.","type":"string","minLength":1,"maxLength":64},"trace":{"description":"The sidecar's step log for the named request so far. Metadata only — never message content. Absent when the request is unknown or recorded no steps.","$ref":"../outlook/local-trace.schema.json"}},"additionalProperties":true};
-const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace.schema.json","title":"SidecarLocalTrace","description":"The sidecar's internal on-device steps for one request, as an append-only event log. Protocol 1.0 delivers the whole log with the result; a future delivery mode may append to it incrementally, and a client that applies steps by `sequence` (last one wins) renders both identically. Contains no message content, so it can be shown even when the user declines to share the result.","type":"object","required":["steps"],"properties":{"steps":{"type":"array","items":{"$ref":"../outlook/local-trace-step.schema.json"},"maxItems":32},"totalDurationMs":{"type":"integer","minimum":0}},"additionalProperties":true};
-const schema162 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace-step.schema.json","title":"SidecarLocalTraceStep","description":"One internal on-device processing step, shaped as an event: a stable `sequence` identity carrying a status that may evolve. Metadata only: never message content, snippets, or file names.","type":"object","required":["sequence","id","status"],"properties":{"sequence":{"description":"Stable identity of this step within the request, and its ordering key. A later step with the same sequence supersedes an earlier one, so the same payload works whether the log arrives complete or is appended to over time.","type":"integer","minimum":0},"id":{"description":"Step identifier. Known values include expandQuery, buildIndex, match, and summarize. Receivers ignore unknown values and render them by their raw id.","type":"string","minLength":1,"maxLength":128},"status":{"description":"Step outcome. Known values include running, ok, skipped, degraded, and error. Receivers treat unknown values as running.","type":"string","minLength":1,"maxLength":64},"parentSequence":{"description":"Sequence of the step this one runs inside, when the sidecar nests work (for example a tool call made during a local model turn). Absent for top-level steps.","type":"integer","minimum":0},"startedAtOffsetMs":{"description":"Milliseconds between the start of the request and the start of this step, so a client can order and place steps identically in both delivery modes.","type":"integer","minimum":0},"durationMs":{"type":"integer","minimum":0},"model":{"description":"Identifier of the local model this step used, when it used one.","type":"string","minLength":1,"maxLength":256},"cacheHit":{"description":"Whether this step was served from a local cache (for example the in-memory mailbox index).","type":"boolean"},"detail":{"description":"Short non-sensitive note — the sidecar's counterpart of a progress message: why a step was skipped or degraded, or what it is doing.","type":"string","maxLength":512},"counts":{"description":"Item counts keyed by an open string. Known keys include keywordsIn, keywordsOut, messagesScanned, matched, and hitsReturned.","type":"object","maxProperties":16,"additionalProperties":{"type":"integer","minimum":0}}},"additionalProperties":true};
+export const validateSidecarProgressV1Result = validate118;
+const schema158 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json","title":"SidecarProgressV1Result","description":"A point-in-time view of one request's on-device progress. `trace` carries the same append-only event log a result may embed, so a client that applies steps by `sequence` (last one wins) renders a polled log and a complete log identically.","type":"object","required":["state"],"properties":{"state":{"description":"Where the named request is in its lifecycle. Known values are running, finished, and unknown. Receivers treat unrecognized values as running.","type":"string","minLength":1,"maxLength":64},"trace":{"description":"The sidecar's step log for the named request so far. Metadata only — never message content. Absent when the request is unknown or recorded no steps.","$ref":"../outlook/local-trace.schema.json"}},"additionalProperties":true};
+const schema159 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace.schema.json","title":"SidecarLocalTrace","description":"The sidecar's internal on-device steps for one request, as an append-only event log. Protocol 1.0 delivers the whole log with the result; a future delivery mode may append to it incrementally, and a client that applies steps by `sequence` (last one wins) renders both identically. Contains no message content, so it can be shown even when the user declines to share the result.","type":"object","required":["steps"],"properties":{"steps":{"type":"array","items":{"$ref":"../outlook/local-trace-step.schema.json"},"maxItems":32},"totalDurationMs":{"type":"integer","minimum":0}},"additionalProperties":true};
+const schema160 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace-step.schema.json","title":"SidecarLocalTraceStep","description":"One internal on-device processing step, shaped as an event: a stable `sequence` identity carrying a status that may evolve. Metadata only: never message content, snippets, or file names.","type":"object","required":["sequence","id","status"],"properties":{"sequence":{"description":"Stable identity of this step within the request, and its ordering key. A later step with the same sequence supersedes an earlier one, so the same payload works whether the log arrives complete or is appended to over time.","type":"integer","minimum":0},"id":{"description":"Step identifier. Known values include expandQuery, buildIndex, match, and summarize. Receivers ignore unknown values and render them by their raw id.","type":"string","minLength":1,"maxLength":128},"status":{"description":"Step outcome. Known values include running, ok, skipped, degraded, and error. Receivers treat unknown values as running.","type":"string","minLength":1,"maxLength":64},"parentSequence":{"description":"Sequence of the step this one runs inside, when the sidecar nests work (for example a tool call made during a local model turn). Absent for top-level steps.","type":"integer","minimum":0},"startedAtOffsetMs":{"description":"Milliseconds between the start of the request and the start of this step, so a client can order and place steps identically in both delivery modes.","type":"integer","minimum":0},"durationMs":{"type":"integer","minimum":0},"model":{"description":"Identifier of the local model this step used, when it used one.","type":"string","minLength":1,"maxLength":256},"cacheHit":{"description":"Whether this step was served from a local cache (for example the in-memory mailbox index).","type":"boolean"},"detail":{"description":"Short non-sensitive note — the sidecar's counterpart of a progress message: why a step was skipped or degraded, or what it is doing.","type":"string","maxLength":512},"counts":{"description":"Item counts keyed by an open string. Known keys include keywordsIn, keywordsOut, messagesScanned, matched, and hitsReturned.","type":"object","maxProperties":16,"additionalProperties":{"type":"integer","minimum":0}}},"additionalProperties":true};
 
-function validate114(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate119(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -28415,12 +26465,12 @@ vErrors.push(err33);
 }
 errors++;
 }
-validate114.errors = vErrors;
+validate119.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate113(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate118(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -28471,8 +26521,8 @@ errors++;
 }
 }
 if(data.trace !== undefined){
-if(!(validate114(data.trace, {instancePath:instancePath+"/trace",parentData:data,parentDataProperty:"trace",rootData}))){
-vErrors = vErrors === null ? validate114.errors : vErrors.concat(validate114.errors);
+if(!(validate119(data.trace, {instancePath:instancePath+"/trace",parentData:data,parentDataProperty:"trace",rootData}))){
+vErrors = vErrors === null ? validate119.errors : vErrors.concat(validate119.errors);
 errors = vErrors.length;
 }
 }
@@ -28487,14 +26537,14 @@ vErrors.push(err4);
 }
 errors++;
 }
-validate113.errors = vErrors;
+validate118.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookSearchEmailsV1Params = validate116;
-const schema163 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json","title":"OutlookSearchEmailsV1Params","type":"object","required":["mailboxId","query"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"query":{"description":"Natural-language or keyword query. The sidecar may expand it into additional local search terms.","type":"string","minLength":1,"maxLength":1024},"limit":{"description":"Maximum number of hits to return. Defaults to 10.","type":"integer","minimum":1,"maximum":50},"includeAttachments":{"description":"Also match against attachment file names and locally extractable attachment text. Defaults to true.","type":"boolean"},"summarize":{"description":"Produce a locally generated plain-text summary of the hits when a local model is configured. Defaults to true.","type":"boolean"}},"additionalProperties":true};
+export const validateOutlookSearchEmailsV1Params = validate121;
+const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json","title":"OutlookSearchEmailsV1Params","type":"object","required":["mailboxId","query"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"query":{"description":"Natural-language or keyword query. The sidecar may expand it into additional local search terms.","type":"string","minLength":1,"maxLength":1024},"limit":{"description":"Maximum number of hits to return. Defaults to 10.","type":"integer","minimum":1,"maximum":50},"includeAttachments":{"description":"Also match against attachment file names and locally extractable attachment text. Defaults to true.","type":"boolean"},"summarize":{"description":"Produce a locally generated plain-text summary of the hits when a local model is configured. Defaults to true.","type":"boolean"}},"additionalProperties":true};
 
-function validate116(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate121(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -28522,7 +26572,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data0 = data.mailboxId;
 if(typeof data0 === "string"){
-if(!pattern70.test(data0)){
+if(!pattern60.test(data0)){
 const err2 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err2];
@@ -28649,15 +26699,15 @@ vErrors.push(err12);
 }
 errors++;
 }
-validate116.errors = vErrors;
+validate121.errors = vErrors;
 return errors === 0;
 }
 
-export const validateOutlookSearchEmailsV1Result = validate117;
-const schema164 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-result.schema.json","title":"OutlookSearchEmailsV1Result","description":"Locally matched emails for a query, with an optional locally generated summary. Search and summarization both run entirely on the device.","type":"object","required":["mailbox","hits"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"hits":{"type":"array","items":{"$ref":"../outlook/search-hit.schema.json"},"maxItems":50},"totalMatched":{"description":"Number of matching messages before the limit was applied.","type":"integer","minimum":0},"summary":{"description":"Plain-text summary of the hits generated by a local model. Absent when summarization was not requested or no local model is available.","type":"string","maxLength":32768},"summaryModel":{"description":"Identifier of the local model that generated the summary, for user-facing transparency.","type":"string","minLength":1,"maxLength":256},"expandedKeywords":{"description":"Search terms actually used after local query expansion.","type":"array","items":{"type":"string","minLength":1,"maxLength":256},"maxItems":32},"warnings":{"description":"Local sources or messages that could not be inspected without hiding successful results.","type":"array","items":{"$ref":"../outlook/listing-warning.schema.json"}},"trace":{"description":"Metadata about the sidecar's internal on-device steps (durations, models, item counts). Never contains message content.","$ref":"../outlook/local-trace.schema.json"}},"additionalProperties":true};
-const schema166 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/search-hit.schema.json","title":"OutlookSearchHit","description":"One locally matched email for an outlook.search_emails.v1 query.","type":"object","required":["email"],"properties":{"email":{"$ref":"../outlook/email-summary.schema.json"},"snippet":{"description":"Short plain-text excerpt around the strongest match. Never a full message body.","type":"string","maxLength":2048},"matchedIn":{"description":"Fields the query matched. Known values include subject, body, sender, attachmentName, and attachmentContent. Receivers ignore unknown values.","type":"array","items":{"type":"string","minLength":1,"maxLength":128},"maxItems":16},"matchedAttachmentNames":{"description":"File names of attachments whose name or extracted text matched the query.","type":"array","items":{"type":"string","minLength":1,"maxLength":1024},"maxItems":64}},"additionalProperties":true};
+export const validateOutlookSearchEmailsV1Result = validate122;
+const schema162 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-result.schema.json","title":"OutlookSearchEmailsV1Result","description":"Locally matched emails for a query, with an optional locally generated summary. Search and summarization both run entirely on the device.","type":"object","required":["mailbox","hits"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"hits":{"type":"array","items":{"$ref":"../outlook/search-hit.schema.json"},"maxItems":50},"totalMatched":{"description":"Number of matching messages before the limit was applied.","type":"integer","minimum":0},"summary":{"description":"Plain-text summary of the hits generated by a local model. Absent when summarization was not requested or no local model is available.","type":"string","maxLength":32768},"summaryModel":{"description":"Identifier of the local model that generated the summary, for user-facing transparency.","type":"string","minLength":1,"maxLength":256},"expandedKeywords":{"description":"Search terms actually used after local query expansion.","type":"array","items":{"type":"string","minLength":1,"maxLength":256},"maxItems":32},"warnings":{"description":"Local sources or messages that could not be inspected without hiding successful results.","type":"array","items":{"$ref":"../outlook/listing-warning.schema.json"}},"trace":{"description":"Metadata about the sidecar's internal on-device steps (durations, models, item counts). Never contains message content.","$ref":"../outlook/local-trace.schema.json"}},"additionalProperties":true};
+const schema164 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/search-hit.schema.json","title":"OutlookSearchHit","description":"One locally matched email for an outlook.search_emails.v1 query.","type":"object","required":["email"],"properties":{"email":{"$ref":"../outlook/email-summary.schema.json"},"snippet":{"description":"Short plain-text excerpt around the strongest match. Never a full message body.","type":"string","maxLength":2048},"matchedIn":{"description":"Fields the query matched. Known values include subject, body, sender, attachmentName, and attachmentContent. Receivers ignore unknown values.","type":"array","items":{"type":"string","minLength":1,"maxLength":128},"maxItems":16},"matchedAttachmentNames":{"description":"File names of attachments whose name or extracted text matched the query.","type":"array","items":{"type":"string","minLength":1,"maxLength":1024},"maxItems":64}},"additionalProperties":true};
 
-function validate118(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate123(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/search-hit.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -29025,12 +27075,12 @@ vErrors.push(err29);
 }
 errors++;
 }
-validate118.errors = vErrors;
+validate123.errors = vErrors;
 return errors === 0;
 }
 
 
-function validate117(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate122(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -29091,7 +27141,7 @@ errors++;
 if(data0.id !== undefined){
 let data1 = data0.id;
 if(typeof data1 === "string"){
-if(!pattern70.test(data1)){
+if(!pattern60.test(data1)){
 const err5 = {instancePath:instancePath+"/mailbox/id",schemaPath:"../outlook/mailbox.schema.json/properties/id/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err5];
@@ -29280,8 +27330,8 @@ errors++;
 }
 const len0 = data6.length;
 for(let i0=0; i0<len0; i0++){
-if(!(validate118(data6[i0], {instancePath:instancePath+"/hits/" + i0,parentData:data6,parentDataProperty:i0,rootData}))){
-vErrors = vErrors === null ? validate118.errors : vErrors.concat(validate118.errors);
+if(!(validate123(data6[i0], {instancePath:instancePath+"/hits/" + i0,parentData:data6,parentDataProperty:i0,rootData}))){
+vErrors = vErrors === null ? validate123.errors : vErrors.concat(validate123.errors);
 errors = vErrors.length;
 }
 }
@@ -29555,8 +27605,8 @@ errors++;
 }
 }
 if(data.trace !== undefined){
-if(!(validate114(data.trace, {instancePath:instancePath+"/trace",parentData:data,parentDataProperty:"trace",rootData}))){
-vErrors = vErrors === null ? validate114.errors : vErrors.concat(validate114.errors);
+if(!(validate119(data.trace, {instancePath:instancePath+"/trace",parentData:data,parentDataProperty:"trace",rootData}))){
+vErrors = vErrors === null ? validate119.errors : vErrors.concat(validate119.errors);
 errors = vErrors.length;
 }
 }
@@ -29571,14 +27621,14 @@ vErrors.push(err43);
 }
 errors++;
 }
-validate117.errors = vErrors;
+validate122.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesListV1Params = validate121;
-const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json","title":"SourcesListV1Params","type":"object","additionalProperties":false};
+export const validateSourcesListV1Params = validate126;
+const schema167 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json","title":"SourcesListV1Params","type":"object","additionalProperties":false};
 
-function validate121(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate126(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -29604,15 +27654,15 @@ vErrors.push(err1);
 }
 errors++;
 }
-validate121.errors = vErrors;
+validate126.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesListV1Result = validate122;
-const schema170 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":false};
-const schema171 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"locator":{"type":"object"},"enabled":{"type":"boolean"},"discoveryCursor":{"type":["object","null"]},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":false};
+export const validateSourcesListV1Result = validate127;
+const schema168 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":false};
+const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"locator":{"type":"object"},"enabled":{"type":"boolean"},"discoveryCursor":{"type":["object","null"]},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":false};
 
-function validate122(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate127(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -29737,7 +27787,7 @@ vErrors.push(err10);
 errors++;
 }
 for(const key1 in data1){
-if(!(func45.call(schema171.properties, key1))){
+if(!(func21.call(schema169.properties, key1))){
 const err11 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err11];
@@ -29851,7 +27901,7 @@ errors++;
 if(data1.discoveryCursor !== undefined){
 let data7 = data1.discoveryCursor;
 if((!(data7 && typeof data7 == "object" && !Array.isArray(data7))) && (data7 !== null)){
-const err20 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema171.properties.discoveryCursor.type},message:"must be object,null"};
+const err20 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -29864,7 +27914,7 @@ errors++;
 if(data1.completedScanId !== undefined){
 let data8 = data1.completedScanId;
 if((typeof data8 !== "string") && (data8 !== null)){
-const err21 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema171.properties.completedScanId.type},message:"must be string,null"};
+const err21 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -29889,7 +27939,7 @@ errors++;
 if(data1.lastSuccessAt !== undefined){
 let data9 = data1.lastSuccessAt;
 if((typeof data9 !== "string") && (data9 !== null)){
-const err23 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema171.properties.lastSuccessAt.type},message:"must be string,null"};
+const err23 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -29914,7 +27964,7 @@ errors++;
 if(data1.lastErrorCode !== undefined){
 let data10 = data1.lastErrorCode;
 if((typeof data10 !== "string") && (data10 !== null)){
-const err25 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema171.properties.lastErrorCode.type},message:"must be string,null"};
+const err25 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -29959,14 +28009,14 @@ vErrors.push(err28);
 }
 errors++;
 }
-validate122.errors = vErrors;
+validate127.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesGetFolderHierarchyV1Params = validate123;
-const schema172 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json","title":"SourcesGetFolderHierarchyV1Params","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"}},"required":["sourceId"],"additionalProperties":false};
+export const validateSourcesGetFolderHierarchyV1Params = validate128;
+const schema170 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json","title":"SourcesGetFolderHierarchyV1Params","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"}},"required":["sourceId"],"additionalProperties":false};
 
-function validate123(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate128(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -30029,15 +28079,15 @@ vErrors.push(err4);
 }
 errors++;
 }
-validate123.errors = vErrors;
+validate128.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesGetFolderHierarchyV1Result = validate124;
-const schema173 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json","title":"SourcesGetFolderHierarchyV1Result","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"nodes":{"type":"array","items":{"$ref":"../source/folder-hierarchy-node.schema.json"}}},"required":["sourceId","nodes"],"additionalProperties":false};
-const schema174 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/folder-hierarchy-node.schema.json","title":"SourceFolderHierarchyNode","type":"object","properties":{"nodeId":{"type":"string","minLength":1},"parentNodeId":{"type":["string","null"]},"name":{"type":"string"},"pathName":{"type":"string"},"artificialRoot":{"type":"boolean"},"directLeafChildren":{"type":"integer","minimum":0},"totalLeafChildren":{"type":"integer","minimum":0},"directChildNodes":{"type":"integer","minimum":0}},"required":["nodeId","parentNodeId","name","pathName","artificialRoot","directLeafChildren","totalLeafChildren","directChildNodes"],"additionalProperties":false};
+export const validateSourcesGetFolderHierarchyV1Result = validate129;
+const schema171 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json","title":"SourcesGetFolderHierarchyV1Result","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"nodes":{"type":"array","items":{"$ref":"../source/folder-hierarchy-node.schema.json"}}},"required":["sourceId","nodes"],"additionalProperties":false};
+const schema172 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/folder-hierarchy-node.schema.json","title":"SourceFolderHierarchyNode","type":"object","properties":{"nodeId":{"type":"string","minLength":1},"parentNodeId":{"type":["string","null"]},"name":{"type":"string"},"pathName":{"type":"string"},"artificialRoot":{"type":"boolean"},"directLeafChildren":{"type":"integer","minimum":0},"totalLeafChildren":{"type":"integer","minimum":0},"directChildNodes":{"type":"integer","minimum":0}},"required":["nodeId","parentNodeId","name","pathName","artificialRoot","directLeafChildren","totalLeafChildren","directChildNodes"],"additionalProperties":false};
 
-function validate124(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate129(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -30226,7 +28276,7 @@ errors++;
 if(data2.parentNodeId !== undefined){
 let data4 = data2.parentNodeId;
 if((typeof data4 !== "string") && (data4 !== null)){
-const err16 = {instancePath:instancePath+"/nodes/" + i0+"/parentNodeId",schemaPath:"../source/folder-hierarchy-node.schema.json/properties/parentNodeId/type",keyword:"type",params:{type: schema174.properties.parentNodeId.type},message:"must be string,null"};
+const err16 = {instancePath:instancePath+"/nodes/" + i0+"/parentNodeId",schemaPath:"../source/folder-hierarchy-node.schema.json/properties/parentNodeId/type",keyword:"type",params:{type: schema172.properties.parentNodeId.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -30382,14 +28432,14 @@ vErrors.push(err28);
 }
 errors++;
 }
-validate124.errors = vErrors;
+validate129.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesGetDocumentV1Params = validate125;
-const schema175 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json","title":"SourcesGetDocumentV1Params","type":"object","properties":{"documentId":{"type":"string","format":"uuid"},"subject_scope":{"type":"string","enum":["subject","subject_with_thread"],"default":"subject"}},"required":["documentId"],"additionalProperties":false};
+export const validateSourcesGetDocumentV1Params = validate130;
+const schema173 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json","title":"SourcesGetDocumentV1Params","type":"object","properties":{"documentId":{"type":"string","format":"uuid"},"subject_scope":{"type":"string","enum":["subject","subject_with_thread"],"default":"subject"}},"required":["documentId"],"additionalProperties":false};
 
-function validate125(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate130(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -30454,7 +28504,7 @@ vErrors.push(err4);
 errors++;
 }
 if(!((data1 === "subject") || (data1 === "subject_with_thread"))){
-const err5 = {instancePath:instancePath+"/subject_scope",schemaPath:"#/properties/subject_scope/enum",keyword:"enum",params:{allowedValues: schema175.properties.subject_scope.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/subject_scope",schemaPath:"#/properties/subject_scope/enum",keyword:"enum",params:{allowedValues: schema173.properties.subject_scope.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -30475,14 +28525,14 @@ vErrors.push(err6);
 }
 errors++;
 }
-validate125.errors = vErrors;
+validate130.errors = vErrors;
 return errors === 0;
 }
 
-export const validateSourcesGetDocumentV1Result = validate126;
-const schema176 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json","title":"SourcesGetDocumentV1Result","type":"object","properties":{"filename":{"type":"string","minLength":1},"mimeType":{"type":"string","minLength":1},"contentBase64":{"type":"string","pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["filename","mimeType","contentBase64"],"additionalProperties":false};
+export const validateSourcesGetDocumentV1Result = validate131;
+const schema174 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json","title":"SourcesGetDocumentV1Result","type":"object","properties":{"filename":{"type":"string","minLength":1},"mimeType":{"type":"string","minLength":1},"contentBase64":{"type":"string","pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["filename","mimeType","contentBase64"],"additionalProperties":false};
 
-function validate126(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
+function validate131(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json" */;
 let vErrors = null;
 let errors = 0;
@@ -30582,7 +28632,7 @@ errors++;
 if(data.contentBase64 !== undefined){
 let data2 = data.contentBase64;
 if(typeof data2 === "string"){
-if(!pattern11.test(data2)){
+if(!pattern9.test(data2)){
 const err8 = {instancePath:instancePath+"/contentBase64",schemaPath:"#/properties/contentBase64/pattern",keyword:"pattern",params:{pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},message:"must match pattern \""+"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"+"\""};
 if(vErrors === null){
 vErrors = [err8];
@@ -30718,8 +28768,8 @@ errors++;
 }
 }
 if(data.topLevelParent !== undefined){
-if(!(validate70(data.topLevelParent, {instancePath:instancePath+"/topLevelParent",parentData:data,parentDataProperty:"topLevelParent",rootData}))){
-vErrors = vErrors === null ? validate70.errors : vErrors.concat(validate70.errors);
+if(!(validate76(data.topLevelParent, {instancePath:instancePath+"/topLevelParent",parentData:data,parentDataProperty:"topLevelParent",rootData}))){
+vErrors = vErrors === null ? validate76.errors : vErrors.concat(validate76.errors);
 errors = vErrors.length;
 }
 }
@@ -30734,7 +28784,7 @@ vErrors.push(err19);
 }
 errors++;
 }
-validate126.errors = vErrors;
+validate131.errors = vErrors;
 return errors === 0;
 }
 

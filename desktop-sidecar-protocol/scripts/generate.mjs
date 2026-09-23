@@ -648,6 +648,7 @@ for (const [schemaPath, outputName] of typeTargets) {
     cwd: path.dirname(absoluteSchemaPath),
     declareExternallyReferenced: true,
     enableConstEnums: false,
+    maxItems: -1,
     format: true,
     strictIndexSignatures: false,
     style: { semi: true, singleQuote: false, trailingComma: "all" },
