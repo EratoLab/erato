@@ -4,11 +4,25 @@ use super::contract;
 use genai::chat::Tool;
 use serde_json::{Value, json};
 
-pub const NAME: &str = "local_collect_evidence";
-pub const NAMESPACE: &str = "local";
-pub const QUALIFIED_NAME: &str = "collect_evidence";
+pub const NAME: &str = erato_config::config::LOCAL_COLLECT_EVIDENCE_TOOL_NAME;
+pub const QUALIFIED_NAME: &str = "erato/local_collect_evidence";
 pub fn build(omit_strict: bool) -> Tool {
-    Tool{name:NAME.into(),description:Some("Collect a bounded package of local evidence using deterministic search queries. The task pauses durably until the user reviews an exact snapshot in the native app. Only selected, approved evidence returns. Do not request private intermediate hits, general Office actions, scripts or code.".into()),schema:Some(json!({"type":"object","properties":{"queryVariants":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":512}}},"required":["queryVariants"],"additionalProperties":false})),strict:(!omit_strict).then_some(false),config:None}
+    Tool {
+        name: NAME.into(),
+        description: Some(concat!(
+            "Collect a bounded package of local evidence using deterministic search queries. ",
+            "The task pauses durably until the user reviews an exact snapshot in the native app. ",
+            "Only selected, approved evidence returns. Do not request private intermediate hits, ",
+            "general Office actions, scripts or code."
+        ).into()),
+        schema: Some(json!({
+            "type": "object",
+            "properties": {"queryVariants": {"type":"array", "minItems":1, "maxItems":8,
+                "uniqueItems":true, "items":{"type":"string", "minLength":1, "maxLength":512}}},
+            "required": ["queryVariants"], "additionalProperties": false
+        })),
+        strict: (!omit_strict).then_some(false), config: None,
+    }
 }
 pub fn plan(input: &Value, now: i64) -> Result<Value, contract::Invalid> {
     let object = input.as_object().ok_or(contract::Invalid)?;
@@ -39,7 +53,7 @@ pub fn eligible(
     if !config.desktop_sidecar.local_delegation.enabled
         || !config.delegation.tasks.enabled
         || other_tools
-        || !allowlist.iter().any(|p| p == "local/collect_evidence")
+        || !allowlist.iter().any(|p| p == QUALIFIED_NAME)
     {
         return false;
     }
@@ -59,11 +73,11 @@ pub fn eligible(
         && origin.origin_chat_id.is_some()
         && origin.origin_message_id.is_some()
         && task.facet_ids.iter().any(|id| {
-            config.facets.facets.get(id).is_some_and(|f| {
-                f.tool_call_allowlist
-                    .iter()
-                    .any(|p| p == "local/collect_evidence")
-            })
+            config
+                .facets
+                .facets
+                .get(id)
+                .is_some_and(|f| f.tool_call_allowlist.iter().any(|p| p == QUALIFIED_NAME))
         })
         && origin.depth == 1
         && origin.adopted_at.is_none()

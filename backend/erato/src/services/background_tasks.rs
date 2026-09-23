@@ -5,6 +5,7 @@
 //! Clients can resume streaming from any point by reconnecting.
 
 use crate::config::GenerationStatusConfig;
+use crate::db::entity::local_delegation_jobs::ACTIVE_JOB_STATES_SQL;
 use crate::metrics_constants::{
     POSTGRES_QUERY_DELEGATION_TIMEOUT_BACKSTOP, POSTGRES_QUERY_GENERATION_CLEANUP,
     POSTGRES_QUERY_GENERATION_DISPLACED, POSTGRES_QUERY_GENERATION_FINISH,
@@ -490,12 +491,8 @@ impl BackgroundTaskManager {
         }
 
         if let Some(id) = local_job {
-            txn.execute_raw(sea_orm::Statement::from_sql_and_values(
-                sea_orm::DatabaseBackend::Postgres,
-                "UPDATE local_delegation_jobs SET state='continuing',generation_id=$2 WHERE id=$1",
-                vec![id.into(), generation_id.into()],
-            ))
-            .await?;
+            crate::services::local_delegation::store::begin_continuation_in(txn, id, generation_id)
+                .await?;
         } else {
             crate::services::local_delegation::store::abandon_in(txn, chat_id)
                 .await
@@ -1031,22 +1028,30 @@ impl BackgroundTaskManager {
             let statement = named_statement_from_sql_and_values(
                 sea_orm::DatabaseBackend::Postgres,
                 POSTGRES_QUERY_GENERATION_REAP,
-                r#"
+                format!(
+                    r#"
                 UPDATE chats
                 SET generation_state = CASE WHEN EXISTS (
                     SELECT 1 FROM local_delegation_jobs j WHERE j.chat_id=chats.id
                     AND j.generation_id=chats.active_generation_id
-                    AND j.state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing')
+                    AND j.state IN ({ACTIVE_JOB_STATES_SQL})
                 ) THEN 'awaiting_approval' ELSE 'errored' END, generation_ended_at = now()
                 WHERE generation_state = 'running'
                   AND generation_heartbeat_at < now() - make_interval(secs => $1::double precision)
-                "#,
+                "#
+                ),
                 [(config.stale_after_secs as f64).into()],
             );
             if let Err(err) = db.execute_raw(statement).await {
                 tracing::warn!(error = %err, "Failed to reap stale generations");
             }
 
+            if let Err(error) =
+                crate::services::local_delegation::store::recover(&db, config.stale_after_secs)
+                    .await
+            {
+                tracing::warn!(%error, "Failed to recover local delegation jobs");
+            }
             let shared_reap_statement = named_statement_from_sql_and_values(
                 sea_orm::DatabaseBackend::Postgres,
                 POSTGRES_QUERY_GENERATION_REAP,

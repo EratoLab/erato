@@ -1,3 +1,4 @@
+pub const POSTGRES_QUERY_LOCAL_DELEGATION: &str = "local_delegation";
 pub const POSTGRES_QUERY_VERIFY_LATEST_MIGRATION: &str = "verify_latest_migration";
 pub const POSTGRES_QUERY_LIST_RECENT_CHATS: &str = "list_recent_chats";
 pub const POSTGRES_QUERY_COUNT_RECENT_CHATS: &str = "count_recent_chats";
@@ -49,6 +50,7 @@ pub const POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT: &str = "delegation_retry_in
 pub const POSTGRES_QUERY_DELEGATION_TOOL_CALL: &str = "delegation_tool_call";
 
 pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
+    POSTGRES_QUERY_LOCAL_DELEGATION,
     POSTGRES_QUERY_VERIFY_LATEST_MIGRATION,
     POSTGRES_QUERY_LIST_RECENT_CHATS,
     POSTGRES_QUERY_COUNT_RECENT_CHATS,

@@ -176,7 +176,20 @@ async fn test_app_state_internal(
     let mcp_servers = McpServers::new(&app_config);
     let reloadable = ReloadableAppState::new(&app_config, mcp_servers);
 
+    let local_delegation_signer = app_config
+        .desktop_sidecar
+        .local_delegation
+        .enabled
+        .then(|| {
+            erato::services::local_delegation::signing::Signer::new(
+                &app_config.desktop_sidecar.local_delegation,
+            )
+            .map(Arc::new)
+        })
+        .transpose()
+        .unwrap();
     let app_state = AppState {
+        local_delegation_signer,
         db: db.clone(),
         default_file_storage_provider: None,
         file_storage_providers,

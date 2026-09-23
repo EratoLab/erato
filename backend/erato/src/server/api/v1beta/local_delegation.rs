@@ -1,6 +1,8 @@
 //! Authenticated rendezvous. Bodies contain cloud-known plans or approved bytes;
 //! native handles, pre-consent statuses and error reports are not accepted here.
 use super::me_profile_middleware::MeProfile;
+use crate::db::entity::local_delegation_jobs::JobState;
+use crate::services::local_delegation::contract;
 use crate::services::local_delegation::{signing::Signer, store, uploads};
 use crate::{
     policy::{
@@ -17,7 +19,7 @@ use axum::{
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 type ApiError = (StatusCode, &'static str);
 fn unavailable(_: impl std::fmt::Display) -> ApiError {
     (
@@ -31,8 +33,11 @@ fn conflict(_: impl std::fmt::Display) -> ApiError {
         "Local delegation request could not be accepted",
     )
 }
-fn signer(state: &AppState) -> Result<Signer, ApiError> {
-    Signer::new(&state.config.desktop_sidecar.local_delegation).map_err(unavailable)
+fn signer(state: &AppState) -> Result<&Signer, ApiError> {
+    state
+        .local_delegation_signer
+        .as_deref()
+        .ok_or_else(|| unavailable("disabled"))
 }
 fn origin<'a>(state: &AppState, headers: &'a HeaderMap) -> Result<&'a str, ApiError> {
     let value = headers
@@ -91,10 +96,17 @@ pub struct JobResponse {
     pub id: Uuid,
     pub chat_id: Uuid,
     pub message_id: Uuid,
-    pub state: String,
+    pub state: JobState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = String, nullable = false)]
     pub receipt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(schema_with = contract::outcome_schema)]
     pub server_outcome: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(schema_with = contract::binding_schema)]
     pub binding: Option<Value>,
+    #[schema(schema_with = contract::plan_schema)]
     pub plan: Value,
 }
 impl From<store::PendingJob> for JobResponse {
@@ -111,7 +123,8 @@ impl From<store::PendingJob> for JobResponse {
         }
     }
 }
-#[derive(Deserialize, ToSchema, Default)]
+#[derive(Deserialize, ToSchema, IntoParams, Default)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub struct PendingQuery {
     pub after: Option<Uuid>,
@@ -122,6 +135,8 @@ pub struct PendingResponse {
     pub enabled: bool,
     #[serde(rename = "accountId")]
     pub account_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Uuid, nullable = false)]
     pub next: Option<Uuid>,
     pub jobs: Vec<JobResponse>,
 }
@@ -134,7 +149,12 @@ pub struct ClaimResponse {
 pub struct ReceiptResponse {
     pub receipt: String,
 }
-#[utoipa::path(post,path="/me/local-delegation/context",request_body=ContextRequest,responses((status=200,body=AssertionResponse)))]
+#[utoipa::path(
+    operation_id = "local_delegation_context",
+    post, path = "/me/local-delegation/context",
+    request_body = ContextRequest,
+    responses((status = 200, body = AssertionResponse))
+)]
 pub async fn context(
     State(state): State<AppState>,
     Extension(me): Extension<MeProfile>,
@@ -160,7 +180,12 @@ pub async fn context(
         .map_err(conflict)?;
     Ok(Json(AssertionResponse { assertion }))
 }
-#[utoipa::path(get,path="/me/local-delegation/jobs",responses((status=200,body=PendingResponse)))]
+#[utoipa::path(
+    operation_id = "local_delegation_pending",
+    get, path = "/me/local-delegation/jobs",
+    params(PendingQuery),
+    responses((status = 200, body = PendingResponse))
+)]
 pub async fn pending(
     axum::extract::Query(query): axum::extract::Query<PendingQuery>,
     State(state): State<AppState>,
@@ -176,9 +201,6 @@ pub async fn pending(
         }));
     }
     signer(&state)?;
-    store::recover(&state.db, state.config.generation_status.stale_after_secs)
-        .await
-        .map_err(unavailable)?;
     policy
         .rebuild_data_if_needed_req(&state.db, &state.config)
         .await
@@ -207,7 +229,13 @@ pub async fn pending(
         jobs,
     }))
 }
-#[utoipa::path(post,path="/me/local-delegation/jobs/{id}/claim",params(("id"=Uuid,Path)),request_body=ClaimRequest,responses((status=200,body=ClaimResponse)))]
+#[utoipa::path(
+    operation_id = "local_delegation_claim",
+    post, path = "/me/local-delegation/jobs/{id}/claim",
+    params(("id" = Uuid, Path)),
+    request_body = ClaimRequest,
+    responses((status = 200, body = ClaimResponse))
+)]
 pub async fn claim(
     State(state): State<AppState>,
     Extension(me): Extension<MeProfile>,
@@ -241,13 +269,19 @@ pub async fn claim(
         authorization,
     }))
 }
-#[utoipa::path(post,path="/me/local-delegation/jobs/{id}/complete",params(("id"=Uuid,Path)),request_body(content=Object,description="Exact native-approved export validated against desktop-sidecar-protocol ApprovedLocalExport"),responses((status=200,body=ReceiptResponse)))]
+#[utoipa::path(
+    operation_id = "local_delegation_complete",
+    post, path = "/me/local-delegation/jobs/{id}/complete",
+    params(("id" = Uuid, Path)),
+    request_body(content = ApprovedExport, description = "Exact native-approved export validated against desktop-sidecar-protocol ApprovedLocalExport"),
+    responses((status = 200, body = ReceiptResponse))
+)]
 pub async fn complete(
     State(state): State<AppState>,
     Extension(me): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
     Path(id): Path<Uuid>,
-    Json(package): Json<Value>,
+    Json(ApprovedExport(package)): Json<ApprovedExport>,
 ) -> Result<Json<ReceiptResponse>, ApiError> {
     let signer = signer(&state)?;
     let job = authorize_job(&state, &policy, &me, id).await?;
@@ -274,7 +308,12 @@ pub async fn complete(
     .map_err(conflict)?;
     Ok(Json(ReceiptResponse { receipt }))
 }
-#[utoipa::path(post,path="/me/local-delegation/jobs/{id}/cancel",params(("id"=Uuid,Path)),responses((status=204)))]
+#[utoipa::path(
+    operation_id = "local_delegation_cancel",
+    post, path = "/me/local-delegation/jobs/{id}/cancel",
+    params(("id" = Uuid, Path)),
+    responses((status = 204))
+)]
 pub async fn cancel(
     State(state): State<AppState>,
     Extension(me): Extension<MeProfile>,
@@ -296,7 +335,12 @@ pub async fn cancel(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[utoipa::path(post,path="/me/local-delegation/jobs/{id}/resume",params(("id"=Uuid,Path)),responses((status=202)))]
+#[utoipa::path(
+    operation_id = "local_delegation_resume",
+    post, path = "/me/local-delegation/jobs/{id}/resume",
+    params(("id" = Uuid, Path)),
+    responses((status = 202))
+)]
 pub async fn resume(
     State(state): State<AppState>,
     Extension(me): Extension<MeProfile>,
@@ -305,11 +349,25 @@ pub async fn resume(
 ) -> Result<StatusCode, ApiError> {
     signer(&state)?;
     authorize_job(&state, &policy, &me, id).await?;
-    store::recover(&state.db, state.config.generation_status.stale_after_secs)
-        .await
-        .map_err(unavailable)?;
+    store::recover_job(
+        &state.db,
+        state.config.generation_status.stale_after_secs,
+        Some(id),
+    )
+    .await
+    .map_err(unavailable)?;
     super::message_streaming::local_jobs::launch(state, policy, me, id)
         .await
         .map_err(conflict)?;
     Ok(StatusCode::ACCEPTED)
 }
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+pub struct ApprovedExport(Value);
+impl utoipa::PartialSchema for ApprovedExport {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        contract::openapi_schema("approved-export")
+    }
+}
+impl ToSchema for ApprovedExport {}

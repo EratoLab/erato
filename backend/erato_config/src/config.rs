@@ -34,6 +34,7 @@ pub const DELEGATE_TASK_TOOL_NAME: &str = "delegate_task";
 /// async task results are delivered as turns, so nothing polls for them yet,
 /// but the name stays free for that extension.
 pub const COLLECT_TASKS_TOOL_NAME: &str = "collect_tasks";
+pub const LOCAL_COLLECT_EVIDENCE_TOOL_NAME: &str = "local_collect_evidence";
 
 /// Tool names a configured client tool may not take.
 pub const RESERVED_TOOL_NAMES: &[&str] = &[
@@ -41,6 +42,7 @@ pub const RESERVED_TOOL_NAMES: &[&str] = &[
     DELEGATE_TO_ASSISTANT_TOOL_NAME,
     DELEGATE_TASK_TOOL_NAME,
     COLLECT_TASKS_TOOL_NAME,
+    LOCAL_COLLECT_EVIDENCE_TOOL_NAME,
 ];
 
 /// Whether a `tool_call_allowlist` selects a reserved `erato/<name>` tool.

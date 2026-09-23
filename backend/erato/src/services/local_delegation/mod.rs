@@ -54,3 +54,11 @@ pub struct Checkpoint {
     pub task_server_budget: Option<u32>,
     pub task_client_budget: Option<u32>,
 }
+
+/// One interpretation of a durable native-consent stop for generation and parent delivery.
+pub fn is_waiting(content: &[ContentPart]) -> bool {
+    content.iter().any(|part| matches!(part, ContentPart::ToolUse(tool)
+        if tool.tool_name == tool::NAME
+            && tool.status == crate::models::message::ToolCallStatus::InProgress
+            && tool.output.as_ref().is_some_and(|output| output["status"] == "awaiting_local_consent")))
+}

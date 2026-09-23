@@ -104,7 +104,23 @@ mod tests {
     use super::*;
     // Synthetic, public test fixture (32-byte seed filled with 7). Never a deployment key.
     fn fixture() -> LocalDelegationConfig {
-        LocalDelegationConfig{enabled:true,backend_origin:Some("https://erato.example".into()),signing_key_id:Some("fixture".into()),signing_private_key_pem:Some("-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH\n-----END PRIVATE KEY-----\n".into()),verification_keys:std::collections::BTreeMap::from([("fixture".into(),"6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw".into())])}
+        LocalDelegationConfig {
+            enabled: true,
+            backend_origin: Some("https://erato.example".into()),
+            signing_key_id: Some("fixture".into()),
+            signing_private_key_pem: Some(
+                concat!(
+                    "-----BEGIN PRIVATE KEY-----\n",
+                    "MC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH\n",
+                    "-----END PRIVATE KEY-----\n"
+                )
+                .into(),
+            ),
+            verification_keys: std::collections::BTreeMap::from([(
+                "fixture".into(),
+                "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw".into(),
+            )]),
+        }
     }
     #[test]
     fn signed_context_uses_exact_audience_and_installed_public_key() {

@@ -2,13 +2,12 @@
 //! enter this runner. The first version offers deterministic local collection;
 //! it never replays arbitrary MCP/Office effects after a restart.
 use super::*;
+use crate::db::entity::local_delegation_jobs::JobState;
 use crate::services::local_delegation::{Checkpoint, Consumption, store, tool};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
-pub(super) fn is_waiting(content: &[ContentPart]) -> bool {
-    content.iter().any(|part| matches!(part, ContentPart::ToolUse(t) if t.tool_name == tool::NAME && t.status == MessageToolCallStatus::InProgress && t.output.as_ref().is_some_and(|v| v["status"] == "awaiting_local_consent")))
-}
-fn raw(checkpoint: &Checkpoint) -> Value {
+pub(super) use crate::services::local_delegation::is_waiting;
+pub(super) fn raw(checkpoint: &Checkpoint) -> Value {
     json!({"role":"assistant","content":checkpoint.content})
 }
 fn waiting_content(checkpoint: &mut Checkpoint, call: &genai::chat::ToolCall, id: Uuid) {
@@ -45,6 +44,7 @@ pub(super) async fn park_initial(
     consumption: Consumption,
     budgets: Option<crate::services::delegation::TaskToolBudgets>,
     allowed: &HashSet<String>,
+    previous: Option<&store::Resume>,
 ) -> Result<Vec<ContentPart>, Report> {
     if allowed.len() != 1
         || !allowed.contains(tool::NAME)
@@ -105,6 +105,14 @@ pub(super) async fn park_initial(
         task_server_budget: Some(budgets.server),
         task_client_budget: Some(budgets.client),
     };
+    if let Some(previous) = previous {
+        checkpoint.selected_facets = previous.checkpoint.selected_facets.clone();
+        checkpoint.max_tool_calls = previous.checkpoint.max_tool_calls;
+        checkpoint.max_model_turns = previous.checkpoint.max_model_turns;
+        checkpoint.origin_user_message_id = previous.checkpoint.origin_user_message_id;
+        checkpoint.task_server_budget = previous.checkpoint.task_server_budget;
+        checkpoint.task_client_budget = previous.checkpoint.task_client_budget;
+    }
     let id = Uuid::new_v4();
     let plan = tool::plan(&call.fn_arguments, Utc::now().timestamp())?;
     waiting_content(&mut checkpoint, call, id);
@@ -112,7 +120,7 @@ pub(super) async fn park_initial(
         &state.db,
         store::Park {
             id,
-            previous: None,
+            previous: previous.map(|resume| resume.fence),
             owner,
             chat_id,
             message_id,
@@ -193,9 +201,17 @@ fn apply_result(resume: &mut store::Resume) -> Result<(), Report> {
                         .ok_or_else(|| eyre!("Invalid approved result"))?,
                 )?,
             )?;
-            evidence.push(
-                json!({"artifactId":item["artifactId"],"file_id":crate::services::local_delegation::uploads::file_id(resume.job.id,package["exportId"].as_str().unwrap(),item["artifactId"].as_str().unwrap(),item["sha256"].as_str().unwrap()),"filename":item["filename"],"text":text}),
-            );
+            evidence.push(json!({
+                "artifactId": item["artifactId"],
+                "file_id": crate::services::local_delegation::uploads::file_id(
+                    resume.job.id,
+                    package["exportId"].as_str().unwrap(),
+                    item["artifactId"].as_str().unwrap(),
+                    item["sha256"].as_str().unwrap()
+                ),
+                "filename": item["filename"],
+                "text": text
+            }));
         }
         json!({"status":"approved","exportId":package["exportId"],"evidence":evidence})
     };
@@ -219,7 +235,7 @@ fn apply_result(resume: &mut store::Resume) -> Result<(), Report> {
     }
     Ok(())
 }
-async fn save(state: &AppState, resume: &store::Resume) -> Result<(), Report> {
+pub(super) async fn save(state: &AppState, resume: &store::Resume) -> Result<(), Report> {
     store::checkpoint(
         &state.db,
         resume.fence,
@@ -258,10 +274,10 @@ pub(crate) async fn launch(
         return Err(eyre!("Durable task leases are disabled"));
     }
     let job = store::get(&state.db, id, &me.id).await?;
-    if job.state == "completed" {
+    if job.state == JobState::Completed {
         return Ok(());
     }
-    if job.state != "awaiting_authenticated_resume" && job.state != "continuing" {
+    if job.state != JobState::AwaitingAuthenticatedResume && job.state != JobState::Continuing {
         return Err(eyre!("No continuation is ready"));
     }
     let (_, task) = state
@@ -366,205 +382,79 @@ async fn run(
     );
     let options = build_chat_options_for_completion(&settings, &provider.model_capabilities);
     let headers = ChatProviderHeadersContext::new(&me.id, &me.id_token_claims);
-    let client = state.genai_for_chat_provider_id_with_headers_context(
-        Some(&resume.checkpoint.model_id),
-        Some(&headers),
-    )?;
     apply_result(&mut resume)?;
     save(state, &resume).await?;
-    loop {
-        if resume.checkpoint.model_finished {
-            store::finish(
-                &state.db,
-                resume.fence,
-                &raw(&resume.checkpoint),
-                &serde_json::to_value(&resume.checkpoint.generation_metadata)?,
-            )
-            .await?;
-            let _ = publish(state, policy, me, task, resume.job.message_id).await;
-            return Ok(());
-        }
-        if !resume.checkpoint.pending_calls.is_empty() {
-            let call = resume.checkpoint.pending_calls.remove(0);
-            let cap = resume
-                .checkpoint
-                .max_tool_calls
-                .min(state.config.generation.max_tool_calls_per_message);
-            let client_cap = resume
-                .checkpoint
-                .task_client_budget
-                .unwrap_or(0)
-                .min(task_tool_budgets_for_chat(&chat).map_or(0, |b| b.client));
-            let plan = tool::plan(&call.fn_arguments, Utc::now().timestamp());
-            if call.fn_name != tool::NAME
-                || !resume.checkpoint.allowed_tools.contains(&call.fn_name)
-                || resume.checkpoint.consumption.tool_calls >= cap
-                || resume.checkpoint.consumption.client_tool_calls >= client_cap
-                || plan.is_err()
-            {
-                task.mark_tool_budget_exhausted();
-                settle_call(
-                    &mut resume.checkpoint,
-                    &call,
-                    json!({"status":"not_executed","reason":"Local collection is unavailable or its bounded allowance is exhausted."}),
-                    true,
-                )?;
-                save(state, &resume).await?;
-                continue;
-            }
-            resume.checkpoint.consumption.tool_calls += 1;
-            resume.checkpoint.consumption.client_tool_calls += 1;
-            resume.checkpoint.result_applied = false;
-            let id = Uuid::new_v4();
-            waiting_content(&mut resume.checkpoint, &call, id);
-            store::park(
-                &state.db,
-                store::Park {
-                    id,
-                    previous: Some(resume.fence),
-                    owner: &me.id,
-                    chat_id: chat.id,
-                    message_id: resume.job.message_id,
-                    generation_id: task.generation_id,
-                    tool_call_id: &call.call_id,
-                    task_id: &resume.job.task_id,
-                    plan: &plan?,
-                    checkpoint: &resume.checkpoint,
-                    message: &raw(&resume.checkpoint),
-                },
-            )
-            .await?;
-            task.mark_awaiting_approval();
-            let _ = publish(state, policy, me, task, resume.job.message_id).await;
-            return Ok(());
-        }
-        if resume.checkpoint.consumption.model_turns >= resume.checkpoint.max_model_turns {
-            resume.checkpoint.content.push(ContentPart::Text(ContentPartText{text:"Local research stopped at its model-call limit. Approved evidence remains attached to this task.".into()}));
-            resume.checkpoint.model_finished = true;
-            save(state, &resume).await?;
-            continue;
-        }
-        let guardrails = state
-            .config
-            .chat_provider_guardrails(Some(&resume.checkpoint.model_id));
-        if scan_chat_request_for_prompt_injection(
-            &resume.checkpoint.request,
-            &state.config.guardrails,
-            &guardrails,
-        )?
-        .is_some()
-        {
-            return Err(eyre!("Local continuation rejected by prompt guardrail"));
-        }
-        // Persist the charge BEFORE model I/O. A crash may discard an unfinished
-        // response, but never refunds a model call or executes its tools twice.
-        resume.checkpoint.consumption.model_turns += 1;
-        save(state, &resume).await?;
-        let timeout = state
-            .config
-            .generation_status
-            .provider_idle_timeout_secs
-            .clamp(10, 300);
-        let mut response = tokio::time::timeout(
-            Duration::from_secs(timeout),
-            client.exec_chat(
-                "PLACEHOLDER_MODEL",
-                resume.checkpoint.request.clone(),
-                Some(&options),
-            ),
+    if resume.checkpoint.model_finished {
+        store::finish(
+            &state.db,
+            resume.fence,
+            &raw(&resume.checkpoint),
+            &serde_json::to_value(&resume.checkpoint.generation_metadata)?,
         )
-        .await??;
-        let calls: Vec<_> = response.tool_calls().into_iter().cloned().collect();
-        let mut unique = HashSet::new();
-        if calls.len() > 100
-            || calls.iter().any(|c| {
-                !unique.insert(&c.call_id)
-                    || resume
-                        .checkpoint
-                        .content
-                        .iter()
-                        .any(|p| matches!(p,ContentPart::ToolUse(t) if t.tool_call_id==c.call_id))
-            })
-        {
-            return Err(eyre!("Invalid repeated local tool call"));
-        }
-        if let Some(reasoning) = &response.reasoning_content {
-            resume
-                .checkpoint
-                .content
-                .push(ContentPart::Reasoning(ContentPartReasoning {
-                    text: reasoning.clone(),
-                    ..Default::default()
-                }));
-            if !response
-                .content
-                .reasoning_contents()
-                .contains(&reasoning.as_str())
-            {
-                response
-                    .content
-                    .push(GenAiContentPart::ReasoningContent(reasoning.clone()));
-            }
-        }
-        for text in response.texts() {
-            resume
-                .checkpoint
-                .content
-                .push(ContentPart::Text(ContentPartText { text: text.into() }));
-        }
-        let metadata = resume
-            .checkpoint
-            .generation_metadata
-            .get_or_insert_with(Default::default);
-        macro_rules! usage {
-            ($field:ident,$value:expr) => {
-                metadata.$field = Some(
-                    metadata
-                        .$field
-                        .unwrap_or(0)
-                        .saturating_add($value.unwrap_or(0).max(0) as u32),
-                );
-            };
-        }
-        usage!(used_prompt_tokens, response.usage.prompt_tokens);
-        usage!(used_completion_tokens, response.usage.completion_tokens);
-        usage!(used_total_tokens, response.usage.total_tokens);
-        usage!(
-            used_reasoning_tokens,
-            response
-                .usage
-                .completion_tokens_details
-                .as_ref()
-                .and_then(|details| details.reasoning_tokens)
-        );
-        if let Some(reasoning) = &response.reasoning_content {
-            metadata
-                .reasoning_summary
-                .get_or_insert_with(String::new)
-                .push_str(reasoning);
-        }
-        let reasoning_items: Vec<_> = response
-            .content
-            .reasoning_items()
-            .into_iter()
-            .cloned()
-            .collect();
-        if !reasoning_items.is_empty() {
-            metadata
-                .reasoning_items
-                .get_or_insert_with(Vec::new)
-                .extend(reasoning_items);
-        }
-
-        resume.checkpoint.request.messages.push(GenAiChatMessage {
-            role: ChatRole::Assistant,
-            content: response.content,
-            options: None,
-        });
-        resume.checkpoint.pending_calls = calls;
-        resume.checkpoint.model_finished = resume.checkpoint.pending_calls.is_empty();
-        save(state, &resume).await?;
+        .await?;
+        return publish(state, policy, me, task, resume.job.message_id).await;
     }
+    let current_budget = task_tool_budgets_for_chat(&chat)
+        .ok_or_else(|| eyre!("Local research budget was withdrawn"))?;
+    let budgets = crate::services::delegation::TaskToolBudgets {
+        server: current_budget
+            .server
+            .min(resume.checkpoint.task_server_budget.unwrap_or(0)),
+        client: current_budget
+            .client
+            .min(resume.checkpoint.task_client_budget.unwrap_or(0)),
+    };
+    let model_id = resume.checkpoint.model_id.clone();
+    let message_id = resume.job.message_id;
+    let request = resume.checkpoint.request.clone();
+    let content = resume.checkpoint.content.clone();
+    let allowed = resume.checkpoint.allowed_tools.iter().cloned().collect();
+    let pending = resume.checkpoint.pending_calls.clone();
+    // Reuse the same streaming, guardrail, tracing, accounting and tool dispatch
+    // loop as /continue. The resume seed adds durable counters/checkpoints only;
+    // it does not introduce another model runner or ordinary approval grant.
+    stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
+        detached_generation_event_sink(),
+        state,
+        policy,
+        &me.to_subject(),
+        request,
+        LangfuseTraceEnrichment::default(),
+        options,
+        message_id,
+        me.id.clone(),
+        chat.id,
+        Some(&model_id),
+        &me.groups,
+        McpRequestAuthContext {
+            app_state: Some(state),
+            user_id: Uuid::parse_str(&me.id).ok(),
+            oidc_token: Some(&me.oidc_token),
+            access_token: me.access_token.as_deref(),
+        },
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        allowed,
+        vec![],
+        HashMap::new(),
+        &headers,
+        Some(task),
+        chat.assistant_id,
+        content,
+        true,
+        false,
+        None,
+        Some(budgets),
+        Some(ParkedTurnResume {
+            initial_unfinished_tool_calls: pending,
+            approved_task_call_ids: HashSet::new(),
+            local_job: Some(resume),
+        }),
+    )
+    .await?;
+    publish(state, policy, me, task, message_id).await
 }
 
 #[cfg(test)]
@@ -621,7 +511,7 @@ mod tests {
                 plan: json!({"queryVariants":["query"]}),
                 binding: None,
                 origin: None,
-                state: "continuing".into(),
+                state: JobState::Continuing,
                 receipt: Some("receipt".into()),
                 server_outcome: None,
             },
@@ -654,8 +544,17 @@ mod tests {
         resume
             .checkpoint
             .content
-            .push(ContentPart::Text(ContentPartText {
-                text: "later model content".into(),
+            .push(ContentPart::ToolUse(ToolUse {
+                tool_call_id: "parallel-sibling".into(),
+                tool_name: tool::NAME.into(),
+                status: MessageToolCallStatus::Success,
+                input: None,
+                output: Some(json!({"status":"approved"})),
+                progress_message: None,
+                progress: None,
+                total: None,
+                started_at: None,
+                ended_at: None,
             }));
         assert!(is_waiting(&resume.checkpoint.content));
     }

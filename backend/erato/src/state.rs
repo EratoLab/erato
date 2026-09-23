@@ -100,6 +100,7 @@ impl GlobalPolicyEngine {
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
+    pub local_delegation_signer: Option<Arc<crate::services::local_delegation::signing::Signer>>,
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub config: AppConfig,
@@ -187,13 +188,19 @@ impl std::fmt::Debug for AppState {
 
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
-        if config.desktop_sidecar.local_delegation.enabled {
-            crate::services::local_delegation::signing::Signer::new(
-                &config.desktop_sidecar.local_delegation,
-            )?;
-            if !config.delegation.tasks.enabled {
-                return Err(eyre::eyre!("Local delegation requires durable task leases"));
-            }
+        let local_delegation_signer = config
+            .desktop_sidecar
+            .local_delegation
+            .enabled
+            .then(|| {
+                crate::services::local_delegation::signing::Signer::new(
+                    &config.desktop_sidecar.local_delegation,
+                )
+                .map(Arc::new)
+            })
+            .transpose()?;
+        if local_delegation_signer.is_some() && !config.delegation.tasks.enabled {
+            return Err(eyre::eyre!("Local delegation requires durable task leases"));
         }
         let distribution = Arc::new(Distribution::load(&config));
         crate::server::router::ensure_office_addin_manifests_support_launch_events(
@@ -295,6 +302,7 @@ impl AppState {
 
         Ok(Self {
             db,
+            local_delegation_signer,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
             config,

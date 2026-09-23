@@ -604,14 +604,15 @@ Settings for distributing and configuring the local Erato desktop sidecar.
 
 Native-reviewed local evidence collection is disabled by default. Keep `enabled`
 false until the paired native/backend/frontend release passes recovery and host
-qualification. The initial supported operation is `local/collect_evidence` in an
+qualification. The initial supported operation is `erato/local_collect_evidence` in an
 explicitly configured asynchronous delegated leaf task. It requires
 `delegation.tasks.enabled` and the task's frozen tool budget; ordinary chats,
 Office actions, arbitrary scripts and local inference are outside this profile.
 
 `backend_origin` is the canonical HTTPS issuer, for example
 `https://erato.example.com`. `signing_key_id` selects an Ed25519 key in
-`verification_keys`, a map of key IDs to base64url public keys without padding.
+`verification_keys`, a map of 1–8 key IDs to Ed25519 public keys encoded as
+base64url without padding (32 decoded bytes per key).
 `signing_private_key_pem` is the matching PKCS#8 PEM secret, held only by the single
 backend replica. This task feature supports one backend replica only. Personalized
 native downloads receive only the origin and public verification keys. Retain

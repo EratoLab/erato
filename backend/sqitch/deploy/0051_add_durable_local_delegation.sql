@@ -23,6 +23,7 @@ CREATE TABLE public.local_delegation_jobs (
     export_id text UNIQUE,
     manifest_digest text,
     created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
     expires_at timestamptz NOT NULL,
     accepted_at timestamptz,
     UNIQUE(message_id,tool_call_id),
@@ -30,6 +31,9 @@ CREATE TABLE public.local_delegation_jobs (
     CHECK ((approved_export IS NULL) = (receipt IS NULL)),
     CHECK (state NOT IN ('awaiting_authenticated_resume','continuing','completed') OR receipt IS NOT NULL OR server_outcome IS NOT NULL)
 );
+CREATE TRIGGER on_update_set_updated_columns_local_delegation_jobs
+    BEFORE UPDATE ON public.local_delegation_jobs
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
 CREATE INDEX local_delegation_owner_pending_idx ON public.local_delegation_jobs(owner_user_id,created_at)
     WHERE state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing');
 CREATE INDEX local_delegation_chat_idx ON public.local_delegation_jobs(chat_id);

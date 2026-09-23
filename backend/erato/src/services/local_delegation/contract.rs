@@ -7,11 +7,14 @@ use std::sync::LazyLock;
 
 // Generated from desktop-sidecar-protocol, checked by its check:generated command.
 // Keep this inside backend/ so container builds need no files outside their context.
-static SCHEMAS: LazyLock<BTreeMap<String, jsonschema::Validator>> = LazyLock::new(|| {
-    let documents: BTreeMap<String, Value> = serde_json::from_str(include_str!(
+static DOCUMENTS: LazyLock<BTreeMap<String, Value>> = LazyLock::new(|| {
+    serde_json::from_str(include_str!(
         "../../../../generated/local_delegation_schemas.json"
     ))
-    .expect("bundled shared schemas");
+    .expect("bundled shared schemas")
+});
+static SCHEMAS: LazyLock<BTreeMap<String, jsonschema::Validator>> = LazyLock::new(|| {
+    let documents = &*DOCUMENTS;
     documents
         .iter()
         .map(|(name, document)| {
@@ -158,6 +161,58 @@ pub fn validate_export(
     }
     Ok(())
 }
+/// Describe the exact canonical wire contract in OpenAPI instead of advertising
+/// serde_json::Value as an untyped/null body. References are resolved from the
+/// same bundled documents used by runtime validation, never from the network.
+pub fn openapi_schema(kind: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+    fn expand(value: &Value, base: &str) -> Value {
+        match value {
+            Value::Object(object) => {
+                if let Some(reference) = object.get("$ref").and_then(Value::as_str) {
+                    let mut url = url::Url::parse(base).unwrap().join(reference).unwrap();
+                    let fragment = url.fragment().unwrap_or("").to_string();
+                    url.set_fragment(None);
+                    let document = DOCUMENTS
+                        .values()
+                        .find(|doc| doc["$id"].as_str() == Some(url.as_str()))
+                        .expect("bundled schema reference");
+                    return expand(
+                        document.pointer(&fragment).expect("schema pointer"),
+                        url.as_str(),
+                    );
+                }
+                let mut result = serde_json::Map::new();
+                for (key, value) in object {
+                    if matches!(key.as_str(), "$schema" | "$id" | "title") {
+                        continue;
+                    }
+                    if key == "const" {
+                        result.insert("enum".into(), serde_json::json!([value]));
+                        result.insert("type".into(), serde_json::json!("string"));
+                    } else {
+                        result.insert(key.clone(), expand(value, base));
+                    }
+                }
+                Value::Object(result)
+            }
+            Value::Array(values) => Value::Array(values.iter().map(|v| expand(v, base)).collect()),
+            _ => value.clone(),
+        }
+    }
+    let document = &DOCUMENTS[kind];
+    serde_json::from_value(expand(document, document["$id"].as_str().unwrap()))
+        .expect("canonical OpenAPI schema")
+}
+pub fn plan_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+    openapi_schema("plan")
+}
+pub fn binding_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+    openapi_schema("binding")
+}
+pub fn outcome_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+    serde_json::from_value(serde_json::json!({"type":"object","properties":{"status":{"type":"string","enum":["cancelled","expired"]}},"required":["status"],"additionalProperties":false})).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,7 +226,22 @@ mod tests {
         let mut binding = fixture["binding"].clone();
         binding["planDigest"] = json!(plan_digest(&plan).unwrap());
         let text = b"APPROVED fixture";
-        let mut package = json!({"binding":binding,"exportId":"e".repeat(43),"snapshotId":"s".repeat(43),"grantId":"g".repeat(43),"approvedAt":100,"expiresAt":plan["expiresAt"],"artifacts":[{"artifactId":"a".repeat(43),"filename":"evidence.txt","mediaType":"text/plain","sha256":digest(text),"byteLength":text.len(),"contentBase64":STANDARD.encode(text)}]});
+        let mut package = json!({
+            "binding": binding,
+            "exportId": "e".repeat(43),
+            "snapshotId": "s".repeat(43),
+            "grantId": "g".repeat(43),
+            "approvedAt": 100,
+            "expiresAt": plan["expiresAt"],
+            "artifacts": [{
+                "artifactId": "a".repeat(43),
+                "filename": "evidence.txt",
+                "mediaType": "text/plain",
+                "sha256": digest(text),
+                "byteLength": text.len(),
+                "contentBase64": STANDARD.encode(text)
+            }]
+        });
         package["manifestDigest"] = json!(manifest_digest(&package).unwrap());
         (package, binding, plan)
     }

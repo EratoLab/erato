@@ -3702,13 +3702,24 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             ));
         }
     }
-    if !mcp_claimed_names.contains(crate::services::local_delegation::tool::NAME)
+    let local_name = crate::services::local_delegation::tool::NAME;
+    if mcp_claimed_names.contains(local_name)
+        && client_tool_allowlist
+            .iter()
+            .any(|pattern| pattern == crate::services::local_delegation::tool::QUALIFIED_NAME)
+    {
+        tracing::error!(
+            tool = local_name,
+            "Not offering explicitly selected local research: an MCP tool claims the reserved name"
+        );
+    }
+    if !mcp_claimed_names.contains(local_name)
         && crate::services::local_delegation::tool::eligible(
-            &app_state.config,
-            chat,
-            &client_tool_allowlist,
-            !chat_request_tools.is_empty(),
+            &app_state.config, chat, &client_tool_allowlist, !chat_request_tools.is_empty(),
         )
+        // Leaf eligibility above requires a delegated run. Reuse reserved-name
+        // selection/collision handling without applying the parent-only restriction.
+        && synthetic_tool_offer_slot(local_name, true, &client_tool_allowlist, &generation_mcp_tools, false)
     {
         chat_request_tools.push(crate::services::local_delegation::tool::build(
             effective_model_settings.compat_omit_strict,
@@ -4832,7 +4843,7 @@ async fn stream_generate_chat_completion<
     // Set only by the approval continuation: the calls a parked batch never
     // reached, so the first turn dispatches them instead of going straight to
     // the model. `None` for a generation that starts from a user message.
-    resume: Option<ParkedTurnResume>,
+    mut resume: Option<ParkedTurnResume>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
     let mcp = app_state.mcp_state().await;
     // Record the real assistant message id on the streaming task. `start_task`
@@ -4899,7 +4910,20 @@ async fn stream_generate_chat_completion<
     let langfuse_trace_id = tracing_client
         .as_ref()
         .map(|client| client.trace_id().to_string());
-    let max_tool_calls_per_message = app_state.config.generation.max_tool_calls_per_message;
+    let mut durable_local = resume.as_mut().and_then(|seed| seed.local_job.take());
+    let saved_consumption = durable_local
+        .as_ref()
+        .map(|local| local.checkpoint.consumption.clone())
+        .unwrap_or_default();
+    let saved_metadata = durable_local
+        .as_ref()
+        .and_then(|local| local.checkpoint.generation_metadata.clone())
+        .unwrap_or_default();
+    let max_tool_calls_per_message = app_state.config.generation.max_tool_calls_per_message.min(
+        durable_local
+            .as_ref()
+            .map_or(u32::MAX, |local| local.checkpoint.max_tool_calls),
+    );
     // Default time the loop holds a turn open awaiting a client tool's result
     // before giving up (the backstop that prevents a never-answering client
     // from leaking the parked turn). A client tool counts as one normal
@@ -4931,17 +4955,18 @@ async fn stream_generate_chat_completion<
             )
         },
     );
-    let mut current_turn = 0;
-    let mut current_tool_call_count = 0;
+    let mut current_turn = saved_consumption.model_turns as usize;
+    let mut current_tool_call_count = saved_consumption.tool_calls;
     // Charged per class and never summed: a run that has spent its server
     // budget may still make client calls, and the other way round.
-    let mut task_server_tool_calls: u32 = 0;
-    let mut task_client_tool_calls: u32 = 0;
-    let mut submission_attempts: HashMap<String, u32> = HashMap::new();
+    let mut task_server_tool_calls = saved_consumption.server_tool_calls;
+    let mut task_client_tool_calls = saved_consumption.client_tool_calls;
+    let mut submission_attempts: HashMap<String, u32> =
+        saved_consumption.submission_attempts.into_iter().collect();
     // At most one successful client-action proposal per generation: the
     // client needs a single authoritative proposal, so duplicate or
     // conflicting calls after the first are answered with an error.
-    let mut client_action_already_proposed = false;
+    let mut client_action_already_proposed = saved_consumption.client_action_already_proposed;
 
     let mut current_message_content = initial_message_content;
     let mut current_turn_chat_request = chat_request.clone();
@@ -4977,13 +5002,15 @@ async fn stream_generate_chat_completion<
         .collect();
 
     // Track cumulative usage statistics across all turns
-    let mut total_prompt_tokens = 0u32;
-    let mut total_completion_tokens = 0u32;
-    let mut total_total_tokens = 0u32;
-    let mut total_reasoning_tokens = 0u32;
-    let mut captured_reasoning_summary = String::new();
-    let mut captured_reasoning_items: Vec<genai::chat::ReasoningItem> = vec![];
-    let mut captured_reasoning_item_encrypted_content: Vec<String> = vec![];
+    let mut total_prompt_tokens = saved_metadata.used_prompt_tokens.unwrap_or(0);
+    let mut total_completion_tokens = saved_metadata.used_completion_tokens.unwrap_or(0);
+    let mut total_total_tokens = saved_metadata.used_total_tokens.unwrap_or(0);
+    let mut total_reasoning_tokens = saved_metadata.used_reasoning_tokens.unwrap_or(0);
+    let mut captured_reasoning_summary = saved_metadata.reasoning_summary.unwrap_or_default();
+    let mut captured_reasoning_items = saved_metadata.reasoning_items.unwrap_or_default();
+    let mut captured_reasoning_item_encrypted_content = saved_metadata
+        .reasoning_item_encrypted_content
+        .unwrap_or_default();
 
     let build_generation_metadata =
         |total_prompt_tokens: u32,
@@ -5062,6 +5089,41 @@ async fn stream_generate_chat_completion<
     let mut tool_call_parent_observation_ids: HashMap<String, String> = HashMap::new();
     let mut tool_call_started_at: HashMap<String, String> = HashMap::new();
 
+    // A local continuation checkpoints at the model I/O boundaries. Ordinary
+    // generations and approval continuations retain their existing lifecycle.
+    macro_rules! checkpoint_local_turn {
+        () => {
+            if let Some(local) = durable_local.as_mut() {
+                local.checkpoint.request = current_turn_chat_request.clone();
+                local.checkpoint.content = current_message_content.clone();
+                local.checkpoint.pending_calls = unfinished_tool_calls.iter().cloned().collect();
+                local.checkpoint.consumption = crate::services::local_delegation::Consumption {
+                    model_turns: current_turn as u32,
+                    tool_calls: current_tool_call_count,
+                    server_tool_calls: task_server_tool_calls,
+                    client_tool_calls: task_client_tool_calls,
+                    submission_attempts: submission_attempts
+                        .iter()
+                        .map(|(k, v)| (k.clone(), *v))
+                        .collect(),
+                    client_action_already_proposed,
+                };
+                local.checkpoint.generation_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                );
+                local_jobs::save(app_state, local).await?;
+            }
+        };
+    }
     let completion = 'loop_call_turns: loop {
         current_turn += 1;
         tracing::debug!("Starting chat completion turn {}", current_turn);
@@ -5862,7 +5924,9 @@ async fn stream_generate_chat_completion<
             // and neither delegation tool (`delegate_to_assistant`,
             // `delegate_task`) is a client tool; hallucinated names were
             // already rejected by the `allowed_tool_names` check above.
-            if unfinished_tool_call.fn_name == crate::services::local_delegation::tool::NAME {
+            if unfinished_tool_call.fn_name == crate::services::local_delegation::tool::NAME
+                && !available_mcp_tools_by_name.contains_key(&unfinished_tool_call.fn_name)
+            {
                 let task = streaming_task
                     .ok_or_else(|| eyre!("Local delegation requires a durable generation lease"))?;
                 let metadata = build_generation_metadata(
@@ -5903,6 +5967,7 @@ async fn stream_generate_chat_completion<
                     },
                     task_tool_budgets,
                     &allowed_tool_names,
+                    durable_local.as_ref(),
                 )
                 .await?;
                 // The job transaction already persisted content and metadata. The
@@ -7265,6 +7330,24 @@ async fn stream_generate_chat_completion<
             }
         }
 
+        if durable_local
+            .as_ref()
+            .is_some_and(|local| current_turn > local.checkpoint.max_model_turns as usize)
+        {
+            if let Some(task) = streaming_task {
+                task.mark_tool_budget_exhausted();
+            }
+            current_turn = current_turn.saturating_sub(1);
+            checkpoint_local_turn!();
+            break 'loop_call_turns Ok((
+                current_message_content,
+                durable_local
+                    .as_ref()
+                    .and_then(|local| local.checkpoint.generation_metadata.clone()),
+            ));
+        }
+        checkpoint_local_turn!();
+
         let genai_client = app_state
             .genai_for_chat_provider_id_with_headers_context(
                 chat_provider_id,
@@ -8057,6 +8140,7 @@ async fn stream_generate_chat_completion<
                             .into_iter()
                             .map(ToOwned::to_owned),
                     );
+                    checkpoint_local_turn!();
                 } else {
                     // Update Langfuse trace with final output and metadata if enabled
                     if let Some(ref client) = tracing_client
@@ -8282,7 +8366,28 @@ async fn stream_generate_chat_completion<
             ));
         }
     };
-    completion.map(|(content, metadata)| (without_preparing_tools(&content), metadata))
+    let completion =
+        completion.map(|(content, metadata)| (without_preparing_tools(&content), metadata));
+    if let (Some(local), Ok((content, metadata))) = (durable_local.as_mut(), &completion)
+        && !local_jobs::is_waiting(content)
+    {
+        local.checkpoint.content = content.clone();
+        local.checkpoint.generation_metadata = metadata.clone();
+        local.checkpoint.model_finished = true;
+        // A terminal response needs no replay, but keeps consumed allowances.
+        local.checkpoint.consumption.tool_calls = current_tool_call_count;
+        local.checkpoint.consumption.server_tool_calls = task_server_tool_calls;
+        local.checkpoint.consumption.client_tool_calls = task_client_tool_calls;
+        local_jobs::save(app_state, local).await?;
+        crate::services::local_delegation::store::finish(
+            &app_state.db,
+            local.fence,
+            &local_jobs::raw(&local.checkpoint),
+            &serde_json::to_value(metadata)?,
+        )
+        .await?;
+    }
+    completion
 }
 
 /// Mark the task's outcome as parked when the finalized message stops on an
@@ -14795,6 +14900,7 @@ pub async fn continue_message_sse(
 /// than beside it is what makes them obey the same filtered tool set, approval
 /// gate and budgets as any other call.
 pub(crate) struct ParkedTurnResume {
+    pub local_job: Option<crate::services::local_delegation::store::Resume>,
     pub initial_unfinished_tool_calls: Vec<genai::chat::ToolCall>,
     /// Task calls the user has just approved on a `task_plan` card. The
     /// dispatch-approval pre-pass skips them, or the decision the user made
@@ -16191,6 +16297,7 @@ pub(crate) async fn run_continuation(
         });
     }
     let resume = (!pending_tool_calls.is_empty()).then(|| ParkedTurnResume {
+        local_job: None,
         initial_unfinished_tool_calls: pending_tool_calls,
         approved_task_call_ids,
     });

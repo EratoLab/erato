@@ -2,6 +2,7 @@
 //! Blob keys include the immutable content digest. A crash before SQL finalization
 //! can leave an unreferenced blob, but a retry writes the same key and file ID.
 use super::{contract, store};
+use crate::db::entity::local_delegation_jobs::JobState;
 use crate::state::AppState;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use eyre::{Result, eyre};
@@ -40,7 +41,7 @@ pub async fn stage(
         &job.plan,
         chrono::Utc::now().timestamp(),
     )?;
-    if job.state != "waiting_for_local_result" {
+    if job.state != JobState::WaitingForLocalResult {
         return Err(eyre!("Local result is no longer pending"));
     }
     let artifacts = package["artifacts"]
@@ -86,7 +87,7 @@ pub async fn stage(
 mod tests {
     use super::*;
     #[test]
-    fn retry_keys_are_stable_and_conflicting_bytes_cannot_overwrite_accepted_blobs() {
+    fn retry_keys_are_stable_and_distinct_content_gets_distinct_blob_identity() {
         let job = Uuid::new_v4();
         let id = file_id(job, "export", "artifact", "digest");
         assert_eq!(id, file_id(job, "export", "artifact", "digest"));

@@ -2,6 +2,8 @@
 //! persisted in PostgreSQL for one backend replica. Continuations reuse the
 //! existing chat generation identity and lifecycle; no separate job lease exists.
 use super::{Checkpoint, contract};
+use crate::db::entity::local_delegation_jobs::ACTIVE_JOB_STATES_SQL;
+use crate::db::entity::local_delegation_jobs::JobState;
 use eyre::{Result, eyre};
 use sea_orm::prelude::Uuid;
 use sea_orm::{
@@ -11,7 +13,12 @@ use sea_orm::{
 use serde_json::{Value, json};
 
 fn statement(sql: &str, values: Vec<sea_orm::Value>) -> Statement {
-    Statement::from_sql_and_values(DbBackend::Postgres, sql, values)
+    crate::query_metrics::named_statement_from_sql_and_values(
+        DbBackend::Postgres,
+        crate::metrics_constants::POSTGRES_QUERY_LOCAL_DELEGATION,
+        sql,
+        values,
+    )
 }
 fn conflict() -> eyre::Report {
     eyre!("Local delegation state conflict")
@@ -28,7 +35,7 @@ pub struct PendingJob {
     pub plan: Value,
     pub binding: Option<Value>,
     pub origin: Option<String>,
-    pub state: String,
+    pub state: JobState,
     pub receipt: Option<String>,
     pub server_outcome: Option<Value>,
 }
@@ -75,7 +82,19 @@ pub async fn park(db: &DatabaseConnection, input: Park<'_>) -> Result<Uuid> {
     }
     let tx = db.begin().await?;
     // This also serializes against archive, generation takeover and tool-policy updates.
-    let chat=tx.query_one_raw(statement("SELECT id FROM chats WHERE id=$1 AND owner_user_id=$2 AND archived_at IS NULL AND active_generation_id=$3 AND generation_state='running' FOR UPDATE",vec![input.chat_id.into(),input.owner.into(),input.generation_id.into()])).await?;
+    let chat = tx
+        .query_one_raw(statement(
+            r#"SELECT id FROM chats
+           WHERE id=$1 AND owner_user_id=$2 AND archived_at IS NULL
+             AND active_generation_id=$3 AND generation_state='running'
+           FOR UPDATE"#,
+            vec![
+                input.chat_id.into(),
+                input.owner.into(),
+                input.generation_id.into(),
+            ],
+        ))
+        .await?;
     if chat.is_none() {
         return Err(conflict());
     }
@@ -101,7 +120,33 @@ pub async fn park(db: &DatabaseConnection, input: Park<'_>) -> Result<Uuid> {
             return Err(conflict());
         }
     }
-    let inserted=tx.execute_raw(statement("INSERT INTO local_delegation_jobs(id,owner_user_id,chat_id,message_id,tool_call_id,attempt_id,task_id,plan,checkpoint,expires_at,generation_id) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,to_timestamp($10::bigint),$11 WHERE $10>extract(epoch from now()) AND $10<=extract(epoch from now())+604800 ON CONFLICT(message_id,tool_call_id) DO NOTHING",vec![id.into(),input.owner.into(),input.chat_id.into(),input.message_id.into(),input.tool_call_id.into(),Uuid::new_v4().into(),input.task_id.into(),input.plan.clone().into(),checkpoint.into(),input.plan["expiresAt"].as_i64().ok_or_else(conflict)?.into(),input.generation_id.into()])).await?;
+    let inserted = tx
+        .execute_raw(statement(
+            r#"INSERT INTO local_delegation_jobs(
+               id, owner_user_id, chat_id, message_id, tool_call_id, attempt_id,
+               task_id, plan, checkpoint, expires_at, generation_id
+           ) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,to_timestamp($10::bigint),$11
+           WHERE $10>extract(epoch from now())
+             AND $10<=extract(epoch from now())+604800
+           ON CONFLICT(message_id,tool_call_id) DO NOTHING"#,
+            vec![
+                id.into(),
+                input.owner.into(),
+                input.chat_id.into(),
+                input.message_id.into(),
+                input.tool_call_id.into(),
+                Uuid::new_v4().into(),
+                input.task_id.into(),
+                input.plan.clone().into(),
+                checkpoint.into(),
+                input.plan["expiresAt"]
+                    .as_i64()
+                    .ok_or_else(conflict)?
+                    .into(),
+                input.generation_id.into(),
+            ],
+        ))
+        .await?;
     if inserted.rows_affected() != 1 {
         return Err(conflict());
     }
@@ -131,16 +176,70 @@ pub async fn pending(
     owner: &str,
     after: Option<Uuid>,
 ) -> Result<Vec<PendingJob>> {
-    let rows=db.query_all_raw(statement("SELECT j.* FROM local_delegation_jobs j JOIN chats c ON c.id=j.chat_id WHERE j.owner_user_id=$1 AND c.owner_user_id=$1 AND c.archived_at IS NULL AND (j.state IN ('awaiting_authenticated_resume','continuing') OR (j.state='waiting_for_local_result' AND j.expires_at>now()) OR (j.state IN ('completed','cancelled') AND (j.receipt IS NOT NULL OR j.server_outcome IS NOT NULL) AND j.expires_at>now()-interval '7 days')) AND ($2::uuid IS NULL OR j.id>$2) ORDER BY j.id LIMIT 128",vec![owner.into(),after.into()])).await?;
+    let rows = db
+        .query_all_raw(statement(
+            r#"
+            SELECT j.*
+            FROM local_delegation_jobs j
+            JOIN chats c ON c.id=j.chat_id
+            WHERE j.owner_user_id=$1
+            AND c.owner_user_id=$1
+            AND c.archived_at IS NULL
+            AND (j.state IN ('awaiting_authenticated_resume','continuing')
+            OR (j.state='waiting_for_local_result'
+            AND j.expires_at>now())
+            OR (j.state IN ('completed','cancelled')
+            AND (j.receipt IS NOT NULL
+            OR j.server_outcome IS NOT NULL)
+            AND j.expires_at>now()-interval '7 days'))
+            AND ($2::uuid IS NULL
+            OR j.id>$2)
+            ORDER BY j.id
+            LIMIT 128
+        "#,
+            vec![owner.into(), after.into()],
+        ))
+        .await?;
     rows.into_iter().map(PendingJob::from_row).collect()
 }
 pub async fn get(db: &DatabaseConnection, id: Uuid, owner: &str) -> Result<PendingJob> {
-    let row=db.query_one_raw(statement("SELECT j.* FROM local_delegation_jobs j JOIN chats c ON c.id=j.chat_id WHERE j.id=$1 AND j.owner_user_id=$2 AND c.owner_user_id=$2 AND c.archived_at IS NULL",vec![id.into(),owner.into()])).await?.ok_or_else(conflict)?;
+    let row = db
+        .query_one_raw(statement(
+            r#"
+            SELECT j.*
+            FROM local_delegation_jobs j
+            JOIN chats c ON c.id=j.chat_id
+            WHERE j.id=$1
+            AND j.owner_user_id=$2
+            AND c.owner_user_id=$2
+            AND c.archived_at IS NULL
+        "#,
+            vec![id.into(), owner.into()],
+        ))
+        .await?
+        .ok_or_else(conflict)?;
     PendingJob::from_row(row)
 }
 async fn lock_job(tx: &DatabaseTransaction, id: Uuid, owner: &str) -> Result<sea_orm::QueryResult> {
     // Lock chat first consistently with generation/archival code.
-    if tx.query_one_raw(statement("SELECT c.id FROM chats c JOIN local_delegation_jobs j ON j.chat_id=c.id WHERE j.id=$1 AND j.owner_user_id=$2 AND c.owner_user_id=$2 AND c.archived_at IS NULL FOR UPDATE OF c",vec![id.into(),owner.into()])).await?.is_none() {return Err(conflict());}
+    if tx
+        .query_one_raw(statement(
+            r#"
+            SELECT c.id
+            FROM chats c
+            JOIN local_delegation_jobs j ON j.chat_id=c.id
+            WHERE j.id=$1
+            AND j.owner_user_id=$2
+            AND c.owner_user_id=$2
+            AND c.archived_at IS NULL FOR UPDATE OF c
+        "#,
+            vec![id.into(), owner.into()],
+        ))
+        .await?
+        .is_none()
+    {
+        return Err(conflict());
+    }
     tx.query_one_raw(statement("SELECT *,floor(extract(epoch from now()))::bigint AS clock FROM local_delegation_jobs WHERE id=$1 AND owner_user_id=$2 FOR UPDATE",vec![id.into(),owner.into()])).await?.ok_or_else(conflict)
 }
 pub async fn bind_device(
@@ -157,7 +256,7 @@ pub async fn bind_device(
     let mut job = PendingJob::from_row(row)?;
     if job.server_outcome.is_some()
         || (job.receipt.is_none()
-            && (job.state != "waiting_for_local_result"
+            && (job.state != JobState::WaitingForLocalResult
                 || job.plan["expiresAt"].as_i64().ok_or_else(conflict)? <= now))
     {
         return Err(conflict());
@@ -244,7 +343,7 @@ pub async fn accept_files(
     }
     let now: i64 = row.try_get("", "clock")?;
     let job = PendingJob::from_row(row)?;
-    if job.state != "waiting_for_local_result" {
+    if job.state != JobState::WaitingForLocalResult {
         return Err(conflict());
     }
     let binding = job.binding.ok_or_else(conflict)?;
@@ -252,17 +351,27 @@ pub async fn accept_files(
     // File metadata, attachment links, exact result, receipt and resume intent
     // have one logged commit. No visible duplicate files on retry.
     for file in files.files {
-        tx.execute_raw(statement("INSERT INTO file_uploads(id,owner_user_id,filename,file_storage_provider_id,file_storage_path) VALUES($1,$2,$3,$4,$5)",vec![file.id.into(),owner.into(),file.filename.into(),file.provider.into(),file.path.into()])).await?;
-        tx.execute_raw(statement(
-            "INSERT INTO chat_file_uploads(chat_id,file_upload_id) VALUES($1,$2)",
-            vec![job.chat_id.into(), file.id.into()],
-        ))
+        crate::models::file_upload::create_file_upload_record(
+            &tx,
+            file.id,
+            owner.into(),
+            &job.chat_id,
+            file.filename,
+            file.provider,
+            file.path,
+            None,
+            None,
+        )
         .await?;
     }
     let receipt = sign(
         json!({"iss":binding["backendOrigin"],"aud":"erato-local-export-receipt-v1","binding":binding,"exportId":package["exportId"],"manifestDigest":package["manifestDigest"],"receiptId":Uuid::new_v4().simple().to_string(),"acceptedAt":now}),
     )?;
-    tx.execute_raw(statement("UPDATE local_delegation_jobs SET state='awaiting_authenticated_resume',approved_export=$2,receipt=$3,export_id=$4,manifest_digest=$5,accepted_at=to_timestamp($6::bigint) WHERE id=$1",vec![id.into(),package.clone().into(),receipt.clone().into(),package["exportId"].as_str().ok_or_else(conflict)?.into(),package["manifestDigest"].as_str().ok_or_else(conflict)?.into(),now.into()])).await?;
+    tx.execute_raw(statement(r#"
+            UPDATE local_delegation_jobs
+            SET state='awaiting_authenticated_resume',approved_export=$2,receipt=$3,export_id=$4,manifest_digest=$5,accepted_at=to_timestamp($6::bigint)
+            WHERE id=$1
+        "#,vec![id.into(),package.clone().into(),receipt.clone().into(),package["exportId"].as_str().ok_or_else(conflict)?.into(),package["manifestDigest"].as_str().ok_or_else(conflict)?.into(),now.into()])).await?;
     tx.commit().await?;
     Ok(receipt)
 }
@@ -279,6 +388,31 @@ pub struct Resume {
     pub package: Option<Value>,
     pub job: PendingJob,
 }
+/// The chat generation transaction owns the lease before entering this transition.
+/// Test fixtures and production use the same guarded job-state update.
+pub(crate) async fn begin_continuation_in<C: ConnectionTrait>(
+    db: &C,
+    id: Uuid,
+    generation_id: Uuid,
+) -> Result<(), sea_orm::DbErr> {
+    let updated = db
+        .execute_raw(statement(
+            r#"
+        UPDATE local_delegation_jobs j SET state='continuing', generation_id=$2
+        FROM chats c WHERE j.id=$1 AND c.id=j.chat_id
+          AND c.active_generation_id=$2 AND c.generation_state='running'
+          AND c.archived_at IS NULL
+          AND j.state IN ('awaiting_authenticated_resume','continuing')
+          AND j.generation_id IS DISTINCT FROM $2
+    "#,
+            vec![id.into(), generation_id.into()],
+        ))
+        .await?;
+    if updated.rows_affected() != 1 {
+        return Err(sea_orm::DbErr::Custom("Local continuation conflict".into()));
+    }
+    Ok(())
+}
 #[cfg(test)]
 async fn claim_resume(
     db: &DatabaseConnection,
@@ -287,26 +421,10 @@ async fn claim_resume(
     generation_id: Uuid,
 ) -> Result<Resume> {
     let tx = db.begin().await?;
-    let row = lock_job(&tx, id, owner).await?;
-    let checkpoint: Value = row.try_get("", "checkpoint")?;
-    let package: Option<Value> = row.try_get("", "approved_export")?;
-    let job = PendingJob::from_row(row)?;
-    tx.query_one_raw(statement("UPDATE local_delegation_jobs j SET state='continuing',generation_id=$3 FROM chats c WHERE j.id=$1 AND j.owner_user_id=$2 AND c.id=j.chat_id AND c.active_generation_id=$3 AND c.generation_state='running' AND j.state='awaiting_authenticated_resume' RETURNING j.id",vec![id.into(),owner.into(),generation_id.into()])).await?.ok_or_else(conflict)?;
-    let fence = Fence {
-        job_id: id,
-        generation_id,
-    };
-    let checkpoint: Checkpoint = serde_json::from_value(checkpoint)?;
-    if checkpoint.version != 1 {
-        return Err(conflict());
-    }
+    lock_job(&tx, id, owner).await?;
+    begin_continuation_in(&tx, id, generation_id).await?;
     tx.commit().await?;
-    Ok(Resume {
-        fence,
-        checkpoint,
-        package,
-        job,
-    })
+    claimed(db, id, owner, generation_id).await
 }
 /// Read the checkpoint after the existing BackgroundTaskManager claims its generation.
 pub async fn claimed(
@@ -318,6 +436,9 @@ pub async fn claimed(
     let tx = db.begin().await?;
     let row = lock_job(&tx, id, owner).await?;
     let checkpoint: Checkpoint = serde_json::from_value(row.try_get("", "checkpoint")?)?;
+    if checkpoint.version != 1 {
+        return Err(conflict());
+    }
     let package: Option<Value> = row.try_get("", "approved_export")?;
     let fence = Fence {
         job_id: id,
@@ -394,7 +515,15 @@ pub async fn checkpoint(
         return Err(conflict());
     }
     values.push(serialized.into());
-    let row=tx.query_one_raw(statement(&format!("UPDATE local_delegation_jobs j SET checkpoint=$3 FROM chats c WHERE {FENCED} AND ($3->'consumption'->>'tool_calls')::bigint >= (j.checkpoint->'consumption'->>'tool_calls')::bigint AND ($3->'consumption'->>'model_turns')::bigint >= (j.checkpoint->'consumption'->>'model_turns')::bigint RETURNING j.message_id"),values)).await?.ok_or_else(conflict)?;
+    let row=tx.query_one_raw(statement(&format!(r#"
+            UPDATE local_delegation_jobs j
+            SET checkpoint=$3
+            FROM chats c
+            WHERE {FENCED}
+            AND ($3->'consumption'->>'tool_calls')::bigint >= (j.checkpoint->'consumption'->>'tool_calls')::bigint
+            AND ($3->'consumption'->>'model_turns')::bigint >= (j.checkpoint->'consumption'->>'model_turns')::bigint
+            RETURNING j.message_id
+        "#),values)).await?.ok_or_else(conflict)?;
     let message_id: Uuid = row.try_get("", "message_id")?;
     tx.execute_raw(statement(
         "UPDATE messages SET raw_message=$2 WHERE id=$1",
@@ -423,7 +552,18 @@ pub async fn finish(
         ],
     ))
     .await?;
-    tx.execute_raw(statement("UPDATE chats c SET generation_state='completed',generation_ended_at=now() FROM local_delegation_jobs j WHERE j.id=$1 AND c.id=j.chat_id AND c.active_generation_id=$2",vec![fence.job_id.into(),fence.generation_id.into()])).await?;
+    tx.execute_raw(statement(
+        r#"
+            UPDATE chats c
+            SET generation_state='completed',generation_ended_at=now()
+            FROM local_delegation_jobs j
+            WHERE j.id=$1
+            AND c.id=j.chat_id
+            AND c.active_generation_id=$2
+        "#,
+        vec![fence.job_id.into(), fence.generation_id.into()],
+    ))
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -431,7 +571,20 @@ pub async fn finish(
 /// Persist the terminal decision and settle its visible tool part before another
 /// generation can replace this task. Native cancellation is reconciled on return.
 pub(crate) async fn abandon_in<C: ConnectionTrait>(db: &C, chat_id: Uuid) -> Result<u64> {
-    let rows=db.query_all_raw(statement("UPDATE local_delegation_jobs SET state='cancelled',server_outcome='{\"status\":\"cancelled\"}' WHERE chat_id=$1 AND state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing') RETURNING message_id,tool_call_id",vec![chat_id.into()])).await?;
+    let rows = db
+        .query_all_raw(statement(
+            &format!(
+                r#"
+            UPDATE local_delegation_jobs
+            SET state='cancelled',server_outcome='{{"status":"cancelled"}}'
+            WHERE chat_id=$1
+            AND state IN ({ACTIVE_JOB_STATES_SQL})
+            RETURNING message_id,tool_call_id
+        "#
+            ),
+            vec![chat_id.into()],
+        ))
+        .await?;
     for row in &rows {
         let message_id: Uuid = row.try_get("", "message_id")?;
         let call_id: String = row.try_get("", "tool_call_id")?;
@@ -478,7 +631,16 @@ pub(crate) async fn abandon_in<C: ConnectionTrait>(db: &C, chat_id: Uuid) -> Res
 }
 pub async fn abort_chat(db: &DatabaseConnection, chat_id: Uuid, owner: &str) -> Result<bool> {
     let tx = db.begin().await?;
-    if tx.query_one_raw(statement("SELECT id FROM chats WHERE id=$1 AND owner_user_id=$2 AND archived_at IS NULL FOR UPDATE",vec![chat_id.into(),owner.into()])).await?.is_none(){return Err(conflict());}
+    if tx
+        .query_one_raw(statement(
+            "SELECT id FROM chats WHERE id=$1 AND owner_user_id=$2 FOR UPDATE",
+            vec![chat_id.into(), owner.into()],
+        ))
+        .await?
+        .is_none()
+    {
+        return Err(conflict());
+    }
     let changed = abandon_in(&tx, chat_id).await? > 0;
     if changed {
         tx.execute_raw(statement(
@@ -493,7 +655,19 @@ pub async fn abort_chat(db: &DatabaseConnection, chat_id: Uuid, owner: &str) -> 
 pub async fn cancel(db: &DatabaseConnection, id: Uuid, owner: &str) -> Result<Option<Uuid>> {
     let tx = db.begin().await?;
     lock_job(&tx, id, owner).await?;
-    let row = tx.query_one_raw(statement("UPDATE local_delegation_jobs SET state='awaiting_authenticated_resume',server_outcome='{\"status\":\"cancelled\"}' WHERE id=$1 AND state NOT IN ('completed','cancelled','expired') AND server_outcome IS NULL RETURNING generation_id",vec![id.into()])).await?;
+    let row = tx
+        .query_one_raw(statement(
+            r#"
+            UPDATE local_delegation_jobs
+            SET state='awaiting_authenticated_resume',server_outcome='{"status":"cancelled"}'
+            WHERE id=$1
+            AND state NOT IN ('completed','cancelled','expired')
+            AND server_outcome IS NULL
+            RETURNING generation_id
+        "#,
+            vec![id.into()],
+        ))
+        .await?;
     let generation_id: Option<Uuid> = row
         .map(|row| row.try_get("", "generation_id"))
         .transpose()?
@@ -504,12 +678,38 @@ pub async fn cancel(db: &DatabaseConnection, id: Uuid, owner: &str) -> Result<Op
 /// Database-only recovery records a need for live authentication; it cannot
 /// launch a cloud generation or reconstruct authority from a stored subject ID.
 pub async fn recover(db: &DatabaseConnection, stale_after_secs: u64) -> Result<()> {
-    let tx = db.begin().await?;
-    // Serialize recovery with normal cancellation/new-turn/checkpoint writes.
-    // Lock chats first, matching the existing generation transaction's order.
-    tx.query_all_raw(statement("SELECT c.id FROM chats c WHERE EXISTS (SELECT 1 FROM local_delegation_jobs j WHERE j.chat_id=c.id AND j.state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing')) ORDER BY c.id FOR UPDATE",vec![])).await?;
-    tx.execute_raw(statement("UPDATE local_delegation_jobs j SET state=CASE WHEN c.archived_at IS NOT NULL OR c.owner_user_id<>j.owner_user_id THEN 'cancelled' ELSE 'awaiting_authenticated_resume' END,server_outcome=CASE WHEN j.state='waiting_for_local_result' AND j.expires_at<=now() THEN '{\"status\":\"expired\"}'::jsonb ELSE j.server_outcome END FROM chats c WHERE c.id=j.chat_id AND j.state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing') AND (c.archived_at IS NOT NULL OR c.owner_user_id<>j.owner_user_id OR (j.state='waiting_for_local_result' AND j.expires_at<=now()) OR (j.state='continuing' AND (j.generation_id IS DISTINCT FROM c.active_generation_id OR c.generation_state IS DISTINCT FROM 'running' OR COALESCE(c.generation_heartbeat_at,c.generation_started_at,'epoch'::timestamptz)<now()-make_interval(secs=>$1::double precision))))",vec![(stale_after_secs as f64).into()])).await?;
-    tx.commit().await?;
+    recover_job(db, stale_after_secs, None).await
+}
+/// Bounded maintenance, also usable for one explicitly resumed job. Lock only
+/// chats with a recoverable job; retry busy chats on the next maintenance pass.
+/// Pending-list requests are read-only and never invoke this maintenance.
+pub async fn recover_job(
+    db: &DatabaseConnection,
+    stale_after_secs: u64,
+    job_id: Option<Uuid>,
+) -> Result<()> {
+    db.execute_raw(statement(&format!(r#"
+        WITH recoverable AS MATERIALIZED (
+            SELECT j.id, c.id AS chat_id
+            FROM chats c JOIN local_delegation_jobs j ON j.chat_id=c.id
+            WHERE ($2::uuid IS NULL OR j.id=$2)
+              AND j.state IN ({ACTIVE_JOB_STATES_SQL})
+              AND (c.archived_at IS NOT NULL OR c.owner_user_id<>j.owner_user_id
+                OR (j.state='waiting_for_local_result' AND j.expires_at<=now())
+                OR (j.state='continuing' AND (
+                    j.generation_id IS DISTINCT FROM c.active_generation_id
+                    OR c.generation_state IS DISTINCT FROM 'running'
+                    OR COALESCE(c.generation_heartbeat_at,c.generation_started_at,'epoch'::timestamptz)
+                       <now()-make_interval(secs=>$1::double precision))))
+            ORDER BY c.id, j.id LIMIT 128 FOR UPDATE OF c SKIP LOCKED
+        )
+        UPDATE local_delegation_jobs j
+        SET state=CASE WHEN c.archived_at IS NOT NULL OR c.owner_user_id<>j.owner_user_id
+                THEN 'cancelled' ELSE 'awaiting_authenticated_resume' END,
+            server_outcome=CASE WHEN j.state='waiting_for_local_result' AND j.expires_at<=now()
+                THEN '{{"status":"expired"}}'::jsonb ELSE j.server_outcome END
+        FROM chats c, recoverable r WHERE j.id=r.id AND c.id=r.chat_id
+    "#), vec![(stale_after_secs as f64).into(), job_id.into()])).await?;
     Ok(())
 }
 
@@ -551,7 +751,11 @@ mod tests {
         db.execute_raw(statement("INSERT INTO messages(id,chat_id,raw_message) VALUES($1,$2,'{\"role\":\"assistant\",\"content\":[]}')",vec![message.into(),chat.into()])).await.unwrap();
         let plan = json!({"operation":"collect_evidence","queryVariants":["quarterly"],"maxHits":10,"maxArtifacts":3,"maxBytes":4096,"executionSeconds":30,"expiresAt":chrono::Utc::now().timestamp()+1800});
         let checkpoint = checkpoint_fixture();
-        let content = json!({"role":"assistant","content":[]});
+        let content = json!({"role":"assistant","content":[{
+            "content_type":"tool_use", "tool_call_id":"tool-call", "tool_name":"local_collect_evidence",
+            "status":"in_progress", "input":{"queryVariants":["quarterly"]},
+            "output":{"status":"awaiting_local_consent"}
+        }]});
         let id = park(
             db,
             Park {
@@ -584,7 +788,22 @@ mod tests {
         .await
         .unwrap();
         let bytes = b"Approved exact evidence";
-        let mut package = json!({"binding":job.binding,"exportId":"e".repeat(43),"snapshotId":"s".repeat(43),"grantId":"g".repeat(43),"approvedAt":chrono::Utc::now().timestamp(),"expiresAt":job.plan["expiresAt"],"artifacts":[{"artifactId":"a".repeat(43),"filename":"evidence.txt","mediaType":"text/plain","sha256":contract::digest(bytes),"byteLength":bytes.len(),"contentBase64":STANDARD.encode(bytes)}]});
+        let mut package = json!({
+            "binding": job.binding,
+            "exportId": "e".repeat(43),
+            "snapshotId": "s".repeat(43),
+            "grantId": "g".repeat(43),
+            "approvedAt": chrono::Utc::now().timestamp(),
+            "expiresAt": job.plan["expiresAt"],
+            "artifacts": [{
+                "artifactId": "a".repeat(43),
+                "filename": "evidence.txt",
+                "mediaType": "text/plain",
+                "sha256": contract::digest(bytes),
+                "byteLength": bytes.len(),
+                "contentBase64": STANDARD.encode(bytes)
+            }]
+        });
         package["manifestDigest"] = json!(contract::manifest_digest(&package).unwrap());
         package
     }
@@ -626,7 +845,7 @@ mod tests {
         );
         assert_eq!(
             pending(&other, "owner", None).await.unwrap()[0].state,
-            "waiting_for_local_result"
+            JobState::WaitingForLocalResult
         );
         let (a, b) = tokio::join!(
             accept(&db, id, "owner", &package, receipt),
@@ -636,7 +855,7 @@ mod tests {
         assert_eq!(first, b.unwrap());
         assert_eq!(
             pending(&other, "owner", None).await.unwrap()[0].state,
-            "awaiting_authenticated_resume"
+            JobState::AwaitingAuthenticatedResume
         );
         let mut conflict = package.clone();
         conflict["exportId"] = json!("x".repeat(43));
@@ -685,7 +904,7 @@ mod tests {
         recover(&other, 90).await.unwrap();
         assert_eq!(
             pending(&db, "owner", None).await.unwrap()[0].state,
-            "awaiting_authenticated_resume"
+            JobState::AwaitingAuthenticatedResume
         );
         let next = Uuid::new_v4();
         db.execute_raw(statement(
@@ -827,7 +1046,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             pending(&db, "owner", None).await.unwrap()[0].state,
-            "completed"
+            JobState::Completed
         );
         // Cancelling an old completed job cannot abort a newer chat generation.
         assert_eq!(cancel(&db, id, "owner").await.unwrap(), None);
@@ -886,10 +1105,13 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(get(&db, id, "owner").await.unwrap().state, "completed");
+        assert_eq!(
+            get(&db, id, "owner").await.unwrap().state,
+            JobState::Completed
+        );
         assert_eq!(
             get(&db, next_id, "owner").await.unwrap().state,
-            "waiting_for_local_result"
+            JobState::WaitingForLocalResult
         );
         assert!(ensure_current(&db, claim.fence).await.is_err());
         assert!(
@@ -955,7 +1177,7 @@ mod tests {
         let _ = child.wait().await.unwrap();
         let fresh = sea_orm::Database::connect(url.as_str()).await.unwrap();
         let job = get(&fresh, id, "owner").await.unwrap();
-        assert_eq!(job.state, "awaiting_authenticated_resume");
+        assert_eq!(job.state, JobState::AwaitingAuthenticatedResume);
         assert!(job.receipt.is_some());
         let row = fresh
             .query_one_raw(statement(
@@ -1036,7 +1258,10 @@ mod tests {
         assert!(abort_chat(&db, chat, "other-owner").await.is_err());
         assert!(abort_chat(&db, chat, "owner").await.unwrap());
         assert!(ensure_current(&db, current.fence).await.is_err());
-        assert_eq!(get(&db, id, "owner").await.unwrap().state, "cancelled");
+        assert_eq!(
+            get(&db, id, "owner").await.unwrap().state,
+            JobState::Cancelled
+        );
         next.request_abort();
 
         let (replacement_id, replacement_chat, replacement_message, _) = fixture(&db).await;
@@ -1057,7 +1282,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             get(&db, replacement_id, "owner").await.unwrap().state,
-            "cancelled"
+            JobState::Cancelled
         );
         assert!(
             restarted
@@ -1070,6 +1295,17 @@ mod tests {
                 .await
                 .is_err()
         );
+        let message = db
+            .query_one_raw(statement(
+                "SELECT raw_message FROM messages WHERE id=$1",
+                vec![replacement_message.into()],
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        let message: Value = message.try_get("", "raw_message").unwrap();
+        assert_eq!(message["content"][0]["status"], "error");
+        assert_eq!(message["content"][0]["output"]["status"], "cancelled");
         replacement.request_abort();
         let memory_only = BackgroundTaskManager::new(None, Default::default(), None);
         assert!(
@@ -1099,13 +1335,90 @@ mod tests {
         .unwrap();
         recover(&db, 90).await.unwrap();
         let job = get(&db, id, "owner").await.unwrap();
-        assert_eq!(job.state, "awaiting_authenticated_resume");
+        assert_eq!(job.state, JobState::AwaitingAuthenticatedResume);
         assert_eq!(job.server_outcome, Some(json!({"status":"expired"})));
         assert!(job.receipt.is_none());
         assert!(
             claim_resume(&db, id, "owner", Uuid::new_v4())
                 .await
                 .is_err()
+        );
+    }
+    /// # Test Categories
+    /// - `uses-db`
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn recovery_skips_live_locked_chats_and_recovers_expired_jobs(pool: sqlx::PgPool) {
+        let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+        let (live, chat, _, _) = fixture(&db).await;
+        let (expired, _, _, _) = fixture(&db).await;
+        db.execute_raw(statement(
+            "UPDATE local_delegation_jobs SET expires_at=now()-interval '1 second' WHERE id=$1",
+            vec![expired.into()],
+        ))
+        .await
+        .unwrap();
+        let lock = db.begin().await.unwrap();
+        lock.query_one_raw(statement(
+            "SELECT id FROM chats WHERE id=$1 FOR UPDATE",
+            vec![chat.into()],
+        ))
+        .await
+        .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), recover(&db, 90))
+            .await
+            .expect("live rows must not block recovery")
+            .unwrap();
+        assert_eq!(
+            get(&db, live, "owner").await.unwrap().state,
+            JobState::WaitingForLocalResult
+        );
+        let recovered = get(&db, expired, "owner").await.unwrap();
+        assert_eq!(recovered.state, JobState::AwaitingAuthenticatedResume);
+        assert_eq!(recovered.server_outcome, Some(json!({"status":"expired"})));
+        lock.rollback().await.unwrap();
+    }
+    /// # Test Categories
+    /// - `uses-db`
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn generation_reaper_preserves_a_durable_consent_stop(pool: sqlx::PgPool) {
+        let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+        let (id, chat, _, _) = fixture(&db).await;
+        db.execute_raw(statement(
+            "UPDATE chats SET generation_heartbeat_at=now()-interval '5 minutes' WHERE id=$1",
+            vec![chat.into()],
+        ))
+        .await
+        .unwrap();
+        let _manager = crate::services::background_tasks::BackgroundTaskManager::new(
+            Some(db.clone()),
+            crate::config::GenerationStatusConfig {
+                heartbeat_interval_secs: 300,
+                stale_after_secs: 1,
+                ..Default::default()
+            },
+            None,
+        );
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let row = db
+                    .query_one_raw(statement(
+                        "SELECT generation_state FROM chats WHERE id=$1",
+                        vec![chat.into()],
+                    ))
+                    .await
+                    .unwrap()
+                    .unwrap();
+                if row.try_get::<String>("", "generation_state").unwrap() == "awaiting_approval" {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            get(&db, id, "owner").await.unwrap().state,
+            JobState::WaitingForLocalResult
         );
     }
 }

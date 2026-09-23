@@ -21,3 +21,5 @@ pub mod share_links;
 pub mod user_preferences;
 pub mod user_tool_approval_settings;
 pub mod users;
+
+pub mod local_delegation_jobs;
