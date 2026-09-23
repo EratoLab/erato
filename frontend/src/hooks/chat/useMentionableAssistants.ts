@@ -2,7 +2,9 @@ import { skipToken } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import {
+  useAssistantHubConfig,
   useFrequentAssistants,
+  useListAssistantHubAssistants,
   useListAssistants,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
@@ -28,7 +30,12 @@ export interface MentionableAssistants {
   all: MentionableAssistant[];
 }
 
-function toMentionable(assistant: Assistant): MentionableAssistant {
+type AssistantCandidate = Pick<
+  Assistant,
+  "id" | "name" | "description" | "owner_email" | "archived_at"
+>;
+
+function toMentionable(assistant: AssistantCandidate): MentionableAssistant {
   return {
     id: assistant.id,
     name: assistant.name,
@@ -42,7 +49,7 @@ function toMentionable(assistant: Assistant): MentionableAssistant {
  * indistinguishable once typed — only the first of a name is offered.
  */
 function toOfferableMentions(
-  assistants: Assistant[],
+  assistants: AssistantCandidate[],
   excludedAssistantId: string | undefined,
 ): MentionableAssistant[] {
   const seenNames = new Set<string>();
@@ -61,7 +68,7 @@ function toOfferableMentions(
 }
 
 /**
- * Assistants the composer may @-mention. Both queries stay unissued while the
+ * Assistants the composer may @-mention. Queries stay unissued while the
  * feature is off, so a deployment without delegation pays nothing for it.
  */
 export function useMentionableAssistants(
@@ -73,6 +80,12 @@ export function useMentionableAssistants(
   const { data: allAssistants } = useListAssistants(
     isGateOpen ? {} : skipToken,
   );
+  const { data: hubConfig } = useAssistantHubConfig(
+    isGateOpen ? {} : skipToken,
+  );
+  const { data: hubAssistants } = useListAssistantHubAssistants(
+    isGateOpen && hubConfig?.enabled ? {} : skipToken,
+  );
   // One over the display limit, so excluding the chat's own assistant still
   // leaves a full set of suggestions.
   const { data: frequentAssistants } = useFrequentAssistants(
@@ -82,7 +95,20 @@ export function useMentionableAssistants(
   );
 
   return useMemo(() => {
-    const all = toOfferableMentions(allAssistants ?? [], boundAssistantId);
+    // The generic listing excludes Hub versions. The Hub listing supplies only
+    // current published versions accessible to this user; delegation needs the
+    // version's assistant ID, rather than the stable Hub ID.
+    const hubCandidates: AssistantCandidate[] = hubConfig?.enabled
+      ? (hubAssistants?.versions ?? []).map((version) => ({
+          id: version.assistant_id,
+          name: version.assistant.name,
+          description: version.assistant.description ?? undefined,
+        }))
+      : [];
+    const all = toOfferableMentions(
+      [...(allAssistants ?? []), ...hubCandidates],
+      boundAssistantId,
+    );
     const frequent = toOfferableMentions(
       frequentAssistants?.assistants ?? [],
       boundAssistantId,
@@ -97,5 +123,12 @@ export function useMentionableAssistants(
       ),
       all: browsable,
     };
-  }, [allAssistants, frequentAssistants, boundAssistantId, isGateOpen]);
+  }, [
+    allAssistants,
+    hubAssistants,
+    hubConfig?.enabled,
+    frequentAssistants,
+    boundAssistantId,
+    isGateOpen,
+  ]);
 }

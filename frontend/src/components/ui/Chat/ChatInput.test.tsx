@@ -45,6 +45,8 @@ const mockUseAudioConversationalFeature = vi.fn();
 const mockUseAssistantsFeature = vi.fn();
 const mockUseUserPreferencesFeature = vi.fn();
 const mockUseListAssistants = vi.fn();
+const mockUseAssistantHubConfig = vi.fn();
+const mockUseListAssistantHubAssistants = vi.fn();
 const mockUseFrequentAssistants = vi.fn();
 const mockUseListMcpServers = vi.fn();
 const mockUseChatDetail = vi.fn();
@@ -114,6 +116,10 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useCreateChat: (...args: unknown[]) => mockUseCreateChat(...args),
   useFacets: (...args: unknown[]) => mockUseFacets(...args),
   useListAssistants: (...args: unknown[]) => mockUseListAssistants(...args),
+  useAssistantHubConfig: (...args: unknown[]) =>
+    mockUseAssistantHubConfig(...args),
+  useListAssistantHubAssistants: (...args: unknown[]) =>
+    mockUseListAssistantHubAssistants(...args),
   useFrequentAssistants: (...args: unknown[]) =>
     mockUseFrequentAssistants(...args),
   useListMcpServers: (...args: unknown[]) => mockUseListMcpServers(...args),
@@ -335,6 +341,8 @@ describe("ChatInput", () => {
       delegationEnabled: false,
     });
     mockUseListAssistants.mockReturnValue({ data: undefined });
+    mockUseAssistantHubConfig.mockReturnValue({ data: { enabled: false } });
+    mockUseListAssistantHubAssistants.mockReturnValue({ data: undefined });
     mockUseFrequentAssistants.mockReturnValue({ data: undefined });
     mockUseUserPreferencesFeature.mockReturnValue({
       mcpServersTabEnabled: false,
@@ -4735,6 +4743,48 @@ describe("ChatInput", () => {
       expect(textarea).toBeDisabled();
       expect(screen.getByTestId("chat-input-mention-backdrop")).toHaveClass(
         "opacity-50",
+      );
+    });
+
+    it("searches and delegates to a Hub assistant using its published assistant ID", async () => {
+      enableDelegation();
+      mockUseListAssistants.mockReturnValue({ data: [] });
+      mockUseFrequentAssistants.mockReturnValue({ data: { assistants: [] } });
+      mockUseAssistantHubConfig.mockReturnValue({ data: { enabled: true } });
+      mockUseListAssistantHubAssistants.mockReturnValue({
+        data: {
+          versions: [
+            {
+              hub_assistant_id: "hub-stable-id",
+              assistant_id: "published-assistant-id",
+              assistant: {
+                name: "Hub researcher",
+                description: "Finds sources",
+              },
+            },
+          ],
+        },
+      });
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(onSendMessage);
+      typeWithCaretAtEnd(textarea, "@");
+      fireEvent.click(screen.getByTestId("chat-input-mention-browse"));
+      fireEvent.change(screen.getByTestId("chat-input-mention-browse-search"), {
+        target: { value: "researcher" },
+      });
+      fireEvent.click(
+        screen.getByTestId(
+          "chat-input-mention-browse-option-published-assistant-id",
+        ),
+      );
+      expect(textarea).toHaveValue("@Hub researcher ");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Hub researcher",
+        undefined,
+        undefined,
+        [],
+        [{ id: "published-assistant-id", name: "Hub researcher" }],
       );
     });
 

@@ -11,7 +11,7 @@ import { ModalBase } from "../Modal/ModalBase";
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
 import type React from "react";
 
-const SEARCH_KEYS = ["name", "description"];
+const SEARCH_KEYS = ["name"];
 
 // No fill of its own — the well sits on the modal shell. The inset is off the
 // size scale and is what publishes the concentric corner the rows read.
