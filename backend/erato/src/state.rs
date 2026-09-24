@@ -11,6 +11,7 @@ use crate::services::file_type_detection::FileTypeDetector;
 use crate::services::genai::GenAIClient;
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
+use crate::services::prompt_guardrails::CompiledPromptGuardrails;
 use crate::services::template_rendering::consumers::{
     chat_provider_headers::ChatProviderHeadersRenderer, system_prompt::SystemPromptRenderer,
 };
@@ -103,6 +104,8 @@ pub struct AppState {
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub config: AppConfig,
+    /// Startup-compiled guardrails; each scan clones its selected regexes.
+    pub prompt_guardrails: Arc<CompiledPromptGuardrails>,
     pub actor_manager: ActorManager,
     pub langfuse_client: LangfuseClient,
     pub global_policy_engine: GlobalPolicyEngine,
@@ -187,6 +190,7 @@ impl std::fmt::Debug for AppState {
 
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
+        let prompt_guardrails = Arc::new(CompiledPromptGuardrails::new(&config.guardrails)?);
         let distribution = Arc::new(Distribution::load(&config));
         crate::server::router::ensure_office_addin_manifests_support_launch_events(
             &config.integrations.ms_office.addin,
@@ -290,6 +294,7 @@ impl AppState {
             default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
             config,
+            prompt_guardrails,
             actor_manager,
             langfuse_client,
             global_policy_engine,

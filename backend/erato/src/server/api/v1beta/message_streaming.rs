@@ -7129,9 +7129,11 @@ async fn stream_generate_chat_completion<
         let provider_guardrails = app_state.config.chat_provider_guardrails(chat_provider_id);
         match scan_chat_request_for_prompt_injection(
             &current_turn_chat_request,
-            &app_state.config.guardrails,
+            &app_state.prompt_guardrails,
             &provider_guardrails,
-        ) {
+        )
+        .await
+        {
             Ok(Some(offense)) => {
                 let error_event = MessageSubmitStreamingResponseError {
                     message_id: Some(assistant_message_id),
