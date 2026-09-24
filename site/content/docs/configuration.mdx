@@ -2661,6 +2661,49 @@ It must be nonempty and differ from the Outlook ID in `integrations.ms_office.ad
 
 **Type:** `string`
 
+##### `integrations.ms_office.teams.enabled`
+
+{/* erato_toml_config_key: integrations.ms_office.teams.enabled */}
+
+Whether to enable standalone Teams app distribution. The Teams app reuses the Office add-in frontend bundle and Entra client ID, so `integrations.ms_office.addin.enabled` and `integrations.ms_office.addin.msal_client_id` must also be configured.
+
+When enabled, the backend serves a rendered manifest preview at `/office-addin/teams/manifest.json` and an installable Teams app ZIP at `/office-addin/teams/app-package.zip`.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+##### `integrations.ms_office.teams.app_id`
+
+{/* erato_toml_config_key: integrations.ms_office.teams.app_id */}
+
+Stable GUID identifying the standalone Teams app. It must differ from the Outlook and Word add-in IDs.
+
+**Default value:** `"c88180bf-f50d-42dc-8b5e-c27280b6035e"`
+
+**Type:** `string`
+
+##### `integrations.ms_office.teams.manifest`
+
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.developer_name */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.website_url */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.privacy_url */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.terms_url */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.short_name */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.full_name */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.short_description */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.full_description */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.tab_name */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.color_icon */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.outline_icon */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.small_color_icon */}
+
+Branding strings and package icon paths for the Teams app. Icon paths must be safe paths relative to the Office add-in bundle. The website, privacy, and terms URLs must use HTTPS. The package version follows the Erato release version; it has no separate configuration override.
+
+**Default values:** Erato branding and the color, outline, and small color icons shipped in the Office add-in bundle.
+
+**Type:** `object`
+
 ##### `integrations.ms_office.addin.document.manifest.display_name`
 
 {/* erato_toml_config_key: integrations.ms_office.addin.document.manifest.display_name */}

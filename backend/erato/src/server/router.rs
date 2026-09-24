@@ -680,6 +680,105 @@ async fn office_addin_document_manifest(
     .await
 }
 
+#[derive(Debug, Deserialize)]
+struct TeamsManifestQuery {
+    base_url: Option<String>,
+}
+
+fn render_teams_manifest_response(
+    app_state: &AppState,
+    headers: &HeaderMap,
+    query: TeamsManifestQuery,
+) -> Result<Vec<u8>, Box<Response>> {
+    let distribution = app_state.distribution.teams_app.as_deref().ok_or_else(|| {
+        Box::new(
+            (
+                StatusCode::NOT_FOUND,
+                "Teams app distribution is disabled or unavailable",
+            )
+                .into_response(),
+        )
+    })?;
+    let base_url = match query.base_url {
+        Some(value) => normalize_manifest_base_url(&value)
+            .map_err(|message| Box::new((StatusCode::BAD_REQUEST, message).into_response()))?,
+        None => derive_manifest_base_url(headers)
+            .map_err(|message| Box::new((StatusCode::BAD_REQUEST, message).into_response()))?,
+    };
+    distribution
+        .render_manifest(
+            &base_url,
+            &app_state.config.integrations.ms_office.teams,
+            &app_state.config.integrations.ms_office.addin,
+        )
+        .map_err(|error| {
+            Box::new(
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to render Teams app manifest: {error}"),
+                )
+                    .into_response(),
+            )
+        })
+}
+
+async fn teams_app_manifest(
+    State(app_state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<TeamsManifestQuery>,
+) -> Response {
+    match render_teams_manifest_response(&app_state, &headers, query) {
+        Ok(bytes) => (
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json; charset=utf-8"),
+            )],
+            bytes,
+        )
+            .into_response(),
+        Err(response) => *response,
+    }
+}
+
+async fn teams_app_package(
+    State(app_state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<TeamsManifestQuery>,
+) -> Response {
+    let manifest = match render_teams_manifest_response(&app_state, &headers, query) {
+        Ok(bytes) => bytes,
+        Err(response) => return *response,
+    };
+    let Some(distribution) = app_state.distribution.teams_app.as_deref() else {
+        return (
+            StatusCode::NOT_FOUND,
+            "Teams app distribution is disabled or unavailable",
+        )
+            .into_response();
+    };
+    match distribution.package(&manifest, &app_state.config.integrations.ms_office.teams) {
+        Ok(bytes) => (
+            [
+                (
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/zip"),
+                ),
+                (
+                    header::CONTENT_DISPOSITION,
+                    HeaderValue::from_static("attachment; filename=erato-teams-app.zip"),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to package Teams app: {error}"),
+        )
+            .into_response(),
+    }
+}
+
 async fn favicon(State(app_state): State<AppState>, path: &'static str) -> Response {
     for candidate in app_state
         .distribution
@@ -800,6 +899,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/office-addin/manifest-document.xml",
             get(office_addin_document_manifest),
+        )
+        .route("/office-addin/teams/manifest.json", get(teams_app_manifest))
+        .route(
+            "/office-addin/teams/app-package.zip",
+            get(teams_app_package),
         )
         .nest("/api/v1beta", crate::server::api::v1beta::router(app_state));
 

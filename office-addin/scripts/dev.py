@@ -139,10 +139,12 @@ FUNNEL_MANIFEST_SPECS = (
     ),
 )
 
-MANIFEST_UNIFIED_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest.json"
-MANIFEST_FUNNEL_UNIFIED_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.json"
+MANIFEST_UNIFIED_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-teams.json"
+MANIFEST_FUNNEL_UNIFIED_PATH = (
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel-teams.json"
+)
 MANIFEST_FUNNEL_APP_PACKAGE_PATH = (
-    OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.zip"
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel-teams.zip"
 )
 MANIFEST_UNIFIED_LOCAL_HOST = f"localhost:{OFFICE_ADDIN_PORT}"
 ADDIN_PUBLIC_DIR = OFFICE_ADDIN_DIR / "public"
@@ -760,7 +762,7 @@ def print_funnel_url() -> None:
         lines += list(manifest.instructions)
     if app_package_written:
         lines += [
-            "In Teams, upload manifests/manifest-funnel.zip via",
+            "In Teams, upload manifests/manifest-funnel-teams.zip via",
             "Apps → Manage your apps → Upload a custom app",
         ]
     width = max(len(line) for line in lines) + 4

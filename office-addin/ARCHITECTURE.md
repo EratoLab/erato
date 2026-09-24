@@ -211,5 +211,9 @@ use the router.
   that panel, so it would close itself on first click. The menu row only hands
   over the composer's `onSelectFiles` and closes the menu; the selection is
   serialized to one markdown `File` and goes through the ordinary upload path.
-- Not shipped: production manifest distribution (`manifests/manifest.json` is
-  the local unified package).
+- The standalone Teams manifest is staged as `manifest-teams.json` and served
+  with its package from `/office-addin/teams`. Teams distribution is configured
+  separately from the Outlook and Word XML add-ins.
+- `manifests/manifest.json` remains as a parked combined Outlook + Teams
+  manifest reference for future work. It is not staged or used by the current
+  standalone Teams distribution or local Teams package flow.

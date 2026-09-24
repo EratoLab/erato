@@ -1643,6 +1643,47 @@ msgid "officeAddin.teams.preview.transcriptLabel"
 msgstr "Teams conversation"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: window.location.host
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.authInstruction"
+msgstr "Ensure the Entra app registration has the Teams NAA broker redirect URI for this deployment: brk-multihub://{0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.copy"
+msgstr "Download the Teams app package ZIP and upload it in Microsoft 365 admin center under Integrated Apps. The JSON preview is for review; upload the ZIP package."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadButton"
+msgstr "Download Teams app package"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadFailed"
+msgstr "Failed to download Teams app package"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadInstruction"
+msgstr "Download the ZIP, then in Microsoft 365 admin center open Settings, Integrated apps, and choose Upload custom apps. Select Teams app as the app type and upload the ZIP."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.manifestPreview"
+msgstr "Teams manifest preview (JSON)"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.openIntegratedApps"
+msgstr "Open Integrated Apps"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.uploadInstruction"
+msgstr "Review the rendered Teams manifest JSON below. The package includes this manifest and its icons."
+
+#. js-lingui-explicit-id
 #: src/teams/providers/TeamsAuthProvider.tsx
 msgid "officeAddin.teams.signedIn.title"
 msgstr "Signed in. Try adding the chat again."

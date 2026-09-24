@@ -1643,6 +1643,47 @@ msgid "officeAddin.teams.preview.transcriptLabel"
 msgstr "Teams-Unterhaltung"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: window.location.host
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.authInstruction"
+msgstr "Stelle sicher, dass die Entra-App-Registrierung die Teams-NAA-Broker-Redirect-URI für diese Bereitstellung enthält: brk-multihub://{0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.copy"
+msgstr "Lade das ZIP-Paket der Teams-App herunter und lade es im Microsoft 365 Admin Center unter Integrierte Apps hoch. Die JSON-Vorschau dient nur zur Prüfung; lade das ZIP-Paket hoch."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadButton"
+msgstr "Teams-App-Paket herunterladen"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadFailed"
+msgstr "Das Teams-App-Paket konnte nicht heruntergeladen werden"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadInstruction"
+msgstr "Lade das ZIP herunter. Öffne im Microsoft 365 Admin Center Einstellungen und Integrierte Apps und wähle Benutzerdefinierte Apps hochladen. Wähle Teams-App als App-Typ und lade das ZIP hoch."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.manifestPreview"
+msgstr "Teams-Manifestvorschau (JSON)"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.openIntegratedApps"
+msgstr "Integrierte Apps öffnen"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.uploadInstruction"
+msgstr "Prüfe das gerenderte Teams-Manifest im JSON-Format. Das Paket enthält dieses Manifest und die zugehörigen Symbole."
+
+#. js-lingui-explicit-id
 #: src/teams/providers/TeamsAuthProvider.tsx
 msgid "officeAddin.teams.signedIn.title"
 msgstr "Angemeldet. Versuche erneut, den Chat hinzuzufügen."

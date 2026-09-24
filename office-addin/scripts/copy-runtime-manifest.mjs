@@ -7,6 +7,7 @@ const manifestNames = [
   "manifest.xml",
   "manifest-exchange-server.xml",
   "manifest-document.xml",
+  "manifest-teams.json",
 ];
 
 fs.mkdirSync(outputDir, { recursive: true });

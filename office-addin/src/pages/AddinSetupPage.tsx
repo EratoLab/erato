@@ -12,7 +12,7 @@ const EXCHANGE_LIMIT_ACCESS_DOCS_URL =
 const SHAREPOINT_CATALOG_DOCS_URL =
   "https://learn.microsoft.com/en-us/office/dev/add-ins/publish/publish-task-pane-and-content-add-ins-to-an-add-in-catalog";
 
-type OfficeProduct = "outlook" | "word" | "excel" | "powerpoint";
+type OfficeProduct = "outlook" | "teams" | "word" | "excel" | "powerpoint";
 type ExchangeSetup = "exchange-online" | "exchange-server";
 
 type ProductOption = {
@@ -29,6 +29,7 @@ type ExchangeSetupOption = {
 
 const PRODUCT_OPTIONS: ProductOption[] = [
   { id: "outlook", label: "Outlook", selectable: true },
+  { id: "teams", label: "Teams", selectable: true },
   { id: "word", label: "Word", selectable: true },
   { id: "excel", label: "Excel", selectable: false },
   { id: "powerpoint", label: "PowerPoint", selectable: false },
@@ -64,6 +65,9 @@ function getManifestPath(
   if (product === "word") {
     return DOCUMENT_MANIFEST_PATH;
   }
+  if (product === "teams") {
+    return "teams/manifest.json";
+  }
   const selectedSetup =
     EXCHANGE_SETUP_OPTIONS.find((option) => option.id === exchangeSetup) ??
     EXCHANGE_SETUP_OPTIONS[0];
@@ -72,7 +76,9 @@ function getManifestPath(
 
 /** Both Exchange variants are sideloaded with the filename shown in the instructions. */
 function getDownloadFilename(product: OfficeProduct): string {
-  return product === "word" ? DOCUMENT_MANIFEST_PATH : "manifest.xml";
+  if (product === "word") return DOCUMENT_MANIFEST_PATH;
+  if (product === "teams") return "erato-teams-app.zip";
+  return "manifest.xml";
 }
 
 function getManifestUrl(
@@ -95,8 +101,10 @@ export function AddinSetupPage() {
   const [selectedExchangeSetup, setSelectedExchangeSetup] =
     useState<ExchangeSetup>("exchange-online");
   const [manifestXml, setManifestXml] = useState("");
+  const [manifestJson, setManifestJson] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
   const spaRedirectUri = getSpaRedirectUri();
 
   useEffect(() => {
@@ -106,6 +114,8 @@ export function AddinSetupPage() {
       try {
         setIsLoading(true);
         setError(null);
+        setManifestXml("");
+        setManifestJson("");
 
         const response = await window.fetch(
           getManifestUrl(selectedProduct, selectedExchangeSetup),
@@ -118,7 +128,12 @@ export function AddinSetupPage() {
           throw new Error(`Failed to load manifest (${response.status})`);
         }
 
-        setManifestXml(await response.text());
+        const manifest = await response.text();
+        if (selectedProduct === "teams") {
+          setManifestJson(JSON.stringify(JSON.parse(manifest), null, 2));
+        } else {
+          setManifestXml(manifest);
+        }
       } catch (loadError) {
         if (abortController.signal.aborted) {
           return;
@@ -146,7 +161,39 @@ export function AddinSetupPage() {
     };
   }, [selectedProduct, selectedExchangeSetup]);
 
-  function handleDownload() {
+  async function handleDownload() {
+    if (selectedProduct === "teams") {
+      try {
+        setIsDownloading(true);
+        setError(null);
+        const response = await window.fetch(
+          new URL("teams/app-package.zip", window.location.href).toString(),
+        );
+        if (!response.ok) {
+          throw new Error(
+            `Failed to download Teams app package (${response.status})`,
+          );
+        }
+        const url = window.URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = getDownloadFilename(selectedProduct);
+        link.click();
+        window.URL.revokeObjectURL(url);
+      } catch (downloadError) {
+        setError(
+          downloadError instanceof Error
+            ? downloadError.message
+            : t({
+                id: "officeAddin.teams.setup.downloadFailed",
+                message: "Failed to download Teams app package",
+              }),
+        );
+      } finally {
+        setIsDownloading(false);
+      }
+      return;
+    }
     const blob = new Blob([manifestXml], { type: "application/xml" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -171,7 +218,13 @@ export function AddinSetupPage() {
             </Trans>
           </h1>
           <p className="office-setup-copy">
-            {selectedProduct === "word" ? (
+            {selectedProduct === "teams" ? (
+              <Trans id="officeAddin.teams.setup.copy">
+                Download the Teams app package ZIP and upload it in Microsoft
+                365 admin center under Integrated Apps. The JSON preview is for
+                review; upload the ZIP package.
+              </Trans>
+            ) : selectedProduct === "word" ? (
               <Trans id="officeAddin.word.setup.copy">
                 Download the XML below as <code>manifest-document.xml</code>,
                 then deploy it through the Integrated apps portal or a
@@ -200,7 +253,9 @@ export function AddinSetupPage() {
           onSelectProduct={setSelectedProduct}
         />
 
-        {selectedProduct === "word" ? (
+        {selectedProduct === "teams" ? (
+          <TeamsInstructions />
+        ) : selectedProduct === "word" ? (
           <WordInstructions spaRedirectUri={spaRedirectUri} />
         ) : selectedExchangeSetup === "exchange-online" ? (
           <ExchangeOnlineInstructions spaRedirectUri={spaRedirectUri} />
@@ -211,11 +266,19 @@ export function AddinSetupPage() {
         <div className="office-setup-actions">
           <button
             type="button"
-            onClick={handleDownload}
-            disabled={isLoading || !manifestXml}
+            onClick={() => void handleDownload()}
+            disabled={
+              isLoading ||
+              isDownloading ||
+              (selectedProduct === "teams" ? !manifestJson : !manifestXml)
+            }
             className="office-setup-button"
           >
-            {selectedProduct === "word" ? (
+            {selectedProduct === "teams" ? (
+              <Trans id="officeAddin.teams.setup.downloadButton">
+                Download Teams app package
+              </Trans>
+            ) : selectedProduct === "word" ? (
               <Trans id="officeAddin.word.setup.downloadButton">
                 Download manifest-document.xml
               </Trans>
@@ -225,7 +288,18 @@ export function AddinSetupPage() {
               </Trans>
             )}
           </button>
-          {selectedProduct === "word" ? (
+          {selectedProduct === "teams" ? (
+            <a
+              href={INTEGRATED_APPS_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="office-setup-button office-setup-button--secondary"
+            >
+              <Trans id="officeAddin.teams.setup.openIntegratedApps">
+                Open Integrated Apps
+              </Trans>
+            </a>
+          ) : selectedProduct === "word" ? (
             <>
               <a
                 href={INTEGRATED_APPS_URL}
@@ -293,19 +367,32 @@ export function AddinSetupPage() {
           className="office-setup-preview-label"
           htmlFor="manifest-preview"
         >
-          <Trans id="officeAddin.setup.manifestPreview">Manifest preview</Trans>
+          {selectedProduct === "teams" ? (
+            <Trans id="officeAddin.teams.setup.manifestPreview">
+              Teams manifest preview (JSON)
+            </Trans>
+          ) : (
+            <Trans id="officeAddin.setup.manifestPreview">
+              Manifest preview
+            </Trans>
+          )}
         </label>
         <textarea
           id="manifest-preview"
           className="office-setup-preview"
           readOnly
+          onCopy={(event) => {
+            if (selectedProduct === "teams") event.preventDefault();
+          }}
           value={
             isLoading
               ? t({
                   id: "officeAddin.setup.loadingManifest",
                   message: "Loading manifest...",
                 })
-              : manifestXml
+              : selectedProduct === "teams"
+                ? manifestJson
+                : manifestXml
           }
           spellCheck={false}
         />
@@ -439,6 +526,32 @@ function WordInstructions({ spaRedirectUri }: { spaRedirectUri: string }) {
           Word on Mac is not supported for on-premises mailboxes: the SharePoint
           app catalog does not cover the Mac desktop client. Point those users
           at Word for the web through a SharePoint Online catalog instead.
+        </Trans>
+      </li>
+    </ol>
+  );
+}
+
+function TeamsInstructions() {
+  return (
+    <ol className="office-setup-steps">
+      <li>
+        <Trans id="officeAddin.teams.setup.uploadInstruction">
+          Review the rendered Teams manifest JSON below. The package includes
+          this manifest and its icons.
+        </Trans>
+      </li>
+      <li>
+        <Trans id="officeAddin.teams.setup.downloadInstruction">
+          Download the ZIP, then in Microsoft 365 admin center open Settings,
+          Integrated apps, and choose Upload custom apps. Select Teams app as
+          the app type and upload the ZIP.
+        </Trans>
+      </li>
+      <li>
+        <Trans id="officeAddin.teams.setup.authInstruction">
+          Ensure the Entra app registration has the Teams NAA broker redirect
+          URI for this deployment: brk-multihub://{window.location.host}
         </Trans>
       </li>
     </ol>

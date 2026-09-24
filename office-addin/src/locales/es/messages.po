@@ -1643,6 +1643,47 @@ msgid "officeAddin.teams.preview.transcriptLabel"
 msgstr "Conversación de Teams"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: window.location.host
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.authInstruction"
+msgstr "Asegúrate de que el registro de la aplicación Entra incluya el URI de redirección del agente NAA de Teams para esta implementación: brk-multihub://{0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.copy"
+msgstr "Descarga el ZIP de la aplicación de Teams y súbelo en el Centro de administración de Microsoft 365, en Aplicaciones integradas. La vista previa JSON es solo para revisión; sube el ZIP."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadButton"
+msgstr "Descargar paquete de la aplicación de Teams"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadFailed"
+msgstr "No se pudo descargar el paquete de la aplicación de Teams"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadInstruction"
+msgstr "Descarga el ZIP. En el Centro de administración de Microsoft 365, abre Configuración, Aplicaciones integradas y elige Cargar aplicaciones personalizadas. Selecciona Aplicación de Teams como tipo y carga el ZIP."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.manifestPreview"
+msgstr "Vista previa del manifiesto de Teams (JSON)"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.openIntegratedApps"
+msgstr "Abrir Aplicaciones integradas"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.uploadInstruction"
+msgstr "Revisa el manifiesto JSON generado de Teams. El paquete incluye este manifiesto y sus iconos."
+
+#. js-lingui-explicit-id
 #: src/teams/providers/TeamsAuthProvider.tsx
 msgid "officeAddin.teams.signedIn.title"
 msgstr "Sesión iniciada. Vuelve a intentar añadir el chat."
