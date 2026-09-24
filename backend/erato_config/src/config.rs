@@ -5162,6 +5162,8 @@ pub struct MsOfficeConfig {
 
     #[serde(default)]
     pub addin: MsOfficeAddinConfig,
+    #[serde(default)]
+    pub teams: MsOfficeTeamsAppConfig,
 }
 
 impl MsOfficeConfig {
@@ -5184,7 +5186,185 @@ impl MsOfficeConfig {
             }
         }
 
-        self.addin.validate()
+        self.addin.validate()?;
+        self.teams.validate(&self.addin)
+    }
+}
+
+/// Independent Teams personal app distribution settings. The runtime shares
+/// the Office add-in frontend and Entra registration, but has its own app ID
+/// and customer-facing manifest branding.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeTeamsAppConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_ms_office_teams_app_id")]
+    pub app_id: String,
+    #[serde(default)]
+    pub manifest: MsOfficeTeamsManifestConfig,
+}
+
+impl Default for MsOfficeTeamsAppConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            app_id: default_ms_office_teams_app_id(),
+            manifest: MsOfficeTeamsManifestConfig::default(),
+        }
+    }
+}
+
+impl MsOfficeTeamsAppConfig {
+    pub fn validate(&self, addin: &MsOfficeAddinConfig) -> Result<(), Report> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if !addin.enabled {
+            return Err(eyre!(
+                "Microsoft Teams app distribution requires `integrations.ms_office.addin.enabled = true` because it shares that frontend bundle."
+            ));
+        }
+        if self.app_id.trim().is_empty() {
+            return Err(eyre!(
+                "Microsoft Teams app ID cannot be empty when enabled."
+            ));
+        }
+        if !is_ms_office_guid(self.app_id.trim()) {
+            return Err(eyre!("Microsoft Teams app ID must be a GUID."));
+        }
+        if self.app_id.trim() == addin.addin_id.trim()
+            || self.app_id.trim() == addin.document.addin_id.trim()
+        {
+            return Err(eyre!(
+                "Microsoft Teams app ID must differ from the Outlook and Word add-in IDs."
+            ));
+        }
+        if addin
+            .msal_client_id
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(eyre!(
+                "Microsoft Teams app distribution requires `integrations.ms_office.addin.msal_client_id`."
+            ));
+        }
+        self.manifest.validate()
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeTeamsManifestConfig {
+    #[serde(default = "default_ms_office_teams_developer_name")]
+    pub developer_name: String,
+    #[serde(default = "default_ms_office_teams_website_url")]
+    pub website_url: String,
+    #[serde(default = "default_ms_office_teams_privacy_url")]
+    pub privacy_url: String,
+    #[serde(default = "default_ms_office_teams_terms_url")]
+    pub terms_url: String,
+    #[serde(default = "default_ms_office_teams_short_name")]
+    pub short_name: String,
+    #[serde(default = "default_ms_office_teams_full_name")]
+    pub full_name: String,
+    #[serde(default = "default_ms_office_teams_short_description")]
+    pub short_description: String,
+    #[serde(default = "default_ms_office_teams_full_description")]
+    pub full_description: String,
+    #[serde(default = "default_ms_office_teams_tab_name")]
+    pub tab_name: String,
+    #[serde(default = "default_ms_office_teams_color_icon")]
+    pub color_icon: String,
+    #[serde(default = "default_ms_office_teams_outline_icon")]
+    pub outline_icon: String,
+    #[serde(default = "default_ms_office_teams_small_color_icon")]
+    pub small_color_icon: String,
+}
+
+impl Default for MsOfficeTeamsManifestConfig {
+    fn default() -> Self {
+        Self {
+            developer_name: default_ms_office_teams_developer_name(),
+            website_url: default_ms_office_teams_website_url(),
+            privacy_url: default_ms_office_teams_privacy_url(),
+            terms_url: default_ms_office_teams_terms_url(),
+            short_name: default_ms_office_teams_short_name(),
+            full_name: default_ms_office_teams_full_name(),
+            short_description: default_ms_office_teams_short_description(),
+            full_description: default_ms_office_teams_full_description(),
+            tab_name: default_ms_office_teams_tab_name(),
+            color_icon: default_ms_office_teams_color_icon(),
+            outline_icon: default_ms_office_teams_outline_icon(),
+            small_color_icon: default_ms_office_teams_small_color_icon(),
+        }
+    }
+}
+
+impl MsOfficeTeamsManifestConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        for (key, value) in [
+            ("developer_name", &self.developer_name),
+            ("website_url", &self.website_url),
+            ("privacy_url", &self.privacy_url),
+            ("terms_url", &self.terms_url),
+            ("short_name", &self.short_name),
+            ("full_name", &self.full_name),
+            ("short_description", &self.short_description),
+            ("full_description", &self.full_description),
+            ("tab_name", &self.tab_name),
+            ("color_icon", &self.color_icon),
+            ("outline_icon", &self.outline_icon),
+            ("small_color_icon", &self.small_color_icon),
+        ] {
+            if value.trim().is_empty() {
+                return Err(eyre!(
+                    "Microsoft Teams manifest field `{key}` cannot be empty."
+                ));
+            }
+        }
+        if self.short_name.chars().count() > 30 {
+            return Err(eyre!(
+                "Microsoft Teams manifest `short_name` cannot exceed 30 characters."
+            ));
+        }
+        if self.full_name.chars().count() > 100 {
+            return Err(eyre!(
+                "Microsoft Teams manifest `full_name` cannot exceed 100 characters."
+            ));
+        }
+        if self.short_description.chars().count() > 80 {
+            return Err(eyre!(
+                "Microsoft Teams manifest `short_description` cannot exceed 80 characters."
+            ));
+        }
+        for (key, value) in [
+            ("website_url", &self.website_url),
+            ("privacy_url", &self.privacy_url),
+            ("terms_url", &self.terms_url),
+        ] {
+            let url = url::Url::parse(value).map_err(|error| {
+                eyre!("Microsoft Teams manifest `{key}` is not a valid URL: {error}")
+            })?;
+            if url.scheme() != "https" {
+                return Err(eyre!("Microsoft Teams manifest `{key}` must use https."));
+            }
+        }
+        for (key, value) in [
+            ("color_icon", &self.color_icon),
+            ("outline_icon", &self.outline_icon),
+            ("small_color_icon", &self.small_color_icon),
+        ] {
+            let path = std::path::Path::new(value);
+            if path.is_absolute()
+                || path
+                    .components()
+                    .any(|component| !matches!(component, std::path::Component::Normal(_)))
+            {
+                return Err(eyre!(
+                    "Microsoft Teams manifest `{key}` must be a safe bundle-relative path."
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -5509,6 +5689,59 @@ fn default_ms_office_addin_msal_authority() -> String {
 
 fn default_ms_office_addin_id() -> String {
     "ee94d041-bd77-446c-8854-421648f50e7c".to_string()
+}
+
+fn default_ms_office_teams_app_id() -> String {
+    "c88180bf-f50d-42dc-8b5e-c27280b6035e".to_string()
+}
+
+fn is_ms_office_guid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 36
+        && [8, 13, 18, 23]
+            .into_iter()
+            .all(|index| bytes[index] == b'-')
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| [8, 13, 18, 23].contains(&index) || byte.is_ascii_hexdigit())
+}
+
+fn default_ms_office_teams_developer_name() -> String {
+    "Erato".to_string()
+}
+fn default_ms_office_teams_website_url() -> String {
+    "https://erato.app".to_string()
+}
+fn default_ms_office_teams_privacy_url() -> String {
+    "https://erato.app/privacy".to_string()
+}
+fn default_ms_office_teams_terms_url() -> String {
+    "https://erato.app/terms".to_string()
+}
+fn default_ms_office_teams_short_name() -> String {
+    "Erato".to_string()
+}
+fn default_ms_office_teams_full_name() -> String {
+    "Erato AI Assistant".to_string()
+}
+fn default_ms_office_teams_short_description() -> String {
+    "Erato AI assistant for Microsoft Teams".to_string()
+}
+fn default_ms_office_teams_full_description() -> String {
+    "Access the Erato AI assistant in Microsoft Teams for collaborative conversations with your organization’s knowledge.".to_string()
+}
+fn default_ms_office_teams_tab_name() -> String {
+    "Erato".to_string()
+}
+fn default_ms_office_teams_color_icon() -> String {
+    "assets/color-icon-192x192.png".to_string()
+}
+fn default_ms_office_teams_outline_icon() -> String {
+    "assets/outline-icon-32x32.png".to_string()
+}
+fn default_ms_office_teams_small_color_icon() -> String {
+    "assets/color-icon-32x32.png".to_string()
 }
 
 /// A distinct compile-time constant, never generated: the document add-in's

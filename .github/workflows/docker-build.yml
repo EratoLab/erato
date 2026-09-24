@@ -273,6 +273,11 @@ jobs:
         if: success() || failure()
         run: pnpm run office:validate:rendered
 
+      - name: "Standalone Teams app manifest validates"
+        working-directory: ./office-addin
+        if: success() || failure()
+        run: pnpm run office:validate:teams
+
   lint-backend:
     timeout-minutes: 10
     name: "lint (backend)"

@@ -204,6 +204,25 @@ chat_provider_ids = ["test-token-limit"]
 # [[integrations.ms_office.addin.launch_events]]
 # event = "OnNewMessageCompose"
 # function_name = "onNewMessageComposeHandler"
+#
+# # Standalone Teams personal app distribution; uses the Office add-in bundle
+# # and Entra client ID, but has its own stable app ID and branding.
+# [integrations.ms_office.teams]
+# enabled = true
+# app_id = "c88180bf-f50d-42dc-8b5e-c27280b6035e"
+# [integrations.ms_office.teams.manifest]
+# developer_name = "Erato"
+# website_url = "https://erato.app"
+# privacy_url = "https://erato.app/privacy"
+# terms_url = "https://erato.app/terms"
+# short_name = "Erato"
+# full_name = "Erato AI Assistant"
+# short_description = "Erato AI assistant for Microsoft Teams"
+# full_description = "Access the Erato AI assistant in Microsoft Teams."
+# tab_name = "Erato"
+# color_icon = "assets/color-icon-192x192.png"
+# outline_icon = "assets/outline-icon-32x32.png"
+# small_color_icon = "assets/color-icon-32x32.png"
 
 # Frontend configuration options for embedded scenarios
 # [frontend]

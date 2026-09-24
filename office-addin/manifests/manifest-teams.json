@@ -1,0 +1,47 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.29/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.29",
+  "version": "1.0.6",
+  "id": "e82b2f76-3ebf-407e-be47-c6149716ccde",
+  "developer": {
+    "name": "Erato (Local)",
+    "websiteUrl": "https://erato.app",
+    "privacyUrl": "https://erato.app/privacy",
+    "termsOfUseUrl": "https://erato.app/terms"
+  },
+  "name": {
+    "short": "Erato Teams (Local)",
+    "full": "Erato AI Assistant for Teams (Local)"
+  },
+  "description": {
+    "short": "Erato AI assistant for Microsoft Teams",
+    "full": "Access the Erato AI assistant in Microsoft Teams."
+  },
+  "icons": {
+    "color": "assets/color-icon-192x192.png",
+    "outline": "assets/outline-icon-32x32.png",
+    "color32x32": "assets/color-icon-32x32.png"
+  },
+  "accentColor": "#050505",
+  "staticTabs": [
+    {
+      "entityId": "eratoChat",
+      "name": "Erato (Local)",
+      "contentUrl": "https://localhost:3002/office-addin/teams",
+      "websiteUrl": "https://localhost:3002/office-addin/teams",
+      "scopes": ["personal"],
+      "context": ["personalTab"]
+    }
+  ],
+  "validDomains": ["localhost:3002"],
+  "webApplicationInfo": {
+    "id": "06d98d69-523a-4c2e-893d-44bd98226b31",
+    "resource": "api://06d98d69-523a-4c2e-893d-44bd98226b31",
+    "nestedAppAuthInfo": [
+      {
+        "redirectUri": "brk-multihub://localhost:3002",
+        "scopes": ["User.Read"]
+      }
+    ]
+  }
+}

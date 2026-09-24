@@ -1643,6 +1643,47 @@ msgid "officeAddin.teams.preview.transcriptLabel"
 msgstr "Konwersacja w usłudze Teams"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: window.location.host
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.authInstruction"
+msgstr "Upewnij się, że rejestracja aplikacji Entra zawiera identyfikator URI przekierowania brokera Teams NAA dla tego wdrożenia: brk-multihub://{0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.copy"
+msgstr "Pobierz pakiet ZIP aplikacji Teams i prześlij go w Centrum administracyjnym Microsoft 365 w sekcji Zintegrowane aplikacje. Podgląd JSON służy tylko do weryfikacji; prześlij pakiet ZIP."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadButton"
+msgstr "Pobierz pakiet aplikacji Teams"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadFailed"
+msgstr "Nie udało się pobrać pakietu aplikacji Teams"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadInstruction"
+msgstr "Pobierz plik ZIP. W Centrum administracyjnym Microsoft 365 otwórz Ustawienia, Zintegrowane aplikacje i wybierz Prześlij aplikacje niestandardowe. Wybierz Aplikacja Teams jako typ aplikacji i prześlij plik ZIP."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.manifestPreview"
+msgstr "Podgląd manifestu Teams (JSON)"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.openIntegratedApps"
+msgstr "Otwórz Zintegrowane aplikacje"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.uploadInstruction"
+msgstr "Sprawdź wygenerowany manifest Teams w formacie JSON. Pakiet zawiera ten manifest i jego ikony."
+
+#. js-lingui-explicit-id
 #: src/teams/providers/TeamsAuthProvider.tsx
 msgid "officeAddin.teams.signedIn.title"
 msgstr "Zalogowano. Spróbuj ponownie dodać czat."

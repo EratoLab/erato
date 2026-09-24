@@ -1643,6 +1643,47 @@ msgid "officeAddin.teams.preview.transcriptLabel"
 msgstr "Conversation Teams"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: window.location.host
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.authInstruction"
+msgstr "Vérifiez que l’inscription de l’application Entra contient l’URI de redirection du courtier NAA Teams pour ce déploiement : brk-multihub://{0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.copy"
+msgstr "Téléchargez le ZIP de l’application Teams et chargez-le dans le Centre d’administration Microsoft 365, sous Applications intégrées. L’aperçu JSON sert uniquement à la vérification ; chargez le ZIP."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadButton"
+msgstr "Télécharger le package de l’application Teams"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadFailed"
+msgstr "Échec du téléchargement du package de l’application Teams"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.downloadInstruction"
+msgstr "Téléchargez le ZIP. Dans le Centre d’administration Microsoft 365, ouvrez Paramètres, Applications intégrées, puis choisissez Charger des applications personnalisées. Sélectionnez Application Teams comme type et chargez le ZIP."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.manifestPreview"
+msgstr "Aperçu du manifeste Teams (JSON)"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.openIntegratedApps"
+msgstr "Ouvrir les applications intégrées"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.uploadInstruction"
+msgstr "Vérifiez le manifeste JSON généré de Teams. Le package contient ce manifeste et ses icônes."
+
+#. js-lingui-explicit-id
 #: src/teams/providers/TeamsAuthProvider.tsx
 msgid "officeAddin.teams.signedIn.title"
 msgstr "Connecté. Essayez à nouveau d'ajouter la conversation."
