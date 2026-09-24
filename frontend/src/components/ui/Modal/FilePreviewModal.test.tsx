@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { OutlookSourceNavigationProvider } from "@/providers/OutlookSourceNavigationProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { FilePreviewModal } from "./FilePreviewModal";
@@ -60,6 +61,44 @@ const renderWithTheme = (ui: React.ReactElement) =>
   render(<ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>);
 
 describe("FilePreviewModal", () => {
+  it("offers a saved source on a reloaded file and withholds it without file permission", () => {
+    const file = makeFile({
+      outlook_provenance: {
+        version: 1,
+        origins: [
+          {
+            topLevelParent: {
+              external_ids: [{ key: "ews_id", value: "saved-parent" }],
+            },
+          },
+        ],
+      },
+    });
+    const renderFile = (missingPermissions: boolean) => (
+      <ThemeProvider enableCustomTheme={false}>
+        <OutlookSourceNavigationProvider
+          navigator={{ canOpen: () => true, open: vi.fn() }}
+        >
+          <FilePreviewModal
+            isOpen
+            onClose={vi.fn()}
+            file={{
+              ...file,
+              file_contents_unavailable_missing_permissions: missingPermissions,
+            }}
+          />
+        </OutlookSourceNavigationProvider>
+      </ThemeProvider>
+    );
+    const { rerender } = render(renderFile(false));
+    expect(
+      screen.getByRole("button", { name: "Open in Outlook" }),
+    ).toBeInTheDocument();
+    rerender(renderFile(true));
+    expect(
+      screen.queryByRole("button", { name: "Open in Outlook" }),
+    ).not.toBeInTheDocument();
+  });
   it("previews PDF files from the preview URL", async () => {
     renderWithTheme(
       <FilePreviewModal isOpen={true} onClose={vi.fn()} file={makeFile()} />,

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 
 import {
   DesktopSidecarClient,
@@ -6,6 +7,7 @@ import {
   SidecarClientError,
   type SidecarClientInfo,
   type SidecarProgressV1Result,
+  type DiscoverResult,
 } from "../typescript/src/index.js";
 import {
   MockSidecar,
@@ -55,6 +57,60 @@ const fetchWithOrigin = (
 };
 
 describe("DesktopSidecarClient", () => {
+  it("exposes verified discovery extensions and clears them on rediscovery failure", async () => {
+    const { sidecar } = await setup();
+    const transport = new HttpTransport(sidecar.address.url, {
+      fetch: fetchWithOrigin,
+    });
+    const extension = {
+      version: 1,
+      target: "classicOutlook",
+      launchUriPrefix: "erato-launch://outlook/open?reference=",
+      maxReferenceBytes: 16384,
+    };
+    let tamper = false;
+    const client = new DesktopSidecarClient({
+      clientInfo,
+      transport: {
+        request: async (body, options) => {
+          const response = JSON.parse(
+            await transport.request(body, options),
+          ) as { result: DiscoverResult };
+          const document = response.result.document;
+          document["x-erato-outlook-navigation"] = extension;
+          const input = structuredClone(document);
+          delete (input["x-erato-catalogue"] as { digest?: string }).digest;
+          const sorted = JSON.stringify(input, (_key, value: unknown) =>
+            value && typeof value === "object" && !Array.isArray(value)
+              ? Object.fromEntries(
+                  Object.entries(value).sort(([a], [b]) =>
+                    a < b ? -1 : a > b ? 1 : 0,
+                  ),
+                )
+              : value,
+          );
+          document["x-erato-catalogue"].digest =
+            `sha256:${createHash("sha256").update(sorted).digest("hex")}`;
+          if (tamper)
+            document["x-erato-outlook-navigation"] = {
+              ...extension,
+              version: 2,
+            };
+          return JSON.stringify(response);
+        },
+      },
+    });
+    await client.discover();
+    expect(
+      client.getSnapshot().discoveryExtensions?.["x-erato-outlook-navigation"],
+    ).toEqual(extension);
+    tamper = true;
+    const pending = client.discover();
+    expect(client.getSnapshot().discoveryExtensions).toBeUndefined();
+    await expect(pending).rejects.toMatchObject({ kind: "invalid_result" });
+    expect(client.getSnapshot().discoveryExtensions).toBeUndefined();
+  });
+
   it("discovers ready data and invokes a compiled enabled capability", async () => {
     const { client } = await setup();
 

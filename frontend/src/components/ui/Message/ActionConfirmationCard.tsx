@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
+import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
 
 import type React from "react";
@@ -119,7 +120,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   className = "",
   "data-testid": dataTestId,
 }) => {
-  const cardRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
   const alwaysAllowReasonId = useId();
   const isPending = status === "pending";
 
@@ -184,18 +185,17 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   }, [announcementText]);
 
   return (
-    <div
+    <Card
       ref={cardRef}
+      variant="surface"
+      size="sm"
       // Programmatic focus target so keyboard focus never drops to <body>
       // when the trigger disables on open or the button row unmounts.
       tabIndex={-1}
       role={isPending ? "group" : undefined}
       aria-label={isPending ? resolvedTitle : undefined}
-      className={
-        isPending
-          ? `mt-2 space-y-2 rounded-md border border-theme-border bg-theme-bg-primary p-3 ${className}`
-          : `mt-2 rounded-md border border-theme-border bg-theme-bg-primary px-3 py-2 text-xs text-theme-fg-muted ${className}`
-      }
+      className={`mt-2 min-w-0 ${className}`}
+      bodyClassName={isPending ? "space-y-3" : "text-xs text-theme-fg-muted"}
       data-testid={dataTestId}
     >
       {isPending ? (
@@ -282,7 +282,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
       <p role="status" className="sr-only">
         {announcement}
       </p>
-    </div>
+    </Card>
   );
 };
 

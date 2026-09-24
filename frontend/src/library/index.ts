@@ -37,6 +37,11 @@ export { useGenerationIndicatorCount } from "@/hooks/chat/useGenerationIndicator
 export { CountBadge } from "@/components/ui/Controls/CountBadge";
 export { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
 export {
+  OutlookSourceNavigationProvider,
+  type OutlookSourceNavigator,
+} from "@/providers/OutlookSourceNavigationProvider";
+export { uniqueOutlookId } from "@/lib/outlookNavigation";
+export {
   ChatMessage,
   type ChatMessageHostComponents,
   type ChatMessageProps,

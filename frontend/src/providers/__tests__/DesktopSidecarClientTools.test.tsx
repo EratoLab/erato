@@ -28,6 +28,40 @@ vi.mock("../FeatureConfigProvider", () => ({
 describe("DesktopSidecarClientTools uploads", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("sends provenance before file bytes so it survives API persistence", async () => {
+    vi.mocked(fetchUploadFile).mockResolvedValue({
+      files: [{ id: "file-id" }],
+    } as Awaited<ReturnType<typeof fetchUploadFile>>);
+    render(<DesktopSidecarClientTools />);
+    const options = vi.mocked(createSidecarChatTools).mock.calls[0][1];
+    const provenance = {
+      version: 1,
+      origins: [
+        {
+          topLevelParent: {
+            external_ids: [
+              { key: "email_message_id", value: "<mail@example.test>" },
+            ],
+            mailbox: { emailAddress: "shared@example.test" },
+          },
+        },
+      ],
+    };
+    await options.uploadAttachment(
+      new File(["pdf"], "a.pdf"),
+      "chat-id",
+      undefined,
+      undefined,
+      provenance,
+    );
+    const body = vi.mocked(fetchUploadFile).mock.calls[0][0]
+      .body as unknown as FormData;
+    expect([...body.keys()]).toEqual(["outlook_provenance", "file"]);
+    expect(JSON.parse(body.get("outlook_provenance") as string)).toEqual(
+      provenance,
+    );
+  });
+
   it.each([undefined, "AAMk+opaque/id==&value%"])(
     "preserves an EWS ID when provided and omits absent metadata (%s)",
     async (externalIdEwsId) => {

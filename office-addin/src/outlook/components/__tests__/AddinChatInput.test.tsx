@@ -292,6 +292,7 @@ describe("AddinChatInput", () => {
       isEmailBodyDismissed: false,
       dismissedAttachmentIds: [],
       resolveSelectedFilesForSend: vi.fn(async () => [emlFile]),
+      getFileProvenance: vi.fn(() => undefined),
       hasSelectedEmailSource: true,
       parentReplyContext: null,
       isLoadingParentReplyContext: false,
@@ -322,6 +323,46 @@ describe("AddinChatInput", () => {
     ]);
     expect(h.controls.setDraftMessage).not.toHaveBeenCalled();
     expect(uploadErrorText()).toBe("");
+  });
+
+  it("uploads different email sources separately and places provenance before bytes", async () => {
+    const otherFile = new File(["unrelated mail"], emlFile.name);
+    const provenance = {
+      version: 1,
+      origins: [
+        {
+          document: {
+            external_ids: [{ key: "ews_id", value: "current-thread" }],
+          },
+        },
+      ],
+    };
+    (
+      h.emailSource.resolveSelectedFilesForSend as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([emlFile, otherFile]);
+    (
+      h.emailSource.getFileProvenance as ReturnType<typeof vi.fn>
+    ).mockImplementation((file: File) =>
+      file === emlFile ? provenance : undefined,
+    );
+    h.fetchUploadFile
+      .mockResolvedValueOnce({ files: [{ id: "thread-upload" }] })
+      .mockResolvedValueOnce({ files: [{ id: "drop-upload" }] });
+    const { onSendMessage } = renderInput();
+    send();
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+    const first = h.fetchUploadFile.mock.calls[0][0].body as FormData;
+    const second = h.fetchUploadFile.mock.calls[1][0].body as FormData;
+    expect([...first.keys()]).toEqual(["outlook_provenance", "file"]);
+    expect(JSON.parse(first.get("outlook_provenance") as string)).toEqual(
+      provenance,
+    );
+    expect([...second.keys()]).toEqual(["file"]);
+    expect(onSendMessage.mock.calls[0][1]).toEqual([
+      "f1",
+      "thread-upload",
+      "drop-upload",
+    ]);
   });
 
   it("keeps the draft and surfaces the failure when the upload rejects", async () => {

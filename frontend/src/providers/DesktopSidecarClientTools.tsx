@@ -25,8 +25,16 @@ export function DesktopSidecarClientTools() {
       uploadsEnabled: enabled,
       maxUploadBytes: maxSizeBytes,
       maxFiles,
-      uploadAttachment: async (file, chatId, signal, externalIdEwsId) => {
+      uploadAttachment: async (
+        file,
+        chatId,
+        signal,
+        externalIdEwsId,
+        provenance,
+      ) => {
         const body = new FormData();
+        if (provenance)
+          body.append("outlook_provenance", JSON.stringify(provenance));
         body.append("file", file, file.name);
         const response = await fetchUploadFile(
           {

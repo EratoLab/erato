@@ -11,6 +11,7 @@ import {
 
 import { useGraphTokenOptional } from "./EntraGraphTokenProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
+import { useOffice } from "../../providers/OfficeProvider";
 import { useCurrentThread } from "../hooks/useCurrentThread";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
@@ -34,7 +35,11 @@ import type {
   StagedEmailDismissals,
   StagedEmailDismissalsMap,
 } from "../utils/stagedEmailDismissals";
-import type { LocalFilePreviewItem } from "@erato/frontend/library";
+import type {
+  LocalFilePreviewItem,
+  OutlookFileProvenance,
+  OutlookMessageReference,
+} from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 const OUTLOOK_CLOUD_ATTACHMENT_TYPE = "cloud";
@@ -219,6 +224,7 @@ interface OutlookEmailSourceContextValue {
   isEmailBodyDismissed: boolean;
   dismissedAttachmentIds: string[];
   resolveSelectedFilesForSend: () => Promise<File[]>;
+  getFileProvenance: (file: File) => OutlookFileProvenance | undefined;
   hasSelectedEmailSource: boolean;
   parentReplyContext: ParentMessageMetadata | null;
   isLoadingParentReplyContext: boolean;
@@ -255,6 +261,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   isEmailBodyDismissed: false,
   dismissedAttachmentIds: [],
   resolveSelectedFilesForSend: async () => [],
+  getFileProvenance: () => undefined,
   hasSelectedEmailSource: false,
   parentReplyContext: null,
   isLoadingParentReplyContext: false,
@@ -279,7 +286,13 @@ export function OutlookEmailSourceProvider({
     isLoadingAttachments,
     getAttachmentFile,
     selectedConversation,
+    sharedContext,
+    isLoadingSharedContext,
   } = useOutlookMailItem();
+  const { mailboxUser } = useOffice();
+  const attachmentProvenance = useRef(
+    new WeakMap<File, OutlookFileProvenance>(),
+  );
   // Environment-dispatched message fetch; null when no mail backend is
   // available, in which case the thread preview and reply-context chip
   // quietly stay off (the same UX as a failed fetch).
@@ -548,6 +561,48 @@ export function OutlookEmailSourceProvider({
   }, [deferredDropInput]);
   const isDropResolutionStale = dropSynthInput !== deferredDropInput;
 
+  const sourceReference = useMemo<OutlookMessageReference | undefined>(() => {
+    if (!itemId || isComposeMode) return undefined;
+    const external_ids = [{ key: "ews_id", value: itemId }];
+    if (emailItem?.internetMessageId)
+      external_ids.push({
+        key: "email_message_id",
+        value: emailItem.internetMessageId,
+      });
+    // The owner, including a shared mailbox, is distinct from the signed-in user.
+    const owner =
+      !emailItem || isLoadingSharedContext
+        ? undefined
+        : (sharedContext?.owner ?? mailboxUser?.emailAddress);
+    return {
+      external_ids,
+      ...(owner ? { mailbox: { emailAddress: owner } } : {}),
+    };
+  }, [
+    itemId,
+    isComposeMode,
+    emailItem,
+    isLoadingSharedContext,
+    sharedContext?.owner,
+    mailboxUser?.emailAddress,
+  ]);
+
+  const getFileProvenance = useCallback(
+    (file: File): OutlookFileProvenance | undefined => {
+      // A thread export opens its requested subject. Never attach this identity
+      // to independently dropped emails, even when they share a filename.
+      if (
+        file === threadEmlFile &&
+        sourceReference &&
+        deferredSynthInput?.thread === currentThread
+      ) {
+        return { version: 1, origins: [{ document: sourceReference }] };
+      }
+      return attachmentProvenance.current.get(file);
+    },
+    [threadEmlFile, sourceReference, deferredSynthInput, currentThread],
+  );
+
   const resolvedFiles = useMemo<File[]>(() => {
     const files: File[] = [];
     if (threadEmlFile) files.push(threadEmlFile);
@@ -774,6 +829,11 @@ export function OutlookEmailSourceProvider({
         }
         try {
           const file = await getAttachmentFile(attachment.id);
+          if (sourceReference)
+            attachmentProvenance.current.set(file, {
+              version: 1,
+              origins: [{ topLevelParent: sourceReference }],
+            });
           filesToSend.push(file);
         } catch (error) {
           console.warn(
@@ -794,6 +854,7 @@ export function OutlookEmailSourceProvider({
     selectableAttachments,
     stagedEmails,
     threadTrimError,
+    sourceReference,
   ]);
 
   const value = useMemo<OutlookEmailSourceContextValue>(
@@ -828,6 +889,7 @@ export function OutlookEmailSourceProvider({
       isEmailBodyDismissed,
       dismissedAttachmentIds,
       resolveSelectedFilesForSend,
+      getFileProvenance,
       hasSelectedEmailSource:
         stagedEmails.length > 0 ||
         isEmailBodyIncluded ||
@@ -861,6 +923,7 @@ export function OutlookEmailSourceProvider({
       removeDroppedEmail,
       removeEmailBody,
       resolveSelectedFilesForSend,
+      getFileProvenance,
       restoreAttachment,
       restoreEmailBody,
       restoreStagedEmailAttachment,
