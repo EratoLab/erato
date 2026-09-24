@@ -176,6 +176,12 @@ async fn test_app_state_internal(
         db: db.clone(),
         default_file_storage_provider: None,
         file_storage_providers,
+        prompt_guardrails: Arc::new(
+            erato::services::prompt_guardrails::CompiledPromptGuardrails::new(
+                &app_config.guardrails,
+            )
+            .unwrap(),
+        ),
         config: app_config,
         actor_manager,
         langfuse_client,
