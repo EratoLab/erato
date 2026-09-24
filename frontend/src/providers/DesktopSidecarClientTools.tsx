@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 
-import { registerClientToolExecutor } from "@/hooks/chat/clientToolExecutors";
+import {
+  registerClientToolExecutor,
+  registerLocalOnlyClientTools,
+} from "@/hooks/chat/clientToolExecutors";
 import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
 import { createSidecarChatTools } from "@/lib/desktopSidecar/chatTools";
 import {
@@ -46,10 +49,19 @@ export function DesktopSidecarClientTools() {
         return uploaded;
       },
     });
+    // Any delegation declaration blocks legacy content, even if strict support
+    // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
+    const unguard = registerLocalOnlyClientTools(
+      tools.map((tool) => tool.name),
+      () => Boolean(client.getSnapshot().localDelegation),
+    );
     const unregister = tools.map((tool) =>
       registerClientToolExecutor(tool.name, tool.execute, tool.isAvailable),
     );
-    return () => unregister.forEach((cleanup) => cleanup());
+    return () => {
+      unguard();
+      unregister.forEach((cleanup) => cleanup());
+    };
   }, [client, enabled, maxSizeBytes, maxFiles, approveFiles]);
   return null;
 }

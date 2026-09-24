@@ -49,7 +49,8 @@
     "deploy/0047_add_async_delivery_and_latest_generation_indexes.sql",
     "deploy/0048_add_client_tool_file_approval.sql",
     "deploy/0049_add_external_id_ews_id_to_file_uploads.sql",
-    "deploy/0050_add_outlook_provenance_to_file_uploads.sql"
+    "deploy/0050_add_outlook_provenance_to_file_uploads.sql",
+    "deploy/0051_add_durable_local_delegation.sql"
   ],
-  "latest_change": "c471b5a1d9dc43f389dbf4142583253080719832"
+  "latest_change": "3eb3443389d2fbd82942c3587bc9bb3e5322ffd0"
 }

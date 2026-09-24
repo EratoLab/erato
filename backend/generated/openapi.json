@@ -2257,6 +2257,198 @@
         ]
       }
     },
+    "/api/v1beta/me/local-delegation/context": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "local_delegation_context",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssertionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs": {
+      "get": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "local_delegation_pending",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs/{id}/cancel": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "local_delegation_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs/{id}/claim": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "local_delegation_claim",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs/{id}/complete": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "local_delegation_complete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Exact native-approved export validated against desktop-sidecar-protocol ApprovedLocalExport",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovedExport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs/{id}/resume": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "local_delegation_resume",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1beta/me/mcp-tool-approval-settings": {
       "get": {
         "tags": [],
@@ -4347,6 +4539,105 @@
           }
         }
       },
+      "ApprovedExport": {
+        "type": "object",
+        "required": [
+          "binding",
+          "exportId",
+          "snapshotId",
+          "grantId",
+          "manifestDigest",
+          "approvedAt",
+          "expiresAt",
+          "artifacts"
+        ],
+        "properties": {
+          "approvedAt": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "artifacts": {
+            "type": "array"
+          },
+          "binding": {
+            "type": "object",
+            "required": [
+              "backendOrigin",
+              "accountId",
+              "deviceId",
+              "taskId",
+              "jobId",
+              "attemptId",
+              "toolCallId",
+              "planDigest"
+            ],
+            "properties": {
+              "accountId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              "attemptId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              "backendOrigin": {
+                "type": "string",
+                "maxLength": 2048,
+                "minLength": 1
+              },
+              "deviceId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{32,128}$"
+              },
+              "jobId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              "planDigest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "taskId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              "toolCallId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "expiresAt": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "exportId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{32,128}$"
+          },
+          "grantId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{32,128}$"
+          },
+          "manifestDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "snapshotId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{32,128}$"
+          }
+        },
+        "additionalProperties": false
+      },
       "ArchiveAllChatsResponse": {
         "type": "object",
         "description": "Response from the archive all chats endpoint",
@@ -4404,6 +4695,17 @@
           "chat_id": {
             "type": "string",
             "description": "The ID of the archived chat"
+          }
+        }
+      },
+      "AssertionResponse": {
+        "type": "object",
+        "required": [
+          "assertion"
+        ],
+        "properties": {
+          "assertion": {
+            "type": "string"
           }
         }
       },
@@ -5717,6 +6019,33 @@
           }
         }
       },
+      "ClaimRequest": {
+        "type": "object",
+        "required": [
+          "deviceId"
+        ],
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClaimResponse": {
+        "type": "object",
+        "required": [
+          "job",
+          "authorization"
+        ],
+        "properties": {
+          "authorization": {
+            "type": "string"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobResponse"
+          }
+        }
+      },
       "ClientToolFileApproval": {
         "type": "string",
         "description": "Default handling of files retrieved by client tools before they leave the device.",
@@ -6409,6 +6738,22 @@
             "format": "uuid"
           }
         }
+      },
+      "ContextRequest": {
+        "type": "object",
+        "required": [
+          "deviceId",
+          "challenge"
+        ],
+        "properties": {
+          "challenge": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "ContinueStreamRequest": {
         "type": "object",
@@ -7672,6 +8017,174 @@
           }
         }
       },
+      "JobResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "chatId",
+          "messageId",
+          "state",
+          "plan"
+        ],
+        "properties": {
+          "binding": {
+            "type": "object",
+            "required": [
+              "backendOrigin",
+              "accountId",
+              "deviceId",
+              "taskId",
+              "jobId",
+              "attemptId",
+              "toolCallId",
+              "planDigest"
+            ],
+            "properties": {
+              "accountId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              "attemptId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              "backendOrigin": {
+                "type": "string",
+                "maxLength": 2048,
+                "minLength": 1
+              },
+              "deviceId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{32,128}$"
+              },
+              "jobId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              "planDigest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "taskId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              "toolCallId": {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "chatId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "messageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plan": {
+            "type": "object",
+            "required": [
+              "operation",
+              "queryVariants",
+              "maxHits",
+              "maxArtifacts",
+              "maxBytes",
+              "executionSeconds",
+              "expiresAt"
+            ],
+            "properties": {
+              "executionSeconds": {
+                "type": "integer",
+                "maximum": 300,
+                "minimum": 1
+              },
+              "expiresAt": {
+                "type": "integer",
+                "maximum": 9007199254740991,
+                "minimum": 0
+              },
+              "maxArtifacts": {
+                "type": "integer",
+                "maximum": 20,
+                "minimum": 1
+              },
+              "maxBytes": {
+                "type": "integer",
+                "maximum": 12582912,
+                "minimum": 1
+              },
+              "maxHits": {
+                "type": "integer",
+                "maximum": 100,
+                "minimum": 1
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "collect_evidence"
+                ]
+              },
+              "queryVariants": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 512,
+                  "minLength": 1
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "receipt": {
+            "type": "string"
+          },
+          "serverOutcome": {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "cancelled",
+                  "expired"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "JobState": {
+        "type": "string",
+        "enum": [
+          "waiting_for_local_result",
+          "awaiting_authenticated_resume",
+          "continuing",
+          "completed",
+          "cancelled",
+          "expired"
+        ]
+      },
       "LinkFileRequest": {
         "type": "object",
         "description": "Request to link an external file (SharePoint, Google Drive, etc.)",
@@ -8851,6 +9364,32 @@
         },
         "additionalProperties": false
       },
+      "PendingResponse": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "accountId",
+          "jobs"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobResponse"
+            }
+          },
+          "next": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "PendingToolCall": {
         "type": "object",
         "description": "A call of the parked batch that was never popped. The parked part is the\nonly record of these, so the continuation has to replay them from here.",
@@ -8918,6 +9457,17 @@
             "format": "uuid",
             "description": "The delivered `task_result` user row to react to.",
             "example": "00000000-0000-0000-0000-000000000000"
+          }
+        }
+      },
+      "ReceiptResponse": {
+        "type": "object",
+        "required": [
+          "receipt"
+        ],
+        "properties": {
+          "receipt": {
+            "type": "string"
           }
         }
       },

@@ -135,6 +135,76 @@ export type ApprovalItem = {
   tool_name: string;
 };
 
+export type ApprovedExport = {
+  /**
+   * @maximum 9007199254740991
+   * @minimum 0
+   */
+  approvedAt: number;
+  artifacts: any[];
+  binding: {
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    accountId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    attemptId: string;
+    /**
+     * @maxLength 2048
+     * @minLength 1
+     */
+    backendOrigin: string;
+    /**
+     * @pattern ^[A-Za-z0-9_-]{32,128}$
+     */
+    deviceId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    jobId: string;
+    /**
+     * @pattern ^sha256:[a-f0-9]{64}$
+     */
+    planDigest: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    taskId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    toolCallId: string;
+  };
+  /**
+   * @maximum 9007199254740991
+   * @minimum 0
+   */
+  expiresAt: number;
+  /**
+   * @pattern ^[A-Za-z0-9_-]{32,128}$
+   */
+  exportId: string;
+  /**
+   * @pattern ^[A-Za-z0-9_-]{32,128}$
+   */
+  grantId: string;
+  /**
+   * @pattern ^sha256:[a-f0-9]{64}$
+   */
+  manifestDigest: string;
+  /**
+   * @pattern ^[A-Za-z0-9_-]{32,128}$
+   */
+  snapshotId: string;
+};
+
 /**
  * Response from the archive all chats endpoint
  */
@@ -187,6 +257,10 @@ export type ArchiveChatResponse = {
    * The ID of the archived chat
    */
   chat_id: string;
+};
+
+export type AssertionResponse = {
+  assertion: string;
 };
 
 /**
@@ -948,6 +1022,15 @@ export type ChildApprovalRef = {
   tool_name: string;
 };
 
+export type ClaimRequest = {
+  deviceId: string;
+};
+
+export type ClaimResponse = {
+  authorization: string;
+  job: JobResponse;
+};
+
 /**
  * Default handling of files retrieved by client tools before they leave the device.
  */
@@ -1246,6 +1329,11 @@ export type ContentPartToolRejection = {
    * @format uuid
    */
   user_tool_approval_setting_id?: null | undefined;
+};
+
+export type ContextRequest = {
+  challenge: string;
+  deviceId: string;
 };
 
 /**
@@ -1906,6 +1994,108 @@ export type GlobalFacetSettings = {
   show_facet_indicator_with_display_name: boolean;
 };
 
+export type JobResponse = {
+  binding?: {
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    accountId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    attemptId: string;
+    /**
+     * @maxLength 2048
+     * @minLength 1
+     */
+    backendOrigin: string;
+    /**
+     * @pattern ^[A-Za-z0-9_-]{32,128}$
+     */
+    deviceId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    jobId: string;
+    /**
+     * @pattern ^sha256:[a-f0-9]{64}$
+     */
+    planDigest: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    taskId: string;
+    /**
+     * @maxLength 128
+     * @minLength 1
+     */
+    toolCallId: string;
+  };
+  /**
+   * @format uuid
+   */
+  chatId: string;
+  /**
+   * @format uuid
+   */
+  id: string;
+  /**
+   * @format uuid
+   */
+  messageId: string;
+  plan: {
+    /**
+     * @maximum 300
+     * @minimum 1
+     */
+    executionSeconds: number;
+    /**
+     * @maximum 9007199254740991
+     * @minimum 0
+     */
+    expiresAt: number;
+    /**
+     * @maximum 20
+     * @minimum 1
+     */
+    maxArtifacts: number;
+    /**
+     * @maximum 12582912
+     * @minimum 1
+     */
+    maxBytes: number;
+    /**
+     * @maximum 100
+     * @minimum 1
+     */
+    maxHits: number;
+    operation: "collect_evidence";
+    /**
+     * @maxItems 8
+     * @minItems 1
+     * @uniqueItems true
+     */
+    queryVariants: string[];
+  };
+  receipt?: string;
+  serverOutcome?: {
+    status: "cancelled" | "expired";
+  };
+  state: JobState;
+};
+
+export type JobState =
+  | "waiting_for_local_result"
+  | "awaiting_authenticated_resume"
+  | "continuing"
+  | "completed"
+  | "cancelled"
+  | "expired";
+
 /**
  * Request to link an external file (SharePoint, Google Drive, etc.)
  */
@@ -2517,6 +2707,16 @@ export type OutlookMessageReference = {
   mailbox?: OutlookMailboxReference;
 };
 
+export type PendingResponse = {
+  accountId: string;
+  enabled: boolean;
+  jobs: JobResponse[];
+  /**
+   * @format uuid
+   */
+  next?: string;
+};
+
 /**
  * A call of the parked batch that was never popped. The parked part is the
  * only record of these, so the continuation has to replay them from here.
@@ -2570,6 +2770,10 @@ export type ReactToTaskResultRequest = {
    * @example 00000000-0000-0000-0000-000000000000
    */
   task_result_message_id: string;
+};
+
+export type ReceiptResponse = {
+  receipt: string;
 };
 
 export type RecentChat = {

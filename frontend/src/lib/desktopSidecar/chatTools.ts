@@ -95,8 +95,13 @@ export function createSidecarChatTools(
     execute: ClientToolExecutor,
   ): SidecarChatTool => ({
     name,
-    isAvailable: () => client.supports(method),
+    // Any delegation declaration blocks legacy content, even if strict support
+    // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
+    isAvailable: () =>
+      !client.getSnapshot().localDelegation && client.supports(method),
     execute: async (input, context) => {
+      if (client.getSnapshot().localDelegation)
+        return { ok: true, disposition: "local_only" };
       const key = context
         ? `${name}:${context.messageId}:${context.toolCallId}`
         : null;

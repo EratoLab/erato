@@ -11,6 +11,7 @@ use axum::Router;
 use axum::http;
 use axum_test::TestServer;
 use axum_test::multipart::{MultipartForm, Part};
+use erato::db::entity::local_delegation_jobs::JobState;
 use erato::models::chat::{
     ChatConfiguration, ChatProvenance, ChatProvenanceKind, seed_chat_lineage,
 };
@@ -16675,4 +16676,399 @@ async fn facet_override_beats_global_policy(pool: Pool<Postgres>) {
             .await
             .is_empty()
     );
+}
+
+/// Native-reviewed research uses the real initial tool loop, authenticated APIs
+/// and the existing single-replica task lifecycle. No native plaintext is supplied
+/// until the synthetic approved package is posted.
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn local_research_parks_and_resumes_in_the_single_backend(pool: Pool<Postgres>) {
+    local_research_roundtrip(pool, false).await;
+}
+
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn repeated_local_research_uses_the_shared_loop_without_resetting_budgets(
+    pool: Pool<Postgres>,
+) {
+    local_research_roundtrip(pool, true).await;
+}
+
+async fn local_research_roundtrip(pool: Pool<Postgres>, repeated: bool) {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use erato::services::local_delegation::{contract, store};
+    use sea_orm::ConnectionTrait;
+    let mut mocks = MockSet::new();
+    mocks.mock(move |when, then| {
+        let marker = if repeated {
+            "SECOND_APPROVED_MARKER"
+        } else {
+            "APPROVED_LOCAL_MARKER"
+        };
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[marker], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["LOCAL-RESEARCH-FINISHED"]),
+        );
+    });
+    if repeated {
+        mocks.mock(|when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["APPROVED_LOCAL_MARKER"],
+                    &["SECOND_APPROVED_MARKER"],
+                ));
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_local_second",
+                    "local_collect_evidence",
+                    json!({"queryVariants":["followup"]}),
+                )]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["local_collect_evidence"],
+                &["APPROVED_LOCAL_MARKER"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_local",
+                "local_collect_evidence",
+                json!({"queryVariants":["quarterly"]}),
+            )]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["LOCAL-CHILD-BRIEF"],
+                &["local_collect_evidence"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "Task queued for local review.",
+            ]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions").matcher(BodyContainsMatcher::new(&["LOCAL-ROOT-REQUEST"], &["LOCAL-CHILD-BRIEF", "local_collect_evidence"]));
+        mock_llm_sse_response(then, crate::test_utils::build_openai_tool_calls_streaming_response(&[("call_parent_local", "delegate_task", json!({"task":"LOCAL-CHILD-BRIEF: collect evidence", "facet_ids":["local_research"],"run_mode":"async"}))]));
+    });
+    // Isolated storage endpoint: no dependency on the developer's SeaweedFS.
+    mocks.mock(|when, then| {
+        when.put();
+        then.status(http::StatusCode::OK);
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    config.delegation.tasks.enabled = true;
+    config.delegation.tasks.run_modes = vec![erato_config::config::TaskRunMode::Async];
+    config.desktop_sidecar.allowed_origins = vec!["https://app.example".into()];
+    config.desktop_sidecar.local_delegation = serde_json::from_value(json!({"enabled":true,"backend_origin":"https://erato.example","signing_key_id":"fixture","signing_private_key_pem":"-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH\n-----END PRIVATE KEY-----\n","verification_keys":{"fixture":"6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"}})).unwrap();
+    for (id, allowlist) in [
+        ("plan", vec!["erato/delegate_task"]),
+        ("local_research", vec!["erato/local_collect_evidence"]),
+    ] {
+        config.facets.facets.insert(
+            id.into(),
+            serde_json::from_value(json!({"display_name":id,"tool_call_allowlist":allowlist}))
+                .unwrap(),
+        );
+        config.facet_permissions.rules.insert(
+            id.into(),
+            erato_config::config::FacetPermissionRule::AllowAll {
+                facet_ids: vec![id.into()],
+            },
+        );
+    }
+    config.facets.facets.get_mut("plan").unwrap().delegation = Some(serde_json::from_value(json!({"child_facet_ids":["local_research"],"run_modes":["async"],"max_server_tool_calls_per_task":0,"max_client_tool_calls_per_task":2})).unwrap());
+    config.file_storage_providers.insert("seaweedfs".into(), serde_json::from_value(json!({"provider_kind":"s3","config":{"endpoint":_llm.url("/").to_string(),"bucket":"local-test","region":"us-east-1","access_key_id":"fixture","secret_access_key":"fixture"}})).unwrap());
+    let app_state = test_app_state(config, pool).await;
+    let server = app_server(app_state.clone());
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let owner = me.id.to_string();
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "LOCAL-ROOT-REQUEST", &["plan"]).await;
+    assert!(!format!("{events:?}").contains("APPROVED_LOCAL_MARKER"));
+    let parent_message = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let approved_plan =
+        post_continuestream_decisions(&server, parent_message, &[("plan:1:0", "approve")]).await;
+    approved_plan.assert_status_ok();
+
+    let mut job = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            let jobs = store::pending(&app_state.db, &owner, None).await.unwrap();
+            if let Some(job) = jobs.into_iter().next() {
+                break job;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("initial generation must park durably");
+    // Main's crash-orphan cleanup must preserve a live durable consent stop.
+    erato::services::interrupted_parts::sweep_interrupted_tool_parts(&app_state.db, 90).await;
+    assert_eq!(
+        store::get(&app_state.db, job.id, &owner)
+            .await
+            .unwrap()
+            .state,
+        JobState::WaitingForLocalResult
+    );
+    let parked = message_row(&app_state.db, job.message_id).await;
+    assert!(
+        content_of(&parked)
+            .iter()
+            .any(|part| part["output"]["status"] == "awaiting_local_consent")
+    );
+    let parent_rows = active_thread_rows(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    assert!(
+        !parent_rows.iter().any(|row| content_of(row)
+            .iter()
+            .any(|part| part["content_type"] == "task_result" && part["status"] == "completed")),
+        "a consent stop must not deliver a completed result to the parent"
+    );
+    // A read-only poll must finish even while another transaction holds this chat.
+    use sea_orm::TransactionTrait;
+    let locked = app_state.db.begin().await.unwrap();
+    locked
+        .query_one_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT id FROM chats WHERE id=$1 FOR UPDATE",
+            vec![job.chat_id.into()],
+        ))
+        .await
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        server
+            .get("/api/v1beta/me/local-delegation/jobs")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .assert_status_ok();
+    })
+    .await
+    .expect("pending-list requests must not acquire chat locks");
+    locked.rollback().await.unwrap();
+    let mut path = format!("/api/v1beta/me/local-delegation/jobs/{}", job.id);
+    server
+        .post(&format!("{path}/claim"))
+        .json(&json!({"deviceId":"d".repeat(43)}))
+        .await
+        .assert_status(http::StatusCode::UNAUTHORIZED);
+    let claim = server
+        .post(&format!("{path}/claim"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("origin", "https://app.example")
+        .json(&json!({"deviceId":"d".repeat(43)}))
+        .await;
+    claim.assert_status_ok();
+    let claim = claim.json::<Value>();
+    server
+        .post(&format!("{path}/claim"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("origin", "https://app.example")
+        .json(&json!({"deviceId":"x".repeat(43)}))
+        .await
+        .assert_status(http::StatusCode::CONFLICT);
+    let bytes = b"APPROVED_LOCAL_MARKER";
+    let mut package = json!({"binding":claim["job"]["binding"],"exportId":"e".repeat(43),"snapshotId":"s".repeat(43),"grantId":"g".repeat(43),"approvedAt":chrono::Utc::now().timestamp(),"expiresAt":job.plan["expiresAt"],"artifacts":[{"artifactId":"a".repeat(43),"filename":"approved.txt","mediaType":"text/plain","byteLength":bytes.len(),"sha256":contract::digest(bytes),"contentBase64":STANDARD.encode(bytes)}]});
+    package["manifestDigest"] = json!(contract::manifest_digest(&package).unwrap());
+    let accepted = server
+        .post(&format!("{path}/complete"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&package)
+        .await;
+    accepted.assert_status_ok();
+    let retry = server
+        .post(&format!("{path}/complete"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&package)
+        .await;
+    retry.assert_status_ok();
+    assert_eq!(accepted.json::<Value>(), retry.json::<Value>());
+    server
+        .post(&format!("{path}/resume"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status(http::StatusCode::ACCEPTED);
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            if store::get(&app_state.db, job.id, &owner)
+                .await
+                .unwrap()
+                .state
+                == JobState::Completed
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the task must complete the saved checkpoint");
+    if repeated {
+        let first_id = job.id;
+        job = store::pending(&app_state.db, &owner, None)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|next| next.id != first_id && next.state == JobState::WaitingForLocalResult)
+            .expect("the shared loop must durably park its next collection");
+        let parent_rows = active_thread_rows(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+        assert!(!parent_rows.iter().any(|row| {
+            content_of(row)
+                .iter()
+                .any(|part| part["content_type"] == "task_result" && part["status"] == "completed")
+        }));
+        path = format!("/api/v1beta/me/local-delegation/jobs/{}", job.id);
+        let claim = server
+            .post(&format!("{path}/claim"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header("origin", "https://app.example")
+            .json(&json!({"deviceId":"d".repeat(43)}))
+            .await;
+        claim.assert_status_ok();
+        package["binding"] = claim.json::<Value>()["job"]["binding"].clone();
+        package["expiresAt"] = job.plan["expiresAt"].clone();
+        package["exportId"] = json!("f".repeat(43));
+        package["snapshotId"] = json!("t".repeat(43));
+        package["grantId"] = json!("h".repeat(43));
+        let bytes = b"SECOND_APPROVED_MARKER";
+        package["artifacts"][0]["contentBase64"] = json!(STANDARD.encode(bytes));
+        package["artifacts"][0]["byteLength"] = json!(bytes.len());
+        package["artifacts"][0]["sha256"] = json!(contract::digest(bytes));
+        package["manifestDigest"] = json!(contract::manifest_digest(&package).unwrap());
+        server
+            .post(&format!("{path}/complete"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&package)
+            .await
+            .assert_status_ok();
+        server
+            .post(&format!("{path}/resume"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .assert_status(http::StatusCode::ACCEPTED);
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            while store::get(&app_state.db, job.id, &owner)
+                .await
+                .unwrap()
+                .state
+                != JobState::Completed
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("the second collection must finish without resetting consumed budgets");
+    }
+    let row = app_state
+        .db
+        .query_one_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT checkpoint FROM local_delegation_jobs WHERE id=$1",
+            vec![job.id.into()],
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    wait_for_delivery_state(&app_state.db, job.chat_id, &["delivered", "reacted"]).await;
+    let parent_rows = active_thread_rows(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    assert!(
+        parent_rows.iter().any(|row| content_of(row)
+            .iter()
+            .any(|part| part["content_type"] == "task_result" && part["status"] == "completed")),
+        "the original parent must receive the resumed child's result"
+    );
+    let event_types = shared_generation_event_types(&app_state.db, job.chat_id).await;
+    assert!(
+        event_types.iter().any(|event| event == "text_delta"),
+        "resumed generation must stream normal text events: {event_types:?}"
+    );
+    let checkpoint: Value = row.try_get("", "checkpoint").unwrap();
+    assert_eq!(
+        checkpoint["consumption"]["tool_calls"],
+        if repeated { 2 } else { 1 }
+    );
+    assert_eq!(
+        checkpoint["consumption"]["client_tool_calls"],
+        if repeated { 2 } else { 1 }
+    );
+    assert_eq!(
+        checkpoint["consumption"]["model_turns"],
+        if repeated { 3 } else { 2 }
+    );
+    assert!(checkpoint.to_string().contains("LOCAL-RESEARCH-FINISHED"));
+    server
+        .post(&format!("{path}/complete"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&package)
+        .await
+        .assert_status_ok();
+    assert_eq!(
+        store::pending(&app_state.db, &owner, None)
+            .await
+            .unwrap()
+            .len(),
+        if repeated { 2 } else { 1 },
+        "completed receipt remains recoverable by a returning native device"
+    );
+}
+
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn abort_remains_available_for_archived_chats_without_local_jobs(pool: Pool<Postgres>) {
+    use sea_orm::ConnectionTrait;
+    let (config, _llm) = crate::test_utils::setup_mock_llm_server(None).await;
+    let app_state = test_app_state(config, pool).await;
+    let server = app_server(app_state.clone());
+    let chat = Uuid::parse_str(&create_chat(&server, None).await).unwrap();
+    let (_, task) = app_state
+        .background_tasks
+        .start_task(chat, Uuid::new_v4())
+        .await;
+    app_state
+        .db
+        .execute_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "UPDATE chats SET archived_at=now() WHERE id=$1",
+            vec![chat.into()],
+        ))
+        .await
+        .unwrap();
+    let response = server
+        .post("/api/v1beta/me/messages/abortstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"chat_id":chat}))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["abort_requested"], true);
+    assert!(task.is_abort_requested());
 }

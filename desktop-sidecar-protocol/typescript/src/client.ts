@@ -1,3 +1,7 @@
+import {
+  localDelegationContracts,
+  supportsStrictLocalDelegation,
+} from "./localDelegation.js";
 import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
   validateCancelResult,
@@ -49,6 +53,24 @@ import {
 } from "./generated/validators.mjs";
 
 import type {
+  LocalContextsChallengeV1Params,
+  LocalContextsChallengeV1Result,
+  LocalContextsBindV1Params,
+  LocalContextsBindV1Result,
+  LocalTasksStartV1Params,
+  LocalTasksStartV1Result,
+  LocalTasksStatusV1Params,
+  LocalTasksStatusV1Result,
+  LocalTasksCancelV1Params,
+  LocalTasksCancelV1Result,
+  LocalTasksReviewV1Params,
+  LocalTasksReviewV1Result,
+  LocalExportsStatusV1Params,
+  LocalExportsStatusV1Result,
+  LocalExportsReadV1Params,
+  LocalExportsReadV1Result,
+  LocalExportsAckV1Params,
+  LocalExportsAckV1Result,
   CapabilityDescriptor,
   IndexingBenchmarkListV1Params,
   IndexingBenchmarkListV1Result,
@@ -140,6 +162,9 @@ export interface SidecarCapability {
 }
 
 export interface SidecarSnapshot {
+  /** A validated declaration from discovery; never infer strict support from a single RPC. */
+  localDelegation?: DiscoverResult["localDelegation"];
+  strictLocalDelegation?: boolean;
   state: SidecarReadinessState;
   protocolVersion: string | null;
   serverInfo: { name: string; version: string } | null;
@@ -197,6 +222,8 @@ interface JsonRpcResponse {
 }
 
 const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
+  ...localDelegationContracts,
+
   "diagnostics.echo.v1": {
     validateParams: validateDiagnosticsEchoV1Params,
     validateResult: validateDiagnosticsEchoV1Result,
@@ -351,6 +378,51 @@ export class DesktopSidecarClient {
   }
 
   async invoke(
+    method: "local_contexts.challenge.v1",
+    params: LocalContextsChallengeV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalContextsChallengeV1Result>;
+  async invoke(
+    method: "local_contexts.bind.v1",
+    params: LocalContextsBindV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalContextsBindV1Result>;
+  async invoke(
+    method: "local_tasks.start.v1",
+    params: LocalTasksStartV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalTasksStartV1Result>;
+  async invoke(
+    method: "local_tasks.status.v1",
+    params: LocalTasksStatusV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalTasksStatusV1Result>;
+  async invoke(
+    method: "local_tasks.cancel.v1",
+    params: LocalTasksCancelV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalTasksCancelV1Result>;
+  async invoke(
+    method: "local_tasks.review.v1",
+    params: LocalTasksReviewV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalTasksReviewV1Result>;
+  async invoke(
+    method: "local_exports.status.v1",
+    params: LocalExportsStatusV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalExportsStatusV1Result>;
+  async invoke(
+    method: "local_exports.read.v1",
+    params: LocalExportsReadV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalExportsReadV1Result>;
+  async invoke(
+    method: "local_exports.ack.v1",
+    params: LocalExportsAckV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalExportsAckV1Result>;
+  async invoke(
     method: "diagnostics.echo.v1",
     params: DiagnosticsEchoV1Params,
     options?: InvokeOptions,
@@ -490,7 +562,9 @@ export class DesktopSidecarClient {
         await this.discover().catch(() => undefined);
       } else if (
         clientError.kind === "malformed_message" ||
-        clientError.kind === "invalid_result"
+        clientError.kind === "invalid_result" ||
+        (method.startsWith("local_") &&
+          ["transport_error", "timeout"].includes(clientError.kind))
       ) {
         this.#failReadiness(clientError);
       }
@@ -513,6 +587,7 @@ export class DesktopSidecarClient {
 
   async #runDiscovery(signal?: AbortSignal): Promise<void> {
     this.#setSnapshot({
+      ...this.#snapshot,
       state: "discovering",
       protocolVersion: null,
       serverInfo: null,
@@ -573,6 +648,8 @@ export class DesktopSidecarClient {
         instanceId: result.instanceId,
         catalogue,
         capabilities,
+        localDelegation: result.localDelegation,
+        strictLocalDelegation: supportsStrictLocalDelegation(result),
         error: null,
       });
     } catch (error) {

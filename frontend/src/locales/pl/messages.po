@@ -5590,6 +5590,10 @@ msgstr "Zbliżanie się do limitu budżetowego"
 msgid "Approaching Token Limit"
 msgstr "Zbliżanie się do limitu tokenów"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Approved evidence is ready to upload"
+msgstr "Zatwierdzone materiały źródłowe są gotowe do przesłania"
+
 #: src/pages/AssistantsListPage.tsx
 #~ msgid "Archive"
 #~ msgstr ""
@@ -5809,6 +5813,10 @@ msgstr ""
 #~ msgid "Cancel starting dictation"
 #~ msgstr "Anuluj uruchamianie dyktowania"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Cancel task"
+msgstr "Anuluj zadanie"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
 msgstr ""
@@ -5901,6 +5909,10 @@ msgstr ""
 msgid "collapse sidebar"
 msgstr "zwiń pasek boczny"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Collecting evidence on this device"
+msgstr "Zbieranie materiałów źródłowych na tym urządzeniu"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Completed"
 msgstr ""
@@ -5942,6 +5954,10 @@ msgstr "Wykorzystanie kontekstu"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Context usage exceeds model capacity. The assistant can't be created like this."
 msgstr "Wykorzystanie kontekstu przekracza pojemność modelu. Asystent nie może zostać utworzony w tej formie."
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Continuing the original task"
+msgstr "Kontynuowanie pierwotnego zadania"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Conversational"
@@ -6181,6 +6197,10 @@ msgstr "Błąd:"
 msgid "Estimating token usage..."
 msgstr "Szacowanie użycia tokenów..."
 
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "Evidence sharing requires review in the desktop app for each package."
+msgstr "Udostępnianie materiałów źródłowych wymaga sprawdzenia każdego pakietu w aplikacji komputerowej."
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
 msgstr ""
@@ -6381,6 +6401,26 @@ msgstr "Wczytywanie konwersacji…"
 msgid "Loading..."
 msgstr "Ładowanie..."
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local collection could not finish"
+msgstr "Nie udało się ukończyć lokalnego zbierania materiałów"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local research"
+msgstr "Lokalne wyszukiwanie informacji"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local research tasks"
+msgstr "Zadania lokalnego wyszukiwania informacji"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local task cancelled"
+msgstr "Zadanie lokalne anulowane"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local task expired"
+msgstr "Zadanie lokalne wygasło"
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Locale Detection Test"
 msgstr "Test wykrywania języka"
@@ -6528,6 +6568,10 @@ msgstr "Otwórz w usłudze Teams"
 msgid "Open menu"
 msgstr "Otwórz menu"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Open original task"
+msgstr "Otwórz pierwotne zadanie"
+
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.prompt-optimizer.tooltip"
@@ -6595,6 +6639,10 @@ msgstr ""
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "Read local mailbox"
 msgstr "Odczyt lokalnej skrzynki pocztowej"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Ready for review in the desktop app"
+msgstr "Gotowe do sprawdzenia w aplikacji komputerowej"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -6688,6 +6736,14 @@ msgstr "Ponów transkrypcję"
 msgid "Retrying..."
 msgstr "Ponawianie..."
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
+msgstr "Sprawdź i wybierz materiały źródłowe w aplikacji komputerowej. Zbieranie trwa nadal po zamknięciu tego panelu; przesyłanie i kontynuacja w chmurze czekają na Twój powrót z aktywną sesją logowania."
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Review in desktop app"
+msgstr "Sprawdź w aplikacji komputerowej"
+
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 #~ msgid "Running"
 #~ msgstr "W toku"
@@ -6743,6 +6799,10 @@ msgstr ""
 #: src/pages/SharedChatPage.tsx
 #~ msgid "Shared Chat - {sharedChatTitle}"
 #~ msgstr "Udostępniony czat - {sharedChatTitle}"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Sharing declined on this device"
+msgstr "Udostępnianie odrzucone na tym urządzeniu"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"
@@ -7136,6 +7196,14 @@ msgstr "Używam narzędzi"
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"
 #~ msgstr ""
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Waiting for the desktop app to reconnect"
+msgstr "Oczekiwanie na ponowne połączenie aplikacji komputerowej"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Waiting for the device that accepted this task"
+msgstr "Oczekiwanie na urządzenie, które przyjęło to zadanie"
 
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Yes"

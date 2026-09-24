@@ -333,7 +333,8 @@ pub fn select_client_tools<'a>(
 
     for tool in matched {
         let name = tool.name.as_str();
-        if name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+        if name == crate::services::local_delegation::tool::NAME
+            || name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
             || name == crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME
         {
             skipped.push((tool, ClientToolSkip::ReservedName));

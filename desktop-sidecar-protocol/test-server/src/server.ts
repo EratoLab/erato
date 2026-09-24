@@ -394,6 +394,18 @@ export class MockSidecar {
     if (this.#options.omitMethods?.includes(message.method)) {
       return rpcError(message.id, -32601, "Method not found.");
     }
+    if (/^local_(?:contexts|tasks|exports)\./.test(message.method)) {
+      return rpcError(
+        message.id,
+        -32011,
+        "Strict local delegation is unavailable.",
+        {
+          kind: "capability_unavailable",
+          reasonCode: "local_delegation_not_enabled",
+        },
+      );
+    }
+
     if (message.method === "rpc.discover") {
       if (!validateDiscoverParams(message.params)) {
         return rpcError(message.id, -32602, "Invalid discovery parameters.");

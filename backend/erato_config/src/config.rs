@@ -34,6 +34,7 @@ pub const DELEGATE_TASK_TOOL_NAME: &str = "delegate_task";
 /// async task results are delivered as turns, so nothing polls for them yet,
 /// but the name stays free for that extension.
 pub const COLLECT_TASKS_TOOL_NAME: &str = "collect_tasks";
+pub const LOCAL_COLLECT_EVIDENCE_TOOL_NAME: &str = "local_collect_evidence";
 
 /// Tool names a configured client tool may not take.
 pub const RESERVED_TOOL_NAMES: &[&str] = &[
@@ -41,6 +42,7 @@ pub const RESERVED_TOOL_NAMES: &[&str] = &[
     DELEGATE_TO_ASSISTANT_TOOL_NAME,
     DELEGATE_TASK_TOOL_NAME,
     COLLECT_TASKS_TOOL_NAME,
+    LOCAL_COLLECT_EVIDENCE_TOOL_NAME,
 ];
 
 /// Whether a `tool_call_allowlist` selects a reserved `erato/<name>` tool.
@@ -738,6 +740,11 @@ impl ClientToolFileApproval {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct DesktopSidecarConfig {
+    /// Native exact-snapshot delegation. Disabled until native, recovery and host
+    /// qualification are complete; independent of legacy file-upload preferences.
+    #[serde(default)]
+    pub local_delegation: LocalDelegationConfig,
+
     /// Default file upload decision. Users may override this in Sidecar settings.
     #[serde(default)]
     pub file_upload_approval: ClientToolFileApproval,
@@ -790,6 +797,24 @@ pub struct DesktopSidecarConfig {
     pub organization_configuration: DesktopSidecarOrganizationConfiguration,
 }
 
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct LocalDelegationConfig {
+    /// Enable the authenticated local-evidence workflow. Defaults to false.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Canonical HTTPS backend origin pinned in the native installation.
+    pub backend_origin: Option<String>,
+    /// Identifier of the active Ed25519 signing key.
+    pub signing_key_id: Option<String>,
+    /// Backend-only Ed25519 PKCS#8 PEM. Never included in native bootstrap.
+    #[facet(sensitive)]
+    pub signing_private_key_pem: Option<SecretConfigString>,
+    /// Public Ed25519 keys indexed by key ID, encoded as base64url without padding.
+    /// Retain old receipt verification keys for the maximum job/tombstone lifetime.
+    #[serde(default)]
+    pub verification_keys: std::collections::BTreeMap<String, String>,
+}
+
 impl DesktopSidecarConfig {
     /// Public loopback endpoint matching the personalized artifact.
     pub fn endpoint(&self) -> Option<String> {
@@ -807,6 +832,30 @@ impl DesktopSidecarConfig {
 
     pub fn bootstrap_fields(&self) -> eyre::Result<serde_json::Map<String, serde_json::Value>> {
         let mut fields = serde_json::Map::new();
+        if self.local_delegation.enabled {
+            let policy = &self.local_delegation;
+            let origin = policy
+                .backend_origin
+                .as_deref()
+                .ok_or_else(|| eyre::eyre!("Local delegation backend origin required"))?;
+            let parsed = url::Url::parse(origin)?;
+            eyre::ensure!(
+                parsed.scheme() == "https" && parsed.origin().ascii_serialization() == origin,
+                "Local delegation requires a canonical HTTPS backend origin"
+            );
+            eyre::ensure!(
+                !policy.verification_keys.is_empty() && policy.verification_keys.len() <= 8,
+                "Local delegation requires 1..8 public verification keys"
+            );
+            fields.insert("content_release".into(), "strict_snapshot_v1".into());
+            fields.insert(
+                "local_delegation".into(),
+                serde_json::json!({
+                    "backend_origin": origin,
+                    "verification_keys": policy.verification_keys,
+                }),
+            );
+        }
         if let Some(port) = self.port {
             eyre::ensure!(
                 port != 0,
@@ -6628,6 +6677,22 @@ mod desktop_sidecar_installation_tests {
             config.endpoint().unwrap(),
             "https://127.0.0.1:23124/erato/sidecar/rpc"
         );
+    }
+
+    #[test]
+    fn strict_bootstrap_contains_only_public_delegation_authority() {
+        let config: DesktopSidecarConfig = serde_json::from_value(serde_json::json!({
+            "local_delegation": {"enabled":true,"backend_origin":"https://erato.example", "signing_key_id":"key", "signing_private_key_pem":"PRIVATE_KEY_MARKER", "verification_keys":{"key":"public"}}
+        })).unwrap();
+        let fields = config.bootstrap_fields().unwrap();
+        assert_eq!(fields["content_release"], "strict_snapshot_v1");
+        assert_eq!(
+            fields["local_delegation"]["verification_keys"]["key"],
+            "public"
+        );
+        let encoded = serde_json::to_string(&fields).unwrap();
+        assert!(!encoded.contains("PRIVATE_KEY_MARKER"));
+        assert!(!encoded.contains("signing_private_key_pem"));
     }
 
     #[test]

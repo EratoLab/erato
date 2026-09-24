@@ -594,6 +594,48 @@ directory = "/app/component-kits"
 
 Settings for distributing and configuring the local Erato desktop sidecar.
 
+#### `desktop_sidecar.local_delegation`
+
+{/* erato_toml_config_key: desktop_sidecar.local_delegation.enabled */}
+{/* erato_toml_config_key: desktop_sidecar.local_delegation.backend_origin */}
+{/* erato_toml_config_key: desktop_sidecar.local_delegation.signing_key_id */}
+{/* erato_toml_config_key: desktop_sidecar.local_delegation.signing_private_key_pem */}
+{/* erato_toml_config_key: desktop_sidecar.local_delegation.verification_keys.<key> */}
+
+Native-reviewed local evidence collection is disabled by default. Keep `enabled`
+false until the paired native/backend/frontend release passes recovery and host
+qualification. The initial supported operation is `erato/local_collect_evidence` in an
+explicitly configured asynchronous delegated leaf task. It requires
+`delegation.tasks.enabled` and the task's frozen tool budget; ordinary chats,
+Office actions, arbitrary scripts and local inference are outside this profile.
+
+`backend_origin` is the canonical HTTPS issuer, for example
+`https://erato.example.com`. `signing_key_id` selects an Ed25519 key in
+`verification_keys`, a map of 1–8 key IDs to Ed25519 public keys encoded as
+base64url without padding (32 decoded bytes per key).
+`signing_private_key_pem` is the matching PKCS#8 PEM secret, held only by the single
+backend replica. This task feature supports one backend replica only. Personalized
+native downloads receive only the origin and public verification keys. Retain
+old public keys for at least the maximum seven-day job lifetime plus the
+seven-day receipt/tombstone retention period; update installations before rotation.
+
+The authenticated web/Office shell starts review. Native UI authorizes exactly
+selected bytes from a frozen snapshot. Existing always-allow file preferences do
+not approve these snapshots. Before approval, content and derived metadata remain
+native; the shell holds local handles and coarse status. Installed native code
+and its private storage are trusted. This profile does not provide OS-enforced
+confinement. After approved plaintext reaches the frontend, its scripts and normal
+backend/provider processing can access that plaintext.
+
+Jobs survive pane closure. Approved exports, receipt retries and logged database
+checkpoints survive process restarts. Cloud continuation requires a fresh normal
+user session and current authorization; no access/refresh token is stored in the
+checkpoint. Cancellation/expiry and generation takeover fence older workers.
+Unreferenced approved blobs from a crash before database acceptance require the
+storage provider's orphan cleanup policy. Strict downloads require the native
+`strict_snapshot_v1` distribution profile; this declaration does not itself
+qualify an operating system or Office host.
+
 #### `desktop_sidecar.file_upload_approval`
 
 {/* erato_toml_config_key: desktop_sidecar.file_upload_approval */}

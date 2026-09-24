@@ -11,8 +11,19 @@
     "serverInfo": {
       "$ref": "../common.schema.json#/definitions/ProductInfo"
     },
-    "instanceId": { "type": "string", "minLength": 1, "maxLength": 256 },
-    "document": { "$ref": "./discovery-document.schema.json" }
+    "instanceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "document": {
+      "$ref": "./discovery-document.schema.json"
+    },
+    "localDelegation": {
+      "type": "object",
+      "description": "Opaque security declaration. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.",
+      "additionalProperties": true
+    }
   },
   "additionalProperties": true
 }

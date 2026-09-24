@@ -4247,6 +4247,382 @@ export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse,>(
   });
 };
 
+export type LocalDelegationContextError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationContextVariables = {
+  body: Schemas.ContextRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationContext = (
+  variables: LocalDelegationContextVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AssertionResponse,
+    LocalDelegationContextError,
+    Schemas.ContextRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/local-delegation/context",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationContext = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.AssertionResponse,
+      LocalDelegationContextError,
+      LocalDelegationContextVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.AssertionResponse,
+    LocalDelegationContextError,
+    LocalDelegationContextVariables
+  >({
+    mutationFn: (variables: LocalDelegationContextVariables) =>
+      fetchLocalDelegationContext(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type LocalDelegationPendingQueryParams = {
+  /**
+   * @format uuid
+   */
+  after?: string;
+};
+
+export type LocalDelegationPendingError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationPendingVariables = {
+  queryParams?: LocalDelegationPendingQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationPending = (
+  variables: LocalDelegationPendingVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.PendingResponse,
+    LocalDelegationPendingError,
+    undefined,
+    {},
+    LocalDelegationPendingQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function localDelegationPendingQuery(
+  variables: LocalDelegationPendingVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.PendingResponse>;
+};
+
+export function localDelegationPendingQuery(
+  variables: LocalDelegationPendingVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.PendingResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function localDelegationPendingQuery(
+  variables: LocalDelegationPendingVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/local-delegation/jobs",
+      operationId: "localDelegationPending",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchLocalDelegationPending(variables, signal),
+  };
+}
+
+export const useSuspenseLocalDelegationPending = <
+  TData = Schemas.PendingResponse,
+>(
+  variables: LocalDelegationPendingVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.PendingResponse,
+      LocalDelegationPendingError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.PendingResponse,
+    LocalDelegationPendingError,
+    TData
+  >({
+    ...localDelegationPendingQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useLocalDelegationPending = <TData = Schemas.PendingResponse,>(
+  variables: LocalDelegationPendingVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.PendingResponse,
+      LocalDelegationPendingError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.PendingResponse,
+    LocalDelegationPendingError,
+    TData
+  >({
+    ...localDelegationPendingQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type LocalDelegationCancelPathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type LocalDelegationCancelError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationCancelVariables = {
+  pathParams: LocalDelegationCancelPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationCancel = (
+  variables: LocalDelegationCancelVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    LocalDelegationCancelError,
+    undefined,
+    {},
+    {},
+    LocalDelegationCancelPathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/cancel",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationCancel = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      LocalDelegationCancelError,
+      LocalDelegationCancelVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    LocalDelegationCancelError,
+    LocalDelegationCancelVariables
+  >({
+    mutationFn: (variables: LocalDelegationCancelVariables) =>
+      fetchLocalDelegationCancel(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type LocalDelegationClaimPathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type LocalDelegationClaimError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationClaimVariables = {
+  body: Schemas.ClaimRequest;
+  pathParams: LocalDelegationClaimPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationClaim = (
+  variables: LocalDelegationClaimVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ClaimResponse,
+    LocalDelegationClaimError,
+    Schemas.ClaimRequest,
+    {},
+    {},
+    LocalDelegationClaimPathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/claim",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationClaim = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ClaimResponse,
+      LocalDelegationClaimError,
+      LocalDelegationClaimVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ClaimResponse,
+    LocalDelegationClaimError,
+    LocalDelegationClaimVariables
+  >({
+    mutationFn: (variables: LocalDelegationClaimVariables) =>
+      fetchLocalDelegationClaim(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type LocalDelegationCompletePathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type LocalDelegationCompleteError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationCompleteVariables = {
+  body: Schemas.ApprovedExport;
+  pathParams: LocalDelegationCompletePathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationComplete = (
+  variables: LocalDelegationCompleteVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ReceiptResponse,
+    LocalDelegationCompleteError,
+    Schemas.ApprovedExport,
+    {},
+    {},
+    LocalDelegationCompletePathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/complete",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationComplete = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ReceiptResponse,
+      LocalDelegationCompleteError,
+      LocalDelegationCompleteVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ReceiptResponse,
+    LocalDelegationCompleteError,
+    LocalDelegationCompleteVariables
+  >({
+    mutationFn: (variables: LocalDelegationCompleteVariables) =>
+      fetchLocalDelegationComplete(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type LocalDelegationResumePathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type LocalDelegationResumeError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationResumeVariables = {
+  pathParams: LocalDelegationResumePathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationResume = (
+  variables: LocalDelegationResumeVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    LocalDelegationResumeError,
+    undefined,
+    {},
+    {},
+    LocalDelegationResumePathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/resume",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationResume = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      LocalDelegationResumeError,
+      LocalDelegationResumeVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    LocalDelegationResumeError,
+    LocalDelegationResumeVariables
+  >({
+    mutationFn: (variables: LocalDelegationResumeVariables) =>
+      fetchLocalDelegationResume(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ListUserToolApprovalSettingsError = Fetcher.ErrorWrapper<undefined>;
 
 export type ListUserToolApprovalSettingsVariables =
@@ -7671,6 +8047,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/generating";
       operationId: "generatingChats";
       variables: GeneratingChatsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/local-delegation/jobs";
+      operationId: "localDelegationPending";
+      variables: LocalDelegationPendingVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/mcp-tool-approval-settings";

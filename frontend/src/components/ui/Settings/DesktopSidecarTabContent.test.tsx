@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
 import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 
@@ -11,6 +11,17 @@ vi.mock("./ClientToolFileApprovalSetting", () => ({
 }));
 
 const providerMounted = vi.fn();
+const sidecar = vi.hoisted(() => ({
+  state: "unavailable",
+  strict: false,
+  invoke: vi.fn().mockResolvedValue({ opened: true }),
+}));
+beforeEach(() => {
+  providerMounted.mockClear();
+  sidecar.state = "unavailable";
+  sidecar.strict = false;
+  sidecar.invoke.mockClear();
+});
 vi.mock("@/providers/DesktopSidecarProvider", () => ({
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT: "https://localhost:1234",
   resolveDesktopSidecarEndpoint: () => undefined,
@@ -22,8 +33,15 @@ vi.mock("@/providers/DesktopSidecarProvider", () => ({
   },
   DesktopSidecarConfigurationSync: () => null,
   useDesktopSidecar: () => ({
-    client: null,
-    snapshot: { state: "unavailable" },
+    client:
+      sidecar.state === "ready"
+        ? {
+            supports: (method: string) =>
+              method === "sidecar.open_data_directory.v1",
+            invoke: sidecar.invoke,
+          }
+        : null,
+    snapshot: { state: sidecar.state, localDelegation: sidecar.strict },
   }),
 }));
 
@@ -46,4 +64,30 @@ it("keeps the details expanded across connection retries and still allows collap
   expect(
     screen.queryByRole("button", { name: "Retry connection" }),
   ).not.toBeInTheDocument();
+});
+
+it("retains the directory command for a legacy sidecar", () => {
+  sidecar.state = "ready";
+  render(<DesktopSidecarRow />);
+  fireEvent.click(
+    screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Open data directory" }));
+  expect(sidecar.invoke).toHaveBeenCalledWith(
+    "sidecar.open_data_directory.v1",
+    {},
+  );
+});
+
+it("does not offer the legacy directory command in strict consent mode", () => {
+  sidecar.state = "ready";
+  sidecar.strict = true;
+  render(<DesktopSidecarRow />);
+  fireEvent.click(
+    screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Open data directory" }),
+  ).not.toBeInTheDocument();
+  expect(sidecar.invoke).not.toHaveBeenCalled();
 });

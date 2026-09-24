@@ -1,5 +1,6 @@
 import {
   getClientToolExecutor,
+  isClientToolResultLocalOnly,
   hasClientToolCallBeenAnswered,
   markClientToolCallAnswered,
   releaseClientToolCallAbort,
@@ -23,7 +24,9 @@ interface HandleClientToolCallDeps {
  * Runs the registered executor for a `client_tool_call` and POSTs the outcome to
  * resume the suspended turn. Execute-once by `tool_call_id` (a resumestream
  * replay re-emits the event); a missing/throwing executor still POSTs an error
- * so the backend recovers instead of parking to timeout.
+ * so the backend recovers instead of parking to timeout. Strict native tools are
+ * the exception: their results and errors remain local, and a stale legacy call
+ * expires on the backend rather than uploading private native information.
  */
 export async function handleClientToolCall(
   responseData: MessageSubmitStreamingResponseClientToolCall & {
@@ -33,6 +36,7 @@ export async function handleClientToolCall(
 ): Promise<void> {
   const { message_id, tool_call_id, tool_name, input } = responseData;
   const { chatId } = deps;
+  if (isClientToolResultLocalOnly(tool_name)) return;
 
   if (!chatId || !message_id || !tool_call_id || !tool_name) {
     console.warn("[client_tool_call] missing required fields", responseData);
@@ -65,6 +69,7 @@ export async function handleClientToolCall(
         chatId,
         signal,
       });
+      if (outcome.disposition === "local_only") return;
       body = outcome.ok
         ? // Coalesce to explicit null so an empty success is delivered as a
           // result, not treated by the backend as "no result → tool error".
@@ -88,6 +93,7 @@ export async function handleClientToolCall(
     }
   }
 
+  if (isClientToolResultLocalOnly(tool_name)) return;
   try {
     const response = await fetch("/api/v1beta/me/messages/clienttoolresult", {
       method: "POST",

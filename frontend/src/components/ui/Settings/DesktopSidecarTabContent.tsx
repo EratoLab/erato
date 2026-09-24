@@ -104,10 +104,14 @@ function DesktopSidecarEntityRow({
               message: "Start the desktop sidecar, then try connecting again.",
             })}
       </p>
-      <ClientToolFileApprovalSetting />
-      {connected && client?.supports("indexing.status.v1") && (
-        <SidecarIndexingControls />
+      {snapshot.localDelegation ? (
+        <p className="text-sm text-theme-fg-secondary">{t`Evidence sharing requires review in the desktop app for each package.`}</p>
+      ) : (
+        <ClientToolFileApprovalSetting />
       )}
+      {connected &&
+        !snapshot.localDelegation &&
+        client?.supports("indexing.status.v1") && <SidecarIndexingControls />}
       {openDataDirectoryError ? (
         <p role="alert" className="text-sm text-theme-error-fg">
           {t({
@@ -117,7 +121,9 @@ function DesktopSidecarEntityRow({
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {connected && client?.supports("sidecar.open_data_directory.v1") ? (
+        {connected &&
+        !snapshot.localDelegation &&
+        client?.supports("sidecar.open_data_directory.v1") ? (
           <Button
             variant="secondary"
             size="sm"
