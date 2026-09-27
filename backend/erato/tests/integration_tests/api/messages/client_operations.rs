@@ -203,6 +203,16 @@ async fn park(state: &erato::state::AppState, chat_id: Uuid) -> OperationRequest
     let rows = attempts::Entity::find().all(&state.db).await.unwrap();
     assert_eq!(rows.len(), 1, "timeout must become one logged operation");
     let request: OperationRequest = serde_json::from_value(rows[0].request.clone()).unwrap();
+    if request.operation_id.starts_with("erato/") {
+        assert!(
+            !parse_sse_events(&response).iter().any(|event| {
+                serde_json::from_str::<Value>(&event.data)
+                    .is_ok_and(|value| value["message_type"] == "client_tool_call")
+            }),
+            "synthetic child operations must use account discovery, not SSE"
+        );
+    }
+
     let message = Messages::find_by_id(request.message_id)
         .one(&state.db)
         .await
@@ -253,6 +263,9 @@ async fn durable_timeout_claim_and_continue_on_another_replica(pool: Pool<Postgr
     let request = park(&state, chat_id).await;
     let mut replica = test_app_state(state.config.clone(), pool).await;
     replica.client_operations = state.client_operations.clone();
+    let current = replica.config.client_tools.tools.get_mut("page").unwrap();
+    current.description = "Updated page reader".into();
+    current.timeout_ms = Some(15);
     assert!(replica.background_tasks.get_task(&chat_id).await.is_none());
     let server = app_server(replica.clone());
     let listed = server
@@ -364,6 +377,7 @@ async fn durable_timeout_claim_and_continue_on_another_replica(pool: Pool<Postgr
             .any(|tool| tool["function"]["name"] == "read_document_page"),
         "original client tool must survive continuation"
     );
+    assert!(last["tools"].to_string().contains("Updated page reader"));
     assert!(last["messages"].to_string().contains("approved page"));
     let params: GenerationParameters =
         serde_json::from_value(message.generation_parameters.unwrap()).unwrap();
@@ -548,6 +562,20 @@ async fn dropped_http_stream_escalates_before_the_execution_timeout(pool: Pool<P
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn successful_fast_call_creates_no_durable_attempt(pool: Pool<Postgres>) {
+    fast_call_case(pool, false, false).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn invalid_fast_result_is_refused_without_escalating_or_aborting(pool: Pool<Postgres>) {
+    fast_call_case(pool, true, false).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn unexpected_fast_attachment_is_refused_without_resolving_files(pool: Pool<Postgres>) {
+    fast_call_case(pool, true, true).await;
+}
+
+async fn fast_call_case(pool: Pool<Postgres>, invalid: bool, unexpected_attachment: bool) {
     let (state, _mock, recorder, chat_id) = setup(pool, 60_000).await;
     let server = app_server(state.clone());
     let submit = async {
@@ -572,10 +600,15 @@ async fn successful_fast_call_creates_no_durable_attempt(pool: Pool<Postgres>) {
                         ..
                     } = event
                     {
+                        let result = if invalid && !unexpected_attachment {
+                            json!({"private":"INVALID-FAST-SECRET"})
+                        } else {
+                            json!({"document_identity":"doc-one","page":1,"text":"approved page"})
+                        };
                         let response = server.post("/api/v1beta/me/messages/clienttoolresult").with_bearer_token(TEST_JWT_TOKEN)
                             .add_header("X-Erato-Executor", serde_json::to_string(&binding("device-one")).unwrap())
                             .json(&json!({"chat_id":chat_id,"message_id":message_id,"tool_call_id":tool_call_id,
-                                "result":{"document_identity":"doc-one","page":1,"text":"approved page"}})).await;
+                                "result":result, "file_upload_ids": if unexpected_attachment { vec![Uuid::new_v4()] } else { vec![] }})).await;
                         response.assert_status_ok();
                         assert_eq!(response.json::<Value>()["delivered"], true);
                         return;
@@ -598,7 +631,28 @@ async fn successful_fast_call_creates_no_durable_attempt(pool: Pool<Postgres>) {
             .unwrap()
             .is_empty()
     );
-    assert_eq!(turn_requests(&recorder).len(), 2);
+    let requests = turn_requests(&recorder);
+    assert_eq!(requests.len(), 2);
+    if invalid {
+        assert!(
+            requests.last().unwrap()["messages"]
+                .to_string()
+                .contains("invalid_operation_result")
+        );
+        assert!(
+            !recorder
+                .bodies()
+                .iter()
+                .any(|body| body.contains("INVALID-FAST-SECRET"))
+        );
+        let messages = Messages::find().all(&state.db).await.unwrap();
+        assert!(!messages.iter().any(|message| {
+            message
+                .raw_message
+                .to_string()
+                .contains("INVALID-FAST-SECRET")
+        }));
+    }
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -950,6 +1004,17 @@ async fn repeated_parks_do_not_mint_new_submission_allowances(pool: Pool<Postgre
         ..Default::default()
     });
     let first = park(&state, chat_id).await;
+    state
+        .config
+        .client_tools
+        .tools
+        .get_mut("page")
+        .unwrap()
+        .submission
+        .as_mut()
+        .unwrap()
+        .max_attempts = 8;
+
     let server = app_server(state.clone());
     let mut request = first;
     for expected_count in 1..=2 {
@@ -1031,4 +1096,230 @@ async fn repeated_parks_do_not_mint_new_submission_allowances(pool: Pool<Postgre
         params.turn_consumption.submission_attempts["read_document_page"],
         2
     );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn invalid_late_fast_result_settles_only_the_open_attempt(pool: Pool<Postgres>) {
+    let (state, _mock, recorder, chat_id) = setup(pool, 10).await;
+    let request = park(&state, chat_id).await;
+    let server = app_server(state.clone());
+    let body = json!({"chat_id":chat_id,"message_id":request.message_id,
+        "tool_call_id":request.tool_call_id,"result":{"private":"LATE-FAST-SECRET"}});
+    for _ in 0..2 {
+        server
+            .post("/api/v1beta/me/messages/clienttoolresult")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header(
+                "X-Erato-Executor",
+                serde_json::to_string(&binding("device-one")).unwrap(),
+            )
+            .json(&body)
+            .await
+            .assert_status_ok();
+    }
+    let row = store::get(&state.db, request.account_id, request.attempt_id)
+        .await
+        .unwrap();
+    assert_eq!(row.state, AttemptState::Ready);
+    assert_eq!(
+        row.result.as_ref().unwrap()["error"]["code"],
+        "invalid_operation_result"
+    );
+    assert!(!row.result.unwrap().to_string().contains("LATE-FAST-SECRET"));
+    server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/continue",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    wait_completed(&state, request.attempt_id).await;
+    assert_eq!(turn_requests(&recorder).len(), 2);
+    assert!(
+        !recorder
+            .bodies()
+            .iter()
+            .any(|body| body.contains("LATE-FAST-SECRET"))
+    );
+    server.post("/api/v1beta/me/messages/clienttoolresult")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Executor", serde_json::to_string(&binding("device-one")).unwrap())
+        .json(&json!({"chat_id":chat_id,"message_id":request.message_id,
+            "tool_call_id":request.tool_call_id,"result":{"document_identity":"doc-one","page":1,"text":"replacement"}}))
+        .await.assert_status_conflict();
+}
+
+struct SyntheticPageKind {
+    authorize_child: bool,
+}
+impl OperationKind for SyntheticPageKind {
+    fn kind(&self) -> &'static str {
+        "test.synthetic-page.v1"
+    }
+    fn operation_id(&self) -> &'static str {
+        "erato/read_document_page"
+    }
+    fn realm(&self) -> ExecutionRealm {
+        ExecutionRealm::OfficeAddin
+    }
+    fn consent(&self) -> ConsentPolicy {
+        ConsentPolicy::None
+    }
+    fn tool_offer(&self, context: &OperationOfferContext<'_>) -> Option<OperationToolOffer> {
+        if !self.authorize_child
+            || !erato::models::chat::chat_is_delegated_run(context.chat)
+            || context.other_tools
+            || context.account_id.is_none()
+        {
+            return None;
+        }
+        let executor = context.request_context.executor.clone()?;
+        self.validate_input(&json!({"page":1}), &executor).ok()?;
+        Some(OperationToolOffer {
+            definition: ClientToolConfig {
+                namespace: Some("erato".into()), name: "read_document_page".into(),
+                description: "Synthetic bound page reader".into(),
+                parameters: json!({"type":"object","properties":{"page":{"type":"integer"}},"required":["page"]}).to_string(),
+                timeout_ms: Some(60_000), ..Default::default()
+            }, binding: executor,
+        })
+    }
+    fn validate_input(&self, input: &Value, executor: &ExecutorBinding) -> Result<(), String> {
+        DocumentPageKind.validate_input(input, executor)
+    }
+    fn validate_result(
+        &self,
+        request: &OperationRequest,
+        result: &OperationResult,
+    ) -> Result<ValidatedResult, String> {
+        DocumentPageKind.validate_result(request, result)
+    }
+}
+
+async fn mark_child(state: &erato::state::AppState, chat_id: Uuid) {
+    let parent_id = seed_origin_chat(&state.db).await;
+    let mut chat: chats::ActiveModel = chats::Entity::find_by_id(chat_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .into();
+    chat.assistant_configuration = ActiveValue::Set(Some(json!({"provenance":{
+        "kind":"delegation","origin_chat_id":parent_id,"depth":1,"run_mode":"async"}})));
+    chat.update(&state.db).await.unwrap();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn synthetic_kind_parks_and_resumes_a_bound_child_without_config_or_sse(
+    pool: Pool<Postgres>,
+) {
+    let (mut state, _mock, recorder, chat_id) = setup(pool, 60_000).await;
+    state.config.client_tools.tools.clear();
+    state.config.facets.tool_call_allowlist = vec!["erato/read_document_page".into()];
+    state.client_operations = OperationRegistry::default();
+    state
+        .client_operations
+        .register(Arc::new(SyntheticPageKind {
+            authorize_child: true,
+        }))
+        .unwrap();
+    mark_child(&state, chat_id).await;
+    // The synthetic kind bypasses neither the allowlist nor the binding, but
+    // needs no configured tool in the otherwise-reserved erato namespace.
+    let request = tokio::time::timeout(Duration::from_secs(10), park(&state, chat_id))
+        .await
+        .unwrap();
+    assert_eq!(request.operation_id, "erato/read_document_page");
+    let message = Messages::find_by_id(request.message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let params: GenerationParameters =
+        serde_json::from_value(message.generation_parameters.unwrap()).unwrap();
+    assert!(params.client_tools.contains_key("read_document_page"));
+    let server = app_server(state.clone());
+    let claim = server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/claim",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", "read_document_page")
+        .json(&json!({"binding":binding("device-one")}))
+        .await;
+    claim.assert_status_ok();
+    server.post(&format!("/api/v1beta/me/client-operations/{}/result", request.attempt_id))
+        .with_bearer_token(TEST_JWT_TOKEN).add_header("X-Erato-Client-Tools", "read_document_page")
+        .json(&json!({"claim_token":claim.json::<Value>()["claim_token"],"result":page_result(&request,binding("device-one"))}))
+        .await.assert_status_ok();
+    server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/continue",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    wait_completed(&state, request.attempt_id).await;
+    let requests = turn_requests(&recorder);
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests[1]["tools"]
+            .to_string()
+            .contains("Synthetic bound page reader")
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn child_offers_require_kind_authorization_allowlist_and_binding(pool: Pool<Postgres>) {
+    let (state, _mock, recorder, _) = setup(pool, 60_000).await;
+    for case in ["ordinary", "kind_refused", "no_allowlist", "no_binding"] {
+        let mut state = state.clone();
+        let chat_id = seed_origin_chat(&state.db).await;
+        mark_child(&state, chat_id).await;
+        if case != "ordinary" {
+            state.config.client_tools.tools.clear();
+            state.config.facets.tool_call_allowlist = vec!["erato/read_document_page".into()];
+            state.client_operations = OperationRegistry::default();
+            state
+                .client_operations
+                .register(Arc::new(SyntheticPageKind {
+                    authorize_child: case != "kind_refused",
+                }))
+                .unwrap();
+        }
+        if case == "no_allowlist" {
+            state.config.facets.tool_call_allowlist.clear();
+        }
+        let server = app_server(state.clone());
+        let mut call = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header("X-Erato-Client-Tools", "read_document_page")
+            .json(&json!({"existing_chat_id":chat_id,"user_message":"Read page"}));
+        if case != "no_binding" {
+            call = call.add_header(
+                "X-Erato-Executor",
+                serde_json::to_string(&binding("device-one")).unwrap(),
+            );
+        }
+        tokio::time::timeout(Duration::from_secs(10), call)
+            .await
+            .unwrap()
+            .assert_status_ok();
+        assert!(
+            attempts::Entity::find()
+                .all(&state.db)
+                .await
+                .unwrap()
+                .is_empty(),
+            "{case}"
+        );
+    }
+    for body in recorder.bodies() {
+        let body: Value = serde_json::from_str(&body).unwrap();
+        assert!(!body["tools"].to_string().contains("read_document_page"));
+    }
 }

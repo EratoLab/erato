@@ -152,11 +152,34 @@ pub struct ValidatedResult {
     pub succeeded: bool,
 }
 
+/// Server-owned offer context. Kinds may authorize a bound synthetic operation
+/// here, including in a child; ordinary configured client tools stay suppressed.
+pub struct OperationOfferContext<'a> {
+    pub config: &'a crate::config::AppConfig,
+    pub chat: &'a crate::db::entity::chats::Model,
+    pub account_id: Option<Uuid>,
+    pub request_context: &'a crate::models::message::GenerationRequestContext,
+    pub allowlist: &'a [String],
+    pub other_tools: bool,
+}
+
+pub struct OperationToolOffer {
+    /// Compiled descriptor, not a `[client_tools.tools]` configuration entry.
+    /// The registry owner must match its `erato/<name>` identity exactly.
+    pub definition: crate::config::ClientToolConfig,
+    pub binding: ExecutorBinding,
+}
+
 pub trait OperationKind: Send + Sync {
     fn kind(&self) -> &'static str;
     fn operation_id(&self) -> &'static str;
     fn realm(&self) -> ExecutionRealm;
     fn consent(&self) -> ConsentPolicy;
+    /// No offer, including no child-run exception, unless the kind explicitly
+    /// authorizes this context and supplies its executor binding.
+    fn tool_offer(&self, _context: &OperationOfferContext<'_>) -> Option<OperationToolOffer> {
+        None
+    }
     fn allow_cross_device(&self) -> bool {
         false
     }
@@ -182,6 +205,9 @@ impl OperationRegistry {
         }
         self.0.insert(kind.operation_id().into(), kind);
         Ok(())
+    }
+    pub fn kinds(&self) -> impl Iterator<Item = &dyn OperationKind> {
+        self.0.values().map(AsRef::as_ref)
     }
     pub fn for_operation(&self, id: &str) -> Option<&dyn OperationKind> {
         self.0.get(id).map(AsRef::as_ref)
@@ -256,6 +282,48 @@ pub fn from_fast_result(
         outcome,
         result,
         error,
+        executor: request.binding.clone(),
+    })
+}
+
+/// Fixed server-authored feedback for a malformed executor result. Authentication
+/// and binding failures remain HTTP refusals and never settle another executor's call.
+pub fn invalid_result_outcome() -> crate::services::client_tools::ClientToolOutcome {
+    crate::services::client_tools::ClientToolOutcome::ValidationFailed(vec![
+        crate::services::client_tools::ClientToolValidationIssue {
+            path: String::new(),
+            code: "invalid_operation_result".into(),
+            message: "The executor returned an invalid operation result.".into(),
+        },
+    ])
+}
+
+pub fn invalid_result_feedback() -> ValidatedResult {
+    ValidatedResult {
+        succeeded: false,
+        output: serde_json::json!({
+            "status": "error", "error": "The executor returned an invalid operation result.",
+            "validation_errors": [{"path":"", "code":"invalid_operation_result",
+                "message":"The executor returned an invalid operation result."}]
+        }),
+    }
+}
+
+/// An unsupported fast envelope is also a refused call, including when delivery
+/// races the transaction that parks it. Never persist its unvalidated payload.
+pub fn fast_result_or_refusal(
+    request: &OperationRequest,
+    outcome: crate::services::client_tools::ClientToolOutcome,
+) -> OperationResult {
+    from_fast_result(request, outcome).unwrap_or_else(|_| OperationResult {
+        attempt_id: request.attempt_id,
+        operation_id: request.operation_id.clone(),
+        base_revision: request.base_revision,
+        outcome: OperationOutcome::Rejected,
+        result: None,
+        error: Some(OperationError {
+            code: "invalid_operation_result".into(),
+        }),
         executor: request.binding.clone(),
     })
 }

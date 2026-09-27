@@ -250,6 +250,29 @@ pub async fn accept(
     token: Option<Uuid>,
     result: &OperationResult,
 ) -> Result<(), Report> {
+    accept_result(db, registry, account_id, token, result, false).await
+}
+
+/// The fast transport may race escalation. Invalid content from its original
+/// bound executor becomes fixed refused-call feedback, including in that race.
+/// Claimed durable results still require the kind's validator without this fallback.
+pub async fn accept_fast(
+    db: &DatabaseConnection,
+    registry: &OperationRegistry,
+    account_id: Uuid,
+    result: &OperationResult,
+) -> Result<(), Report> {
+    accept_result(db, registry, account_id, None, result, true).await
+}
+
+async fn accept_result(
+    db: &DatabaseConnection,
+    registry: &OperationRegistry,
+    account_id: Uuid,
+    token: Option<Uuid>,
+    result: &OperationResult,
+    refuse_invalid: bool,
+) -> Result<(), Report> {
     let initial = get(db, account_id, result.attempt_id).await?;
     let tx = db.begin().await?;
     lock_chat(&tx, initial.chat_id, account_id).await?;
@@ -273,24 +296,46 @@ pub async fn accept(
     if !binding_matches {
         return Err(eyre!("Operation claim mismatch"));
     }
-    if (result.outcome == OperationOutcome::Succeeded) != result.result.is_some()
+    // Preserve idempotency even if a newer kind validator is stricter.
+    let submitted = serde_json::to_value(result)?;
+    if row.result.as_ref() == Some(&submitted) {
+        return Ok(());
+    }
+    let validated = if (refuse_invalid
+        && result
+            .error
+            .as_ref()
+            .is_some_and(|error| error.code == "invalid_operation_result"))
+        || (result.outcome == OperationOutcome::Succeeded) != result.result.is_some()
         || (result.outcome == OperationOutcome::Succeeded) == result.error.is_some()
     {
-        return Err(eyre!("Invalid operation result"));
-    }
-    let serialized = serde_json::to_value(result)?;
+        None
+    } else {
+        kind.validate_result(&request, result)
+            .ok()
+            .filter(|validated| {
+                validated.succeeded == (result.outcome == OperationOutcome::Succeeded)
+            })
+    };
+    let (serialized, validated) = match validated {
+        Some(validated) => (serde_json::to_value(result)?, validated),
+        None if refuse_invalid => {
+            let mut refused = result.clone();
+            refused.outcome = OperationOutcome::Rejected;
+            refused.result = None;
+            refused.error = Some(OperationError {
+                code: "invalid_operation_result".into(),
+            });
+            (serde_json::to_value(refused)?, invalid_result_feedback())
+        }
+        None => return Err(eyre!("Invalid operation result")),
+    };
     if let Some(previous) = row.result {
         return if previous == serialized {
             Ok(())
         } else {
             Err(eyre!("Operation already settled"))
         };
-    }
-    let validated = kind
-        .validate_result(&request, result)
-        .map_err(|_| eyre!("Invalid operation result"))?;
-    if validated.succeeded != (result.outcome == OperationOutcome::Succeeded) {
-        return Err(eyre!("Invalid operation result"));
     }
     let changed = tx
         .query_one_raw(statement(

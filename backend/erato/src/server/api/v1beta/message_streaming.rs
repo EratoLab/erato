@@ -3705,6 +3705,18 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             ));
         }
     }
+    append_operation_kind_offers(
+        app_state,
+        chat,
+        me_profile_input.user_id,
+        &generation_request_context,
+        &client_tool_allowlist,
+        &mcp_claimed_names,
+        None,
+        effective_model_settings.compat_omit_strict,
+        &mut chat_request_tools,
+        &mut offered_client_tools,
+    )?;
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -6039,6 +6051,7 @@ async fn stream_generate_chat_completion<
                 if let Some(request) = &durable_request {
                     task.register_client_operation(request.clone()).await;
                 }
+                let server_refused = validation_failure.is_some();
                 let outcome = if let Some(failure) = validation_failure {
                     failure
                 } else {
@@ -6046,38 +6059,41 @@ async fn stream_generate_chat_completion<
                     // POSTed immediately cannot race ahead of the registered waiter.
                     let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
 
-                    // Signal the client to execute: broadcast (submit path + resume
-                    // replay) AND the typed tx stream (regenerate/edit path).
-                    send_background_event(
-                        task,
-                        StreamingEvent::ClientToolCall {
+                    let inbox_only = tool_policy.is_some_and(|policy| policy.inbox_only);
+                    if !inbox_only {
+                        // Signal the client to execute: broadcast (submit path + resume
+                        // replay) AND the typed tx stream (regenerate/edit path).
+                        send_background_event(
+                            task,
+                            StreamingEvent::ClientToolCall {
+                                message_id: assistant_message_id,
+                                content_index,
+                                tool_call_id: call_id.clone(),
+                                tool_name: tool_name.clone(),
+                                input: Some(tool_input.clone()),
+                            },
+                            "broadcast client tool call",
+                        )
+                        .await;
+                        let call_event = MessageSubmitStreamingResponseClientToolCall {
                             message_id: assistant_message_id,
                             content_index,
                             tool_call_id: call_id.clone(),
                             tool_name: tool_name.clone(),
                             input: Some(tool_input.clone()),
-                        },
-                        "broadcast client tool call",
-                    )
-                    .await;
-                    let call_event = MessageSubmitStreamingResponseClientToolCall {
-                        message_id: assistant_message_id,
-                        content_index,
-                        tool_call_id: call_id.clone(),
-                        tool_name: tool_name.clone(),
-                        input: Some(tool_input.clone()),
-                    };
-                    let call_message: MSG = call_event.into();
-                    // Best-effort on the typed stream: the client is, by design,
-                    // away executing the tool and POSTing to a separate endpoint
-                    // during the park, so a dropped SSE connection here must NOT
-                    // abort the generation. The broadcast + resume history is the
-                    // durable signal path.
-                    if let Err(error) = call_message.send_event_report(tx.clone()).await {
-                        warn_and_capture_error(
-                            "send best-effort client tool call SSE event",
-                            &error,
-                        );
+                        };
+                        let call_message: MSG = call_event.into();
+                        // Best-effort on the typed stream: the client is, by design,
+                        // away executing the tool and POSTing to a separate endpoint
+                        // during the park, so a dropped SSE connection here must NOT
+                        // abort the generation. The broadcast + resume history is the
+                        // durable signal path.
+                        if let Err(error) = call_message.send_event_report(tx.clone()).await {
+                            warn_and_capture_error(
+                                "send best-effort client tool call SSE event",
+                                &error,
+                            );
+                        }
                     }
 
                     // Resolve this tool's park budget from the entry that was
@@ -6094,18 +6110,22 @@ async fn stream_generate_chat_completion<
                         Aborted,
                         TimedOut,
                     }
-                    let park = tokio::select! {
-                        received = &mut result_rx => match received {
-                            Ok(outcome) => Park::Delivered(outcome),
-                            // Sender dropped without delivering (e.g. task replaced).
-                            Err(_) => Park::TimedOut,
-                        },
-                        _ = task.wait_for_abort() => Park::Aborted,
-                        _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
-                        _ = tx.closed(), if durable_request.is_some() => Park::TimedOut,
-                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(
-                            park_timeout_ms,
-                        )) => Park::TimedOut,
+                    let park = if inbox_only {
+                        Park::TimedOut
+                    } else {
+                        tokio::select! {
+                            received = &mut result_rx => match received {
+                                Ok(outcome) => Park::Delivered(outcome),
+                                // Sender dropped without delivering (e.g. task replaced).
+                                Err(_) => Park::TimedOut,
+                            },
+                            _ = task.wait_for_abort() => Park::Aborted,
+                            _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
+                            _ = tx.closed(), if durable_request.is_some() => Park::TimedOut,
+                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(
+                                park_timeout_ms,
+                            )) => Park::TimedOut,
+                        }
                     };
 
                     // Drop the pending entry, then settle the timeout/abort-vs-
@@ -6181,6 +6201,35 @@ async fn stream_generate_chat_completion<
                     }
                 };
 
+                let mut validated_output = None;
+                let outcome = if let Some(request) = &durable_request
+                    && !server_refused
+                    && !matches!(outcome, ClientToolOutcome::Cancelled { .. })
+                {
+                    let validated = crate::services::client_operations::from_fast_result(
+                        request, outcome.clone(),
+                    ).ok().and_then(|result| {
+                        app_state.client_operations.for_request(request)?
+                            .validate_result(request, &result).ok()
+                            .filter(|validated| validated.succeeded ==
+                                (result.outcome == crate::services::client_operations::OperationOutcome::Succeeded))
+                    });
+                    match validated {
+                        Some(validated) => {
+                            validated_output = Some(validated.output);
+                            outcome
+                        }
+                        None => {
+                            validated_output = Some(
+                                crate::services::client_operations::invalid_result_feedback()
+                                    .output,
+                            );
+                            crate::services::client_operations::invalid_result_outcome()
+                        }
+                    }
+                } else {
+                    outcome
+                };
                 let (status, bg_status, message_status, mut output_value, mut response_text) =
                     match &outcome {
                         ClientToolOutcome::Result(result, _) => (
@@ -6222,20 +6271,8 @@ async fn stream_generate_chat_completion<
                             ),
                         ),
                     };
-                if let Some(request) = &durable_request
-                    && !matches!(outcome, ClientToolOutcome::Cancelled { .. })
-                {
-                    let result = crate::services::client_operations::from_fast_result(
-                        request,
-                        outcome.clone(),
-                    )?;
-                    let validated = app_state
-                        .client_operations
-                        .for_request(request)
-                        .ok_or_else(|| eyre!("Operation kind unavailable"))?
-                        .validate_result(request, &result)
-                        .map_err(|_| eyre!("Invalid operation result"))?;
-                    output_value = validated.output;
+                if let Some(output) = validated_output {
+                    output_value = output;
                     response_text = output_value.to_string();
                 }
                 if let Some(submission) = submission {
@@ -7181,12 +7218,11 @@ async fn stream_generate_chat_completion<
             task.remove_pending_client_tool(&request.tool_call_id).await;
             if let Ok(outcome) = result_rx.try_recv() {
                 let result =
-                    crate::services::client_operations::from_fast_result(&request, outcome)?;
-                crate::services::client_operations::store::accept(
+                    crate::services::client_operations::fast_result_or_refusal(&request, outcome);
+                crate::services::client_operations::store::accept_fast(
                     &app_state.db,
                     &app_state.client_operations,
                     request.account_id,
-                    None,
                     &result,
                 )
                 .await?;
@@ -14016,6 +14052,8 @@ pub async fn client_tool_result(
     }
 
     if app_state.config.client_tools.durable_operations_enabled {
+        let mut operation_payload = payload.clone();
+        operation_payload["file_upload_ids"] = json!(&request.file_upload_ids);
         let account_id = Uuid::parse_str(&me_user.id).map_err(|_| {
             (
                 axum::http::StatusCode::UNAUTHORIZED,
@@ -14033,7 +14071,6 @@ pub async fn client_tool_result(
                 && task.message_id() == request.message_id
             {
                 if operation.chat_id != request.chat_id
-                    || !request.file_upload_ids.is_empty()
                     || crate::services::client_operations::ExecutorBinding::from_headers(&headers)
                         .as_ref()
                         != Some(&operation.binding)
@@ -14043,32 +14080,9 @@ pub async fn client_tool_result(
                         "Operation binding mismatch".into(),
                     ));
                 }
-                let outcome = ClientToolOutcome::from_payload(&payload);
-                let result = crate::services::client_operations::from_fast_result(
-                    operation,
-                    outcome.clone(),
-                )
-                .map_err(|_| {
-                    (
-                        axum::http::StatusCode::BAD_REQUEST,
-                        "Invalid operation result".into(),
-                    )
-                })?;
-                let kind = app_state
-                    .client_operations
-                    .for_request(operation)
-                    .ok_or_else(|| {
-                        (
-                            axum::http::StatusCode::CONFLICT,
-                            "Operation kind unavailable".into(),
-                        )
-                    })?;
-                kind.validate_result(operation, &result).map_err(|_| {
-                    (
-                        axum::http::StatusCode::BAD_REQUEST,
-                        "Invalid operation result".into(),
-                    )
-                })?;
+                let outcome = ClientToolOutcome::from_payload(&operation_payload);
+                // Delivery acknowledges receipt, not validity. The loop turns an
+                // invalid payload into fixed per-call feedback instead of timing out.
                 if matches!(
                     task.deliver_client_tool_result(&request.tool_call_id, outcome)
                         .await,
@@ -14107,7 +14121,6 @@ pub async fn client_tool_result(
                 .or(operation);
             if let Some(operation) = durable_request {
                 if operation.chat_id != request.chat_id
-                    || !request.file_upload_ids.is_empty()
                     || crate::services::client_operations::ExecutorBinding::from_headers(&headers)
                         .as_ref()
                         != Some(&operation.binding)
@@ -14117,37 +14130,15 @@ pub async fn client_tool_result(
                         "Operation binding mismatch".into(),
                     ));
                 }
-                let result = crate::services::client_operations::from_fast_result(
+                let result = crate::services::client_operations::fast_result_or_refusal(
                     &operation,
-                    ClientToolOutcome::from_payload(&payload),
-                )
-                .map_err(|_| {
-                    (
-                        axum::http::StatusCode::BAD_REQUEST,
-                        "Invalid operation result".into(),
-                    )
-                })?;
-                let kind = app_state
-                    .client_operations
-                    .for_request(&operation)
-                    .ok_or_else(|| {
-                        (
-                            axum::http::StatusCode::CONFLICT,
-                            "Operation kind unavailable".into(),
-                        )
-                    })?;
-                kind.validate_result(&operation, &result).map_err(|_| {
-                    (
-                        axum::http::StatusCode::BAD_REQUEST,
-                        "Invalid operation result".into(),
-                    )
-                })?;
+                    ClientToolOutcome::from_payload(&operation_payload),
+                );
                 if row.is_some() {
-                    crate::services::client_operations::store::accept(
+                    crate::services::client_operations::store::accept_fast(
                         &app_state.db,
                         &app_state.client_operations,
                         account_id,
-                        None,
                         &result,
                     )
                     .await
@@ -16322,6 +16313,84 @@ pub(crate) async fn run_continuation(
     .await
 }
 
+/// Synthetic durable kinds use the same offered-policy dispatch map without
+/// requiring a configured client tool or weakening its child-run suppression.
+#[allow(clippy::too_many_arguments)]
+fn append_operation_kind_offers(
+    app_state: &AppState,
+    chat: &crate::db::entity::chats::Model,
+    account_id: Option<Uuid>,
+    request_context: &GenerationRequestContext,
+    allowlist: &[String],
+    mcp_claimed_names: &HashSet<String>,
+    original_selection: Option<&HashMap<String, crate::config::ClientToolConfig>>,
+    omit_strict: bool,
+    tools: &mut Vec<genai::chat::Tool>,
+    policies: &mut HashMap<String, crate::services::client_tools::OfferedClientTool>,
+) -> Result<(), Report> {
+    use crate::services::client_operations::OperationOfferContext;
+    if !app_state.config.client_tools.durable_operations_enabled || account_id.is_none() {
+        return Ok(());
+    }
+    let mut kinds: Vec<_> = app_state.client_operations.kinds().collect();
+    kinds.sort_by_key(|kind| kind.operation_id());
+    for kind in kinds {
+        if original_selection.is_some_and(|selection| {
+            !selection
+                .values()
+                .any(|saved| saved.qualified_name() == kind.operation_id())
+        }) {
+            continue;
+        }
+        let context = OperationOfferContext {
+            config: &app_state.config,
+            chat,
+            account_id,
+            request_context,
+            allowlist,
+            other_tools: !tools.is_empty(),
+        };
+        let Some(offer) = kind.tool_offer(&context) else {
+            continue;
+        };
+        let definition = offer.definition;
+        let name = &definition.name;
+        if definition.namespace_or_default() != erato_config::config::RESERVED_TOOL_NAMESPACE
+            || definition.qualified_name() != kind.operation_id()
+            || !erato_config::config::allowlist_selects_reserved_tool(allowlist, name)
+            || !offer.binding.validate()
+            || offer.binding.realm != kind.realm()
+        {
+            continue;
+        }
+        if mcp_claimed_names.contains(name)
+            || policies.contains_key(name)
+            || tools.iter().any(|tool| tool.name.as_ref() == name.as_str())
+        {
+            tracing::warn!(
+                operation = kind.operation_id(),
+                "Not offering colliding operation kind"
+            );
+            continue;
+        }
+        let schema: JsonValue = serde_json::from_str(&definition.parameters)?;
+        let mut policy =
+            crate::services::client_tools::OfferedClientTool::prepare(&definition, &schema)
+                .map_err(|error| eyre!(error))?;
+        policy.executor = Some(offer.binding);
+        policy.inbox_only = true;
+        tools.push(crate::services::client_tools::build_client_tool(
+            name,
+            &definition.description,
+            schema,
+            omit_strict,
+            false,
+        ));
+        policies.insert(name.clone(), policy);
+    }
+    Ok(())
+}
+
 /// One replay and generation path for approval stops and durable client results.
 /// The operation record carries execution identity, never a second model request.
 #[allow(clippy::too_many_arguments)]
@@ -16427,32 +16496,42 @@ async fn resume_parked_generation(
     let mut offered_client_tools = HashMap::new();
     if !is_delegated_run {
         for (name, saved) in &generation_parameters.client_tools {
-            let still_configured = app_state
+            let Some(current) = app_state
                 .config
                 .client_tools
                 .tools
                 .values()
-                .any(|current| current == saved);
-            if !still_configured
-                || !is_qualified_tool_allowed(
-                    saved.namespace_or_default(),
-                    &saved.name,
-                    &client_tool_allowlist,
-                )
-                || mcp_claimed_names.contains(name)
+                .find(|current| current.qualified_name() == saved.qualified_name())
+            else {
+                continue;
+            };
+            let current =
+                crate::services::client_tools::OfferedClientTool::restore_config(saved, current);
+            if !crate::services::client_tools::client_tool_is_available(
+                &current,
+                &generation_parameters
+                    .request_context
+                    .as_ref()
+                    .map(|context| context.registered_client_tools.clone())
+                    .unwrap_or_default(),
+            ) || !is_qualified_tool_allowed(
+                saved.namespace_or_default(),
+                &saved.name,
+                &client_tool_allowlist,
+            ) || mcp_claimed_names.contains(name)
             {
                 continue;
             }
-            let schema: JsonValue = serde_json::from_str(&saved.parameters)?;
+            let schema: JsonValue = serde_json::from_str(&current.parameters)?;
             let mut policy =
-                crate::services::client_tools::OfferedClientTool::prepare(saved, &schema)
+                crate::services::client_tools::OfferedClientTool::prepare(&current, &schema)
                     .map_err(|error| eyre!(error))?;
             policy.executor = generation_parameters
                 .request_context
                 .as_ref()
                 .and_then(|context| context.executor.clone());
             let strict = crate::services::client_tools::native_strict_for_submission(
-                saved,
+                &current,
                 &schema,
                 &provider.provider_kind,
                 provider.model_capabilities.supports_strict_tool_calling,
@@ -16461,7 +16540,7 @@ async fn resume_parked_generation(
             .map_err(|error| eyre!(error))?;
             continuation_tools.push(crate::services::client_tools::build_client_tool(
                 name,
-                &saved.description,
+                &current.description,
                 schema,
                 compat_omit_strict,
                 strict,
@@ -16533,6 +16612,21 @@ async fn resume_parked_generation(
             false,
         ));
     }
+    append_operation_kind_offers(
+        app_state,
+        &chat,
+        Some(user_id),
+        &generation_parameters
+            .request_context
+            .clone()
+            .unwrap_or_default(),
+        &client_tool_allowlist,
+        &mcp_claimed_names,
+        Some(&generation_parameters.client_tools),
+        compat_omit_strict,
+        &mut continuation_tools,
+        &mut offered_client_tools,
+    )?;
     chat_request.tools = (!continuation_tools.is_empty()).then_some(continuation_tools);
     let allowed_tool_names: HashSet<String> = chat_request
         .tools

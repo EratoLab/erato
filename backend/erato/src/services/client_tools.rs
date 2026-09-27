@@ -28,6 +28,8 @@ use crate::config::{ClientToolConfig, ClientToolNativeSchema};
 pub struct OfferedClientTool {
     pub config: ClientToolConfig,
     pub executor: Option<crate::services::client_operations::ExecutorBinding>,
+    /// Synthetic bound operations use account discovery, never a child SSE relay.
+    pub inbox_only: bool,
     pub timeout_ms: Option<u64>,
     pub submission: Option<SubmissionPolicy>,
 }
@@ -39,6 +41,22 @@ pub struct SubmissionPolicy {
 }
 
 impl OfferedClientTool {
+    pub fn restore_config(
+        saved: &ClientToolConfig,
+        current: &ClientToolConfig,
+    ) -> ClientToolConfig {
+        let mut restored = current.clone();
+        if let Some(saved_policy) = &saved.submission {
+            let mut policy = current
+                .submission
+                .clone()
+                .unwrap_or_else(|| saved_policy.clone());
+            policy.max_attempts = policy.max_attempts.min(saved_policy.max_attempts);
+            restored.submission = Some(policy);
+        }
+        restored
+    }
+
     pub fn prepare(config: &ClientToolConfig, schema: &Value) -> Result<Self, String> {
         let submission = config
             .submission
@@ -55,6 +73,7 @@ impl OfferedClientTool {
         Ok(Self {
             config: config.clone(),
             executor: None,
+            inbox_only: false,
             timeout_ms: config.timeout_ms,
             submission,
         })
