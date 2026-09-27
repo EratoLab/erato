@@ -4903,6 +4903,51 @@ the remaining attempt count. A successful executor returns a small receipt in
 `result`; the accepted arguments and receipt are persisted without an additional
 model call. The host's review UI can restore the draft from those records.
 
+### Compact replay of earlier client tool calls
+
+By default, every client tool call from earlier in a chat is sent to the model
+again on each later request, with its full arguments and result. Add a `replay`
+table to replace calls from earlier user turns with a small receipt instead.
+Use it for tools whose results expire at the next user message, such as reads of
+a document capture. Those results cost context without helping later turns.
+
+```toml
+[client_tools.tools.read_pages]
+name = "read_pages"
+namespace = "editor"
+description = "Read the captured document page by page."
+parameters = '''{"type":"object","properties":{"snapshot":{"type":"string"},"cursor":{"type":["string","null"]}},"required":["snapshot"]}'''
+
+[client_tools.tools.read_pages.replay]
+mode = "receipt"
+keep_input_fields = ["$.snapshot"]
+keep_output_fields = ["$.status", "$.error", "$.result.snapshot", "$.result.complete"]
+```
+
+{/* erato_toml_config_key: client_tools.tools.<key>.replay.mode */}
+{/* erato_toml_config_key: client_tools.tools.<key>.replay.keep_input_fields.[] */}
+{/* erato_toml_config_key: client_tools.tools.<key>.replay.keep_output_fields.[] */}
+
+- **`mode`** _(default: `"full"`)_ - `full` replays arguments and results unchanged. `receipt` replaces both with a receipt for calls from earlier user turns.
+- **`keep_input_fields`** _(default: `[]`)_ - Argument fields to keep in the receipt, as `$.key.key` paths. Only object keys are supported, not array indices or wildcards. At most 32 paths.
+- **`keep_output_fields`** _(default: `[]`)_ - Result fields to keep, using the same syntax. Paths start at the stored tool output, so client results are under `$.result`, and `$.status`, `$.error` and `$.submission.status` are also available.
+
+A receipt keeps the tool name and call ID, the call status, the listed fields at
+their original nesting, and a fixed note. The note tells the model the body was
+omitted and that it should call the tool again for current data. A listed field
+whose JSON is larger than 512 bytes is replaced by a size marker. Missing fields
+are skipped. The fields may only be set when `mode = "receipt"`. Client tools
+that share a model-facing name across namespaces must use the same `replay` settings.
+
+A user turn is one user message and every model call, tool call, correction and
+approval continuation that answers it. Calls from the current user turn are always
+replayed in full, so paging and corrections still see their own results. Only the
+model's context changes. Stored messages, chat history, previews and traces keep
+the full arguments and results. Chats created before this setting was enabled are
+compacted from their next message onward. Each request's stored input records the
+receipts the model received, so switching `mode` back to `full` restores only calls
+from the latest earlier turn. Older calls in that chat stay compacted.
+
 ### `budget`
 
 {/* erato_toml_config_key: budget */}
