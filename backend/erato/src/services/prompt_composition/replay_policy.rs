@@ -7,18 +7,48 @@
 //! one; the in-turn loop and the approval continuation replay the current
 //! turn's own calls through `replay_assistant_content`, which this policy never
 //! touches.
+//!
+//! A stored call carries only its model-facing name, and an MCP tool may share
+//! that name (MCP wins the collision at offer time). A call is therefore
+//! compacted only when the generation that made it recorded offering a client
+//! tool of that name. Without that record the call replays in full: guessing
+//! wrong would hide an MCP tool's result from the model.
 
 use crate::config::{ClientToolReplayMode, ClientToolsConfig, parse_receipt_field_path};
 use crate::models::message::{ContentPart, InputMessage, ToolUse};
 use serde_json::{Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-/// Marker key of a receipt. Its presence makes stubbing idempotent: a
-/// snapshot persisted after this change already holds receipts, and
-/// re-extracting fields from a receipt would lose them.
+/// Top-level key of every receipt.
 pub const RECEIPT_MARKER_KEY: &str = "omitted_from_replay";
 
-pub const RECEIPT_NOTE: &str = "This call belongs to an earlier user turn. Its full arguments and result are omitted from the conversation replay; only the fields under \"kept\" remain. Call the tool again if current data is needed.";
+pub const RECEIPT_NOTE: &str = "This call belongs to an earlier user turn. Its full content is omitted from the conversation replay; only the fields under \"kept\" remain. Call the tool again if current data is needed.";
+
+/// Key of the per-generation record, in a row's `generation_parameters`, of
+/// the client tools that generation offered (keyed by model-facing name).
+const OFFERED_CLIENT_TOOLS_KEY: &str = "client_tools";
+
+/// The client tools one stored generation offered to the model.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OfferedClientTools(HashSet<String>);
+
+impl OfferedClientTools {
+    /// Reads the record from a row's raw `generation_parameters`. Rows written
+    /// before the record existed yield an empty set, so they replay in full.
+    pub fn from_generation_parameters(parameters: Option<&Value>) -> Self {
+        Self(
+            parameters
+                .and_then(|parameters| parameters.get(OFFERED_CLIENT_TOOLS_KEY))
+                .and_then(Value::as_object)
+                .map(|tools| tools.keys().cloned().collect())
+                .unwrap_or_default(),
+        )
+    }
+
+    fn contains(&self, tool_name: &str) -> bool {
+        self.0.contains(tool_name)
+    }
+}
 
 /// A kept value whose JSON serialisation exceeds this is replaced by a marker,
 /// so a receipt stays bounded even when a configured path selects a body.
@@ -65,13 +95,18 @@ impl ToolReplayPolicy {
         self.receipts.is_empty()
     }
 
-    /// Rewrites one replayed message from an earlier user turn. Both the
-    /// assistant-role call and the tool-role response are rewritten in place,
-    /// never dropped, so every call keeps its matching response. Both fields
-    /// are stubbed on both roles: the provider reads only one of them per role,
-    /// but the persisted snapshot stores both.
-    pub fn apply_to_prior_turn_message(&self, mut message: InputMessage) -> InputMessage {
+    /// Rewrites one replayed message of a stored row from an earlier user
+    /// turn. Both the assistant-role call and the tool-role response are
+    /// rewritten in place, never dropped, so every call keeps its matching
+    /// response. Both fields are stubbed on both roles: the provider reads only
+    /// one of them per role, but the persisted snapshot stores both.
+    pub fn apply_to_prior_turn_message(
+        &self,
+        mut message: InputMessage,
+        offered: &OfferedClientTools,
+    ) -> InputMessage {
         if let ContentPart::ToolUse(tool_use) = &mut message.content
+            && offered.contains(&tool_use.tool_name)
             && let Some(spec) = self.receipts.get(&tool_use.tool_name)
         {
             stub_tool_use(tool_use, spec);
@@ -81,10 +116,10 @@ impl ToolReplayPolicy {
 }
 
 fn stub_tool_use(tool_use: &mut ToolUse, spec: &ReceiptSpec) {
-    if !is_receipt(tool_use.input.as_ref()) {
-        tool_use.input = Some(receipt(tool_use.input.as_ref(), &spec.input_paths, None));
-    }
-    if !is_receipt(tool_use.output.as_ref()) {
+    tool_use.input = Some(receipt(tool_use.input.as_ref(), &spec.input_paths, None));
+    // A call that never produced a result keeps replaying without one; a
+    // receipt would claim a result existed.
+    if tool_use.output.is_some() {
         let status = serde_json::to_value(&tool_use.status).ok();
         tool_use.output = Some(receipt(
             tool_use.output.as_ref(),
@@ -92,12 +127,6 @@ fn stub_tool_use(tool_use: &mut ToolUse, spec: &ReceiptSpec) {
             status,
         ));
     }
-}
-
-fn is_receipt(value: Option<&Value>) -> bool {
-    value
-        .and_then(Value::as_object)
-        .is_some_and(|object| object.contains_key(RECEIPT_MARKER_KEY))
 }
 
 fn receipt(source: Option<&Value>, paths: &[Vec<String>], status: Option<Value>) -> Value {
@@ -195,6 +224,14 @@ mod tests {
         }
     }
 
+    fn offered(names: &[&str]) -> OfferedClientTools {
+        let tools: Map<String, Value> = names
+            .iter()
+            .map(|name| (name.to_string(), json!({})))
+            .collect();
+        OfferedClientTools::from_generation_parameters(Some(&json!({ "client_tools": tools })))
+    }
+
     fn tool_use(message: &InputMessage) -> &ToolUse {
         match &message.content {
             ContentPart::ToolUse(tool_use) => tool_use,
@@ -208,12 +245,15 @@ mod tests {
             &["$.snapshot"],
             &["$.result.snapshot", "$.result.complete", "$.missing"],
         );
-        let stubbed = policy.apply_to_prior_turn_message(message(
+        let stubbed = policy.apply_to_prior_turn_message(
+            message(
             MessageRole::Tool,
             "read_pages",
             json!({"snapshot": "s1", "cursor": "c2"}),
             json!({"status": "success", "result": {"snapshot": "s1", "complete": true, "blocks": ["body text"]}}),
-        ));
+        ),
+            &offered(&["read_pages"]),
+        );
         let stubbed = tool_use(&stubbed);
         assert_eq!(
             stubbed.input,
@@ -235,12 +275,15 @@ mod tests {
     fn an_oversized_kept_field_is_replaced_by_a_marker() {
         let policy = policy(&[], &["$.body"]);
         let body = "x".repeat(MAX_RECEIPT_FIELD_BYTES);
-        let stubbed = policy.apply_to_prior_turn_message(message(
-            MessageRole::Tool,
-            "read_pages",
-            json!({}),
-            json!({"body": body}),
-        ));
+        let stubbed = policy.apply_to_prior_turn_message(
+            message(
+                MessageRole::Tool,
+                "read_pages",
+                json!({}),
+                json!({"body": body}),
+            ),
+            &offered(&["read_pages"]),
+        );
         let size = MAX_RECEIPT_FIELD_BYTES + 2;
         assert_eq!(
             tool_use(&stubbed).output.as_ref().unwrap()["kept"]["body"],
@@ -249,16 +292,72 @@ mod tests {
     }
 
     #[test]
-    fn stubbing_a_receipt_again_leaves_it_unchanged() {
+    fn a_call_is_compacted_only_when_its_generation_offered_that_client_tool() {
         let policy = policy(&["$.snapshot"], &["$.result.snapshot"]);
-        let once = policy.apply_to_prior_turn_message(message(
-            MessageRole::Assistant,
+        let call = message(
+            MessageRole::Tool,
             "read_pages",
-            json!({"snapshot": "s1"}),
-            json!({"result": {"snapshot": "s1"}}),
-        ));
-        let twice = policy.apply_to_prior_turn_message(once.clone());
-        assert_eq!(json!(once), json!(twice));
+            json!({"snapshot": "s1", "cursor": "c2"}),
+            json!({"result": {"snapshot": "s1", "blocks": ["body text"]}}),
+        );
+        // A same-named MCP tool wins the collision at offer time, so the
+        // generation's record does not list the client tool.
+        for record in [
+            offered(&[]),
+            offered(&["some_other_tool"]),
+            OfferedClientTools::from_generation_parameters(None),
+            OfferedClientTools::from_generation_parameters(Some(&json!({"selected_facets": {}}))),
+        ] {
+            assert_eq!(
+                json!(policy.apply_to_prior_turn_message(call.clone(), &record)),
+                json!(call)
+            );
+        }
+        let stubbed = policy.apply_to_prior_turn_message(call, &offered(&["read_pages"]));
+        assert_eq!(
+            tool_use(&stubbed).input.as_ref().unwrap()["kept"],
+            json!({"snapshot": "s1"})
+        );
+    }
+
+    #[test]
+    fn a_call_without_a_result_keeps_replaying_without_one() {
+        let policy = policy(&["$.snapshot"], &["$.status"]);
+        let mut call = message(
+            MessageRole::Tool,
+            "read_pages",
+            json!({"snapshot": "s1", "plan": "large body"}),
+            json!(null),
+        );
+        if let ContentPart::ToolUse(tool_use) = &mut call.content {
+            tool_use.output = None;
+            tool_use.status = ToolCallStatus::InProgress;
+        }
+        let stubbed = policy.apply_to_prior_turn_message(call, &offered(&["read_pages"]));
+        let stubbed = tool_use(&stubbed);
+        assert_eq!(stubbed.output, None);
+        assert_eq!(
+            stubbed.input.as_ref().unwrap()["kept"],
+            json!({"snapshot": "s1"})
+        );
+    }
+
+    #[test]
+    fn a_stored_payload_carrying_the_marker_key_is_still_compacted() {
+        let policy = policy(&[], &["$.status"]);
+        let stubbed = policy.apply_to_prior_turn_message(
+            message(
+                MessageRole::Tool,
+                "read_pages",
+                json!({}),
+                json!({RECEIPT_MARKER_KEY: "x", "status": "success", "body": "y".repeat(4096)}),
+            ),
+            &offered(&["read_pages"]),
+        );
+        assert_eq!(
+            tool_use(&stubbed).output.as_ref().unwrap()["kept"],
+            json!({"status": "success"})
+        );
     }
 
     #[test]
@@ -271,7 +370,7 @@ mod tests {
             json!({"hits": [1, 2]}),
         );
         assert_eq!(
-            json!(policy.apply_to_prior_turn_message(other.clone())),
+            json!(policy.apply_to_prior_turn_message(other.clone(), &offered(&["search"]))),
             json!(other)
         );
         assert!(ToolReplayPolicy::default().is_empty());
@@ -280,12 +379,10 @@ mod tests {
     #[test]
     fn a_path_through_a_kept_scalar_does_not_overwrite_it() {
         let policy = policy(&[], &["$.a", "$.a.b"]);
-        let stubbed = policy.apply_to_prior_turn_message(message(
-            MessageRole::Tool,
-            "read_pages",
-            json!({}),
-            json!({"a": 1}),
-        ));
+        let stubbed = policy.apply_to_prior_turn_message(
+            message(MessageRole::Tool, "read_pages", json!({}), json!({"a": 1})),
+            &offered(&["read_pages"]),
+        );
         assert_eq!(
             tool_use(&stubbed).output.as_ref().unwrap()["kept"],
             json!({"a": 1})

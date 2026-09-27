@@ -3,6 +3,7 @@
 //! This module contains the core logic for transforming chat data through the
 //! three phases: Abstract → Resolved → Concrete
 
+use super::replay_policy::OfferedClientTools;
 use super::traits::{FileResolver, MessageRepository, PromptProvider};
 use super::types::{
     AbstractChatSequence, AbstractChatSequencePart, ActionFacetUserInput, ConcreteChatRequest,
@@ -629,11 +630,12 @@ pub async fn resolve_sequence(
                                 {
                                     continue;
                                 }
-                                // Also reaches snapshots persisted before receipts
-                                // existed, which still hold full payloads.
-                                let input_msg = replay_policy.apply_to_prior_turn_message(
-                                    normalize_historical_input_message(input_msg),
-                                );
+                                // Snapshot messages carry no record of which
+                                // generation made them, so the replay policy is
+                                // not applied here: receipts written when their
+                                // row was replayed pass through, and older full
+                                // payloads stay full — see `replay_policy`.
+                                let input_msg = normalize_historical_input_message(input_msg);
                                 if include_system || !matches!(input_msg.role, MessageRole::System)
                                 {
                                     input_messages.push(input_msg);
@@ -660,10 +662,15 @@ pub async fn resolve_sequence(
             AbstractChatSequencePart::PreviousAssistantMessage { message_id } => {
                 let message = message_repo.get_message_by_id(&message_id).await?;
                 let parsed = MessageSchema::validate(&message.raw_message)?;
+                let offered = OfferedClientTools::from_generation_parameters(
+                    message.generation_parameters.as_ref(),
+                );
                 input_messages.extend(
                     replay_assistant_content(&parsed.role, parsed.content)
                         .into_iter()
-                        .map(|message| replay_policy.apply_to_prior_turn_message(message)),
+                        .map(|message| {
+                            replay_policy.apply_to_prior_turn_message(message, &offered)
+                        }),
                 );
             }
 

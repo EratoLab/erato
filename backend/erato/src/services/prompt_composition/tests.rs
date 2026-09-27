@@ -89,6 +89,12 @@ mod test_cases {
             );
         }
 
+        fn set_generation_parameters(&mut self, message_id: Uuid, parameters: JsonValue) {
+            if let Some(message) = self.messages.get_mut(&message_id) {
+                message.generation_parameters = Some(parameters);
+            }
+        }
+
         // Update a message's generation_input_messages field to simulate persistence
         fn update_generation_input_messages(
             &mut self,
@@ -3679,8 +3685,14 @@ mod test_cases {
         /// Two Word edits, each persisted the way a generation persists it: the
         /// composed input becomes the assistant row's snapshot. `snapshot_policy`
         /// is what the second turn was composed with, so a legacy row can be
-        /// produced by composing it with full replay.
-        async fn two_edit_chat(snapshot_policy: ToolReplayPolicy, extra: Vec<ContentPart>) -> Chat {
+        /// produced by composing it with full replay. `offered` is each
+        /// generation's record of the client tools it offered; a same-named MCP
+        /// tool is left out of it, as MCP wins that collision at offer time.
+        async fn two_edit_chat(
+            snapshot_policy: ToolReplayPolicy,
+            extra: Vec<ContentPart>,
+            offered: Option<&[&str]>,
+        ) -> Chat {
             let provider = MockPromptProvider::new()
                 .with_system_prompt("You are helpful.")
                 .with_replay_policy(snapshot_policy);
@@ -3705,6 +3717,7 @@ mod test_cases {
                 turn_one.clone(),
             );
             repo.update_generation_input_messages(assistant[0], &gen_one);
+            record_offer(&mut repo, assistant[0], offered);
 
             repo.add_message(
                 user[1],
@@ -3725,6 +3738,7 @@ mod test_cases {
                 ],
             );
             repo.update_generation_input_messages(assistant[1], &gen_two);
+            record_offer(&mut repo, assistant[1], offered);
 
             repo.add_message(
                 user[2],
@@ -3737,6 +3751,18 @@ mod test_cases {
                 user,
                 assistant,
                 turn_one,
+            }
+        }
+
+        const WORD_TOOLS: Option<&[&str]> = Some(&[READ, SUBMIT]);
+
+        fn record_offer(repo: &mut MockMessageRepository, row: Uuid, offered: Option<&[&str]>) {
+            if let Some(offered) = offered {
+                let tools: serde_json::Map<String, JsonValue> = offered
+                    .iter()
+                    .map(|name| (name.to_string(), json!({"name": name})))
+                    .collect();
+                repo.set_generation_parameters(row, json!({"client_tools": tools}));
             }
         }
 
@@ -3764,7 +3790,7 @@ mod test_cases {
 
         #[tokio::test]
         async fn later_turns_replay_earlier_word_edits_as_receipts() {
-            let chat = two_edit_chat(word_policy(), vec![]).await;
+            let chat = two_edit_chat(word_policy(), vec![], WORD_TOOLS).await;
 
             let turn_two = stored_snapshot(&chat, 1);
             let turn_two_text = json_text(&turn_two);
@@ -3826,7 +3852,7 @@ mod test_cases {
 
         #[tokio::test]
         async fn a_continuation_rebuild_keeps_its_own_turn_in_full() {
-            let chat = two_edit_chat(word_policy(), vec![]).await;
+            let chat = two_edit_chat(word_policy(), vec![], WORD_TOOLS).await;
 
             // What the approval continuation sends: the parked row's own
             // snapshot, then the row's content through the full replay.
@@ -3857,28 +3883,69 @@ mod test_cases {
             assert_provider_sequence_is_valid(rebuilt);
         }
 
+        /// A snapshot records no origin for its calls, so a legacy snapshot that
+        /// still holds full payloads keeps them; only rows replayed from their own
+        /// content, with an offer record, are compacted.
         #[tokio::test]
-        async fn a_legacy_snapshot_with_full_pages_replays_as_receipts() {
-            let chat = two_edit_chat(ToolReplayPolicy::default(), vec![]).await;
+        async fn a_legacy_snapshot_stays_full_while_newer_rows_compact() {
+            let chat = two_edit_chat(ToolReplayPolicy::default(), vec![], WORD_TOOLS).await;
             let legacy = json_text(&stored_snapshot(&chat, 1));
             assert!(legacy.contains(&page_body(1, 1)));
-            assert!(legacy.contains(&plan_body(1, "accepted")));
 
             let turn_three = compose(&chat.repo, &word_provider(), chat.user[2]).await;
             let turn_three_text = json_text(&turn_three);
             for body in [page_body(1, 1), page_body(1, 2), plan_body(1, "accepted")] {
+                assert!(turn_three_text.contains(&body), "{body} was guessed away");
+            }
+            for body in [
+                page_body(2, 1),
+                plan_body(2, "rejected"),
+                plan_body(2, "accepted"),
+            ] {
                 assert!(
                     !turn_three_text.contains(&body),
-                    "{body} survived a legacy snapshot"
+                    "{body} replayed in turn 3"
                 );
             }
-            assert!(turn_three_text.contains("submit-1-accepted"));
+            assert_provider_sequence_is_valid(turn_three);
+        }
+
+        #[tokio::test]
+        async fn rows_without_an_offer_record_replay_exactly_as_before() {
+            let chat = two_edit_chat(word_policy(), vec![], None).await;
+            let default_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+            let baseline = json_text(&compose(&chat.repo, &default_provider, chat.user[2]).await);
+            let with_policy = json_text(&compose(&chat.repo, &word_provider(), chat.user[2]).await);
+            assert_eq!(with_policy, baseline);
+            assert!(with_policy.contains(&page_body(1, 1)));
+            assert!(with_policy.contains(&plan_body(2, "accepted")));
+        }
+
+        /// MCP wins a name collision at offer time, so a generation whose read
+        /// tool was an MCP tool records only the submission as a client tool.
+        #[tokio::test]
+        async fn a_same_named_mcp_call_is_never_compacted() {
+            let chat = two_edit_chat(word_policy(), vec![], Some(&[SUBMIT])).await;
+            let turn_three = compose(&chat.repo, &word_provider(), chat.user[2]).await;
+            let turn_three_text = json_text(&turn_three);
+            for body in [page_body(1, 1), page_body(1, 2), page_body(2, 1)] {
+                assert!(
+                    turn_three_text.contains(&body),
+                    "{body} MCP read was compacted"
+                );
+            }
+            for body in [plan_body(1, "accepted"), plan_body(2, "accepted")] {
+                assert!(
+                    !turn_three_text.contains(&body),
+                    "{body} replayed in turn 3"
+                );
+            }
             assert_provider_sequence_is_valid(turn_three);
         }
 
         #[tokio::test]
         async fn full_replay_and_unconfigured_tools_compose_exactly_as_before() {
-            let chat = two_edit_chat(ToolReplayPolicy::default(), vec![search()]).await;
+            let chat = two_edit_chat(ToolReplayPolicy::default(), vec![search()], WORD_TOOLS).await;
             let default_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
             let baseline = json_text(&compose(&chat.repo, &default_provider, chat.user[2]).await);
             assert!(baseline.contains(&page_body(1, 1)));
@@ -3932,7 +3999,7 @@ mod test_cases {
                 json!({"assistant": "Research", "task": "look it up"}),
                 json!({"status": "completed", "result": "DELEGATE-ANSWER", "localTrace": {"steps": ["SECRET-STEP"]}}),
             );
-            let chat = two_edit_chat(word_policy(), vec![delegation.clone()]).await;
+            let chat = two_edit_chat(word_policy(), vec![delegation.clone()], WORD_TOOLS).await;
 
             let expected: Vec<JsonValue> =
                 replay_assistant_content(&MessageRole::Assistant, vec![delegation])

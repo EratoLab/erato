@@ -4697,7 +4697,7 @@ pub struct ClientToolConfig {
 /// `[client_tools.tools.<id>.replay]`. Applies only to calls from earlier user
 /// turns: the turn in progress, including an approval continuation of a
 /// parked turn, always sees its own calls in full.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ClientToolReplayConfig {
     /// `full` (default) replays arguments and result verbatim. `receipt`
     /// replaces both with a bounded receipt built from the fields listed below
@@ -4715,7 +4715,7 @@ pub struct ClientToolReplayConfig {
     pub keep_output_fields: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -7016,5 +7016,31 @@ mod reserved_namespace_tests {
         // built-ins, so it must not be stripped from a prompt template.
         assert!(!pattern_names_reserved_namespace("*"));
         assert!(!pattern_names_reserved_namespace("web-search-mcp/*"));
+    }
+}
+
+#[cfg(test)]
+mod client_tool_replay_serialization_tests {
+    use super::*;
+
+    /// Generation parameters persist client-tool configs, so the replay table
+    /// must round-trip through serde like the rest of the config.
+    #[test]
+    fn replay_config_round_trips_through_json() {
+        let replay = ClientToolReplayConfig {
+            mode: ClientToolReplayMode::Receipt,
+            keep_input_fields: vec!["$.snapshot".into()],
+            keep_output_fields: vec!["$.status".into(), "$.result.complete".into()],
+        };
+        let json = serde_json::to_value(&replay).unwrap();
+        assert_eq!(json["mode"], "receipt");
+        assert_eq!(
+            serde_json::from_value::<ClientToolReplayConfig>(json).unwrap(),
+            replay
+        );
+        assert_eq!(
+            serde_json::from_value::<ClientToolReplayConfig>(serde_json::json!({})).unwrap(),
+            ClientToolReplayConfig::default()
+        );
     }
 }

@@ -840,8 +840,8 @@ async fn count_tokens_for_chat_request(
 
 /// The text of a chat request that reaches the provider as tokens: text parts,
 /// replayed tool-call arguments and replayed tool responses. Tool definitions
-/// are left out because the estimate does not know the request's action facet,
-/// so it cannot tell which client tools would be offered.
+/// (`chat_request.tools`) are not counted: `history_tokens` is derived from
+/// this total, and definitions are not history.
 fn chat_request_token_chunks(chat_request: &ChatRequest) -> Vec<String> {
     let mut text_chunks: Vec<String> = Vec::new();
 

@@ -4936,15 +4936,21 @@ A receipt keeps the tool name and call ID, the call status, the listed fields at
 their original nesting, and a fixed note. The note tells the model the body was
 omitted and that it should call the tool again for current data. A listed field
 whose JSON is larger than 512 bytes is replaced by a size marker. Missing fields
-are skipped. The fields may only be set when `mode = "receipt"`. Client tools
-that share a model-facing name across namespaces must use the same `replay` settings.
+are skipped. A call that never returned a result keeps replaying without one. The
+fields may only be set when `mode = "receipt"`. Client tools that share a
+model-facing name across namespaces must use the same `replay` settings.
+
+A call is compacted only when the generation that made it recorded offering a client
+tool with that name. When an MCP tool has the same name, the MCP tool is offered
+instead, so its calls always replay in full. Calls from generations without that
+record, including all calls stored before it existed, also replay in full.
 
 A user turn is one user message and every model call, tool call, correction and
 approval continuation that answers it. Calls from the current user turn are always
 replayed in full, so paging and corrections still see their own results. Only the
 model's context changes. Stored messages, chat history, previews and traces keep
-the full arguments and results. Chats created before this setting was enabled are
-compacted from their next message onward. Each request's stored input records the
+the full arguments and results. A call is compacted when the next user message is
+composed. History that an earlier request already stored in full stays full. Each request's stored input records the
 receipts the model received, so switching `mode` back to `full` restores only calls
 from the latest earlier turn. Older calls in that chat stay compacted.
 
