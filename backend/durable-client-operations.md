@@ -58,6 +58,46 @@ requirements and delegated-child restrictions still apply on continuation. A kin
 must explicitly authorize a bound child operation; no parent-to-child SSE relay is
 introduced.
 
+## Rollout prerequisites and current limits
+
+The generic coordinator lands as an extraction during the #1237 rebase, alongside
+its first actual handler. A separate neutral frontend PR is not required. Before
+any production enablement that integration must provide authenticated-shell
+list/claim/execute/result/continue handling, executor headers on submission,
+`client_tool_pending` presentation, account/view lifecycle handling, and the
+native consent/receipt flow. This PR supplies backend APIs and generated types;
+it does not supply that UI or register a production kind.
+
+After a durable park, continuation is detached. Further registered client calls
+enter the inbox immediately. Attached continuation is still required before this
+mechanism is suitable for Word-style sequences of fast client calls; the sidecar's
+single-operation leaf is the first supported production shape.
+
+Registering a configured operation kind makes a valid `X-Erato-Executor` binding
+mandatory for that tool when the flag is enabled. Roll out the coordinator/header
+support before enabling the kind. Synthetic kinds supply a binding through their
+server-owned offer policy; they must derive it from authenticated context, never
+model arguments. Kind registration is not permission to invent an unbound device.
+
+`user_confirmed` consent and device/host identifiers are client assertions, at the
+same trust level as existing client actions. Kinds requiring stronger proof must
+validate it themselves, as the native kind does with signed binding and receipts.
+The current attempt expiry is 24 hours and the claim lease is five minutes bounded
+by that expiry; they are not yet configurable per kind.
+
+Inbox `after` is a cursor for one sweep, ordered by random attempt UUID. Concurrent
+inserts may sort before that cursor. A coordinator must restart every subsequent
+sweep without `after`, and must not treat the cursor as a durable high-water mark.
+Discovery is eventually complete across sweeps, not a snapshot or change feed.
+
+Malformed fast results from the authenticated, bound executor become fixed
+per-call validation feedback, including results racing escalation. Raw payloads
+and validator errors are not echoed to the model. Wrong identities/bindings remain
+HTTP refusals; claimed durable results continue to require kind validation.
+Continuation resolves original tool identities against current configuration and
+re-prepares their schemas/timeouts. It retains consumed counters and never raises
+the original submission limit or removes submission semantics during that turn.
+
 ## Downstream sidecar rebase checklist
 
 * Delete `message_streaming/local_jobs.rs`'s request reconstruction/launch path;
@@ -68,8 +108,13 @@ introduced.
   in the local-evidence kind's payload/extension.
 * Replace local-job recovery/launch hooks in `background_tasks.rs` with the generic
   lease/continuation path. Keep task-parent delivery using the existing lifecycle.
-* Register `erato/local_collect_evidence` as the first kind. Its async leaf,
-  exclusive scope and depth-one restrictions belong to its kind policy.
+* Register `erato/local_collect_evidence` as the first kind using `tool_offer`.
+  The compiled descriptor needs no `[client_tools.tools]` entry. Its async leaf,
+  exclusive scope, depth-one restrictions and binding decision belong in that
+  kind's offer policy, rechecked on continuation. The shared hook enforces the
+  reserved namespace, exact registry identity, allowlist, binding shape/realm and
+  name collisions. Ordinary configured client tools remain suppressed in children.
+  Synthetic operations enter the inbox directly without emitting client-call SSE.
 * Keep `contract.rs`, signing, export validation and upload authorization specific
   to local evidence. Reuse the already cached signer and transaction-aware uploads.
 * Extract generic discovery/capability routing from `LocalTaskCoordinator`; keep
