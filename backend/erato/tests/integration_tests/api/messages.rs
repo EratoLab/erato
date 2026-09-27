@@ -1,5 +1,6 @@
 //! Message submission and streaming API tests.
 
+mod client_operations;
 mod client_submissions;
 mod tool_arguments;
 
