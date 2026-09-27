@@ -127,7 +127,8 @@ impl From<ContentPart> for GenAiMessageContent {
                 );
                 GenAiMessageContent::from_text(String::new())
             }
-            ContentPart::ToolApprovalRequest(_)
+            ContentPart::ClientToolPending(_)
+            | ContentPart::ToolApprovalRequest(_)
             | ContentPart::ToolApproval(_)
             | ContentPart::ToolRejection(_) => {
                 // Approval lifecycle entries are deliberately excluded from

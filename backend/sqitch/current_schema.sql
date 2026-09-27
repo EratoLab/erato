@@ -298,6 +298,32 @@ CREATE VIEW public.chats_latest_message AS
 
 
 --
+-- Name: client_operation_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_operation_attempts (
+    attempt_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    chat_id uuid NOT NULL,
+    message_id uuid NOT NULL,
+    tool_call_id text NOT NULL,
+    generation_id uuid NOT NULL,
+    request jsonb NOT NULL,
+    state text NOT NULL,
+    claim_token uuid,
+    claim_binding jsonb,
+    claim_expires_at timestamp with time zone,
+    result jsonb,
+    validated_result jsonb,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT client_operation_attempts_check CHECK (((result IS NULL) = (validated_result IS NULL))),
+    CONSTRAINT client_operation_attempts_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'claimed'::text, 'ready'::text, 'continuing'::text, 'completed'::text])))
+);
+
+
+--
 -- Name: file_uploads; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -663,6 +689,22 @@ ALTER TABLE ONLY public.chats
 
 
 --
+-- Name: client_operation_attempts client_operation_attempts_message_id_tool_call_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_operation_attempts
+    ADD CONSTRAINT client_operation_attempts_message_id_tool_call_id_key UNIQUE (message_id, tool_call_id);
+
+
+--
+-- Name: client_operation_attempts client_operation_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_operation_attempts
+    ADD CONSTRAINT client_operation_attempts_pkey PRIMARY KEY (attempt_id);
+
+
+--
 -- Name: file_uploads file_uploads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -827,6 +869,20 @@ ALTER TABLE ONLY public.users
 --
 
 CREATE INDEX chats_generation_state_idx ON public.chats USING btree (owner_user_id) WHERE (generation_state IS NOT NULL);
+
+
+--
+-- Name: client_operation_attempts_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_operation_attempts_chat ON public.client_operation_attempts USING btree (chat_id) WHERE (state <> 'completed'::text);
+
+
+--
+-- Name: client_operation_attempts_inbox; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_operation_attempts_inbox ON public.client_operation_attempts USING btree (account_id, attempt_id) WHERE (state <> 'completed'::text);
 
 
 --
@@ -1201,6 +1257,13 @@ CREATE TRIGGER on_update_set_updated_columns_chat_file_uploads BEFORE UPDATE ON 
 
 
 --
+-- Name: client_operation_attempts on_update_set_updated_columns_client_operation_attempts; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_client_operation_attempts BEFORE UPDATE ON public.client_operation_attempts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
 -- Name: mcp_server_oauth_authorization_states on_update_set_updated_columns_mcp_server_oauth_authorization_st; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1365,6 +1428,30 @@ ALTER TABLE ONLY public.chat_file_uploads
 
 ALTER TABLE ONLY public.chats
     ADD CONSTRAINT chats_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES public.assistants(id);
+
+
+--
+-- Name: client_operation_attempts client_operation_attempts_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_operation_attempts
+    ADD CONSTRAINT client_operation_attempts_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: client_operation_attempts client_operation_attempts_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_operation_attempts
+    ADD CONSTRAINT client_operation_attempts_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+
+--
+-- Name: client_operation_attempts client_operation_attempts_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_operation_attempts
+    ADD CONSTRAINT client_operation_attempts_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
 
 
 --

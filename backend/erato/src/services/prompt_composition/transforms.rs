@@ -714,7 +714,8 @@ pub(crate) fn replay_assistant_content(
             // Approval lifecycle content is host-side state. The
             // ToolUse appended after its resolution is the only
             // portion that must be replayed to the provider.
-            ContentPart::ToolApprovalRequest(_)
+            ContentPart::ClientToolPending(_)
+            | ContentPart::ToolApprovalRequest(_)
             | ContentPart::ToolApproval(_)
             | ContentPart::ToolRejection(_) => {}
             ContentPart::ToolUse(tool_use) => {

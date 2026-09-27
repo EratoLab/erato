@@ -4586,6 +4586,10 @@ pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_promp
 /// `[client_tools]` sibling keys that set global settings for all client tools.
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ClientToolsConfig {
+    /// Enable durable escalation for compiled, registered operation kinds.
+    /// No production kinds are registered by the neutral foundation.
+    #[serde(default)]
+    pub durable_operations_enabled: bool,
     /// Client tools keyed by config tool id. The id is the override handle; the
     /// model-facing name is each tool's `name` field.
     #[serde(default)]
@@ -4603,7 +4607,7 @@ pub struct ClientToolsConfig {
 /// Returning client tools MUST be read-only / idempotent: a backend restart
 /// drops the parked turn, so a client may re-execute on recovery. Mutations
 /// must use the terminal `client_actions` (`propose_client_action`) path.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ClientToolConfig {
     /// Tool name exposed to the model (e.g. "fetch_availability", selected in
     /// allowlists as "outlook/fetch_availability" via its namespace). Must be
@@ -4652,7 +4656,7 @@ pub struct ClientToolConfig {
     pub submission: Option<ClientToolSubmissionConfig>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet)]
 pub struct ClientToolSubmissionConfig {
     /// Maximum submissions of this tool per generation, including the initial
     /// attempt and schema/client failures. Must be 1–10. Default: 3.
@@ -4679,7 +4683,7 @@ impl Default for ClientToolSubmissionConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]

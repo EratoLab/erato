@@ -454,6 +454,12 @@ impl BackgroundTaskManager {
             return Ok(false);
         }
 
+        crate::services::client_operations::store::supersede_other_attempts(
+            txn, chat_id, message_id,
+        )
+        .await
+        .map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?;
+
         // Only now is the shared row ours to replace: doing this before the
         // CAS would cut a live holder off from its abort channel.
         let delete_statement = named_statement_from_sql_and_values(
@@ -985,7 +991,10 @@ impl BackgroundTaskManager {
                 POSTGRES_QUERY_GENERATION_REAP,
                 r#"
                 UPDATE chats
-                SET generation_state = 'errored', generation_ended_at = now()
+                SET generation_state = CASE WHEN EXISTS (
+                    SELECT 1 FROM client_operation_attempts a
+                    WHERE a.chat_id = chats.id AND a.generation_id = chats.active_generation_id AND a.state <> 'completed'
+                ) THEN 'awaiting_approval' ELSE 'errored' END, generation_ended_at = now()
                 WHERE generation_state = 'running'
                   AND generation_heartbeat_at < now() - make_interval(secs => $1::double precision)
                 "#,
@@ -1204,6 +1213,10 @@ pub struct StreamingTask {
     /// memory only — a backend restart drops parked turns (returning client
     /// tools must be read/idempotent).
     pending_client_tools: Arc<RwLock<HashMap<String, oneshot::Sender<ClientToolOutcome>>>>,
+    client_operations:
+        RwLock<HashMap<String, crate::services::client_operations::OperationRequest>>,
+    client_disconnected: AtomicBool,
+    client_disconnect_notify: Notify,
 }
 
 impl std::fmt::Debug for StreamingTask {
@@ -1240,6 +1253,9 @@ impl StreamingTask {
             abort_requested: Arc::new(AtomicBool::new(false)),
             abort_notify: Arc::new(Notify::new()),
             pending_client_tools: Arc::new(RwLock::new(HashMap::new())),
+            client_operations: RwLock::new(HashMap::new()),
+            client_disconnected: AtomicBool::new(false),
+            client_disconnect_notify: Notify::new(),
         }
     }
 
@@ -1454,6 +1470,42 @@ impl StreamingTask {
         self.pending_client_tools.write().await.remove(tool_call_id);
     }
 
+    pub fn client_stream_guard(self: &Arc<Self>) -> ClientStreamGuard {
+        ClientStreamGuard(Arc::downgrade(self))
+    }
+
+    pub fn mark_client_disconnected(&self) {
+        self.client_disconnected.store(true, Ordering::Release);
+        self.client_disconnect_notify.notify_waiters();
+    }
+
+    pub async fn wait_for_client_disconnect(&self) {
+        loop {
+            let notified = self.client_disconnect_notify.notified();
+            if self.client_disconnected.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    pub async fn register_client_operation(
+        &self,
+        request: crate::services::client_operations::OperationRequest,
+    ) {
+        self.client_operations
+            .write()
+            .await
+            .insert(request.tool_call_id.clone(), request);
+    }
+
+    pub async fn client_operation(
+        &self,
+        call_id: &str,
+    ) -> Option<crate::services::client_operations::OperationRequest> {
+        self.client_operations.read().await.get(call_id).cloned()
+    }
+
     /// Get the number of active subscribers
     pub fn subscriber_count(&self) -> usize {
         self.event_tx.receiver_count()
@@ -1558,6 +1610,17 @@ pub enum ToolCallStatus {
     InProgress,
     Success,
     Error,
+}
+
+/// Dropping the originating SSE stream changes only durable eligibility. It
+/// never aborts execution, and legacy fast calls keep their existing behavior.
+pub struct ClientStreamGuard(std::sync::Weak<StreamingTask>);
+impl Drop for ClientStreamGuard {
+    fn drop(&mut self) {
+        if let Some(task) = self.0.upgrade() {
+            task.mark_client_disconnected();
+        }
+    }
 }
 
 #[cfg(test)]

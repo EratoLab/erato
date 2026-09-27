@@ -26,6 +26,8 @@ use crate::config::{ClientToolConfig, ClientToolNativeSchema};
 /// Request-scoped policy for the exact tool selected after namespace deduplication.
 #[derive(Clone)]
 pub struct OfferedClientTool {
+    pub config: ClientToolConfig,
+    pub executor: Option<crate::services::client_operations::ExecutorBinding>,
     pub timeout_ms: Option<u64>,
     pub submission: Option<SubmissionPolicy>,
 }
@@ -51,6 +53,8 @@ impl OfferedClientTool {
             })
             .transpose()?;
         Ok(Self {
+            config: config.clone(),
+            executor: None,
             timeout_ms: config.timeout_ms,
             submission,
         })

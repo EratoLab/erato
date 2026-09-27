@@ -9,6 +9,7 @@ pub mod assistant_hub_reviews;
 pub mod assistants;
 pub mod chat_file_uploads;
 pub mod chats;
+pub mod client_operation_attempts;
 pub mod file_uploads;
 pub mod mcp_server_oauth_authorization_states;
 pub mod mcp_server_oauth_clients;
