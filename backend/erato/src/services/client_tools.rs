@@ -647,6 +647,7 @@ mod tests {
             requires_client_registration: false,
             timeout_ms: None,
             submission: None,
+            replay: Default::default(),
         }
     }
 

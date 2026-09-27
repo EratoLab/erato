@@ -1,3 +1,4 @@
+use super::replay_policy::ToolReplayPolicy;
 use super::traits::{FileResolver, MessageRepository, PromptProvider};
 use crate::config::{ChatProviderConfig, PromptSourceSpecification};
 use crate::db::entity::prelude::*;
@@ -329,6 +330,10 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
         spec: &PromptSourceSpecification,
     ) -> Result<String, Report> {
         self.app_state.resolve_prompt_source(spec).await
+    }
+
+    fn tool_replay_policy(&self) -> ToolReplayPolicy {
+        ToolReplayPolicy::from_client_tools(&self.app_state.config.client_tools)
     }
 }
 

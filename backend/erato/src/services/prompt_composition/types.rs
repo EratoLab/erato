@@ -1,3 +1,4 @@
+use super::replay_policy::ToolReplayPolicy;
 use crate::models::message::{GenerationInputMessages, InputMessage};
 use genai::chat::ChatRequest;
 use sea_orm::prelude::Uuid;
@@ -63,6 +64,10 @@ pub struct ActionFacetUserInput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AbstractChatSequence {
     pub parts: Vec<AbstractChatSequencePart>,
+    /// How tool calls from earlier user turns replay. Read from configuration
+    /// on every composition rather than persisted with the sequence.
+    #[serde(skip)]
+    pub replay_policy: ToolReplayPolicy,
 }
 
 /// Individual parts that make up an abstract chat sequence.
@@ -170,7 +175,10 @@ pub struct ConcreteChatRequest {
 impl AbstractChatSequence {
     /// Create a new empty abstract sequence
     pub fn new() -> Self {
-        Self { parts: Vec::new() }
+        Self {
+            parts: Vec::new(),
+            replay_policy: ToolReplayPolicy::default(),
+        }
     }
 
     /// Add a part to the sequence

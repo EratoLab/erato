@@ -1454,6 +1454,7 @@ impl AppConfig {
         // here (MCP servers are not known at config load) and stays at request
         // assembly.
         let mut seen_qualified_names = std::collections::HashSet::new();
+        let mut replay_by_name = HashMap::new();
         for tool in config.client_tools.tools.values() {
             let name = tool.name.trim();
             if name.is_empty() {
@@ -1500,6 +1501,41 @@ impl AppConfig {
                      OpenAI/Azure and Anthropic reject such tool names at request time.",
                     name
                 ));
+            }
+            let replay = &tool.replay;
+            if replay.mode == ClientToolReplayMode::Full
+                && !(replay.keep_input_fields.is_empty() && replay.keep_output_fields.is_empty())
+            {
+                panic!(
+                    "Client tool '{}' lists replay receipt fields but replay.mode is not \"receipt\".",
+                    qualified
+                );
+            }
+            for fields in [&replay.keep_input_fields, &replay.keep_output_fields] {
+                if fields.len() > MAX_CLIENT_TOOL_RECEIPT_FIELDS {
+                    panic!(
+                        "Client tool '{}' lists more than {} replay receipt fields.",
+                        qualified, MAX_CLIENT_TOOL_RECEIPT_FIELDS
+                    );
+                }
+                for path in fields {
+                    if let Err(error) = parse_receipt_field_path(path) {
+                        panic!(
+                            "Client tool '{}' has an invalid replay receipt field: {}",
+                            qualified, error
+                        );
+                    }
+                }
+            }
+            // The stored call carries only the model-facing name, so tools that
+            // share it across namespaces must agree on how it replays.
+            if let Some(previous) = replay_by_name.insert(name.to_string(), replay.clone())
+                && previous != *replay
+            {
+                panic!(
+                    "Client tools named '{}' in different namespaces must use the same replay settings.",
+                    name
+                );
             }
             if tool.timeout_ms == Some(0) {
                 panic!(
@@ -4650,6 +4686,69 @@ pub struct ClientToolConfig {
     /// draft; applying it remains a separate user-confirmed client action.
     #[serde(default)]
     pub submission: Option<ClientToolSubmissionConfig>,
+
+    /// How this tool's calls from earlier user turns are replayed to the model.
+    /// Defaults to full replay. Only the model-facing history changes; the
+    /// stored message keeps the complete arguments and result.
+    #[serde(default)]
+    pub replay: ClientToolReplayConfig,
+}
+
+/// `[client_tools.tools.<id>.replay]`. Applies only to calls from earlier user
+/// turns: the turn in progress, including an approval continuation of a
+/// parked turn, always sees its own calls in full.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct ClientToolReplayConfig {
+    /// `full` (default) replays arguments and result verbatim. `receipt`
+    /// replaces both with a bounded receipt built from the fields listed below
+    /// plus a fixed omission note.
+    #[serde(default)]
+    pub mode: ClientToolReplayMode,
+    /// Argument fields kept in a receipt, as `$.key.key` paths into the call
+    /// arguments. At most 32. Missing fields are skipped; a value larger than
+    /// the per-field bound is replaced by an omission marker.
+    #[serde(default)]
+    pub keep_input_fields: Vec<String>,
+    /// Result fields kept in a receipt, as `$.key.key` paths into the stored
+    /// tool output. Same rules as `keep_input_fields`.
+    #[serde(default)]
+    pub keep_output_fields: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolReplayMode {
+    #[default]
+    Full,
+    Receipt,
+}
+
+/// Upper bound on each receipt field list.
+pub const MAX_CLIENT_TOOL_RECEIPT_FIELDS: usize = 32;
+
+/// Parses a receipt field path (`$.a.b`) into its object keys. Only object
+/// member access is supported: no array indices, wildcards or quoting.
+pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
+    let Some(rest) = path.strip_prefix("$.") else {
+        return Err(format!("'{path}' must start with '$.'"));
+    };
+    rest.split('.')
+        .map(|key| {
+            if !key.is_empty()
+                && key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
+                Ok(key.to_string())
+            } else {
+                Err(format!(
+                    "'{path}' has an invalid key '{key}'; keys use [A-Za-z0-9_-]"
+                ))
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]

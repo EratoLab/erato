@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod test_cases {
+    use super::super::replay_policy::{RECEIPT_MARKER_KEY, ToolReplayPolicy};
     use super::super::traits::{FileResolver, MessageRepository, PromptProvider};
+    use super::super::transforms::replay_assistant_content;
     use super::super::transforms::{
         build_abstract_sequence, build_abstract_sequence_with_facet_tool_expansions,
         resolve_sequence,
@@ -215,6 +217,7 @@ mod test_cases {
     struct MockPromptProvider {
         system_prompt: Option<String>,
         assistant_config: Option<AssistantWithFiles>,
+        replay_policy: ToolReplayPolicy,
     }
 
     impl MockPromptProvider {
@@ -222,7 +225,13 @@ mod test_cases {
             Self {
                 system_prompt: None,
                 assistant_config: None,
+                replay_policy: ToolReplayPolicy::default(),
             }
+        }
+
+        fn with_replay_policy(mut self, replay_policy: ToolReplayPolicy) -> Self {
+            self.replay_policy = replay_policy;
+            self
         }
 
         fn with_system_prompt(mut self, prompt: &str) -> Self {
@@ -283,6 +292,10 @@ mod test_cases {
                     prompt_name
                 )),
             }
+        }
+
+        fn tool_replay_policy(&self) -> ToolReplayPolicy {
+            self.replay_policy.clone()
         }
     }
 
@@ -3485,6 +3498,472 @@ mod test_cases {
                 render_placeholder_template("Check: {{code}}", &args),
                 "Check: a < b && c > d"
             );
+        }
+    }
+
+    // ============================================================================
+    // Prior-turn receipts (ERMAIN-868)
+    // ============================================================================
+
+    mod prior_turn_receipts {
+        use super::*;
+        use crate::config::{
+            ClientToolConfig, ClientToolReplayConfig, ClientToolReplayMode, ClientToolsConfig,
+        };
+        use crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME;
+        use serde_json::json;
+
+        const READ: &str = "read_document_blocks";
+        const SUBMIT: &str = "submit_document_plan";
+
+        fn receipt_tool(name: &str, input: &[&str], output: &[&str]) -> ClientToolConfig {
+            ClientToolConfig {
+                name: name.into(),
+                namespace: Some("word".into()),
+                replay: ClientToolReplayConfig {
+                    mode: ClientToolReplayMode::Receipt,
+                    keep_input_fields: input.iter().map(|s| s.to_string()).collect(),
+                    keep_output_fields: output.iter().map(|s| s.to_string()).collect(),
+                },
+                ..Default::default()
+            }
+        }
+
+        fn word_policy() -> ToolReplayPolicy {
+            let mut tools = ClientToolsConfig::default();
+            tools.tools.insert(
+                "word_read".into(),
+                receipt_tool(
+                    READ,
+                    &["$.snapshot"],
+                    &[
+                        "$.status",
+                        "$.error",
+                        "$.result.snapshot",
+                        "$.result.blocksRead",
+                        "$.result.blocksTotal",
+                        "$.result.complete",
+                    ],
+                ),
+            );
+            tools.tools.insert(
+                "word_submit".into(),
+                receipt_tool(
+                    SUBMIT,
+                    &["$.snapshot"],
+                    &[
+                        "$.status",
+                        "$.error",
+                        "$.result.draft_id",
+                        "$.result.snapshot",
+                        "$.result.action",
+                        "$.submission.status",
+                    ],
+                ),
+            );
+            ToolReplayPolicy::from_client_tools(&tools)
+        }
+
+        fn page_body(turn: u32, page: u32) -> String {
+            format!("PAGE-BODY-{turn}-{page}")
+        }
+
+        fn plan_body(turn: u32, label: &str) -> String {
+            format!("PLAN-BODY-{turn}-{label}")
+        }
+
+        fn tool_use(call_id: &str, name: &str, input: JsonValue, output: JsonValue) -> ContentPart {
+            ContentPart::ToolUse(ToolUse {
+                tool_call_id: call_id.into(),
+                status: ToolCallStatus::Success,
+                tool_name: name.into(),
+                progress_message: None,
+                progress: None,
+                total: None,
+                input: Some(input),
+                output: Some(output),
+                started_at: None,
+                ended_at: None,
+            })
+        }
+
+        fn read_page(turn: u32, page: u32, complete: bool) -> ContentPart {
+            let snapshot = format!("snap-{turn}");
+            tool_use(
+                &format!("read-{turn}-{page}"),
+                READ,
+                json!({"snapshot": snapshot, "cursor": if page == 1 { JsonValue::Null } else { json!(format!("c{page}")) }}),
+                json!({
+                    "status": "success",
+                    "result": {
+                        "snapshot": snapshot,
+                        "blocks": [{"ref": format!("b{page}"), "text": page_body(turn, page)}],
+                        "blocksRead": page * 10,
+                        "blocksTotal": 20,
+                        "nextCursor": if complete { JsonValue::Null } else { json!("c2") },
+                        "complete": complete,
+                    },
+                }),
+            )
+        }
+
+        fn submit(turn: u32, label: &str, accepted: bool) -> ContentPart {
+            let call_id = format!("submit-{turn}-{label}");
+            let snapshot = format!("snap-{turn}");
+            let output = if accepted {
+                json!({
+                    "status": "success",
+                    "result": {"draft_id": call_id, "snapshot": snapshot, "action": "word.submit_document_plan"},
+                    "submission": {"status": "accepted", "attempts_remaining": 0},
+                })
+            } else {
+                json!({
+                    "status": "error",
+                    "error": "The plan failed validation.",
+                    "validation_errors": [{"path": "/blocks/0", "code": "compile-plan", "message": "bad"}],
+                    "submission": {"status": "retry", "attempts_remaining": 2},
+                })
+            };
+            tool_use(
+                &call_id,
+                SUBMIT,
+                json!({"snapshot": snapshot, "blocks": [{"text": plan_body(turn, label)}]}),
+                output,
+            )
+        }
+
+        fn search() -> ContentPart {
+            tool_use(
+                "search-1",
+                "search_documents",
+                json!({"query": "SEARCH-QUERY"}),
+                json!({"results": ["SEARCH-RESULT"]}),
+            )
+        }
+
+        fn text(value: &str) -> ContentPart {
+            ContentPart::Text(ContentPartText { text: value.into() })
+        }
+
+        struct Chat {
+            repo: MockMessageRepository,
+            user: [Uuid; 3],
+            assistant: [Uuid; 2],
+            turn_one: Vec<ContentPart>,
+        }
+
+        async fn compose(
+            repo: &MockMessageRepository,
+            provider: &MockPromptProvider,
+            previous_message_id: Uuid,
+        ) -> GenerationInputMessages {
+            let sequence = build_abstract_sequence(
+                repo,
+                provider,
+                &create_test_chat(),
+                &previous_message_id,
+                vec![],
+                &create_test_chat_provider_config(),
+                &FacetsConfig::default(),
+                &[],
+                None,
+            )
+            .await
+            .expect("abstract sequence");
+            resolve_sequence(sequence, repo, &MockFileResolver::new())
+                .await
+                .expect("resolved sequence")
+                .1
+        }
+
+        /// Two Word edits, each persisted the way a generation persists it: the
+        /// composed input becomes the assistant row's snapshot. `snapshot_policy`
+        /// is what the second turn was composed with, so a legacy row can be
+        /// produced by composing it with full replay.
+        async fn two_edit_chat(snapshot_policy: ToolReplayPolicy, extra: Vec<ContentPart>) -> Chat {
+            let provider = MockPromptProvider::new()
+                .with_system_prompt("You are helpful.")
+                .with_replay_policy(snapshot_policy);
+            let mut repo = MockMessageRepository::new();
+            let user = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+            let assistant = [Uuid::new_v4(), Uuid::new_v4()];
+
+            repo.add_message(user[0], None, MessageRole::User, "Tighten the intro.");
+            let gen_one = compose(&repo, &provider, user[0]).await;
+            let mut turn_one = vec![
+                text("Reading the document."),
+                read_page(1, 1, false),
+                read_page(1, 2, true),
+                submit(1, "accepted", true),
+            ];
+            turn_one.extend(extra);
+            turn_one.push(text("Draft ready for review."));
+            repo.add_message_with_content(
+                assistant[0],
+                Some(user[0]),
+                MessageRole::Assistant,
+                turn_one.clone(),
+            );
+            repo.update_generation_input_messages(assistant[0], &gen_one);
+
+            repo.add_message(
+                user[1],
+                Some(assistant[0]),
+                MessageRole::User,
+                "Now shorten the conclusion.",
+            );
+            let gen_two = compose(&repo, &provider, user[1]).await;
+            repo.add_message_with_content(
+                assistant[1],
+                Some(user[1]),
+                MessageRole::Assistant,
+                vec![
+                    read_page(2, 1, true),
+                    submit(2, "rejected", false),
+                    submit(2, "accepted", true),
+                    text("Second draft ready."),
+                ],
+            );
+            repo.update_generation_input_messages(assistant[1], &gen_two);
+
+            repo.add_message(
+                user[2],
+                Some(assistant[1]),
+                MessageRole::User,
+                "What did you change?",
+            );
+            Chat {
+                repo,
+                user,
+                assistant,
+                turn_one,
+            }
+        }
+
+        fn stored_snapshot(chat: &Chat, assistant: usize) -> GenerationInputMessages {
+            let row = chat.repo.messages[&chat.assistant[assistant]].clone();
+            serde_json::from_value(row.generation_input_messages.expect("snapshot"))
+                .expect("snapshot parses")
+        }
+
+        fn json_text(messages: &GenerationInputMessages) -> String {
+            serde_json::to_string(messages).expect("serializable")
+        }
+
+        fn assert_provider_sequence_is_valid(messages: GenerationInputMessages) {
+            let request = messages.into_chat_request();
+            let openai = into_openai_request_parts(&request).expect("OpenAI request parts");
+            assert_no_orphaned_tool_messages(&openai.messages);
+        }
+
+        fn word_provider() -> MockPromptProvider {
+            MockPromptProvider::new()
+                .with_system_prompt("You are helpful.")
+                .with_replay_policy(word_policy())
+        }
+
+        #[tokio::test]
+        async fn later_turns_replay_earlier_word_edits_as_receipts() {
+            let chat = two_edit_chat(word_policy(), vec![]).await;
+
+            let turn_two = stored_snapshot(&chat, 1);
+            let turn_two_text = json_text(&turn_two);
+            for body in [page_body(1, 1), page_body(1, 2), plan_body(1, "accepted")] {
+                assert!(!turn_two_text.contains(&body), "{body} replayed in turn 2");
+            }
+            assert!(turn_two_text.contains(RECEIPT_MARKER_KEY));
+            let receipt = turn_two
+                .messages
+                .iter()
+                .find_map(|message| match (&message.role, &message.content) {
+                    (MessageRole::Tool, ContentPart::ToolUse(part))
+                        if part.tool_call_id == "submit-1-accepted" =>
+                    {
+                        part.output.clone()
+                    }
+                    _ => None,
+                })
+                .expect("turn 1 submission response is still replayed");
+            assert_eq!(
+                receipt["kept"],
+                json!({
+                    "status": "success",
+                    "result": {"draft_id": "submit-1-accepted", "snapshot": "snap-1", "action": "word.submit_document_plan"},
+                    "submission": {"status": "accepted"},
+                })
+            );
+            assert_eq!(receipt["status"], json!("success"));
+
+            // Turn 3 replays turn 1 from turn 2's snapshot, where it already is a
+            // receipt, and turn 2 from its raw row.
+            let turn_three = compose(&chat.repo, &word_provider(), chat.user[2]).await;
+            let turn_three_text = json_text(&turn_three);
+            for body in [
+                page_body(1, 1),
+                plan_body(1, "accepted"),
+                page_body(2, 1),
+                plan_body(2, "rejected"),
+                plan_body(2, "accepted"),
+            ] {
+                assert!(
+                    !turn_three_text.contains(&body),
+                    "{body} replayed in turn 3"
+                );
+            }
+            assert!(turn_three_text.contains("submit-1-accepted"));
+            assert!(turn_three_text.contains("\"blocksTotal\":20"));
+
+            // Only the model-facing replay changes: the stored row keeps every
+            // argument and result the add-in reads back on history load.
+            let stored =
+                MessageSchema::validate(&chat.repo.messages[&chat.assistant[0]].raw_message)
+                    .expect("stored row parses");
+            assert_eq!(json!(stored.content), json!(chat.turn_one));
+
+            assert_provider_sequence_is_valid(turn_two);
+            assert_provider_sequence_is_valid(turn_three);
+        }
+
+        #[tokio::test]
+        async fn a_continuation_rebuild_keeps_its_own_turn_in_full() {
+            let chat = two_edit_chat(word_policy(), vec![]).await;
+
+            // What the approval continuation sends: the parked row's own
+            // snapshot, then the row's content through the full replay.
+            let row = MessageSchema::validate(&chat.repo.messages[&chat.assistant[1]].raw_message)
+                .expect("parked row parses");
+            let mut rebuilt = stored_snapshot(&chat, 1);
+            rebuilt
+                .messages
+                .extend(replay_assistant_content(&row.role, row.content));
+            let rebuilt_text = json_text(&rebuilt);
+
+            for body in [
+                page_body(2, 1),
+                plan_body(2, "rejected"),
+                plan_body(2, "accepted"),
+            ] {
+                assert!(
+                    rebuilt_text.contains(&body),
+                    "{body} missing from the parked turn"
+                );
+            }
+            for body in [page_body(1, 1), page_body(1, 2), plan_body(1, "accepted")] {
+                assert!(
+                    !rebuilt_text.contains(&body),
+                    "{body} from an earlier turn replayed"
+                );
+            }
+            assert_provider_sequence_is_valid(rebuilt);
+        }
+
+        #[tokio::test]
+        async fn a_legacy_snapshot_with_full_pages_replays_as_receipts() {
+            let chat = two_edit_chat(ToolReplayPolicy::default(), vec![]).await;
+            let legacy = json_text(&stored_snapshot(&chat, 1));
+            assert!(legacy.contains(&page_body(1, 1)));
+            assert!(legacy.contains(&plan_body(1, "accepted")));
+
+            let turn_three = compose(&chat.repo, &word_provider(), chat.user[2]).await;
+            let turn_three_text = json_text(&turn_three);
+            for body in [page_body(1, 1), page_body(1, 2), plan_body(1, "accepted")] {
+                assert!(
+                    !turn_three_text.contains(&body),
+                    "{body} survived a legacy snapshot"
+                );
+            }
+            assert!(turn_three_text.contains("submit-1-accepted"));
+            assert_provider_sequence_is_valid(turn_three);
+        }
+
+        #[tokio::test]
+        async fn full_replay_and_unconfigured_tools_compose_exactly_as_before() {
+            let chat = two_edit_chat(ToolReplayPolicy::default(), vec![search()]).await;
+            let default_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+            let baseline = json_text(&compose(&chat.repo, &default_provider, chat.user[2]).await);
+            assert!(baseline.contains(&page_body(1, 1)));
+
+            let mut tools = ClientToolsConfig::default();
+            tools.tools.insert(
+                "other".into(),
+                receipt_tool("some_other_tool", &["$.id"], &["$.id"]),
+            );
+            tools.tools.insert(
+                "word_full".into(),
+                ClientToolConfig {
+                    name: READ.into(),
+                    ..Default::default()
+                },
+            );
+            let unrelated = MockPromptProvider::new()
+                .with_system_prompt("You are helpful.")
+                .with_replay_policy(ToolReplayPolicy::from_client_tools(&tools));
+            assert_eq!(
+                json_text(&compose(&chat.repo, &unrelated, chat.user[2]).await),
+                baseline
+            );
+
+            // With the Word tools on receipts, a tool outside the policy still
+            // replays verbatim.
+            let stubbed = compose(&chat.repo, &word_provider(), chat.user[2]).await;
+            let search_parts: Vec<_> = stubbed
+                .messages
+                .iter()
+                .filter_map(|message| match &message.content {
+                    ContentPart::ToolUse(part) if part.tool_name == "search_documents" => {
+                        Some(json!(part))
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(search_parts.len(), 2);
+            for part in search_parts {
+                assert_eq!(part["input"], json!({"query": "SEARCH-QUERY"}));
+                assert_eq!(part["output"], json!({"results": ["SEARCH-RESULT"]}));
+            }
+            assert_provider_sequence_is_valid(stubbed);
+        }
+
+        #[tokio::test]
+        async fn delegation_results_keep_their_trace_stripping_and_framing() {
+            let delegation = tool_use(
+                "delegate-1",
+                DELEGATE_TO_ASSISTANT_TOOL_NAME,
+                json!({"assistant": "Research", "task": "look it up"}),
+                json!({"status": "completed", "result": "DELEGATE-ANSWER", "localTrace": {"steps": ["SECRET-STEP"]}}),
+            );
+            let chat = two_edit_chat(word_policy(), vec![delegation.clone()]).await;
+
+            let expected: Vec<JsonValue> =
+                replay_assistant_content(&MessageRole::Assistant, vec![delegation])
+                    .iter()
+                    .map(|message| json!(message))
+                    .collect();
+            let turn_two = stored_snapshot(&chat, 1);
+            let replayed: Vec<JsonValue> = turn_two
+                .messages
+                .iter()
+                .filter(|message| {
+                    matches!(&message.content, ContentPart::ToolUse(part) if part.tool_call_id == "delegate-1")
+                })
+                .map(|message| json!(message))
+                .collect();
+            assert_eq!(replayed, expected);
+            // The provider reads the response from the tool-role copy only.
+            let response = turn_two
+                .messages
+                .iter()
+                .find_map(|message| match (&message.role, &message.content) {
+                    (MessageRole::Tool, ContentPart::ToolUse(part))
+                        if part.tool_call_id == "delegate-1" =>
+                    {
+                        Some(json!(part.output))
+                    }
+                    _ => None,
+                })
+                .expect("delegation response replayed");
+            assert!(!response.to_string().contains("SECRET-STEP"));
+            assert!(response.to_string().contains("DELEGATE-ANSWER"));
         }
     }
 }
