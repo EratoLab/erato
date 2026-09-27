@@ -509,6 +509,13 @@ export type AssistantWithFiles = Assistant & {
   files: AssistantFile[];
 };
 
+export type AttemptState =
+  | "pending"
+  | "claimed"
+  | "ready"
+  | "continuing"
+  | "completed";
+
 export type AudioTranscriptSegment = {
   /**
    * Zero-based chunk index for this segment.
@@ -948,10 +955,48 @@ export type ChildApprovalRef = {
   tool_name: string;
 };
 
+export type ClaimClientOperationRequest = {
+  binding: ExecutorBinding;
+  user_confirmed?: boolean;
+};
+
+export type ClaimClientOperationResponse = {
+  /**
+   * @format uuid
+   */
+  claim_token: string;
+  /**
+   * @format date-time
+   */
+  expires_at: string;
+};
+
+export type ClientOperationResponse = {
+  state: AttemptState;
+};
+
+export type ClientOperationView = {
+  request: OperationRequest;
+  state: AttemptState;
+};
+
 /**
  * Default handling of files retrieved by client tools before they leave the device.
  */
 export type ClientToolFileApproval = "never_allow" | "ask" | "always_allow";
+
+/**
+ * Metadata-only suspension marker. Input and approved output use the normal
+ * ToolUse part; this marker is never replayed as model context.
+ */
+export type ClientToolPending = {
+  /**
+   * @format uuid
+   */
+  attempt_id: string;
+  pending_tool_calls: PendingToolCall[];
+  tool_call_id: string;
+};
 
 export type ClientToolResultRequest = {
   /**
@@ -1013,9 +1058,19 @@ export type ClientToolValidationIssue = {
   path: string;
 };
 
+export type CompleteClientOperationRequest = {
+  /**
+   * @format uuid
+   */
+  claim_token: string;
+  result: OperationResult;
+};
+
 export type CompleteMcpServerOauthResponse = {
   connection_status: McpServerStatusValue;
 };
+
+export type ConsentPolicy = "none" | "ask" | "native";
 
 export type ContentPart =
   | (ContentPartText & {
@@ -1029,6 +1084,9 @@ export type ContentPart =
     })
   | (ContentPartToolApprovalRequest & {
       content_type: "tool_approval_request";
+    })
+  | (ClientToolPending & {
+      content_type: "client_tool_pending";
     })
   | (ContentPartToolApproval & {
       content_type: "tool_approval";
@@ -1614,6 +1672,17 @@ export type EditMessageStreamingResponseMessage =
       message_type: "user_message_saved";
     });
 
+export type ExecutionRealm = "frontend" | "office-addin" | "desktop-sidecar";
+
+/**
+ * Client-asserted routing identity, not attestation. Kinds may require stronger proof.
+ */
+export type ExecutorBinding = {
+  device_id: string;
+  host_context?: null | HostContext;
+  realm: ExecutionRealm;
+};
+
 export type FacetInfo = {
   default_enabled: boolean;
   display_name: string;
@@ -1906,6 +1975,11 @@ export type GlobalFacetSettings = {
   show_facet_indicator_with_display_name: boolean;
 };
 
+export type HostContext = {
+  identity: string;
+  kind: string;
+};
+
 /**
  * Request to link an external file (SharePoint, Google Drive, etc.)
  */
@@ -1919,6 +1993,16 @@ export type LinkFileRequest = {
    * The source/provider type: "sharepoint" (future: "google_drive", etc.)
    */
   source: string;
+};
+
+export type ListClientOperationsResponse = {
+  account_id: string;
+  /**
+   * @format uuid
+   */
+  after?: string;
+  enabled: boolean;
+  operations: ClientOperationView[];
 };
 
 export type ListMcpServerToolsResponse = {
@@ -2404,6 +2488,95 @@ export type NothingToReactError = {
    */
   task_result_message_id: string;
 };
+
+export type OperationError = {
+  code: string;
+};
+
+export type OperationOutcome = "succeeded" | "rejected" | "failed" | "unknown";
+
+/**
+ * JSON transport shape only: every payload still requires its compiled kind's
+ * validator. An explicit schema keeps generated clients from treating JSON as void.
+ */
+export type OperationPayload =
+  | null
+  | boolean
+  | number
+  | string
+  | OperationPayload[]
+  | {
+      [key: string]: OperationPayload;
+    };
+
+export type OperationRequest = {
+  /**
+   * @format uuid
+   */
+  account_id: string;
+  /**
+   * @format uuid
+   */
+  attempt_id: string;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  base_revision?: number;
+  binding: ExecutorBinding;
+  /**
+   * @format uuid
+   */
+  chat_id: string;
+  consent: ConsentPolicy;
+  /**
+   * @format date-time
+   */
+  expires_at: string;
+  input: OperationPayload;
+  kind: string;
+  /**
+   * @format uuid
+   */
+  message_id: string;
+  operation_id: string;
+  realm: ExecutionRealm;
+  tool_call_id: string;
+};
+
+export type OperationResult = {
+  /**
+   * @format uuid
+   */
+  attempt_id: string;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  base_revision?: number;
+  error?: null | OperationError;
+  executor: ExecutorBinding;
+  operation_id: string;
+  outcome: OperationOutcome;
+  result?: null | OperationValue;
+};
+
+export type OperationValue =
+  | {
+      type: "value";
+      value: OperationPayload;
+    }
+  | {
+      /**
+       * @format uuid
+       */
+      reference: string;
+      type: "reference";
+    }
+  | {
+      receipt: OperationPayload;
+      type: "receipt";
+    };
 
 /**
  * An organization group

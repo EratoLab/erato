@@ -3543,6 +3543,342 @@ export const useReactToTaskResultSse = (
   });
 };
 
+export type ListClientOperationsQueryParams = {
+  /**
+   * @format uuid
+   */
+  after?: string;
+};
+
+export type ListClientOperationsError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListClientOperationsVariables = {
+  queryParams?: ListClientOperationsQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchListClientOperations = (
+  variables: ListClientOperationsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ListClientOperationsResponse,
+    ListClientOperationsError,
+    undefined,
+    {},
+    ListClientOperationsQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/me/client-operations",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function listClientOperationsQuery(
+  variables: ListClientOperationsVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ListClientOperationsResponse>;
+};
+
+export function listClientOperationsQuery(
+  variables: ListClientOperationsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.ListClientOperationsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listClientOperationsQuery(
+  variables: ListClientOperationsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/client-operations",
+      operationId: "listClientOperations",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListClientOperations(variables, signal),
+  };
+}
+
+export const useSuspenseListClientOperations = <
+  TData = Schemas.ListClientOperationsResponse,
+>(
+  variables: ListClientOperationsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ListClientOperationsResponse,
+      ListClientOperationsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ListClientOperationsResponse,
+    ListClientOperationsError,
+    TData
+  >({
+    ...listClientOperationsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListClientOperations = <
+  TData = Schemas.ListClientOperationsResponse,
+>(
+  variables: ListClientOperationsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ListClientOperationsResponse,
+      ListClientOperationsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ListClientOperationsResponse,
+    ListClientOperationsError,
+    TData
+  >({
+    ...listClientOperationsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type CancelClientOperationPathParams = {
+  /**
+   * @format uuid
+   */
+  attemptId: string;
+};
+
+export type CancelClientOperationError = Fetcher.ErrorWrapper<undefined>;
+
+export type CancelClientOperationVariables = {
+  pathParams: CancelClientOperationPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCancelClientOperation = (
+  variables: CancelClientOperationVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ClientOperationResponse,
+    CancelClientOperationError,
+    undefined,
+    {},
+    {},
+    CancelClientOperationPathParams
+  >({
+    url: "/api/v1beta/me/client-operations/{attemptId}/cancel",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useCancelClientOperation = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ClientOperationResponse,
+      CancelClientOperationError,
+      CancelClientOperationVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ClientOperationResponse,
+    CancelClientOperationError,
+    CancelClientOperationVariables
+  >({
+    mutationFn: (variables: CancelClientOperationVariables) =>
+      fetchCancelClientOperation(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ClaimClientOperationPathParams = {
+  /**
+   * @format uuid
+   */
+  attemptId: string;
+};
+
+export type ClaimClientOperationError = Fetcher.ErrorWrapper<undefined>;
+
+export type ClaimClientOperationVariables = {
+  body: Schemas.ClaimClientOperationRequest;
+  pathParams: ClaimClientOperationPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchClaimClientOperation = (
+  variables: ClaimClientOperationVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ClaimClientOperationResponse,
+    ClaimClientOperationError,
+    Schemas.ClaimClientOperationRequest,
+    {},
+    {},
+    ClaimClientOperationPathParams
+  >({
+    url: "/api/v1beta/me/client-operations/{attemptId}/claim",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useClaimClientOperation = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ClaimClientOperationResponse,
+      ClaimClientOperationError,
+      ClaimClientOperationVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ClaimClientOperationResponse,
+    ClaimClientOperationError,
+    ClaimClientOperationVariables
+  >({
+    mutationFn: (variables: ClaimClientOperationVariables) =>
+      fetchClaimClientOperation(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ContinueClientOperationPathParams = {
+  /**
+   * @format uuid
+   */
+  attemptId: string;
+};
+
+export type ContinueClientOperationError = Fetcher.ErrorWrapper<undefined>;
+
+export type ContinueClientOperationVariables = {
+  pathParams: ContinueClientOperationPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchContinueClientOperation = (
+  variables: ContinueClientOperationVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ClientOperationResponse,
+    ContinueClientOperationError,
+    undefined,
+    {},
+    {},
+    ContinueClientOperationPathParams
+  >({
+    url: "/api/v1beta/me/client-operations/{attemptId}/continue",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useContinueClientOperation = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ClientOperationResponse,
+      ContinueClientOperationError,
+      ContinueClientOperationVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ClientOperationResponse,
+    ContinueClientOperationError,
+    ContinueClientOperationVariables
+  >({
+    mutationFn: (variables: ContinueClientOperationVariables) =>
+      fetchContinueClientOperation(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type CompleteClientOperationPathParams = {
+  /**
+   * @format uuid
+   */
+  attemptId: string;
+};
+
+export type CompleteClientOperationError = Fetcher.ErrorWrapper<undefined>;
+
+export type CompleteClientOperationVariables = {
+  body: Schemas.CompleteClientOperationRequest;
+  pathParams: CompleteClientOperationPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCompleteClientOperation = (
+  variables: CompleteClientOperationVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ClientOperationResponse,
+    CompleteClientOperationError,
+    Schemas.CompleteClientOperationRequest,
+    {},
+    {},
+    CompleteClientOperationPathParams
+  >({
+    url: "/api/v1beta/me/client-operations/{attemptId}/result",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useCompleteClientOperation = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ClientOperationResponse,
+      CompleteClientOperationError,
+      CompleteClientOperationVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ClientOperationResponse,
+    CompleteClientOperationError,
+    CompleteClientOperationVariables
+  >({
+    mutationFn: (variables: CompleteClientOperationVariables) =>
+      fetchCompleteClientOperation(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type OrganizationConfigurationError = Fetcher.ErrorWrapper<undefined>;
 
 export type OrganizationConfigurationVariables =
@@ -7646,6 +7982,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/chats/{chatId}";
       operationId: "chatDetail";
       variables: ChatDetailVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/client-operations";
+      operationId: "listClientOperations";
+      variables: ListClientOperationsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/desktop-sidecar/organization-configuration";
