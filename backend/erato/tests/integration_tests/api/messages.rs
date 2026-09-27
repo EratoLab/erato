@@ -1,6 +1,7 @@
 //! Message submission and streaming API tests.
 
 mod client_submissions;
+mod token_usage_tool_parts;
 mod tool_arguments;
 
 use axum::Router;
