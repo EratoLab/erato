@@ -5435,3 +5435,91 @@ model_name = "gpt-4o"
 "#,
     );
 }
+
+#[test]
+fn test_client_tool_replay_defaults_to_full_and_loads_receipt_fields() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.plain]
+name = "plain"
+description = "full replay by default"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.read]
+name = "read_pages"
+description = "replays prior turns as receipts"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.read.replay]
+mode = "receipt"
+keep_input_fields = ["$.snapshot"]
+keep_output_fields = ["$.status", "$.result.complete"]
+"#,
+    );
+    let plain = &config.client_tools.tools["plain"].replay;
+    assert_eq!(plain.mode, erato::config::ClientToolReplayMode::Full);
+    assert!(plain.keep_input_fields.is_empty() && plain.keep_output_fields.is_empty());
+    let read = &config.client_tools.tools["read"].replay;
+    assert_eq!(read.mode, erato::config::ClientToolReplayMode::Receipt);
+    assert_eq!(read.keep_input_fields, vec!["$.snapshot"]);
+    assert_eq!(
+        read.keep_output_fields,
+        vec!["$.status", "$.result.complete"]
+    );
+}
+
+#[test]
+#[should_panic(expected = "replay.mode is not \"receipt\"")]
+fn test_client_tool_receipt_fields_require_receipt_mode() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.read]
+name = "read_pages"
+description = "fields without the mode"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.read.replay]
+keep_output_fields = ["$.status"]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "invalid replay receipt field")]
+fn test_client_tool_receipt_field_paths_are_validated() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.read]
+name = "read_pages"
+description = "array indices are not supported"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.read.replay]
+mode = "receipt"
+keep_output_fields = ["$.result.blocks[0]"]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "must use the same replay settings")]
+fn test_same_named_client_tools_must_agree_on_replay() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.a]
+name = "read_pages"
+namespace = "word"
+description = "receipt"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.a.replay]
+mode = "receipt"
+
+[client_tools.tools.b]
+name = "read_pages"
+namespace = "other"
+description = "full"
+parameters = '{ "type": "object" }'
+"#,
+    );
+}

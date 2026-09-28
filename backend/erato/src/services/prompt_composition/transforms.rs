@@ -3,6 +3,7 @@
 //! This module contains the core logic for transforming chat data through the
 //! three phases: Abstract → Resolved → Concrete
 
+use super::replay_policy::OfferedClientTools;
 use super::traits::{FileResolver, MessageRepository, PromptProvider};
 use super::types::{
     AbstractChatSequence, AbstractChatSequencePart, ActionFacetUserInput, ConcreteChatRequest,
@@ -90,6 +91,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     platform: Option<&str>,
 ) -> Result<AbstractChatSequence, Report> {
     let mut sequence = AbstractChatSequence::new();
+    sequence.replay_policy = prompt_provider.tool_replay_policy();
 
     // 1. Check if this is the first message
     let previous_message = message_repo.get_message_by_id(previous_message_id).await?;
@@ -456,6 +458,9 @@ pub async fn resolve_sequence(
 ) -> Result<(ResolvedChatSequence, GenerationInputMessages), Report> {
     let mut input_messages = Vec::new();
     let mut has_system_message = false;
+    // Composition runs at the start of a user turn, so every tool call it
+    // replays belongs to an earlier one — see `replay_policy`.
+    let replay_policy = abstract_seq.replay_policy;
 
     for part in abstract_seq.parts {
         match part {
@@ -625,6 +630,11 @@ pub async fn resolve_sequence(
                                 {
                                     continue;
                                 }
+                                // Snapshot messages carry no record of which
+                                // generation made them, so the replay policy is
+                                // not applied here: receipts written when their
+                                // row was replayed pass through, and older full
+                                // payloads stay full — see `replay_policy`.
                                 let input_msg = normalize_historical_input_message(input_msg);
                                 if include_system || !matches!(input_msg.role, MessageRole::System)
                                 {
@@ -652,7 +662,16 @@ pub async fn resolve_sequence(
             AbstractChatSequencePart::PreviousAssistantMessage { message_id } => {
                 let message = message_repo.get_message_by_id(&message_id).await?;
                 let parsed = MessageSchema::validate(&message.raw_message)?;
-                input_messages.extend(replay_assistant_content(&parsed.role, parsed.content));
+                let offered = OfferedClientTools::from_generation_parameters(
+                    message.generation_parameters.as_ref(),
+                );
+                input_messages.extend(
+                    replay_assistant_content(&parsed.role, parsed.content)
+                        .into_iter()
+                        .map(|message| {
+                            replay_policy.apply_to_prior_turn_message(message, &offered)
+                        }),
+                );
             }
 
             AbstractChatSequencePart::CurrentUserContent { content } => {
@@ -704,6 +723,9 @@ pub async fn resolve_sequence(
 /// parked turn from the row rather than from a second, hand-assembled copy: two
 /// derivations of "what the model already saw" drift, and the one that drifts
 /// silently hands the provider a tool response with no matching call.
+///
+/// Always replays in full: the continuation's row is the turn in progress.
+/// Receipts for earlier turns are applied by composition on top of this.
 pub(crate) fn replay_assistant_content(
     role: &MessageRole,
     content: Vec<ContentPart>,

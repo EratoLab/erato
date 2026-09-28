@@ -816,36 +816,7 @@ async fn count_tokens_for_chat_request(
     );
     let _enter = span.enter();
 
-    let mut text_chunks: Vec<String> = Vec::new();
-
-    if let Some(system) = &chat_request.system
-        && !system.is_empty()
-    {
-        text_chunks.push(system.clone());
-    }
-
-    for msg in &chat_request.messages {
-        let mut parts = Vec::new();
-        if msg.content.is_text_only() {
-            if let Some(text) = msg.content.first_text()
-                && !text.is_empty()
-            {
-                parts.push(text.to_string());
-            }
-        } else {
-            for part in msg.content.parts() {
-                if let genai::chat::ContentPart::Text(text) = part
-                    && !text.is_empty()
-                {
-                    parts.push(text.to_string());
-                }
-            }
-        }
-
-        if !parts.is_empty() {
-            text_chunks.push(parts.join(" "));
-        }
-    }
+    let text_chunks = chat_request_token_chunks(chat_request);
 
     let app_state_ref = app_state;
     let futures = text_chunks.iter().map(|text| async move {
@@ -865,4 +836,79 @@ async fn count_tokens_for_chat_request(
 
     span.record("total_tokens", total_tokens);
     Ok(total_tokens)
+}
+
+/// The text of a chat request that reaches the provider as tokens: text parts,
+/// replayed tool-call arguments and replayed tool responses. Tool definitions
+/// (`chat_request.tools`) are not counted: `history_tokens` is derived from
+/// this total, and definitions are not history.
+fn chat_request_token_chunks(chat_request: &ChatRequest) -> Vec<String> {
+    let mut text_chunks: Vec<String> = Vec::new();
+
+    if let Some(system) = &chat_request.system
+        && !system.is_empty()
+    {
+        text_chunks.push(system.clone());
+    }
+
+    for msg in &chat_request.messages {
+        let mut parts = Vec::new();
+        for part in msg.content.parts() {
+            match part {
+                genai::chat::ContentPart::Text(text) if !text.is_empty() => {
+                    parts.push(text.to_string());
+                }
+                genai::chat::ContentPart::ToolCall(call) => {
+                    parts.push(format!("{} {}", call.fn_name, call.fn_arguments));
+                }
+                genai::chat::ContentPart::ToolResponse(response)
+                    if !response.content.is_empty() =>
+                {
+                    parts.push(response.content.clone());
+                }
+                _ => {}
+            }
+        }
+
+        if !parts.is_empty() {
+            text_chunks.push(parts.join(" "));
+        }
+    }
+
+    text_chunks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use genai::chat::{ToolCall, ToolResponse};
+    use serde_json::json;
+
+    #[test]
+    fn replayed_tool_arguments_and_responses_are_counted() {
+        let page = "x".repeat(200 * 1024);
+        let request = ChatRequest::new(vec![
+            ChatMessage::user("Edit the document."),
+            ChatMessage::from(vec![ToolCall {
+                call_id: "call-1".into(),
+                fn_name: "read_document_blocks".into(),
+                fn_arguments: json!({"snapshot": "s1"}),
+                thought_signatures: None,
+            }]),
+            ChatMessage::from(ToolResponse::new("call-1", page.clone())),
+            ChatMessage::assistant("Done."),
+        ]);
+
+        let chunks = chat_request_token_chunks(&request);
+
+        assert_eq!(
+            chunks,
+            vec![
+                "Edit the document.".to_string(),
+                r#"read_document_blocks {"snapshot":"s1"}"#.to_string(),
+                page,
+                "Done.".to_string(),
+            ]
+        );
+    }
 }

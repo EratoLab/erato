@@ -668,6 +668,15 @@ chat_provider_ids = ["test-token-limit"]
 # # Optional per-tool park timeout (default 60000 ms).
 # # timeout_ms = 30000
 #
+# # Optional: replay this tool's calls from EARLIER user turns as bounded
+# # receipts instead of full arguments/results (default mode = "full"). The
+# # current turn always sees its own calls in full; stored messages are
+# # unchanged. Paths are `$.key.key` into the arguments / stored output.
+# # [client_tools.tools.outlook_fetch_availability.replay]
+# # mode = "receipt"
+# # keep_input_fields = ["$.lookahead_days"]
+# # keep_output_fields = ["$.status", "$.error"]
+#
 # OPTIONAL Entra permissions (EXO attendee name search): grant the add-in app
 # registration People.Read and/or User.ReadBasic.All (delegated) to resolve
 # attendee display names to addresses on Exchange Online (counterpart of

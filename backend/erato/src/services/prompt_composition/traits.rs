@@ -1,3 +1,4 @@
+use super::replay_policy::ToolReplayPolicy;
 use crate::config::{ChatProviderConfig, PromptSourceSpecification};
 use crate::db::entity::chats;
 use crate::db::entity::messages;
@@ -74,4 +75,9 @@ pub trait PromptProvider: Send + Sync {
         &self,
         chat: &chats::Model,
     ) -> Result<Option<AssistantWithFiles>, Report>;
+
+    /// How tool calls from earlier user turns replay. Full replay by default.
+    fn tool_replay_policy(&self) -> ToolReplayPolicy {
+        ToolReplayPolicy::default()
+    }
 }
