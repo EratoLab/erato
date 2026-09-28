@@ -53,3 +53,4 @@
 0050_add_outlook_provenance_to_file_uploads 2026-09-22T19:00:00Z Codex <codex@openai.com> # Preserve Outlook source references on file uploads
 0051_add_client_operation_attempts 2026-09-27T00:00:00Z Codex <codex@openai.com> # Logged durable client operation attempts
 0052_add_local_evidence_exports [0051_add_client_operation_attempts] 2026-09-28T10:00:00Z Daniel Person <daniel@erato.ai> # Native consent/export extension for durable operations
+0053_add_teams_bot [0052_add_local_evidence_exports] 2026-09-28T14:00:00Z bdart <dfiebig@bdart.de> # Teams bot: user oid, conversation mapping, SSO exchange dedupe

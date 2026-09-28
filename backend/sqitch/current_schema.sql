@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict OM7cNXdBdyBvLZvgpYZtJmnVfBbiARdfWSfbAR86ERODzDTyXhtRLbkmz7CSgJk
+\restrict ggWVPYiqIBzmlGDznkgkb0lIsGgkW539faqLudbWV0tgXNprY3HXMMBn33cuBRq
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -85,6 +85,53 @@ BEGIN
         RAISE EXCEPTION 'Constraint violation: Multiple messages in the same sibling group are marked as active';
     END IF;
 
+    RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: notify_policy_facts_changed(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.notify_policy_facts_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    old_row jsonb;
+    new_row jsonb;
+    old_id uuid;
+    new_id uuid;
+    field_name text;
+    changed boolean := TG_OP <> 'UPDATE';
+BEGIN
+    IF TG_OP <> 'INSERT' THEN old_row := to_jsonb(OLD); END IF;
+    IF TG_OP <> 'DELETE' THEN new_row := to_jsonb(NEW); END IF;
+    IF TG_OP = 'UPDATE' THEN
+        FOREACH field_name IN ARRAY TG_ARGV[2:TG_NARGS-1] LOOP
+            changed := changed OR (old_row -> field_name IS DISTINCT FROM new_row -> field_name);
+        END LOOP;
+    END IF;
+    IF NOT changed THEN RETURN NULL; END IF;
+
+    -- Only assistant grants and chat share links participate in this policy.
+    IF TG_ARGV[0] NOT IN ('grants', 'links') OR
+       old_row ->> 'resource_type' = (CASE TG_ARGV[0] WHEN 'grants' THEN 'assistant' ELSE 'chat' END) THEN
+        old_id := (old_row ->> TG_ARGV[1])::uuid;
+    END IF;
+    IF TG_ARGV[0] NOT IN ('grants', 'links') OR
+       new_row ->> 'resource_type' = (CASE TG_ARGV[0] WHEN 'grants' THEN 'assistant' ELSE 'chat' END) THEN
+        new_id := (new_row ->> TG_ARGV[1])::uuid;
+    END IF;
+    -- PostgreSQL delivers NOTIFY only after commit, and discards it on rollback.
+    -- Invalidate old/new association keys together without storing revisions.
+    IF old_id IS NOT NULL OR new_id IS NOT NULL THEN
+        PERFORM pg_notify('policy_facts_changed', (
+            SELECT jsonb_agg(jsonb_build_array(TG_ARGV[0], id))::text
+            FROM (SELECT DISTINCT unnest(ARRAY[old_id, new_id]) AS id) AS ids
+            WHERE id IS NOT NULL
+        ));
+    END IF;
     RETURN NULL;
 END;
 $$;
@@ -335,8 +382,34 @@ CREATE TABLE public.file_uploads (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     owner_user_id text NOT NULL,
-    audio_transcription text
+    audio_transcription text,
+    external_id_ews_id text,
+    outlook_provenance jsonb
 );
+
+
+--
+-- Name: local_evidence_exports; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.local_evidence_exports (
+    attempt_id uuid NOT NULL,
+    binding jsonb NOT NULL,
+    origin text NOT NULL,
+    plan jsonb NOT NULL,
+    receipt text,
+    export_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT local_evidence_exports_check CHECK (((receipt IS NULL) = (export_id IS NULL)))
+);
+
+
+--
+-- Name: TABLE local_evidence_exports; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.local_evidence_exports IS 'Native immutable binding and durable acknowledgement receipt. No job lifecycle, generation checkpoint, native handles/statuses, or credentials.';
 
 
 --
@@ -440,6 +513,34 @@ CREATE TABLE public.share_links (
     enabled boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: teams_conversations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.teams_conversations (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    conversation_id text NOT NULL,
+    conversation_type text NOT NULL,
+    user_id uuid NOT NULL,
+    current_chat_id uuid,
+    service_url text NOT NULL,
+    teams_user_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT teams_conversations_conversation_type_check CHECK ((conversation_type = ANY (ARRAY['personal'::text, 'groupChat'::text, 'channel'::text])))
+);
+
+
+--
+-- Name: teams_token_exchanges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.teams_token_exchanges (
+    exchange_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -550,6 +651,8 @@ CREATE TABLE public.user_preferences (
     starting_hub_assistant_id uuid,
     starting_assistant_id uuid,
     starting_assistant_cleared boolean DEFAULT false NOT NULL,
+    client_tool_file_approval text,
+    CONSTRAINT user_preferences_client_tool_file_approval_check CHECK ((client_tool_file_approval = ANY (ARRAY['never_allow'::text, 'ask'::text, 'always_allow'::text]))),
     CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
     CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND ((starting_hub_assistant_id IS NOT NULL) OR (starting_assistant_id IS NOT NULL)))))
 );
@@ -583,7 +686,8 @@ CREATE TABLE public.users (
     subject text NOT NULL,
     email text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    entra_object_id text
 );
 
 
@@ -713,6 +817,22 @@ ALTER TABLE ONLY public.file_uploads
 
 
 --
+-- Name: local_evidence_exports local_evidence_exports_export_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_evidence_exports
+    ADD CONSTRAINT local_evidence_exports_export_id_key UNIQUE (export_id);
+
+
+--
+-- Name: local_evidence_exports local_evidence_exports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_evidence_exports
+    ADD CONSTRAINT local_evidence_exports_pkey PRIMARY KEY (attempt_id);
+
+
+--
 -- Name: mcp_server_oauth_authorization_states mcp_server_oauth_authorization_states_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -798,6 +918,30 @@ ALTER TABLE ONLY public.share_links
 
 ALTER TABLE ONLY public.share_links
     ADD CONSTRAINT share_links_unique_resource UNIQUE (resource_type, resource_id);
+
+
+--
+-- Name: teams_conversations teams_conversations_conversation_id_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.teams_conversations
+    ADD CONSTRAINT teams_conversations_conversation_id_user_id_key UNIQUE (conversation_id, user_id);
+
+
+--
+-- Name: teams_conversations teams_conversations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.teams_conversations
+    ADD CONSTRAINT teams_conversations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: teams_token_exchanges teams_token_exchanges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.teams_token_exchanges
+    ADD CONSTRAINT teams_token_exchanges_pkey PRIMARY KEY (exchange_id);
 
 
 --
@@ -1019,6 +1163,13 @@ CREATE INDEX idx_chats_assistant_configuration ON public.chats USING btree (((as
 
 
 --
+-- Name: idx_chats_assistant_usage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chats_assistant_usage ON public.chats USING btree (assistant_id, id) INCLUDE (owner_user_id) WHERE (assistant_id IS NOT NULL);
+
+
+--
 -- Name: idx_chats_async_delivery_in_flight; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1079,6 +1230,13 @@ CREATE INDEX idx_message_feedbacks_message_id ON public.message_feedbacks USING 
 --
 
 CREATE INDEX idx_messages_active_thread ON public.messages USING btree (is_message_in_active_thread) WHERE (is_message_in_active_thread = true);
+
+
+--
+-- Name: idx_messages_assistant_usage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_assistant_usage ON public.messages USING btree (chat_id, created_at) WHERE (((raw_message ->> 'role'::text) = 'assistant'::text) AND (generation_metadata IS NOT NULL));
 
 
 --
@@ -1159,6 +1317,13 @@ CREATE INDEX runtime_configuration_source_service_idx ON public.runtime_configur
 
 
 --
+-- Name: teams_conversations_current_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX teams_conversations_current_chat ON public.teams_conversations USING btree (current_chat_id) WHERE (current_chat_id IS NOT NULL);
+
+
+--
 -- Name: temp_chat_generation_commands_pending_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1177,6 +1342,13 @@ CREATE INDEX temp_chat_generation_events_generation_idx ON public.temp_chat_gene
 --
 
 CREATE INDEX temp_chat_generations_heartbeat_idx ON public.temp_chat_generations USING btree (heartbeat_at) WHERE (state = 'running'::text);
+
+
+--
+-- Name: users_entra_object_id_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX users_entra_object_id_unique ON public.users USING btree (entra_object_id) WHERE (entra_object_id IS NOT NULL);
 
 
 --
@@ -1264,6 +1436,13 @@ CREATE TRIGGER on_update_set_updated_columns_client_operation_attempts BEFORE UP
 
 
 --
+-- Name: local_evidence_exports on_update_set_updated_columns_local_evidence_exports; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_local_evidence_exports BEFORE UPDATE ON public.local_evidence_exports FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
 -- Name: mcp_server_oauth_authorization_states on_update_set_updated_columns_mcp_server_oauth_authorization_st; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1313,10 +1492,73 @@ CREATE TRIGGER on_update_set_updated_columns_share_links BEFORE UPDATE ON public
 
 
 --
+-- Name: teams_conversations on_update_set_updated_columns_teams_conversations; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_teams_conversations BEFORE UPDATE ON public.teams_conversations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
 -- Name: user_tool_approval_settings on_update_set_updated_columns_user_tool_approval_settings; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER on_update_set_updated_columns_user_tool_approval_settings BEFORE UPDATE ON public.user_tool_approval_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: assistant_file_uploads policy_facts_changed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER policy_facts_changed AFTER INSERT OR DELETE OR UPDATE ON public.assistant_file_uploads FOR EACH ROW EXECUTE FUNCTION public.notify_policy_facts_changed('associations', 'file_upload_id', 'file_upload_id', 'assistant_id');
+
+
+--
+-- Name: assistant_hub_assistant_versions policy_facts_changed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER policy_facts_changed AFTER INSERT OR DELETE OR UPDATE ON public.assistant_hub_assistant_versions FOR EACH ROW EXECUTE FUNCTION public.notify_policy_facts_changed('hub', 'assistant_id', 'assistant_id', 'status', 'is_published', 'is_current_published_version');
+
+
+--
+-- Name: assistants policy_facts_changed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER policy_facts_changed AFTER INSERT OR DELETE OR UPDATE ON public.assistants FOR EACH ROW EXECUTE FUNCTION public.notify_policy_facts_changed('assistant', 'id', 'id', 'owner_user_id');
+
+
+--
+-- Name: chat_file_uploads policy_facts_changed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER policy_facts_changed AFTER INSERT OR DELETE OR UPDATE ON public.chat_file_uploads FOR EACH ROW EXECUTE FUNCTION public.notify_policy_facts_changed('associations', 'file_upload_id', 'file_upload_id', 'chat_id');
+
+
+--
+-- Name: chats policy_facts_changed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER policy_facts_changed AFTER INSERT OR DELETE OR UPDATE ON public.chats FOR EACH ROW EXECUTE FUNCTION public.notify_policy_facts_changed('chat', 'id', 'id', 'owner_user_id', 'archived_at');
+
+
+--
+-- Name: file_uploads policy_facts_changed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER policy_facts_changed AFTER INSERT OR DELETE OR UPDATE ON public.file_uploads FOR EACH ROW EXECUTE FUNCTION public.notify_policy_facts_changed('file', 'id', 'id', 'owner_user_id');
+
+
+--
+-- Name: share_grants policy_facts_changed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER policy_facts_changed AFTER INSERT OR DELETE OR UPDATE ON public.share_grants FOR EACH ROW EXECUTE FUNCTION public.notify_policy_facts_changed('grants', 'resource_id', 'resource_type', 'resource_id', 'subject_type', 'subject_id_type', 'subject_id', 'role');
+
+
+--
+-- Name: share_links policy_facts_changed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER policy_facts_changed AFTER INSERT OR DELETE OR UPDATE ON public.share_links FOR EACH ROW EXECUTE FUNCTION public.notify_policy_facts_changed('links', 'resource_id', 'resource_type', 'resource_id', 'enabled');
 
 
 --
@@ -1455,6 +1697,14 @@ ALTER TABLE ONLY public.client_operation_attempts
 
 
 --
+-- Name: local_evidence_exports local_evidence_exports_attempt_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_evidence_exports
+    ADD CONSTRAINT local_evidence_exports_attempt_id_fkey FOREIGN KEY (attempt_id) REFERENCES public.client_operation_attempts(attempt_id) ON DELETE CASCADE;
+
+
+--
 -- Name: mcp_server_oauth_authorization_states mcp_server_oauth_authorization_states_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1500,6 +1750,22 @@ ALTER TABLE ONLY public.messages
 
 ALTER TABLE ONLY public.messages
     ADD CONSTRAINT messages_sibling_message_id_fkey FOREIGN KEY (sibling_message_id) REFERENCES public.messages(id);
+
+
+--
+-- Name: teams_conversations teams_conversations_current_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.teams_conversations
+    ADD CONSTRAINT teams_conversations_current_chat_id_fkey FOREIGN KEY (current_chat_id) REFERENCES public.chats(id) ON DELETE SET NULL;
+
+
+--
+-- Name: teams_conversations teams_conversations_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.teams_conversations
+    ADD CONSTRAINT teams_conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1562,5 +1828,5 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict OM7cNXdBdyBvLZvgpYZtJmnVfBbiARdfWSfbAR86ERODzDTyXhtRLbkmz7CSgJk
+\unrestrict ggWVPYiqIBzmlGDznkgkb0lIsGgkW539faqLudbWV0tgXNprY3HXMMBn33cuBRq
 
