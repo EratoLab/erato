@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useState } from "react";
 
+import { useSidecarNetworkPermission } from "@/hooks/useSidecarNetworkPermission";
 import {
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT,
   DesktopSidecarProvider,
@@ -25,17 +26,18 @@ const DESKTOP_SIDECAR_LAUNCH_URL = "erato-launch://launch";
  */
 export function DesktopSidecarRow() {
   const [attempt, setAttempt] = useState(0);
+  const endpoint =
+    resolveDesktopSidecarEndpoint() ?? DEFAULT_DESKTOP_SIDECAR_ENDPOINT;
 
   return (
     <DesktopSidecarProvider
       key={attempt}
-      endpoint={
-        resolveDesktopSidecarEndpoint() ?? DEFAULT_DESKTOP_SIDECAR_ENDPOINT
-      }
+      endpoint={endpoint}
       retryDiscovery={false}
     >
       <DesktopSidecarConfigurationSync />
       <DesktopSidecarEntityRow
+        endpoint={endpoint}
         defaultExpanded={attempt > 0}
         onRetry={() => setAttempt((currentAttempt) => currentAttempt + 1)}
       />
@@ -44,32 +46,41 @@ export function DesktopSidecarRow() {
 }
 
 function DesktopSidecarEntityRow({
+  endpoint,
   onRetry,
   defaultExpanded,
 }: {
+  endpoint: string;
   onRetry: () => void;
   defaultExpanded: boolean;
 }) {
   const { client, snapshot } = useDesktopSidecar();
+  const permission = useSidecarNetworkPermission(endpoint);
+  const permissionDenied = permission === "denied";
   const [openingDataDirectory, setOpeningDataDirectory] = useState(false);
   const [openDataDirectoryError, setOpenDataDirectoryError] = useState(false);
   const connected = snapshot.state === "ready";
   const connecting = snapshot.state === "discovering";
 
-  const statusLabel = connected
+  const status = permissionDenied
     ? t({
-        id: "preferences.dialog.desktopSidecar.status.connected",
-        message: "Connected",
+        id: "preferences.dialog.desktopSidecar.permission.denied",
+        message: "Local application access blocked",
       })
-    : connecting
+    : connected
       ? t({
-          id: "preferences.dialog.desktopSidecar.status.connecting",
-          message: "Connecting...",
+          id: "preferences.dialog.desktopSidecar.status.connected",
+          message: "Connected",
         })
-      : t({
-          id: "preferences.dialog.desktopSidecar.status.unavailable",
-          message: "Not connected",
-        });
+      : connecting
+        ? t({
+            id: "preferences.dialog.desktopSidecar.status.connecting",
+            message: "Connecting...",
+          })
+        : t({
+            id: "preferences.dialog.desktopSidecar.status.unavailable",
+            message: "Not connected",
+          });
 
   return (
     <EntityRow
@@ -81,14 +92,25 @@ function DesktopSidecarEntityRow({
         id: "preferences.dialog.desktopSidecar.heading",
         message: "Desktop Sidecar",
       })}
-      status={{ tone: connected ? "success" : "warning", label: statusLabel }}
+      status={{
+        tone: connected && !permissionDenied ? "success" : "warning",
+        label: status,
+      }}
       caption={t({
         id: "preferences.dialog.serversTools.scope.thisDevice",
-        message: "{status} · this device",
-        values: { status: statusLabel },
+        message: `${status} · this device`,
       })}
       data-testid="servers-tools-sidecar-row"
     >
+      {permissionDenied && (
+        <p role="alert" className="text-sm text-theme-warning-fg">
+          {t({
+            id: "preferences.dialog.desktopSidecar.permission.description",
+            message:
+              "The browser has blocked access to local applications. This permission is required to connect to the desktop sidecar. Open this site's permissions using the icon next to the address bar and allow or reset local application or local network access, then retry. The browser cannot show the prompt again while access is blocked.",
+          })}
+        </p>
+      )}
       <p className="text-sm text-theme-fg-secondary">
         {connected && snapshot.serverInfo
           ? t({
@@ -150,10 +172,15 @@ function DesktopSidecarEntityRow({
                 id: "preferences.dialog.desktopSidecar.retry.connecting",
                 message: "Connecting...",
               })
-            : t({
-                id: "preferences.dialog.desktopSidecar.retry",
-                message: "Retry connection",
-              })}
+            : permissionDenied || permission === "prompt"
+              ? t({
+                  id: "preferences.dialog.desktopSidecar.permission.retry",
+                  message: "Retry local application access",
+                })
+              : t({
+                  id: "preferences.dialog.desktopSidecar.retry",
+                  message: "Retry connection",
+                })}
         </Button>
         {!connected ? (
           <Button
