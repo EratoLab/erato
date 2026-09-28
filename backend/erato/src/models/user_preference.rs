@@ -3,10 +3,59 @@ use crate::db::entity::user_preferences;
 use eyre::Report;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, EntityTrait, IntoActiveModel};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use utoipa::ToSchema;
+
+/// A user's standing decision for one client tool, keyed by its qualified
+/// `namespace/name`. Tools without a decision keep their default behaviour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientToolDecision {
+    NeverAllow,
+    Ask,
+    AlwaysAllow,
+}
+
+pub const MAX_CLIENT_TOOL_DECISIONS: usize = 256;
+
+/// Mirrors the provider tool-name rule (`^[a-zA-Z0-9_-]{1,64}$`) for both parts.
+pub fn is_valid_qualified_tool_name(name: &str) -> bool {
+    let valid_part = |part: &str| {
+        (1..=64).contains(&part.len())
+            && part
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    };
+    name.split_once('/')
+        .is_some_and(|(namespace, tool)| valid_part(namespace) && valid_part(tool))
+}
+
+/// Reads the stored map. An entry that no longer parses is treated as
+/// `never_allow`, so a corrupted decision cannot silently re-enable a tool.
+pub fn client_tool_decisions_from_json(
+    value: &serde_json::Value,
+) -> BTreeMap<String, ClientToolDecision> {
+    value
+        .as_object()
+        .map(|entries| {
+            entries
+                .iter()
+                .map(|(name, decision)| {
+                    let decision = serde_json::from_value(decision.clone())
+                        .unwrap_or(ClientToolDecision::NeverAllow);
+                    (name.clone(), decision)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct UpdateUserPreferencesInput {
     pub client_tool_file_approval: Option<crate::config::ClientToolFileApproval>,
+    /// Replaces the whole map when present.
+    pub client_tool_decisions: Option<BTreeMap<String, ClientToolDecision>>,
     pub nickname: Option<Option<String>>,
     pub job_title: Option<Option<String>>,
     pub assistant_custom_instructions: Option<Option<String>>,
@@ -96,6 +145,9 @@ pub async fn upsert_user_preferences(
         if let Some(value) = input.client_tool_file_approval {
             model.client_tool_file_approval = ActiveValue::Set(Some(value.as_str().to_owned()));
         }
+        if let Some(decisions) = input.client_tool_decisions {
+            model.client_tool_decisions = ActiveValue::Set(serde_json::to_value(decisions)?);
+        }
         if let Some(value) = input.nickname {
             model.nickname = ActiveValue::Set(normalize_optional_text(value));
         }
@@ -158,6 +210,9 @@ pub async fn upsert_user_preferences(
             starting_hub_assistant_id: ActiveValue::Set(starting_assistant.hub_assistant_id),
             starting_assistant_id: ActiveValue::Set(starting_assistant.assistant_id),
             starting_assistant_cleared: ActiveValue::Set(starting_assistant.cleared),
+            client_tool_decisions: ActiveValue::Set(serde_json::to_value(
+                input.client_tool_decisions.unwrap_or_default(),
+            )?),
             ..Default::default()
         };
 

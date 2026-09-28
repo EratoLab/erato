@@ -443,6 +443,8 @@ pub struct MeProfileChatRequestInput<'a> {
     pub user_preference_job_title: Option<&'a str>,
     pub user_preference_assistant_custom_instructions: Option<&'a str>,
     pub user_preference_assistant_additional_information: Option<&'a str>,
+    pub client_tool_decisions:
+        &'a std::collections::BTreeMap<String, crate::models::user_preference::ClientToolDecision>,
 }
 
 impl<'a> MeProfileChatRequestInput<'a> {
@@ -465,6 +467,7 @@ impl<'a> MeProfileChatRequestInput<'a> {
             user_preference_assistant_additional_information: me_profile
                 .preference_assistant_additional_information
                 .as_deref(),
+            client_tool_decisions: &me_profile.client_tool_decisions,
         }
     }
 }
@@ -3598,6 +3601,13 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                     &client_tool.name,
                     &client_tool_allowlist,
                 )
+            })
+            // A tool the user never allows is not offered, so the model cannot plan around it.
+            .filter(|client_tool| {
+                me_profile_input
+                    .client_tool_decisions
+                    .get(&client_tool.qualified_name())
+                    != Some(&crate::models::user_preference::ClientToolDecision::NeverAllow)
             })
             .collect();
         let selection = crate::services::client_tools::select_client_tools(
@@ -17053,6 +17063,10 @@ async fn resume_parked_generation(
                 &saved.name,
                 &client_tool_allowlist,
             ) || mcp_claimed_names.contains(name)
+                || me_profile_input
+                    .client_tool_decisions
+                    .get(&saved.qualified_name())
+                    == Some(&crate::models::user_preference::ClientToolDecision::NeverAllow)
             {
                 continue;
             }

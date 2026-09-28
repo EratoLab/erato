@@ -24,6 +24,8 @@ pub struct Model {
     pub starting_assistant_cleared: bool,
     #[sea_orm(column_type = "Text", nullable)]
     pub client_tool_file_approval: Option<String>,
+    #[sea_orm(column_type = "JsonBinary")]
+    pub client_tool_decisions: Json,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -410,3 +410,61 @@ async fn test_client_tool_file_approval_persists_and_survives_unrelated_updates(
         );
     }
 }
+
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_client_tool_decisions_default_empty_and_survive_unrelated_updates(
+    pool: Pool<Postgres>,
+) {
+    use erato::models::user_preference::{ClientToolDecision, client_tool_decisions_from_json};
+    use std::collections::BTreeMap;
+    let conn = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let user = create_user(&conn, "tool-decisions").await;
+    let fresh = upsert_user_preferences(
+        &conn,
+        &user,
+        UpdateUserPreferencesInput {
+            nickname: Some(Some("Sam".to_owned())),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(client_tool_decisions_from_json(&fresh.client_tool_decisions).is_empty());
+
+    let decisions = BTreeMap::from([
+        (
+            "desktop/search_sidecar_index".to_owned(),
+            ClientToolDecision::NeverAllow,
+        ),
+        (
+            "desktop/read_sidecar_conversation".to_owned(),
+            ClientToolDecision::Ask,
+        ),
+    ]);
+    upsert_user_preferences(
+        &conn,
+        &user,
+        UpdateUserPreferencesInput {
+            client_tool_decisions: Some(decisions.clone()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let prefs = upsert_user_preferences(
+        &conn,
+        &user,
+        UpdateUserPreferencesInput {
+            job_title: Some(Some("Engineer".to_owned())),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        client_tool_decisions_from_json(&prefs.client_tool_decisions),
+        decisions
+    );
+}
