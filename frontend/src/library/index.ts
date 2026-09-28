@@ -340,6 +340,7 @@ export {
 export {
   defaultLocale,
   dynamicActivate,
+  getSupportedLocale,
   getValidLocale,
   i18n,
 } from "@/lib/i18n";

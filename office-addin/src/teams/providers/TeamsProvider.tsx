@@ -2,6 +2,8 @@ import { t } from "@lingui/core/macro";
 import { app } from "@microsoft/teams-js";
 import { createContext, useContext, useEffect, useState } from "react";
 
+import { activateHostLocale } from "../../utils/activateHostLocale";
+
 import type { ReactNode } from "react";
 
 /** Host themes TeamsJS reports; unknown values (e.g. `glass`) map to default. */
@@ -52,6 +54,8 @@ export function TeamsProvider({ children }: { children: ReactNode }) {
     const bootstrap = async () => {
       await app.initialize();
       const teamsContext = await app.getContext();
+      // Children render in the host's language from their first paint.
+      await activateHostLocale(teamsContext.app.locale);
       if (cancelled) {
         return;
       }

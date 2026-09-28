@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { createContext, useContext, useEffect, useState } from "react";
 
+import { activateHostLocale } from "../utils/activateHostLocale";
 import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 
 interface MailboxUser {
@@ -116,9 +117,18 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void loadOfficeJs()
       .then(() => {
-        return Office.onReady().then((info) => {
+        return Office.onReady().then(async (info) => {
           const host = info.host ? String(info.host) : null;
           const platform = info.platform ? String(info.platform) : null;
+
+          // Children render in the host's language from their first paint.
+          let displayLanguage: string | null = null;
+          try {
+            displayLanguage = Office.context.displayLanguage;
+          } catch (error) {
+            console.warn("Failed to read Office displayLanguage", error);
+          }
+          await activateHostLocale(displayLanguage);
 
           let mailboxUser: MailboxUser | null = null;
           if (host === "Outlook") {
