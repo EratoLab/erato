@@ -1970,6 +1970,208 @@
         ]
       }
     },
+    "/api/v1beta/me/client-operations": {
+      "get": {
+        "tags": [],
+        "operationId": "listClientOperations",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListClientOperationsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/client-operations/{attempt_id}/cancel": {
+      "post": {
+        "tags": [],
+        "operationId": "cancelClientOperation",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientOperationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/client-operations/{attempt_id}/claim": {
+      "post": {
+        "tags": [],
+        "operationId": "claimClientOperation",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimClientOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimClientOperationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/client-operations/{attempt_id}/continue": {
+      "post": {
+        "tags": [],
+        "operationId": "continueClientOperation",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientOperationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/client-operations/{attempt_id}/result": {
+      "post": {
+        "tags": [],
+        "operationId": "completeClientOperation",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteClientOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientOperationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/desktop-sidecar/organization-configuration": {
       "get": {
         "tags": [
@@ -5140,6 +5342,16 @@
         ],
         "description": "An assistant with its associated files"
       },
+      "AttemptState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "claimed",
+          "ready",
+          "continuing",
+          "completed"
+        ]
+      },
       "AudioTranscriptSegment": {
         "type": "object",
         "properties": {
@@ -5717,6 +5929,64 @@
           }
         }
       },
+      "ClaimClientOperationRequest": {
+        "type": "object",
+        "required": [
+          "binding"
+        ],
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/ExecutorBinding"
+          },
+          "user_confirmed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClaimClientOperationResponse": {
+        "type": "object",
+        "required": [
+          "claim_token",
+          "expires_at"
+        ],
+        "properties": {
+          "claim_token": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ClientOperationResponse": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/AttemptState"
+          }
+        }
+      },
+      "ClientOperationView": {
+        "type": "object",
+        "required": [
+          "request",
+          "state"
+        ],
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/OperationRequest"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AttemptState"
+          }
+        }
+      },
       "ClientToolFileApproval": {
         "type": "string",
         "description": "Default handling of files retrieved by client tools before they leave the device.",
@@ -5725,6 +5995,30 @@
           "ask",
           "always_allow"
         ]
+      },
+      "ClientToolPending": {
+        "type": "object",
+        "description": "Metadata-only suspension marker. Input and approved output use the normal\nToolUse part; this marker is never replayed as model context.",
+        "required": [
+          "attempt_id",
+          "tool_call_id",
+          "pending_tool_calls"
+        ],
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pending_tool_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingToolCall"
+            }
+          },
+          "tool_call_id": {
+            "type": "string"
+          }
+        }
       },
       "ClientToolResultRequest": {
         "type": "object",
@@ -5807,6 +6101,23 @@
           }
         }
       },
+      "CompleteClientOperationRequest": {
+        "type": "object",
+        "required": [
+          "claim_token",
+          "result"
+        ],
+        "properties": {
+          "claim_token": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "result": {
+            "$ref": "#/components/schemas/OperationResult"
+          }
+        },
+        "additionalProperties": false
+      },
       "CompleteMcpServerOauthResponse": {
         "type": "object",
         "required": [
@@ -5817,6 +6128,14 @@
             "$ref": "#/components/schemas/McpServerStatusValue"
           }
         }
+      },
+      "ConsentPolicy": {
+        "type": "string",
+        "enum": [
+          "none",
+          "ask",
+          "native"
+        ]
       },
       "ContentPart": {
         "oneOf": [
@@ -5898,6 +6217,27 @@
                     "type": "string",
                     "enum": [
                       "tool_approval_request"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClientToolPending"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_tool_pending"
                     ]
                   }
                 }
@@ -7153,6 +7493,41 @@
           }
         ]
       },
+      "ExecutionRealm": {
+        "type": "string",
+        "enum": [
+          "frontend",
+          "office-addin",
+          "desktop-sidecar"
+        ]
+      },
+      "ExecutorBinding": {
+        "type": "object",
+        "description": "Client-asserted routing identity, not attestation. Kinds may require stronger proof.",
+        "required": [
+          "device_id",
+          "realm"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string"
+          },
+          "host_context": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HostContext"
+              }
+            ]
+          },
+          "realm": {
+            "$ref": "#/components/schemas/ExecutionRealm"
+          }
+        },
+        "additionalProperties": false
+      },
       "FacetInfo": {
         "type": "object",
         "required": [
@@ -7672,6 +8047,22 @@
           }
         }
       },
+      "HostContext": {
+        "type": "object",
+        "required": [
+          "kind",
+          "identity"
+        ],
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "LinkFileRequest": {
         "type": "object",
         "description": "Request to link an external file (SharePoint, Google Drive, etc.)",
@@ -7694,6 +8085,32 @@
           "source": {
             "type": "string",
             "description": "The source/provider type: \"sharepoint\" (future: \"google_drive\", etc.)"
+          }
+        }
+      },
+      "ListClientOperationsResponse": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "enabled",
+          "operations"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientOperationView"
+            }
           }
         }
       },
@@ -8664,6 +9081,236 @@
             "format": "uuid"
           }
         }
+      },
+      "OperationError": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperationOutcome": {
+        "type": "string",
+        "enum": [
+          "succeeded",
+          "rejected",
+          "failed",
+          "unknown"
+        ]
+      },
+      "OperationPayload": {
+        "oneOf": [
+          {
+            "type": "null",
+            "default": null
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number",
+            "format": "double"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationPayload"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OperationPayload"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "JSON transport shape only: every payload still requires its compiled kind's\nvalidator. An explicit schema keeps generated clients from treating JSON as void."
+      },
+      "OperationRequest": {
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "operation_id",
+          "kind",
+          "realm",
+          "chat_id",
+          "message_id",
+          "tool_call_id",
+          "account_id",
+          "binding",
+          "consent",
+          "expires_at",
+          "input"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "base_revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "binding": {
+            "$ref": "#/components/schemas/ExecutorBinding"
+          },
+          "chat_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/ConsentPolicy"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "input": {
+            "$ref": "#/components/schemas/OperationPayload"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "realm": {
+            "$ref": "#/components/schemas/ExecutionRealm"
+          },
+          "tool_call_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperationResult": {
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "operation_id",
+          "outcome",
+          "executor"
+        ],
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "base_revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OperationError"
+              }
+            ]
+          },
+          "executor": {
+            "$ref": "#/components/schemas/ExecutorBinding"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/OperationOutcome"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OperationValue"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperationValue": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "value",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "value"
+                ]
+              },
+              "value": {
+                "$ref": "#/components/schemas/OperationPayload"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "reference",
+              "type"
+            ],
+            "properties": {
+              "reference": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "reference"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "receipt",
+              "type"
+            ],
+            "properties": {
+              "receipt": {
+                "$ref": "#/components/schemas/OperationPayload"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "receipt"
+                ]
+              }
+            }
+          }
+        ]
       },
       "OrganizationGroup": {
         "type": "object",

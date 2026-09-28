@@ -1966,7 +1966,9 @@ async fn acquire_user_generation_lease(
     ),
     StreamRouteError,
 > {
-    if !app_state.config.delegation.tasks.enabled {
+    if !app_state.config.delegation.tasks.enabled
+        && !app_state.config.client_tools.durable_operations_enabled
+    {
         return Ok(app_state
             .background_tasks
             .start_task(chat_id, message_id)
@@ -2594,7 +2596,7 @@ async fn reconcile_orphaned_parent_slot(
 /// Called after `remove_task`, wherever the tail owns that: a delivery takes the
 /// chat's lease for itself and `RefuseParked` would refuse a lease this turn
 /// still held.
-async fn settle_tail_deliveries(
+pub(crate) async fn settle_tail_deliveries(
     app_state: &AppState,
     policy: &PolicyEngine,
     me_user: &MeProfile,
@@ -2892,6 +2894,7 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
     GenerationRequestContext {
         platform: Some(platform),
         registered_client_tools: crate::services::client_tools::registered_client_tools(headers),
+        executor: crate::services::client_operations::ExecutorBinding::from_headers(headers),
     }
 }
 
@@ -3569,7 +3572,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             // Remember the OFFERED entry's policy by model-facing name
             // (unique post-dedup) — the dispatch site must not re-find the
             // config by bare name, which is ambiguous across namespaces.
-            let policy =
+            let mut policy =
                 crate::services::client_tools::OfferedClientTool::prepare(client_tool, &schema)
                     .map_err(|error| {
                         eyre!("Invalid client submission schema for '{}': {}", name, error)
@@ -3584,6 +3587,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                 effective_model_settings.compat_omit_strict,
             )
             .map_err(|error| eyre!(error))?;
+            policy.executor = generation_request_context.executor.clone();
             offered_client_tools.insert(name.to_string(), policy);
             chat_request_tools.push(crate::services::client_tools::build_client_tool(
                 name,
@@ -3701,6 +3705,18 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             ));
         }
     }
+    append_operation_kind_offers(
+        app_state,
+        chat,
+        me_profile_input.user_id,
+        &generation_request_context,
+        &client_tool_allowlist,
+        &mcp_claimed_names,
+        None,
+        effective_model_settings.compat_omit_strict,
+        &mut chat_request_tools,
+        &mut offered_client_tools,
+    )?;
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -3740,6 +3756,11 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         action_facet_id: user_input.action_facet.as_ref().map(|af| af.id.clone()),
         action_facet_args: user_input.action_facet.as_ref().map(|af| af.args.clone()),
         initiator: None,
+        client_tools: offered_client_tools
+            .iter()
+            .map(|(name, policy)| (name.clone(), policy.config.clone()))
+            .collect(),
+        turn_consumption: Default::default(),
     };
 
     // Return the unresolved version for saving to DB (to avoid duplicating file contents)
@@ -4906,6 +4927,12 @@ async fn stream_generate_chat_completion<
         tool_call_parent_observation_id: Option<String>,
         error: Option<String>,
     }
+    let operation_attempt = resume.as_ref().and_then(|resume| resume.operation_attempt);
+    let consumption = resume
+        .as_ref()
+        .map(|resume| resume.consumption.clone())
+        .unwrap_or_default();
+    let mut resume_iteration = resume.is_some() && consumption.model_turns > 0;
     let (mut unfinished_tool_calls, approved_task_call_ids): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
@@ -4918,17 +4945,19 @@ async fn stream_generate_chat_completion<
             )
         },
     );
-    let mut current_turn = 0;
-    let mut current_tool_call_count = 0;
+    let mut current_turn = consumption.model_turns;
+    let mut current_tool_call_count = consumption.tool_calls;
     // Charged per class and never summed: a run that has spent its server
     // budget may still make client calls, and the other way round.
-    let mut task_server_tool_calls: u32 = 0;
-    let mut task_client_tool_calls: u32 = 0;
-    let mut submission_attempts: HashMap<String, u32> = HashMap::new();
+    let mut task_server_tool_calls: u32 = consumption.server_tool_calls;
+    let mut task_client_tool_calls: u32 = consumption.client_tool_calls;
+    let mut submission_attempts = consumption.submission_attempts;
+    let mut tool_charges = consumption.tool_charges;
+
     // At most one successful client-action proposal per generation: the
     // client needs a single authoritative proposal, so duplicate or
     // conflicting calls after the first are answered with an error.
-    let mut client_action_already_proposed = false;
+    let mut client_action_already_proposed = consumption.client_action_proposed;
 
     let mut current_message_content = initial_message_content;
     let mut current_turn_chat_request = chat_request.clone();
@@ -5049,8 +5078,59 @@ async fn stream_generate_chat_completion<
     let mut tool_call_parent_observation_ids: HashMap<String, String> = HashMap::new();
     let mut tool_call_started_at: HashMap<String, String> = HashMap::new();
 
+    macro_rules! persist_operation_turn {
+        () => {
+            persist_operation_turn!(None::<&genai::chat::ToolCall>)
+        };
+        ($current_call:expr) => {
+            if let (Some(attempt_id), Some(task)) = (operation_attempt, streaming_task) {
+                if let Some(pending) =
+                    current_message_content
+                        .iter_mut()
+                        .find_map(|part| match part {
+                            ContentPart::ClientToolPending(pending)
+                                if pending.attempt_id == attempt_id =>
+                            {
+                                Some(pending)
+                            }
+                            _ => None,
+                        })
+                {
+                    pending.pending_tool_calls = $current_call
+                        .into_iter()
+                        .chain(unfinished_tool_calls.iter())
+                        .map(|call| crate::models::message::PendingToolCall {
+                            call_id: call.call_id.clone(),
+                            fn_name: call.fn_name.clone(),
+                            fn_arguments: call.fn_arguments.clone(),
+                        })
+                        .collect();
+                }
+                crate::services::client_operations::store::save_progress(
+                    &app_state.db,
+                    attempt_id,
+                    task.generation_id,
+                    &without_preparing_tools(&current_message_content),
+                    &crate::services::client_operations::TurnConsumption {
+                        model_turns: current_turn,
+                        tool_calls: current_tool_call_count,
+                        server_tool_calls: task_server_tool_calls,
+                        client_tool_calls: task_client_tool_calls,
+                        submission_attempts: submission_attempts.clone(),
+                        tool_charges: tool_charges.clone(),
+                        client_action_proposed: client_action_already_proposed,
+                    },
+                )
+                .await?;
+            }
+        };
+    }
+
     let completion = 'loop_call_turns: loop {
-        current_turn += 1;
+        // A parked iteration was already counted before its checkpoint.
+        if !std::mem::take(&mut resume_iteration) {
+            current_turn += 1;
+        }
         tracing::debug!("Starting chat completion turn {}", current_turn);
         let chat_provider_metric_label = chat_provider_id.unwrap_or("unknown");
         let provider_request_start = Instant::now();
@@ -5104,6 +5184,10 @@ async fn stream_generate_chat_completion<
         // An approval reached mid-batch. The part must be the LAST one, and it
         // must not reach disk until the batch it interrupted has settled.
         let mut pending_approval_part: Option<ContentPartToolApprovalRequest> = None;
+        let mut pending_client_operation: Option<(
+            crate::services::client_operations::OperationRequest,
+            tokio::sync::oneshot::Receiver<ClientToolOutcome>,
+        )> = None;
         // Children that stopped to ask. Collected rather than acted on, because
         // the requests are carried up in one part after the rest of the batch
         // has settled — a child that parks must not abandon its siblings.
@@ -5171,7 +5255,9 @@ async fn stream_generate_chat_completion<
                 exit_after_join = true;
             }
         }
-        'pop_calls: while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
+        'pop_calls: while !unfinished_tool_calls.is_empty() {
+            persist_operation_turn!();
+            let unfinished_tool_call = unfinished_tool_calls.pop_front().expect("nonempty calls");
             let batch_position = {
                 let position = batch_position;
                 batch_position += 1;
@@ -5258,7 +5344,11 @@ async fn stream_generate_chat_completion<
             // hallucinations drain a real allowance — and, with a budget of
             // `0`, would answer an invalid name with "you are out of budget",
             // telling the model nothing about what was actually wrong with it.
-            let budget_refusal = task_tool_budgets
+            let already_charged = tool_charges.get(&unfinished_tool_call.call_id);
+            let budget_refusal = if let Some(charge) = already_charged {
+                charge.budget_refusal.clone()
+            } else {
+                task_tool_budgets
                 .filter(|_| allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()))
                 .and_then(|budgets| {
                 let class = crate::services::delegation::classify_task_tool_call(
@@ -5285,7 +5375,8 @@ async fn stream_generate_chat_completion<
                         }
                     }
                 }
-            });
+            }).map(str::to_owned)
+            };
 
             // The per-message cap is the outer backstop for every turn,
             // including a task run — the per-task budgets bound the work a
@@ -5300,7 +5391,7 @@ async fn stream_generate_chat_completion<
             // `{"status":"failed"}` with nothing in it. Ending the turn
             // gracefully keeps what the child has and reports it as the
             // partial, resumable result it is.
-            if current_tool_call_count >= max_tool_calls_per_message {
+            if already_charged.is_none() && current_tool_call_count >= max_tool_calls_per_message {
                 if let Some(task) = streaming_task.filter(|_| task_tool_budgets.is_some()) {
                     tracing::warn!(
                         chat_id = %chat_id,
@@ -5335,7 +5426,17 @@ async fn stream_generate_chat_completion<
                 ));
                 break 'pop_calls;
             }
-            current_tool_call_count += 1;
+            if already_charged.is_none() {
+                current_tool_call_count += 1;
+                tool_charges.insert(
+                    unfinished_tool_call.call_id.clone(),
+                    crate::services::client_operations::ToolCallCharge {
+                        budget_refusal: budget_refusal.clone(),
+                        ..Default::default()
+                    },
+                );
+            }
+            persist_operation_turn!(Some(&unfinished_tool_call));
             let tool_index =
                 tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
             let was_preparing = matches!(current_message_content.get(tool_index), Some(ContentPart::ToolUse(part)) if part.status == MessageToolCallStatus::Preparing);
@@ -5387,7 +5488,7 @@ async fn stream_generate_chat_completion<
             // Budget refusal, decided above and emitted here so it lands
             // before every dispatch branch and so client tools are bounded
             // the same way MCP tools are.
-            if let Some(error_message) = budget_refusal {
+            if let Some(error_message) = budget_refusal.as_deref() {
                 if let Some(task) = streaming_task {
                     // The refusal part is indistinguishable from any other
                     // refusal, so the run says out of band that it stopped at
@@ -5905,16 +6006,46 @@ async fn stream_generate_chat_completion<
                 let tool_policy = offered_client_tools.get(&tool_name);
                 let submission = tool_policy.and_then(|policy| policy.submission.as_ref());
                 let attempt = if submission.is_some() {
-                    let attempt = submission_attempts.entry(tool_name.clone()).or_default();
-                    *attempt += 1;
-                    *attempt
+                    *tool_charges
+                        .entry(call_id.clone())
+                        .or_default()
+                        .submission_attempt
+                        .get_or_insert_with(|| {
+                            let count = submission_attempts.entry(tool_name.clone()).or_default();
+                            *count += 1;
+                            *count
+                        })
                 } else {
                     0
                 };
+                if app_state.config.client_tools.durable_operations_enabled
+                    && tool_policy.is_some_and(|policy| {
+                        app_state
+                            .client_operations
+                            .for_operation(&policy.config.qualified_name())
+                            .is_some()
+                    })
+                {
+                    tool_charges
+                        .entry(call_id.clone())
+                        .or_default()
+                        .operation_identity
+                        .get_or_insert_with(|| {
+                            crate::services::client_operations::OperationIdentity {
+                                attempt_id: Uuid::new_v4(),
+                                expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                            }
+                        });
+                }
+                // Commit charges and identity before validation/dispatch. A
+                // crash at either point resumes the same logical attempt.
+                persist_operation_turn!(Some(&unfinished_tool_call));
                 // A submission is a single final artifact, never one of several
                 // parallel candidates. Reject it before invoking a host executor.
-                let validation_failure = submission.and_then(|submission| {
-                    if batch_call_count != 1 {
+                let mut validation_failure = submission.and_then(|submission| {
+                    if attempt > submission.max_attempts {
+                        Some(ClientToolOutcome::Cancelled { reason: "submission_attempt_limit".into() })
+                    } else if batch_call_count != 1 {
                         Some(ClientToolOutcome::ValidationFailed(vec![
                             crate::services::client_tools::ClientToolValidationIssue {
                                 path: String::new(),
@@ -5924,6 +6055,57 @@ async fn stream_generate_chat_completion<
                         ]))
                     } else { submission.validate(&tool_input) }
                 });
+                let durable_request = if app_state.config.client_tools.durable_operations_enabled {
+                    tool_policy.and_then(|policy| {
+                        let kind = app_state
+                            .client_operations
+                            .for_operation(&policy.config.qualified_name())?;
+                        let binding = policy.executor.as_ref()?;
+                        (kind.realm() == binding.realm
+                            && kind.validate_input(&tool_input, binding).is_ok())
+                        .then(|| {
+                            let identity = tool_charges[&call_id]
+                                .operation_identity
+                                .as_ref()
+                                .expect("registered call identity");
+                            crate::services::client_operations::OperationRequest {
+                                attempt_id: identity.attempt_id,
+                                operation_id: policy.config.qualified_name(),
+                                kind: kind.kind().into(),
+                                realm: kind.realm(),
+                                chat_id,
+                                message_id: assistant_message_id,
+                                tool_call_id: call_id.clone(),
+                                account_id: Uuid::parse_str(&user_id)
+                                    .expect("authenticated UUID account"),
+                                binding: binding.clone(),
+                                base_revision: None,
+                                consent: kind.consent(),
+                                expires_at: identity.expires_at,
+                                input: tool_input.clone(),
+                            }
+                        })
+                    })
+                } else {
+                    None
+                };
+                if app_state.config.client_tools.durable_operations_enabled
+                    && durable_request.is_none()
+                    && tool_policy.is_some_and(|policy| {
+                        app_state
+                            .client_operations
+                            .for_operation(&policy.config.qualified_name())
+                            .is_some()
+                    })
+                {
+                    validation_failure = Some(ClientToolOutcome::Error(
+                        "Client operation binding is unavailable.".into(),
+                    ));
+                }
+                if let Some(request) = &durable_request {
+                    task.register_client_operation(request.clone()).await;
+                }
+                let server_refused = validation_failure.is_some();
                 let outcome = if let Some(failure) = validation_failure {
                     failure
                 } else {
@@ -5931,38 +6113,45 @@ async fn stream_generate_chat_completion<
                     // POSTed immediately cannot race ahead of the registered waiter.
                     let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
 
-                    // Signal the client to execute: broadcast (submit path + resume
-                    // replay) AND the typed tx stream (regenerate/edit path).
-                    send_background_event(
-                        task,
-                        StreamingEvent::ClientToolCall {
+                    let inbox_only = tool_policy.is_some_and(|policy| policy.inbox_only)
+                        || durable_request.as_ref().is_some_and(|request| {
+                            request.consent
+                                != crate::services::client_operations::ConsentPolicy::None
+                        });
+                    if !inbox_only {
+                        // Signal the client to execute: broadcast (submit path + resume
+                        // replay) AND the typed tx stream (regenerate/edit path).
+                        send_background_event(
+                            task,
+                            StreamingEvent::ClientToolCall {
+                                message_id: assistant_message_id,
+                                content_index,
+                                tool_call_id: call_id.clone(),
+                                tool_name: tool_name.clone(),
+                                input: Some(tool_input.clone()),
+                            },
+                            "broadcast client tool call",
+                        )
+                        .await;
+                        let call_event = MessageSubmitStreamingResponseClientToolCall {
                             message_id: assistant_message_id,
                             content_index,
                             tool_call_id: call_id.clone(),
                             tool_name: tool_name.clone(),
                             input: Some(tool_input.clone()),
-                        },
-                        "broadcast client tool call",
-                    )
-                    .await;
-                    let call_event = MessageSubmitStreamingResponseClientToolCall {
-                        message_id: assistant_message_id,
-                        content_index,
-                        tool_call_id: call_id.clone(),
-                        tool_name: tool_name.clone(),
-                        input: Some(tool_input.clone()),
-                    };
-                    let call_message: MSG = call_event.into();
-                    // Best-effort on the typed stream: the client is, by design,
-                    // away executing the tool and POSTing to a separate endpoint
-                    // during the park, so a dropped SSE connection here must NOT
-                    // abort the generation. The broadcast + resume history is the
-                    // durable signal path.
-                    if let Err(error) = call_message.send_event_report(tx.clone()).await {
-                        warn_and_capture_error(
-                            "send best-effort client tool call SSE event",
-                            &error,
-                        );
+                        };
+                        let call_message: MSG = call_event.into();
+                        // Best-effort on the typed stream: the client is, by design,
+                        // away executing the tool and POSTing to a separate endpoint
+                        // during the park, so a dropped SSE connection here must NOT
+                        // abort the generation. The broadcast + resume history is the
+                        // durable signal path.
+                        if let Err(error) = call_message.send_event_report(tx.clone()).await {
+                            warn_and_capture_error(
+                                "send best-effort client tool call SSE event",
+                                &error,
+                            );
+                        }
                     }
 
                     // Resolve this tool's park budget from the entry that was
@@ -5979,27 +6168,56 @@ async fn stream_generate_chat_completion<
                         Aborted,
                         TimedOut,
                     }
-                    let park = tokio::select! {
-                        received = &mut result_rx => match received {
-                            Ok(outcome) => Park::Delivered(outcome),
-                            // Sender dropped without delivering (e.g. task replaced).
-                            Err(_) => Park::TimedOut,
-                        },
-                        _ = task.wait_for_abort() => Park::Aborted,
-                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(
-                            park_timeout_ms,
-                        )) => Park::TimedOut,
+                    let park = if inbox_only {
+                        Park::TimedOut
+                    } else {
+                        tokio::select! {
+                            received = &mut result_rx => match received {
+                                Ok(outcome) => Park::Delivered(outcome),
+                                // Sender dropped without delivering (e.g. task replaced).
+                                Err(_) => Park::TimedOut,
+                            },
+                            _ = task.wait_for_abort() => Park::Aborted,
+                            _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
+                            _ = tx.closed(), if durable_request.is_some() => Park::TimedOut,
+                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(
+                                park_timeout_ms,
+                            )) => Park::TimedOut,
+                        }
                     };
 
                     // Drop the pending entry, then settle the timeout/abort-vs-
                     // delivery boundary race: if the client's result landed just as
                     // we gave up, prefer it over discarding (and over the endpoint
                     // having reported a spurious success).
-                    task.remove_pending_client_tool(&call_id).await;
+                    if !matches!(park, Park::TimedOut) || durable_request.is_none() {
+                        task.remove_pending_client_tool(&call_id).await;
+                    }
                     let raced_in = result_rx.try_recv().ok();
 
                     match park {
                         Park::Delivered(outcome) => outcome,
+                        Park::TimedOut if raced_in.is_none() && durable_request.is_some() => {
+                            upsert_tool_use(
+                                &mut current_message_content,
+                                ToolUse {
+                                    tool_call_id: call_id.clone(),
+                                    tool_name: tool_name.clone(),
+                                    status: MessageToolCallStatus::InProgress,
+                                    input: Some(tool_input.clone()),
+                                    output: Some(json!({"status":"input_required"})),
+                                    progress_message: None,
+                                    progress: None,
+                                    total: None,
+                                    started_at: Some(tool_call_started),
+                                    ended_at: None,
+                                },
+                            );
+                            pending_client_operation =
+                                Some((durable_request.expect("checked eligible"), result_rx));
+                            exit_after_join = true;
+                            break 'pop_calls;
+                        }
                         Park::TimedOut => {
                             raced_in.unwrap_or_else(|| ClientToolOutcome::Cancelled {
                                 reason: "timeout".to_string(),
@@ -6041,6 +6259,35 @@ async fn stream_generate_chat_completion<
                     }
                 };
 
+                let mut validated_output = None;
+                let outcome = if let Some(request) = &durable_request
+                    && !server_refused
+                    && !matches!(outcome, ClientToolOutcome::Cancelled { .. })
+                {
+                    let validated = crate::services::client_operations::from_fast_result(
+                        request, outcome.clone(),
+                    ).ok().and_then(|result| {
+                        app_state.client_operations.for_request(request)?
+                            .validate_result(request, &result).ok()
+                            .filter(|validated| validated.succeeded ==
+                                (result.outcome == crate::services::client_operations::OperationOutcome::Succeeded))
+                    });
+                    match validated {
+                        Some(validated) => {
+                            validated_output = Some(validated.output);
+                            outcome
+                        }
+                        None => {
+                            validated_output = Some(
+                                crate::services::client_operations::invalid_result_feedback()
+                                    .output,
+                            );
+                            crate::services::client_operations::invalid_result_outcome()
+                        }
+                    }
+                } else {
+                    outcome
+                };
                 let (status, bg_status, message_status, mut output_value, mut response_text) =
                     match &outcome {
                         ClientToolOutcome::Result(result, _) => (
@@ -6082,6 +6329,10 @@ async fn stream_generate_chat_completion<
                             ),
                         ),
                     };
+                if let Some(output) = validated_output {
+                    output_value = output;
+                    response_text = output_value.to_string();
+                }
                 if let Some(submission) = submission {
                     submission.annotate(&mut output_value, &outcome, attempt);
                     response_text = output_value.to_string();
@@ -6967,15 +7218,94 @@ async fn stream_generate_chat_completion<
         // approval is genuinely the last part — which is what the six
         // last-part checks and the continuation both rely on.
         if let Some(approval_request) = pending_approval_part.take() {
+            if let Some(task) = streaming_task {
+                crate::services::client_operations::store::save_consumption(
+                    &app_state.db,
+                    assistant_message_id,
+                    task.generation_id,
+                    &crate::services::client_operations::TurnConsumption {
+                        model_turns: current_turn,
+                        tool_calls: current_tool_call_count,
+                        server_tool_calls: task_server_tool_calls,
+                        client_tool_calls: task_client_tool_calls,
+                        submission_attempts: submission_attempts.clone(),
+                        tool_charges: tool_charges.clone(),
+                        client_action_proposed: client_action_already_proposed,
+                    },
+                )
+                .await?;
+            }
             current_message_content.push(ContentPart::ToolApprovalRequest(approval_request));
         }
 
         if let Some(error) = exit_error {
             return Err(error);
         }
+        if let Some((request, mut result_rx)) = pending_client_operation {
+            let pending_tool_calls = unfinished_tool_calls
+                .drain(..)
+                .map(|call| crate::models::message::PendingToolCall {
+                    call_id: call.call_id,
+                    fn_name: call.fn_name,
+                    fn_arguments: call.fn_arguments,
+                })
+                .collect();
+            current_message_content = without_preparing_tools(&current_message_content);
+            current_message_content.push(ContentPart::ClientToolPending(
+                crate::services::client_operations::ClientToolPending {
+                    attempt_id: request.attempt_id,
+                    tool_call_id: request.tool_call_id.clone(),
+                    pending_tool_calls,
+                },
+            ));
+            let task = streaming_task.expect("client operation has a task");
+            crate::services::client_operations::store::park(
+                &app_state.db,
+                &request,
+                task.generation_id,
+                &current_message_content,
+                &crate::services::client_operations::TurnConsumption {
+                    model_turns: current_turn,
+                    tool_calls: current_tool_call_count,
+                    server_tool_calls: task_server_tool_calls,
+                    client_tool_calls: task_client_tool_calls,
+                    submission_attempts: submission_attempts.clone(),
+                    tool_charges: tool_charges.clone(),
+                    client_action_proposed: client_action_already_proposed,
+                },
+            )
+            .await?;
+            task.remove_pending_client_tool(&request.tool_call_id).await;
+            if let Ok(outcome) = result_rx.try_recv() {
+                let result =
+                    crate::services::client_operations::fast_result_or_refusal(&request, outcome);
+                crate::services::client_operations::store::accept_fast(
+                    &app_state.db,
+                    &app_state.client_operations,
+                    request.account_id,
+                    &result,
+                )
+                .await?;
+            }
+            task.mark_awaiting_approval();
+            exit_metadata = build_generation_metadata(
+                total_prompt_tokens,
+                total_completion_tokens,
+                total_total_tokens,
+                total_reasoning_tokens,
+                langfuse_trace_id.clone(),
+                false,
+                None,
+                non_empty_string(&captured_reasoning_summary),
+                non_empty_vec(&captured_reasoning_items),
+                non_empty_vec(&captured_reasoning_item_encrypted_content),
+            );
+        }
         if exit_after_join {
             break 'loop_call_turns Ok((current_message_content, exit_metadata));
         }
+
+        persist_operation_turn!();
 
         if !pending_waits.is_empty() {
             let latest_wait_deadline = pending_waits
@@ -8235,10 +8565,7 @@ fn mark_task_awaiting_approval_if_parked(
     task: &Arc<StreamingTask>,
     final_content_parts: &[ContentPart],
 ) {
-    if matches!(
-        final_content_parts.last(),
-        Some(ContentPart::ToolApprovalRequest(_))
-    ) {
+    if crate::models::message::is_durable_stop(final_content_parts) {
         task.mark_awaiting_approval();
     }
 }
@@ -8646,6 +8973,7 @@ fn summary_user_message_text_from_generation_input(
                 }
                 ContentPart::Reasoning(_)
                 | ContentPart::ToolUse(_)
+                | ContentPart::ClientToolPending(_)
                 | ContentPart::ToolApprovalRequest(_)
                 | ContentPart::ToolApproval(_)
                 | ContentPart::ToolRejection(_)
@@ -9506,7 +9834,11 @@ fn is_tool_allowed_by_allowlist(
 /// client tools (`namespace/tool_name`). A `namespace` here is the MCP server
 /// id or the client-tool namespace. Patterns: `*` (all), a bare namespace (all
 /// of that namespace), `namespace/*` (prefix), or an exact `namespace/name`.
-fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[String]) -> bool {
+pub(super) fn is_qualified_tool_allowed(
+    namespace: &str,
+    tool_name: &str,
+    allowlist: &[String],
+) -> bool {
     let qualified_name = format!("{}/{}", namespace, tool_name);
 
     allowlist.iter().any(|pattern| {
@@ -9547,7 +9879,7 @@ fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[Stri
 ///    additively-only-on-`Some` (never resurrects a `None`/all-allowed base),
 ///    whereas here it is a first-class selector — action facets are the primary
 ///    client-tool path and live in a separate `action_facets` map.
-fn effective_client_tool_allowlist(
+pub(super) fn effective_client_tool_allowlist(
     facets: &crate::config::FacetsConfig,
     action_facets: &crate::config::ActionFacetsConfig,
     selected_facet_ids: &[String],
@@ -11193,6 +11525,8 @@ pub async fn message_submit_sse(
     let (broadcast_rx, task) =
         acquire_user_generation_lease(&app_state, chat_id, Uuid::new_v4()).await?;
 
+    let client_stream_guard = task.client_stream_guard();
+
     // Clone variables for the background task
     let app_state_bg = app_state.clone();
     let policy_bg = policy.clone();
@@ -11268,6 +11602,9 @@ pub async fn message_submit_sse(
         })
     };
 
+    let event_stream = futures::StreamExt::inspect(event_stream, move |_| {
+        let _ = &client_stream_guard;
+    });
     Ok(Sse::new(event_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
@@ -11504,6 +11841,8 @@ mod reasoning_replay_tests {
             action_facet_id: None,
             action_facet_args: None,
             initiator: None,
+            client_tools: Default::default(),
+            turn_consumption: Default::default(),
         };
         let changed_parameters = GenerationParameters {
             generation_chat_provider_id: Some("responses-sonnet".to_string()),
@@ -11512,6 +11851,8 @@ mod reasoning_replay_tests {
             action_facet_id: None,
             action_facet_args: None,
             initiator: None,
+            client_tools: Default::default(),
+            turn_consumption: Default::default(),
         };
 
         assert!(openai_responses_reasoning_replay_model_matches(
@@ -13667,6 +14008,28 @@ pub async fn abort_message_stream(
     })?
     .0;
 
+    let aborted_operation = if app_state.config.client_tools.durable_operations_enabled {
+        let account_id = Uuid::parse_str(&me_user.id).map_err(|_| {
+            (
+                axum::http::StatusCode::UNAUTHORIZED,
+                "Invalid account".into(),
+            )
+        })?;
+        crate::services::client_operations::store::abort_chat(
+            &app_state.db,
+            account_id,
+            request.chat_id,
+        )
+        .await
+        .map_err(|_| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Operation cancellation failed".into(),
+            )
+        })?
+    } else {
+        false
+    };
     if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
         task.request_abort();
     } else if let Some((generation_id, _)) = app_state
@@ -13684,7 +14047,7 @@ pub async fn abort_message_stream(
                     format!("Failed to request abort: {error}"),
                 )
             })?;
-    } else {
+    } else if !aborted_operation {
         return Err((
             axum::http::StatusCode::NOT_FOUND,
             "No active generation task found for this chat".to_string(),
@@ -13715,6 +14078,7 @@ pub async fn client_tool_result(
     State(app_state): State<AppState>,
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
+    headers: HeaderMap,
     Json(request): Json<ClientToolResultRequest>,
 ) -> Result<Json<ClientToolResultResponse>, (axum::http::StatusCode, String)> {
     // Per-chat ownership gate, identical to abort/resume — middleware alone does
@@ -13749,6 +14113,152 @@ pub async fn client_tool_result(
     }
     if let Some(result) = request.result {
         payload["result"] = result;
+    }
+
+    if app_state.config.client_tools.durable_operations_enabled {
+        let mut operation_payload = payload.clone();
+        operation_payload["file_upload_ids"] = json!(&request.file_upload_ids);
+        let account_id = Uuid::parse_str(&me_user.id).map_err(|_| {
+            (
+                axum::http::StatusCode::UNAUTHORIZED,
+                "Invalid account".into(),
+            )
+        })?;
+        let operation = match &task {
+            Some(task) => task.client_operation(&request.tool_call_id).await,
+            None => None,
+        };
+        // Fast local delivery needs no new database access. Only late/remote
+        // results probe the logged inbox, before the legacy UNLOGGED transport.
+        if operation.is_some() || task.is_none() {
+            if let (Some(operation), Some(task)) = (&operation, &task)
+                && task.message_id() == request.message_id
+            {
+                if operation.consent != crate::services::client_operations::ConsentPolicy::None {
+                    return Err((
+                        axum::http::StatusCode::CONFLICT,
+                        "Operation consent requires a claim".into(),
+                    ));
+                }
+                if operation.chat_id != request.chat_id
+                    || crate::services::client_operations::ExecutorBinding::from_headers(&headers)
+                        .as_ref()
+                        != Some(&operation.binding)
+                {
+                    return Err((
+                        axum::http::StatusCode::CONFLICT,
+                        "Operation binding mismatch".into(),
+                    ));
+                }
+                let outcome = ClientToolOutcome::from_payload(&operation_payload);
+                // Delivery acknowledges receipt, not validity. The loop turns an
+                // invalid payload into fixed per-call feedback instead of timing out.
+                if matches!(
+                    task.deliver_client_tool_result(&request.tool_call_id, outcome)
+                        .await,
+                    ClientToolDelivery::Delivered
+                ) {
+                    return Ok(Json(ClientToolResultResponse { delivered: true }));
+                }
+            }
+            let row = crate::services::client_operations::store::for_call(
+                &app_state.db,
+                account_id,
+                request.message_id,
+                &request.tool_call_id,
+            )
+            .await
+            .map_err(|_| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Operation lookup failed".into(),
+                )
+            })?;
+            let durable_request = row
+                .as_ref()
+                .map(|row| {
+                    serde_json::from_value::<crate::services::client_operations::OperationRequest>(
+                        row.request.clone(),
+                    )
+                })
+                .transpose()
+                .map_err(|_| {
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        "Invalid stored operation".into(),
+                    )
+                })?
+                .or(operation);
+            if let Some(operation) = durable_request {
+                if operation.consent != crate::services::client_operations::ConsentPolicy::None {
+                    return Err((
+                        axum::http::StatusCode::CONFLICT,
+                        "Operation consent requires a claim".into(),
+                    ));
+                }
+                if operation.chat_id != request.chat_id
+                    || crate::services::client_operations::ExecutorBinding::from_headers(&headers)
+                        .as_ref()
+                        != Some(&operation.binding)
+                {
+                    return Err((
+                        axum::http::StatusCode::CONFLICT,
+                        "Operation binding mismatch".into(),
+                    ));
+                }
+                let result = crate::services::client_operations::fast_result_or_refusal(
+                    &operation,
+                    ClientToolOutcome::from_payload(&operation_payload),
+                );
+                if let Some(row) = row {
+                    if matches!(
+                        row.state,
+                        crate::services::client_operations::store::AttemptState::Pending
+                            | crate::services::client_operations::store::AttemptState::Claimed
+                    ) && !super::client_operations::authorize_open_operation(
+                        &app_state, &policy, &me_user, &operation,
+                    )
+                    .await
+                    .map_err(|_| {
+                        (
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                            "Operation authorization failed".into(),
+                        )
+                    })? {
+                        crate::services::client_operations::store::withdraw(
+                            &app_state.db,
+                            account_id,
+                            operation.attempt_id,
+                        )
+                        .await
+                        .map_err(|_| {
+                            (
+                                axum::http::StatusCode::CONFLICT,
+                                "Operation is no longer open".into(),
+                            )
+                        })?;
+                        return Err((
+                            axum::http::StatusCode::CONFLICT,
+                            "Operation authorization withdrawn".into(),
+                        ));
+                    }
+                    crate::services::client_operations::store::accept_fast(
+                        &app_state.db,
+                        &app_state.client_operations,
+                        account_id,
+                        &result,
+                    )
+                    .await
+                    .map_err(|_| {
+                        (
+                            axum::http::StatusCode::CONFLICT,
+                            "Operation is no longer open".into(),
+                        )
+                    })?;
+                    return Ok(Json(ClientToolResultResponse { delivered: true }));
+                }
+            }
+        }
     }
 
     if task.is_none() {
@@ -14705,6 +15215,8 @@ pub async fn continue_message_sse(
 /// than beside it is what makes them obey the same filtered tool set, approval
 /// gate and budgets as any other call.
 pub(crate) struct ParkedTurnResume {
+    pub operation_attempt: Option<Uuid>,
+    pub consumption: crate::services::client_operations::TurnConsumption,
     pub initial_unfinished_tool_calls: Vec<genai::chat::ToolCall>,
     /// Task calls the user has just approved on a `task_plan` card. The
     /// dispatch-approval pre-pass skips them, or the decision the user made
@@ -15342,7 +15854,7 @@ pub(crate) async fn run_continuation(
     effective_selected_facet_ids.sort();
     let GenerationMcpToolSet {
         tools: available_mcp_tools,
-        mcp_claimed_names: _,
+        mcp_claimed_names,
         denied: denied_mcp_tools,
         write_suppressed: write_suppressed_mcp_tools,
         disabled_server_ids: mcp_servers_disabled_by_user,
@@ -15880,6 +16392,157 @@ pub(crate) async fn run_continuation(
         .await;
     }
 
+    resume_parked_generation(
+        task,
+        tx,
+        app_state,
+        policy,
+        me_user,
+        message,
+        chat,
+        parsed,
+        generation_parameters,
+        GenerationMcpToolSet {
+            tools: available_mcp_tools,
+            mcp_claimed_names,
+            denied: denied_mcp_tools,
+            write_suppressed: write_suppressed_mcp_tools,
+            disabled_server_ids: mcp_servers_disabled_by_user,
+            disabled_tools: mcp_tools_disabled_by_user,
+            unavailable_server_ids: mcp_servers_unavailable,
+            needing_auth_server_ids: mcp_servers_needing_auth,
+            missing_credential_server_ids: mcp_servers_missing_credential,
+        },
+        approved_plan_calls,
+        approval_request.pending_tool_calls,
+        None,
+    )
+    .await
+}
+
+/// Synthetic durable kinds use the same offered-policy dispatch map without
+/// requiring a configured client tool or weakening its child-run suppression.
+#[allow(clippy::too_many_arguments)]
+fn append_operation_kind_offers(
+    app_state: &AppState,
+    chat: &crate::db::entity::chats::Model,
+    account_id: Option<Uuid>,
+    request_context: &GenerationRequestContext,
+    allowlist: &[String],
+    mcp_claimed_names: &HashSet<String>,
+    original_selection: Option<&HashMap<String, crate::config::ClientToolConfig>>,
+    omit_strict: bool,
+    tools: &mut Vec<genai::chat::Tool>,
+    policies: &mut HashMap<String, crate::services::client_tools::OfferedClientTool>,
+) -> Result<(), Report> {
+    use crate::services::client_operations::OperationOfferContext;
+    if !app_state.config.client_tools.durable_operations_enabled || account_id.is_none() {
+        return Ok(());
+    }
+    let mut kinds: Vec<_> = app_state.client_operations.kinds().collect();
+    kinds.sort_by_key(|kind| kind.operation_id());
+    for kind in kinds {
+        if original_selection.is_some_and(|selection| {
+            !selection
+                .values()
+                .any(|saved| saved.qualified_name() == kind.operation_id())
+        }) {
+            continue;
+        }
+        let context = OperationOfferContext {
+            config: &app_state.config,
+            chat,
+            account_id,
+            request_context,
+            allowlist,
+            other_tools: !tools.is_empty(),
+        };
+        let Some(offer) = kind.tool_offer(&context) else {
+            continue;
+        };
+        let definition = offer.definition;
+        let name = &definition.name;
+        if definition.namespace_or_default() != erato_config::config::RESERVED_TOOL_NAMESPACE
+            || definition.qualified_name() != kind.operation_id()
+            || !erato_config::config::allowlist_selects_reserved_tool(allowlist, name)
+            || !offer.binding.validate()
+            || offer.binding.realm != kind.realm()
+        {
+            continue;
+        }
+        if mcp_claimed_names.contains(name)
+            || policies.contains_key(name)
+            || tools.iter().any(|tool| tool.name.as_ref() == name.as_str())
+        {
+            tracing::warn!(
+                operation = kind.operation_id(),
+                "Not offering colliding operation kind"
+            );
+            continue;
+        }
+        let schema: JsonValue = serde_json::from_str(&definition.parameters)?;
+        let mut policy =
+            crate::services::client_tools::OfferedClientTool::prepare(&definition, &schema)
+                .map_err(|error| eyre!(error))?;
+        policy.executor = Some(offer.binding);
+        policy.inbox_only = true;
+        tools.push(crate::services::client_tools::build_client_tool(
+            name,
+            &definition.description,
+            schema,
+            omit_strict,
+            false,
+        ));
+        policies.insert(name.clone(), policy);
+    }
+    Ok(())
+}
+
+/// One replay and generation path for approval stops and durable client results.
+/// The operation record carries execution identity, never a second model request.
+#[allow(clippy::too_many_arguments)]
+async fn resume_parked_generation(
+    task: &Arc<StreamingTask>,
+    tx: Sender<Result<Event, Report>>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message: crate::db::entity::messages::Model,
+    chat: crate::db::entity::chats::Model,
+    mut parsed: MessageSchema,
+    generation_parameters: GenerationParameters,
+    tool_set: GenerationMcpToolSet,
+    approved_plan_calls: Vec<crate::models::message::PendingToolCall>,
+    pending_from_park: Vec<crate::models::message::PendingToolCall>,
+    operation_attempt: Option<Uuid>,
+) -> Result<(), Report> {
+    let mcp = app_state.mcp_state().await;
+    let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
+    let user_id = Uuid::parse_str(&me_user.id)?;
+    let mcp_auth_context = McpRequestAuthContext {
+        app_state: Some(app_state),
+        user_id: Some(user_id),
+        oidc_token: Some(&me_user.oidc_token),
+        access_token: me_user.access_token.as_deref(),
+    };
+    let mut effective_selected_facet_ids: Vec<String> = generation_parameters
+        .selected_facets
+        .iter()
+        .filter(|(_, enabled)| **enabled)
+        .map(|(id, _)| id.clone())
+        .collect();
+    effective_selected_facet_ids.sort();
+    let GenerationMcpToolSet {
+        tools: available_mcp_tools,
+        mcp_claimed_names,
+        denied: denied_mcp_tools,
+        write_suppressed: write_suppressed_mcp_tools,
+        disabled_server_ids: mcp_servers_disabled_by_user,
+        disabled_tools: mcp_tools_disabled_by_user,
+        unavailable_server_ids: mcp_servers_unavailable,
+        needing_auth_server_ids: mcp_servers_needing_auth,
+        missing_credential_server_ids: _,
+    } = tool_set;
     let generation_input_messages: GenerationInputMessages = serde_json::from_value(
         message
             .generation_input_messages
@@ -15889,6 +16552,22 @@ pub(crate) async fn run_continuation(
     let chat_provider_id = generation_parameters
         .generation_chat_provider_id
         .ok_or_else(|| eyre!("Interrupted message has no chat provider"))?;
+    let allowlist = app_state
+        .determine_chat_provider_allowlist_for_user(policy, &me_user.to_subject(), &me_user.groups)
+        .await?;
+    let still_configured = app_state
+        .config
+        .chat_providers
+        .as_ref()
+        .is_some_and(|providers| providers.providers.contains_key(&chat_provider_id))
+        || (chat_provider_id == "default" && app_state.config.chat_provider.is_some());
+    if !still_configured
+        || allowlist
+            .as_ref()
+            .is_some_and(|allowed| !allowed.contains(&chat_provider_id))
+    {
+        return Err(eyre!("The original model is no longer authorized"));
+    }
     let generation_input_messages = resolve_file_pointers_in_generation_input(
         app_state,
         generation_input_messages,
@@ -15921,6 +16600,61 @@ pub(crate) async fn run_continuation(
         generation_parameters.action_facet_id.as_deref(),
     );
     let is_delegated_run = crate::models::chat::chat_is_delegated_run(&chat);
+    let mut offered_client_tools = HashMap::new();
+    if !is_delegated_run {
+        for (name, saved) in &generation_parameters.client_tools {
+            let Some(current) = app_state
+                .config
+                .client_tools
+                .tools
+                .values()
+                .find(|current| current.qualified_name() == saved.qualified_name())
+            else {
+                continue;
+            };
+            let current =
+                crate::services::client_tools::OfferedClientTool::restore_config(saved, current);
+            if !crate::services::client_tools::client_tool_is_available(
+                &current,
+                &generation_parameters
+                    .request_context
+                    .as_ref()
+                    .map(|context| context.registered_client_tools.clone())
+                    .unwrap_or_default(),
+            ) || !is_qualified_tool_allowed(
+                saved.namespace_or_default(),
+                &saved.name,
+                &client_tool_allowlist,
+            ) || mcp_claimed_names.contains(name)
+            {
+                continue;
+            }
+            let schema: JsonValue = serde_json::from_str(&current.parameters)?;
+            let mut policy =
+                crate::services::client_tools::OfferedClientTool::prepare(&current, &schema)
+                    .map_err(|error| eyre!(error))?;
+            policy.executor = generation_parameters
+                .request_context
+                .as_ref()
+                .and_then(|context| context.executor.clone());
+            let strict = crate::services::client_tools::native_strict_for_submission(
+                &current,
+                &schema,
+                &provider.provider_kind,
+                provider.model_capabilities.supports_strict_tool_calling,
+                compat_omit_strict,
+            )
+            .map_err(|error| eyre!(error))?;
+            continuation_tools.push(crate::services::client_tools::build_client_tool(
+                name,
+                &current.description,
+                schema,
+                compat_omit_strict,
+                strict,
+            ));
+            offered_client_tools.insert(name.clone(), policy);
+        }
+    }
     let mut task_offer_scope: Option<crate::services::delegation::TaskOfferScope> = None;
     let mut delegation_offered_file_ids: Vec<Uuid> = Vec::new();
     // No anchor row means nothing to hang a child's provenance on, so the offer
@@ -15985,6 +16719,21 @@ pub(crate) async fn run_continuation(
             false,
         ));
     }
+    append_operation_kind_offers(
+        app_state,
+        &chat,
+        Some(user_id),
+        &generation_parameters
+            .request_context
+            .clone()
+            .unwrap_or_default(),
+        &client_tool_allowlist,
+        &mcp_claimed_names,
+        Some(&generation_parameters.client_tools),
+        compat_omit_strict,
+        &mut continuation_tools,
+        &mut offered_client_tools,
+    )?;
     chat_request.tools = (!continuation_tools.is_empty()).then_some(continuation_tools);
     let allowed_tool_names: HashSet<String> = chat_request
         .tools
@@ -16051,7 +16800,7 @@ pub(crate) async fn run_continuation(
         .collect();
     for call in approved_plan_calls
         .iter()
-        .chain(approval_request.pending_tool_calls.iter())
+        .chain(pending_from_park.iter())
         .filter(|call| !settled_call_ids.contains(&call.call_id))
     {
         if allowed_tool_names.contains(&call.fn_name) {
@@ -16100,7 +16849,9 @@ pub(crate) async fn run_continuation(
             options: None,
         });
     }
-    let resume = (!pending_tool_calls.is_empty()).then(|| ParkedTurnResume {
+    let resume = Some(ParkedTurnResume {
+        operation_attempt,
+        consumption: generation_parameters.turn_consumption.clone(),
         initial_unfinished_tool_calls: pending_tool_calls,
         approved_task_call_ids,
     });
@@ -16153,7 +16904,7 @@ pub(crate) async fn run_continuation(
             mcp_tools_disabled_by_user,
             allowed_tool_names,
             available_mcp_tools,
-            HashMap::new(),
+            offered_client_tools,
             &headers_context,
             Some(task),
             chat.assistant_id,
@@ -16164,9 +16915,7 @@ pub(crate) async fn run_continuation(
                 &app_state.config.delegation,
             ),
             delegation,
-            // The budget is per generation, like the per-message cap it sits
-            // beside: a continuation starts a fresh one. Documented, not
-            // fixed — the same is already true of `max_tool_calls_per_message`.
+            // The same logical turn retains its consumption across stops.
             task_tool_budgets_for_chat(&chat),
             resume,
         )
@@ -16189,6 +16938,16 @@ pub(crate) async fn run_continuation(
             .unwrap_or_default()
     });
     completed_metadata.continuation_in_flight = None;
+    if let Some(attempt_id) = operation_attempt {
+        return complete_client_operation_generation(
+            app_state,
+            task,
+            attempt_id,
+            end_content,
+            completed_metadata,
+        )
+        .await;
+    }
     update_message_generation_metadata(
         &app_state.db,
         policy,
@@ -16205,6 +16964,169 @@ pub(crate) async fn run_continuation(
         end_content,
         me_user,
         message.id,
+    )
+    .await
+}
+
+async fn complete_client_operation_generation(
+    app_state: &AppState,
+    task: &Arc<StreamingTask>,
+    attempt_id: Uuid,
+    mut content: Vec<ContentPart>,
+    metadata: GenerationMetadata,
+) -> Result<(), Report> {
+    content.retain(|part| !matches!(part, ContentPart::ClientToolPending(pending) if pending.attempt_id == attempt_id));
+    let updated = crate::services::client_operations::store::complete_continuation(
+        &app_state.db,
+        attempt_id,
+        task.generation_id,
+        &content,
+        &metadata,
+    )
+    .await?;
+    mark_task_awaiting_approval_if_parked(task, &content);
+    let message_id = updated.id;
+    let message = ChatMessage::from_model(updated)?;
+    send_background_event(
+        task,
+        StreamingEvent::AssistantMessageCompleted {
+            message_id,
+            content,
+            message,
+        },
+        "completed client operation continuation",
+    )
+    .await;
+    Ok(())
+}
+
+/// Authenticated requests may run on any replica. Generation ownership is
+/// acquired by the API before entry; no credential or principal is persisted.
+pub(crate) async fn run_client_operation_continuation(
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    attempt_id: Uuid,
+) -> Result<(), Report> {
+    // This API starts a detached generation. Registered client calls use the
+    // account inbox immediately until an interactive transport owns a turn.
+    task.mark_client_disconnected();
+    let account_id = Uuid::parse_str(&me_user.id)?;
+    let row = crate::services::client_operations::store::begin_continuation(
+        &app_state.db,
+        account_id,
+        attempt_id,
+        task.generation_id,
+    )
+    .await?;
+    let message = get_message_by_id(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &row.message_id,
+    )
+    .await?;
+    let parsed = MessageSchema::validate(&message.raw_message)?;
+    let pending_calls = parsed
+        .content
+        .iter()
+        .find_map(|part| match part {
+            ContentPart::ClientToolPending(pending) if pending.attempt_id == attempt_id => {
+                Some(pending.pending_tool_calls.clone())
+            }
+            _ => None,
+        })
+        .ok_or_else(|| eyre!("Operation pending part missing"))?;
+    let chat =
+        get_chat_by_message_id(&app_state.db, policy, &me_user.to_subject(), &message.id).await?;
+    reject_if_archived(&chat).map_err(|(_, message)| eyre!(message))?;
+    let parameters: GenerationParameters = serde_json::from_value(
+        message
+            .generation_parameters
+            .clone()
+            .ok_or_else(|| eyre!("Missing generation parameters"))?,
+    )?;
+    let submission_finished = parsed.content.iter().any(|part| match part {
+        ContentPart::ToolUse(tool) if tool.tool_call_id == row.tool_call_id => tool
+            .output
+            .as_ref()
+            .and_then(|output| output.get("submission"))
+            .and_then(|submission| submission.get("status"))
+            .and_then(JsonValue::as_str)
+            .is_some_and(|status| status == "accepted" || status == "failed"),
+        _ => false,
+    });
+    if submission_finished {
+        let metadata = message
+            .generation_metadata
+            .as_ref()
+            .and_then(|value| serde_json::from_value(value.clone()).ok())
+            .unwrap_or_default();
+        return complete_client_operation_generation(
+            app_state,
+            task,
+            attempt_id,
+            parsed.content,
+            metadata,
+        )
+        .await;
+    }
+    let mcp = app_state.mcp_state().await;
+    let profile = MeProfileChatRequestInput::from_me_profile(me_user);
+    let assistant = crate::models::chat::get_chat_assistant_configuration(
+        &app_state.db,
+        policy,
+        &profile.subject,
+        &chat,
+    )
+    .await?;
+    let mut facets: Vec<String> = parameters
+        .selected_facets
+        .iter()
+        .filter(|(_, enabled)| **enabled)
+        .map(|(id, _)| id.clone())
+        .collect();
+    facets.sort();
+    let auth = McpRequestAuthContext {
+        app_state: Some(app_state),
+        user_id: Some(account_id),
+        oidc_token: Some(&me_user.oidc_token),
+        access_token: me_user.access_token.as_deref(),
+    };
+    let tools = resolve_generation_mcp_tools(
+        app_state,
+        policy,
+        &mcp,
+        chat.id,
+        GenerationMcpToolInputs {
+            effective_selected_facet_ids: &facets,
+            action_facet_id: parameters.action_facet_id.as_deref(),
+            assistant_config: assistant.as_ref(),
+            subject: &profile.subject,
+            user_groups: profile.user_groups,
+            user_id: Some(account_id),
+            write_tools_enabled: chat.mcp_write_tools_enabled,
+            disabled_server_ids: &chat.disabled_mcp_server_ids,
+            disabled_tool_patterns: &chat.disabled_mcp_tools,
+        },
+        &auth,
+    )
+    .await?;
+    resume_parked_generation(
+        task,
+        detached_generation_event_sink(),
+        app_state,
+        policy,
+        me_user,
+        message,
+        chat,
+        parsed,
+        parameters,
+        tools,
+        Vec::new(),
+        pending_calls,
+        Some(attempt_id),
     )
     .await
 }

@@ -4,6 +4,7 @@ pub mod assistant_usage;
 pub mod assistants;
 pub mod audio_transcription;
 pub mod budget;
+pub mod client_operations;
 pub mod delegated_run_retry;
 pub mod desktop_sidecar;
 pub mod entra_id;
@@ -20,6 +21,8 @@ pub mod sharepoint;
 pub mod starting_assistant;
 pub mod token_usage;
 pub mod user_tool_approval_settings;
+
+use self::client_operations::*;
 
 use crate::db::entity_ext::{chats, messages};
 use crate::models;
@@ -165,6 +168,23 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/resumestream", post(resume_message_sse))
         .route("/messages/continuestream", post(continue_message_sse))
         .route("/messages/clienttoolresult", post(client_tool_result))
+        .route("/client-operations", get(list_client_operations))
+        .route(
+            "/client-operations/{attempt_id}/claim",
+            post(claim_client_operation),
+        )
+        .route(
+            "/client-operations/{attempt_id}/result",
+            post(complete_client_operation),
+        )
+        .route(
+            "/client-operations/{attempt_id}/cancel",
+            post(cancel_client_operation),
+        )
+        .route(
+            "/client-operations/{attempt_id}/continue",
+            post(continue_client_operation),
+        )
         .route(
             "/mcp-tool-approval-settings",
             get(list_user_tool_approval_settings).post(create_user_tool_approval_setting),
@@ -426,6 +446,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         react_to_task_result_sse,
         retry_delegated_run,
         client_tool_result,
+        list_client_operations,
+        claim_client_operation,
+        complete_client_operation,
+        cancel_client_operation,
+        continue_client_operation,
         list_user_tool_approval_settings,
         create_user_tool_approval_setting,
         apply_user_tool_approval_settings_batch,

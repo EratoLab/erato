@@ -104,6 +104,7 @@ pub struct AppState {
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub config: AppConfig,
+    pub client_operations: crate::services::client_operations::OperationRegistry,
     /// Startup-compiled guardrails; each scan clones its selected regexes.
     pub prompt_guardrails: Arc<CompiledPromptGuardrails>,
     pub actor_manager: ActorManager,
@@ -241,7 +242,9 @@ impl AppState {
         )
         // The lease only has to arbitrate once a write can be refused because
         // of it, which is what the task route turns on.
-        .with_lease_identity_guard(config.delegation.tasks.enabled);
+        .with_lease_identity_guard(
+            config.delegation.tasks.enabled || config.client_tools.durable_operations_enabled,
+        );
 
         // Initialize the system prompt renderer
         let system_prompt_renderer = SystemPromptRenderer::new();
@@ -294,6 +297,7 @@ impl AppState {
             default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
             config,
+            client_operations: Default::default(),
             prompt_guardrails,
             actor_manager,
             langfuse_client,

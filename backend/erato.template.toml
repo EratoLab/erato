@@ -648,6 +648,11 @@ chat_provider_ids = ["test-token-limit"]
 # Existing tools default to false for backward compatibility. Sidecar tool
 # definitions and facet prompts are supplied by deployment configuration packages.
 #
+# [client_tools]
+# # Dark by default. Only compiled operation kinds with typed result validators
+# # may park durably; enabling this alone does not enable any executor.
+# durable_operations_enabled = false
+#
 # [client_tools.tools.outlook_fetch_availability]
 # # Model-facing name; keep it dot-free (OpenAI/Anthropic reject "." in tool
 # # names). The namespace exists purely for allowlist selection ("outlook/*").

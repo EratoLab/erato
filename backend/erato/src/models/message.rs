@@ -42,6 +42,11 @@ pub struct GenerationParameters {
     /// Who started this generation. Absent means a user did.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initiator: Option<GenerationInitiator>,
+    /// Exact qualified selection and policies, retained across durable stops.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub client_tools: HashMap<String, erato_config::config::ClientToolConfig>,
+    #[serde(default)]
+    pub turn_consumption: crate::services::client_operations::TurnConsumption,
 }
 
 // Homed here rather than in `services::delegation` because it is a
@@ -204,6 +209,8 @@ pub struct GenerationRequestContext {
     /// Ready client executors at request time. Older stored requests have none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub registered_client_tools: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executor: Option<crate::services::client_operations::ExecutorBinding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -522,6 +529,7 @@ pub enum ContentPart {
     Reasoning(ContentPartReasoning),
     ToolUse(ToolUse),
     ToolApprovalRequest(ContentPartToolApprovalRequest),
+    ClientToolPending(crate::services::client_operations::ClientToolPending),
     ToolApproval(ContentPartToolApproval),
     ToolRejection(ContentPartToolRejection),
     TextFilePointer(ContentPartTextFilePointer),
@@ -548,6 +556,14 @@ pub enum ContentPart {
     /// The history walk keeps it (unlike the directive markers above, which
     /// are request-scoped) so later turns can still see what came back.
     TaskResult(ContentPartTaskResult),
+}
+
+/// The durable stop predicate shared by generation tails and child envelopes.
+pub fn is_durable_stop(content: &[ContentPart]) -> bool {
+    matches!(
+        content.last(),
+        Some(ContentPart::ToolApprovalRequest(_) | ContentPart::ClientToolPending(_))
+    )
 }
 
 /// A delivered task result, as it sits in the conversation.
@@ -788,7 +804,7 @@ impl MessageSchema {
                 ContentPart::Text(text) => Some(text.text.as_str()),
                 ContentPart::Reasoning(_) => None,
                 ContentPart::ToolUse(_) => None,
-                ContentPart::ToolApprovalRequest(_) => None,
+                ContentPart::ClientToolPending(_) | ContentPart::ToolApprovalRequest(_) => None,
                 ContentPart::ToolApproval(_) => None,
                 ContentPart::ToolRejection(_) => None,
                 ContentPart::TextFilePointer(_) => None,
@@ -1622,7 +1638,9 @@ impl InputMessage {
             ContentPart::Text(content) => content.text.to_string(),
             ContentPart::Reasoning(_) => String::new(),
             ContentPart::ToolUse(_) => String::new(),
-            ContentPart::ToolApprovalRequest(_) => String::new(),
+            ContentPart::ClientToolPending(_) | ContentPart::ToolApprovalRequest(_) => {
+                String::new()
+            }
             ContentPart::ToolApproval(_) => String::new(),
             ContentPart::ToolRejection(_) => String::new(),
             ContentPart::TextFilePointer(_) => String::new(),

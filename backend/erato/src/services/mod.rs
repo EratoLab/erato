@@ -36,3 +36,5 @@ pub mod sentry_stub;
 
 #[cfg(not(feature = "sentry"))]
 pub use sentry_stub as sentry;
+
+pub mod client_operations;

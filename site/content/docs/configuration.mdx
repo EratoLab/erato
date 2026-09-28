@@ -4469,6 +4469,21 @@ tool result reports unavailable or truncated contents. Error and rejected
 validation results do not attach files. IDs nested inside arbitrary result JSON
 are not treated as attachments.
 
+#### `client_tools.durable_operations_enabled`
+
+{/* erato_toml_config_key: client_tools.durable_operations_enabled */}
+
+Default: `false`. Enables durable escalation for explicitly registered client
+operation kinds. Each kind must provide server-side input, binding and result
+validation. Enabling this setting does not register an executor or make arbitrary
+client tools durable. The neutral foundation registers no production kinds.
+
+Eligible calls retain the ordinary in-memory fast path. On disconnect or timeout,
+they may park in the logged operation inbox and later continue under a fresh
+authenticated request. Existing generation leases coordinate backend replicas;
+no backend credentials are stored with an operation. Kinds may impose narrower
+rollout restrictions, including single-replica execution.
+
 #### `client_tools.tools.<key>.requires_client_registration`
 
 {/* erato_toml_config_key: client_tools.tools.<key>.requires_client_registration */}

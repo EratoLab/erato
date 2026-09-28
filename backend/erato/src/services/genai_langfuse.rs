@@ -193,6 +193,7 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "sequence": result.sequence,
                 }));
             }
+            ContentPart::ClientToolPending(_) => {}
             ContentPart::ToolApprovalRequest(request) => {
                 output_parts.push(json!({
                     "type": "tool_approval_request",
