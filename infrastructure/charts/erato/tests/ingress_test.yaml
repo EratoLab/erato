@@ -111,3 +111,35 @@ tests:
       - equal:
           path: metadata.annotations["cert-manager.io/cluster-issuer"]
           value: letsencrypt
+
+  - it: should route the Teams bot webhook directly to the backend
+    set:
+      teamsBot.directRoute.enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /api/integrations/teams/messages
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Exact
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3130
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: /
+
+  - it: should not add the Teams route when oauth2-proxy is disabled
+    set:
+      teamsBot.directRoute.enabled: true
+      oauth2Proxy.enabled: false
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 1

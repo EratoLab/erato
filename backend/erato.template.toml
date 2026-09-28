@@ -226,8 +226,9 @@ chat_provider_ids = ["test-token-limit"]
 #
 # # Conversational Teams bot (personal chats, group chats, channels). Point the
 # # Azure Bot messaging endpoint at <origin>/api/integrations/teams/messages and
-# # exempt that path from oauth2-proxy (`skip_auth_regex`); the backend checks
-# # the Bot Connector's signed token itself.
+# # route that exact path to the backend around oauth2-proxy (Helm:
+# # `teamsBot.directRoute`); oauth2-proxy would strip the Authorization header,
+# # and the backend checks the Bot Connector's signed token itself.
 # [integrations.ms_office.teams.bot]
 # enabled = true
 # app_id = "<bot Entra app ID>"

@@ -131,3 +131,27 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: gatewayApi.parentRefs must contain at least one Gateway reference when gatewayApi.enabled is true
+
+  - it: should route the Teams bot webhook directly to the backend
+    set:
+      ingress.enabled: false
+      gatewayApi.enabled: true
+      gatewayApi.parentRefs:
+        - name: shared-gateway
+      teamsBot.directRoute.enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: Exact
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /api/integrations/teams/messages
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 3130
+      - equal:
+          path: spec.rules[1].matches[0].path.value
+          value: /

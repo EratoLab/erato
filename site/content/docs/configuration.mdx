@@ -2754,7 +2754,7 @@ Branding strings and package icon paths for the Teams app. Icon paths must be sa
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.oauth_connection_name */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.token_service_url */}
 
-Conversational Teams bot for personal chats, group chats and channels. When enabled, the backend accepts Bot Framework activities at `/api/integrations/teams/messages`; point the Azure Bot resource's messaging endpoint there and exempt the path from oauth2-proxy (for example `skip_auth_regex = ["^/api/integrations/teams/messages$"]`). The endpoint verifies the Bot Connector's signed token itself and only accepts activities from `tenant_id`.
+Conversational Teams bot for personal chats, group chats and channels. When enabled, the backend accepts Bot Framework activities at `/api/integrations/teams/messages`; point the Azure Bot resource's messaging endpoint there and route that exact path to the backend around oauth2-proxy (Helm chart: `teamsBot.directRoute`). A `skip_auth_regex` exemption does not work, because oauth2-proxy strips the `Authorization` header on every route. The endpoint verifies the Bot Connector's signed token itself and only accepts activities from `tenant_id`.
 
 - `app_id`, `app_password`: the bot's Entra application (single tenant) and its client secret.
 - `tenant_id`: the deployment's Entra tenant.

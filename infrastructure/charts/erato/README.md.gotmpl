@@ -364,6 +364,25 @@ required `ReferenceGrant` in the Gateway namespace. Gateway listeners, including
 termination and their certificates, are configured on the Gateway rather than in this
 chart.
 
+### Microsoft Teams bot
+
+The Teams bot endpoint `/api/integrations/teams/messages` must bypass oauth2-proxy:
+oauth2-proxy strips client `Authorization` headers on every route, including routes in
+`skip_auth_regex`, and the backend verifies the Bot Connector token itself. Enable the
+direct route, which adds an exact-path rule to the Ingress or HTTPRoute that targets the
+Erato application Service, and allow the ingress controller or Gateway pods through the
+backend NetworkPolicy:
+
+```yaml
+teamsBot:
+  directRoute:
+    enabled: true
+    ingressFrom:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+```
+
 {{ template "chart.requirementsSection" . }}
 
 {{ template "chart.valuesSection" . }}

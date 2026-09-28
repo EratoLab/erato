@@ -27,6 +27,17 @@ spec:
       ports:
         - protocol: TCP
           port: 3130
+    {{- if and .Values.teamsBot.directRoute.enabled .Values.oauth2Proxy.enabled }}
+    {{- if not .Values.teamsBot.directRoute.ingressFrom }}
+    {{- fail "teamsBot.directRoute.ingressFrom must list the ingress controller or Gateway pods while backend.networkPolicy.enabled is true" }}
+    {{- end }}
+    # Teams bot webhook routed directly by the ingress controller or Gateway
+    - from:
+        {{- toYaml .Values.teamsBot.directRoute.ingressFrom | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 3130
+    {{- end }}
     - ports:
         - protocol: TCP
           port: {{ .Values.backend.metrics.port }}
