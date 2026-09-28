@@ -34,6 +34,7 @@ pub use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfi
 pub mod services;
 pub use erato_config::startup_log;
 pub mod state;
+pub mod teams_bot;
 pub mod telemetry;
 pub mod translation_po;
 

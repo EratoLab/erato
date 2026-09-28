@@ -5354,6 +5354,11 @@ pub struct MsOfficeTeamsAppConfig {
     pub app_id: String,
     #[serde(default)]
     pub manifest: MsOfficeTeamsManifestConfig,
+    // Conversational Teams bot (personal chats, group chats and channels).
+    // Independent of the tab distribution above: the bot endpoint works on its
+    // own, and when both are enabled the rendered Teams app contains both.
+    #[serde(default)]
+    pub bot: TeamsBotConfig,
 }
 
 impl Default for MsOfficeTeamsAppConfig {
@@ -5362,12 +5367,14 @@ impl Default for MsOfficeTeamsAppConfig {
             enabled: false,
             app_id: default_ms_office_teams_app_id(),
             manifest: MsOfficeTeamsManifestConfig::default(),
+            bot: TeamsBotConfig::default(),
         }
     }
 }
 
 impl MsOfficeTeamsAppConfig {
     pub fn validate(&self, addin: &MsOfficeAddinConfig) -> Result<(), Report> {
+        self.bot.validate()?;
         if !self.enabled {
             return Ok(());
         }
@@ -5401,6 +5408,160 @@ impl MsOfficeTeamsAppConfig {
             ));
         }
         self.manifest.validate()
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct TeamsBotConfig {
+    // Whether the Teams bot endpoint `/api/integrations/teams/messages` is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+    // Microsoft Entra application (client) ID of the Azure Bot resource.
+    #[serde(default)]
+    pub app_id: Option<String>,
+    // Client secret of the bot's Entra application.
+    #[serde(default)]
+    pub app_password: Option<SecretConfigString>,
+    // Entra tenant ID of this deployment. Used as the token authority for the
+    // single-tenant bot, and every incoming activity must originate from it.
+    #[serde(default)]
+    pub tenant_id: Option<String>,
+    // Name of the Azure Bot OAuth connection that yields the user's Microsoft
+    // Graph token (the same delegated scopes the web login uses).
+    #[serde(default)]
+    pub oauth_connection_name: Option<String>,
+    // Bot Framework token service endpoint. Regional deployments use for example
+    // `https://europe.token.botframework.com`.
+    // Defaults to `https://token.botframework.com`.
+    #[serde(default = "default_teams_bot_token_service_url")]
+    pub token_service_url: String,
+    // Optional Entra app ID for Teams single sign-on. When set together with
+    // `sso_resource`, the rendered Teams manifest's `webApplicationInfo` points
+    // at it so Teams can sign users in silently. Without it, users confirm
+    // sign-in once with a button.
+    #[serde(default)]
+    pub sso_app_id: Option<String>,
+    // Application ID URI for Teams single sign-on, for example
+    // `api://botid-<app_id>`. Must equal the OAuth connection's token exchange URL.
+    #[serde(default)]
+    pub sso_resource: Option<String>,
+    // Public HTTPS origin of this deployment, used for links from Teams to Erato.
+    #[serde(default)]
+    pub public_base_url: Option<String>,
+    // Optional assistant ID that new Teams chats are bound to.
+    #[serde(default)]
+    pub assistant_id: Option<String>,
+    // How many preceding messages of a group chat or channel thread are attached
+    // as context when the bot is mentioned. `0` disables context fetching.
+    // Defaults to `20`.
+    #[serde(default = "default_teams_bot_context_message_count")]
+    pub context_message_count: u32,
+    // Whether answers in personal chats are streamed as the model generates them.
+    // Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub streaming: bool,
+    // Whether only security groups are resolved for the policy engine when a
+    // user talks to the bot. Should match the `groups` claim configuration of
+    // the web login. Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub security_groups_only: bool,
+}
+
+impl Default for TeamsBotConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            app_id: None,
+            app_password: None,
+            tenant_id: None,
+            oauth_connection_name: None,
+            token_service_url: default_teams_bot_token_service_url(),
+            sso_app_id: None,
+            sso_resource: None,
+            public_base_url: None,
+            assistant_id: None,
+            context_message_count: default_teams_bot_context_message_count(),
+            streaming: true,
+            security_groups_only: true,
+        }
+    }
+}
+
+fn default_teams_bot_token_service_url() -> String {
+    "https://token.botframework.com".to_string()
+}
+
+fn default_teams_bot_context_message_count() -> u32 {
+    20
+}
+
+impl TeamsBotConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if !self.enabled {
+            return Ok(());
+        }
+        for (key, value) in [("app_id", &self.app_id), ("tenant_id", &self.tenant_id)] {
+            if !value
+                .as_deref()
+                .is_some_and(|value| is_ms_office_guid(value.trim()))
+            {
+                return Err(eyre!(
+                    "Teams bot `{key}` must be a GUID when the bot is enabled."
+                ));
+            }
+        }
+        if self
+            .app_password
+            .as_ref()
+            .is_none_or(|password| password.expose_secret().trim().is_empty())
+        {
+            return Err(eyre!(
+                "Teams bot `app_password` is required when the bot is enabled."
+            ));
+        }
+        if self
+            .oauth_connection_name
+            .as_deref()
+            .is_none_or(|name| name.trim().is_empty())
+        {
+            return Err(eyre!(
+                "Teams bot `oauth_connection_name` is required when the bot is enabled."
+            ));
+        }
+        for (key, value) in [
+            ("token_service_url", Some(self.token_service_url.as_str())),
+            ("public_base_url", self.public_base_url.as_deref()),
+        ] {
+            let Some(value) = value else { continue };
+            let url = url::Url::parse(value)
+                .map_err(|error| eyre!("Teams bot `{key}` is not a valid URL: {error}"))?;
+            if url.scheme() != "https" {
+                return Err(eyre!("Teams bot `{key}` must use https."));
+            }
+        }
+        match (self.sso_app_id.as_deref(), self.sso_resource.as_deref()) {
+            (None, None) => {}
+            (Some(app_id), Some(resource)) => {
+                if !is_ms_office_guid(app_id.trim()) {
+                    return Err(eyre!("Teams bot `sso_app_id` must be a GUID."));
+                }
+                if !resource.starts_with("api://") {
+                    return Err(eyre!("Teams bot `sso_resource` must start with `api://`."));
+                }
+            }
+            _ => {
+                return Err(eyre!(
+                    "Teams bot `sso_app_id` and `sso_resource` must be configured together."
+                ));
+            }
+        }
+        if let Some(assistant_id) = self.assistant_id.as_deref()
+            && !is_ms_office_guid(assistant_id.trim())
+        {
+            return Err(eyre!("Teams bot `assistant_id` must be a UUID."));
+        }
+        Ok(())
     }
 }
 

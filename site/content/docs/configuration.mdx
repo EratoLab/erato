@@ -2745,6 +2745,45 @@ Branding strings and package icon paths for the Teams app. Icon paths must be sa
 
 **Default values:** Erato branding and the color, outline, and small color icons shipped in the Office add-in bundle.
 
+##### `integrations.ms_office.teams.bot`
+
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.enabled */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.app_id */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.app_password */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.tenant_id */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.oauth_connection_name */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.token_service_url */}
+
+Conversational Teams bot for personal chats, group chats and channels. When enabled, the backend accepts Bot Framework activities at `/api/integrations/teams/messages`; point the Azure Bot resource's messaging endpoint there and exempt the path from oauth2-proxy (for example `skip_auth_regex = ["^/api/integrations/teams/messages$"]`). The endpoint verifies the Bot Connector's signed token itself and only accepts activities from `tenant_id`.
+
+- `app_id`, `app_password`: the bot's Entra application (single tenant) and its client secret.
+- `tenant_id`: the deployment's Entra tenant.
+- `oauth_connection_name`: the Azure Bot OAuth connection that yields the user's delegated Microsoft Graph token. Give it the Graph scopes the web login uses, plus: `User.Read` and `GroupMember.Read.All` (identity and group-based policies), `Files.Read.All`/`Sites.Read.All` (files shared in group chats and channels), `Chat.Read` and `ChannelMessage.Read.All` (conversation context).
+- `token_service_url`: the Bot Framework token service; regional bots use for example `https://europe.token.botframework.com`.
+
+Users are recognized by their Entra object ID, which Erato records on every web or Teams tab login; people who have never opened Erato are asked to do so once. Chats started in Teams are regular Erato chats, visible in the web app.
+
+When `integrations.ms_office.teams.enabled` is also set, the rendered Teams app contains the bot next to the tab.
+
+**Default values:** disabled; `token_service_url` is `"https://token.botframework.com"`.
+
+##### `integrations.ms_office.teams.bot` (optional behavior)
+
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_app_id */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_resource */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.public_base_url */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.assistant_id */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.context_message_count */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.streaming */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.security_groups_only */}
+
+- `sso_app_id`, `sso_resource`: set both to sign users in silently. The rendered manifest's `webApplicationInfo` then points at this app and resource, which must equal the OAuth connection's token exchange URL (typically `api://botid-<app_id>`). Without them, users confirm sign-in once with a button. Verify that the Teams tab still signs in when overriding them.
+- `public_base_url`: HTTPS origin used for links from Teams back to Erato chats.
+- `assistant_id`: assistant that new Teams chats are bound to.
+- `context_message_count`: preceding group chat or channel thread messages attached as context when the bot is mentioned (`0` disables). Default `20`.
+- `streaming`: stream answers in personal chats. Default `true`.
+- `security_groups_only`: resolve only security groups for the policy engine; match the `groups` claim configuration of the web login. Default `true`.
+
 **Type:** `object`
 
 ##### `integrations.ms_office.addin.document.manifest.display_name`

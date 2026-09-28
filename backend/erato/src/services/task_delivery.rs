@@ -1136,6 +1136,9 @@ pub async fn deliver_task_result(
         tracing::warn!(%error, %origin_chat_id, "The reaction to a delivered task result failed");
         return DeliveryOutcome::Delivered;
     }
+    // Nobody is watching a background reaction in the browser; a chat that
+    // lives in Teams gets the answer pushed there.
+    crate::teams_bot::notify_task_reaction(app_state, origin_chat_id, task.message_id());
 
     // 9. CAS #4 — REACTED, fenced on our claim token like every other write.
     //    The token survives step 6 (that write carries it through), so an

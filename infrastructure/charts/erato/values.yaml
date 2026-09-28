@@ -97,6 +97,8 @@ oauth2Proxy:
     # cookie_secret = ""
     # cookie_secure = true
     # skip_auth_regex = ["^/health", "^/metrics"]
+    # With the Teams bot enabled, also exempt its endpoint (it verifies the
+    # Bot Connector token itself): "^/api/integrations/teams/messages$"
   upstreams:
     # -- Automatically inject OAUTH2_PROXY_UPSTREAMS. Disable this to manage upstreams through oauth2Proxy.config or external environment variables.
     enabled: true

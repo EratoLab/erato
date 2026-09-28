@@ -905,6 +905,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/office-addin/teams/app-package.zip",
             get(teams_app_package),
         )
+        .route(
+            crate::teams_bot::MESSAGES_ROUTE,
+            axum::routing::post(crate::teams_bot::messages_route),
+        )
         .nest("/api/v1beta", crate::server::api::v1beta::router(app_state));
 
     #[cfg(all(feature = "profiling", target_os = "linux"))]
