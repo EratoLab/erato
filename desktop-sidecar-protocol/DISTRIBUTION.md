@@ -224,6 +224,9 @@ manifest completely describes the six-target filesystem example in Section 1:
 - `platform.abi` is the relevant ABI or runtime family.
 - `default_file` is the file ID selected when a request does not specify one.
 - `files` lists every file available for this target.
+- `local_delegation_profile` optionally declares `strict_snapshot_v1` support;
+  omitted/null means unsupported. It is a compatibility declaration from the
+  trusted artifact publisher, not a host qualification or integrity assertion.
 
 ### File fields
 
@@ -508,4 +511,35 @@ define:
   which belong to the build and deployment pipeline.
 
 These concerns MAY affect how bytes are produced or verified, but they MUST NOT
-add fields to this manifest or write derived files into the artifact root.
+add signing/integrity fields to this manifest or write derived files into the artifact root.
+The optional compatibility field below does not carry signing or integrity metadata.
+
+## Strict delegation packaging gate
+
+The strict snapshot contract in [DELEGATION.md](./DELEGATION.md) does not by
+itself qualify distribution artifacts. Each manifest target MAY declare
+`local_delegation_profile: "strict_snapshot_v1"`; omitted/null means unsupported.
+Current native Windows/macOS builds declare this implementation profile; Linux
+must not. A strict backend MUST exclude targets without that exact profile.
+This is a compatibility gate, not a statement of host qualification. Deployment
+still verifies the artifact's trusted source and tested behavior.
+
+The personalized bootstrap uses `content_release: "strict_snapshot_v1"` and a
+`local_delegation` object containing `backend_origin` and `verification_keys`
+(public Ed25519 base64url keys by key ID). Backend signing private keys MUST NOT
+be included. Unsupported review platforms or missing/invalid trust policy fail
+startup closed. Do not personalize older bootstrap-v1 binaries with this
+requirement: unknown fields are ignored under bootstrap v1. The trusted manifest
+profile is therefore checked before personalization; strict requirements must
+never be inferred from bootstrap fields injected into an unmarked artifact.
+Supporting binaries recognize these fields and must reject an unsupported
+`content_release` value or invalid `local_delegation` policy before listening.
+
+Native exact-snapshot delegation requires bundled inert review assets, private
+review-to-store communication and tested consent/export/recovery behavior.
+This profile trusts installed native code and does not require OS sandbox
+qualification or a new signed macOS application. Existing installer/personalization
+validation still applies;
+do not broaden archive allowlists to arbitrary contents or strip existing
+signatures. Capability discovery declares trust in installed native code, not
+OS-enforced egress isolation. No rollout setting is enabled by the contract alone.

@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-result.schema.json",
+  "title": "LocalContextsBindV1Result",
+  "type": "object",
+  "properties": {
+    "contextHandle": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "expiresAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": ["contextHandle", "expiresAt"],
+  "additionalProperties": false
+}

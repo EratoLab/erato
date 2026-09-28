@@ -857,3 +857,9 @@ accept new identifier keys in `external_ids`; new clients continue to accept
 responses without native IDs or parent references. The provenance object's own
 version is independent of the RPC protocol/package version. Consumers MUST reject
 unsupported provenance versions, rather than interpret them as version 1.
+
+## Strict local delegation (reserved)
+
+[DELEGATION.md](./DELEGATION.md) defines the strict snapshot profile and its
+closed schemas. Version 0.1.28 reserves these methods with disabled availability;
+shipping their schemas does not qualify any implementation or enable delegation.

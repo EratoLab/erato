@@ -68,57 +68,7 @@ export interface OutlookSearchHit {
    *
    * @maxItems 16
    */
-  matchedIn?:
-    | []
-    | [string]
-    | [string, string]
-    | [string, string, string]
-    | [string, string, string, string]
-    | [string, string, string, string, string]
-    | [string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string, string, string, string, string, string, string]
-    | [string, string, string, string, string, string, string, string, string, string, string, string, string, string]
-    | [
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-      ]
-    | [
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-      ];
+  matchedIn?: string[];
   /**
    * File names of attachments whose name or extracted text matched the query.
    *

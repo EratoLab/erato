@@ -1,0 +1,23 @@
+{
+  "binding": {
+    "backendOrigin": "https://erato.example",
+    "accountId": "account-a",
+    "deviceId": "ddddddddddddddddddddddddddddddddddddddddddd",
+    "taskId": "task-a",
+    "jobId": "job-a",
+    "attemptId": "attempt-a",
+    "toolCallId": "tool-a",
+    "planDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "plan": {
+    "operation": "collect_evidence",
+    "queryVariants": ["quarterly report"],
+    "maxHits": 10,
+    "maxArtifacts": 3,
+    "maxBytes": 1024,
+    "executionSeconds": 30,
+    "expiresAt": 1800000000
+  },
+  "contextHandle": "ccccccccccccccccccccccccccccccccccccccccccc",
+  "authorization": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}

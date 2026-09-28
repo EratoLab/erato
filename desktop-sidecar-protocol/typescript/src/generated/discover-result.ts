@@ -5,6 +5,12 @@ export interface DiscoverResult {
   serverInfo: ProductInfo;
   instanceId: string;
   document: DiscoveryDocument;
+  /**
+   * Opaque security declaration. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.
+   */
+  localDelegation?: {
+    [k: string]: unknown;
+  };
   [k: string]: unknown;
 }
 export interface ProductInfo {

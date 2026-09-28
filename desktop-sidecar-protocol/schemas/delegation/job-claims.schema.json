@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/delegation/job-claims.schema.json",
+  "title": "LocalJobClaims",
+  "type": "object",
+  "properties": {
+    "iss": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "aud": {
+      "const": "erato-local-job-v1"
+    },
+    "sub": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "origin": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "binding": {
+      "$ref": "../delegation/binding.schema.json"
+    },
+    "jti": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "exp": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": ["iss", "aud", "sub", "origin", "binding", "jti", "iat", "exp"],
+  "additionalProperties": false
+}
