@@ -5,11 +5,13 @@
 //! protocol side stays independent and could move into its own crate.
 
 use super::activity::ConversationKind;
-use super::cards::{ApprovalChoice, PendingApproval};
+use super::cards::{ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet};
 use super::graph::{GraphIdentity, SharedItem};
 use crate::db::entity::prelude::{Chats, Messages, TeamsConversations, TeamsTokenExchanges};
 use crate::db::entity::{teams_conversations, teams_token_exchanges, users};
-use crate::models::message::{ContentPart, GenerationRequestContext, MessageSchema};
+use crate::models::message::{
+    ContentPart, GenerationRequestContext, MessageSchema, ToolApprovalKind,
+};
 use crate::normalize_profile::IdTokenProfile;
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::{
@@ -24,7 +26,7 @@ use crate::state::AppState;
 use eyre::{Report, WrapErr, eyre};
 use sea_orm::prelude::*;
 use sea_orm::sea_query::OnConflict;
-use sea_orm::{ActiveValue, QueryFilter};
+use sea_orm::{ActiveValue, QueryFilter, QuerySelect, TransactionTrait};
 use serde_json::{Value, json};
 use tokio::sync::{broadcast, mpsc};
 
@@ -44,8 +46,8 @@ pub struct Completion {
     pub chat_id: Uuid,
     pub message_id: Uuid,
     pub text: String,
-    /// Open tool approvals the turn stopped on.
-    pub approvals: Vec<PendingApproval>,
+    /// The open tool approvals the turn stopped on, answered together.
+    pub approvals: Option<PendingApprovalSet>,
     /// The turn stopped on a client tool, which only the web app can run.
     pub needs_client: bool,
 }
@@ -54,8 +56,12 @@ pub struct Completion {
 pub enum StartError {
     /// The chat is already generating.
     Busy,
-    /// Erato refused the request (validation, archived chat, …).
+    /// Erato refused the request (validation, archived chat, foreign chat, …).
     Rejected(String),
+    /// The decisions do not cover exactly the approvals that are open now.
+    DecisionsMismatch,
+    /// Every approval of the message was already decided.
+    AlreadyDecided,
 }
 
 impl From<StreamRouteError> for StartError {
@@ -63,7 +69,14 @@ impl From<StreamRouteError> for StartError {
         match error {
             StreamRouteError::GenerationRunning(_) => StartError::Busy,
             StreamRouteError::PlainText(_, message) => StartError::Rejected(message),
-            _ => StartError::Rejected("The request could not be processed.".to_string()),
+            StreamRouteError::DecisionsMismatch(_) => StartError::DecisionsMismatch,
+            StreamRouteError::AlreadyContinued(_) => StartError::AlreadyDecided,
+            StreamRouteError::CoveredByParent(_) => StartError::Rejected(
+                "This approval is answered in the chat that started the task.".to_string(),
+            ),
+            StreamRouteError::NothingToReact(_) => {
+                StartError::Rejected("The request could not be processed.".to_string())
+            }
         }
     }
 }
@@ -235,11 +248,29 @@ impl Host {
         row: &teams_conversations::Model,
         assistant_id: Option<Uuid>,
     ) -> Result<(Uuid, bool), Report> {
+        // Fast path without a lock: the mapping already points at a usable chat.
         if let Some(chat_id) = row.current_chat_id
-            && let Some(chat) = Chats::find_by_id(chat_id).one(&self.app_state.db).await?
-            && chat.archived_at.is_none()
-            && chat.owner_user_id == session.me.id
+            && self
+                .usable_chat(session, chat_id, &self.app_state.db)
+                .await?
         {
+            return Ok((chat_id, false));
+        }
+
+        // Activities of one conversation are handled concurrently. Serialise
+        // chat creation on the mapping row so two first messages (or two
+        // messages right after `/new`) end up in one chat: the second waits
+        // here, then re-reads the winner's chat instead of creating its own.
+        let txn = self.app_state.db.begin().await?;
+        let locked = TeamsConversations::find_by_id(row.id)
+            .lock_exclusive()
+            .one(&txn)
+            .await?
+            .ok_or_else(|| eyre!("Teams conversation mapping disappeared"))?;
+        if let Some(chat_id) = locked.current_chat_id
+            && self.usable_chat(session, chat_id, &txn).await?
+        {
+            txn.commit().await?;
             return Ok((chat_id, false));
         }
         let assistant_id = match assistant_id {
@@ -270,8 +301,30 @@ impl Host {
             None,
         )
         .await?;
-        self.set_current_chat(row, Some(chat.id)).await?;
+        // The chat service commits on its own connection; the mapping update
+        // joins the locking transaction, which releases the row on commit.
+        TeamsConversations::update(teams_conversations::ActiveModel {
+            id: ActiveValue::Unchanged(locked.id),
+            current_chat_id: ActiveValue::Set(Some(chat.id)),
+            ..Default::default()
+        })
+        .exec(&txn)
+        .await?;
+        txn.commit().await?;
         Ok((chat.id, true))
+    }
+
+    /// Whether a mapped chat can keep receiving Teams messages.
+    async fn usable_chat<C: sea_orm::ConnectionTrait>(
+        &self,
+        session: &Session,
+        chat_id: Uuid,
+        conn: &C,
+    ) -> Result<bool, Report> {
+        Ok(Chats::find_by_id(chat_id)
+            .one(conn)
+            .await?
+            .is_some_and(|chat| chat.archived_at.is_none() && chat.owner_user_id == session.me.id))
     }
 
     /// Store bytes as a regular upload on the chat.
@@ -363,14 +416,20 @@ impl Host {
         &self,
         session: &Session,
         message_id: Uuid,
-        approval_id: String,
-        choice: ApprovalChoice,
+        decisions: Vec<(String, ApprovalChoice)>,
     ) -> Result<mpsc::Receiver<GenerationUpdate>, StartError> {
-        let decision = match choice {
-            ApprovalChoice::Approve => ToolApprovalDecision::Approve,
-            ApprovalChoice::Reject => ToolApprovalDecision::Reject,
-        };
-        let request = ContinueStreamRequest::single_decision(message_id, approval_id, decision);
+        let decisions = decisions
+            .into_iter()
+            .map(|(approval_id, choice)| {
+                let decision = match choice {
+                    ApprovalChoice::Approve => ToolApprovalDecision::Approve,
+                    ApprovalChoice::Reject => ToolApprovalDecision::Reject,
+                };
+                (approval_id, decision)
+            })
+            .collect();
+        // Passed through as submitted: Erato checks that the set is exact.
+        let request = ContinueStreamRequest::with_decisions(message_id, decisions);
         let started = start_continuation(
             &self.app_state,
             &session.policy,
@@ -411,6 +470,28 @@ impl Host {
             message_id,
             &parsed.content,
         )))
+    }
+
+    /// The approvals a message of the session user's own chat is waiting on.
+    pub async fn pending_approvals(
+        &self,
+        session: &Session,
+        message_id: Uuid,
+    ) -> Result<Option<PendingApprovalSet>, Report> {
+        let Some(message) = Messages::find_by_id(message_id)
+            .one(&self.app_state.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+        if !self
+            .usable_chat(session, message.chat_id, &self.app_state.db)
+            .await?
+        {
+            return Ok(None);
+        }
+        let parsed = MessageSchema::validate(&message.raw_message)?;
+        Ok(completion_from_content(message.chat_id, message_id, &parsed.content).approvals)
     }
 
     /// Claim an SSO token exchange; `false` when another replica or client
@@ -516,17 +597,34 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
         .collect::<Vec<_>>()
         .join("\n\n");
     let approvals = match content.last() {
-        Some(ContentPart::ToolApprovalRequest(request)) => request
-            .approval_items()
-            .into_iter()
-            .map(|item| PendingApproval {
-                message_id: message_id.to_string(),
-                approval_id: item.approval_id,
-                tool_name: item.tool_name,
-                input: item.input,
-            })
-            .collect(),
-        _ => Vec::new(),
+        Some(ContentPart::ToolApprovalRequest(request)) => Some(PendingApprovalSet {
+            message_id: message_id.to_string(),
+            kind: match request.kind {
+                ToolApprovalKind::McpTool => ApprovalKind::McpTool,
+                ToolApprovalKind::DelegatedTask => ApprovalKind::DelegatedTask,
+                ToolApprovalKind::TaskPlan => ApprovalKind::TaskPlan,
+            },
+            items: request
+                .approval_items()
+                .into_iter()
+                .map(|item| match item.child {
+                    // A delegated task's item names the parent's delegation
+                    // call; the decision is about the child's gated tool.
+                    Some(child) => PendingApprovalItem {
+                        approval_id: item.approval_id,
+                        tool_name: child.tool_name,
+                        input: child.input,
+                    },
+                    None => PendingApprovalItem {
+                        approval_id: item.approval_id,
+                        tool_name: item.tool_name,
+                        input: item.input,
+                    },
+                })
+                .collect(),
+        })
+        .filter(|set: &PendingApprovalSet| !set.items.is_empty()),
+        _ => None,
     };
     Completion {
         chat_id,

@@ -136,13 +136,38 @@ async fn on_approval(
         return Ok(());
     };
     let message_id = Uuid::parse_str(&submit.message_id)?;
+    let Some(decisions) = submit.decisions() else {
+        return target
+            .send_text("Please choose Approve or Deny for every item, then submit again.")
+            .await;
+    };
     let updates = match host
-        .continue_approval(&user.session, message_id, submit.approval_id, submit.choice)
+        .continue_approval(&user.session, message_id, decisions.clone())
         .await
     {
         Ok(updates) => updates,
-        Err(StartError::Rejected(_)) => {
-            // Someone else's card, or already decided: the turn is not theirs.
+        Err(StartError::DecisionsMismatch) => {
+            // The open set changed since the card was posted: show it afresh.
+            return match host.pending_approvals(&user.session, message_id).await? {
+                Some(set) => {
+                    target
+                        .send_text("The approvals changed in the meantime. Here they are again:")
+                        .await?;
+                    send_approval_card(target, &set).await
+                }
+                None => {
+                    target
+                        .send_text("This approval is not open for you anymore.")
+                        .await
+                }
+            };
+        }
+        Err(StartError::AlreadyDecided) => {
+            return target.send_text("This approval was already decided.").await;
+        }
+        Err(StartError::Rejected(message)) => {
+            tracing::debug!(%message, "Teams approval refused");
+            // Someone else's card, or a chat the user cannot continue.
             return target
                 .send_text("This approval is not open for you anymore.")
                 .await;
@@ -155,14 +180,20 @@ async fn on_approval(
         activity.conversation_id(),
         activity.service_url.as_deref(),
     ) {
-        let tool_name = activity
-            .value
-            .as_ref()
-            .and_then(|value| value.get("tool_name"))
-            .and_then(Value::as_str)
-            .unwrap_or("The tool");
+        let named: Vec<(String, cards::ApprovalChoice)> = decisions
+            .iter()
+            .enumerate()
+            .map(|(index, (_, choice))| {
+                let tool_name = submit
+                    .tool_names
+                    .get(index)
+                    .cloned()
+                    .unwrap_or_else(|| "The tool".to_string());
+                (tool_name, *choice)
+            })
+            .collect();
         let decided_by = user.identity.display_name.as_deref().unwrap_or("you");
-        let card = cards::decided_card(tool_name, submit.choice, decided_by);
+        let card = cards::decided_card(&named, decided_by);
         let update = json!({"type": "message", "id": card_activity_id, "attachments": [card]});
         if let Err(error) = bot
             .connector
@@ -335,30 +366,37 @@ async fn token_exchange(
         .as_ref()
         .map(|from| from.id.as_str())
         .unwrap_or_default();
-    // Every open Teams client sends this invoke; exactly one gets processed.
-    if !host.claim_token_exchange(exchange_id).await? {
-        return Ok((StatusCode::OK, json!({})));
+    let exchanged = json!({"id": exchange_id, "connectionName": connection_name});
+    let not_exchanged = (
+        StatusCode::PRECONDITION_FAILED,
+        json!({
+            "id": exchange_id,
+            "connectionName": connection_name,
+            "failureDetail": "The bot is unable to exchange token. Proceed with regular login.",
+        }),
+    );
+    if exchange_id.is_empty() || sso_token.is_empty() || from_id.is_empty() {
+        return Ok(not_exchanged);
     }
+    // Exchange first, deduplicate second (as Microsoft's middleware does):
+    // when consent is missing, every client needs its own 412 to fall back to
+    // the sign-in button, so a failed exchange must not claim the ID.
     let token = bot
         .user_tokens
         .exchange(&bot.connector, from_id, sso_token)
-        .await?;
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "Teams SSO token exchange failed");
+            None
+        });
     if token.is_none() {
-        // 412 makes Teams fall back to the sign-in button (consent needed).
-        return Ok((
-            StatusCode::PRECONDITION_FAILED,
-            json!({
-                "id": exchange_id,
-                "connectionName": connection_name,
-                "failureDetail": "The token could not be exchanged.",
-            }),
-        ));
+        return Ok(not_exchanged);
     }
-    send_signed_in(bot, activity).await;
-    Ok((
-        StatusCode::OK,
-        json!({"id": exchange_id, "connectionName": connection_name}),
-    ))
+    // Every open Teams client sends this invoke; only one confirms the sign-in.
+    if host.claim_token_exchange(exchange_id).await? {
+        send_signed_in(bot, activity).await;
+    }
+    Ok((StatusCode::OK, exchanged))
 }
 
 async fn verify_state(bot: &TeamsBot, activity: &Activity) -> Result<(StatusCode, Value), Report> {
@@ -528,12 +566,15 @@ async fn render_generation(
     stream
         .finish(&completion_text(&completion, link.as_deref()))
         .await?;
-    send_approval_cards(target, &completion).await
+    match &completion.approvals {
+        Some(set) => send_approval_card(target, set).await,
+        None => Ok(()),
+    }
 }
 
 pub(super) fn completion_text(completion: &Completion, chat_link: Option<&str>) -> String {
     let mut text = completion.text.clone();
-    if text.is_empty() && !completion.approvals.is_empty() {
+    if text.is_empty() && completion.approvals.is_some() {
         text = "I need your approval before I continue.".to_string();
     }
     if completion.needs_client {
@@ -549,24 +590,15 @@ pub(super) fn completion_text(completion: &Completion, chat_link: Option<&str>) 
     text
 }
 
-pub(super) async fn send_approval_cards(
+/// One card for every open decision of a parked message.
+async fn send_approval_card(
     target: &ReplyTarget<'_>,
-    completion: &Completion,
+    set: &cards::PendingApprovalSet,
 ) -> Result<(), Report> {
-    for approval in &completion.approvals {
-        let mut card = cards::approval_card(approval);
-        // Carried along so the decided card can name the tool.
-        for action in card["content"]["actions"]
-            .as_array_mut()
-            .into_iter()
-            .flatten()
-        {
-            action["data"]["tool_name"] = json!(approval.tool_name);
-        }
-        target
-            .send(&json!({"type": "message", "attachments": [card]}))
-            .await?;
-    }
+    let card = cards::approval_card(set);
+    target
+        .send(&json!({"type": "message", "attachments": [card]}))
+        .await?;
     Ok(())
 }
 
@@ -574,6 +606,9 @@ async fn reply_start_error(target: &ReplyTarget<'_>, error: StartError) -> Resul
     let text = match error {
         StartError::Busy => "I'm still working on your previous message.".to_string(),
         StartError::Rejected(message) => format!("I could not start this request: {message}"),
+        StartError::DecisionsMismatch | StartError::AlreadyDecided => {
+            "This approval is not open anymore.".to_string()
+        }
     };
     target.send_text(&text).await
 }
@@ -610,7 +645,9 @@ pub(super) async fn deliver_proactive(
             mention: None,
         };
         target.send_text(&text).await?;
-        send_approval_cards(&target, &completion).await?;
+        if let Some(set) = &completion.approvals {
+            send_approval_card(&target, set).await?;
+        }
     }
     Ok(())
 }
@@ -667,14 +704,14 @@ fn file_name(file: &IncomingFile) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::teams_bot::cards::PendingApproval;
+    use crate::teams_bot::cards::{ApprovalKind, PendingApprovalItem, PendingApprovalSet};
 
     fn completion(text: &str) -> Completion {
         Completion {
             chat_id: Uuid::nil(),
             message_id: Uuid::nil(),
             text: text.to_string(),
-            approvals: Vec::new(),
+            approvals: None,
             needs_client: false,
         }
     }
@@ -689,11 +726,14 @@ mod tests {
     #[test]
     fn completion_text_explains_approvals_and_client_steps() {
         let mut waiting = completion("");
-        waiting.approvals.push(PendingApproval {
+        waiting.approvals = Some(PendingApprovalSet {
             message_id: "m".into(),
-            approval_id: "a".into(),
-            tool_name: "t".into(),
-            input: json!({}),
+            kind: ApprovalKind::McpTool,
+            items: vec![PendingApprovalItem {
+                approval_id: "a".into(),
+                tool_name: "t".into(),
+                input: json!({}),
+            }],
         });
         assert_eq!(
             completion_text(&waiting, None),

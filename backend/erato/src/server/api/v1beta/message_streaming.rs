@@ -1769,18 +1769,21 @@ pub struct ContinueStreamRequest {
 }
 
 impl ContinueStreamRequest {
-    /// One decision for one open approval, as an approval card answers it.
-    pub(crate) fn single_decision(
+    /// The decisions an approval card submitted, one per approval id. The
+    /// set is validated like any other continuation (exact, no duplicates).
+    pub(crate) fn with_decisions(
         message_id: Uuid,
-        approval_id: String,
-        decision: ToolApprovalDecision,
+        decisions: Vec<(String, ToolApprovalDecision)>,
     ) -> Self {
         Self {
             message_id,
-            decisions: vec![ApprovalDecisionItem {
-                approval_id,
-                decision,
-            }],
+            decisions: decisions
+                .into_iter()
+                .map(|(approval_id, decision)| ApprovalDecisionItem {
+                    approval_id,
+                    decision,
+                })
+                .collect(),
             decision: None,
         }
     }
@@ -2659,8 +2662,9 @@ pub(crate) async fn settle_tail_deliveries(
 /// share: a cleanup guard around the run, the failure frame, the closing stream
 /// end, and the terminal outcome on the chat's generation lease. The edit,
 /// regenerate and continue paths run their own tail instead — each owns its
-/// request's response channel and forwards a failure over that, so neither the
-/// broadcast failure frame nor a stream end applies to them.
+/// request's response channel and forwards a failure over that. The continue
+/// tail also broadcasts the failure frame and stream end, because the Teams
+/// bot and resumestream follow a continuation through the broadcast.
 ///
 /// A failure is captured even where the caller absorbs it: delegation turns a
 /// failed child into a `failed` envelope the parent recovers from in prose, and
@@ -8707,6 +8711,20 @@ async fn stream_update_assistant_message_completion<
     .await
     .wrap_err("Failed to hydrate image URLs")?;
     updated_assistant_message_wrapped.content = hydrated_final_content_parts.clone();
+
+    // The request-scoped SSE channel is not the only audience: resumestream
+    // clients and in-process consumers (the Teams bot) follow the task
+    // broadcast, which the delta events of these paths already reach.
+    send_background_event(
+        task,
+        StreamingEvent::AssistantMessageCompleted {
+            message_id: updated_assistant_message.id,
+            content: hydrated_final_content_parts.clone(),
+            message: updated_assistant_message_wrapped.clone(),
+        },
+        "broadcast assistant message completion",
+    )
+    .await;
 
     let message_completed_event: MSG = MessageSubmitStreamingResponseMessageComplete {
         message_id: updated_assistant_message.id, // This is assistant_message_id
@@ -15270,8 +15288,19 @@ pub(crate) async fn start_continuation(
         let generation_failed = result.is_err();
         if let Err(error) = result {
             log_and_capture_error("continue message background task", &error);
+            // Broadcast listeners (resumestream, Teams bot) get the same
+            // closing frames `with_generation_task_lifecycle` sends.
+            send_background_event(
+                &task,
+                StreamingEvent::Error {
+                    error: generation_failure_error_value(),
+                },
+                "broadcast continuation failure",
+            )
+            .await;
             forward_error_report(&tx, &error).await;
         }
+        send_background_event(&task, StreamingEvent::StreamEnd, "broadcast stream end").await;
         let outcome = task.derive_outcome(generation_failed);
         task.mark_completed();
         cleanup_guard.disarm();
