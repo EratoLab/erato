@@ -1,5 +1,5 @@
 use crate::config::{I18nLanguageConfig, LanguageDetectionPriority};
-use crate::models::user::get_or_create_user;
+use crate::models::user::{get_or_create_user, record_entra_object_id};
 use crate::models::user_preference::get_user_preferences;
 use crate::normalize_profile::{IdTokenProfile, normalize_profile};
 use crate::policy::prelude::Subject;
@@ -261,24 +261,52 @@ pub async fn user_profile_from_token(
     )
     .await
     .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if let Some(entra_object_id) = normalized_profile.organization_user_id.as_deref()
+        && let Err(error) = record_entra_object_id(&app_state.db, &user, entra_object_id).await
+    {
+        // Best effort: only the Teams bot depends on it, and the next login retries.
+        tracing::warn!(%error, user_id = %user.id, "Failed to record the Entra object ID");
+    }
 
-    let user_id = user.id.to_string();
+    let user_id = user.id;
     let id_token_xms_pl = normalized_profile.id_token_xms_pl.clone();
     let id_token_xms_tpl = normalized_profile.id_token_xms_tpl.clone();
-    let mut user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id);
+    let user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id.to_string());
+    let user_profile = complete_user_profile(
+        app_state,
+        user_profile,
+        &user_id,
+        accept_language_header,
+        id_token_xms_pl.as_deref(),
+        id_token_xms_tpl.as_deref(),
+    )
+    .await?;
+
+    Ok((user_profile, id_token_claims))
+}
+
+/// Resolve the final language and apply stored preferences. Shared by the
+/// token-based login and the Teams bot, which builds its profile from Graph.
+pub(crate) async fn complete_user_profile(
+    app_state: &AppState,
+    mut user_profile: UserProfile,
+    user_id: &sea_orm::prelude::Uuid,
+    accept_language_header: Option<&str>,
+    id_token_xms_pl: Option<&str>,
+    id_token_xms_tpl: Option<&str>,
+) -> Result<UserProfile, StatusCode> {
     user_profile.determine_final_language_with_config(
         accept_language_header,
         &app_state.config.i18n.language,
-        id_token_xms_pl.as_deref(),
-        id_token_xms_tpl.as_deref(),
+        id_token_xms_pl,
+        id_token_xms_tpl,
     );
-    let prefs = get_user_preferences(&app_state.db, &user.id)
+    let prefs = get_user_preferences(&app_state.db, user_id)
         .await
         .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
     user_profile.client_tool_file_approval = app_state.config.desktop_sidecar.file_upload_approval;
     user_profile.apply_user_preferences(prefs);
-
-    Ok((user_profile, id_token_claims))
+    Ok(user_profile)
 }
 
 /// Middleware that extracts and validates user profile from JWT token
