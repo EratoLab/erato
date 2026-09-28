@@ -98,6 +98,47 @@ Continuation resolves original tool identities against current configuration and
 re-prepares their schemas/timeouts. It retains consumed counters and never raises
 the original submission limit or removes submission semantics during that turn.
 
+## Consent, withdrawal and crash accounting
+
+Only `consent: none` can use the in-memory fast path. `ask` and `native`
+operations enter account discovery immediately without a client-call SSE. Neither
+can accept an unclaimed legacy/fast result. `ask` requires claim confirmation;
+`native` additionally requires the kind's proof validator, not a confirmation bit.
+
+Claim and first durable-result acceptance share current authorization checks:
+account/chat access, recorded qualified identity, current configuration and facet
+allowlist, registration requirements, and the synthetic kind's offer policy.
+Withdrawing an open operation settles a fixed `withdrawn` outcome; unaccepted
+executor content is discarded. Results committed before withdrawal remain history
+and support identical retries, even if the kind was removed. Continuation may
+replay those results but will not re-offer the withdrawn tool. Authorization is
+checked against the handling replica's configuration; replicas must receive the
+same policy updates. A claim cannot retract execution already started on a client.
+
+Each logical tool call has a persisted charge record. Recovery reuses its tool and
+submission charges, task-budget decision, operation UUID and expiry; it does not
+mint another correction attempt or charge the parked loop iteration twice. Charges
+and pending calls commit together before dispatch. This is not an exactly-once
+external-effects guarantee: executors still need idempotency under the stable call
+or attempt identity. The initial kinds remain read-only/idempotent.
+
+The disabled durable flag does **not** disable changes shared with existing
+approval continuation: original client tools are restored, logical-turn counters,
+task budgets and the one-client-action flag are retained, and the original model
+must still be configured and authorized. Delegation stop detection now validates
+the complete message schema; malformed rows are not classified as approval stops.
+The named client-tool map remains `generation_parameters.client_tools` for replay
+policy consumers.
+
+`client_operations::joint_replay_*` runs the two-turn page/draft/rejection,
+restart, duplicate-result and withdrawal scenarios on this branch and the combined
+#1250 tree. Without replay configuration support it asserts full historical replay;
+with #1250 it enables receipts and asserts earlier pages/drafts are compacted while
+the current turn's pages, both drafts and diagnostics survive. The checkpoint crash
+test separately kills a spawned generation immediately after its real charge write,
+then recovers through the production lease and continuation path on another state.
+These simulate worker loss; they do not claim OS-process-kill qualification.
+
 ## Downstream sidecar rebase checklist
 
 * Delete `message_streaming/local_jobs.rs`'s request reconstruction/launch path;
