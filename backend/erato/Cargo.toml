@@ -58,7 +58,7 @@ x509-parser = "0.18"
 time = "0.3"
 aes-gcm-siv = "0.11.1"
 hmac = "0.13.0"
-jsonwebtoken = "10.4.0"
+jsonwebtoken = { version = "10.4.0", features = ["aws_lc_rs"] }
 regorus = "0.5.0"
 sha2 = "0.11.0"
 

@@ -8,6 +8,7 @@ pub use super::assistants::Entity as Assistants;
 pub use super::chat_file_uploads::Entity as ChatFileUploads;
 pub use super::chats::Entity as Chats;
 pub use super::file_uploads::Entity as FileUploads;
+pub use super::local_evidence_exports::Entity as LocalEvidenceExports;
 pub use super::mcp_server_oauth_authorization_states::Entity as McpServerOauthAuthorizationStates;
 pub use super::mcp_server_oauth_clients::Entity as McpServerOauthClients;
 pub use super::mcp_server_oauth_credentials::Entity as McpServerOauthCredentials;

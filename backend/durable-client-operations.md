@@ -1,7 +1,7 @@
 # Durable client operations
 
-Status: dark foundation. There are no production operation kinds registered in this PR.
-Baseline: main `de31f87c`; downstream sidecar branch `198f9272`.
+Status: dark shared mechanism. Native local evidence is its first compiled kind,
+registered only when its separate disabled-by-default configuration is enabled.
 
 ## Boundaries and compatibility
 
@@ -60,13 +60,12 @@ introduced.
 
 ## Rollout prerequisites and current limits
 
-The generic coordinator lands as an extraction during the #1237 rebase, alongside
-its first actual handler. A separate neutral frontend PR is not required. Before
-any production enablement that integration must provide authenticated-shell
-list/claim/execute/result/continue handling, executor headers on submission,
-`client_tool_pending` presentation, account/view lifecycle handling, and the
-native consent/receipt flow. This PR supplies backend APIs and generated types;
-it does not supply that UI or register a production kind.
+The generic coordinator is extracted alongside the native local evidence handler.
+See [the sidecar integration record](local-evidence-operations.md) for the
+adapter, trust boundaries and completed rebase checklist. The integration supplies
+account-scoped discovery, claim/result/continuation, executor headers,
+`client_tool_pending` presentation, shell lifecycle handling and native review.
+Real-host qualification is still required before enablement.
 
 After a durable park, continuation is detached. Further registered client calls
 enter the inbox immediately. Attached continuation is still required before this
@@ -139,62 +138,17 @@ test separately kills a spawned generation immediately after its real charge wri
 then recovers through the production lease and continuation path on another state.
 These simulate worker loss; they do not claim OS-process-kill qualification.
 
-## Downstream sidecar rebase checklist
+## Local evidence integration
 
-* Delete `message_streaming/local_jobs.rs`'s request reconstruction/launch path;
-  its separate non-streaming model loop was already removed before this baseline.
-* Delete `services/local_delegation::Checkpoint` and its composed ChatRequest.
-* Replace `local_delegation_jobs` and generic portions of `local_delegation/store.rs`
-  with operation attempts; keep native challenge/binding, export and receipt data
-  in the local-evidence kind's payload/extension.
-* Replace local-job recovery/launch hooks in `background_tasks.rs` with the generic
-  lease/continuation path. Keep task-parent delivery using the existing lifecycle.
-* Register `erato/local_collect_evidence` as the first kind using `tool_offer`.
-  The compiled descriptor needs no `[client_tools.tools]` entry. Its async leaf,
-  exclusive scope, depth-one restrictions and binding decision belong in that
-  kind's offer policy, rechecked on continuation. The shared hook enforces the
-  reserved namespace, exact registry identity, allowlist, binding shape/realm and
-  name collisions. Ordinary configured client tools remain suppressed in children.
-  Synthetic operations enter the inbox directly without emitting client-call SSE.
-* Keep `contract.rs`, signing, export validation and upload authorization specific
-  to local evidence. Reuse the already cached signer and transaction-aware uploads.
-* Extract generic discovery/capability routing from `LocalTaskCoordinator`; keep
-  challenge → bind → native start/status/review/read → complete/ack in its handler.
-* Keep native consent gating of legacy RPCs and startup/settings metadata paths.
-* Protocol 0.1.28 target: use the generic attempt UUID in the existing logical job
-  identity field. No new native consent, receipt or export format is required.
-* Renumber the downstream migration after this foundation and regenerate sources.
-* Retain single-replica eligibility for the sidecar task kind; the neutral mechanism
-  and ordinary-chat continuation use the existing cross-replica generation lease.
+The completed [rebase delta](local-evidence-operations.md) records the removed
+private checkpoint, job lifecycle and continuation paths. The native kind uses the
+shared attempts table, with a narrow export/binding extension. Its offer policy
+retains the single-replica, async-leaf, exclusive-scope and depth-one restrictions.
+Ordinary configured client tools remain suppressed in delegated children.
 
-### Files to remove or reduce from the downstream diff
-
-| File | Downstream change |
-| --- | --- |
-| `backend/erato/src/server/api/v1beta/message_streaming/local_jobs.rs` | Delete private checkpoint/reconstruction/launch; keep any small kind dispatch adapter with the kind. |
-| `backend/erato/src/services/local_delegation/mod.rs` | Delete `Checkpoint` and private `Consumption`. |
-| `backend/erato/src/services/local_delegation/store.rs` | Remove generic job state/recovery/continuation; retain only native binding, export, and receipt transactions. |
-| `backend/erato/src/db/entity/local_delegation_jobs.rs` | Replace with a narrow sidecar extension keyed by the generic attempt, if required. |
-| `backend/sqitch/{deploy,revert,verify}/0051_add_durable_local_delegation.sql` | Replace/renumber for that narrow extension; remove private checkpoint and job lifecycle columns. |
-| `backend/erato/src/server/api/v1beta/local_delegation.rs` | Remove private list/cancel/resume routing; retain native challenge/binding and approved upload/receipt endpoints. |
-| `backend/erato/src/server/api/v1beta/message_streaming.rs` | Remove local-checkpoint seed/persistence hooks; use generic park and message replay. |
-| `backend/erato/src/services/background_tasks.rs` | Remove `ResumeLocalJob` takeover and local-table recovery hooks. |
-| `backend/erato/src/models/chat.rs` | Remove private local-job liveness SQL. |
-| `backend/erato/src/services/delegation.rs` | Use the shared durable-stop predicate, keeping the existing parent delivery lifecycle. |
-| `frontend/src/lib/desktopSidecar/localTaskCoordinator.ts` | Move discovery, claim lifecycle and continuation into the generic coordinator; retain native handling as a kind. |
-| `frontend/src/providers/LocalTaskCoordinator.tsx` | Share shell lifecycle/polling; retain the native review presentation in the kind. |
-| Corresponding coordinator and delegation integration tests | Replace private job fixtures with attempts; keep native privacy/export regressions. |
-| Backend OpenAPI and frontend generated API files | Regenerate to remove private lifecycle APIs and consume generic operation APIs. |
-
-The protocol schemas, generated local RPC types, consent/export validators,
-signer, and upload helpers are retained. The native binding currently distinguishes
-`jobId` and `attemptId`; preserve their existing signed meanings at the adapter and
-map the generic attempt UUID to the backend job identity. Do not rename signed
-fields merely to match the database table. Verify the exact mapping against native
-#68 before any protocol version change.
-
-The foundation must land before #1237's final rebase. Publishing drafts is
-independent of merging: this work does not authorize a merge or deployment.
+Protocol 0.1.28 keeps its existing signed fields: native `jobId` is the generic
+attempt UUID; native `attemptId` retains the original generation UUID. No native
+consent, receipt or export format changed for the shared-operation integration.
 
 References: Workflow contract v0 (Linear eb6c078d27a0), Delegation Foundations
 (c7ac285ded0d), ERMAIN-854 counter/selection continuity. This does not implement

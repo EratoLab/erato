@@ -9,6 +9,7 @@ pub mod delegated_run_retry;
 pub mod desktop_sidecar;
 pub mod entra_id;
 mod file_resolution;
+pub mod local_delegation;
 pub mod mcp_servers;
 pub mod me_profile_middleware;
 pub mod message_streaming;
@@ -153,6 +154,21 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
 
     // build our application with a route
     let me_routes = Router::new()
+        .route("/local-delegation/context", post(local_delegation::context))
+        .route("/local-delegation/exports", get(local_delegation::receipts))
+        .route(
+            "/local-delegation/jobs/{id}/export-context",
+            post(local_delegation::export_context),
+        )
+        .route(
+            "/local-delegation/jobs/{id}/authorize",
+            post(local_delegation::authorize_native),
+        )
+        .route(
+            "/local-delegation/jobs/{id}/complete",
+            post(local_delegation::complete)
+                .layer(axum::extract::DefaultBodyLimit::max(18 * 1024 * 1024)),
+        )
         .route("/profile", get(profile))
         .route("/profile/preferences", put(update_profile_preferences))
         .route("/facets", get(facets))
@@ -471,6 +487,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         mcp_servers::disconnect_mcp_server_oauth,
         file_capabilities,
         budget::budget_status,
+        local_delegation::context,
+        local_delegation::receipts,
+        local_delegation::export_context,
+        local_delegation::authorize_native,
+        local_delegation::complete,
         desktop_sidecar::organization_configuration,
         desktop_sidecar::distribution,
         desktop_sidecar::download_distribution_artifact,

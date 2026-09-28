@@ -255,6 +255,7 @@ pub async fn retry_delegated_run(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
     Path((chat_id, child_chat_id)): Path<(String, String)>,
+    headers: axum::http::HeaderMap,
     Json(request): Json<RetryDelegatedRunRequest>,
 ) -> Result<(StatusCode, Json<RetryDelegatedRunResponse>), RetryRouteError> {
     // One variant today; the match is what a new one would have to answer to.
@@ -598,6 +599,13 @@ pub async fn retry_delegated_run(
     };
 
     let context = crate::server::api::v1beta::message_streaming::DelegationDispatchContext {
+        request_context: crate::models::message::GenerationRequestContext {
+            executor: crate::services::client_operations::ExecutorBinding::from_headers(&headers),
+            registered_client_tools: crate::services::client_tools::registered_client_tools(
+                &headers,
+            ),
+            ..Default::default()
+        },
         me_user: &me_user,
         // Empty: targets are the mention route's, and a task run names none.
         targets: &[],

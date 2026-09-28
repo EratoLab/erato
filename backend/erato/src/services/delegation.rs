@@ -1446,12 +1446,15 @@ fn delegated_chat_title(task: &str) -> String {
 /// streaming machinery inside the parent's dispatch loop, which would
 /// otherwise make the parent's future recursively sized (and trips the
 /// worker-stack limit `main.rs` documents).
+// Keep the authenticated caller and its executor routing explicit at this lifecycle boundary.
+#[allow(clippy::too_many_arguments)]
 fn run_delegated_child(
     app_state: AppState,
     policy: PolicyEngine,
     me_user: crate::server::api::v1beta::me_profile_middleware::MeProfile,
     child_task: std::sync::Arc<crate::services::background_tasks::StreamingTask>,
     request: crate::server::api::v1beta::message_streaming::MessageSubmitRequest,
+    request_context: crate::models::message::GenerationRequestContext,
     chat_id: Uuid,
     run_mode: ProvenanceRunMode,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), eyre::Report>> + Send>> {
@@ -1478,7 +1481,7 @@ fn run_delegated_child(
                                 &policy,
                                 &me_user,
                                 &request,
-                                crate::models::message::GenerationRequestContext::default(),
+                                request_context,
                                 chat_id,
                                 true,
                                 Vec::new(),
@@ -2104,6 +2107,14 @@ pub(crate) async fn launch_delegation(
         context.me_user.clone(),
         child_task.clone(),
         child_request,
+        // Preserve the authenticated caller's routing identity through the
+        // child. This grants no tool: ordinary client tools remain suppressed,
+        // and a synthetic kind must independently authorize this exact scope.
+        crate::models::message::GenerationRequestContext {
+            executor: context.request_context.executor.clone(),
+            registered_client_tools: context.request_context.registered_client_tools.clone(),
+            ..Default::default()
+        },
         child_chat.id,
         run.run_mode,
     ));

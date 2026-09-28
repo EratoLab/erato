@@ -5,6 +5,7 @@ pub mod config_redaction;
 pub mod configuration_reload_listener;
 pub mod delegation;
 pub mod delegation_trace;
+pub mod local_delegation;
 pub(crate) mod tool_arguments;
 
 pub mod display_text;
