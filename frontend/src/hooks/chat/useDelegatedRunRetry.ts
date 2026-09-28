@@ -24,6 +24,7 @@ import {
 import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 import { delegatedRunsListingParams } from "@/utils/chat/delegatedRunDispatch";
 
+import { getClientToolHeaders } from "./clientToolExecutors";
 import { findListedChat } from "./listedDelegatedRun";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
 
@@ -195,6 +196,7 @@ export function useDelegatedRunRetry(
       // later also retry a stuck delivery; until it can, anything else is a
       // 422 rather than a silently different action.
       body: { kind: "task" },
+      headers: getClientToolHeaders(),
       pathParams: { chatId: origin, childChatId },
     });
   }, [childChatId, mutation, origin]);

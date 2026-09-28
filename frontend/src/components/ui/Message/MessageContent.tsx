@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 
+import { Alert } from "@/components/ui/Feedback/Alert";
 import { TaskResultCard } from "@/components/ui/Message/TaskResultCard";
 import {
   Trace,
@@ -614,6 +615,7 @@ const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "reasoning" ||
   part.content_type === "tool_use" ||
   part.content_type === "tool_approval_request" ||
+  part.content_type === "client_tool_pending" ||
   part.content_type === "image" ||
   part.content_type === "image_file_pointer";
 
@@ -1422,6 +1424,20 @@ export const MessageContent = memo(function MessageContent({
 
         if (part.content_type === "task_result") {
           return <TaskResultCard key={`task-result-${index}`} part={part} />;
+        }
+
+        if (part.content_type === "client_tool_pending") {
+          if (index !== content.length - 1) return null;
+          return (
+            <Alert
+              key={`client-operation-${part.attempt_id}`}
+              type="info"
+              role="status"
+              geometryVariant="message"
+            >
+              {t`This task is waiting for a connected app. You can leave this chat and return later.`}
+            </Alert>
+          );
         }
 
         if (part.content_type === "tool_approval_request" && messageId) {

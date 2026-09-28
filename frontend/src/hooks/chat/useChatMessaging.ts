@@ -1158,10 +1158,18 @@ export function useChatMessaging(
               const finalParts =
                 responseData.message?.content ?? responseData.content;
               const lastPart = finalParts?.at(-1);
-              if (lastPart?.content_type === "tool_approval_request") {
+              if (
+                lastPart?.content_type === "tool_approval_request" ||
+                lastPart?.content_type === "client_tool_pending"
+              ) {
                 useGenerationStatusStore
                   .getState()
-                  .seedActionRequired(activeStreamKey, lastPart.requested_at);
+                  .seedActionRequired(
+                    activeStreamKey,
+                    lastPart.content_type === "tool_approval_request"
+                      ? lastPart.requested_at
+                      : new Date().toISOString(),
+                  );
               } else {
                 useGenerationStatusStore
                   .getState()

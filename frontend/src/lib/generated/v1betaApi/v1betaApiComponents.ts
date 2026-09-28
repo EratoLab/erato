@@ -62,7 +62,7 @@ export function licenseNoticesQuery(
   };
 }
 
-export const useSuspenseLicenseNotices = <TData = void,>(
+export const useSuspenseLicenseNotices = <TData = void>(
   variables: LicenseNoticesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<void, LicenseNoticesError, TData>,
@@ -77,7 +77,7 @@ export const useSuspenseLicenseNotices = <TData = void,>(
   });
 };
 
-export const useLicenseNotices = <TData = void,>(
+export const useLicenseNotices = <TData = void>(
   variables: LicenseNoticesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<void, LicenseNoticesError, TData>,
@@ -1270,7 +1270,7 @@ export function listAssistantsQuery(
   };
 }
 
-export const useSuspenseListAssistants = <TData = ListAssistantsResponse,>(
+export const useSuspenseListAssistants = <TData = ListAssistantsResponse>(
   variables: ListAssistantsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1293,7 +1293,7 @@ export const useSuspenseListAssistants = <TData = ListAssistantsResponse,>(
   });
 };
 
-export const useListAssistants = <TData = ListAssistantsResponse,>(
+export const useListAssistants = <TData = ListAssistantsResponse>(
   variables: ListAssistantsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1422,7 +1422,7 @@ export function getAssistantQuery(
   };
 }
 
-export const useSuspenseGetAssistant = <TData = Schemas.AssistantWithFiles,>(
+export const useSuspenseGetAssistant = <TData = Schemas.AssistantWithFiles>(
   variables: GetAssistantVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1445,7 +1445,7 @@ export const useSuspenseGetAssistant = <TData = Schemas.AssistantWithFiles,>(
   });
 };
 
-export const useGetAssistant = <TData = Schemas.AssistantWithFiles,>(
+export const useGetAssistant = <TData = Schemas.AssistantWithFiles>(
   variables: GetAssistantVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1653,7 +1653,7 @@ export function getAssistantUsageQuery(
   };
 }
 
-export const useSuspenseGetAssistantUsage = <TData = Schemas.AssistantUsage,>(
+export const useSuspenseGetAssistantUsage = <TData = Schemas.AssistantUsage>(
   variables: GetAssistantUsageVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1676,7 +1676,7 @@ export const useSuspenseGetAssistantUsage = <TData = Schemas.AssistantUsage,>(
   });
 };
 
-export const useGetAssistantUsage = <TData = Schemas.AssistantUsage,>(
+export const useGetAssistantUsage = <TData = Schemas.AssistantUsage>(
   variables: GetAssistantUsageVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1743,7 +1743,7 @@ export function chatsQuery(variables: ChatsVariables | reactQuery.SkipToken) {
   };
 }
 
-export const useSuspenseChats = <TData = ChatsResponse,>(
+export const useSuspenseChats = <TData = ChatsResponse>(
   variables: ChatsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<ChatsResponse, ChatsError, TData>,
@@ -1758,7 +1758,7 @@ export const useSuspenseChats = <TData = ChatsResponse,>(
   });
 };
 
-export const useChats = <TData = ChatsResponse,>(
+export const useChats = <TData = ChatsResponse>(
   variables: ChatsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<ChatsResponse, ChatsError, TData>,
@@ -1922,7 +1922,7 @@ export function chatMessagesQuery(
   };
 }
 
-export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse,>(
+export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse>(
   variables: ChatMessagesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1945,7 +1945,7 @@ export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   });
 };
 
-export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
+export const useChatMessages = <TData = Schemas.ChatMessagesResponse>(
   variables: ChatMessagesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2338,7 +2338,7 @@ export function getFileQuery(
 /**
  * This endpoint retrieves information about a specific file by its ID.
  */
-export const useSuspenseGetFile = <TData = Schemas.FileUploadItem,>(
+export const useSuspenseGetFile = <TData = Schemas.FileUploadItem>(
   variables: GetFileVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FileUploadItem, GetFileError, TData>,
@@ -2360,7 +2360,7 @@ export const useSuspenseGetFile = <TData = Schemas.FileUploadItem,>(
 /**
  * This endpoint retrieves information about a specific file by its ID.
  */
-export const useGetFile = <TData = Schemas.FileUploadItem,>(
+export const useGetFile = <TData = Schemas.FileUploadItem>(
   variables: GetFileVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FileUploadItem, GetFileError, TData>,
@@ -2441,7 +2441,7 @@ export function getFilePreviewQuery(
   };
 }
 
-export const useSuspenseGetFilePreview = <TData = undefined,>(
+export const useSuspenseGetFilePreview = <TData = undefined>(
   variables: GetFilePreviewVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, GetFilePreviewError, TData>,
@@ -2456,7 +2456,7 @@ export const useSuspenseGetFilePreview = <TData = undefined,>(
   });
 };
 
-export const useGetFilePreview = <TData = undefined,>(
+export const useGetFilePreview = <TData = undefined>(
   variables: GetFilePreviewVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, GetFilePreviewError, TData>,
@@ -2619,7 +2619,7 @@ export function allDrivesQuery(
  *   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
  *   https://learn.microsoft.com/graph/search-query-parameter
  */
-export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse,>(
+export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse>(
   variables: AllDrivesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2660,7 +2660,7 @@ export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse,>(
  *   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
  *   https://learn.microsoft.com/graph/search-query-parameter
  */
-export const useAllDrives = <TData = Schemas.AllDrivesResponse,>(
+export const useAllDrives = <TData = Schemas.AllDrivesResponse>(
   variables: AllDrivesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2744,7 +2744,7 @@ export function getDriveRootQuery(
   };
 }
 
-export const useSuspenseGetDriveRoot = <TData = Schemas.DriveItemsResponse,>(
+export const useSuspenseGetDriveRoot = <TData = Schemas.DriveItemsResponse>(
   variables: GetDriveRootVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2767,7 +2767,7 @@ export const useSuspenseGetDriveRoot = <TData = Schemas.DriveItemsResponse,>(
   });
 };
 
-export const useGetDriveRoot = <TData = Schemas.DriveItemsResponse,>(
+export const useGetDriveRoot = <TData = Schemas.DriveItemsResponse>(
   variables: GetDriveRootVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2859,7 +2859,7 @@ export function getDriveItemQuery(
   };
 }
 
-export const useSuspenseGetDriveItem = <TData = Schemas.DriveItemResponse,>(
+export const useSuspenseGetDriveItem = <TData = Schemas.DriveItemResponse>(
   variables: GetDriveItemVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2882,7 +2882,7 @@ export const useSuspenseGetDriveItem = <TData = Schemas.DriveItemResponse,>(
   });
 };
 
-export const useGetDriveItem = <TData = Schemas.DriveItemResponse,>(
+export const useGetDriveItem = <TData = Schemas.DriveItemResponse>(
   variables: GetDriveItemVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -3002,7 +3002,7 @@ export const useSuspenseGetDriveItemChildren = <
   });
 };
 
-export const useGetDriveItemChildren = <TData = Schemas.DriveItemsResponse,>(
+export const useGetDriveItemChildren = <TData = Schemas.DriveItemsResponse>(
   variables: GetDriveItemChildrenVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -3076,7 +3076,7 @@ export function budgetStatusQuery(
   };
 }
 
-export const useSuspenseBudgetStatus = <TData = Schemas.BudgetStatusResponse,>(
+export const useSuspenseBudgetStatus = <TData = Schemas.BudgetStatusResponse>(
   variables: BudgetStatusVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -3099,7 +3099,7 @@ export const useSuspenseBudgetStatus = <TData = Schemas.BudgetStatusResponse,>(
   });
 };
 
-export const useBudgetStatus = <TData = Schemas.BudgetStatusResponse,>(
+export const useBudgetStatus = <TData = Schemas.BudgetStatusResponse>(
   variables: BudgetStatusVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -3307,7 +3307,7 @@ export function chatDetailQuery(
  * delegated run means its provenance and the parameters it was dispatched
  * with, neither of which is reachable through the listing that hides it.
  */
-export const useSuspenseChatDetail = <TData = Schemas.ChatDetail,>(
+export const useSuspenseChatDetail = <TData = Schemas.ChatDetail>(
   variables: ChatDetailVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.ChatDetail, ChatDetailError, TData>,
@@ -3332,7 +3332,7 @@ export const useSuspenseChatDetail = <TData = Schemas.ChatDetail,>(
  * delegated run means its provenance and the parameters it was dispatched
  * with, neither of which is reachable through the listing that hides it.
  */
-export const useChatDetail = <TData = Schemas.ChatDetail,>(
+export const useChatDetail = <TData = Schemas.ChatDetail>(
   variables: ChatDetailVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.ChatDetail, ChatDetailError, TData>,
@@ -4033,7 +4033,7 @@ export function facetsQuery(variables: FacetsVariables | reactQuery.SkipToken) {
   };
 }
 
-export const useSuspenseFacets = <TData = Schemas.FacetsResponse,>(
+export const useSuspenseFacets = <TData = Schemas.FacetsResponse>(
   variables: FacetsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FacetsResponse, FacetsError, TData>,
@@ -4052,7 +4052,7 @@ export const useSuspenseFacets = <TData = Schemas.FacetsResponse,>(
   });
 };
 
-export const useFacets = <TData = Schemas.FacetsResponse,>(
+export const useFacets = <TData = Schemas.FacetsResponse>(
   variables: FacetsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FacetsResponse, FacetsError, TData>,
@@ -4150,7 +4150,7 @@ export function fileCapabilitiesQuery(
  * file processors and model capabilities. An optional model_id can be provided
  * to get capabilities specific to that model (particularly for image understanding).
  */
-export const useSuspenseFileCapabilities = <TData = FileCapabilitiesResponse,>(
+export const useSuspenseFileCapabilities = <TData = FileCapabilitiesResponse>(
   variables: FileCapabilitiesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -4178,7 +4178,7 @@ export const useSuspenseFileCapabilities = <TData = FileCapabilitiesResponse,>(
  * file processors and model capabilities. An optional model_id can be provided
  * to get capabilities specific to that model (particularly for image understanding).
  */
-export const useFileCapabilities = <TData = FileCapabilitiesResponse,>(
+export const useFileCapabilities = <TData = FileCapabilitiesResponse>(
   variables: FileCapabilitiesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -4236,13 +4236,13 @@ export type UploadFileVariables = {
  */
 /**
  * WORKAROUND: This endpoint requires a multipart/form-data request.
- * Despite the type signature suggesting `body?: Schemas.MultipartFormFile[]`, 
+ * Despite the type signature suggesting `body?: Schemas.MultipartFormFile[]`,
  * the underlying fetcher expects a pre-constructed `FormData` object.
- * 
+ *
  * When calling this function, construct a `FormData` object manually,
  * append your file(s) to it (e.g., `formData.append('file', myFile)`),
  * and pass it as the `body` property in the `variables` object, using type casting:
- * 
+ *
  * ```ts
  * const formData = new FormData();
  * formData.append('file', myFile);
@@ -4556,7 +4556,7 @@ export const useSuspenseGeneratingChats = <
   });
 };
 
-export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse,>(
+export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse>(
   variables: GeneratingChatsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -4580,6 +4580,329 @@ export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse,>(
     ),
     ...options,
     ...queryOptions,
+  });
+};
+
+export type LocalDelegationContextError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationContextVariables = {
+  body: Schemas.ContextRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationContext = (
+  variables: LocalDelegationContextVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AssertionResponse,
+    LocalDelegationContextError,
+    Schemas.ContextRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/local-delegation/context",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationContext = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.AssertionResponse,
+      LocalDelegationContextError,
+      LocalDelegationContextVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.AssertionResponse,
+    LocalDelegationContextError,
+    LocalDelegationContextVariables
+  >({
+    mutationFn: (variables: LocalDelegationContextVariables) =>
+      fetchLocalDelegationContext(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type LocalDelegationReceiptsQueryParams = {
+  /**
+   * @format uuid
+   */
+  after?: string;
+};
+
+export type LocalDelegationReceiptsError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationReceiptsVariables = {
+  queryParams?: LocalDelegationReceiptsQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationReceipts = (
+  variables: LocalDelegationReceiptsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ReceiptsResponse,
+    LocalDelegationReceiptsError,
+    undefined,
+    {},
+    LocalDelegationReceiptsQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/me/local-delegation/exports",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function localDelegationReceiptsQuery(
+  variables: LocalDelegationReceiptsVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.ReceiptsResponse>;
+};
+
+export function localDelegationReceiptsQuery(
+  variables: LocalDelegationReceiptsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ReceiptsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function localDelegationReceiptsQuery(
+  variables: LocalDelegationReceiptsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/local-delegation/exports",
+      operationId: "localDelegationReceipts",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchLocalDelegationReceipts(variables, signal),
+  };
+}
+
+export const useSuspenseLocalDelegationReceipts = <
+  TData = Schemas.ReceiptsResponse,
+>(
+  variables: LocalDelegationReceiptsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ReceiptsResponse,
+      LocalDelegationReceiptsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ReceiptsResponse,
+    LocalDelegationReceiptsError,
+    TData
+  >({
+    ...localDelegationReceiptsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useLocalDelegationReceipts = <TData = Schemas.ReceiptsResponse>(
+  variables: LocalDelegationReceiptsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ReceiptsResponse,
+      LocalDelegationReceiptsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ReceiptsResponse,
+    LocalDelegationReceiptsError,
+    TData
+  >({
+    ...localDelegationReceiptsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type LocalDelegationAuthorizePathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type LocalDelegationAuthorizeError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationAuthorizeVariables = {
+  body: Schemas.AuthorizationRequest;
+  pathParams: LocalDelegationAuthorizePathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationAuthorize = (
+  variables: LocalDelegationAuthorizeVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AuthorizationResponse,
+    LocalDelegationAuthorizeError,
+    Schemas.AuthorizationRequest,
+    {},
+    {},
+    LocalDelegationAuthorizePathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/authorize",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationAuthorize = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.AuthorizationResponse,
+      LocalDelegationAuthorizeError,
+      LocalDelegationAuthorizeVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.AuthorizationResponse,
+    LocalDelegationAuthorizeError,
+    LocalDelegationAuthorizeVariables
+  >({
+    mutationFn: (variables: LocalDelegationAuthorizeVariables) =>
+      fetchLocalDelegationAuthorize(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type LocalDelegationCompletePathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type LocalDelegationCompleteError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationCompleteVariables = {
+  body: Schemas.CompleteRequest;
+  pathParams: LocalDelegationCompletePathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationComplete = (
+  variables: LocalDelegationCompleteVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ReceiptResponse,
+    LocalDelegationCompleteError,
+    Schemas.CompleteRequest,
+    {},
+    {},
+    LocalDelegationCompletePathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/complete",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationComplete = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ReceiptResponse,
+      LocalDelegationCompleteError,
+      LocalDelegationCompleteVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ReceiptResponse,
+    LocalDelegationCompleteError,
+    LocalDelegationCompleteVariables
+  >({
+    mutationFn: (variables: LocalDelegationCompleteVariables) =>
+      fetchLocalDelegationComplete(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type LocalDelegationExportContextPathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type LocalDelegationExportContextError = Fetcher.ErrorWrapper<undefined>;
+
+export type LocalDelegationExportContextVariables = {
+  pathParams: LocalDelegationExportContextPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchLocalDelegationExportContext = (
+  variables: LocalDelegationExportContextVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AuthorizationResponse,
+    LocalDelegationExportContextError,
+    undefined,
+    {},
+    {},
+    LocalDelegationExportContextPathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/export-context",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useLocalDelegationExportContext = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.AuthorizationResponse,
+      LocalDelegationExportContextError,
+      LocalDelegationExportContextVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.AuthorizationResponse,
+    LocalDelegationExportContextError,
+    LocalDelegationExportContextVariables
+  >({
+    mutationFn: (variables: LocalDelegationExportContextVariables) =>
+      fetchLocalDelegationExportContext(deepMerge(fetcherOptions, variables)),
+    ...options,
   });
 };
 
@@ -4924,7 +5247,7 @@ export const useSuspenseListMcpServers = <
   });
 };
 
-export const useListMcpServers = <TData = Schemas.ListMcpServersResponse,>(
+export const useListMcpServers = <TData = Schemas.ListMcpServersResponse>(
   variables: ListMcpServersVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -5717,7 +6040,7 @@ export function availableModelsQuery(
  * This endpoint returns all available chat models (providers) that the user can use.
  * Each model includes the provider ID and display name.
  */
-export const useSuspenseAvailableModels = <TData = AvailableModelsResponse,>(
+export const useSuspenseAvailableModels = <TData = AvailableModelsResponse>(
   variables: AvailableModelsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -5744,7 +6067,7 @@ export const useSuspenseAvailableModels = <TData = AvailableModelsResponse,>(
  * This endpoint returns all available chat models (providers) that the user can use.
  * Each model includes the provider ID and display name.
  */
-export const useAvailableModels = <TData = AvailableModelsResponse,>(
+export const useAvailableModels = <TData = AvailableModelsResponse>(
   variables: AvailableModelsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6128,7 +6451,7 @@ export function profileQuery(
   };
 }
 
-export const useSuspenseProfile = <TData = Schemas.UserProfile,>(
+export const useSuspenseProfile = <TData = Schemas.UserProfile>(
   variables: ProfileVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.UserProfile, ProfileError, TData>,
@@ -6143,7 +6466,7 @@ export const useSuspenseProfile = <TData = Schemas.UserProfile,>(
   });
 };
 
-export const useProfile = <TData = Schemas.UserProfile,>(
+export const useProfile = <TData = Schemas.UserProfile>(
   variables: ProfileVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.UserProfile, ProfileError, TData>,
@@ -6302,7 +6625,7 @@ export function recentChatsQuery(
   };
 }
 
-export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse,>(
+export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse>(
   variables: RecentChatsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6325,7 +6648,7 @@ export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse,>(
   });
 };
 
-export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
+export const useRecentChats = <TData = Schemas.RecentChatsResponse>(
   variables: RecentChatsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6430,7 +6753,7 @@ export const useSuspenseStarterPrompts = <
   });
 };
 
-export const useStarterPrompts = <TData = Schemas.StarterPromptsResponse,>(
+export const useStarterPrompts = <TData = Schemas.StarterPromptsResponse>(
   variables: StarterPromptsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6537,9 +6860,7 @@ export const useSuspenseStartingAssistant = <
   });
 };
 
-export const useStartingAssistant = <
-  TData = Schemas.StartingAssistantResponse,
->(
+export const useStartingAssistant = <TData = Schemas.StartingAssistantResponse>(
   variables: StartingAssistantVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6613,7 +6934,7 @@ export function messagesQuery(
   };
 }
 
-export const useSuspenseMessages = <TData = MessagesResponse,>(
+export const useSuspenseMessages = <TData = MessagesResponse>(
   variables: MessagesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<MessagesResponse, MessagesError, TData>,
@@ -6628,7 +6949,7 @@ export const useSuspenseMessages = <TData = MessagesResponse,>(
   });
 };
 
-export const useMessages = <TData = MessagesResponse,>(
+export const useMessages = <TData = MessagesResponse>(
   variables: MessagesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<MessagesResponse, MessagesError, TData>,
@@ -6888,7 +7209,7 @@ export const useSuspenseListShareGrants = <
   });
 };
 
-export const useListShareGrants = <TData = Schemas.ListShareGrantsResponse,>(
+export const useListShareGrants = <TData = Schemas.ListShareGrantsResponse>(
   variables: ListShareGrantsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7260,7 +7581,7 @@ export const useSuspenseResolveShareLink = <
   });
 };
 
-export const useResolveShareLink = <TData = Schemas.ResolveShareLinkResponse,>(
+export const useResolveShareLink = <TData = Schemas.ResolveShareLinkResponse>(
   variables: ResolveShareLinkVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7392,7 +7713,7 @@ export const useSuspenseShareLinkMessages = <
   });
 };
 
-export const useShareLinkMessages = <TData = Schemas.ChatMessagesResponse,>(
+export const useShareLinkMessages = <TData = Schemas.ChatMessagesResponse>(
   variables: ShareLinkMessagesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7505,7 +7826,7 @@ export function healthQuery(variables: HealthVariables | reactQuery.SkipToken) {
   };
 }
 
-export const useSuspenseHealth = <TData = undefined,>(
+export const useSuspenseHealth = <TData = undefined>(
   variables: HealthVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, HealthError, TData>,
@@ -7520,7 +7841,7 @@ export const useSuspenseHealth = <TData = undefined,>(
   });
 };
 
-export const useHealth = <TData = undefined,>(
+export const useHealth = <TData = undefined>(
   variables: HealthVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, HealthError, TData>,
@@ -7604,7 +7925,7 @@ export function officeAddinDocumentManifestQuery(
   };
 }
 
-export const useSuspenseOfficeAddinDocumentManifest = <TData = undefined,>(
+export const useSuspenseOfficeAddinDocumentManifest = <TData = undefined>(
   variables: OfficeAddinDocumentManifestVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7627,7 +7948,7 @@ export const useSuspenseOfficeAddinDocumentManifest = <TData = undefined,>(
   });
 };
 
-export const useOfficeAddinDocumentManifest = <TData = undefined,>(
+export const useOfficeAddinDocumentManifest = <TData = undefined>(
   variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7720,9 +8041,7 @@ export function officeAddinExchangeServerManifestQuery(
   };
 }
 
-export const useSuspenseOfficeAddinExchangeServerManifest = <
-  TData = undefined,
->(
+export const useSuspenseOfficeAddinExchangeServerManifest = <TData = undefined>(
   variables: OfficeAddinExchangeServerManifestVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7747,7 +8066,7 @@ export const useSuspenseOfficeAddinExchangeServerManifest = <
   });
 };
 
-export const useOfficeAddinExchangeServerManifest = <TData = undefined,>(
+export const useOfficeAddinExchangeServerManifest = <TData = undefined>(
   variables: OfficeAddinExchangeServerManifestVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7834,7 +8153,7 @@ export function officeAddinManifestQuery(
   };
 }
 
-export const useSuspenseOfficeAddinManifest = <TData = undefined,>(
+export const useSuspenseOfficeAddinManifest = <TData = undefined>(
   variables: OfficeAddinManifestVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, OfficeAddinManifestError, TData>,
@@ -7853,7 +8172,7 @@ export const useSuspenseOfficeAddinManifest = <TData = undefined,>(
   });
 };
 
-export const useOfficeAddinManifest = <TData = undefined,>(
+export const useOfficeAddinManifest = <TData = undefined>(
   variables: OfficeAddinManifestVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, OfficeAddinManifestError, TData>,
@@ -8012,6 +8331,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/generating";
       operationId: "generatingChats";
       variables: GeneratingChatsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/local-delegation/exports";
+      operationId: "localDelegationReceipts";
+      variables: LocalDelegationReceiptsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/mcp-tool-approval-settings";

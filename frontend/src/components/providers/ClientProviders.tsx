@@ -12,6 +12,7 @@ import {
 } from "../../providers/DesktopSidecarProvider";
 import { FeatureConfigProvider } from "../../providers/FeatureConfigProvider";
 import { I18nProvider } from "../../providers/I18nProvider";
+import { LocalTaskCoordinator } from "../../providers/LocalTaskCoordinator";
 import { McpAuthorizationToasts } from "../ui/Settings/mcpAuthorizationToasts";
 import { Toaster } from "../ui/Toast/Toaster";
 
@@ -32,6 +33,7 @@ export function ClientProviders({ children }: PropsWithChildren) {
           <FeatureConfigProvider>
             <DesktopSidecarClientTools />
             <I18nProvider>
+              <LocalTaskCoordinator />
               <>
                 <div
                   className="flex h-screen min-h-screen bg-theme-bg-primary"

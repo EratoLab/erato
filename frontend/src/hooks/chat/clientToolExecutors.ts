@@ -1,3 +1,5 @@
+import { operationExecutorHeaders } from "@/lib/clientOperations/registration";
+
 /**
  * Registry for client-executed tools. The host (e.g. the Outlook add-in)
  * registers executors by tool name; the shared streaming loop looks them up when
@@ -13,6 +15,13 @@ export type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1beta
 export type ClientToolExecutionResult =
   | {
       ok: true;
+      disposition: "local_only";
+      result?: never;
+      fileUploadIds?: never;
+    }
+  | {
+      ok: true;
+      disposition?: "submit";
       result: unknown;
       /**
        * Uploaded files to attach to the assistant message with rich previews.
@@ -23,6 +32,7 @@ export type ClientToolExecutionResult =
     }
   | {
       ok: false;
+      disposition?: "submit";
       error: string;
       validationErrors?: ClientToolValidationIssue[];
     };
@@ -88,7 +98,16 @@ export function getClientToolHeaders(): Record<string, string> {
     .map(([name]) => name)
     .sort()
     .slice(0, 128);
-  return { "X-Erato-Client-Tools": names.join(",") };
+  const operations = operationExecutorHeaders();
+  const allNames = [
+    ...new Set([
+      ...names,
+      ...(operations["X-Erato-Client-Tools"]?.split(",") ?? []),
+    ]),
+  ]
+    .sort()
+    .slice(0, 128);
+  return { ...operations, "X-Erato-Client-Tools": allNames.join(",") };
 }
 
 // tool_call_ids handled this session, so a resumestream replay never re-runs a
@@ -158,7 +177,33 @@ export function abortClientToolCalls(chatId: string): void {
 }
 
 export function resetClientToolRegistryForTests(): void {
+  localOnlyGuards.clear();
   executors.clear();
   answeredToolCallIds.clear();
   abortControllers.clear();
+}
+
+// These predicates carry no content/status upstream. They also protect the
+// missing-executor and exception fallbacks, which otherwise automatically POST.
+const localOnlyGuards = new Set<{
+  names: ReadonlySet<string>;
+  active: () => boolean;
+}>();
+export function registerLocalOnlyClientTools(
+  names: Iterable<string>,
+  active: () => boolean,
+): () => void {
+  const guard = { names: new Set(names), active };
+  localOnlyGuards.add(guard);
+  return () => {
+    localOnlyGuards.delete(guard);
+  };
+}
+export function isClientToolResultLocalOnly(name: string): boolean {
+  return (
+    name === "local_collect_evidence" ||
+    [...localOnlyGuards].some(
+      (guard) => guard.names.has(name) && guard.active(),
+    )
+  );
 }
