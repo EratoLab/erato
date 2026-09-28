@@ -13,11 +13,15 @@ cp .env.template.local .env.local
 # Edit .env.local with your configuration
 ```
 
-2. Install dependencies:
+2. Install dependencies from the `frontend` directory:
 
 ```bash
-pnpm install
+just install
 ```
+
+This builds the local desktop sidecar protocol before installing the frontend,
+so the frontend receives current compiled protocol types and JavaScript. Run
+`just install` again after pulling protocol changes if you start Vite directly.
 
 3. Run the development server:
 
@@ -26,6 +30,13 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+The authenticated development commands (`just dev`, `just dev_keycloak`,
+`just dev_entra_id`, and `just dev_nginx_jwt`) run `just install` automatically
+before starting the auth containers and Vite. This also applies when using
+`just dev_logged dev_entra_id` to capture output. Dependency preparation includes
+the frontend library build, so these commands take longer to start than `pnpm dev`.
+CI and Docker retain their existing explicit build and install steps.
 
 You can start editing the app by modifying files in the `src/` directory. The page auto-updates as you edit files.
 
