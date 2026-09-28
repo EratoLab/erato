@@ -1323,3 +1323,871 @@ async fn child_offers_require_kind_authorization_allowlist_and_binding(pool: Poo
         assert!(!body["tools"].to_string().contains("read_document_page"));
     }
 }
+
+struct PolicyPageKind {
+    consent: ConsentPolicy,
+    crash_on_input: Arc<std::sync::atomic::AtomicBool>,
+}
+impl OperationKind for PolicyPageKind {
+    fn kind(&self) -> &'static str {
+        DocumentPageKind.kind()
+    }
+    fn operation_id(&self) -> &'static str {
+        DocumentPageKind.operation_id()
+    }
+    fn realm(&self) -> ExecutionRealm {
+        DocumentPageKind.realm()
+    }
+    fn consent(&self) -> ConsentPolicy {
+        self.consent
+    }
+    fn allow_cross_device(&self) -> bool {
+        true
+    }
+    fn validate_input(&self, input: &Value, executor: &ExecutorBinding) -> Result<(), String> {
+        // This is reached by the actual dispatch loop AFTER its charge/identity
+        // checkpoint. Panic only the spawned generation to simulate worker death.
+        assert!(
+            !self
+                .crash_on_input
+                .swap(false, std::sync::atomic::Ordering::SeqCst),
+            "injected worker death after committed call charge"
+        );
+        DocumentPageKind.validate_input(input, executor)
+    }
+    fn validate_result(
+        &self,
+        request: &OperationRequest,
+        result: &OperationResult,
+    ) -> Result<ValidatedResult, String> {
+        DocumentPageKind.validate_result(request, result)
+    }
+}
+fn install_policy_kind(
+    state: &mut erato::state::AppState,
+    consent: ConsentPolicy,
+) -> Arc<std::sync::atomic::AtomicBool> {
+    let crash = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    state.client_operations = OperationRegistry::default();
+    state
+        .client_operations
+        .register(Arc::new(PolicyPageKind {
+            consent,
+            crash_on_input: crash.clone(),
+        }))
+        .unwrap();
+    crash
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn consent_kinds_cannot_execute_or_submit_through_the_fast_path(pool: Pool<Postgres>) {
+    let (mut state, _mock, _recorder, _) = setup(pool, 60_000).await;
+    for consent in [ConsentPolicy::Ask, ConsentPolicy::Native] {
+        install_policy_kind(&mut state, consent);
+        let chat_id = seed_origin_chat(&state.db).await;
+        let server = app_server(state.clone());
+        let response = tokio::time::timeout(
+            Duration::from_secs(10),
+            server
+                .post("/api/v1beta/me/messages/submitstream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .add_header("X-Erato-Client-Tools", "read_document_page")
+                .add_header(
+                    "X-Erato-Executor",
+                    serde_json::to_string(&binding("device-one")).unwrap(),
+                )
+                .json(&json!({"existing_chat_id":chat_id,"user_message":"Read page one"})),
+        )
+        .await
+        .unwrap();
+        response.assert_status_ok();
+        assert!(!parse_sse_events(&response).iter().any(|event| {
+            serde_json::from_str::<Value>(&event.data)
+                .is_ok_and(|value| value["message_type"] == "client_tool_call")
+        }));
+        let row = attempts::Entity::find()
+            .filter(attempts::Column::ChatId.eq(chat_id))
+            .one(&state.db)
+            .await
+            .unwrap()
+            .unwrap();
+        let request: OperationRequest = serde_json::from_value(row.request).unwrap();
+        assert_eq!(request.consent, consent);
+        server.post("/api/v1beta/me/messages/clienttoolresult").with_bearer_token(TEST_JWT_TOKEN)
+            .add_header("X-Erato-Executor", serde_json::to_string(&binding("device-one")).unwrap())
+            .json(&json!({"chat_id":chat_id,"message_id":request.message_id,"tool_call_id":request.tool_call_id,
+                "status":"success","result":{"document_identity":"doc-one","page":1,"text":"unconfirmed"}}))
+            .await.assert_status_conflict();
+        assert!(
+            store::accept_fast(
+                &state.db,
+                &state.client_operations,
+                request.account_id,
+                &page_result(&request, binding("device-one"))
+            )
+            .await
+            .is_err()
+        );
+        let claim_url = format!(
+            "/api/v1beta/me/client-operations/{}/claim",
+            request.attempt_id
+        );
+        if consent == ConsentPolicy::Ask {
+            server
+                .post(&claim_url)
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .add_header("X-Erato-Client-Tools", "read_document_page")
+                .json(&json!({"binding":binding("device-one"),"user_confirmed":false}))
+                .await
+                .assert_status_conflict();
+        }
+        let claimed = server
+            .post(&claim_url)
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header("X-Erato-Client-Tools", "read_document_page")
+            .json(&json!({"binding":binding("device-one"),"user_confirmed":true}))
+            .await;
+        claimed.assert_status_ok();
+        // Native proof belongs to the kind validator; this fixture tests routing,
+        // not an attestation. Neither consent mode can use unclaimed acceptance.
+        server.post(&format!("/api/v1beta/me/client-operations/{}/result", request.attempt_id))
+            .with_bearer_token(TEST_JWT_TOKEN).add_header("X-Erato-Client-Tools", "read_document_page")
+            .json(&json!({"claim_token":claimed.json::<Value>()["claim_token"],"result":page_result(&request,binding("device-one"))}))
+            .await.assert_status_ok();
+    }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn withdrawn_tools_refuse_claims_and_uncommitted_results(pool: Pool<Postgres>) {
+    let (base, _mock, _recorder, _) = setup(pool, 10).await;
+    for remove_tool in [false, true] {
+        for claimed_before in [false, true] {
+            let mut state = base.clone();
+            let chat_id = seed_origin_chat(&state.db).await;
+            // park() also asserts the isolated inbox size, so use one row per case.
+            let request = park(&state, chat_id).await;
+            let server = app_server(state.clone());
+            let claim_url = format!(
+                "/api/v1beta/me/client-operations/{}/claim",
+                request.attempt_id
+            );
+            let token = if claimed_before {
+                let response = server
+                    .post(&claim_url)
+                    .with_bearer_token(TEST_JWT_TOKEN)
+                    .add_header("X-Erato-Client-Tools", "read_document_page")
+                    .json(&json!({"binding":binding("device-one")}))
+                    .await;
+                response.assert_status_ok();
+                Some(response.json::<Value>()["claim_token"].clone())
+            } else {
+                None
+            };
+            if remove_tool {
+                state.config.client_tools.tools.clear();
+            } else {
+                state.config.facets.tool_call_allowlist.clear();
+            }
+            let server = app_server(state.clone());
+            if let Some(token) = token {
+                server.post(&format!("/api/v1beta/me/client-operations/{}/result",request.attempt_id))
+                    .with_bearer_token(TEST_JWT_TOKEN).add_header("X-Erato-Client-Tools","read_document_page")
+                    .json(&json!({"claim_token":token,"result":page_result(&request,binding("device-one"))}))
+                    .await.assert_status_conflict();
+            } else {
+                server
+                    .post(&claim_url)
+                    .with_bearer_token(TEST_JWT_TOKEN)
+                    .add_header("X-Erato-Client-Tools", "read_document_page")
+                    .json(&json!({"binding":binding("device-one")}))
+                    .await
+                    .assert_status_conflict();
+            }
+            let row = attempts::Entity::find_by_id(request.attempt_id)
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(row.state, AttemptState::Ready);
+            assert_eq!(row.result.unwrap()["error"]["code"], "withdrawn");
+            assert!(
+                !row.validated_result
+                    .unwrap()
+                    .to_string()
+                    .contains("approved page")
+            );
+            server
+                .post(&format!(
+                    "/api/v1beta/me/client-operations/{}/continue",
+                    request.attempt_id
+                ))
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .await
+                .assert_status_ok();
+            wait_completed(&state, request.attempt_id).await;
+            let message = Messages::find_by_id(request.message_id)
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(message.raw_message.to_string().contains("withdrawn"));
+            attempts::Entity::delete_by_id(request.attempt_id)
+                .exec(&state.db)
+                .await
+                .unwrap();
+        }
+    }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn committed_results_survive_withdrawal_and_identical_redelivery(pool: Pool<Postgres>) {
+    let (mut state, _mock, _recorder, chat_id) = setup(pool, 10).await;
+    let request = park(&state, chat_id).await;
+    let server = app_server(state.clone());
+    let claim = server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/claim",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", "read_document_page")
+        .json(&json!({"binding":binding("device-one")}))
+        .await;
+    claim.assert_status_ok();
+    let result = json!({"claim_token":claim.json::<Value>()["claim_token"],"result":page_result(&request,binding("device-one"))});
+    let url = format!(
+        "/api/v1beta/me/client-operations/{}/result",
+        request.attempt_id
+    );
+    server
+        .post(&url)
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", "read_document_page")
+        .json(&result)
+        .await
+        .assert_status_ok();
+    state.config.client_tools.tools.clear();
+    state.client_operations = OperationRegistry::default();
+    let server = app_server(state.clone());
+    server
+        .post(&url)
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", "read_document_page")
+        .json(&result)
+        .await
+        .assert_status_ok();
+    server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/continue",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    wait_completed(&state, request.attempt_id).await;
+    let message = Messages::find_by_id(request.message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(message.raw_message.to_string().contains("approved page"));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool<Postgres>) {
+    use sea_orm::ConnectionTrait;
+    use std::sync::atomic::Ordering;
+    let (mut state, _mock, recorder, chat_id) =
+        setup_with_second_submission(pool.clone(), 10, true).await;
+    state.config.generation.max_tool_calls_per_message = 2;
+    state
+        .config
+        .client_tools
+        .tools
+        .get_mut("page")
+        .unwrap()
+        .submission = Some(erato::config::ClientToolSubmissionConfig {
+        max_attempts: 2,
+        ..Default::default()
+    });
+    let crash = install_policy_kind(&mut state, ConsentPolicy::None);
+    let first = park(&state, chat_id).await;
+    let mut rejected = page_result(&first, binding("device-one"));
+    rejected.outcome = OperationOutcome::Rejected;
+    rejected.result = None;
+    rejected.error = Some(OperationError {
+        code: "validation_failed".into(),
+    });
+    store::accept(
+        &state.db,
+        &state.client_operations,
+        first.account_id,
+        None,
+        &rejected,
+    )
+    .await
+    .unwrap();
+    crash.store(true, Ordering::SeqCst);
+    app_server(state.clone())
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/continue",
+            first.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    let checkpoint = tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let message = Messages::find_by_id(first.message_id)
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            let params: GenerationParameters =
+                serde_json::from_value(message.generation_parameters.unwrap()).unwrap();
+            if !crash.load(Ordering::SeqCst)
+                && params
+                    .turn_consumption
+                    .tool_charges
+                    .get("page-call-2")
+                    .is_some_and(|charge| charge.submission_attempt == Some(2))
+            {
+                break params.turn_consumption;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(checkpoint.tool_calls, 2);
+    let second_id = checkpoint.tool_charges["page-call-2"]
+        .operation_identity
+        .as_ref()
+        .unwrap()
+        .attempt_id;
+    // The test uses a panic, so let the in-process cleanup guard finish before
+    // restoring the stale lease that a real process death would have left.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let chat = chats::Entity::find_by_id(chat_id)
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            if chat.generation_state.as_deref() == Some("errored") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    state
+        .db
+        .execute_unprepared(&format!(
+            "UPDATE chats SET generation_state='running',generation_heartbeat_at=now()-interval '1 hour' WHERE id='{chat_id}'"
+        ))
+        .await
+        .unwrap();
+    state.db.execute_unprepared("TRUNCATE temp_chat_generation_commands, temp_chat_generation_events, temp_chat_generations CASCADE").await.unwrap();
+    let mut replica = test_app_state(state.config.clone(), pool).await;
+    replica.client_operations = state.client_operations.clone();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let chat = chats::Entity::find_by_id(chat_id)
+                .one(&replica.db)
+                .await
+                .unwrap()
+                .unwrap();
+            if chat.generation_state.as_deref() == Some("awaiting_approval") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let server = app_server(replica.clone());
+    server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/continue",
+            first.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    wait_completed(&replica, first.attempt_id).await;
+    let row = attempts::Entity::find_by_id(second_id)
+        .one(&replica.db)
+        .await
+        .unwrap()
+        .expect("same operation identity after crash");
+    assert_eq!(row.state, AttemptState::Pending);
+    let message = Messages::find_by_id(first.message_id)
+        .one(&replica.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let after: GenerationParameters =
+        serde_json::from_value(message.generation_parameters.unwrap()).unwrap();
+    assert_eq!(
+        after.turn_consumption, checkpoint,
+        "recovery must not charge the same iteration/call/submission twice"
+    );
+    let second: OperationRequest = serde_json::from_value(row.request).unwrap();
+    let result = page_result(&second, binding("device-one"));
+    for _ in 0..2 {
+        store::accept(
+            &replica.db,
+            &replica.client_operations,
+            second.account_id,
+            None,
+            &result,
+        )
+        .await
+        .unwrap();
+    }
+    server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/continue",
+            second_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    wait_completed(&replica, second_id).await;
+    let message = Messages::find_by_id(first.message_id)
+        .one(&replica.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let parts = message.raw_message["content"].as_array().unwrap();
+    assert_eq!(
+        parts
+            .iter()
+            .filter(
+                |part| part["tool_call_id"] == "page-call-2" && part["content_type"] == "tool_use"
+            )
+            .count(),
+        1
+    );
+    assert_eq!(
+        turn_requests(&recorder).len(),
+        2,
+        "recovery must not regenerate a proposal"
+    );
+}
+
+struct PlanKind;
+impl OperationKind for PlanKind {
+    fn kind(&self) -> &'static str {
+        "test.plan.v1"
+    }
+    fn operation_id(&self) -> &'static str {
+        "client/submit_plan"
+    }
+    fn realm(&self) -> ExecutionRealm {
+        ExecutionRealm::OfficeAddin
+    }
+    fn consent(&self) -> ConsentPolicy {
+        ConsentPolicy::None
+    }
+    fn validate_input(&self, input: &Value, binding: &ExecutorBinding) -> Result<(), String> {
+        DocumentPageKind.validate_input(&json!({"page":1}), binding)?;
+        input["draft"]
+            .as_str()
+            .filter(|draft| draft.len() < 4096)
+            .map(|_| ())
+            .ok_or("draft required".into())
+    }
+    fn validate_result(
+        &self,
+        _request: &OperationRequest,
+        result: &OperationResult,
+    ) -> Result<ValidatedResult, String> {
+        if result.outcome == OperationOutcome::Rejected
+            && result.result.is_none()
+            && result
+                .error
+                .as_ref()
+                .is_some_and(|error| error.code == "validation_failed")
+        {
+            return Ok(ValidatedResult {
+                succeeded: false,
+                output: json!({"status":"error","error":"CURRENT-DIAGNOSTIC"}),
+            });
+        }
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct PlanReceipt {
+            accepted: bool,
+        }
+        let Some(OperationValue::Value { value }) = &result.result else {
+            return Err("receipt required".into());
+        };
+        let receipt: PlanReceipt =
+            serde_json::from_value(value.clone()).map_err(|_| "typed receipt required")?;
+        if !receipt.accepted {
+            return Err("invalid receipt".into());
+        }
+        Ok(ValidatedResult {
+            succeeded: true,
+            output: json!({"status":"success","result":{"accepted":true}}),
+        })
+    }
+}
+async fn next_inbox_request(state: &erato::state::AppState, chat_id: Uuid) -> OperationRequest {
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let row = attempts::Entity::find()
+                .filter(attempts::Column::ChatId.eq(chat_id))
+                .filter(attempts::Column::State.eq(AttemptState::Pending))
+                .one(&state.db)
+                .await
+                .unwrap();
+            let chat = chats::Entity::find_by_id(chat_id)
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            if let Some(row) = row
+                && chat.generation_state.as_deref() == Some("awaiting_approval")
+            {
+                break serde_json::from_value(row.request).unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+async fn post_claimed_result(
+    state: &erato::state::AppState,
+    request: &OperationRequest,
+    accepted: bool,
+) -> Value {
+    let server = app_server(state.clone());
+    let claim = server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/claim",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", "read_document_page,submit_plan")
+        .json(&json!({"binding":binding("device-one")}))
+        .await;
+    claim.assert_status_ok();
+    let mut result = page_result(request, binding("device-one"));
+    if request.operation_id == "client/submit_plan" {
+        result.result = accepted.then(|| OperationValue::Value {
+            value: json!({"accepted":true}),
+        });
+        if !accepted {
+            result.outcome = OperationOutcome::Rejected;
+            result.error = Some(OperationError {
+                code: "validation_failed".into(),
+            });
+        }
+    } else {
+        result.result = Some(OperationValue::Value {
+            value: json!({"document_identity":"doc-one","page":1,
+            "text":if request.tool_call_id=="read-A" {"PRIOR-PAGE-SECRET"} else {"CURRENT-PAGE"}}),
+        });
+    }
+    let payload = json!({"claim_token":claim.json::<Value>()["claim_token"],"result":result});
+    server
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/result",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", "read_document_page,submit_plan")
+        .json(&payload)
+        .await
+        .assert_status_ok();
+    payload
+}
+async fn continue_inbox(state: &erato::state::AppState, id: Uuid) {
+    app_server(state.clone())
+        .post(&format!("/api/v1beta/me/client-operations/{id}/continue"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    wait_completed(state, id).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn joint_replay_keeps_current_drafts_through_restart_and_duplicate_result(
+    pool: Pool<Postgres>,
+) {
+    joint_replay_case(pool, false).await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn joint_replay_refuses_withdrawn_tool_before_claim(pool: Pool<Postgres>) {
+    joint_replay_case(pool, true).await;
+}
+async fn joint_replay_case(pool: Pool<Postgres>, withdraw: bool) {
+    use erato::services::background_tasks::{BackgroundTaskManager, Takeover};
+    use sea_orm::ConnectionTrait;
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    for (yes, no, call, name, args) in [
+        (
+            vec!["TURN-A"],
+            vec!["TURN-B", "read-A"],
+            "read-A",
+            "read_document_page",
+            json!({"page":1}),
+        ),
+        (
+            vec!["read-A"],
+            vec!["TURN-B", "plan-A"],
+            "plan-A",
+            "submit_plan",
+            json!({"draft":"PRIOR-DRAFT-SECRET"}),
+        ),
+        (
+            vec!["TURN-B"],
+            vec!["read-B"],
+            "read-B",
+            "read_document_page",
+            json!({"page":1}),
+        ),
+        (
+            vec!["read-B"],
+            vec!["plan-B1"],
+            "plan-B1",
+            "submit_plan",
+            json!({"draft":"CURRENT-DRAFT-REJECTED"}),
+        ),
+        (
+            vec!["plan-B1"],
+            vec!["plan-B2"],
+            "plan-B2",
+            "submit_plan",
+            json!({"draft":"CURRENT-DRAFT-CORRECTED"}),
+        ),
+    ] {
+        let capture = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&yes, &no))
+                .matcher(capture);
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[(call, name, args)]),
+            );
+        });
+    }
+    let capture = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["plan-B2"], &[]))
+            .matcher(capture);
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["JOINT-RECOVERED"]),
+        );
+    });
+    let (mut config, _mock) = setup_mock_llm_server_with_mocks(mocks).await;
+    config.client_tools.durable_operations_enabled = true;
+    config.facets.tool_call_allowlist = vec![
+        "client/read_document_page".into(),
+        "client/submit_plan".into(),
+    ];
+    for (name, parameters, submission) in [
+        (
+            "read_document_page",
+            json!({"type":"object","properties":{"page":{"type":"integer"}},"required":["page"]}),
+            None,
+        ),
+        (
+            "submit_plan",
+            json!({"type":"object","properties":{"draft":{"type":"string"}},"required":["draft"]}),
+            Some(erato::config::ClientToolSubmissionConfig {
+                max_attempts: 3,
+                ..Default::default()
+            }),
+        ),
+    ] {
+        let tool = ClientToolConfig {
+            name: name.into(),
+            description: name.into(),
+            parameters: parameters.to_string(),
+            timeout_ms: Some(10),
+            requires_client_registration: true,
+            submission,
+            ..Default::default()
+        };
+        // The same regression runs on #1249 alone and on its combined tree with
+        // #1250. There is no compile-time dependency on the latter's new type.
+        let mut value = serde_json::to_value(tool).unwrap();
+        value["replay"] =
+            json!({"mode":"receipt","keep_input_fields":[],"keep_output_fields":["$.status"]});
+        config
+            .client_tools
+            .tools
+            .insert(name.into(), serde_json::from_value(value).unwrap());
+    }
+    let receipts_supported = serde_json::to_value(&config.client_tools.tools["read_document_page"])
+        .unwrap()
+        .get("replay")
+        .is_some();
+    let mut state = test_app_state(config, pool.clone()).await;
+    state
+        .client_operations
+        .register(Arc::new(DocumentPageKind))
+        .unwrap();
+    state
+        .client_operations
+        .register(Arc::new(PlanKind))
+        .unwrap();
+    let chat_id = seed_origin_chat(&state.db).await;
+    let mut previous_message_id = None;
+    for turn in ["TURN-A", "TURN-B"] {
+        app_server(state.clone())
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header("X-Erato-Client-Tools", "read_document_page,submit_plan")
+            .add_header(
+                "X-Erato-Executor",
+                serde_json::to_string(&binding("device-one")).unwrap(),
+            )
+            .json(&json!({"existing_chat_id":chat_id,"previous_message_id":previous_message_id,"user_message":turn}))
+            .await
+            .assert_status_ok();
+        let read = next_inbox_request(&state, chat_id).await;
+        post_claimed_result(&state, &read, true).await;
+        continue_inbox(&state, read.attempt_id).await;
+        let plan = next_inbox_request(&state, chat_id).await;
+        post_claimed_result(&state, &plan, turn == "TURN-A").await;
+        continue_inbox(&state, plan.attempt_id).await;
+        previous_message_id = Some(plan.message_id);
+    }
+    let request = next_inbox_request(&state, chat_id).await;
+    assert_eq!(request.tool_call_id, "plan-B2");
+    let message = Messages::find_by_id(request.message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let snapshot = message.generation_input_messages.unwrap().to_string();
+    assert_eq!(snapshot.contains("PRIOR-PAGE-SECRET"), !receipts_supported);
+    assert_eq!(snapshot.contains("PRIOR-DRAFT-SECRET"), !receipts_supported);
+    if receipts_supported {
+        assert!(snapshot.contains("omitted_from_replay"));
+    }
+    let payload = if withdraw {
+        state.config.client_tools.tools.remove("submit_plan");
+        app_server(state.clone())
+            .post(&format!(
+                "/api/v1beta/me/client-operations/{}/claim",
+                request.attempt_id
+            ))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header("X-Erato-Client-Tools", "submit_plan")
+            .json(&json!({"binding":binding("device-one")}))
+            .await
+            .assert_status_conflict();
+        None
+    } else {
+        Some(post_claimed_result(&state, &request, false).await)
+    };
+    let manager = BackgroundTaskManager::new(
+        Some(state.db.clone()),
+        state.config.generation_status.clone(),
+        None,
+    )
+    .with_lease_identity_guard(true);
+    let (_events, old_task) = manager
+        .try_start_task(chat_id, request.message_id, Takeover::TakeParked, 30)
+        .await
+        .unwrap();
+    store::begin_continuation(
+        &state.db,
+        request.account_id,
+        request.attempt_id,
+        old_task.generation_id,
+    )
+    .await
+    .unwrap();
+    old_task.request_abort();
+    state.db.execute_unprepared(&format!("UPDATE chats SET generation_state='running',generation_heartbeat_at=now()-interval '1 hour' WHERE id='{chat_id}'")).await.unwrap();
+    state.db.execute_unprepared("TRUNCATE temp_chat_generation_commands, temp_chat_generation_events, temp_chat_generations CASCADE").await.unwrap();
+    let mut replica = test_app_state(state.config.clone(), pool).await;
+    replica.client_operations = state.client_operations.clone();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let chat = chats::Entity::find_by_id(chat_id)
+                .one(&replica.db)
+                .await
+                .unwrap()
+                .unwrap();
+            if chat.generation_state.as_deref() == Some("awaiting_approval") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    if let Some(payload) = payload {
+        app_server(replica.clone())
+            .post(&format!(
+                "/api/v1beta/me/client-operations/{}/result",
+                request.attempt_id
+            ))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header("X-Erato-Client-Tools", "read_document_page,submit_plan")
+            .json(&payload)
+            .await
+            .assert_status_ok();
+    }
+    continue_inbox(&replica, request.attempt_id).await;
+    let message = Messages::find_by_id(request.message_id)
+        .one(&replica.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let params: GenerationParameters =
+        serde_json::from_value(message.generation_parameters.unwrap()).unwrap();
+    assert_eq!(params.turn_consumption.tool_calls, 3);
+    assert_eq!(
+        params.turn_consumption.submission_attempts["submit_plan"],
+        2
+    );
+    assert_eq!(
+        message.raw_message["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == "plan-B2")
+            .count(),
+        1
+    );
+    let bodies = turn_requests(&recorder);
+    assert_eq!(bodies.len(), if withdraw { 5 } else { 6 });
+    // Withdrawal is a terminal submission refusal, so it must not launch an
+    // extra model call. Its complete current turn remains in the message row.
+    let rebuilt = if withdraw {
+        message.raw_message.to_string()
+    } else {
+        bodies.last().unwrap().to_string()
+    };
+    for marker in [
+        "CURRENT-PAGE",
+        "CURRENT-DRAFT-REJECTED",
+        "CURRENT-DRAFT-CORRECTED",
+        "CURRENT-DIAGNOSTIC",
+    ] {
+        assert!(rebuilt.contains(marker), "missing {marker}");
+    }
+    if withdraw {
+        assert!(rebuilt.contains("withdrawn"));
+    } else {
+        assert_eq!(rebuilt.contains("PRIOR-PAGE-SECRET"), !receipts_supported);
+        assert_eq!(rebuilt.contains("PRIOR-DRAFT-SECRET"), !receipts_supported);
+    }
+}

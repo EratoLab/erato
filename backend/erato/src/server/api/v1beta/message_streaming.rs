@@ -4932,6 +4932,7 @@ async fn stream_generate_chat_completion<
         .as_ref()
         .map(|resume| resume.consumption.clone())
         .unwrap_or_default();
+    let mut resume_iteration = resume.is_some() && consumption.model_turns > 0;
     let (mut unfinished_tool_calls, approved_task_call_ids): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
@@ -4951,6 +4952,8 @@ async fn stream_generate_chat_completion<
     let mut task_server_tool_calls: u32 = consumption.server_tool_calls;
     let mut task_client_tool_calls: u32 = consumption.client_tool_calls;
     let mut submission_attempts = consumption.submission_attempts;
+    let mut tool_charges = consumption.tool_charges;
+
     // At most one successful client-action proposal per generation: the
     // client needs a single authoritative proposal, so duplicate or
     // conflicting calls after the first are answered with an error.
@@ -5114,6 +5117,7 @@ async fn stream_generate_chat_completion<
                         server_tool_calls: task_server_tool_calls,
                         client_tool_calls: task_client_tool_calls,
                         submission_attempts: submission_attempts.clone(),
+                        tool_charges: tool_charges.clone(),
                         client_action_proposed: client_action_already_proposed,
                     },
                 )
@@ -5123,7 +5127,10 @@ async fn stream_generate_chat_completion<
     }
 
     let completion = 'loop_call_turns: loop {
-        current_turn += 1;
+        // A parked iteration was already counted before its checkpoint.
+        if !std::mem::take(&mut resume_iteration) {
+            current_turn += 1;
+        }
         tracing::debug!("Starting chat completion turn {}", current_turn);
         let chat_provider_metric_label = chat_provider_id.unwrap_or("unknown");
         let provider_request_start = Instant::now();
@@ -5337,7 +5344,11 @@ async fn stream_generate_chat_completion<
             // hallucinations drain a real allowance — and, with a budget of
             // `0`, would answer an invalid name with "you are out of budget",
             // telling the model nothing about what was actually wrong with it.
-            let budget_refusal = task_tool_budgets
+            let already_charged = tool_charges.get(&unfinished_tool_call.call_id);
+            let budget_refusal = if let Some(charge) = already_charged {
+                charge.budget_refusal.clone()
+            } else {
+                task_tool_budgets
                 .filter(|_| allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()))
                 .and_then(|budgets| {
                 let class = crate::services::delegation::classify_task_tool_call(
@@ -5364,7 +5375,8 @@ async fn stream_generate_chat_completion<
                         }
                     }
                 }
-            });
+            }).map(str::to_owned)
+            };
 
             // The per-message cap is the outer backstop for every turn,
             // including a task run — the per-task budgets bound the work a
@@ -5379,7 +5391,7 @@ async fn stream_generate_chat_completion<
             // `{"status":"failed"}` with nothing in it. Ending the turn
             // gracefully keeps what the child has and reports it as the
             // partial, resumable result it is.
-            if current_tool_call_count >= max_tool_calls_per_message {
+            if already_charged.is_none() && current_tool_call_count >= max_tool_calls_per_message {
                 if let Some(task) = streaming_task.filter(|_| task_tool_budgets.is_some()) {
                     tracing::warn!(
                         chat_id = %chat_id,
@@ -5414,7 +5426,16 @@ async fn stream_generate_chat_completion<
                 ));
                 break 'pop_calls;
             }
-            current_tool_call_count += 1;
+            if already_charged.is_none() {
+                current_tool_call_count += 1;
+                tool_charges.insert(
+                    unfinished_tool_call.call_id.clone(),
+                    crate::services::client_operations::ToolCallCharge {
+                        budget_refusal: budget_refusal.clone(),
+                        ..Default::default()
+                    },
+                );
+            }
             persist_operation_turn!(Some(&unfinished_tool_call));
             let tool_index =
                 tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
@@ -5467,7 +5488,7 @@ async fn stream_generate_chat_completion<
             // Budget refusal, decided above and emitted here so it lands
             // before every dispatch branch and so client tools are bounded
             // the same way MCP tools are.
-            if let Some(error_message) = budget_refusal {
+            if let Some(error_message) = budget_refusal.as_deref() {
                 if let Some(task) = streaming_task {
                     // The refusal part is indistinguishable from any other
                     // refusal, so the run says out of band that it stopped at
@@ -5985,12 +6006,39 @@ async fn stream_generate_chat_completion<
                 let tool_policy = offered_client_tools.get(&tool_name);
                 let submission = tool_policy.and_then(|policy| policy.submission.as_ref());
                 let attempt = if submission.is_some() {
-                    let attempt = submission_attempts.entry(tool_name.clone()).or_default();
-                    *attempt += 1;
-                    *attempt
+                    *tool_charges
+                        .entry(call_id.clone())
+                        .or_default()
+                        .submission_attempt
+                        .get_or_insert_with(|| {
+                            let count = submission_attempts.entry(tool_name.clone()).or_default();
+                            *count += 1;
+                            *count
+                        })
                 } else {
                     0
                 };
+                if app_state.config.client_tools.durable_operations_enabled
+                    && tool_policy.is_some_and(|policy| {
+                        app_state
+                            .client_operations
+                            .for_operation(&policy.config.qualified_name())
+                            .is_some()
+                    })
+                {
+                    tool_charges
+                        .entry(call_id.clone())
+                        .or_default()
+                        .operation_identity
+                        .get_or_insert_with(|| {
+                            crate::services::client_operations::OperationIdentity {
+                                attempt_id: Uuid::new_v4(),
+                                expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                            }
+                        });
+                }
+                // Commit charges and identity before validation/dispatch. A
+                // crash at either point resumes the same logical attempt.
                 persist_operation_turn!(Some(&unfinished_tool_call));
                 // A submission is a single final artifact, never one of several
                 // parallel candidates. Reject it before invoking a host executor.
@@ -6015,21 +6063,27 @@ async fn stream_generate_chat_completion<
                         let binding = policy.executor.as_ref()?;
                         (kind.realm() == binding.realm
                             && kind.validate_input(&tool_input, binding).is_ok())
-                        .then(|| crate::services::client_operations::OperationRequest {
-                            attempt_id: Uuid::new_v4(),
-                            operation_id: policy.config.qualified_name(),
-                            kind: kind.kind().into(),
-                            realm: kind.realm(),
-                            chat_id,
-                            message_id: assistant_message_id,
-                            tool_call_id: call_id.clone(),
-                            account_id: Uuid::parse_str(&user_id)
-                                .expect("authenticated UUID account"),
-                            binding: binding.clone(),
-                            base_revision: None,
-                            consent: kind.consent(),
-                            expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
-                            input: tool_input.clone(),
+                        .then(|| {
+                            let identity = tool_charges[&call_id]
+                                .operation_identity
+                                .as_ref()
+                                .expect("registered call identity");
+                            crate::services::client_operations::OperationRequest {
+                                attempt_id: identity.attempt_id,
+                                operation_id: policy.config.qualified_name(),
+                                kind: kind.kind().into(),
+                                realm: kind.realm(),
+                                chat_id,
+                                message_id: assistant_message_id,
+                                tool_call_id: call_id.clone(),
+                                account_id: Uuid::parse_str(&user_id)
+                                    .expect("authenticated UUID account"),
+                                binding: binding.clone(),
+                                base_revision: None,
+                                consent: kind.consent(),
+                                expires_at: identity.expires_at,
+                                input: tool_input.clone(),
+                            }
                         })
                     })
                 } else {
@@ -6059,7 +6113,11 @@ async fn stream_generate_chat_completion<
                     // POSTed immediately cannot race ahead of the registered waiter.
                     let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
 
-                    let inbox_only = tool_policy.is_some_and(|policy| policy.inbox_only);
+                    let inbox_only = tool_policy.is_some_and(|policy| policy.inbox_only)
+                        || durable_request.as_ref().is_some_and(|request| {
+                            request.consent
+                                != crate::services::client_operations::ConsentPolicy::None
+                        });
                     if !inbox_only {
                         // Signal the client to execute: broadcast (submit path + resume
                         // replay) AND the typed tx stream (regenerate/edit path).
@@ -7171,6 +7229,7 @@ async fn stream_generate_chat_completion<
                         server_tool_calls: task_server_tool_calls,
                         client_tool_calls: task_client_tool_calls,
                         submission_attempts: submission_attempts.clone(),
+                        tool_charges: tool_charges.clone(),
                         client_action_proposed: client_action_already_proposed,
                     },
                 )
@@ -7211,6 +7270,7 @@ async fn stream_generate_chat_completion<
                     server_tool_calls: task_server_tool_calls,
                     client_tool_calls: task_client_tool_calls,
                     submission_attempts: submission_attempts.clone(),
+                    tool_charges: tool_charges.clone(),
                     client_action_proposed: client_action_already_proposed,
                 },
             )
@@ -9774,7 +9834,11 @@ fn is_tool_allowed_by_allowlist(
 /// client tools (`namespace/tool_name`). A `namespace` here is the MCP server
 /// id or the client-tool namespace. Patterns: `*` (all), a bare namespace (all
 /// of that namespace), `namespace/*` (prefix), or an exact `namespace/name`.
-fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[String]) -> bool {
+pub(super) fn is_qualified_tool_allowed(
+    namespace: &str,
+    tool_name: &str,
+    allowlist: &[String],
+) -> bool {
     let qualified_name = format!("{}/{}", namespace, tool_name);
 
     allowlist.iter().any(|pattern| {
@@ -9815,7 +9879,7 @@ fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[Stri
 ///    additively-only-on-`Some` (never resurrects a `None`/all-allowed base),
 ///    whereas here it is a first-class selector — action facets are the primary
 ///    client-tool path and live in a separate `action_facets` map.
-fn effective_client_tool_allowlist(
+pub(super) fn effective_client_tool_allowlist(
     facets: &crate::config::FacetsConfig,
     action_facets: &crate::config::ActionFacetsConfig,
     selected_facet_ids: &[String],
@@ -14070,6 +14134,12 @@ pub async fn client_tool_result(
             if let (Some(operation), Some(task)) = (&operation, &task)
                 && task.message_id() == request.message_id
             {
+                if operation.consent != crate::services::client_operations::ConsentPolicy::None {
+                    return Err((
+                        axum::http::StatusCode::CONFLICT,
+                        "Operation consent requires a claim".into(),
+                    ));
+                }
                 if operation.chat_id != request.chat_id
                     || crate::services::client_operations::ExecutorBinding::from_headers(&headers)
                         .as_ref()
@@ -14120,6 +14190,12 @@ pub async fn client_tool_result(
                 })?
                 .or(operation);
             if let Some(operation) = durable_request {
+                if operation.consent != crate::services::client_operations::ConsentPolicy::None {
+                    return Err((
+                        axum::http::StatusCode::CONFLICT,
+                        "Operation consent requires a claim".into(),
+                    ));
+                }
                 if operation.chat_id != request.chat_id
                     || crate::services::client_operations::ExecutorBinding::from_headers(&headers)
                         .as_ref()
@@ -14134,7 +14210,38 @@ pub async fn client_tool_result(
                     &operation,
                     ClientToolOutcome::from_payload(&operation_payload),
                 );
-                if row.is_some() {
+                if let Some(row) = row {
+                    if matches!(
+                        row.state,
+                        crate::services::client_operations::store::AttemptState::Pending
+                            | crate::services::client_operations::store::AttemptState::Claimed
+                    ) && !super::client_operations::authorize_open_operation(
+                        &app_state, &policy, &me_user, &operation,
+                    )
+                    .await
+                    .map_err(|_| {
+                        (
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                            "Operation authorization failed".into(),
+                        )
+                    })? {
+                        crate::services::client_operations::store::withdraw(
+                            &app_state.db,
+                            account_id,
+                            operation.attempt_id,
+                        )
+                        .await
+                        .map_err(|_| {
+                            (
+                                axum::http::StatusCode::CONFLICT,
+                                "Operation is no longer open".into(),
+                            )
+                        })?;
+                        return Err((
+                            axum::http::StatusCode::CONFLICT,
+                            "Operation authorization withdrawn".into(),
+                        ));
+                    }
                     crate::services::client_operations::store::accept_fast(
                         &app_state.db,
                         &app_state.client_operations,

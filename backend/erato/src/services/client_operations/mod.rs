@@ -230,6 +230,22 @@ pub struct TurnConsumption {
     pub client_tool_calls: u32,
     pub submission_attempts: HashMap<String, u32>,
     pub client_action_proposed: bool,
+    /// Charges belong to logical call IDs, not executions of the recovery loop.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub tool_charges: HashMap<String, ToolCallCharge>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolCallCharge {
+    pub budget_refusal: Option<String>,
+    pub submission_attempt: Option<u32>,
+    pub operation_identity: Option<OperationIdentity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationIdentity {
+    pub attempt_id: Uuid,
+    pub expires_at: DateTime<Utc>,
 }
 
 /// Metadata-only suspension marker. Input and approved output use the normal

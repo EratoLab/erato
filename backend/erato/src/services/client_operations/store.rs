@@ -278,9 +278,6 @@ async fn accept_result(
     lock_chat(&tx, initial.chat_id, account_id).await?;
     let row = get_in(&tx, account_id, result.attempt_id, true).await?;
     let request: OperationRequest = serde_json::from_value(row.request.clone())?;
-    let kind = registry
-        .for_request(&request)
-        .ok_or_else(|| eyre!("Operation kind unavailable"))?;
     if result.operation_id != request.operation_id || result.base_revision != request.base_revision
     {
         return Err(eyre!("Operation identity mismatch"));
@@ -291,7 +288,9 @@ async fn accept_result(
         row.claim_token == Some(token)
             && row.claim_binding.as_ref() == Some(&serde_json::to_value(&result.executor)?)
     } else {
-        row.claim_token.is_none() && result.executor == request.binding
+        request.consent == ConsentPolicy::None
+            && row.claim_token.is_none()
+            && result.executor == request.binding
     };
     if !binding_matches {
         return Err(eyre!("Operation claim mismatch"));
@@ -301,6 +300,9 @@ async fn accept_result(
     if row.result.as_ref() == Some(&submitted) {
         return Ok(());
     }
+    let kind = registry
+        .for_request(&request)
+        .ok_or_else(|| eyre!("Operation kind unavailable"))?;
     let validated = if (refuse_invalid
         && result
             .error
@@ -371,20 +373,47 @@ pub async fn cancel(
     attempt_id: Uuid,
     expired: bool,
 ) -> Result<(), Report> {
+    settle_server_outcome(
+        db,
+        account_id,
+        attempt_id,
+        if expired { "expired" } else { "cancelled" },
+    )
+    .await
+}
+
+/// Withdrawal settles only an open operation. An already committed result is
+/// historical evidence and is never overwritten when configuration changes.
+pub async fn withdraw(
+    db: &DatabaseConnection,
+    account_id: Uuid,
+    attempt_id: Uuid,
+) -> Result<(), Report> {
+    settle_server_outcome(db, account_id, attempt_id, "withdrawn").await
+}
+
+async fn settle_server_outcome(
+    db: &DatabaseConnection,
+    account_id: Uuid,
+    attempt_id: Uuid,
+    code: &str,
+) -> Result<(), Report> {
+    let expired = code == "expired";
     let initial = get(db, account_id, attempt_id).await?;
     let tx = db.begin().await?;
     lock_chat(&tx, initial.chat_id, account_id).await?;
     let row = get_in(&tx, account_id, attempt_id, true).await?;
     if !matches!(row.state, AttemptState::Pending | AttemptState::Claimed) {
-        if row.result.as_ref().is_some_and(|result| {
-            result["error"]["code"] == if expired { "expired" } else { "cancelled" }
-        }) {
+        if row
+            .result
+            .as_ref()
+            .is_some_and(|result| result["error"]["code"] == code)
+        {
             return Ok(());
         }
         return Err(eyre!("Operation already settled"));
     }
     let request: OperationRequest = serde_json::from_value(row.request)?;
-    let code = if expired { "expired" } else { "cancelled" };
     let result = OperationResult {
         attempt_id,
         operation_id: request.operation_id,
@@ -455,62 +484,76 @@ pub async fn begin_continuation(
     if pending(&parsed.content).is_some_and(|pending| pending.attempt_id != attempt_id) {
         return Err(eyre!("Another operation owns this message"));
     }
-    let mut validated: ValidatedResult = serde_json::from_value(
-        row.validated_result
-            .clone()
-            .ok_or_else(|| eyre!("Operation result missing"))?,
-    )?;
-    let parameters: crate::models::message::GenerationParameters = serde_json::from_value(
-        message
-            .generation_parameters
-            .clone()
-            .ok_or_else(|| eyre!("Missing generation parameters"))?,
-    )?;
-    let request: OperationRequest = serde_json::from_value(row.request.clone())?;
-    if let Some(saved) = parameters
-        .client_tools
-        .values()
-        .find(|tool| tool.qualified_name() == request.operation_id)
-    {
-        let schema = serde_json::from_str(&saved.parameters)?;
-        let policy = crate::services::client_tools::OfferedClientTool::prepare(saved, &schema)
-            .map_err(|error| eyre!(error))?;
-        if let Some(submission) = policy.submission {
-            let count = parameters
-                .turn_consumption
-                .submission_attempts
-                .get(&saved.name)
-                .copied()
-                .unwrap_or_default();
-            let outcome = if validated.output["status"] == "cancelled" {
-                crate::services::client_tools::ClientToolOutcome::Cancelled {
-                    reason: "cancelled".into(),
-                }
-            } else {
-                crate::services::client_tools::ClientToolOutcome::from_payload(&validated.output)
-            };
-            submission.annotate(&mut validated.output, &outcome, count);
+    // Result application is part of the ready -> continuing transaction.
+    // A crash retry must not re-annotate an earlier result with later counters
+    // or overwrite message progress committed by the abandoned worker.
+    if row.state == AttemptState::Ready {
+        let mut validated: ValidatedResult = serde_json::from_value(
+            row.validated_result
+                .clone()
+                .ok_or_else(|| eyre!("Operation result missing"))?,
+        )?;
+        let parameters: crate::models::message::GenerationParameters = serde_json::from_value(
+            message
+                .generation_parameters
+                .clone()
+                .ok_or_else(|| eyre!("Missing generation parameters"))?,
+        )?;
+        let request: OperationRequest = serde_json::from_value(row.request.clone())?;
+        if let Some(saved) = parameters
+            .client_tools
+            .values()
+            .find(|tool| tool.qualified_name() == request.operation_id)
+        {
+            let schema = serde_json::from_str(&saved.parameters)?;
+            let policy = crate::services::client_tools::OfferedClientTool::prepare(saved, &schema)
+                .map_err(|error| eyre!(error))?;
+            if let Some(submission) = policy.submission {
+                let count = parameters
+                    .turn_consumption
+                    .tool_charges
+                    .get(&row.tool_call_id)
+                    .and_then(|charge| charge.submission_attempt)
+                    .or_else(|| {
+                        parameters
+                            .turn_consumption
+                            .submission_attempts
+                            .get(&saved.name)
+                            .copied()
+                    })
+                    .unwrap_or_default();
+                let outcome = if validated.output["status"] == "cancelled" {
+                    crate::services::client_tools::ClientToolOutcome::Cancelled {
+                        reason: "cancelled".into(),
+                    }
+                } else {
+                    crate::services::client_tools::ClientToolOutcome::from_payload(
+                        &validated.output,
+                    )
+                };
+                submission.annotate(&mut validated.output, &outcome, count);
+            }
         }
+        let Some(tool) = parsed.content.iter_mut().find_map(|part| match part {
+            ContentPart::ToolUse(tool) if tool.tool_call_id == row.tool_call_id => Some(tool),
+            _ => None,
+        }) else {
+            return Err(eyre!("Operation tool part missing"));
+        };
+        tool.status = if validated.succeeded {
+            MessageToolCallStatus::Success
+        } else {
+            MessageToolCallStatus::Error
+        };
+        tool.output = Some(validated.output);
+        tool.ended_at = Some(Utc::now().to_rfc3339());
+        tx.execute_raw(statement(
+            "client_operations.continue",
+            "UPDATE messages SET raw_message = $2 WHERE id = $1",
+            vec![message.id.into(), serde_json::to_value(parsed)?.into()],
+        ))
+        .await?;
     }
-    let Some(tool) = parsed.content.iter_mut().find_map(|part| match part {
-        ContentPart::ToolUse(tool) if tool.tool_call_id == row.tool_call_id => Some(tool),
-        _ => None,
-    }) else {
-        return Err(eyre!("Operation tool part missing"));
-    };
-    tool.status = if validated.succeeded {
-        MessageToolCallStatus::Success
-    } else {
-        MessageToolCallStatus::Error
-    };
-    tool.output = Some(validated.output);
-    tool.ended_at = Some(Utc::now().to_rfc3339());
-    tx.execute_raw(statement(
-        "client_operations.continue",
-        "UPDATE messages SET raw_message = $2 WHERE id = $1",
-        vec![message.id.into(), serde_json::to_value(parsed)?.into()],
-    ))
-    .await?;
     tx.execute_raw(statement("client_operations.continue", "UPDATE client_operation_attempts SET state = 'continuing', generation_id = $3 WHERE account_id = $1 AND attempt_id = $2", vec![account_id.into(), attempt_id.into(), generation_id.into()])).await?;
     tx.commit().await?;
     Ok(row)

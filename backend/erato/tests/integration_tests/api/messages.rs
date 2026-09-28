@@ -4510,10 +4510,18 @@ enum ApprovalDecisionBody {
 /// - `sse-streaming`
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
+#[derive(Clone, Copy)]
+enum ApprovalContinuationProbe {
+    Normal,
+    WithdrawModel,
+    SubmissionLimit,
+}
+
 async fn continuestream_resumes_a_parked_tool_approval(
     pool: Pool<Postgres>,
     tasks_enabled: bool,
     decision_body: ApprovalDecisionBody,
+    probe: ApprovalContinuationProbe,
 ) {
     const TOOL_RESULT: &str = "approval probe published";
     let continuation_recorder = RequestBodyRecorder::new();
@@ -4527,10 +4535,21 @@ async fn continuestream_resumes_a_parked_tool_approval(
                 .path("/v1/chat/completions")
                 .matcher(BodyContainsMatcher::new(&[TOOL_RESULT], &[]))
                 .matcher(recorder);
-            mock_llm_sse_response(
-                then,
-                build_openai_text_streaming_response(&["APPROVAL-CONTINUED-ANSWER"]),
-            );
+            if matches!(probe, ApprovalContinuationProbe::SubmissionLimit) {
+                mock_llm_sse_response(
+                    then,
+                    build_openai_tool_calls_streaming_response(&[(
+                        "finish-after-approval",
+                        "finish_draft",
+                        json!({"draft":"retained draft"}),
+                    )]),
+                );
+            } else {
+                mock_llm_sse_response(
+                    then,
+                    build_openai_text_streaming_response(&["APPROVAL-CONTINUED-ANSWER"]),
+                );
+            }
         });
     }
     // The parked turn: one closed-world call that runs, then the gated one.
@@ -4571,12 +4590,23 @@ async fn continuestream_resumes_a_parked_tool_approval(
     // in `awaiting_approval`, so under the task gate the takeover mode decides
     // 100% of this route's behaviour rather than a parked-chat corner case.
     app_config.delegation.tasks.enabled = tasks_enabled;
-    let app_state = test_app_state(app_config, pool).await;
+    app_config.client_tools.durable_operations_enabled = false;
+    app_config.client_tools.tools.insert("finish".into(), ClientToolConfig {
+        name: "finish_draft".into(), description: "Finish the draft".into(),
+        parameters: json!({"type":"object","properties":{"draft":{"type":"string"}},"required":["draft"]}).to_string(),
+        submission: Some(erato::config::ClientToolSubmissionConfig { max_attempts: 1, ..Default::default() }),
+        ..Default::default()
+    });
+    app_config
+        .facets
+        .tool_call_allowlist
+        .push("client/finish_draft".into());
+    let mut app_state = test_app_state(app_config, pool).await;
     get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
         .expect("Failed to create user");
     let db = app_state.db.clone();
-    let server = app_server(app_state);
+    let server = app_server(app_state.clone());
 
     let response = server
         .post("/api/v1beta/me/messages/submitstream")
@@ -4628,7 +4658,30 @@ async fn continuestream_resumes_a_parked_tool_approval(
         Some("awaiting_approval")
     );
 
-    let continued = server
+    let parameters: GenerationParameters =
+        serde_json::from_value(parked.generation_parameters.clone().unwrap()).unwrap();
+    assert_eq!(parameters.turn_consumption.tool_calls, 2);
+    assert!(parameters.client_tools.contains_key("finish_draft"));
+    if matches!(probe, ApprovalContinuationProbe::SubmissionLimit) {
+        // Represent an earlier rejected proposal in this logical turn. The
+        // continuation must retain its allowance even while the flag is off.
+        let mut parameters = parameters;
+        parameters
+            .turn_consumption
+            .submission_attempts
+            .insert("finish_draft".into(), 1);
+        parameters.turn_consumption.client_action_proposed = true;
+        let mut row: erato::db::entity::messages::ActiveModel = parked.into();
+        row.generation_parameters =
+            sea_orm::ActiveValue::Set(Some(serde_json::to_value(parameters).unwrap()));
+        row.update(&db).await.unwrap();
+    }
+    if matches!(probe, ApprovalContinuationProbe::WithdrawModel) {
+        app_state.config.chat_provider = None;
+        app_state.config.chat_providers = None;
+    }
+    let server = app_server(app_state);
+    let request = server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
         .json(&match decision_body {
@@ -4640,10 +4693,62 @@ async fn continuestream_resumes_a_parked_tool_approval(
                 "message_id": assistant_message_id,
                 "decisions": [{ "approval_id": "call_probe", "decision": "approve" }],
             }),
-        })
-        .await;
+        });
+    if matches!(probe, ApprovalContinuationProbe::WithdrawModel) {
+        use futures::FutureExt;
+        // axum-test buffers SSE and panics when the body returns an error.
+        // Assert that specific authorization failure and no provider request.
+        let failure = std::panic::AssertUnwindSafe(async { request.await })
+            .catch_unwind()
+            .await;
+        let panic = failure.expect_err("removed model must refuse continuation");
+        let message = panic
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| panic.downcast_ref::<&str>().copied())
+            .unwrap_or_default();
+        assert!(
+            message.contains("original model is no longer authorized"),
+            "{message}"
+        );
+        assert!(continuation_recorder.bodies().is_empty());
+        return;
+    }
+    let continued = request.await;
     continued.assert_status_ok();
     let continued_events = parse_sse_events(&continued);
+    assert!(
+        continuation_recorder.bodies().iter().any(|body| {
+            let body: Value = serde_json::from_str(body).unwrap();
+            body["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["function"]["name"] == "finish_draft")
+        }),
+        "flag-off approval continuation must restore the original client tools"
+    );
+    if matches!(probe, ApprovalContinuationProbe::SubmissionLimit) {
+        let row = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        let tool = row.raw_message["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|part| {
+                part["content_type"] == "tool_use"
+                    && part["tool_call_id"] == "finish-after-approval"
+            })
+            .unwrap();
+        assert_eq!(tool["output"]["submission"]["attempts_remaining"], 0);
+        assert_eq!(tool["output"]["submission"]["status"], "failed");
+        assert_eq!(continuation_recorder.bodies().len(), 1);
+        return;
+    }
+
     assert_eq!(
         extract_full_text(&continued_events),
         "APPROVAL-CONTINUED-ANSWER"
@@ -4712,7 +4817,13 @@ async fn continuestream_resumes_a_parked_tool_approval(
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>) {
-    continuestream_resumes_a_parked_tool_approval(pool, false, ApprovalDecisionBody::Legacy).await;
+    continuestream_resumes_a_parked_tool_approval(
+        pool,
+        false,
+        ApprovalDecisionBody::Legacy,
+        ApprovalContinuationProbe::Normal,
+    )
+    .await;
 }
 
 /// The same park answered by naming the approval. A client that posts
@@ -4729,7 +4840,13 @@ async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>
 async fn continuestream_resumes_a_parked_tool_approval_from_a_decisions_array(
     pool: Pool<Postgres>,
 ) {
-    continuestream_resumes_a_parked_tool_approval(pool, false, ApprovalDecisionBody::Named).await;
+    continuestream_resumes_a_parked_tool_approval(
+        pool,
+        false,
+        ApprovalDecisionBody::Named,
+        ApprovalContinuationProbe::Normal,
+    )
+    .await;
 }
 
 /// Gate ON, and this is the arm that had no coverage at all.
@@ -4750,7 +4867,13 @@ async fn continuestream_resumes_a_parked_tool_approval_from_a_decisions_array(
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn continuestream_resumes_a_parked_tool_approval_under_the_task_gate(pool: Pool<Postgres>) {
-    continuestream_resumes_a_parked_tool_approval(pool, true, ApprovalDecisionBody::Legacy).await;
+    continuestream_resumes_a_parked_tool_approval(
+        pool,
+        true,
+        ApprovalDecisionBody::Legacy,
+        ApprovalContinuationProbe::Normal,
+    )
+    .await;
 }
 
 /// Park a turn on an approval-gated MCP call, then post `decisions` at it.
@@ -10896,4 +11019,27 @@ async fn test_optional_client_tools_follow_registration_without_changing_legacy_
             vec!["fetch_availability"]
         ]
     );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approval_continuation_reauthorizes_model_with_durable_flag_off(pool: Pool<Postgres>) {
+    continuestream_resumes_a_parked_tool_approval(
+        pool,
+        false,
+        ApprovalDecisionBody::Legacy,
+        ApprovalContinuationProbe::WithdrawModel,
+    )
+    .await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approval_continuation_preserves_submission_limit_with_durable_flag_off(
+    pool: Pool<Postgres>,
+) {
+    continuestream_resumes_a_parked_tool_approval(
+        pool,
+        false,
+        ApprovalDecisionBody::Legacy,
+        ApprovalContinuationProbe::SubmissionLimit,
+    )
+    .await;
 }
