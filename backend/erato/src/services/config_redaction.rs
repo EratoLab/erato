@@ -14,8 +14,15 @@ pub const SERVER_ENCRYPTION_KEY_PATH: [TomlPathSegment<'static>; 2] = [
     TomlPathSegment::Key("encryption_key"),
 ];
 
-pub const RUNTIME_CONFIGURATION_REDACTION_PATHS: [&[TomlPathSegment<'static>]; 1] =
-    [&SERVER_ENCRYPTION_KEY_PATH];
+pub const LOCAL_DELEGATION_SIGNING_KEY_PATH: [TomlPathSegment<'static>; 3] = [
+    TomlPathSegment::Key("desktop_sidecar"),
+    TomlPathSegment::Key("local_delegation"),
+    TomlPathSegment::Key("signing_private_key_pem"),
+];
+pub const RUNTIME_CONFIGURATION_REDACTION_PATHS: [&[TomlPathSegment<'static>]; 2] = [
+    &SERVER_ENCRYPTION_KEY_PATH,
+    &LOCAL_DELEGATION_SIGNING_KEY_PATH,
+];
 
 pub fn redact_toml_keys(source: &str, paths: &[&[TomlPathSegment<'_>]]) -> Result<String, Report> {
     let mut document = source
@@ -216,5 +223,12 @@ mod tests {
             "Failed to parse configuration source for redaction"
         );
         assert!(!error.to_string().contains(secret));
+    }
+    #[test]
+    fn redacts_local_delegation_signing_key() {
+        let source = "[desktop_sidecar.local_delegation]\nsigning_private_key_pem = 'SECRET_MARKER'\nbackend_origin = 'https://erato.example'\n";
+        let redacted = redact_toml_keys(source, &RUNTIME_CONFIGURATION_REDACTION_PATHS).unwrap();
+        assert!(!redacted.contains("SECRET_MARKER"));
+        assert!(redacted.contains("https://erato.example"));
     }
 }

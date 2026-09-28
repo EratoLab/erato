@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/delegation/approved-export.schema.json",
+  "title": "ApprovedLocalExport",
+  "type": "object",
+  "properties": {
+    "binding": {
+      "$ref": "../delegation/binding.schema.json"
+    },
+    "exportId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "snapshotId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "grantId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "manifestDigest": {
+      "$ref": "../common.schema.json#/definitions/Digest"
+    },
+    "approvedAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "expiresAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{32,128}$"
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mediaType": {
+            "enum": [
+              "text/plain",
+              "message/rfc822",
+              "application/octet-stream",
+              "application/json",
+              "application/pdf"
+            ]
+          },
+          "sha256": {
+            "$ref": "../common.schema.json#/definitions/Digest"
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12582912
+          },
+          "contentBase64": {
+            "type": "string",
+            "maxLength": 16777216,
+            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+          }
+        },
+        "required": [
+          "artifactId",
+          "filename",
+          "mediaType",
+          "sha256",
+          "byteLength",
+          "contentBase64"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "binding",
+    "exportId",
+    "snapshotId",
+    "grantId",
+    "manifestDigest",
+    "approvedAt",
+    "expiresAt",
+    "artifacts"
+  ],
+  "additionalProperties": false
+}

@@ -180,6 +180,11 @@ pub trait OperationKind: Send + Sync {
     fn tool_offer(&self, _context: &OperationOfferContext<'_>) -> Option<OperationToolOffer> {
         None
     }
+    /// Whether this logical turn may offer the operation again after its result.
+    /// For example, cancelling native collection must not start another search.
+    fn reoffer_after_result(&self, _result: &OperationResult) -> bool {
+        true
+    }
     fn allow_cross_device(&self) -> bool {
         false
     }

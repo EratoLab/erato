@@ -126,6 +126,7 @@ export { FilePreviewContent } from "@/components/ui/FilePreview/FilePreviewConte
 export { resolvePreviewKind } from "@/components/ui/FilePreview/FilePreviewContent";
 export type { FilePreviewContentProps } from "@/components/ui/FilePreview/FilePreviewContent";
 export type { PreviewKind } from "@/components/ui/FilePreview/FilePreviewContent";
+export { OutlookSourceAction } from "@/components/ui/FilePreview/OutlookSourceAction";
 export { TeamsTranscriptPreview } from "@/components/ui/FilePreview/TeamsTranscriptPreview";
 export { AttachmentNotice } from "@/components/ui/FileUpload/AttachmentNotice";
 export type { AttachmentNoticeProps } from "@/components/ui/FileUpload/AttachmentNotice";

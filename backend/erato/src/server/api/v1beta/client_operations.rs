@@ -131,7 +131,7 @@ pub(super) async fn authorize_open_operation(
     }))
 }
 
-async fn authorize_or_withdraw(
+pub(super) async fn authorize_or_withdraw(
     state: &AppState,
     policy: &PolicyEngine,
     me: &MeProfile,

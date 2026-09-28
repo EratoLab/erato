@@ -99,6 +99,17 @@ async fn lock_chat(
     Ok(())
 }
 
+/// Acquire the shared chat/attempt fence before a kind writes its extension.
+pub async fn lock_attempt(
+    tx: &DatabaseTransaction,
+    account_id: Uuid,
+    attempt_id: Uuid,
+) -> Result<attempts::Model, Report> {
+    let initial = get_in(tx, account_id, attempt_id, false).await?;
+    lock_chat(tx, initial.chat_id, account_id).await?;
+    get_in(tx, account_id, attempt_id, true).await
+}
+
 pub async fn save_consumption<C: ConnectionTrait>(
     db: &C,
     message_id: Uuid,
@@ -273,10 +284,35 @@ async fn accept_result(
     result: &OperationResult,
     refuse_invalid: bool,
 ) -> Result<(), Report> {
-    let initial = get(db, account_id, result.attempt_id).await?;
     let tx = db.begin().await?;
-    lock_chat(&tx, initial.chat_id, account_id).await?;
-    let row = get_in(&tx, account_id, result.attempt_id, true).await?;
+    accept_result_in(&tx, registry, account_id, token, result, refuse_invalid).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Kind adapters may commit approved attachments and receipts in the same logged
+/// transaction as result acceptance. All generic ownership/claim checks still run.
+pub async fn accept_in(
+    tx: &DatabaseTransaction,
+    registry: &OperationRegistry,
+    account_id: Uuid,
+    token: Uuid,
+    result: &OperationResult,
+) -> Result<(), Report> {
+    accept_result_in(tx, registry, account_id, Some(token), result, false).await
+}
+
+async fn accept_result_in(
+    tx: &DatabaseTransaction,
+    registry: &OperationRegistry,
+    account_id: Uuid,
+    token: Option<Uuid>,
+    result: &OperationResult,
+    refuse_invalid: bool,
+) -> Result<(), Report> {
+    let initial = get_in(tx, account_id, result.attempt_id, false).await?;
+    lock_chat(tx, initial.chat_id, account_id).await?;
+    let row = get_in(tx, account_id, result.attempt_id, true).await?;
     let request: OperationRequest = serde_json::from_value(row.request.clone())?;
     if result.operation_id != request.operation_id || result.base_revision != request.base_revision
     {
@@ -361,7 +397,6 @@ async fn accept_result(
     if changed.is_none() {
         return Err(eyre!("Operation is no longer open"));
     }
-    tx.commit().await?;
     Ok(())
 }
 

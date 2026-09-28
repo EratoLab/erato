@@ -17,6 +17,125 @@ const outputDirectory =
     : path.resolve(process.argv[outputArgumentIndex + 1]);
 
 const typeTargets = [
+  ["schemas/delegation/binding.schema.json", "binding.ts", "LocalTaskBinding"],
+  ["schemas/delegation/plan.schema.json", "plan.ts", "LocalTaskPlan"],
+  ["schemas/delegation/status.schema.json", "status.ts", "LocalTaskStatus"],
+  [
+    "schemas/delegation/security.schema.json",
+    "security.ts",
+    "LocalDelegationSecurity",
+  ],
+  [
+    "schemas/delegation/approved-export.schema.json",
+    "approved-export.ts",
+    "ApprovedLocalExport",
+  ],
+  [
+    "schemas/delegation/receipt-claims.schema.json",
+    "receipt-claims.ts",
+    "LocalExportReceiptClaims",
+  ],
+  [
+    "schemas/delegation/context-claims.schema.json",
+    "context-claims.ts",
+    "LocalContextClaims",
+  ],
+  [
+    "schemas/delegation/job-claims.schema.json",
+    "job-claims.ts",
+    "LocalJobClaims",
+  ],
+  [
+    "schemas/methods/local-contexts-challenge-v1-params.schema.json",
+    "local-contexts-challenge-v1-params.ts",
+    "LocalContextsChallengeV1Params",
+  ],
+  [
+    "schemas/methods/local-contexts-challenge-v1-result.schema.json",
+    "local-contexts-challenge-v1-result.ts",
+    "LocalContextsChallengeV1Result",
+  ],
+  [
+    "schemas/methods/local-contexts-bind-v1-params.schema.json",
+    "local-contexts-bind-v1-params.ts",
+    "LocalContextsBindV1Params",
+  ],
+  [
+    "schemas/methods/local-contexts-bind-v1-result.schema.json",
+    "local-contexts-bind-v1-result.ts",
+    "LocalContextsBindV1Result",
+  ],
+  [
+    "schemas/methods/local-tasks-start-v1-params.schema.json",
+    "local-tasks-start-v1-params.ts",
+    "LocalTasksStartV1Params",
+  ],
+  [
+    "schemas/methods/local-tasks-start-v1-result.schema.json",
+    "local-tasks-start-v1-result.ts",
+    "LocalTasksStartV1Result",
+  ],
+  [
+    "schemas/methods/local-tasks-status-v1-params.schema.json",
+    "local-tasks-status-v1-params.ts",
+    "LocalTasksStatusV1Params",
+  ],
+  [
+    "schemas/methods/local-tasks-status-v1-result.schema.json",
+    "local-tasks-status-v1-result.ts",
+    "LocalTasksStatusV1Result",
+  ],
+  [
+    "schemas/methods/local-tasks-cancel-v1-params.schema.json",
+    "local-tasks-cancel-v1-params.ts",
+    "LocalTasksCancelV1Params",
+  ],
+  [
+    "schemas/methods/local-tasks-cancel-v1-result.schema.json",
+    "local-tasks-cancel-v1-result.ts",
+    "LocalTasksCancelV1Result",
+  ],
+  [
+    "schemas/methods/local-tasks-review-v1-params.schema.json",
+    "local-tasks-review-v1-params.ts",
+    "LocalTasksReviewV1Params",
+  ],
+  [
+    "schemas/methods/local-tasks-review-v1-result.schema.json",
+    "local-tasks-review-v1-result.ts",
+    "LocalTasksReviewV1Result",
+  ],
+  [
+    "schemas/methods/local-exports-status-v1-params.schema.json",
+    "local-exports-status-v1-params.ts",
+    "LocalExportsStatusV1Params",
+  ],
+  [
+    "schemas/methods/local-exports-status-v1-result.schema.json",
+    "local-exports-status-v1-result.ts",
+    "LocalExportsStatusV1Result",
+  ],
+  [
+    "schemas/methods/local-exports-read-v1-params.schema.json",
+    "local-exports-read-v1-params.ts",
+    "LocalExportsReadV1Params",
+  ],
+  [
+    "schemas/methods/local-exports-read-v1-result.schema.json",
+    "local-exports-read-v1-result.ts",
+    "LocalExportsReadV1Result",
+  ],
+  [
+    "schemas/methods/local-exports-ack-v1-params.schema.json",
+    "local-exports-ack-v1-params.ts",
+    "LocalExportsAckV1Params",
+  ],
+  [
+    "schemas/methods/local-exports-ack-v1-result.schema.json",
+    "local-exports-ack-v1-result.ts",
+    "LocalExportsAckV1Result",
+  ],
+
   [
     "schemas/methods/indexing-benchmark-list-v1-params.schema.json",
     "indexing-benchmark-list-v1-params.ts",
@@ -363,6 +482,59 @@ const typeTargets = [
 ];
 
 const validatorTargets = {
+  validateLocalTaskBinding:
+    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/binding.schema.json",
+  validateLocalTaskPlan:
+    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/plan.schema.json",
+  validateLocalTaskStatus:
+    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/status.schema.json",
+  validateLocalDelegationSecurity:
+    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json",
+  validateApprovedLocalExport:
+    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/approved-export.schema.json",
+  validateLocalExportReceiptClaims:
+    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/receipt-claims.schema.json",
+  validateLocalContextClaims:
+    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/context-claims.schema.json",
+  validateLocalJobClaims:
+    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/job-claims.schema.json",
+  validateLocalContextsChallengeV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-params.schema.json",
+  validateLocalContextsChallengeV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-result.schema.json",
+  validateLocalContextsBindV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-params.schema.json",
+  validateLocalContextsBindV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-result.schema.json",
+  validateLocalTasksStartV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-params.schema.json",
+  validateLocalTasksStartV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-result.schema.json",
+  validateLocalTasksStatusV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-params.schema.json",
+  validateLocalTasksStatusV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-result.schema.json",
+  validateLocalTasksCancelV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-params.schema.json",
+  validateLocalTasksCancelV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-result.schema.json",
+  validateLocalTasksReviewV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-review-v1-params.schema.json",
+  validateLocalTasksReviewV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-review-v1-result.schema.json",
+  validateLocalExportsStatusV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-status-v1-params.schema.json",
+  validateLocalExportsStatusV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-status-v1-result.schema.json",
+  validateLocalExportsReadV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-read-v1-params.schema.json",
+  validateLocalExportsReadV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-read-v1-result.schema.json",
+  validateLocalExportsAckV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-params.schema.json",
+  validateLocalExportsAckV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-result.schema.json",
+
   validateOutlookFileProvenance:
     "https://schemas.erato.ai/desktop-sidecar/v1/outlook/file-provenance.schema.json",
   validateIndexingBenchmarkListV1Params:
@@ -476,6 +648,7 @@ for (const [schemaPath, outputName] of typeTargets) {
     cwd: path.dirname(absoluteSchemaPath),
     declareExternallyReferenced: true,
     enableConstEnums: false,
+    maxItems: -1,
     format: true,
     strictIndexSignatures: false,
     style: { semi: true, singleQuote: false, trailingComma: "all" },

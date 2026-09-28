@@ -2799,6 +2799,8 @@ impl MessageSubmitRequest {
 /// Everything the tool-dispatch loop needs to run a delegated child assistant
 /// for a `delegate_to_assistant` call.
 pub(crate) struct DelegationDispatchContext<'a> {
+    /// Routing identity only; each operation kind still authorizes child access.
+    pub request_context: GenerationRequestContext,
     /// The origin user; the child chat and its messages are owned by them.
     pub me_user: &'a MeProfile,
     /// Targets validated for this turn — the only accepted `assistant_id`s.
@@ -12825,6 +12827,7 @@ pub(crate) async fn run_generation_after_user_message(
         crate::models::chat::chat_is_delegated_run(chat),
         crate::services::delegation::child_may_park_on_approval(chat, &app_state.config.delegation),
         Some(DelegationDispatchContext {
+            request_context: generation_request_context.clone(),
             me_user,
             targets: &delegation_targets,
             offered_file_ids: &delegation_offered_file_ids,
@@ -13317,6 +13320,7 @@ pub async fn regenerate_message_sse(
                         &app_state.config.delegation,
                     ),
                     Some(DelegationDispatchContext {
+                        request_context: generation_request_context.clone(),
                         me_user: &me_user,
                         targets: &delegation_targets,
                         offered_file_ids: &delegation_offered_file_ids,
@@ -13861,6 +13865,7 @@ pub async fn edit_message_sse(
                         &app_state.config.delegation,
                     ),
                     Some(DelegationDispatchContext {
+                        request_context: generation_request_context.clone(),
                         me_user: &me_user,
                         targets: &delegation_targets,
                         offered_file_ids: &delegation_offered_file_ids,
@@ -16862,6 +16867,10 @@ async fn resume_parked_generation(
     let delegation = origin_user_message_id
         .filter(|_| task_offer_scope.is_some())
         .map(|origin_user_message_id| DelegationDispatchContext {
+            request_context: generation_parameters
+                .request_context
+                .clone()
+                .unwrap_or_default(),
             me_user,
             // No mention targets: only the task route is re-offered, and a
             // `delegate_to_assistant` call would have nothing to validate
@@ -17041,12 +17050,22 @@ pub(crate) async fn run_client_operation_continuation(
     let chat =
         get_chat_by_message_id(&app_state.db, policy, &me_user.to_subject(), &message.id).await?;
     reject_if_archived(&chat).map_err(|(_, message)| eyre!(message))?;
-    let parameters: GenerationParameters = serde_json::from_value(
+    let mut parameters: GenerationParameters = serde_json::from_value(
         message
             .generation_parameters
             .clone()
             .ok_or_else(|| eyre!("Missing generation parameters"))?,
     )?;
+    let request: crate::services::client_operations::OperationRequest =
+        serde_json::from_value(row.request.clone())?;
+    if let Some(kind) = app_state.client_operations.for_request(&request)
+        && let Some(result) = row.result.as_ref()
+        && !kind.reoffer_after_result(&serde_json::from_value(result.clone())?)
+    {
+        parameters
+            .client_tools
+            .retain(|_, tool| tool.qualified_name() != request.operation_id);
+    }
     let submission_finished = parsed.content.iter().any(|part| match part {
         ContentPart::ToolUse(tool) if tool.tool_call_id == row.tool_call_id => tool
             .output

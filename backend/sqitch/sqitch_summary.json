@@ -50,7 +50,8 @@
     "deploy/0048_add_client_tool_file_approval.sql",
     "deploy/0049_add_external_id_ews_id_to_file_uploads.sql",
     "deploy/0050_add_outlook_provenance_to_file_uploads.sql",
-    "deploy/0051_add_client_operation_attempts.sql"
+    "deploy/0051_add_client_operation_attempts.sql",
+    "deploy/0052_add_local_evidence_exports.sql"
   ],
-  "latest_change": "67070b74381ee9c457fdda379f43537131b9514d"
+  "latest_change": "39049f8b3fa9c1060385b6941d18d0f099d68690"
 }

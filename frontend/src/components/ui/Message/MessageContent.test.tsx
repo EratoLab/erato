@@ -2006,3 +2006,23 @@ it("renders local file consent alongside a submitted host card in the originatin
     useClientToolFileApprovalStore.setState({ requests: [] });
   }
 });
+
+it("shows a durable app wait in persisted history and hides a consumed marker", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  const view = renderWithTheme(<MessageContent content={[pending]} />);
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "waiting for a connected app",
+  );
+  view.unmount();
+  renderWithTheme(
+    <MessageContent
+      content={[pending, { content_type: "text", text: "Finished" }]}
+    />,
+  );
+  expect(screen.queryByRole("status")).toBeNull();
+});

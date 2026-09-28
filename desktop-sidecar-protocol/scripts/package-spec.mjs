@@ -12,6 +12,7 @@ const releaseEntries = [
   "README.md",
   "DISTRIBUTION.md",
   "SPEC.md",
+  "DELEGATION.md",
   "TRANSPORT.md",
   "openrpc.json",
   "schemas",

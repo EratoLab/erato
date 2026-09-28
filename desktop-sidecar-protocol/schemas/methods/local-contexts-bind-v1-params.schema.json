@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-params.schema.json",
+  "title": "LocalContextsBindV1Params",
+  "type": "object",
+  "properties": {
+    "assertion": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 16384,
+      "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+    }
+  },
+  "required": ["assertion"],
+  "additionalProperties": false
+}

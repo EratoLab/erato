@@ -4,6 +4,7 @@ import {
   ChatMessage,
   DefaultMessageControls,
   DelegatedRunOpenProvider,
+  LocalTaskCoordinator,
   DelegatedRunsSection,
   DocumentIcon,
   FeedbackCommentDialog,
@@ -643,6 +644,7 @@ export function AddinChatCoreView({
       {/* Deep message surfaces (the trace's open-run affordance) open chats
           through the session controller instead of routes the pane lacks. */}
       <DelegatedRunOpenProvider onOpen={controller.openChatById}>
+        <LocalTaskCoordinator />
         <div className="app-shell-skin relative flex size-full min-w-0 flex-col">
           {TopLeftAccessory ? (
             // A kit accessory earns a header row and the trigger joins it in

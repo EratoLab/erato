@@ -657,6 +657,7 @@ describe("DelegatedRunsSection retry", () => {
     expect(mutate).toHaveBeenCalledWith({
       body: { kind: "task" },
       pathParams: { chatId: "origin-1", childChatId: "run-failed" },
+      headers: { "X-Erato-Client-Tools": "" },
     });
     // Without this the retry child exists server-side and shows up nowhere
     // until the user reloads.

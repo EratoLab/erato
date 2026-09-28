@@ -278,6 +278,34 @@ pub async fn create_file_upload(
     let file_upload_id = Uuid::new_v4();
     let owner_user_id = subject_user_id(subject);
 
+    create_file_upload_record(
+        conn,
+        file_upload_id,
+        owner_user_id,
+        chat_id,
+        filename,
+        file_storage_provider_id,
+        file_storage_path,
+        external_id_ews_id,
+        outlook_provenance,
+    )
+    .await
+}
+
+/// Insert authorized metadata and its chat link in the caller's transaction.
+/// The caller must authorize chat updates before entering this helper.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn create_file_upload_record<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    file_upload_id: Uuid,
+    owner_user_id: String,
+    chat_id: &Uuid,
+    filename: String,
+    file_storage_provider_id: String,
+    file_storage_path: String,
+    external_id_ews_id: Option<String>,
+    outlook_provenance: Option<serde_json::Value>,
+) -> Result<file_uploads::Model, Report> {
     // Create the file upload record (independent of chat)
     let new_file_upload = file_uploads::ActiveModel {
         id: ActiveValue::Set(file_upload_id),

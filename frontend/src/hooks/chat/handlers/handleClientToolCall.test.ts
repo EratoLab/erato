@@ -5,6 +5,7 @@ import { handleToolCallUpdate } from "./handleToolCallUpdate";
 import {
   abortClientToolCalls,
   registerClientToolExecutor,
+  registerLocalOnlyClientTools,
   resetClientToolRegistryForTests,
   trackClientToolCallAbort,
 } from "../clientToolExecutors";
@@ -65,6 +66,35 @@ describe("handleClientToolCall", () => {
     });
     expect(signal.aborted).toBe(true);
     expect(other.aborted).toBe(false);
+  });
+
+  it("does not automatically report durable local operations or local-only dispositions", async () => {
+    await handleClientToolCall(
+      makeEvent({ tool_name: "local_collect_evidence" }),
+      deps,
+    );
+    registerClientToolExecutor("fetch_availability", async () => ({
+      ok: true,
+      disposition: "local_only",
+    }));
+    await handleClientToolCall(
+      makeEvent({ tool_call_id: "private-call" }),
+      deps,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("suppresses a native exception even if strict mode activates during execution", async () => {
+    let strict = false;
+    registerLocalOnlyClientTools(["get_sidecar_document"], () => strict);
+    registerClientToolExecutor("get_sidecar_document", async () => {
+      strict = true;
+      throw new Error("PRIVATE_SECRET metadata");
+    });
+    await handleClientToolCall(
+      makeEvent({ tool_name: "get_sidecar_document" }),
+      deps,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("runs the registered executor and POSTs its result", async () => {
