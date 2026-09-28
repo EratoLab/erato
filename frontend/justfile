@@ -11,23 +11,25 @@ storybook:
 codegen:
     pnpm run codegen
 
+# The protocol's prepare script builds dist before the frontend installs its file: dependency.
 install:
-    pnpm install
+    pnpm --dir ../desktop-sidecar-protocol install --frozen-lockfile
+    pnpm install --frozen-lockfile
 
 generate_dex_config:
     python3 local-auth/generate_dex_config.py
 
-dev: generate_dex_config
+dev: install generate_dex_config
     cd local-auth && docker compose up --force-recreate --detach
     echo "Proxied local server with auth will be available at http://localhost:4180"
     pnpm run dev
 
-dev_keycloak:
+dev_keycloak: install
     cd local-auth && docker compose -f docker-compose.keycloak.yml up --force-recreate --detach
     echo "Proxied local server with auth will be available at http://localhost:4180"
     pnpm run dev
 
-dev_entra_id:
+dev_entra_id: install
     #!/usr/bin/env sh
     cd local-auth
     if [ ! -f "oauth2-proxy-entra-id.cfg" ]; then
@@ -37,7 +39,7 @@ dev_entra_id:
     echo "Proxied local server with Entra ID auth will be available at http://localhost:4180"
     cd .. && pnpm run dev
 
-dev_nginx_jwt:
+dev_nginx_jwt: install
     cd local-auth && docker compose -f docker-compose.nginx-jwt.yml up --force-recreate --detach
     echo "Proxied local server with Nginx JWT auth will be available at http://localhost:4180"
     echo "Usage: Add ?user=<username> to any URL to authenticate"
