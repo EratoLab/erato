@@ -16,20 +16,27 @@ type ComponentKitWithI18n = {
   name: string;
 };
 
-// Validate detected locale
-export function getValidLocale(locale: string): string {
+// Resolve a locale to a supported one, or null when it has no supported match
+export function getSupportedLocale(
+  locale: string | null | undefined,
+): string | null {
+  if (!locale) {
+    return null;
+  }
   // Exact match
   if (supportedLocales.includes(locale)) {
     return locale;
   }
   // Partial match on BCP-47 language tag. For example, "en-US" will match "en".
-  else if (locale.length > 2 && supportedLocales.includes(locale.slice(0, 2))) {
+  if (locale.length > 2 && supportedLocales.includes(locale.slice(0, 2))) {
     return locale.slice(0, 2);
   }
-  // Fallback
-  else {
-    return defaultLocale;
-  }
+  return null;
+}
+
+// Validate detected locale
+export function getValidLocale(locale: string): string {
+  return getSupportedLocale(locale) ?? defaultLocale;
 }
 
 // Browser locale detection without persistence

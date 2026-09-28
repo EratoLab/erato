@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   detectLocale,
   dynamicActivate,
+  getSupportedLocale,
   getValidLocale,
   i18n,
   supportedLocales,
@@ -54,6 +55,21 @@ describe("i18n Locale Detection (No Persistence)", () => {
 
     it("should handle empty string", () => {
       expect(getValidLocale("")).toBe(defaultLocale);
+    });
+  });
+
+  describe("getSupportedLocale", () => {
+    it("should resolve region-qualified host languages", () => {
+      expect(getSupportedLocale("de-DE")).toBe("de");
+      expect(getSupportedLocale("en-us")).toBe("en");
+      expect(getSupportedLocale("fr")).toBe("fr");
+    });
+
+    it("should return null instead of the default locale", () => {
+      expect(getSupportedLocale("it-IT")).toBeNull();
+      expect(getSupportedLocale("")).toBeNull();
+      expect(getSupportedLocale(null)).toBeNull();
+      expect(getSupportedLocale(undefined)).toBeNull();
     });
   });
 
