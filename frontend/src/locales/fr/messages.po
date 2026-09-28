@@ -1501,6 +1501,16 @@ msgid "chat.attachments.toggle"
 msgstr "Afficher ou masquer les pièces jointes"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolCallApproval.tsx
+msgid "chat.clientToolCallApproval.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolCallApproval.tsx
+msgid "chat.clientToolCallApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Conversation de chat"
@@ -2983,6 +2993,36 @@ msgid "desktopSidecar.setup.unavailable.title"
 msgstr "Les téléchargements du Desktop Sidecar sont indisponibles"
 
 #. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.folderHierarchy.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.getDocument.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.listMailboxes.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.readConversation.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.search.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.searchFields.label"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Page non trouvée"
@@ -3941,6 +3981,16 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.status.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SidecarToolDecisions.tsx
+msgid "preferences.dialog.desktopSidecar.tools.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SidecarToolDecisions.tsx
+msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
 msgstr ""
 
 #. js-lingui-explicit-id

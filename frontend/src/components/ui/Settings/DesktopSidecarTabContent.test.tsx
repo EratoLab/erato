@@ -9,6 +9,9 @@ import type { ReactNode } from "react";
 vi.mock("./ClientToolFileApprovalSetting", () => ({
   ClientToolFileApprovalSetting: () => null,
 }));
+vi.mock("./SidecarToolDecisions", () => ({
+  SidecarToolDecisions: () => <div data-testid="sidecar-tool-decisions" />,
+}));
 
 const providerMounted = vi.fn();
 const sidecar = vi.hoisted(() => ({
@@ -91,3 +94,26 @@ it("does not offer the legacy directory command in strict consent mode", () => {
   ).not.toBeInTheDocument();
   expect(sidecar.invoke).not.toHaveBeenCalled();
 });
+
+it.each([
+  ["a connected legacy sidecar", "ready", false, true],
+  ["strict consent mode", "ready", true, false],
+  ["a disconnected sidecar", "unavailable", false, false],
+] as const)(
+  "lists per-tool decisions only for %s",
+  (_, state, strict, shown) => {
+    sidecar.state = state;
+    sidecar.strict = strict;
+    render(<DesktopSidecarRow />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
+    );
+    if (shown) {
+      expect(screen.getByTestId("sidecar-tool-decisions")).toBeInTheDocument();
+    } else {
+      expect(
+        screen.queryByTestId("sidecar-tool-decisions"),
+      ).not.toBeInTheDocument();
+    }
+  },
+);

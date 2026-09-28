@@ -33,6 +33,38 @@ export const LIST_SIDECAR_MAILBOXES_TOOL = "list_sidecar_mailboxes";
 export const GET_SIDECAR_FOLDER_HIERARCHY_TOOL = "get_sidecar_folder_hierarchy";
 export const GET_SIDECAR_DOCUMENT_TOOL = "get_sidecar_document";
 
+/**
+ * Namespace the deployment's configuration packages give the sidecar tools.
+ * Tool calls carry only the bare model-facing name; per-tool decisions are
+ * keyed by the qualified name the backend filters on.
+ */
+export const SIDECAR_TOOL_NAMESPACE = "desktop";
+
+export const sidecarQualifiedToolName = (name: string) =>
+  `${SIDECAR_TOOL_NAMESPACE}/${name}`;
+
+/** Each sidecar tool and the sidecar method it needs, in display order. */
+export const SIDECAR_CHAT_TOOL_METHODS: readonly {
+  name: string;
+  method: string;
+}[] = [
+  { name: SEARCH_SIDECAR_INDEX_TOOL, method: "search.query.v1" },
+  {
+    name: READ_SIDECAR_CONVERSATION_TOOL,
+    method: "outlook.get_conversation.v1",
+  },
+  { name: GET_SIDECAR_DOCUMENT_TOOL, method: "sources.get_document.v1" },
+  { name: GET_SIDECAR_SEARCH_FIELDS_TOOL, method: "search.metadata_fields.v1" },
+  { name: LIST_SIDECAR_MAILBOXES_TOOL, method: "outlook.list_mailboxes.v1" },
+  {
+    name: GET_SIDECAR_FOLDER_HIERARCHY_TOOL,
+    method: "sources.get_folder_hierarchy.v1",
+  },
+];
+
+/** Outcome of the user's standing or per-call decision for one tool call. */
+export type SidecarToolCallDecision = "allowed" | "declined" | "disabled";
+
 export interface SidecarAttachmentUpload {
   (
     file: File,
@@ -53,10 +85,17 @@ export interface SidecarChatToolOptions {
   uploadsEnabled: boolean;
   maxUploadBytes: number;
   maxFiles: number;
+  /** Applies the user's per-tool decision before the sidecar is contacted. */
+  decideCall?: (
+    qualifiedName: string,
+    input: unknown,
+    context?: ClientToolCallContext,
+  ) => Promise<SidecarToolCallDecision>;
 }
 
 export interface SidecarChatTool {
   name: string;
+  method: string;
   isAvailable: () => boolean;
   execute: ClientToolExecutor;
 }
@@ -121,6 +160,7 @@ export function createSidecarChatTools(
     execute: ClientToolExecutor,
   ): SidecarChatTool => ({
     name,
+    method,
     // Any delegation declaration blocks legacy content, even if strict support
     // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
     isAvailable: () =>
@@ -141,6 +181,20 @@ export function createSidecarChatTools(
               "This desktop sidecar capability is unavailable on this device.",
             );
           }
+          const decision = options.decideCall
+            ? await options.decideCall(
+                sidecarQualifiedToolName(name),
+                input,
+                context,
+              )
+            : "allowed";
+          if (decision === "disabled") {
+            return { ok: false, error: "The user has turned this tool off." };
+          }
+          if (decision === "declined") {
+            return { ok: false, error: "The user declined this tool call." };
+          }
+          context?.signal?.throwIfAborted();
           return await execute(input, context);
         } catch (error) {
           return {

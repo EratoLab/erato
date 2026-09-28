@@ -26,6 +26,7 @@ import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { ClientToolCallApprovals } from "./ClientToolCallApproval";
 import { ClientToolFileApprovals } from "./ClientToolFileApproval";
 import { CollapsibleCodeBlock } from "./CollapsibleCodeBlock";
 import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
@@ -1383,6 +1384,7 @@ export const MessageContent = memo(function MessageContent({
         <pre className="message-content-raw-block whitespace-pre-wrap">
           <code>{rawText}</code>
         </pre>
+        {messageId && <ClientToolCallApprovals messageId={messageId} />}
         {messageId && <ClientToolFileApprovals messageId={messageId} />}
       </article>
     );
@@ -1525,6 +1527,7 @@ export const MessageContent = memo(function MessageContent({
           />
         </HostArtifactContext.Provider>
       )}
+      {messageId && <ClientToolCallApprovals messageId={messageId} />}
       {messageId && <ClientToolFileApprovals messageId={messageId} />}
     </article>
   );

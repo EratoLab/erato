@@ -4,6 +4,7 @@ import {
   registerClientToolExecutor,
   registerLocalOnlyClientTools,
 } from "@/hooks/chat/clientToolExecutors";
+import { useClientToolCallApproval } from "@/hooks/chat/useClientToolCallApproval";
 import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
 import { createSidecarChatTools } from "@/lib/desktopSidecar/chatTools";
 import {
@@ -18,6 +19,7 @@ import { useChatInputFeature, useUploadFeature } from "./FeatureConfigProvider";
 export function DesktopSidecarClientTools() {
   const { client } = useDesktopSidecar();
   const { approveFiles } = useClientToolFileApproval();
+  const { decideCall } = useClientToolCallApproval();
   const { enabled, maxSizeBytes } = useUploadFeature();
   const { maxFiles } = useChatInputFeature();
 
@@ -25,6 +27,7 @@ export function DesktopSidecarClientTools() {
     if (!client) return;
     const tools = createSidecarChatTools(client, {
       approveFiles,
+      decideCall,
       uploadsEnabled: enabled,
       maxUploadBytes: maxSizeBytes,
       maxFiles,
@@ -70,6 +73,6 @@ export function DesktopSidecarClientTools() {
       unguard();
       unregister.forEach((cleanup) => cleanup());
     };
-  }, [client, enabled, maxSizeBytes, maxFiles, approveFiles]);
+  }, [client, enabled, maxSizeBytes, maxFiles, approveFiles, decideCall]);
   return null;
 }

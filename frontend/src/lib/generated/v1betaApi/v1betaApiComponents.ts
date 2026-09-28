@@ -62,7 +62,7 @@ export function licenseNoticesQuery(
   };
 }
 
-export const useSuspenseLicenseNotices = <TData = void>(
+export const useSuspenseLicenseNotices = <TData = void,>(
   variables: LicenseNoticesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<void, LicenseNoticesError, TData>,
@@ -77,7 +77,7 @@ export const useSuspenseLicenseNotices = <TData = void>(
   });
 };
 
-export const useLicenseNotices = <TData = void>(
+export const useLicenseNotices = <TData = void,>(
   variables: LicenseNoticesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<void, LicenseNoticesError, TData>,
@@ -1270,7 +1270,7 @@ export function listAssistantsQuery(
   };
 }
 
-export const useSuspenseListAssistants = <TData = ListAssistantsResponse>(
+export const useSuspenseListAssistants = <TData = ListAssistantsResponse,>(
   variables: ListAssistantsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1293,7 +1293,7 @@ export const useSuspenseListAssistants = <TData = ListAssistantsResponse>(
   });
 };
 
-export const useListAssistants = <TData = ListAssistantsResponse>(
+export const useListAssistants = <TData = ListAssistantsResponse,>(
   variables: ListAssistantsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1422,7 +1422,7 @@ export function getAssistantQuery(
   };
 }
 
-export const useSuspenseGetAssistant = <TData = Schemas.AssistantWithFiles>(
+export const useSuspenseGetAssistant = <TData = Schemas.AssistantWithFiles,>(
   variables: GetAssistantVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1445,7 +1445,7 @@ export const useSuspenseGetAssistant = <TData = Schemas.AssistantWithFiles>(
   });
 };
 
-export const useGetAssistant = <TData = Schemas.AssistantWithFiles>(
+export const useGetAssistant = <TData = Schemas.AssistantWithFiles,>(
   variables: GetAssistantVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1653,7 +1653,7 @@ export function getAssistantUsageQuery(
   };
 }
 
-export const useSuspenseGetAssistantUsage = <TData = Schemas.AssistantUsage>(
+export const useSuspenseGetAssistantUsage = <TData = Schemas.AssistantUsage,>(
   variables: GetAssistantUsageVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1676,7 +1676,7 @@ export const useSuspenseGetAssistantUsage = <TData = Schemas.AssistantUsage>(
   });
 };
 
-export const useGetAssistantUsage = <TData = Schemas.AssistantUsage>(
+export const useGetAssistantUsage = <TData = Schemas.AssistantUsage,>(
   variables: GetAssistantUsageVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1743,7 +1743,7 @@ export function chatsQuery(variables: ChatsVariables | reactQuery.SkipToken) {
   };
 }
 
-export const useSuspenseChats = <TData = ChatsResponse>(
+export const useSuspenseChats = <TData = ChatsResponse,>(
   variables: ChatsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<ChatsResponse, ChatsError, TData>,
@@ -1758,7 +1758,7 @@ export const useSuspenseChats = <TData = ChatsResponse>(
   });
 };
 
-export const useChats = <TData = ChatsResponse>(
+export const useChats = <TData = ChatsResponse,>(
   variables: ChatsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<ChatsResponse, ChatsError, TData>,
@@ -1922,7 +1922,7 @@ export function chatMessagesQuery(
   };
 }
 
-export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse>(
+export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   variables: ChatMessagesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -1945,7 +1945,7 @@ export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse>(
   });
 };
 
-export const useChatMessages = <TData = Schemas.ChatMessagesResponse>(
+export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   variables: ChatMessagesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2338,7 +2338,7 @@ export function getFileQuery(
 /**
  * This endpoint retrieves information about a specific file by its ID.
  */
-export const useSuspenseGetFile = <TData = Schemas.FileUploadItem>(
+export const useSuspenseGetFile = <TData = Schemas.FileUploadItem,>(
   variables: GetFileVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FileUploadItem, GetFileError, TData>,
@@ -2360,7 +2360,7 @@ export const useSuspenseGetFile = <TData = Schemas.FileUploadItem>(
 /**
  * This endpoint retrieves information about a specific file by its ID.
  */
-export const useGetFile = <TData = Schemas.FileUploadItem>(
+export const useGetFile = <TData = Schemas.FileUploadItem,>(
   variables: GetFileVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FileUploadItem, GetFileError, TData>,
@@ -2441,7 +2441,7 @@ export function getFilePreviewQuery(
   };
 }
 
-export const useSuspenseGetFilePreview = <TData = undefined>(
+export const useSuspenseGetFilePreview = <TData = undefined,>(
   variables: GetFilePreviewVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, GetFilePreviewError, TData>,
@@ -2456,7 +2456,7 @@ export const useSuspenseGetFilePreview = <TData = undefined>(
   });
 };
 
-export const useGetFilePreview = <TData = undefined>(
+export const useGetFilePreview = <TData = undefined,>(
   variables: GetFilePreviewVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, GetFilePreviewError, TData>,
@@ -2619,7 +2619,7 @@ export function allDrivesQuery(
  *   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
  *   https://learn.microsoft.com/graph/search-query-parameter
  */
-export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse>(
+export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse,>(
   variables: AllDrivesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2660,7 +2660,7 @@ export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse>(
  *   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
  *   https://learn.microsoft.com/graph/search-query-parameter
  */
-export const useAllDrives = <TData = Schemas.AllDrivesResponse>(
+export const useAllDrives = <TData = Schemas.AllDrivesResponse,>(
   variables: AllDrivesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2744,7 +2744,7 @@ export function getDriveRootQuery(
   };
 }
 
-export const useSuspenseGetDriveRoot = <TData = Schemas.DriveItemsResponse>(
+export const useSuspenseGetDriveRoot = <TData = Schemas.DriveItemsResponse,>(
   variables: GetDriveRootVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2767,7 +2767,7 @@ export const useSuspenseGetDriveRoot = <TData = Schemas.DriveItemsResponse>(
   });
 };
 
-export const useGetDriveRoot = <TData = Schemas.DriveItemsResponse>(
+export const useGetDriveRoot = <TData = Schemas.DriveItemsResponse,>(
   variables: GetDriveRootVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2859,7 +2859,7 @@ export function getDriveItemQuery(
   };
 }
 
-export const useSuspenseGetDriveItem = <TData = Schemas.DriveItemResponse>(
+export const useSuspenseGetDriveItem = <TData = Schemas.DriveItemResponse,>(
   variables: GetDriveItemVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -2882,7 +2882,7 @@ export const useSuspenseGetDriveItem = <TData = Schemas.DriveItemResponse>(
   });
 };
 
-export const useGetDriveItem = <TData = Schemas.DriveItemResponse>(
+export const useGetDriveItem = <TData = Schemas.DriveItemResponse,>(
   variables: GetDriveItemVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -3002,7 +3002,7 @@ export const useSuspenseGetDriveItemChildren = <
   });
 };
 
-export const useGetDriveItemChildren = <TData = Schemas.DriveItemsResponse>(
+export const useGetDriveItemChildren = <TData = Schemas.DriveItemsResponse,>(
   variables: GetDriveItemChildrenVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -3076,7 +3076,7 @@ export function budgetStatusQuery(
   };
 }
 
-export const useSuspenseBudgetStatus = <TData = Schemas.BudgetStatusResponse>(
+export const useSuspenseBudgetStatus = <TData = Schemas.BudgetStatusResponse,>(
   variables: BudgetStatusVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -3099,7 +3099,7 @@ export const useSuspenseBudgetStatus = <TData = Schemas.BudgetStatusResponse>(
   });
 };
 
-export const useBudgetStatus = <TData = Schemas.BudgetStatusResponse>(
+export const useBudgetStatus = <TData = Schemas.BudgetStatusResponse,>(
   variables: BudgetStatusVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -3315,7 +3315,7 @@ export function chatDetailQuery(
  * delegated run means its provenance and the parameters it was dispatched
  * with, neither of which is reachable through the listing that hides it.
  */
-export const useSuspenseChatDetail = <TData = Schemas.ChatDetail>(
+export const useSuspenseChatDetail = <TData = Schemas.ChatDetail,>(
   variables: ChatDetailVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.ChatDetail, ChatDetailError, TData>,
@@ -3340,7 +3340,7 @@ export const useSuspenseChatDetail = <TData = Schemas.ChatDetail>(
  * delegated run means its provenance and the parameters it was dispatched
  * with, neither of which is reachable through the listing that hides it.
  */
-export const useChatDetail = <TData = Schemas.ChatDetail>(
+export const useChatDetail = <TData = Schemas.ChatDetail,>(
   variables: ChatDetailVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.ChatDetail, ChatDetailError, TData>,
@@ -4041,7 +4041,7 @@ export function facetsQuery(variables: FacetsVariables | reactQuery.SkipToken) {
   };
 }
 
-export const useSuspenseFacets = <TData = Schemas.FacetsResponse>(
+export const useSuspenseFacets = <TData = Schemas.FacetsResponse,>(
   variables: FacetsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FacetsResponse, FacetsError, TData>,
@@ -4060,7 +4060,7 @@ export const useSuspenseFacets = <TData = Schemas.FacetsResponse>(
   });
 };
 
-export const useFacets = <TData = Schemas.FacetsResponse>(
+export const useFacets = <TData = Schemas.FacetsResponse,>(
   variables: FacetsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FacetsResponse, FacetsError, TData>,
@@ -4158,7 +4158,7 @@ export function fileCapabilitiesQuery(
  * file processors and model capabilities. An optional model_id can be provided
  * to get capabilities specific to that model (particularly for image understanding).
  */
-export const useSuspenseFileCapabilities = <TData = FileCapabilitiesResponse>(
+export const useSuspenseFileCapabilities = <TData = FileCapabilitiesResponse,>(
   variables: FileCapabilitiesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -4186,7 +4186,7 @@ export const useSuspenseFileCapabilities = <TData = FileCapabilitiesResponse>(
  * file processors and model capabilities. An optional model_id can be provided
  * to get capabilities specific to that model (particularly for image understanding).
  */
-export const useFileCapabilities = <TData = FileCapabilitiesResponse>(
+export const useFileCapabilities = <TData = FileCapabilitiesResponse,>(
   variables: FileCapabilitiesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -4244,13 +4244,13 @@ export type UploadFileVariables = {
  */
 /**
  * WORKAROUND: This endpoint requires a multipart/form-data request.
- * Despite the type signature suggesting `body?: Schemas.MultipartFormFile[]`,
+ * Despite the type signature suggesting `body?: Schemas.MultipartFormFile[]`, 
  * the underlying fetcher expects a pre-constructed `FormData` object.
- *
+ * 
  * When calling this function, construct a `FormData` object manually,
  * append your file(s) to it (e.g., `formData.append('file', myFile)`),
  * and pass it as the `body` property in the `variables` object, using type casting:
- *
+ * 
  * ```ts
  * const formData = new FormData();
  * formData.append('file', myFile);
@@ -4564,7 +4564,7 @@ export const useSuspenseGeneratingChats = <
   });
 };
 
-export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse>(
+export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse,>(
   variables: GeneratingChatsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -4726,7 +4726,7 @@ export const useSuspenseLocalDelegationReceipts = <
   });
 };
 
-export const useLocalDelegationReceipts = <TData = Schemas.ReceiptsResponse>(
+export const useLocalDelegationReceipts = <TData = Schemas.ReceiptsResponse,>(
   variables: LocalDelegationReceiptsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -5255,7 +5255,7 @@ export const useSuspenseListMcpServers = <
   });
 };
 
-export const useListMcpServers = <TData = Schemas.ListMcpServersResponse>(
+export const useListMcpServers = <TData = Schemas.ListMcpServersResponse,>(
   variables: ListMcpServersVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6048,7 +6048,7 @@ export function availableModelsQuery(
  * This endpoint returns all available chat models (providers) that the user can use.
  * Each model includes the provider ID and display name.
  */
-export const useSuspenseAvailableModels = <TData = AvailableModelsResponse>(
+export const useSuspenseAvailableModels = <TData = AvailableModelsResponse,>(
   variables: AvailableModelsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6075,7 +6075,7 @@ export const useSuspenseAvailableModels = <TData = AvailableModelsResponse>(
  * This endpoint returns all available chat models (providers) that the user can use.
  * Each model includes the provider ID and display name.
  */
-export const useAvailableModels = <TData = AvailableModelsResponse>(
+export const useAvailableModels = <TData = AvailableModelsResponse,>(
   variables: AvailableModelsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6459,7 +6459,7 @@ export function profileQuery(
   };
 }
 
-export const useSuspenseProfile = <TData = Schemas.UserProfile>(
+export const useSuspenseProfile = <TData = Schemas.UserProfile,>(
   variables: ProfileVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.UserProfile, ProfileError, TData>,
@@ -6474,7 +6474,7 @@ export const useSuspenseProfile = <TData = Schemas.UserProfile>(
   });
 };
 
-export const useProfile = <TData = Schemas.UserProfile>(
+export const useProfile = <TData = Schemas.UserProfile,>(
   variables: ProfileVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.UserProfile, ProfileError, TData>,
@@ -6641,7 +6641,7 @@ export function recentChatsQuery(
   };
 }
 
-export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse>(
+export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse,>(
   variables: RecentChatsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6664,7 +6664,7 @@ export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse>(
   });
 };
 
-export const useRecentChats = <TData = Schemas.RecentChatsResponse>(
+export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
   variables: RecentChatsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6769,7 +6769,7 @@ export const useSuspenseStarterPrompts = <
   });
 };
 
-export const useStarterPrompts = <TData = Schemas.StarterPromptsResponse>(
+export const useStarterPrompts = <TData = Schemas.StarterPromptsResponse,>(
   variables: StarterPromptsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6876,7 +6876,9 @@ export const useSuspenseStartingAssistant = <
   });
 };
 
-export const useStartingAssistant = <TData = Schemas.StartingAssistantResponse>(
+export const useStartingAssistant = <
+  TData = Schemas.StartingAssistantResponse,
+>(
   variables: StartingAssistantVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -6950,7 +6952,7 @@ export function messagesQuery(
   };
 }
 
-export const useSuspenseMessages = <TData = MessagesResponse>(
+export const useSuspenseMessages = <TData = MessagesResponse,>(
   variables: MessagesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<MessagesResponse, MessagesError, TData>,
@@ -6965,7 +6967,7 @@ export const useSuspenseMessages = <TData = MessagesResponse>(
   });
 };
 
-export const useMessages = <TData = MessagesResponse>(
+export const useMessages = <TData = MessagesResponse,>(
   variables: MessagesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<MessagesResponse, MessagesError, TData>,
@@ -7225,7 +7227,7 @@ export const useSuspenseListShareGrants = <
   });
 };
 
-export const useListShareGrants = <TData = Schemas.ListShareGrantsResponse>(
+export const useListShareGrants = <TData = Schemas.ListShareGrantsResponse,>(
   variables: ListShareGrantsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7597,7 +7599,7 @@ export const useSuspenseResolveShareLink = <
   });
 };
 
-export const useResolveShareLink = <TData = Schemas.ResolveShareLinkResponse>(
+export const useResolveShareLink = <TData = Schemas.ResolveShareLinkResponse,>(
   variables: ResolveShareLinkVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7729,7 +7731,7 @@ export const useSuspenseShareLinkMessages = <
   });
 };
 
-export const useShareLinkMessages = <TData = Schemas.ChatMessagesResponse>(
+export const useShareLinkMessages = <TData = Schemas.ChatMessagesResponse,>(
   variables: ShareLinkMessagesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7842,7 +7844,7 @@ export function healthQuery(variables: HealthVariables | reactQuery.SkipToken) {
   };
 }
 
-export const useSuspenseHealth = <TData = undefined>(
+export const useSuspenseHealth = <TData = undefined,>(
   variables: HealthVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, HealthError, TData>,
@@ -7857,7 +7859,7 @@ export const useSuspenseHealth = <TData = undefined>(
   });
 };
 
-export const useHealth = <TData = undefined>(
+export const useHealth = <TData = undefined,>(
   variables: HealthVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, HealthError, TData>,
@@ -7941,7 +7943,7 @@ export function officeAddinDocumentManifestQuery(
   };
 }
 
-export const useSuspenseOfficeAddinDocumentManifest = <TData = undefined>(
+export const useSuspenseOfficeAddinDocumentManifest = <TData = undefined,>(
   variables: OfficeAddinDocumentManifestVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -7964,7 +7966,7 @@ export const useSuspenseOfficeAddinDocumentManifest = <TData = undefined>(
   });
 };
 
-export const useOfficeAddinDocumentManifest = <TData = undefined>(
+export const useOfficeAddinDocumentManifest = <TData = undefined,>(
   variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -8057,7 +8059,9 @@ export function officeAddinExchangeServerManifestQuery(
   };
 }
 
-export const useSuspenseOfficeAddinExchangeServerManifest = <TData = undefined>(
+export const useSuspenseOfficeAddinExchangeServerManifest = <
+  TData = undefined,
+>(
   variables: OfficeAddinExchangeServerManifestVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -8082,7 +8086,7 @@ export const useSuspenseOfficeAddinExchangeServerManifest = <TData = undefined>(
   });
 };
 
-export const useOfficeAddinExchangeServerManifest = <TData = undefined>(
+export const useOfficeAddinExchangeServerManifest = <TData = undefined,>(
   variables: OfficeAddinExchangeServerManifestVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -8169,7 +8173,7 @@ export function officeAddinManifestQuery(
   };
 }
 
-export const useSuspenseOfficeAddinManifest = <TData = undefined>(
+export const useSuspenseOfficeAddinManifest = <TData = undefined,>(
   variables: OfficeAddinManifestVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, OfficeAddinManifestError, TData>,
@@ -8188,7 +8192,7 @@ export const useSuspenseOfficeAddinManifest = <TData = undefined>(
   });
 };
 
-export const useOfficeAddinManifest = <TData = undefined>(
+export const useOfficeAddinManifest = <TData = undefined,>(
   variables: OfficeAddinManifestVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, OfficeAddinManifestError, TData>,
