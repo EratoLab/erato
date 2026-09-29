@@ -424,6 +424,7 @@ impl Host {
                 let decision = match choice {
                     ApprovalChoice::Approve => ToolApprovalDecision::Approve,
                     ApprovalChoice::Reject => ToolApprovalDecision::Reject,
+                    ApprovalChoice::Withdraw => ToolApprovalDecision::Withdraw,
                 };
                 (approval_id, decision)
             })
@@ -603,6 +604,7 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
                 ToolApprovalKind::McpTool => ApprovalKind::McpTool,
                 ToolApprovalKind::DelegatedTask => ApprovalKind::DelegatedTask,
                 ToolApprovalKind::TaskPlan => ApprovalKind::TaskPlan,
+                ToolApprovalKind::ToolCallLimit => ApprovalKind::ToolCallLimit,
             },
             items: request
                 .approval_items()

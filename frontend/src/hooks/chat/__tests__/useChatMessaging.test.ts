@@ -3572,6 +3572,34 @@ describe("useChatMessaging", () => {
       );
     });
 
+    it.each(["approve", "reject", "withdraw"] as const)(
+      "seeds only the budget decision for %s so delta indices stay aligned",
+      async (decision) => {
+        const { result } = renderHook(() => useChatMessaging("chat1"), {
+          wrapper: TestWrapper,
+        });
+        seedParkedChat();
+        await act(async () => {
+          const pending = result.current.continueToolApproval({
+            messageId: parkedMessage.id,
+            decision,
+            toolCallId: "budget-1",
+            toolName: "Tool-call budget",
+            mcpServerId: "",
+            kind: "tool_call_limit",
+          });
+          sseCallbacks.onOpen?.();
+          await pending;
+        });
+        const seeded = useMessagingStore.getState().getStreaming("chat1");
+        expect(seeded.content.map((part) => part.content_type)).toEqual([
+          "text",
+          "tool_approval_request",
+          decision === "approve" ? "tool_approval" : "tool_rejection",
+        ]);
+      },
+    );
+
     it("seeds a refusal slot only for the plan items that were declined", async () => {
       const { result } = renderHook(() => useChatMessaging("chat1"), {
         wrapper: TestWrapper,

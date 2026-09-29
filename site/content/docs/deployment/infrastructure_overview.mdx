@@ -323,7 +323,7 @@ sequenceDiagram
 - Each turn starts by executing any pending tool calls from the previous turn
 - Tool calls are executed via MCP servers with real-time SSE updates
 - LLM generation is streamed with text deltas sent to frontend
-- If the LLM requests more tool calls, the loop continues until it reaches `generation.max_tool_calls_per_message` (15 by default)
+- If another tool call would exceed `generation.max_tool_calls_per_message` (15 by default), an ordinary chat pauses for a decision: double the total tool-call budget, generate a final answer without tools, or stop with the partial response
 - Langfuse tracks each turn separately with detailed metrics
 
 ### Phase 4: Finalization

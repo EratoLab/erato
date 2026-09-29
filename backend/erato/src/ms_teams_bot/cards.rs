@@ -25,6 +25,7 @@ pub enum ApprovalKind {
     McpTool,
     DelegatedTask,
     TaskPlan,
+    ToolCallLimit,
 }
 
 /// One decision the user owes.
@@ -49,6 +50,7 @@ pub struct PendingApprovalSet {
 pub enum ApprovalChoice {
     Approve,
     Reject,
+    Withdraw,
 }
 
 /// The data an approval card submits: the button's data plus the card's
@@ -99,12 +101,22 @@ pub fn approval_card(set: &PendingApprovalSet) -> Value {
         ApprovalKind::McpTool => format!("{count} tool calls need approval"),
         ApprovalKind::TaskPlan => format!("Erato wants to start {count} task(s)"),
         ApprovalKind::DelegatedTask => "Sub-tasks are waiting for approval".to_string(),
+        ApprovalKind::ToolCallLimit => "Tool-call limit reached".to_string(),
     };
     let item_budget = (MAX_INPUT_PREVIEW_CHARS / count.max(1)).min(MAX_ITEM_PREVIEW_CHARS);
     let mut body = vec![json!({
         "type": "TextBlock", "text": heading, "weight": "Bolder", "size": "Medium", "wrap": true,
     })];
-    for (index, item) in set.items.iter().enumerate() {
+    if set.kind == ApprovalKind::ToolCallLimit {
+        body.push(json!({"type": "TextBlock", "wrap": true,
+            "text": "Continue with twice the tool-call budget, generate an answer using the information collected so far, or stop this response."}));
+    }
+    for (index, item) in set
+        .items
+        .iter()
+        .enumerate()
+        .filter(|_| set.kind != ApprovalKind::ToolCallLimit)
+    {
         body.push(json!({
             "type": "TextBlock", "wrap": true, "separator": index > 0,
             "text": format!("Run the tool **{}**?", item.tool_name),
@@ -150,7 +162,21 @@ pub fn approval_card(set: &PendingApprovalSet) -> Value {
             "data": data(all),
         })
     };
-    let actions = if count > 1 {
+    let actions = if set.kind == ApprovalKind::ToolCallLimit {
+        vec![
+            button(
+                "Continue tool calls",
+                "positive",
+                Some(ApprovalChoice::Approve),
+            ),
+            button(
+                "Generate answer now",
+                "default",
+                Some(ApprovalChoice::Reject),
+            ),
+            button("Stop", "destructive", Some(ApprovalChoice::Withdraw)),
+        ]
+    } else if count > 1 {
         vec![
             button("Submit decisions", "default", None),
             button("Approve all", "positive", Some(ApprovalChoice::Approve)),
@@ -173,6 +199,7 @@ pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str) ->
             let verb = match choice {
                 ApprovalChoice::Approve => "approved",
                 ApprovalChoice::Reject => "denied",
+                ApprovalChoice::Withdraw => "stopped",
             };
             json!({"type": "TextBlock", "wrap": true,
                    "text": format!("**{tool_name}** was {verb} by {decided_by}.")})

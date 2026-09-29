@@ -4985,7 +4985,10 @@ async fn stream_generate_chat_completion<
     let langfuse_trace_id = tracing_client
         .as_ref()
         .map(|client| client.trace_id().to_string());
-    let max_tool_calls_per_message = app_state.config.generation.max_tool_calls_per_message;
+    let max_tool_calls_per_message = crate::services::tool_call_budget::effective_budget(
+        app_state.config.generation.max_tool_calls_per_message,
+        &initial_message_content,
+    );
     // Default time the loop holds a turn open awaiting a client tool's result
     // before giving up (the backstop that prevents a never-answering client
     // from leaking the parked turn). A client tool counts as one normal
@@ -5497,12 +5500,40 @@ async fn stream_generate_chat_completion<
                     exit_after_join = true;
                     break 'pop_calls;
                 }
-                // Still an error for an ordinary turn, exactly as before —
-                // but raised after the join, so a batch already in flight is
-                // settled rather than orphaned.
-                exit_error = Some(eyre!(
-                    "Maximum tool call count per message ({max_tool_calls_per_message}) exceeded"
+                // Mention runs have no surface from which to resume a budget
+                // prompt; keep their existing failure behavior.
+                if is_delegated_run && !child_may_park {
+                    exit_error = Some(eyre!(
+                        "Maximum tool call count per message ({max_tool_calls_per_message}) exceeded"
+                    ));
+                    break 'pop_calls;
+                }
+                unfinished_tool_calls.push_front(unfinished_tool_call);
+                let pending_tool_calls = unfinished_tool_calls
+                    .drain(..)
+                    .map(|call| crate::models::message::PendingToolCall {
+                        call_id: call.call_id,
+                        fn_name: call.fn_name,
+                        fn_arguments: call.fn_arguments,
+                    })
+                    .collect();
+                pending_approval_part = Some(crate::services::tool_call_budget::request(
+                    max_tool_calls_per_message,
+                    pending_tool_calls,
                 ));
+                exit_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                );
+                exit_after_join = true;
                 break 'pop_calls;
             }
             if already_charged.is_none() {
@@ -7386,6 +7417,9 @@ async fn stream_generate_chat_completion<
         // approval is genuinely the last part — which is what the six
         // last-part checks and the continuation both rely on.
         if let Some(approval_request) = pending_approval_part.take() {
+            if approval_request.kind == ToolApprovalKind::ToolCallLimit {
+                current_message_content = without_preparing_tools(&current_message_content);
+            }
             if let Some(task) = streaming_task {
                 crate::services::client_operations::store::save_consumption(
                     &app_state.db,
@@ -15354,6 +15388,20 @@ pub(crate) async fn start_continuation(
         // Validated here as well as in the worker: a body that does not answer
         // the turn should be an HTTP status, not a stream that opens and dies.
         let submitted_decisions = resolve_submitted_decisions(&request, &state.open)?;
+        if state.request.kind == ToolApprovalKind::ToolCallLimit
+            && submitted_decisions.iter().any(|(_, decision)| {
+                matches!(
+                    decision,
+                    ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways
+                )
+            })
+        {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                "Tool budget decisions cannot be saved as standing permissions".to_string(),
+            )
+                .into());
+        }
         if submitted_decisions
             .iter()
             .any(|(_, decision)| matches!(decision, ToolApprovalDecision::ApproveAlways))
@@ -16086,6 +16134,88 @@ pub(crate) async fn run_continuation(
             .clone()
             .ok_or_else(|| eyre!("Interrupted message has no generation parameters"))?,
     )?;
+    if approval_request.kind == ToolApprovalKind::ToolCallLimit {
+        for (approval_id, decision) in &submitted_decisions {
+            let item = state
+                .open
+                .iter()
+                .find(|item| &item.approval_id == approval_id)
+                .ok_or_else(|| eyre!("Tool budget decision is no longer open"))?;
+            match decision {
+                ToolApprovalDecision::Approve => {
+                    parsed
+                        .content
+                        .push(ContentPart::ToolApproval(ContentPartToolApproval {
+                            tool_call_id: item.tool_call_id.clone(),
+                            always_allow: false,
+                            user_tool_approval_setting_id: None,
+                            approved_at: now_timestamp(),
+                            approval_id: Some(item.approval_id.clone()),
+                            child_chat_id: None,
+                        }))
+                }
+                ToolApprovalDecision::Reject | ToolApprovalDecision::Withdraw => parsed
+                    .content
+                    .push(ContentPart::ToolRejection(ContentPartToolRejection {
+                        tool_call_id: item.tool_call_id.clone(),
+                        never_allow: false,
+                        user_tool_approval_setting_id: None,
+                        rejected_at: now_timestamp(),
+                        approval_id: Some(item.approval_id.clone()),
+                        child_chat_id: None,
+                        reason: matches!(decision, ToolApprovalDecision::Withdraw)
+                            .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
+                    })),
+                _ => {
+                    return Err(eyre!(
+                        "Tool budget decisions cannot be saved as standing permissions"
+                    ));
+                }
+            }
+        }
+        update_message_content(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            parsed.content.clone(),
+        )
+        .await?;
+        if crate::services::tool_call_budget::choices(&parsed.content)
+            .last()
+            .is_some_and(|(_, choice)| {
+                choice == crate::services::tool_call_budget::BudgetChoice::Stop
+            })
+        {
+            let mut metadata = message
+                .generation_metadata
+                .as_ref()
+                .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
+                .unwrap_or_default();
+            metadata.continuation_in_flight = None;
+            metadata.was_aborted = Some(true);
+            update_message_generation_metadata(
+                &app_state.db,
+                policy,
+                &me_user.to_subject(),
+                &message.id,
+                metadata,
+            )
+            .await?;
+            return stream_update_assistant_message_completion::<
+                MessageSubmitStreamingResponseMessage,
+            >(
+                tx,
+                task,
+                app_state,
+                policy,
+                parsed.content,
+                me_user,
+                message.id,
+            )
+            .await;
+        }
+    }
     let mcp_auth_context = McpRequestAuthContext {
         app_state: Some(app_state),
         user_id: Some(user_id),
@@ -16155,6 +16285,7 @@ pub(crate) async fn run_continuation(
         ToolApprovalKind::McpTool => (submitted_decisions, Vec::new(), Vec::new()),
         ToolApprovalKind::DelegatedTask => (Vec::new(), submitted_decisions, Vec::new()),
         ToolApprovalKind::TaskPlan => (Vec::new(), Vec::new(), submitted_decisions),
+        ToolApprovalKind::ToolCallLimit => (Vec::new(), Vec::new(), Vec::new()),
     };
 
     // Why an approved call the rebuilt tool set no longer carries cannot run.
@@ -17016,7 +17147,16 @@ async fn resume_parked_generation(
     {
         continuation_tools.push(tool);
     }
-    chat_request.tools = (!continuation_tools.is_empty()).then_some(continuation_tools);
+    let answer_without_tools = crate::services::tool_call_budget::choices(&parsed.content)
+        .last()
+        .is_some_and(|(_, choice)| {
+            choice == crate::services::tool_call_budget::BudgetChoice::Answer
+        });
+    chat_request.tools = if answer_without_tools {
+        None
+    } else {
+        (!continuation_tools.is_empty()).then_some(continuation_tools)
+    };
     let allowed_tool_names: HashSet<String> = chat_request
         .tools
         .as_ref()
@@ -17124,6 +17264,11 @@ async fn resume_parked_generation(
         .map(crate::models::message::InputMessage::into_chat_message),
     );
 
+    if answer_without_tools {
+        chat_request.messages.push(GenAiChatMessage::user(
+            "The tool-call budget has been reached. Please provide your final answer now using the information already available. No more tools are available.",
+        ));
+    }
     if !pending_tool_calls.is_empty() {
         chat_request.messages.push(GenAiChatMessage {
             role: ChatRole::Assistant,

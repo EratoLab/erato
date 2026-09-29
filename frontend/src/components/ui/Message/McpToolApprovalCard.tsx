@@ -382,6 +382,45 @@ export const McpToolApprovalCard = ({
     </>
   );
 
+  if (kind === "tool_call_limit") {
+    return (
+      <div
+        className={APPROVAL_CARD_SHELL_CLASS}
+        data-testid="tool-call-limit-approval"
+      >
+        <ActionConfirmationCard
+          title={t({
+            id: "toolCallLimit.title",
+            message: "Tool-call limit reached",
+          })}
+          description={t({
+            id: "toolCallLimit.description",
+            message:
+              "Continue with twice the tool-call budget, generate an answer using the information collected so far, or stop this response.",
+          })}
+          allowOnceLabel={t({
+            id: "toolCallLimit.continue",
+            message: "Continue tool calls",
+          })}
+          alwaysAllowLabel={t({
+            id: "toolCallLimit.answer",
+            message: "Generate answer now",
+          })}
+          denyLabel={t({ id: "toolCallLimit.stop", message: "Stop" })}
+          onAllowOnce={() => decideAll("approve")}
+          onAlwaysAllow={() => decideAll("reject")}
+          onDeny={() => decideAll("withdraw")}
+          status={isArchived ? "dismissed" : "pending"}
+          resolvedLabel={isArchived ? archivedNoticeText() : undefined}
+          isBusy={cardIsBusy}
+          scrollIntoViewOnMount
+          data-testid="tool-call-limit-card"
+        />
+        {refusal}
+      </div>
+    );
+  }
+
   if (kind === "delegated_task") {
     return (
       <>

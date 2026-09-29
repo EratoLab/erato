@@ -11306,7 +11306,8 @@
         "enum": [
           "mcp_tool",
           "delegated_task",
-          "task_plan"
+          "task_plan",
+          "tool_call_limit"
         ]
       },
       "ToolCallStatus": {

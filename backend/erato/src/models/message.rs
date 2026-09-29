@@ -403,6 +403,9 @@ pub enum ToolApprovalKind {
     McpTool,
     DelegatedTask,
     TaskPlan,
+    /// A per-message tool budget decision: approve doubles the budget,
+    /// reject requests an answer without tools, withdraw stops generation.
+    ToolCallLimit,
 }
 
 /// The gated call a delegated child parked on, copied onto the parent's
