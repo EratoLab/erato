@@ -65,8 +65,7 @@ export function applyWordDraftPatches(
     )
       invalidPatch(index);
     const encoded = patch.path.split("/").slice(1);
-    if (encoded.length > 32 || encoded.some((key) => /~(?![01])/u.test(key)))
-      invalidPatch(index);
+    if (encoded.some((key) => /~(?![01])/u.test(key))) invalidPatch(index);
     const keys = encoded.map((key) =>
       key.replaceAll("~1", "/").replaceAll("~0", "~"),
     );

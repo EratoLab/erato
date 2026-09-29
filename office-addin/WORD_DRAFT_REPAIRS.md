@@ -11,7 +11,7 @@ opaque `id` and integer `revision`. A repair supplies the current `snapshot` and
 patches are the RFC 6902 `add`, `replace` and `remove` operations. Paths address
 the submitted proposal using JSON Pointer. Mutable roots are `scope`, `entries`,
 `deleted`, `stories` and `sections`; identity fields are immutable. Limits are
-32 operations, 512 characters per path, 32 path segments and the existing
+32 operations, 512 characters per path and the existing
 256 KiB complete-plan limit. Invalid patch batches leave the draft unchanged.
 
 The host validates and compiles the materialized complete plan through the same

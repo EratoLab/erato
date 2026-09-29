@@ -51,6 +51,19 @@ describe("Word draft patch protocol", () => {
       ]).entries,
     ).toEqual([{ "a/b~c": 2 }]);
   });
+
+  it("can address a leaf through deeply nested table structures", () => {
+    let nested: unknown = { text: "before" };
+    for (let depth = 0; depth < 12; depth++)
+      nested = { rows: [{ cells: [{ blocks: [nested] }] }] };
+    const input = { ...plan, entries: [nested] };
+    const path = `/entries/0${"/rows/0/cells/0/blocks/0".repeat(12)}/text`;
+    const output = applyWordDraftPatches(input, [
+      { op: "replace", path, value: "after" },
+    ]);
+    expect(JSON.stringify(output)).toContain('"text":"after"');
+    expect(JSON.stringify(input)).toContain('"text":"before"');
+  });
   it("bounds patch counts, values and accepted operations", () => {
     for (const patches of [
       [],
