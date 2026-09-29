@@ -1,4 +1,5 @@
 import {
+  normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
 } from "./wordDocumentPlan";
@@ -45,7 +46,8 @@ export function createWordDocumentSubmissionExecutor(
     } catch {
       return { ok: false, error: "Expected JSON plan arguments." };
     }
-    const plan = parseWordDocumentPlan(content, issues);
+    const parsed = parseWordDocumentPlan(content, issues);
+    const plan = parsed && normalizeWordDocumentPlan(parsed, snapshot);
     const invalid = !plan || validateWordDocumentPlan(plan, snapshot, issues);
     if (invalid)
       return {
