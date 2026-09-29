@@ -1084,6 +1084,18 @@ export type ClientOperationView = {
 };
 
 /**
+ * Opaque host-owned correction handle; it grants no permission to apply an artifact.
+ */
+export type ClientToolDraftReference = {
+  id: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  revision: number;
+};
+
+/**
  * Default handling of files retrieved by client tools before they leave the device.
  */
 export type ClientToolFileApproval = "never_allow" | "ask" | "always_allow";
@@ -1131,6 +1143,7 @@ export type ClientToolResultRequest = {
    */
   message_id: string;
   result?: Value;
+  submission_feedback?: null | ClientToolSubmissionFeedback;
   /**
    * The `tool_call_id` from the `client_tool_call` event being answered.
    */
@@ -1149,6 +1162,17 @@ export type ClientToolResultResponse = {
    * benign no-op (already delivered, timed out, aborted, or unknown id).
    */
   delivered: boolean;
+};
+
+/**
+ * Rejection metadata, distinct from a successful submission result.
+ */
+export type ClientToolSubmissionFeedback = {
+  draft?: null | ClientToolDraftReference;
+  /**
+   * Ends an opt-in submission turn without accepting an artifact.
+   */
+  terminal?: boolean;
 };
 
 /**

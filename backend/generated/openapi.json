@@ -6353,6 +6353,24 @@
           }
         }
       },
+      "ClientToolDraftReference": {
+        "type": "object",
+        "description": "Opaque host-owned correction handle; it grants no permission to apply an artifact.",
+        "required": [
+          "id",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "ClientToolFileApproval": {
         "type": "string",
         "description": "Default handling of files retrieved by client tools before they leave the device.",
@@ -6422,6 +6440,17 @@
             "$ref": "#/components/schemas/Value",
             "description": "The tool's JSON result (any JSON value, including `null`). Provide this\nOR `error`. An absent field is treated as \"no result\"; an explicit\n`null` is a valid result."
           },
+          "submission_feedback": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientToolSubmissionFeedback",
+                "description": "Optional host-owned correction handle and terminal rejection marker.\nOnly meaningful with nonempty validation_errors."
+              }
+            ]
+          },
           "tool_call_id": {
             "type": "string",
             "description": "The `tool_call_id` from the `client_tool_call` event being answered."
@@ -6444,6 +6473,26 @@
           "delivered": {
             "type": "boolean",
             "description": "True if a suspended generation received this result; false if it was a\nbenign no-op (already delivered, timed out, aborted, or unknown id)."
+          }
+        }
+      },
+      "ClientToolSubmissionFeedback": {
+        "type": "object",
+        "description": "Rejection metadata, distinct from a successful submission result.",
+        "properties": {
+          "draft": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientToolDraftReference"
+              }
+            ]
+          },
+          "terminal": {
+            "type": "boolean",
+            "description": "Ends an opt-in submission turn without accepting an artifact."
           }
         }
       },

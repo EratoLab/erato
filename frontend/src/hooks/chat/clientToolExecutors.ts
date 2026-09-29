@@ -8,7 +8,10 @@ import { operationExecutorHeaders } from "@/lib/clientOperations/registration";
  * re-execute on recovery; mutations belong on `propose_client_action`.
  */
 
-import type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ClientToolSubmissionFeedback,
+  ClientToolValidationIssue,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -35,6 +38,8 @@ export type ClientToolExecutionResult =
       disposition?: "submit";
       error: string;
       validationErrors?: ClientToolValidationIssue[];
+      /** Correction handle and terminal rejection, never a successful artifact. */
+      submissionFeedback?: ClientToolSubmissionFeedback;
     };
 
 /**

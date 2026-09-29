@@ -1502,7 +1502,7 @@ async fn test_client_tool_files_extract_only_authorized_uploads(pool: Pool<Postg
         .await;
     response.assert_status_ok();
     assert_eq!(response.json::<Value>()["delivered"], true);
-    let ClientToolOutcome::ValidationFailed(issues) = receiver.await.unwrap() else {
+    let ClientToolOutcome::ValidationFailed(issues, _) = receiver.await.unwrap() else {
         panic!("validation diagnostics must take precedence over a result with files")
     };
     assert_eq!(issues.len(), 1);

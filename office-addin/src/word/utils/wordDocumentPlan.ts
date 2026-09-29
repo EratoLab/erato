@@ -447,7 +447,7 @@ export function validateWordDocumentPlan(
     );
 
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
-  const consumed = new Set<string>();
+  const consumed = new Map<string, string>();
   const keptRefs = new Set(
     plan.entries.flatMap((entry) =>
       entry.kind === "keep" ? entry.source : [],
@@ -474,13 +474,20 @@ export function validateWordDocumentPlan(
   };
   const consume = (refs: string[], path: string) =>
     refs.every((ref, index) => {
-      if (!sources.has(ref) || consumed.has(ref))
+      if (!sources.has(ref))
         return reject(
           `${path}/${index}`,
           "source-ownership",
-          "Each body source must be captured and consumed exactly once by keep, replace or deleted.",
+          "Unknown body source reference. Use a ref returned by the completed read.",
         );
-      consumed.add(ref);
+      const previous = consumed.get(ref);
+      if (previous)
+        return reject(
+          `${path}/${index}`,
+          "source-ownership",
+          `Body source ${ref} is already consumed at ${previous}; each source can be consumed only once.`,
+        );
+      consumed.set(ref, `${path}/${index}`);
       return true;
     });
   const mediaSource = (
@@ -763,13 +770,15 @@ export function validateWordDocumentPlan(
     );
   for (const [index, deletion] of plan.deleted.entries())
     if (!consume(deletion.source, `/deleted/${index}/source`)) return "invalid";
-  if (consumed.size !== sources.size)
+  if (consumed.size !== sources.size) {
+    const missing = [...sources.keys()].filter((ref) => !consumed.has(ref));
     return fail(
       "invalid",
       "/entries",
       "source-coverage",
-      "Every captured body source must appear exactly once in keep, replace or deleted; omitted sources are not implicitly deleted.",
+      `Unaccounted body sources: ${missing.slice(0, 32).join(", ")}${missing.length > 32 ? ` (${missing.length} total; first 32 shown)` : ""}. Each requires keep, replace or deleted; omission never deletes content.`,
     );
+  }
 
   if (plan.sections) {
     if (!parseWordSections(plan.sections))

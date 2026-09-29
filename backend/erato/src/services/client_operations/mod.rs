@@ -280,7 +280,7 @@ pub fn from_fast_result(
             Some(OperationValue::Value { value }),
             None,
         ),
-        ClientToolOutcome::ValidationFailed(_) => (
+        ClientToolOutcome::ValidationFailed(..) => (
             OperationOutcome::Rejected,
             None,
             Some(OperationError {
@@ -310,13 +310,14 @@ pub fn from_fast_result(
 /// Fixed server-authored feedback for a malformed executor result. Authentication
 /// and binding failures remain HTTP refusals and never settle another executor's call.
 pub fn invalid_result_outcome() -> crate::services::client_tools::ClientToolOutcome {
-    crate::services::client_tools::ClientToolOutcome::ValidationFailed(vec![
-        crate::services::client_tools::ClientToolValidationIssue {
+    crate::services::client_tools::ClientToolOutcome::ValidationFailed(
+        vec![crate::services::client_tools::ClientToolValidationIssue {
             path: String::new(),
             code: "invalid_operation_result".into(),
             message: "The executor returned an invalid operation result.".into(),
-        },
-    ])
+        }],
+        None,
+    )
 }
 
 pub fn invalid_result_feedback() -> ValidatedResult {

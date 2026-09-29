@@ -186,6 +186,29 @@ describe("handleClientToolCall", () => {
     expect(lastPostBody(fetchMock).error).toContain("No client-tool executor");
   });
 
+  it("preserves correction handles and terminal failures as rejections", async () => {
+    registerClientToolExecutor("fetch_availability", async () => ({
+      ok: false,
+      error: "Repeated invalid proposal",
+      validationErrors: [
+        { path: "", code: "no-progress", message: "Unchanged proposal." },
+      ],
+      submissionFeedback: {
+        draft: { id: "draft-1", revision: 2 },
+        terminal: true,
+      },
+    }));
+    await handleClientToolCall(makeEvent(), deps);
+    expect(lastPostBody(fetchMock)).toMatchObject({
+      submission_feedback: {
+        draft: { id: "draft-1", revision: 2 },
+        terminal: true,
+      },
+      validation_errors: [{ code: "no-progress" }],
+    });
+    expect(lastPostBody(fetchMock)).not.toHaveProperty("result");
+  });
+
   it("execute-once: a replayed event does not re-run or re-POST the tool", async () => {
     const executor = vi.fn(async () => ({ ok: true as const, result: 1 }));
     registerClientToolExecutor("fetch_availability", executor);

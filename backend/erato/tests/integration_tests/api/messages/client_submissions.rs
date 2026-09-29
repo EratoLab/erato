@@ -204,6 +204,33 @@ async fn local_validation_stops_at_attempt_limit(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn correction_handle_reaches_model_and_terminal_rejection_stops_early(pool: Pool<Postgres>) {
+    let issues =
+        json!([{"path":"/title","code":"invalid_title","message":"Title requires correction"}]);
+    let (requests, events) = run_submission(pool, vec![
+        vec![("call_initial", json!({"title":"Rejected"}))],
+        vec![("call_repeated", json!({"title":"Rejected"}))],
+    ], vec![
+        json!({"validation_errors":issues,"submission_feedback":{"draft":{"id":"draft-1","revision":1},"terminal":false}}),
+        json!({"validation_errors":issues,"submission_feedback":{"draft":{"id":"draft-1","revision":1},"terminal":true}}),
+    ], 3, 5_000, false).await;
+    assert_eq!(
+        requests.len(),
+        2,
+        "terminal rejection must not consume the remaining attempt"
+    );
+    assert!(requests[1].to_string().contains("draft-1"));
+    assert!(events.iter().any(|event| event["output"]["submission"]
+        == json!({"status":"failed","attempts_remaining":0})
+        && event["output"]["submission_feedback"]["terminal"] == true));
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["output"]["submission"]["status"] == "accepted")
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn parallel_submissions_never_stage_two_drafts(pool: Pool<Postgres>) {
     let (requests, events) = run_submission(
         pool,
