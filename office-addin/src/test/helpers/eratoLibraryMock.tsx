@@ -325,6 +325,7 @@ export const DEFAULT_STUBS = {
     override ?? fallback,
   seedGenerationStatusFromListing: noop,
   setAuthRecoveryHandler: noop,
+  setClientPlatform: noop,
   toast: { info: noop, success: noop, warning: noop, error: noop },
   transformEmailFencesForCopy: (value: string) => value,
   UploadUnknownError: class extends Error {},
@@ -357,6 +358,9 @@ export const DEFAULT_STUBS = {
   }),
   useDesktopSidecar: () => ({ client: null }),
   useFacets: () => ({ data: { action_facets: [] } }),
+  useFeatureConfig: () => ({
+    sidebar: { chatHistoryShowMetadata: true, chatHistorySources: [] },
+  }),
   useFileCapabilitiesContext: () => ({ capabilities: [] }),
   useFileDropzone: () => ({
     uploadFiles: async () => [],

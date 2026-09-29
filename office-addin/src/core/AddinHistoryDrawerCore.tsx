@@ -82,13 +82,18 @@ export function AddinHistoryDrawerCore({
   const filterStore = useAddinHistoryFilterStore();
   const { enabled: assistantsEnabled, delegationEnabled } =
     useAssistantsFeature();
+  // Same source as the web sidebar: the backend's sidebar config.
+  const { chatHistoryShowMetadata, chatHistorySources } =
+    useFeatureConfig().sidebar;
   const filters = useSanitizedChatHistoryFilters(
-    { assistantsEnabled, delegationEnabled },
+    {
+      assistantsEnabled,
+      delegationEnabled,
+      availableSources: chatHistorySources,
+    },
     filterStore,
   );
   const { enabled: sharingEnabled } = useChatSharingFeature();
-  // Same source as the web sidebar: the backend's sidebar metadata switch.
-  const { chatHistoryShowMetadata } = useFeatureConfig().sidebar;
 
   const panelRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -338,6 +343,7 @@ export function AddinHistoryDrawerCore({
     <ChatHistoryFilterMenu
       assistantsEnabled={assistantsEnabled}
       delegationEnabled={delegationEnabled}
+      availableSources={chatHistorySources}
       store={filterStore}
     />
   );

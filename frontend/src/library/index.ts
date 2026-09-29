@@ -426,18 +426,26 @@ export { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 export { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 export {
   CHAT_HISTORY_FILTER_DEFAULTS,
+  CHAT_HISTORY_SOURCE_VALUES,
+  chatHistorySourcesFromCreatedVia,
   createChatHistoryFilterStore,
   hasActiveFilters,
   isDefaultFilters,
+  isSourceFilterActive,
+  isSourceFilterAvailable,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterFoldback,
   useSanitizedChatHistoryFilters,
   type ChatHistoryFilterStoreHook,
   type ChatHistoryFilterValues,
   type ChatHistoryGroupBy,
+  type ChatHistorySource,
+  type ChatHistorySourceFilter,
+  type ChatHistorySourceMode,
   type ChatHistoryStatusFilter,
   type ChatHistoryTypeFilter,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
+export { setClientPlatform } from "@/lib/clientPlatform";
 export {
   buildInfiniteChatsQueryKey,
   buildRecentChatsFilterParams,

@@ -6,11 +6,13 @@ import {
   recentChatsQuery,
   removeArchivedChatFromLists,
   seedGenerationStatusFromListing,
+  setClientPlatform,
   useArchiveChatEndpoint,
   useAssistantsFeature,
   useBudgetStatus,
   useChatHistoryFilterFoldback,
   useChatMessaging,
+  useFeatureConfig,
   useFileCapabilitiesContext,
   useFileDropzone,
   useFileUploadStore,
@@ -81,20 +83,31 @@ export function AddinChatProviderCore({
   platform: string;
   SessionController?: ComponentType<AddinSessionControllerProps>;
 }) {
+  // Requests outside the messaging hook (e.g. the silent chat created for a
+  // file upload) record the host as where the chat was created.
+  useEffect(() => {
+    setClientPlatform(platform);
+  }, [platform]);
   const filterStore = getAddinChatHistoryFilterStore(platform);
   const { enabled: assistantsEnabled, delegationEnabled } =
     useAssistantsFeature();
+  const { chatHistorySources } = useFeatureConfig().sidebar;
   useChatHistoryFilterFoldback(
-    { assistantsEnabled, delegationEnabled },
+    {
+      assistantsEnabled,
+      delegationEnabled,
+      availableSources: chatHistorySources,
+    },
     filterStore,
   );
 
   const typeFilter = filterStore((state) => state.typeFilter);
   const statusFilter = filterStore((state) => state.statusFilter);
   const delegatedFilter = filterStore((state) => state.delegatedFilter);
+  const sourceFilter = filterStore((state) => state.sourceFilter);
   const filters = useMemo<RecentChatsListFilters>(
-    () => ({ typeFilter, statusFilter, delegatedFilter }),
-    [typeFilter, statusFilter, delegatedFilter],
+    () => ({ typeFilter, statusFilter, delegatedFilter, sourceFilter }),
+    [typeFilter, statusFilter, delegatedFilter, sourceFilter],
   );
   const history = useInfiniteRecentChats({ filters });
   const chats = history.chats;

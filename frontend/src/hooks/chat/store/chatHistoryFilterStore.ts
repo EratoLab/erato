@@ -7,6 +7,29 @@ export type ChatHistoryStatusFilter = "active" | "all";
 export type ChatHistoryDelegatedFilter = "hidden" | "shown";
 export type ChatHistoryGroupBy = "date" | "type" | "unread" | "none";
 
+/**
+ * Where a chat was started, as the list filter offers it. Coarser than the
+ * backend's `created_via`: the Teams tab and the Teams bot share "teams".
+ */
+export type ChatHistorySource =
+  | "web"
+  | "outlook"
+  | "word"
+  | "officeAddin"
+  | "teams"
+  | "legacy";
+export type ChatHistorySourceMode = "all" | "only" | "hide";
+
+export interface ChatHistorySourceFilter {
+  mode: ChatHistorySourceMode;
+  /**
+   * Kept while the mode is "all", so switching back to "only"/"hide" restores
+   * the previous pick. Always in `CHAT_HISTORY_SOURCE_VALUES` order, so equal
+   * selections produce equal query keys.
+   */
+  sources: readonly ChatHistorySource[];
+}
+
 export interface ChatHistoryFilterValues {
   typeFilter: ChatHistoryTypeFilter;
   statusFilter: ChatHistoryStatusFilter;
@@ -17,6 +40,8 @@ export interface ChatHistoryFilterValues {
    */
   delegatedFilter: ChatHistoryDelegatedFilter;
   groupBy: ChatHistoryGroupBy;
+  /** Which surfaces' chats the list keeps or leaves out. */
+  sourceFilter: ChatHistorySourceFilter;
 }
 
 interface ChatHistoryFilterStore extends ChatHistoryFilterValues {
@@ -24,15 +49,127 @@ interface ChatHistoryFilterStore extends ChatHistoryFilterValues {
   setStatusFilter: (statusFilter: ChatHistoryStatusFilter) => void;
   setDelegatedFilter: (delegatedFilter: ChatHistoryDelegatedFilter) => void;
   setGroupBy: (groupBy: ChatHistoryGroupBy) => void;
+  setSourceFilter: (sourceFilter: ChatHistorySourceFilter) => void;
+  setSourceMode: (mode: ChatHistorySourceMode) => void;
+  toggleSource: (source: ChatHistorySource) => void;
   resetToDefaults: () => void;
 }
+
+export const CHAT_HISTORY_SOURCE_FILTER_DEFAULT: ChatHistorySourceFilter = {
+  mode: "all",
+  sources: [],
+};
 
 export const CHAT_HISTORY_FILTER_DEFAULTS: ChatHistoryFilterValues = {
   typeFilter: "all",
   statusFilter: "active",
   delegatedFilter: "hidden",
   groupBy: "date",
+  sourceFilter: CHAT_HISTORY_SOURCE_FILTER_DEFAULT,
 };
+
+/** Every source, in the order the menu lists them. */
+export const CHAT_HISTORY_SOURCE_VALUES: readonly ChatHistorySource[] = [
+  "web",
+  "outlook",
+  "word",
+  "officeAddin",
+  "teams",
+  "legacy",
+];
+const SOURCE_MODE_VALUES: readonly ChatHistorySourceMode[] = [
+  "all",
+  "only",
+  "hide",
+];
+
+/** The backend `created_via` values each source stands for. */
+export const CHAT_HISTORY_SOURCE_CREATED_VIA: Record<
+  ChatHistorySource,
+  readonly string[]
+> = {
+  web: ["web"],
+  outlook: ["outlook"],
+  word: ["word"],
+  officeAddin: ["office_addin"],
+  teams: ["ms_teams_tab", "ms_teams_bot"],
+  legacy: ["legacy"],
+};
+
+/**
+ * The sources a deployment's `created_via` values map to, in menu order.
+ * Unknown values are ignored.
+ */
+export function chatHistorySourcesFromCreatedVia(
+  createdVia: readonly string[],
+): ChatHistorySource[] {
+  return CHAT_HISTORY_SOURCE_VALUES.filter((source) =>
+    CHAT_HISTORY_SOURCE_CREATED_VIA[source].some((value) =>
+      createdVia.includes(value),
+    ),
+  );
+}
+
+/**
+ * Whether a source filter is worth offering: with no integration enabled,
+ * every chat is either a web chat or an older one.
+ */
+export function isSourceFilterAvailable(
+  availableSources: readonly ChatHistorySource[],
+): boolean {
+  return availableSources.some(
+    (source) => source !== "web" && source !== "legacy",
+  );
+}
+
+/** Whether the source filter changes which chats the list contains. */
+export function isSourceFilterActive(filter: ChatHistorySourceFilter): boolean {
+  return filter.mode !== "all" && filter.sources.length > 0;
+}
+
+/** Whether the list keeps a chat from `source` under this filter. */
+export function sourceFilterKeeps(
+  filter: ChatHistorySourceFilter,
+  source: ChatHistorySource,
+): boolean {
+  if (!isSourceFilterActive(filter)) return true;
+  const selected = filter.sources.includes(source);
+  return filter.mode === "only" ? selected : !selected;
+}
+
+function sameSourceFilter(
+  a: ChatHistorySourceFilter,
+  b: ChatHistorySourceFilter,
+): boolean {
+  return (
+    a.mode === b.mode &&
+    a.sources.length === b.sources.length &&
+    a.sources.every((source, index) => source === b.sources[index])
+  );
+}
+
+/** Known sources only, deduplicated, in menu order. */
+function canonicalSources(sources: readonly unknown[]): ChatHistorySource[] {
+  return CHAT_HISTORY_SOURCE_VALUES.filter((source) =>
+    sources.includes(source),
+  );
+}
+
+/** Coerces a persisted (user-editable) value into a source filter. */
+function coerceSourceFilter(value: unknown): ChatHistorySourceFilter {
+  if (typeof value !== "object" || value === null) {
+    return CHAT_HISTORY_SOURCE_FILTER_DEFAULT;
+  }
+  const { mode, sources } = value as Record<string, unknown>;
+  return {
+    mode: coerceToUnion(
+      mode,
+      SOURCE_MODE_VALUES,
+      CHAT_HISTORY_SOURCE_FILTER_DEFAULT.mode,
+    ),
+    sources: Array.isArray(sources) ? canonicalSources(sources) : [],
+  };
+}
 
 const TYPE_FILTER_VALUES: readonly ChatHistoryTypeFilter[] = [
   "all",
@@ -66,20 +203,25 @@ export function isDefaultFilters(values: ChatHistoryFilterValues): boolean {
     values.typeFilter === CHAT_HISTORY_FILTER_DEFAULTS.typeFilter &&
     values.statusFilter === CHAT_HISTORY_FILTER_DEFAULTS.statusFilter &&
     values.delegatedFilter === CHAT_HISTORY_FILTER_DEFAULTS.delegatedFilter &&
-    values.groupBy === CHAT_HISTORY_FILTER_DEFAULTS.groupBy
+    values.groupBy === CHAT_HISTORY_FILTER_DEFAULTS.groupBy &&
+    sameSourceFilter(
+      values.sourceFilter,
+      CHAT_HISTORY_FILTER_DEFAULTS.sourceFilter,
+    )
   );
 }
 
 /**
  * Whether a filter that changes which chats the list contains is active —
- * whether it drops rows (type, status) or adds them (delegated runs).
+ * whether it drops rows (type, status, source) or adds them (delegated runs).
  * Grouping only rearranges the same rows, so it deliberately does not count.
  */
 export function hasActiveFilters(values: ChatHistoryFilterValues): boolean {
   return (
     values.typeFilter !== CHAT_HISTORY_FILTER_DEFAULTS.typeFilter ||
     values.statusFilter !== CHAT_HISTORY_FILTER_DEFAULTS.statusFilter ||
-    values.delegatedFilter !== CHAT_HISTORY_FILTER_DEFAULTS.delegatedFilter
+    values.delegatedFilter !== CHAT_HISTORY_FILTER_DEFAULTS.delegatedFilter ||
+    isSourceFilterActive(values.sourceFilter)
   );
 }
 
@@ -112,6 +254,42 @@ export function createChatHistoryFilterStore(persistName: string) {
           setGroupBy: (groupBy) =>
             set({ groupBy }, false, "chatHistoryFilter/setGroupBy"),
 
+          setSourceFilter: (sourceFilter) =>
+            set(
+              {
+                sourceFilter: {
+                  mode: sourceFilter.mode,
+                  sources: canonicalSources(sourceFilter.sources),
+                },
+              },
+              false,
+              "chatHistoryFilter/setSourceFilter",
+            ),
+
+          setSourceMode: (mode) =>
+            set(
+              (state) => ({ sourceFilter: { ...state.sourceFilter, mode } }),
+              false,
+              "chatHistoryFilter/setSourceMode",
+            ),
+
+          toggleSource: (source) =>
+            set(
+              (state) => {
+                const { sources } = state.sourceFilter;
+                return {
+                  sourceFilter: {
+                    ...state.sourceFilter,
+                    sources: sources.includes(source)
+                      ? sources.filter((selected) => selected !== source)
+                      : canonicalSources([...sources, source]),
+                  },
+                };
+              },
+              false,
+              "chatHistoryFilter/toggleSource",
+            ),
+
           resetToDefaults: () =>
             set(
               { ...CHAT_HISTORY_FILTER_DEFAULTS },
@@ -126,6 +304,7 @@ export function createChatHistoryFilterStore(persistName: string) {
             statusFilter: state.statusFilter,
             delegatedFilter: state.delegatedFilter,
             groupBy: state.groupBy,
+            sourceFilter: state.sourceFilter,
           }),
           // localStorage is user-editable, so each rehydrated field must be
           // coerced back into its union; an out-of-union value would otherwise
@@ -159,6 +338,9 @@ export function createChatHistoryFilterStore(persistName: string) {
                 GROUP_BY_VALUES,
                 CHAT_HISTORY_FILTER_DEFAULTS.groupBy,
               ),
+              // Absent from blobs persisted before this facet existed, which
+              // coerces to "all".
+              sourceFilter: coerceSourceFilter(stored.sourceFilter),
             };
           },
         },
@@ -189,6 +371,8 @@ export interface ChatHistoryFilterCapabilities {
    * same pairing `DelegatedRunsSection` uses to decide a chat can have runs.
    */
   delegationEnabled: boolean;
+  /** Sources chats can come from in this deployment. */
+  availableSources: readonly ChatHistorySource[];
 }
 
 /**
@@ -196,30 +380,60 @@ export interface ChatHistoryFilterCapabilities {
  * offers them is off, instead of invisibly filtering, grouping or widening
  * the list by a criterion the menu no longer shows:
  * - assistants: a type filter other than "all", grouping by type;
- * - delegation: showing delegated runs.
+ * - delegation: showing delegated runs;
+ * - sources: sources this deployment no longer offers, and the whole source
+ *   filter when no integration is enabled.
  */
 export function sanitizeChatHistoryFilters(
   values: ChatHistoryFilterValues,
-  { assistantsEnabled, delegationEnabled }: ChatHistoryFilterCapabilities,
+  {
+    assistantsEnabled,
+    delegationEnabled,
+    availableSources,
+  }: ChatHistoryFilterCapabilities,
 ): ChatHistoryFilterValues {
   const delegatedFilter =
     assistantsEnabled && delegationEnabled
       ? values.delegatedFilter
       : CHAT_HISTORY_FILTER_DEFAULTS.delegatedFilter;
+  const sourceFilter = sanitizeSourceFilter(
+    values.sourceFilter,
+    availableSources,
+  );
   if (assistantsEnabled) {
-    return delegatedFilter === values.delegatedFilter
+    return delegatedFilter === values.delegatedFilter &&
+      sourceFilter === values.sourceFilter
       ? values
-      : { ...values, delegatedFilter };
+      : { ...values, delegatedFilter, sourceFilter };
   }
   return {
     ...values,
     typeFilter: CHAT_HISTORY_FILTER_DEFAULTS.typeFilter,
     delegatedFilter,
+    sourceFilter,
     groupBy:
       values.groupBy === "type"
         ? CHAT_HISTORY_FILTER_DEFAULTS.groupBy
         : values.groupBy,
   };
+}
+
+/** Returns `filter` itself when nothing had to change. */
+function sanitizeSourceFilter(
+  filter: ChatHistorySourceFilter,
+  availableSources: readonly ChatHistorySource[],
+): ChatHistorySourceFilter {
+  if (!isSourceFilterAvailable(availableSources)) {
+    return sameSourceFilter(filter, CHAT_HISTORY_SOURCE_FILTER_DEFAULT)
+      ? filter
+      : CHAT_HISTORY_SOURCE_FILTER_DEFAULT;
+  }
+  const sources = filter.sources.filter((source) =>
+    availableSources.includes(source),
+  );
+  return sources.length === filter.sources.length
+    ? filter
+    : { ...filter, sources };
 }
 
 /**
@@ -228,51 +442,76 @@ export function sanitizeChatHistoryFilters(
  * is read through hooks.
  */
 export const useSanitizedChatHistoryFilters = (
-  { assistantsEnabled, delegationEnabled }: ChatHistoryFilterCapabilities,
+  {
+    assistantsEnabled,
+    delegationEnabled,
+    availableSources,
+  }: ChatHistoryFilterCapabilities,
   store: ChatHistoryFilterStoreHook = useChatHistoryFilterStore,
 ): ChatHistoryFilterValues => {
   const typeFilter = store((state) => state.typeFilter);
   const statusFilter = store((state) => state.statusFilter);
   const delegatedFilter = store((state) => state.delegatedFilter);
   const groupBy = store((state) => state.groupBy);
+  const sourceFilter = store((state) => state.sourceFilter);
 
   // Capabilities are destructured into primitives on purpose: callers build
   // the object inline, so depending on its identity would rerun this on every
-  // render.
+  // render. The source list is keyed by its contents for the same reason.
+  const availableSourcesKey = availableSources.join(",");
   return useMemo(
     () =>
       sanitizeChatHistoryFilters(
-        { typeFilter, statusFilter, delegatedFilter, groupBy },
-        { assistantsEnabled, delegationEnabled },
+        { typeFilter, statusFilter, delegatedFilter, groupBy, sourceFilter },
+        {
+          assistantsEnabled,
+          delegationEnabled,
+          availableSources: availableSourcesKey
+            ? (availableSourcesKey.split(",") as ChatHistorySource[])
+            : [],
+        },
       ),
     [
       typeFilter,
       statusFilter,
       delegatedFilter,
       groupBy,
+      sourceFilter,
       assistantsEnabled,
       delegationEnabled,
+      availableSourcesKey,
     ],
   );
 };
 
 /**
- * Folds assistant-scoped filter values back to their defaults in the store
- * itself while assistants are disabled: the recent-chats query (and any other
+ * Folds feature-scoped filter values back to their defaults in the store
+ * itself while their feature is off: the recent-chats query (and any other
  * reader) consumes the raw persisted values, so sanitizing only at render
  * would let a stale persisted value keep filtering the request invisibly.
  */
 export const useChatHistoryFilterFoldback = (
-  { assistantsEnabled, delegationEnabled }: ChatHistoryFilterCapabilities,
+  {
+    assistantsEnabled,
+    delegationEnabled,
+    availableSources,
+  }: ChatHistoryFilterCapabilities,
   store: ChatHistoryFilterStoreHook = useChatHistoryFilterStore,
 ): void => {
+  const availableSourcesKey = availableSources.join(",");
   useEffect(() => {
-    if (assistantsEnabled && delegationEnabled) return;
     const state = store.getState();
     const sanitized = sanitizeChatHistoryFilters(state, {
       assistantsEnabled,
       delegationEnabled,
+      availableSources: availableSourcesKey
+        ? (availableSourcesKey.split(",") as ChatHistorySource[])
+        : [],
     });
+    if (sanitized.sourceFilter !== state.sourceFilter) {
+      state.setSourceFilter(sanitized.sourceFilter);
+    }
+    if (assistantsEnabled && delegationEnabled) return;
     if (sanitized.typeFilter !== state.typeFilter) {
       state.setTypeFilter(sanitized.typeFilter);
     }
@@ -282,5 +521,5 @@ export const useChatHistoryFilterFoldback = (
     if (sanitized.groupBy !== state.groupBy) {
       state.setGroupBy(sanitized.groupBy);
     }
-  }, [assistantsEnabled, delegationEnabled, store]);
+  }, [assistantsEnabled, delegationEnabled, availableSourcesKey, store]);
 };

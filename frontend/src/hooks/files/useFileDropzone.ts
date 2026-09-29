@@ -5,6 +5,7 @@ import {
   NEW_CHAT_STREAM_KEY,
   useMessagingStore,
 } from "@/hooks/chat/store/messagingStore";
+import { clientPlatformHeaders } from "@/lib/clientPlatform";
 import {
   useCreateChat,
   fetchUploadFile,
@@ -283,6 +284,7 @@ export function useFileDropzone({
                 ? { chat_provider_id: latestChatProviderIdRef.current }
                 : {}),
             },
+            headers: clientPlatformHeaders(),
           });
           logger.log("Silent chat creation result:", createChatResult);
           uploadChatId = createChatResult.chat_id;

@@ -759,6 +759,18 @@ export type Chat = {
 };
 
 /**
+ * Surface a chat was created from, stored in `chats.created_via`.
+ */
+export type ChatCreatedVia =
+  | "legacy"
+  | "web"
+  | "outlook"
+  | "word"
+  | "office_addin"
+  | "ms_teams_tab"
+  | "ms_teams_bot";
+
+/**
  * A single chat, for surfaces that open one directly rather than picking it
  * out of a listing.
  *
@@ -797,6 +809,7 @@ export type ChatDetail = {
    * Delegated runs only: the limits the delegate was told to work within.
    */
   constraints?: string;
+  created_via: ChatCreatedVia;
   /**
    * MCP servers the user switched off for this chat; their tools are not
    * offered to the model.
@@ -2981,6 +2994,7 @@ export type RecentChat = {
    * this may include collaborators/roles/policy-based permissions.
    */
   can_edit: boolean;
+  created_via: ChatCreatedVia;
   /**
    * Terminal outcome of a delegated run: `completed` when the run landed a
    * clean assistant answer, `failed` when it did not (unanswered, errored,

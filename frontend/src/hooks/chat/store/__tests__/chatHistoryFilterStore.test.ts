@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   CHAT_HISTORY_FILTER_DEFAULTS,
+  CHAT_HISTORY_SOURCE_FILTER_DEFAULT,
+  chatHistorySourcesFromCreatedVia,
   createChatHistoryFilterStore,
   hasActiveFilters,
   isDefaultFilters,
@@ -115,6 +117,91 @@ describe("chatHistoryFilterStore", () => {
   });
 });
 
+describe("source filter", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    store().resetToDefaults();
+  });
+
+  it("keeps toggled sources in menu order without duplicates", () => {
+    store().toggleSource("teams");
+    store().toggleSource("web");
+    store().toggleSource("legacy");
+    store().toggleSource("legacy");
+
+    expect(store().sourceFilter).toEqual({
+      mode: "all",
+      sources: ["web", "teams"],
+    });
+  });
+
+  it("keeps the picked sources while switching modes", () => {
+    store().setSourceMode("hide");
+    store().toggleSource("teams");
+    store().setSourceMode("all");
+    store().setSourceMode("only");
+
+    expect(store().sourceFilter).toEqual({ mode: "only", sources: ["teams"] });
+  });
+
+  it("clears on reset", () => {
+    store().setSourceMode("only");
+    store().toggleSource("outlook");
+
+    store().resetToDefaults();
+
+    expect(store().sourceFilter).toEqual(CHAT_HISTORY_SOURCE_FILTER_DEFAULT);
+  });
+
+  it("rehydrates and coerces a persisted source filter", async () => {
+    localStorage.setItem(
+      "erato.sidebar.chatHistoryFilters",
+      JSON.stringify({
+        state: {
+          sourceFilter: {
+            mode: "hide",
+            sources: ["teams", "bogus", "web", "teams", 3],
+          },
+        },
+        version: 0,
+      }),
+    );
+
+    await useChatHistoryFilterStore.persist.rehydrate();
+
+    expect(store().sourceFilter).toEqual({
+      mode: "hide",
+      sources: ["web", "teams"],
+    });
+  });
+
+  it("falls back to all for a garbage or missing persisted source filter", async () => {
+    for (const sourceFilter of [undefined, "teams", { mode: "sometimes" }]) {
+      localStorage.setItem(
+        "erato.sidebar.chatHistoryFilters",
+        JSON.stringify({ state: { sourceFilter }, version: 0 }),
+      );
+
+      await useChatHistoryFilterStore.persist.rehydrate();
+
+      expect(store().sourceFilter).toEqual(CHAT_HISTORY_SOURCE_FILTER_DEFAULT);
+    }
+  });
+
+  it("maps created_via values to sources, merging both Teams values", () => {
+    expect(
+      chatHistorySourcesFromCreatedVia([
+        "legacy",
+        "ms_teams_bot",
+        "web",
+        "ms_teams_tab",
+        "office_addin",
+        "unknown",
+      ]),
+    ).toEqual(["web", "officeAddin", "teams", "legacy"]);
+  });
+});
+
 describe("isDefaultFilters", () => {
   it("is true only for the exact default combination", () => {
     expect(isDefaultFilters(CHAT_HISTORY_FILTER_DEFAULTS)).toBe(true);
@@ -137,6 +224,12 @@ describe("isDefaultFilters", () => {
       isDefaultFilters({
         ...CHAT_HISTORY_FILTER_DEFAULTS,
         delegatedFilter: "shown",
+      }),
+    ).toBe(false);
+    expect(
+      isDefaultFilters({
+        ...CHAT_HISTORY_FILTER_DEFAULTS,
+        sourceFilter: { mode: "all", sources: ["teams"] },
       }),
     ).toBe(false);
   });
@@ -165,16 +258,41 @@ describe("hasActiveFilters", () => {
         delegatedFilter: "shown",
       }),
     ).toBe(true);
+    expect(
+      hasActiveFilters({
+        ...CHAT_HISTORY_FILTER_DEFAULTS,
+        sourceFilter: { mode: "hide", sources: ["teams"] },
+      }),
+    ).toBe(true);
+    // A mode without sources, or sources without a mode, filters nothing.
+    expect(
+      hasActiveFilters({
+        ...CHAT_HISTORY_FILTER_DEFAULTS,
+        sourceFilter: { mode: "only", sources: [] },
+      }),
+    ).toBe(false);
+    expect(
+      hasActiveFilters({
+        ...CHAT_HISTORY_FILTER_DEFAULTS,
+        sourceFilter: { mode: "all", sources: ["teams"] },
+      }),
+    ).toBe(false);
   });
 });
 
 describe("sanitizeChatHistoryFilters", () => {
-  const allEnabled = { assistantsEnabled: true, delegationEnabled: true };
+  const allSources = ["web", "outlook", "teams", "legacy"] as const;
+  const allEnabled = {
+    assistantsEnabled: true,
+    delegationEnabled: true,
+    availableSources: allSources,
+  };
   const assistantScoped = {
     typeFilter: "assistant",
     statusFilter: "all",
     delegatedFilter: "shown",
     groupBy: "type",
+    sourceFilter: CHAT_HISTORY_SOURCE_FILTER_DEFAULT,
   } as const;
 
   it("passes values through when assistants and delegation are enabled", () => {
@@ -188,12 +306,14 @@ describe("sanitizeChatHistoryFilters", () => {
       sanitizeChatHistoryFilters(assistantScoped, {
         assistantsEnabled: false,
         delegationEnabled: false,
+        availableSources: allSources,
       }),
     ).toEqual({
       typeFilter: "all",
       statusFilter: "all",
       delegatedFilter: "hidden",
       groupBy: "date",
+      sourceFilter: CHAT_HISTORY_SOURCE_FILTER_DEFAULT,
     });
   });
 
@@ -204,6 +324,7 @@ describe("sanitizeChatHistoryFilters", () => {
       sanitizeChatHistoryFilters(assistantScoped, {
         assistantsEnabled: true,
         delegationEnabled: false,
+        availableSources: allSources,
       }),
     ).toEqual({ ...assistantScoped, delegatedFilter: "hidden" });
   });
@@ -214,14 +335,48 @@ describe("sanitizeChatHistoryFilters", () => {
       statusFilter: "active",
       delegatedFilter: "hidden",
       groupBy: "unread",
+      sourceFilter: { mode: "hide", sources: ["teams"] },
     } as const;
 
     expect(
       sanitizeChatHistoryFilters(values, {
         assistantsEnabled: false,
         delegationEnabled: false,
+        availableSources: allSources,
       }),
     ).toEqual(values);
+  });
+
+  it("drops sources the deployment no longer offers", () => {
+    const values = {
+      ...assistantScoped,
+      sourceFilter: { mode: "only", sources: ["word", "teams"] },
+    } as const;
+
+    expect(sanitizeChatHistoryFilters(values, allEnabled)).toEqual({
+      ...values,
+      sourceFilter: { mode: "only", sources: ["teams"] },
+    });
+  });
+
+  it("resets the source filter when no integration is enabled", () => {
+    const values = {
+      ...assistantScoped,
+      sourceFilter: { mode: "hide", sources: ["legacy"] },
+    } as const;
+
+    expect(
+      sanitizeChatHistoryFilters(values, {
+        ...allEnabled,
+        availableSources: ["web", "legacy"],
+      }).sourceFilter,
+    ).toEqual(CHAT_HISTORY_SOURCE_FILTER_DEFAULT);
+  });
+
+  it("returns the same object when nothing changes", () => {
+    expect(sanitizeChatHistoryFilters(assistantScoped, allEnabled)).toBe(
+      assistantScoped,
+    );
   });
 });
 

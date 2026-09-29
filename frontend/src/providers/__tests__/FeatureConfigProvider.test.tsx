@@ -202,6 +202,7 @@ describe("FeatureConfigProvider", () => {
           logoPath: null,
           logoDarkPath: null,
           chatHistoryShowMetadata: true,
+          chatHistorySources: [],
         },
         pinnedChats: {
           enabled: false,
@@ -1139,6 +1140,7 @@ describe("FeatureConfigProvider", () => {
         logoPath: null,
         logoDarkPath: null,
         chatHistoryShowMetadata: true,
+        chatHistorySources: [],
       });
     });
 

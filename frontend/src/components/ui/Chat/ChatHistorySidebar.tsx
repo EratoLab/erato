@@ -436,7 +436,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     // Get sidebar configuration
     // Logo env overrides are resolved by ThemeProvider, which also decides
     // whether the file exists; only the collapse mode is read here.
-    const { collapsedMode } = useSidebarFeature();
+    const { collapsedMode, chatHistorySources } = useSidebarFeature();
 
     // Get responsive collapsed mode (forces hidden on mobile even if config is slim)
     const effectiveCollapsedMode = useResponsiveCollapsedMode(collapsedMode);
@@ -497,7 +497,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       (state) => state.statusByChatId,
     );
 
-    const filterCapabilities = { assistantsEnabled, delegationEnabled };
+    const filterCapabilities = {
+      assistantsEnabled,
+      delegationEnabled,
+      availableSources: chatHistorySources,
+    };
     useChatHistoryFilterFoldback(filterCapabilities);
 
     const chatHistoryFilters =
@@ -851,6 +855,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                           <ChatHistoryFilterMenu
                             assistantsEnabled={assistantsEnabled}
                             delegationEnabled={delegationEnabled}
+                            availableSources={chatHistorySources}
                           />
                         }
                       >
@@ -890,6 +895,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                           <ChatHistoryFilterMenu
                             assistantsEnabled={assistantsEnabled}
                             delegationEnabled={delegationEnabled}
+                            availableSources={chatHistorySources}
                           />
                         </div>
                         {hasActiveFilters(chatHistoryFilters) && (
@@ -915,6 +921,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                                   <ChatHistoryFilterMenu
                                     assistantsEnabled={assistantsEnabled}
                                     delegationEnabled={delegationEnabled}
+                                    availableSources={chatHistorySources}
                                   />
                                 ) : undefined
                               }

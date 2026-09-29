@@ -3126,10 +3126,18 @@ export const useBudgetStatus = <TData = Schemas.BudgetStatusResponse>(
   });
 };
 
+export type CreateChatHeaders = {
+  /**
+   * Client surface creating the chat (`web`, `outlook`, `word`, `addin-neutral`, `teams`). Recorded as the chat's `created_via`; defaults to `web`.
+   */
+  ["X-Erato-Platform"]?: string;
+};
+
 export type CreateChatError = Fetcher.ErrorWrapper<undefined>;
 
 export type CreateChatVariables = {
   body?: Schemas.CreateChatRequest;
+  headers?: CreateChatHeaders;
 } & V1betaApiContext["fetcherOptions"];
 
 /**
@@ -3144,7 +3152,7 @@ export const fetchCreateChat = (
     Schemas.CreateChatResponse,
     CreateChatError,
     Schemas.CreateChatRequest,
-    {},
+    CreateChatHeaders,
     {},
     {}
   >({ url: "/api/v1beta/me/chats", method: "post", ...variables, signal });
@@ -6569,6 +6577,14 @@ export type RecentChatsQueryParams = {
    * @format uuid
    */
   origin_chat_id?: string;
+  /**
+   * Comma-separated `ChatCreatedVia` values. If provided, only return chats created via one of these surfaces.
+   */
+  created_via?: string;
+  /**
+   * Comma-separated `ChatCreatedVia` values. Chats created via one of these surfaces are left out. Composes with `created_via`.
+   */
+  exclude_created_via?: string;
 };
 
 export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;

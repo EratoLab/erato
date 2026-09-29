@@ -23,7 +23,10 @@ import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext"
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
-import { useChatHistoryFilterStore } from "./store/chatHistoryFilterStore";
+import {
+  sourceFilterKeeps,
+  useChatHistoryFilterStore,
+} from "./store/chatHistoryFilterStore";
 import {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,
@@ -248,9 +251,10 @@ export function useChatHistory({
   const delegatedFilter = useChatHistoryFilterStore(
     (state) => state.delegatedFilter,
   );
+  const sourceFilter = useChatHistoryFilterStore((state) => state.sourceFilter);
   const listFilters = useMemo<RecentChatsListFilters>(
-    () => ({ typeFilter, statusFilter, delegatedFilter }),
-    [typeFilter, statusFilter, delegatedFilter],
+    () => ({ typeFilter, statusFilter, delegatedFilter, sourceFilter }),
+    [typeFilter, statusFilter, delegatedFilter, sourceFilter],
   );
 
   const pinnedChatsQueryKey = useMemo(
@@ -330,7 +334,8 @@ export function useChatHistory({
     // could never clear it and the row would linger as a ghost.
     if (
       (typeFilter === "assistant" && !pendingChat.assistantId) ||
-      (typeFilter === "chat" && pendingChat.assistantId)
+      (typeFilter === "chat" && pendingChat.assistantId) ||
+      !sourceFilterKeeps(sourceFilter, "web")
     ) {
       return listedChats;
     }
@@ -373,9 +378,11 @@ export function useChatHistory({
       delegated_run_outcome: undefined,
       // A just-created chat replaces nothing.
       retry_of: undefined,
+      // This hook backs the web app, whose sends record "web".
+      created_via: "web",
     };
     return [placeholder, ...listedChats];
-  }, [listedChats, pendingChat, isPendingChatListed, typeFilter]);
+  }, [listedChats, pendingChat, isPendingChatListed, typeFilter, sourceFilter]);
 
   // Seed the status store from the backend's running and pending-approval
   // markers, so generations started (or parked) elsewhere get an indicator

@@ -25,7 +25,10 @@ import { createLogger } from "@/utils/debugLogger";
 
 import {
   CHAT_HISTORY_FILTER_DEFAULTS,
+  CHAT_HISTORY_SOURCE_CREATED_VIA,
+  isSourceFilterActive,
   type ChatHistoryFilterValues,
+  type ChatHistorySourceFilter,
 } from "./store/chatHistoryFilterStore";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
 
@@ -140,11 +143,16 @@ export async function removeArchivedChatFromLists(
   };
 }
 
-/** The filter-store values that reach the recent-chats request. */
+/**
+ * The filter-store values that reach the recent-chats request. The source
+ * filter is optional: listings that are not the filtered chat list (search,
+ * session lookups) leave it out.
+ */
 export type RecentChatsListFilters = Pick<
   ChatHistoryFilterValues,
   "typeFilter" | "statusFilter" | "delegatedFilter"
->;
+> &
+  Partial<Pick<ChatHistoryFilterValues, "sourceFilter">>;
 
 /**
  * Query params the list filters add to a recent-chats request. Key builders
@@ -156,13 +164,30 @@ export function buildRecentChatsFilterParams(
   filters: RecentChatsListFilters,
 ): Pick<
   RecentChatsQueryParams,
-  "type" | "include_archived" | "include_delegated"
+  | "type"
+  | "include_archived"
+  | "include_delegated"
+  | "created_via"
+  | "exclude_created_via"
 > {
   return {
     ...(filters.typeFilter === "all" ? {} : { type: filters.typeFilter }),
     ...(filters.statusFilter === "all" ? { include_archived: true } : {}),
     ...(filters.delegatedFilter === "shown" ? { include_delegated: true } : {}),
+    ...buildSourceFilterParams(filters.sourceFilter),
   };
+}
+
+function buildSourceFilterParams(
+  sourceFilter: ChatHistorySourceFilter | undefined,
+): Pick<RecentChatsQueryParams, "created_via" | "exclude_created_via"> {
+  if (!sourceFilter || !isSourceFilterActive(sourceFilter)) return {};
+  const createdVia = sourceFilter.sources
+    .flatMap((source) => CHAT_HISTORY_SOURCE_CREATED_VIA[source])
+    .join(",");
+  return sourceFilter.mode === "only"
+    ? { created_via: createdVia }
+    : { exclude_created_via: createdVia };
 }
 
 /**

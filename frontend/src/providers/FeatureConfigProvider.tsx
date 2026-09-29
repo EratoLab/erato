@@ -4,6 +4,10 @@ import { createContext, useContext, useMemo } from "react";
 
 import { env } from "@/app/env";
 import {
+  chatHistorySourcesFromCreatedVia,
+  type ChatHistorySource,
+} from "@/hooks/chat/store/chatHistoryFilterStore";
+import {
   DEFAULT_ERROR_REPORT_TEMPLATE,
   ERROR_REPORT_NONE_PLACEHOLDER,
 } from "@/utils/errorReport";
@@ -199,6 +203,8 @@ interface SidebarFeatureConfig {
   logoDarkPath: string | null;
   /** Whether to show metadata (timestamps and file count) in chat history items */
   chatHistoryShowMetadata: boolean;
+  /** Sources chats can come from in this deployment, for the source filter */
+  chatHistorySources: readonly ChatHistorySource[];
 }
 
 interface ChatSharingFeatureConfig {
@@ -339,6 +345,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     logoPath: null,
     logoDarkPath: null,
     chatHistoryShowMetadata: true,
+    chatHistorySources: [],
   },
   pinnedChats: {
     enabled: false,
@@ -461,6 +468,9 @@ function createFeatureConfig(
       logoPath: environment.sidebarLogoPath,
       logoDarkPath: environment.sidebarLogoDarkPath,
       chatHistoryShowMetadata: environment.sidebarChatHistoryShowMetadata,
+      chatHistorySources: chatHistorySourcesFromCreatedVia(
+        environment.chatCreatedViaSources ?? [],
+      ),
     },
     pinnedChats: {
       enabled: environment.pinnedChatsEnabled ?? false,

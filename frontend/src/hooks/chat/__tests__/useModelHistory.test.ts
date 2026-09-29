@@ -15,6 +15,7 @@ describe("useModelHistory", () => {
   it.each([false, true])("restores the last model (pinned: %s)", (isPinned) => {
     const chat: RecentChat = {
       id: "chat-1",
+      created_via: "web",
       title_resolved: "Chat",
       can_edit: true,
       file_uploads: [],

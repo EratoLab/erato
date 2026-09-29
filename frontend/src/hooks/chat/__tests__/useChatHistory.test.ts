@@ -69,6 +69,7 @@ vi.mock("@tanstack/react-query", () => ({
 const listedChat = (id: string): RecentChat => ({
   id,
   title_resolved: `Title of ${id}`,
+  created_via: "web",
   can_edit: true,
   file_uploads: [],
   last_message_at: "2026-01-01T12:00:00.000Z",

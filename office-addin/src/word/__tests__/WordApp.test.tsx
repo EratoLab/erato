@@ -119,6 +119,7 @@ vi.mock("@erato/frontend/library", async () => {
     useChatMessaging: spies.useChatMessaging,
     useFeatureConfig: () => ({
       upload: { maxSizeBytes: 10 * 1024 * 1024 },
+      sidebar: { chatHistoryShowMetadata: true, chatHistorySources: [] },
     }),
     useUploadFeature: () => ({
       enabled: true,

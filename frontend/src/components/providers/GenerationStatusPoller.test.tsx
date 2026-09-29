@@ -39,6 +39,7 @@ const recentChat = (
   overrides: Partial<RecentChat> & { id: string },
 ): RecentChat => ({
   title_resolved: overrides.id,
+  created_via: "web",
   can_edit: false,
   file_uploads: [],
   is_pinned: false,
