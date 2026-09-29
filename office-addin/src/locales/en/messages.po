@@ -1274,6 +1274,42 @@ msgid "officeAddin.startView.openStart"
 msgstr "Switch to start view"
 
 #. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.channelInstruction"
+msgstr "Under Channels, add Microsoft Teams."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: bot.botId
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.copy"
+msgstr "The package above already contains the bot. Before users chat with it, configure the Azure Bot resource for app ID <0>{0}</0>:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.docsInstruction"
+msgstr "Permissions, network routing and all options are described in the <0>Teams bot setup guide</0>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.endpointInstruction"
+msgstr "Under Configuration, set the messaging endpoint:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.oauthInstruction"
+msgstr "Add an OAuth connection (Azure Active Directory v2) with the Microsoft Graph scopes from the setup guide. Its name must match <0>oauth_connection_name</0> in the Erato configuration."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.ssoInstruction"
+msgstr "For silent sign-in, set the OAuth connection's token exchange URL:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.title"
+msgstr "Teams bot"
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
 msgid "officeAddin.teams.fileSource.chats"
 msgstr "Teams chats…"
