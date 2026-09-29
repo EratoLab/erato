@@ -44,6 +44,7 @@ export interface MessagingStore {
   getStreaming: (streamKey?: string | null) => StreamingState;
   setActiveStreamKey: (streamKey: string) => void;
   moveStreamingState: (fromKey: string, toKey: string) => void;
+  releaseNewChatStream: () => void;
   setStreaming: (
     state: Partial<StreamingState>,
     streamKey?: string | null,
@@ -222,6 +223,31 @@ export const useMessagingStore = create<MessagingStore>()(
             },
             false,
             "messaging/setActiveStreamKey",
+          ),
+        // Once navigation has consumed a new chat's id, the temporary key
+        // must be available for another chat. Keep the real chat's buffers
+        // and connection so its generation can continue in the background.
+        releaseNewChatStream: () =>
+          set(
+            (prev) => {
+              const streamKeyAliases = { ...prev.streamKeyAliases };
+              delete streamKeyAliases[NEW_CHAT_STREAM_KEY];
+              const isActive = prev.activeStreamKey === NEW_CHAT_STREAM_KEY;
+              return {
+                streamKeyAliases,
+                newlyCreatedChatId: null,
+                isAwaitingFirstStreamChunkForNewChat: false,
+                ...(isActive
+                  ? {
+                      streaming: initialStreamingState,
+                      userMessages: EMPTY_MESSAGES,
+                      sseAbortCallback: null,
+                    }
+                  : {}),
+              };
+            },
+            false,
+            "messaging/releaseNewChatStream",
           ),
         moveStreamingState: (fromKey, toKey) =>
           set(

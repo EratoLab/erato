@@ -1957,6 +1957,110 @@ describe("useChatMessaging", () => {
     ).toBe(true);
   });
 
+  it("starts a separate chat after returning to the assistant landing while the first chat streams", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+    const { result, rerender } = renderHook(
+      ({ chatId }: { chatId: string | null }) => useChatMessaging(chatId),
+      {
+        wrapper: TestWrapper,
+        initialProps: { chatId: null as string | null },
+      },
+    );
+    await act(async () => {
+      await result.current.sendMessage(
+        "First chat",
+        [],
+        undefined,
+        "assistant-1",
+      );
+    });
+    const firstOnMessage = sseCallbacks.onMessage;
+    const firstConnection = mockCreateSSEConnection.mock.results.at(-1)?.value;
+    const emit = (onMessage: typeof firstOnMessage, data: object) => {
+      act(() => onMessage?.({ data: JSON.stringify(data), type: "message" }));
+    };
+    emit(firstOnMessage, {
+      message_type: "chat_created",
+      chat_id: "chat-first",
+    });
+    emit(firstOnMessage, {
+      message_type: "assistant_message_started",
+      message_id: "reply-first",
+    });
+    emit(firstOnMessage, {
+      message_type: "text_delta",
+      message_id: "reply-first",
+      content_index: 0,
+      new_text: "First reply",
+    });
+    rerender({ chatId: "chat-first" });
+    expect(result.current.messages["reply-first"]).toBeDefined();
+
+    rerender({ chatId: null });
+    expect(result.current.messages).toEqual({});
+    expect(result.current.isPendingResponse).toBe(false);
+    expect(result.current.isStreaming).toBe(false);
+    expect(firstConnection).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.sendMessage(
+        "Second chat",
+        [],
+        undefined,
+        "assistant-1",
+      );
+    });
+    const secondRequest = JSON.parse(
+      mockCreateSSEConnection.mock.calls.at(-1)?.[1].body as string,
+    );
+    expect(secondRequest).toMatchObject({ assistant_id: "assistant-1" });
+    expect(secondRequest.existing_chat_id).toBeUndefined();
+    expect(secondRequest.previous_message_id).toBeUndefined();
+    emit(sseCallbacks.onMessage, {
+      message_type: "chat_created",
+      chat_id: "chat-second",
+    });
+    rerender({ chatId: "chat-second" });
+    emit(firstOnMessage, {
+      message_type: "text_delta",
+      message_id: "reply-first",
+      content_index: 0,
+      new_text: " continues",
+    });
+    expect(result.current.messages["reply-first"]).toBeUndefined();
+    rerender({ chatId: "chat-first" });
+    expect(result.current.messages["reply-first"].content).toEqual([
+      { content_type: "text", text: "First reply continues" },
+    ]);
+    expect(firstConnection).not.toHaveBeenCalled();
+  });
+
+  it("shows a fresh landing page after the provider remounts with a consumed new-chat alias", () => {
+    const store = useMessagingStore.getState();
+    store.setStreaming(
+      {
+        isStreaming: true,
+        currentMessageId: "reply-first",
+        content: [{ content_type: "text", text: "First reply" }],
+      },
+      "__new_chat__",
+    );
+    store.moveStreamingState("__new_chat__", "chat-first");
+    store.setNewlyCreatedChatIdInStore(null);
+
+    const { result } = renderHook(() => useChatMessaging(null), {
+      wrapper: TestWrapper,
+    });
+    expect(result.current.messages).toEqual({});
+    expect(result.current.isPendingResponse).toBe(false);
+    expect(store.getStreaming("chat-first").isStreaming).toBe(true);
+  });
+
   it("should repair invalid temp-user stream anchor on user_message_saved", async () => {
     mockUseChatMessages.mockReturnValue({
       data: undefined,
