@@ -98,7 +98,7 @@ fn effective_detected_mime_type(filename: &str, detected_mime_type: &str) -> Str
         file_bytes_length = tracing::field::Empty,
     )
 )]
-async fn get_file_bytes_cached<'a>(
+pub(crate) async fn get_file_bytes_cached<'a>(
     app_state: &AppState,
     cache_key: &FileCacheKey,
     file_storage: &FileStorage,
@@ -483,7 +483,7 @@ pub fn get_file_cached<'a>(
     })
 }
 
-async fn get_file_cache_key<'a>(
+pub(crate) async fn get_file_cache_key<'a>(
     file_storage: &FileStorage,
     file_id: &Uuid,
     file_storage_path: &str,

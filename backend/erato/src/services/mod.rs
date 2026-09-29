@@ -9,6 +9,7 @@ pub mod local_delegation;
 pub(crate) mod tool_arguments;
 
 pub mod display_text;
+pub(crate) mod embedded_images;
 pub mod file_parsing;
 pub mod file_processing_cached;
 pub mod file_processor;

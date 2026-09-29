@@ -336,6 +336,7 @@ mod test_cases {
 
     fn create_test_chat_provider_config() -> ChatProviderConfig {
         ChatProviderConfig {
+            enable_embedded_image_retrieval_tool: None,
             provider_kind: "openai".to_string(),
             model_name: "gpt-4".to_string(),
             validate_availability: false,
