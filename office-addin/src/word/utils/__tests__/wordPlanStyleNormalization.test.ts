@@ -182,6 +182,56 @@ describe("redundant styleRef normalization", () => {
     expect(styleRefs(english)).toContainEqual(["n3", "Heading2"]);
   });
 
+  it("moves a real table style from styleRef into format.styleRef", () => {
+    const snapshot = readySnapshot(
+      withStyles(
+        '<w:style w:type="table" w:styleId="GridTable4"><w:name w:val="Grid Table 4"/></w:style>',
+      ),
+    );
+    const plan = turnAPlan(snapshot.token, {
+      h1: "Heading1",
+      h2: "Heading2",
+      table: "GridTable4",
+    });
+    const before = globalThis.structuredClone(plan);
+    const normalized = normalizeWordDocumentPlan(plan, snapshot);
+    expect(plan).toEqual(before);
+    const insert = normalized.entries[0];
+    if (insert.kind !== "insert" || insert.blocks[1].type !== "table")
+      throw new Error("fixture");
+    expect(insert.blocks[1].styleRef).toBeUndefined();
+    expect(insert.blocks[1].format?.styleRef).toBe("GridTable4");
+    expect(normalizeWordDocumentPlan(normalized, snapshot)).toEqual(normalized);
+    expect(validateWordDocumentPlan(normalized, snapshot)).toBeNull();
+  });
+
+  it("does not move a table style over an explicit format.styleRef", () => {
+    const snapshot = readySnapshot(
+      withStyles(
+        '<w:style w:type="table" w:styleId="GridTable4"><w:name w:val="Grid Table 4"/></w:style>',
+      ),
+    );
+    const plan = turnAPlan(snapshot.token, {
+      h1: "Heading1",
+      h2: "Heading2",
+      table: "GridTable4",
+    });
+    const insert = plan.entries[0];
+    if (insert.kind !== "insert" || insert.blocks[1].type !== "table")
+      throw new Error("fixture");
+    insert.blocks[1].format = { styleRef: "TableNormal" };
+    const normalized = normalizeWordDocumentPlan(plan, snapshot);
+    expect(styleRefs(normalized)).toContainEqual(["t1", "GridTable4"]);
+    const issues: WordPlanDiagnostics = [];
+    validateWordDocumentPlan(normalized, snapshot, issues);
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        path: "/entries/0/blocks/1/styleRef",
+        code: "table-style-placement",
+      }),
+    );
+  });
+
   it("keeps a heading style of another level for validation to reject", () => {
     const snapshot = readySnapshot(withStyles(localizedStyles));
     const plan = turnAPlan(snapshot.token, {

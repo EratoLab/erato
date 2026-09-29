@@ -312,8 +312,9 @@ export type WordPlanIssue =
   | "invalid";
 /**
  * Drops heading and table styleRefs that only restate the style the host applies
- * anyway. Pure and deterministic: review restore and apply re-derive the same plan
- * from the stored, unnormalized tool arguments.
+ * anyway, and moves a real table style from a table's styleRef into
+ * format.styleRef, where Word applies it. Pure and deterministic: review restore
+ * and apply re-derive the same plan from the stored, unnormalized tool arguments.
  */
 export function normalizeWordDocumentPlan(
   plan: WordDocumentPlan,
@@ -343,10 +344,21 @@ export function normalizeWordDocumentPlan(
     }
     return false;
   };
+  const misplacedTableStyle = (block: WordPlanBlock): string | undefined => {
+    if (block.type !== "table" || !block.styleRef || block.format?.styleRef)
+      return undefined;
+    const style = snapshot.styles.find((s) => s.id === block.styleRef);
+    return style?.type === "table" ? style.id : undefined;
+  };
   const normalized = JSON.parse(JSON.stringify(plan)) as WordDocumentPlan;
   const visit = (blocks: WordPlanBlock[]) => {
     for (const block of blocks) {
+      const tableStyle = misplacedTableStyle(block);
       if (redundant(block)) delete block.styleRef;
+      else if (tableStyle && block.type === "table") {
+        delete block.styleRef;
+        block.format = { ...block.format, styleRef: tableStyle };
+      }
       visit(wordBlockChildEntries(block, "").map((child) => child.block));
     }
   };
