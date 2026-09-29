@@ -1,4 +1,7 @@
 {
   "repository": "EratoLab/erato",
-  "base": "0.6.2"
+  "base": "0.6.2",
+  "reconciled_commits": {
+    "030f0c965e0327c694fa2e2a34f5edbf7b97de14": "Unify the generated-title field in the chat rename dialog with the shared Input component; include with chat composer and history polish."
+  }
 }

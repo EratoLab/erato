@@ -1,0 +1,4267 @@
+{
+  "base_sha": "3d40f674f1829f6cb8be535bdc10678602cfac43",
+  "head_sha": "4c48c4fa821a42c294393b884730f5e5123bf486",
+  "prs": {
+    "780": {
+      "subject": "Merge pull request #780 from EratoLab/feature/ermain-410-create-seperate-migrator-docker-image",
+      "commits": [
+        "fb80522f20eb0df7c180269c00fe44f6eeda3942"
+      ]
+    },
+    "781": {
+      "subject": "Merge pull request #781 from EratoLab/feat/switch-to-rustls",
+      "commits": [
+        "6c32f6a42d90f282784291bd9099c622728bbde9"
+      ]
+    },
+    "783": {
+      "subject": "Mobile model selector placement and alignment (#783)",
+      "commits": [
+        "74f74135ea4689b5289d86c807afc0359911dfcf"
+      ]
+    },
+    "782": {
+      "subject": "Merge pull request #782 from EratoLab/feat/chainguard-base-image",
+      "commits": [
+        "b8f674132400c17b2353761150d80b6129f0050c"
+      ]
+    },
+    "787": {
+      "subject": "Merge pull request #787 from EratoLab/feature/ermain-418-fix-lint-error-due-to-new-published-version-of-msal-packages",
+      "commits": [
+        "b52000816986c0ada10e04f1eedf3e350388ea54"
+      ]
+    },
+    "788": {
+      "subject": "Merge pull request #788 from EratoLab/chore/update-dependencies",
+      "commits": [
+        "63159435ebb23927726305176fe1cf7eba9a0623"
+      ]
+    },
+    "789": {
+      "subject": "Merge pull request #789 from EratoLab/feature/ermain-415-add-option-to-deselect-individual-guardrails",
+      "commits": [
+        "a56840eca641474e2dfefc56bbb548c2f43fcef9"
+      ]
+    },
+    "785": {
+      "subject": "Merge pull request #785 from EratoLab/feature/ermain-412-add-feedback-submission-to-assistant-hub",
+      "commits": [
+        "d1a5aed8ab9ce5ed1403c9777c9f12362b752d8a"
+      ]
+    },
+    "790": {
+      "subject": "Merge pull request #790 from EratoLab/feature/ermain-406-when-publishing-assistant-in-assistant-store-then-also-set",
+      "commits": [
+        "d2b07751e8212bc66a8fcb9ee4ee82f5120a9495"
+      ]
+    },
+    "791": {
+      "subject": "Merge pull request #791 from EratoLab/feature/ermain-393-feedback-scores-dont-point-to-a-trace-in-otel-ingest",
+      "commits": [
+        "83fe1c012b2fc9412be96cb84126c1dfc8923f79"
+      ]
+    },
+    "792": {
+      "subject": "Merge pull request #792 from EratoLab/feat/cache-key-theme-translations",
+      "commits": [
+        "37bc5ed75508a75626d5d2300ae4034fbe576c7b"
+      ]
+    },
+    "793": {
+      "subject": "Merge pull request #793 from EratoLab/feature/ermain-416-during-completion-fehler-beim-laden-der-datei",
+      "commits": [
+        "e5a9cd6f5beb2f3ba0070713bda48e218670b595"
+      ]
+    },
+    "794": {
+      "subject": "Merge pull request #794 from EratoLab/feature/ermain-419-switching-chat-planned-aborting-of-sse-streaming-should-not",
+      "commits": [
+        "ab9f619b39cdc8fbd03a47791ab967222e3e0af7"
+      ]
+    },
+    "786": {
+      "subject": "Merge pull request #786 from EratoLab/feature/ermain-413-client-tool-round-trip",
+      "commits": [
+        "3423b2d870993e2adb54eef20f58bc25be6a7f35"
+      ]
+    },
+    "795": {
+      "subject": "Merge pull request #795 from EratoLab/feature/client-tools-honor-global-allowlist",
+      "commits": [
+        "b2b3f7a3553ba3736710e72b6f190cd802657a80"
+      ]
+    },
+    "797": {
+      "subject": "Merge pull request #797 from EratoLab/chore/clarify-licenses",
+      "commits": [
+        "1bad198238bdf77ff1bf2fdd471fcc3d010b232c"
+      ]
+    },
+    "799": {
+      "subject": "Merge pull request #799 from EratoLab/feature/client-tools-frontend-executor",
+      "commits": [
+        "ffae23fc174d9d8d0c7d2e5b6256614617c33164"
+      ]
+    },
+    "798": {
+      "subject": "Client-side Outlook calendar/free-busy data sourcing (EXO Graph + SE EWS) (#798)",
+      "commits": [
+        "6f0ea4d3c11fe7e58f06bca596164ea969fe77a3"
+      ]
+    },
+    "800": {
+      "subject": "fix: write text/html to clipboard when copying HTML email drafts (ERMAIN-417) (#800)",
+      "commits": [
+        "40bfd87c881e4b75bb9d264c010deaed8606d2f0"
+      ]
+    },
+    "801": {
+      "subject": "Outlook appointment scheduling seam: fetch_availability client tool + outlook_schedule facet (#801)",
+      "commits": [
+        "b302282d89c4bbfe43f90dde1db1b96a9232b107"
+      ]
+    },
+    "784": {
+      "subject": "ERMAIN-411: Mac 'pin the add-in' hint for the unpinned/frozen task pane (#784)",
+      "commits": [
+        "9757a1a2545a89b179226a4dd82ba3918449e2cb"
+      ]
+    },
+    "802": {
+      "subject": "Client tools: portable-name hygiene + offering-loop hardening (#802)",
+      "commits": [
+        "a2d61fef32ec246d48a174770ee4987aca7fa866"
+      ]
+    },
+    "803": {
+      "subject": "fix(edit): mirror regenerate action-facet fallback in edit_message_sse (#803)",
+      "commits": [
+        "885875983cb16b4c0e9a4557bab9e1e39ac7052f"
+      ]
+    },
+    "804": {
+      "subject": "ERMAIN-387: create-appointment confirm path (outlook.create_appointment + erato-appointment fence) (#804)",
+      "commits": [
+        "136f90247cc18501f7d25d6d8c2b9919cd1b17a4"
+      ]
+    },
+    "806": {
+      "subject": "Merge pull request #806 from EratoLab/feature/ermain-403-utilize-profile-picture-from-id-token-as-user-avatar",
+      "commits": [
+        "afe2803bb12134bddf11ecc2d06153fdf18a02d1"
+      ]
+    },
+    "807": {
+      "subject": "Merge pull request #807 from EratoLab/feature/ermain-436-add-favicon-for-iphone-home-screen",
+      "commits": [
+        "d875175c9e364c5616c1b9aedcaa0884186e36da"
+      ]
+    },
+    "808": {
+      "subject": "Merge pull request #808 from EratoLab/feature/ermain-438-make-header-on-assistants-assistants-hub-search-page-more",
+      "commits": [
+        "8f313068390ab6c8f85b84b19afed726090bbc62"
+      ]
+    },
+    "810": {
+      "subject": "Merge pull request #810 from EratoLab/feature/ermain-440-adjust-new-chat-with-assistant-page-to-show-less-detail-by",
+      "commits": [
+        "b9c530b68d99b440165c4916ea616c86a1895935"
+      ]
+    },
+    "809": {
+      "subject": "Merge pull request #809 from EratoLab/feature/ermain-439-remember-toggle-state-of-sidebar-recent-chats-collapsible",
+      "commits": [
+        "30fe303d44578f220a9f7c61356abe194ca9a8fb"
+      ]
+    },
+    "811": {
+      "subject": "Merge pull request #811 from EratoLab/ermain-483-more-compact-headers",
+      "commits": [
+        "d4f6b2f8d61412322c8783a0af47d5fc1193f3fc"
+      ]
+    },
+    "812": {
+      "subject": "Merge pull request #812 from EratoLab/i18n/missing-stable-translations",
+      "commits": [
+        "cd3adaadcf2ac5172ba8ce7af4323980cbd1a134"
+      ]
+    },
+    "813": {
+      "subject": "Merge pull request #813 from EratoLab/feature/ermain-444-bifrost-anthropic-reasoning-handling-error",
+      "commits": [
+        "71189f55d99fe2e6479fdb1365a1526246bf0f86"
+      ]
+    },
+    "814": {
+      "subject": "Merge pull request #814 from EratoLab/feature/ermain-444-bifrost-anthropic-reasoning-handling-error-2",
+      "commits": [
+        "0ea0933300d62fdffd9ff5b60f4a83dff6bfdd1b"
+      ]
+    },
+    "815": {
+      "subject": "Merge pull request #815 from EratoLab/feature/ermain-445-integrate-copy-error-button-for-frontend-errors",
+      "commits": [
+        "77469acbeabf3fdd87861e0a276806ee45e9fe4f"
+      ]
+    },
+    "816": {
+      "subject": "Merge pull request #816 from EratoLab/feature/ermain-447-persist-langfuse-traces-errors-before-generation-and-during",
+      "commits": [
+        "742a8b198b30a18942cd6d9362992f3c706c5786"
+      ]
+    },
+    "817": {
+      "subject": "Merge pull request #817 from EratoLab/deactivate-flaky-auto-scroll-test",
+      "commits": [
+        "0a80f5029fc473bada642bb5ee1f4ed475df9f7b"
+      ]
+    },
+    "818": {
+      "subject": "Multi-attendee availability & deterministic slot ranking (ERMAIN-434/388) (#818)",
+      "commits": [
+        "6c08082a96a88df877ae0bf6422355035605ef90"
+      ]
+    },
+    "820": {
+      "subject": "Merge pull request #820 from EratoLab/feature/ermain-456-provide-more-concrete-errors-for-failed-during-chat",
+      "commits": [
+        "89429f127b359a241985f1a3fead19d08f08f71c"
+      ]
+    },
+    "821": {
+      "subject": "Merge pull request #821 from EratoLab/feature/ermain-458-streaming-ends-with-no-executed-tool-call",
+      "commits": [
+        "b8987c157a2c9af1abc38b906f69b32e29f66e08"
+      ]
+    },
+    "823": {
+      "subject": "Merge pull request #823 from EratoLab/feature/ermain-459-office-addin-users-not-able-to-log-in-with-secure-session",
+      "commits": [
+        "dab2e8bf50cafc9a2057bfd810609339644bb1a1"
+      ]
+    },
+    "822": {
+      "subject": "Export message-rendering surface for component kits + stable i18n ids (#822)",
+      "commits": [
+        "9a057fbe3cbb3f928ec51648674850499338d585"
+      ]
+    },
+    "824": {
+      "subject": "Merge pull request #824 from EratoLab/feature/ermain-460-import-error-due-to-cache",
+      "commits": [
+        "6f62254ab93903a548159a40050c2f835e9131d4"
+      ]
+    },
+    "825": {
+      "subject": "Pass host MessageContent to ChatMessageRenderer overrides (#825)",
+      "commits": [
+        "a25f29ae35b10f0e78601ec7888de5855aa21a49"
+      ]
+    },
+    "826": {
+      "subject": "Versioned ERATO_KIT_RUNTIME host surface for component kits (#826)",
+      "commits": [
+        "147cfe425546a99fd4c26d2c297bb97400ff61f4"
+      ]
+    },
+    "829": {
+      "subject": "Merge pull request #829 from EratoLab/feature/ermain-457-remove-special-image-generation-completion-mode",
+      "commits": [
+        "086c27b8a78cb0d94aa7d6b39d6ab30a779c01b5"
+      ]
+    },
+    "830": {
+      "subject": "Merge pull request #830 from EratoLab/feature/ermain-446-upgrade-from-kreuzberg-to-xberg",
+      "commits": [
+        "e3ec9d5ee5dd05fe881a1b70530222ff88671040"
+      ]
+    },
+    "819": {
+      "subject": "Slot→appointment loop: copy-exact ISO slots + resilient scheduling stickiness (#819)",
+      "commits": [
+        "a1663636fa49d2c14582adaeb24a0a2b4ef2dcb2"
+      ]
+    },
+    "827": {
+      "subject": "Share host modules with component kits via import maps (#827)",
+      "commits": [
+        "48d8f898afb90795a05765556133d567a6a89dc4"
+      ]
+    },
+    "831": {
+      "subject": "Composer UX consistency: token-driven styling, attachment tree restructure, first-message consent fix (#831)",
+      "commits": [
+        "d2b5585ccd1a3833a060abb4340daab95f2b6eca"
+      ]
+    },
+    "796": {
+      "subject": "Hidden facets: platform-scoped, always-on system-prompt injection (#796)",
+      "commits": [
+        "bfdd756506c91e756e516a66d25fe14baeabb6b0"
+      ]
+    },
+    "832": {
+      "subject": "Merge pull request #832 from EratoLab/local-auth-url",
+      "commits": [
+        "ceef1fca7009e60fc4df9280683f5fd2a29d119c"
+      ]
+    },
+    "828": {
+      "subject": "Recover the turn when the model calls an unoffered tool (no more empty assistant message) (#828)",
+      "commits": [
+        "feb3b07a141b41df07deab6c02e4159eca3a986f"
+      ]
+    },
+    "833": {
+      "subject": "Fix chat-history dropdown overflow and double scrollbar (ERMAIN-464) (#833)",
+      "commits": [
+        "b693c62cbdb2b91c42ddc3ce5eb5eca21d67f422"
+      ]
+    },
+    "834": {
+      "subject": "Dropdown: pointerdown outside-close for touch tap-outside dismiss (ERMAIN-465) (#834)",
+      "commits": [
+        "6cec69e201cb20e3aaef4dc01f5279de54da83d7"
+      ]
+    },
+    "835": {
+      "subject": "Make sidebar Assistants section collapsible (#835)",
+      "commits": [
+        "8bdf3a99bc13a484b75360eae57388399c56fdd8"
+      ]
+    },
+    "744": {
+      "subject": "Merge pull request #744 from EratoLab/feature/ermain-361-xlsx-preview",
+      "commits": [
+        "3d50181c8352e8596079939b2b9c627910ab1bad"
+      ]
+    },
+    "839": {
+      "subject": "Storybook stories for confirm/consent components (#839)",
+      "commits": [
+        "1af012a56a4bbc694ef97c4ec76e58642622c12d"
+      ]
+    },
+    "838": {
+      "subject": "Merge pull request #838 from EratoLab/feature/ermain-360-pptx-file-preview",
+      "commits": [
+        "964111b1c447af3ef834b4e79a45a6bda9b5e3e3"
+      ]
+    },
+    "837": {
+      "subject": "Merge pull request #837 from EratoLab/feature/ermain-466-chat-input-stays-usable-while-a-response-is-generating-only",
+      "commits": [
+        "e9cef949196e6678f2536cc7dfac25cb1008f7b3"
+      ]
+    },
+    "840": {
+      "subject": "Merge pull request #840 from EratoLab/feature/ermain-470-queue-the-next-message-and-auto-send-when-the-turn-fully",
+      "commits": [
+        "f86e5681bb54eab12342ee78ec62e32678cf3ea3"
+      ]
+    },
+    "836": {
+      "subject": "Merge pull request #836 from EratoLab/feature/ermain-467-dropdown-menus-soften-first-item-focus-on-open-add-986a",
+      "commits": [
+        "67b9ca86903016b1220bd06dfb40a505a72dfbaf"
+      ]
+    },
+    "842": {
+      "subject": "Merge pull request #842 from EratoLab/fix/queued-message-chip-theme-tokens",
+      "commits": [
+        "22664ebea91c4421e58dee89456ce7796dc60427"
+      ]
+    },
+    "841": {
+      "subject": "Merge pull request #841 from EratoLab/feature/e2e-queue-streaming-composer",
+      "commits": [
+        "456ddbabc985170d47a59f87e930845b0e703e01"
+      ]
+    },
+    "843": {
+      "subject": "Merge pull request #843 from EratoLab/fix/button-geometry-theming-contract",
+      "commits": [
+        "e07491db7845974c8d0c6a15982ea23c10f6c9d4"
+      ]
+    },
+    "846": {
+      "subject": "Merge pull request #846 from EratoLab/feature/e2e-queue-hardening",
+      "commits": [
+        "e5af1e07133bb31d1ec05b071cc9473430228392"
+      ]
+    },
+    "844": {
+      "subject": "Merge pull request #844 from EratoLab/fix/add-menu-trigger-button-reuse",
+      "commits": [
+        "e3b487ef811d75a9bc9a988a162e757b3254b66a"
+      ]
+    },
+    "847": {
+      "subject": "Merge pull request #847 from EratoLab/fix/dropdown-trigger-control-radius",
+      "commits": [
+        "514787643cded016135c5cff4e4ffc88655f6fd3"
+      ]
+    },
+    "845": {
+      "subject": "Merge pull request #845 from EratoLab/fix/file-upload-button-tokens",
+      "commits": [
+        "f3a4effd72e2084849d38affbced1843171082d0"
+      ]
+    },
+    "848": {
+      "subject": "Take button radii from theme tokens (frontend + add-in) (#848)",
+      "commits": [
+        "9b9e04b963f3e2b1e580fa3bffe7a1eb14b7afe7"
+      ]
+    },
+    "849": {
+      "subject": "Merge pull request #849 from EratoLab/feature/ermain-469-ghost-downstream-messages-float-above-the-streaming-reply",
+      "commits": [
+        "d498da146b30a160633f2eaa4f75c2ff7031deda"
+      ]
+    },
+    "850": {
+      "subject": "Merge pull request #850 from EratoLab/test/edit-path-coverage-prework",
+      "commits": [
+        "3958374af914e58264d894230d6483467e965c6e"
+      ]
+    },
+    "853": {
+      "subject": "Edit user messages in place instead of in the composer (ERMAIN-471) (#853)",
+      "commits": [
+        "ef24966a755fd5bc6980024218cf1c572030e36c"
+      ]
+    },
+    "851": {
+      "subject": "Move popover and sidebar-row surfaces out of inline styles (#851)",
+      "commits": [
+        "e499b8b856ae181c4379e2d40f2a4c7bbc9f459d"
+      ]
+    },
+    "852": {
+      "subject": "Move the remaining documented hooks' surfaces out of inline styles (#852)",
+      "commits": [
+        "470a7dd7dc00f533cb278317a8fd3c923607be7e"
+      ]
+    },
+    "854": {
+      "subject": "Pin a type scale per button size (#854)",
+      "commits": [
+        "f1a4d849fa10a14fea92532fc1892d35d0681694"
+      ]
+    },
+    "856": {
+      "subject": "Make sm the default button size (#856)",
+      "commits": [
+        "047dad476c3d5311048664e773476cc328b42a62"
+      ]
+    },
+    "857": {
+      "subject": "Merge pull request #857 from EratoLab/feature/ermain-462-establish-protocol-for-communication-between-host",
+      "commits": [
+        "ef35ea3cb60212275b8c8b533ab99455e84459df"
+      ]
+    },
+    "860": {
+      "subject": "Merge pull request #860 from EratoLab/feature/ermain-481-document-the-desktop-sidecar-artifact-distribution-contract",
+      "commits": [
+        "d8b55cd994044e0bd6ac59510f6407dc480ad9ec"
+      ]
+    },
+    "861": {
+      "subject": "Show a new chat in the sidebar while its first turn runs (#861)",
+      "commits": [
+        "9c0e5e61206a36078b1d6092a046132ab9a1f4c3"
+      ]
+    },
+    "858": {
+      "subject": "Show the user message when returning to a streaming chat (#858)",
+      "commits": [
+        "957bd180ff17d2adbc25433de2a29552b1d536f4"
+      ]
+    },
+    "855": {
+      "subject": "Drop redundant recent-chats refetches on rename (#855)",
+      "commits": [
+        "08bcb312f8f14193c28df721a260247f68fd3f62"
+      ]
+    },
+    "864": {
+      "subject": "Merge pull request #864 from EratoLab/feat/sidecar-restart",
+      "commits": [
+        "e32109f1589b91367f87c63eb5600736a2bdece3"
+      ]
+    },
+    "859": {
+      "subject": "Fix sidebar dropping an unrelated chat when archiving (#859)",
+      "commits": [
+        "873627b572de9610352731fa157bc12cf6031f9a"
+      ]
+    },
+    "867": {
+      "subject": "Merge pull request #867 from EratoLab/feature/ermain-490-extend-mcp-file-exchange-mechanism-to-support-filename",
+      "commits": [
+        "6febc8051f2323cccf5cfe8ae83e007f033fdd20"
+      ]
+    },
+    "863": {
+      "subject": "Map invalid and archived chat ids to 404/409 instead of 500 (#863)",
+      "commits": [
+        "55083e43adf6d4945694d0bf44242d3f40687965"
+      ]
+    },
+    "869": {
+      "subject": "Merge pull request #869 from EratoLab/feat/ds-protocol-mail-listing",
+      "commits": [
+        "5812d6bb7b01b6551b1a4c3a4cabe6c6c5df30bc"
+      ]
+    },
+    "871": {
+      "subject": "Merge pull request #871 from EratoLab/feature/ermain-492-add-configure-method-to-deskto-sidecar",
+      "commits": [
+        "204de63813cd0c9d143901d930149c73ba80bb68"
+      ]
+    },
+    "870": {
+      "subject": "Parallelize e2e CI: shard many-models, worker knob, raise e2e backend memory (#870)",
+      "commits": [
+        "6955a81524bd2d536af4bb12c50c784e95085855"
+      ]
+    },
+    "872": {
+      "subject": "Merge pull request #872 from EratoLab/feature/ermain-483-add-desktop-sidecar-distribution-page-to-app",
+      "commits": [
+        "083327e7a2b5765e01ec70c1339d973db388345c"
+      ]
+    },
+    "874": {
+      "subject": "Merge pull request #874 from EratoLab/manual-profiling-build",
+      "commits": [
+        "a048af936f039f37916ed539f1a02939b868b054"
+      ]
+    },
+    "873": {
+      "subject": "Run basic e2e with 2 workers; record traces only on first retry (#873)",
+      "commits": [
+        "79575c9ef4aa29d49cc87b6298d698c2e1bbdd4f"
+      ]
+    },
+    "868": {
+      "subject": "Show per-chat generation status in the history sidebar (#868)",
+      "commits": [
+        "901efffe352fcdbcd5f94ea3f2bf23dae0580341"
+      ]
+    },
+    "875": {
+      "subject": "Replace e2e settle sleeps with observable waits; enforce via eslint (#875)",
+      "commits": [
+        "28e3797a75927167bad5e3e2fd3f382511a761cf"
+      ]
+    },
+    "876": {
+      "subject": "Layer sendFirstMessage failure diagnosis; widen mcp-auth first-response margin (#876)",
+      "commits": [
+        "b4265db3740a8949d6f8ee04e0f56a733de79cb5"
+      ]
+    },
+    "877": {
+      "subject": "Run every e2e test in CI by default; port token-warning coverage (#877)",
+      "commits": [
+        "d80e95d35bad43774940a3de087d4e0638e6e3e8"
+      ]
+    },
+    "865": {
+      "subject": "Merge pull request #865 from EratoLab/feature/ermain-488-allow-users-to-retract-message-feedback-thumbs-updown",
+      "commits": [
+        "df6ad11c28c1b79c0c7c04c87547ce390c244262"
+      ]
+    },
+    "881": {
+      "subject": "Merge pull request #881 from EratoLab/feature/ermain-494-new-chat-navigation-is-serialized-behind-full-policy",
+      "commits": [
+        "9f60bde68832e7c5a3bbc135806134396481f7fd"
+      ]
+    },
+    "866": {
+      "subject": "Merge pull request #866 from EratoLab/feature/ermain-485-shared-chat-read-dedicated-server-filtered-messages-3379",
+      "commits": [
+        "97de8293794a5acdc84bbe39ce80e15e1cd6b2bf"
+      ]
+    },
+    "879": {
+      "subject": "Merge pull request #879 from EratoLab/feature/ermain-489-after-ermain-486-verify-share-link-viewers-can-no-longer",
+      "commits": [
+        "72cceb8c7d6f6e96c6af7bb39e1652c141bdb7d3"
+      ]
+    },
+    "885": {
+      "subject": "Merge pull request #885 from EratoLab/update-k3s",
+      "commits": [
+        "7b049263c6ae01cb7e4bd030952dc2390ce0a551"
+      ]
+    },
+    "884": {
+      "subject": "Merge pull request #884 from EratoLab/feature/ermain-499-unify-assistant-hub-and-existing-assistants-pages",
+      "commits": [
+        "e20fa5b5b9182f4e81b08696514eaad96a899164"
+      ]
+    },
+    "886": {
+      "subject": "Merge pull request #886 from EratoLab/feature/ermain-499-unify-assistant-hub-and-existing-assistants-pages",
+      "commits": [
+        "2e2b5a1411c28c8401bf9e3e96163eac1b0c9c50"
+      ]
+    },
+    "888": {
+      "subject": "Merge pull request #888 from EratoLab/feature/ermain-512-add-option-to-configure-tool-call-limit-per-chat-message",
+      "commits": [
+        "bed67b3a4d96b8c3c78e85295275a89fc40901af"
+      ]
+    },
+    "889": {
+      "subject": "Merge pull request #889 from EratoLab/feature/ermain-510-allow-filtering-out-tools-from-mcp-servers",
+      "commits": [
+        "cfd26d01160a075c2256c39d7c7f4bb4c99c66ca"
+      ]
+    },
+    "890": {
+      "subject": "Merge pull request #890 from EratoLab/feature/ermain-513-fix-wrong-injection-of-import-maps-for-office-addin",
+      "commits": [
+        "d930d3ccd3a71d12442305e8ef7c1d25b4c46600"
+      ]
+    },
+    "891": {
+      "subject": "Merge pull request #891 from EratoLab/feature/ermain-276-use-magika-for-file-type-detection",
+      "commits": [
+        "e546bfb4738e019fe21a798c16126810d9c68ce3"
+      ]
+    },
+    "893": {
+      "subject": "Merge pull request #893 from EratoLab/feature/ermain-514-admin-panel-preparation-table-for-live-configuration",
+      "commits": [
+        "5db0634c763c2e36615afbd1d37169795caaf58d"
+      ]
+    },
+    "887": {
+      "subject": "Merge pull request #887 from EratoLab/feature/ermain-501-get-conversation-transfer-profile",
+      "commits": [
+        "cd7c2354f5f8bc89b2d9ca4d5ffa4b20ff84bea3"
+      ]
+    },
+    "894": {
+      "subject": "Merge pull request #894 from EratoLab/feature/ermain-515-split-out-config-layer-into-erato_config-crate",
+      "commits": [
+        "fd02a0f2b9da1aaff07ff2e7fd36a87357974455"
+      ]
+    },
+    "895": {
+      "subject": "Merge pull request #895 from EratoLab/feature/ermain-515-split-out-config-layer-into-erato_config-crate",
+      "commits": [
+        "8fbc8676148a8da7f04f2840b32cb34eb66c4ad9"
+      ]
+    },
+    "892": {
+      "subject": "Add-in: sidecar-backed thread fetcher (ERMAIN-503) (#892)",
+      "commits": [
+        "3fb8e394c2c883cbf32aa9f2d65de9030f1e35e2"
+      ]
+    },
+    "896": {
+      "subject": "Fix on-prem detection for hybrid mailboxes; record Windows sidecar qualification (#896)",
+      "commits": [
+        "a161cb6650c25ed86ffbd2f979d722b15403a43d"
+      ]
+    },
+    "897": {
+      "subject": "Merge pull request #897 from EratoLab/feature/ermain-521-extend-mirroring-to-all-detected-and-served-translation-po",
+      "commits": [
+        "7e803c1e6b099bb02900f6a503640113362bfdc8"
+      ]
+    },
+    "899": {
+      "subject": "Merge pull request #899 from EratoLab/feature/ermain-525-second-chance-rebuild-on-unknown-resource-authorize-miss",
+      "commits": [
+        "f90ccafc5d58748cd097548bbbbd1c635a95aabf"
+      ]
+    },
+    "900": {
+      "subject": "Merge pull request #900 from EratoLab/feature/ermain-497-support-gateway-api-in-helm-chart-as-alternative-to-ingress",
+      "commits": [
+        "9eb13cdc16f4db43638780363ce7cda1b1d74e57"
+      ]
+    },
+    "901": {
+      "subject": "Merge pull request #901 from EratoLab/feature/ermain-526-add-intermediate-load-balancer-layer-before-backend-services",
+      "commits": [
+        "5e408cd4528ac257961c957dba08aed459261b19"
+      ]
+    },
+    "902": {
+      "subject": "Merge pull request #902 from EratoLab/feature/ermain-527-add-explainer-text-for-reviewer-notes-and-version-comment-on",
+      "commits": [
+        "31ad0373454c8e7ebd27cb02b7d41189767f2968"
+      ]
+    },
+    "904": {
+      "subject": "Merge pull request #904 from EratoLab/feature/ermain-528-reduce-amount-of-shown-assistant-versions-on-my-submissions",
+      "commits": [
+        "1033ad3329d70e449d9ac183d8aa809b78fe1431"
+      ]
+    },
+    "903": {
+      "subject": "Merge pull request #903 from EratoLab/feature/ermain-405-make-it-possible-to-share-assistant-store-assistant-with",
+      "commits": [
+        "ab2d788c2210e7896af71896b52cb6bbaea48fc9"
+      ]
+    },
+    "898": {
+      "subject": "Merge pull request #898 from EratoLab/feature/ermain-476-decide-is-erato-single-replica-or-do-we-need-shared",
+      "commits": [
+        "fc5914345c15c8d8e5b3c6c4148ad091fa631135"
+      ]
+    },
+    "906": {
+      "subject": "Merge pull request #906 from EratoLab/feature/ermain-529-on-removal-of-assistant-from-hub-by-reviewer-it-should-be",
+      "commits": [
+        "41d115e609efdf807586b0ef472a985b63ca8049"
+      ]
+    },
+    "905": {
+      "subject": "Merge pull request #905 from EratoLab/feature/ermain-511-fix-404s-on-served-pages-and-naively-requested-assets",
+      "commits": [
+        "75068c12717096e0d5fbd752ee925119dce4ed6c"
+      ]
+    },
+    "907": {
+      "subject": "Merge pull request #907 from EratoLab/feature/ermain-530-on-my-submission-page-order-by-most-recent-submission-first",
+      "commits": [
+        "954d686f7b29dd847d1373c623ff929646081e51"
+      ]
+    },
+    "908": {
+      "subject": "Merge pull request #908 from EratoLab/feature/ermain-531-on-the-review-queue-page-order-by-status",
+      "commits": [
+        "6ac60f276419e74e4b6c439021f176b2d8145637"
+      ]
+    },
+    "909": {
+      "subject": "Merge pull request #909 from EratoLab/feature/ermain-532-add-5-star-rating-mode-to-the-assistant-hub",
+      "commits": [
+        "ad4c8410535310ba93c2c7bbbc634f1dcf9698f4"
+      ]
+    },
+    "910": {
+      "subject": "Add sidecar.progress.v1: poll-based incremental progress delivery (ERMAIN-534) (#910)",
+      "commits": [
+        "f2f7b05672c10bc0d2180e8e4e6d99e6769d851c"
+      ]
+    },
+    "911": {
+      "subject": "Merge pull request #911 from EratoLab/feature/ermain-535-backport-load-balancer-networkpolicy-and-rbac-fixes-to-the",
+      "commits": [
+        "ce5ba6af982571c15d84d912223a18f0a51cc5fe"
+      ]
+    },
+    "913": {
+      "subject": "Merge pull request #913 from EratoLab/feature/ermain-536-add-configuration-reload-notification-erato-app-side",
+      "commits": [
+        "c243c3f63e490ca749fc3fbf4d9715e4542683da"
+      ]
+    },
+    "914": {
+      "subject": "Merge pull request #914 from EratoLab/feature/ermain-521-extend-mirroring-to-all-detected-and-served-translation-po-2",
+      "commits": [
+        "54f1268d0e1b89eabe9c387aaa569c12a54a6f10"
+      ]
+    },
+    "916": {
+      "subject": "Merge pull request #916 from EratoLab/feature/ermain-539-add-settings-pane-to-view-sidecar-connection-status",
+      "commits": [
+        "8e2ec3cd40f0e6c348727e3d9c12fbc7a34bd1a7"
+      ]
+    },
+    "915": {
+      "subject": "Merge pull request #915 from EratoLab/feature/ermain-277-persist-mcp-tool-call-approval-state-and-resumable",
+      "commits": [
+        "2c99731652798806f3c45c05eea9841635a6bd97"
+      ]
+    },
+    "917": {
+      "subject": "Merge pull request #917 from EratoLab/ermain-480-distribution-customization",
+      "commits": [
+        "bb1b5fb57bcc5006fbabd967161a1a664fd760c5"
+      ]
+    },
+    "918": {
+      "subject": "MCP tool approval UX follow-ups (#918)",
+      "commits": [
+        "4edb9075deb7aa9dd1d971bf16f47de3260f91aa"
+      ]
+    },
+    "919": {
+      "subject": "Merge settings into an entity-first MCP & Apps pane (#919)",
+      "commits": [
+        "12dec16119d64bc03f8635b7151cb8fc0c588a3b"
+      ]
+    },
+    "921": {
+      "subject": "MCP approval follow-up fixes (#921)",
+      "commits": [
+        "29e889c58d7030c053c2392e8f97a7ccdef11dbb"
+      ]
+    },
+    "912": {
+      "subject": "Never let a progress observer break the observed request (#912)",
+      "commits": [
+        "2ac5d388b4878774247a334ef9847a649c5de424"
+      ]
+    },
+    "922": {
+      "subject": "Extract host-neutral add-in core, isolate Outlook composition (#922)",
+      "commits": [
+        "7e6fe5d30771418d873d3aa3f9606ba0fe8e1d24"
+      ]
+    },
+    "926": {
+      "subject": "Treat cloud.microsoft endpoints as Exchange Online (#926)",
+      "commits": [
+        "c10e8d3ba3db59bf9f7483aa82ea1638d8608a26"
+      ]
+    },
+    "923": {
+      "subject": "Default appointment card and sidecar client identity (#923)",
+      "commits": [
+        "c31800f71a7e0681c387151d92cd4d259162e7a3"
+      ]
+    },
+    "927": {
+      "subject": "fix(office-addin): fix background color inconsistency in add-in chat view (#927)",
+      "commits": [
+        "e2eb456b56ab79e890dcf9da998b50394d86eceb"
+      ]
+    },
+    "928": {
+      "subject": "fix(eml-preview): recover PDF MIME type from extension when email declares octet-stream (ERMAIN-550) (#928)",
+      "commits": [
+        "1394215c37669f1f69529e6d7b5b464fac9f0e51"
+      ]
+    },
+    "929": {
+      "subject": "Expose Erato in Outlook organizer appointment compose (#929)",
+      "commits": [
+        "0c7d698fa060cdd527a8204134aa3e7bf2745979"
+      ]
+    },
+    "935": {
+      "subject": "Merge pull request #935 from EratoLab/feature/ermain-560-disambiguate-pasted-image-uploads-from-clipboard",
+      "commits": [
+        "34921f8c4f206c2d3da803f1ff314da4226b0f53"
+      ]
+    },
+    "936": {
+      "subject": "Merge pull request #936 from EratoLab/feature/ermain-217-add-mermaid-diagram-rendering-in-chat-messages",
+      "commits": [
+        "c4211344e91e86afa25a897fa081a48970096517"
+      ]
+    },
+    "937": {
+      "subject": "Merge pull request #937 from EratoLab/feature/ermain-561-add-support-for-sharing-an-assistant-for-editing",
+      "commits": [
+        "d7fda29f905c7b4e7c0dde91b07406908684e134"
+      ]
+    },
+    "930": {
+      "subject": "Merge pull request #930 from EratoLab/feature/ermain-552-generate-a-local-combined-app-package-unified-manifest-zip",
+      "commits": [
+        "2a57286822477b30fa805d26ed0a041e37ba65f8"
+      ]
+    },
+    "931": {
+      "subject": "Merge pull request #931 from EratoLab/feature/ermain-553-add-the-teams-personal-app-route-teamsapp-teamsjs-host",
+      "commits": [
+        "b4cf75e5fd4ce807cfe351a99d68a3c03f2b5d9d"
+      ]
+    },
+    "932": {
+      "subject": "Merge pull request #932 from EratoLab/feature/ermain-554-teams-tab-fix-the-app-icons-and-harden-host-theming-outline",
+      "commits": [
+        "23ebc51d6ca8279b875ed7cdaf395c0bd33ebc55"
+      ]
+    },
+    "939": {
+      "subject": "feat(office-addin): add Teams chats as a context source in the chat composer (#939)",
+      "commits": [
+        "df7ac6d6ff2ce4fdef4205b7d8f85456aea9174a"
+      ]
+    },
+    "940": {
+      "subject": "feat(office-addin): attach files and images shared in Teams conversations (#940)",
+      "commits": [
+        "8b9b81b652f34f4317304d308804742d2bee102a"
+      ]
+    },
+    "938": {
+      "subject": "Merge pull request #938 from EratoLab/feature/ermain-562-add-support-for-rendering-math-equations",
+      "commits": [
+        "4ba99b963f8608e3bb261fe7432842c79fc819a2"
+      ]
+    },
+    "941": {
+      "subject": "feat(frontend): client-side PDF preview (ERMAIN-566) (#941)",
+      "commits": [
+        "88ed05bd1104cf3b804b0ed456f302a93b0e23cf"
+      ]
+    },
+    "945": {
+      "subject": "Merge pull request #945 from EratoLab/feature/ermain-571-fix-language-fallback-in-jit-compiled-translation-mode",
+      "commits": [
+        "dd67cb9d679ae4d4e48b89bf663de7e913cc024b"
+      ]
+    },
+    "943": {
+      "subject": "Merge pull request #943 from EratoLab/feature/ermain-568-add-option-to-have-pinned-chats",
+      "commits": [
+        "8eef1b4bffcb449205f9a43f4e69f64041974d59"
+      ]
+    },
+    "946": {
+      "subject": "Merge pull request #946 from EratoLab/feature/ermain-573-reactive-kubescape-in-ci",
+      "commits": [
+        "a85c65124f5bc3cb8b1ff7d222e53beb95b2c9a8"
+      ]
+    },
+    "942": {
+      "subject": "feat(frontend): restore PDF text selection and copy (ERMAIN-570) (#942)",
+      "commits": [
+        "d8921e001de4f9d7be3a6f710a34865f5c638e79"
+      ]
+    },
+    "947": {
+      "subject": "Merge pull request #947 from EratoLab/feature/ermain-568-add-option-to-have-pinned-chats-2",
+      "commits": [
+        "a4df2d2f7e90013e23fb62d527dcbdbd080903d3"
+      ]
+    },
+    "960": {
+      "subject": "Merge pull request #960 from EratoLab/feature/ermain-594-on-review-page-make-it-visible-with-whom-assistant-was",
+      "commits": [
+        "99320ef777c6df66b5f4d9941cc9565676e8a48b"
+      ]
+    },
+    "959": {
+      "subject": "Merge pull request #959 from EratoLab/feature/ermain-571-fix-language-fallback-in-jit-compiled-translation-mode-2",
+      "commits": [
+        "81c37d5a5550283808bbd19b65d1e651f0308bf2"
+      ]
+    },
+    "962": {
+      "subject": "Merge pull request #962 from EratoLab/feature/ermain-596-add-markdown-preview-for-assistant-description-to-give",
+      "commits": [
+        "82ea6e8ac83174e9aff9785919f11f21ad82bc2c"
+      ]
+    },
+    "961": {
+      "subject": "Merge pull request #961 from EratoLab/feature/ermain-595-force-whole-organization-option-to-be-at-the-top-of-the",
+      "commits": [
+        "9f6aa7c9033f6bdf2e6429b0c54d93d5b7a0496d"
+      ]
+    },
+    "948": {
+      "subject": "Merge pull request #948 from EratoLab/feature/ermain-577-emit-the-teams-transcript-as-textplain-not-textmarkdown",
+      "commits": [
+        "5725a090868ff54238f3439a3623b9fbb9c1d429"
+      ]
+    },
+    "949": {
+      "subject": "Merge pull request #949 from EratoLab/feature/ermain-578-carry-graphs-message-subject-into-the-teams-transcript",
+      "commits": [
+        "1642666ca9336a83139218efee9d26e5a45e21b9"
+      ]
+    },
+    "964": {
+      "subject": "Merge pull request #964 from EratoLab/feature/ermain-598-make-file-count-limits-configurable-and-align-upload-limit",
+      "commits": [
+        "54e9c134a9b1f1dfd0bfab6359226701d586f8f2"
+      ]
+    },
+    "950": {
+      "subject": "Name the viewer in Teams chat transcripts (#950)",
+      "commits": [
+        "ba218358a8a9470e23b0d17a50239da0c8603bcd"
+      ]
+    },
+    "965": {
+      "subject": "Merge pull request #965 from EratoLab/feature/ermain-600-roll-out-oauth2-proxy-v7152-erato4-for-expired-office-id",
+      "commits": [
+        "fabc49e7c1a19da0735f1aa20a3bbaf42223cf73"
+      ]
+    },
+    "951": {
+      "subject": "Add a chat-input seam for grouped attachment previews (#951)",
+      "commits": [
+        "818135a8f3a08f5d0c726581df223974f7c11389"
+      ]
+    },
+    "953": {
+      "subject": "Preview attached Teams chats as a conversation (#953)",
+      "commits": [
+        "4995faba2f64fc539456c06f2502799aef869fd1"
+      ]
+    },
+    "955": {
+      "subject": "fix: keep table cells and fenced code intact in html-to-text (#955)",
+      "commits": [
+        "9f5fa352332e4c6859f938893af3b94953327ddd"
+      ]
+    },
+    "956": {
+      "subject": "Cite Teams transcript messages by ordinal (#956)",
+      "commits": [
+        "56972ce7f49f0203892c7608a6b593eb94b24628"
+      ]
+    },
+    "957": {
+      "subject": "feat(teams): index a transcript's identifiers and strip them before the model (#957)",
+      "commits": [
+        "e78446adc3d41dfeb7c5c3ec077ddb7ca7d81c85"
+      ]
+    },
+    "958": {
+      "subject": "Render the Teams composer preview from the transcript's index block (#958)",
+      "commits": [
+        "ff74e8743f2bfd23f614a20b4a7584a237389268"
+      ]
+    },
+    "966": {
+      "subject": "Show an attached Teams transcript as a conversation before sending (#966)",
+      "commits": [
+        "480b95d73a62f28e0ba6a9cd238f295d65781aa3"
+      ]
+    },
+    "963": {
+      "subject": "Merge pull request #963 from EratoLab/feature/ermain-572-generate-list-of-license-notices-as-part-of-build",
+      "commits": [
+        "dc0b6691539d2aaf3d21e970a3a2680a41f2c3c8"
+      ]
+    },
+    "968": {
+      "subject": "fix(dev): gate linked add-in reloads on library build completion (ERMAIN-565) (#968)",
+      "commits": [
+        "eed7585befa4b21449f69a54904673a0e46f81a7"
+      ]
+    },
+    "967": {
+      "subject": "Open a stored Teams transcript as its conversation (#967)",
+      "commits": [
+        "7db608f22ef908249997d7c1d0930c4dfe92e962"
+      ]
+    },
+    "969": {
+      "subject": "Teach and resolve Teams transcript message citations (#969)",
+      "commits": [
+        "df2170a834bbe29de39ae0f702d5a5ec470afd36"
+      ]
+    },
+    "970": {
+      "subject": "Add sort by for chats (#970)",
+      "commits": [
+        "9a4063764ff3a27d9923d876a70fabefc5c7d512"
+      ]
+    },
+    "971": {
+      "subject": "Pin Teams message windows to creation time, pace chat reads, gate add-menu rows on the file limit (#971)",
+      "commits": [
+        "8c09bc2a5deddc7e25afe8a3ae3c095209c7138e"
+      ]
+    },
+    "972": {
+      "subject": "Align chat add menu with the dropdown theme-token channel (#972)",
+      "commits": [
+        "a8add0432078cc18693e41c1853d6e873c8955a2"
+      ]
+    },
+    "973": {
+      "subject": "Sidebar geometry: alignment contract, slim centering, resizable width (ERMAIN-608) (#973)",
+      "commits": [
+        "290fe21d246da547f1dac2544ac3cae1380e4310"
+      ]
+    },
+    "974": {
+      "subject": "Sidebar & search UI polish: default icons, collapse animation, aligned search input (ERMAIN-612) (#974)",
+      "commits": [
+        "81e80b035acb0972736224b0a5847bb4128b9faf"
+      ]
+    },
+    "975": {
+      "subject": "Focus rings: keyboard-only, inset on sidebar rows, aligned trailing controls (#975)",
+      "commits": [
+        "80586ae882fd2cf867f684d0d2c8263b1a16e4dd"
+      ]
+    },
+    "976": {
+      "subject": "On-device search part 1: sidecar search protocol, nested trace rendering, client-tool abort plumbing (ERMAIN-616) (#976)",
+      "commits": [
+        "f88193119647711d9a7c46ff37aa09334afaf76c"
+      ]
+    },
+    "988": {
+      "subject": "Merge pull request #988 from EratoLab/feature/ermain-601-make-structure-of-distribution-artifacts-more-concrete",
+      "commits": [
+        "2cdb96409ee8d421adc5b49ca38712d3c8f49593"
+      ]
+    },
+    "978": {
+      "subject": "Merge pull request #978 from EratoLab/feature/ermain-619-delegation-config-server-side-gating-assistantsdelegation",
+      "commits": [
+        "8df3122b1ddb653d2246a3d6c7929536e155ef12"
+      ]
+    },
+    "989": {
+      "subject": "Merge pull request #989 from EratoLab/feature/ermain-521-extend-mirroring-to-all-detected-and-served-translation-po-3",
+      "commits": [
+        "dc7331735e82389d42212ff0d634cf4916fa3631"
+      ]
+    },
+    "990": {
+      "subject": "Merge pull request #990 from EratoLab/feature/ermain-591-add-pin-dropdown-item-to-sidebar-on-chat-overview-page-and",
+      "commits": [
+        "faf25b17563380336b07e437dd2a1a56cf29e75c"
+      ]
+    },
+    "979": {
+      "subject": "Merge pull request #979 from EratoLab/feature/ermain-620-chat-provenance-envelope-context-transfer-primitives",
+      "commits": [
+        "dd78a32d50ee6401155fc9cd8bd28ca0783883b5"
+      ]
+    },
+    "991": {
+      "subject": "Merge pull request #991 from EratoLab/feature/ermain-632-add-ability-to-consume-translation-files-produced-by-admin",
+      "commits": [
+        "285a8085679add05239e446208d961f026f2a013"
+      ]
+    },
+    "980": {
+      "subject": "Mention validation & persistence on submit/edit/regenerate (ERMAIN-621) (#980)",
+      "commits": [
+        "505cf25453d9af10d14f78e0059857ff2c3575de"
+      ]
+    },
+    "981": {
+      "subject": "delegate_to_assistant: tool offer, dispatch branch, awaited child run (ERMAIN-622) (#981)",
+      "commits": [
+        "b367420d49cac113036afee4408328562e2b68a9"
+      ]
+    },
+    "982": {
+      "subject": "Listing surface: hide delegated runs by default, provenance on RecentChat (ERMAIN-623) (#982)",
+      "commits": [
+        "77c7bce0df506c91f7094ceca3f18a7260aa2c81"
+      ]
+    },
+    "984": {
+      "subject": "Composer assistant mentions: @-picker, add-menu and Tools sections (ERMAIN-618) (#984)",
+      "commits": [
+        "39ac74686ebefa3e8dd7577f0e5a39de56dec00d"
+      ]
+    },
+    "985": {
+      "subject": "Delegation trace: nested child steps in the tool call, open-run link (ERMAIN-624) (#985)",
+      "commits": [
+        "3c3aab783df9c00d8abec96ef8c5a286ee2bd585"
+      ]
+    },
+    "986": {
+      "subject": "Assistant space: delegated runs segment, origin hint, attention passthrough (ERMAIN-625) (#986)",
+      "commits": [
+        "e266d042841d0c305f9a0604f267b4a148e4007e"
+      ]
+    },
+    "996": {
+      "subject": "Merge pull request #996 from EratoLab/feature/ermain-646-split-up-lint-github-actions-job",
+      "commits": [
+        "eda523b1bb5d8d8c44eafc84545715dfe9afe452"
+      ]
+    },
+    "987": {
+      "subject": "Highlight tracked assistant mentions behind the composer text (ERMAIN-629) (#987)",
+      "commits": [
+        "8305ac97edf2b1636b923c7fe318ab5507c821bf"
+      ]
+    },
+    "995": {
+      "subject": "Merge pull request #995 from EratoLab/feature/ermain-645-make-error-handling-resilient-against-general-errors-in-tool",
+      "commits": [
+        "31da1e5397f56898fa60a8912058d6e8009bc1bb"
+      ]
+    },
+    "992": {
+      "subject": "Delegated chat lifecycle: archive cascade, age reaping, orphan cleanup, in-flight guard (ERMAIN-627) (#992)",
+      "commits": [
+        "ab5760b017aea975191d1c94f643dd1f9fda0bb4"
+      ]
+    },
+    "997": {
+      "subject": "Merge pull request #997 from EratoLab/feature/ermain-647-reduce-oci-build-cache-thrash-with-branch-aware-registry",
+      "commits": [
+        "08cdd776317d5b5d28f925c4e39dc4af12af6242"
+      ]
+    },
+    "993": {
+      "subject": "Contain third-party assistant metadata in the delegation tool offer (ERMAIN-626) (#993)",
+      "commits": [
+        "f8776147f516c73389016c0ee52eac27625173bc"
+      ]
+    },
+    "994": {
+      "subject": "Pin continuestream tool scope, share the generation task lifecycle (ERMAIN-628) (#994)",
+      "commits": [
+        "5c2b4d8d78c150fe95d34440b8118f4187f96aba"
+      ]
+    },
+    "999": {
+      "subject": "Merge pull request #999 from EratoLab/frontend-build-prepare-hook",
+      "commits": [
+        "90e27bbae8eabcbb39c92990a25ed6c8beb1baec"
+      ]
+    },
+    "998": {
+      "subject": "Compose the delegation preamble instead of storing it in the child's message (ERMAIN-630) (#998)",
+      "commits": [
+        "76611e4ddeec9feede45771a71967f8d93e5099c"
+      ]
+    },
+    "1002": {
+      "subject": "Merge pull request #1002 from EratoLab/feature/ermain-655-make-oauth2-proxy-replica-count-configurable",
+      "commits": [
+        "7c1d00181412e08e25e38d3faa3b9af27c56ac0d"
+      ]
+    },
+    "1003": {
+      "subject": "Merge pull request #1003 from EratoLab/feature/ermain-648-improve-docker-layer-caching-for-frontend-builds",
+      "commits": [
+        "3547fd367557e7cb57baba8fad9504a5543a1504"
+      ]
+    },
+    "1010": {
+      "subject": "Generate SBOM and license artifacts before the source copy (ERMAIN-656) (#1010)",
+      "commits": [
+        "d7df4d012dd627d84453d9ca5cd543eb61662a5f"
+      ]
+    },
+    "1000": {
+      "subject": "Delegated chats open on a run header, not a machine-written message (ERMAIN-631) (#1000)",
+      "commits": [
+        "af26f2e30cf152dcf36a79fd9a426a3a89414b62"
+      ]
+    },
+    "1004": {
+      "subject": "Carry a per-request delegation run mode through submit, edit and regenerate (ERMAIN-634) (#1004)",
+      "commits": [
+        "372b5059adbcfeed9a0625d767e3317b7bc2f553"
+      ]
+    },
+    "1005": {
+      "subject": "Detached delegation dispatch: background runs return at launch (ERMAIN-635) (#1005)",
+      "commits": [
+        "081d9444292236765bdcd66059947c0f329afaf3"
+      ]
+    },
+    "1006": {
+      "subject": "Bound delegated runs: in-task deadline, reaper backstop, background concurrency cap (ERMAIN-636) (#1006)",
+      "commits": [
+        "be3009eb59260f4731feff15df2d636a7924a33c"
+      ]
+    },
+    "1007": {
+      "subject": "Recent chats: optional origin_chat_id filter (ERMAIN-637) (#1007)",
+      "commits": [
+        "96c11df39111dae91a8b5d4182cb98cc7bdd28eb"
+      ]
+    },
+    "1008": {
+      "subject": "Derive a delegated run's outcome from its chat so completion survives retention (ERMAIN-638) (#1008)",
+      "commits": [
+        "d93c3f4691b997a4c5d5bb186d3ee1e96ec69fa1"
+      ]
+    },
+    "1009": {
+      "subject": "Drain in-flight generations on shutdown so their fate is recorded (ERMAIN-639) (#1009)",
+      "commits": [
+        "41ee0992397db2c1843553b24ed43593cbcdab55"
+      ]
+    },
+    "1011": {
+      "subject": "Ask wait-or-background when sending a message with tracked mentions (ERMAIN-640) (#1011)",
+      "commits": [
+        "d720781abdd0ed49eb73a318fff193198f777c07"
+      ]
+    },
+    "1012": {
+      "subject": "Delegation trace: settled background presentation for detached runs (ERMAIN-641) (#1012)",
+      "commits": [
+        "dfa46388c2dddd0fa2a1b07f2376370aa39dfc23"
+      ]
+    },
+    "1013": {
+      "subject": "Delegated background runs of the open chat above the composer (ERMAIN-642) (#1013)",
+      "commits": [
+        "4d0706540ab98d10d5cb5a1ef8635f1ba5a8dc45"
+      ]
+    },
+    "1014": {
+      "subject": "Delegated runs list: dismiss finished background runs (ERMAIN-643) (#1014)",
+      "commits": [
+        "7f253653c54cb673917088c491bab2be6ec6e764"
+      ]
+    },
+    "1016": {
+      "subject": "Record MCP servers skipped for missing OAuth authorization in generation metadata (ERMAIN-657) (#1016)",
+      "commits": [
+        "9d6963031262207a3be056c381e1774dcb7596c1"
+      ]
+    },
+    "1017": {
+      "subject": "Assistant editor: attach MCP servers with per-user connection affordance (ERMAIN-657) (#1017)",
+      "commits": [
+        "2e6a6a65af3f9f871d72f399289a86b1935929e1"
+      ]
+    },
+    "1018": {
+      "subject": "Chat: point at unconnected MCP servers instead of silently dropping their tools (ERMAIN-657) (#1018)",
+      "commits": [
+        "023ab9bb35600d8b68ad9cee075ec35e04e23d68"
+      ]
+    },
+    "1020": {
+      "subject": "Render tracked assistant mentions in sent user messages (ERMAIN-661) (#1020)",
+      "commits": [
+        "83f28cb34cf76c97dc63e80fbe649c296b7d18d9"
+      ]
+    },
+    "1022": {
+      "subject": "Delegated runs list: surface a background run the moment it is dispatched (ERMAIN-664) (#1022)",
+      "commits": [
+        "25ce727b885304aa67b445b8c1795f05726abd92"
+      ]
+    },
+    "1021": {
+      "subject": "Delegation surfaces: kit-aligned badges and chevrons, keyboard reveal, SPA origin link (ERMAIN-665) (#1021)",
+      "commits": [
+        "7f58dcb87a254eec41faaa82793e21c49217ce78"
+      ]
+    },
+    "1023": {
+      "subject": "Do not seed a pending sidebar chat from replayed chat_created frames (ERMAIN-666) (#1023)",
+      "commits": [
+        "169a00ec061b59d226da41397a17da108e70cb26"
+      ]
+    },
+    "1024": {
+      "subject": "feat: show loading spinner on save button in assistant create/edit form (#1024)",
+      "commits": [
+        "607b303c6c901c677f7022e26035ca40529002e2"
+      ]
+    },
+    "1026": {
+      "subject": "Do not clear a still-unlisted chat's placeholder on turn completion (ERMAIN-666) (#1026)",
+      "commits": [
+        "2112ef4c31bc6f63dcbb6610372e6f07261d93e8"
+      ]
+    },
+    "1025": {
+      "subject": "Surface delegated background runs in the add-in pane (ERMAIN-644) (#1025)",
+      "commits": [
+        "bd14759189f0c946c5816cb666a856c30b052b39"
+      ]
+    },
+    "1027": {
+      "subject": "Extract router-free chat-history primitives for host reuse (ERMAIN-614) (#1027)",
+      "commits": [
+        "8a94f05c5f53645bdf58de1dd9a1ec624918835c"
+      ]
+    },
+    "1032": {
+      "subject": "Add-in: skip the oauth2-proxy session warm for custom-audience tokens (#1032)",
+      "commits": [
+        "dc0649c7926c3ac0c6b09bbe5542726181c626a7"
+      ]
+    },
+    "1033": {
+      "subject": "Add-in: AddinStartView extension point with start/chat view switcher (#1033)",
+      "commits": [
+        "8ce550098aded732e78fdf9bdb12acafa505eb24"
+      ]
+    },
+    "1035": {
+      "subject": "Merge pull request #1035 from EratoLab/feature/ermain-675-prevent-lingui-warning-spam-due-to-uncompiled-message",
+      "commits": [
+        "07f12be81400622da384bd179025262da892880c"
+      ]
+    },
+    "1036": {
+      "subject": "Merge pull request #1036 from EratoLab/feature/ermain-442-add-option-to-make-default-model-configurable-on-a-per-user",
+      "commits": [
+        "5f8279c4d2ec2497d8797c386138bb8a0d600f31"
+      ]
+    },
+    "1037": {
+      "subject": "Merge pull request #1037 from EratoLab/feature/ermain-677-improve-prompt-injection-guardrail-encountered-error-message",
+      "commits": [
+        "cc19e19818a15d469a8475ea818e044cc87d825e"
+      ]
+    },
+    "1038": {
+      "subject": "Merge pull request #1038 from EratoLab/feature/ermain-678-block-chat-input-if-previous-message-is-blocked-by-prompt",
+      "commits": [
+        "170ee3f33b37c1b47788edbdcb78f03fa0d54166"
+      ]
+    },
+    "1039": {
+      "subject": "Merge pull request #1039 from EratoLab/feature/ermain-461-add-ability-to-configure-availability-check-of-models",
+      "commits": [
+        "181de6f12a63875c37822bb6fa6bdc1533c684bc"
+      ]
+    },
+    "1042": {
+      "subject": "Route local admin panel through auth proxies (#1042)",
+      "commits": [
+        "4800b7c255be3b9a8dd726e76d4a17d4bfa2a63c"
+      ]
+    },
+    "1040": {
+      "subject": "Merge pull request #1040 from EratoLab/feature/ermain-654-add-support-for-sleepwaitdeferred-continue",
+      "commits": [
+        "d3564def08675570d74d7fbaeeed994dc7c8ab97"
+      ]
+    },
+    "1041": {
+      "subject": "Merge pull request #1041 from EratoLab/feature/ermain-307-display-model-switching-marker",
+      "commits": [
+        "2ab9ee4b825f691590068ed905446599984e8c62"
+      ]
+    },
+    "1043": {
+      "subject": "Merge pull request #1043 from EratoLab/feature/ermain-307-followups",
+      "commits": [
+        "5c6337fcb162e0fa530d958f0ae1ae2913dd0b4a"
+      ]
+    },
+    "1045": {
+      "subject": "Add a delegated-runs filter and pane attention badge (#1045)",
+      "commits": [
+        "bff7e630499e0849a4c2e7495a3825d6c3004a88"
+      ]
+    },
+    "1044": {
+      "subject": "Merge pull request #1044 from EratoLab/feature/ermain-681-increase-file-config-default",
+      "commits": [
+        "e01f01bc87cf4ed98cdf2264f6a981fdfc791198"
+      ]
+    },
+    "1046": {
+      "subject": "Unify staged attachment previews into a shared tile (#1046)",
+      "commits": [
+        "1e570d101921bd497be4fd96746e5f4e75163870"
+      ]
+    },
+    "1047": {
+      "subject": "Draw sent-message attachments with the shared tile (#1047)",
+      "commits": [
+        "dd6c669f88897859da048db7c63af8893b89a04d"
+      ]
+    },
+    "1049": {
+      "subject": "Move staged attachments inside the composer shell (#1049)",
+      "commits": [
+        "7a91fe3728e17323dcb2d82704b1ff838cf75987"
+      ]
+    },
+    "1050": {
+      "subject": "Draw grouped attachment items with the shared tile (#1050)",
+      "commits": [
+        "ac177154da8728a96047ca7b8eca088098a4047b"
+      ]
+    },
+    "1051": {
+      "subject": "Promote attachment tile geometry to theme tokens (#1051)",
+      "commits": [
+        "abab6b9a92b72db51e1a02eaa8e6a0aaa1a39b07"
+      ]
+    },
+    "1055": {
+      "subject": "Pin the kit-facing shared surface (#1055)",
+      "commits": [
+        "b63b9de099926dc11be09b4f05a1734fa70d63df"
+      ]
+    },
+    "1056": {
+      "subject": "Clamp long code blocks with a reveal control (#1056)",
+      "commits": [
+        "f4d24d280ba75609eb4c0863b58ea040e6388d54"
+      ]
+    },
+    "1052": {
+      "subject": "Keep the picked file size on staged attachments (#1052)",
+      "commits": [
+        "07b10916f80593c4f8bfbdab93dafbe2c92d810a"
+      ]
+    },
+    "1053": {
+      "subject": "Let images grow in place before the full preview (#1053)",
+      "commits": [
+        "08dace2b04456fa64fae3d01ead94496c28b1ca6"
+      ]
+    },
+    "1059": {
+      "subject": "Fold the redundant attachments seam into one registry key (#1059)",
+      "commits": [
+        "cf65219e6fd276e4f7fcce1f53521d029f7f1022"
+      ]
+    },
+    "1057": {
+      "subject": "Share the growth control between attached and generated images (#1057)",
+      "commits": [
+        "26d2f9dea74496ce5159437582451d36c3a6c45c"
+      ]
+    },
+    "1058": {
+      "subject": "Group a sent Teams conversation and name its shared files (#1058)",
+      "commits": [
+        "55193dfa0ae274e0fc2b7a2b359c58ca908e1c6e"
+      ]
+    },
+    "1060": {
+      "subject": "Fail CI when the kit shared surface drifts (#1060)",
+      "commits": [
+        "96b44c2c4406664886ac7fb401ae4ca98e6d3308"
+      ]
+    },
+    "1061": {
+      "subject": "Paint the code block surface on the element that clips (#1061)",
+      "commits": [
+        "b685352c664f5413df17bcaa729b45effc025c3d"
+      ]
+    },
+    "1062": {
+      "subject": "Keep the composer upload button usable after a file error (ERMAIN-163) (#1062)",
+      "commits": [
+        "0e37908b937e204ff0ff596b29e92a96506dae00"
+      ]
+    },
+    "1064": {
+      "subject": "Make the info tooltip reachable by keyboard (#1064)",
+      "commits": [
+        "81e7afabca8eb773afda277f501dedd9fa00de80"
+      ]
+    },
+    "1063": {
+      "subject": "Let keyboard users move through the segmented control tabs (#1063)",
+      "commits": [
+        "5aeb23d61cf4ee94188b631a227cab3d2efd83e3"
+      ]
+    },
+    "1066": {
+      "subject": "new hook useChatHistoryRowPresentation (#1066)",
+      "commits": [
+        "5b489576eb190e7fe310ca25e9228ab42c51a997"
+      ]
+    },
+    "1067": {
+      "subject": "Pin FilePreviewButton and ChatAttentionStatusDot to the kit-facing shared surface (#1067)",
+      "commits": [
+        "82e27e73f74c1cb23a60f77315bab4c328b0b7a7"
+      ]
+    },
+    "1065": {
+      "subject": "Let deployments declare Office add-in launch events in config (#1065)",
+      "commits": [
+        "03f6154dcacf5d715200d2fd5690b399eaa8c5c8"
+      ]
+    },
+    "1068": {
+      "subject": "Make theming fail loudly instead of silently, and hoist user attachments above the message body (#1068)",
+      "commits": [
+        "f3c595b1c2ac5ff8fa2ccdb08c6fef70d81ac0b6"
+      ]
+    },
+    "1069": {
+      "subject": "Resolve dropdown and media borders through the merged theme (#1069)",
+      "commits": [
+        "3f40b7fff49ddc56a50c13d23ecf89f8dd6c1424"
+      ]
+    },
+    "1070": {
+      "subject": "Merge pull request #1070 from EratoLab/feature/ermain-597-make-assistant-hub-categories-feature-optional",
+      "commits": [
+        "fa4547640435711e60df1f349cd1f2c6acb2cc82"
+      ]
+    },
+    "1075": {
+      "subject": "Merge pull request #1075 from EratoLab/feature/ermain-703-highlight-selected-item-in-segmentcontrol",
+      "commits": [
+        "36b4b7ee0af052fc6e5aed7f8310eb08d93cf641"
+      ]
+    },
+    "1076": {
+      "subject": "Merge pull request #1076 from EratoLab/feature/ermain-705-optimizesplit-main-page-bundle",
+      "commits": [
+        "5f170bff016e5939dd4076099cd30034ec1e87ae"
+      ]
+    },
+    "1078": {
+      "subject": "Merge pull request #1078 from EratoLab/feature/ermain-711-support-admin-panel-routing-alongside-an-active-backend-load",
+      "commits": [
+        "a40e7a3f14770beb45084a9a0f96f410bc8b252e"
+      ]
+    },
+    "1079": {
+      "subject": "Merge pull request #1079 from EratoLab/feat/expose-api-client-frontend-library",
+      "commits": [
+        "672fc793bc0dc3335808fc1dbfdf376b7402d9f7"
+      ]
+    },
+    "1080": {
+      "subject": "Merge pull request #1080 from EratoLab/feature/ermain-682-add-reloading-of-mcp-server-configuration-based-on-admin",
+      "commits": [
+        "03f2767e19ba856036aeb7af6e0ed8ff4e367ad4"
+      ]
+    },
+    "1071": {
+      "subject": "Add experience policy document as a runtime configuration source type (ERMAIN-694) (#1071)",
+      "commits": [
+        "de91aa4de1a3b921a876bf00a1223cea02730034"
+      ]
+    },
+    "1072": {
+      "subject": "Serve the per-user starting assistant on GET /me/starting-assistant (ERMAIN-695) (#1072)",
+      "commits": [
+        "72bb63df04f6ace2986f1e559955801b38a84010"
+      ]
+    },
+    "1073": {
+      "subject": "Let a person override or clear their start screen, and land them there (ERMAIN-696) (#1073)",
+      "commits": [
+        "b9c44f66a9d0ea9c6009932eb49e2c900edc89ea"
+      ]
+    },
+    "1077": {
+      "subject": "Let an audience expire: read-time expires_at in the starting-assistant resolver (#1077)",
+      "commits": [
+        "e0e614750f9da10e4cac3e367e543e366909daa2"
+      ]
+    },
+    "1081": {
+      "subject": "erato: per-setting resolution orders + stable audience ids on the wire (dual-written, invisible at one setting) (#1081)",
+      "commits": [
+        "d9825cce4f8584e42d4b356b19e886ad59893191"
+      ]
+    },
+    "1083": {
+      "subject": "Merge pull request #1083 from EratoLab/feature/ermain-726-office-add-in-default-settings-should-be-configurable",
+      "commits": [
+        "a1c85f56d6dc472e99d0ee881bc18f548aafc992"
+      ]
+    },
+    "1084": {
+      "subject": "Merge pull request #1084 from EratoLab/feature/ermain-727-establish-chaos-server",
+      "commits": [
+        "b9cb127f2829da3ef2905014ff69999008584d4d"
+      ]
+    },
+    "1085": {
+      "subject": "Merge pull request #1085 from EratoLab/feature/ermain-728-failed-to-send-tool_call_proposed-event-channel-closed",
+      "commits": [
+        "7d7bd0e1727f35bd71b479082f30fc295c077268"
+      ]
+    },
+    "1082": {
+      "subject": "Audience snapshot provenance, and the gate for re-keying the audiences map by id (ERMAIN-721) (#1082)",
+      "commits": [
+        "085b877c113c3adb4d8711b3f9219867a496d947"
+      ]
+    },
+    "1088": {
+      "subject": "Derive dropdown row radius from a panel radius token and four-sided inset (#1088)",
+      "commits": [
+        "0337026c89326d3d19fd16d23ef1aba985490949"
+      ]
+    },
+    "1091": {
+      "subject": "Give customer themes hooks and tokens for cards, tab rails, attachments, and the add-in header (#1091)",
+      "commits": [
+        "68ceb2de28cb4db8ad15df62d295600b155c2954"
+      ]
+    },
+    "1094": {
+      "subject": "Merge pull request #1094 from EratoLab/feature/ermain-743-support-non-image-file-outputs-from-mcp-tools",
+      "commits": [
+        "98852fd27fbb4a4925cde14d36b553d2a3387a38"
+      ]
+    },
+    "1093": {
+      "subject": "Merge pull request #1093 from EratoLab/feature/ermain-742-add-assistants-usage-view",
+      "commits": [
+        "9127ec68136b7e889cb7c603428e69990211309b"
+      ]
+    },
+    "1092": {
+      "subject": "Move every loading ring onto one themable spinner primitive (#1092)",
+      "commits": [
+        "d4962b5d3b887f90cb3111a9d318608aeb454799"
+      ]
+    },
+    "1089": {
+      "subject": "Add a user text-size setting to the Appearance tab (ERMAIN-739) (#1089)",
+      "commits": [
+        "c05f615ba1d2c2c848bfc27679eaa8e72486c77e"
+      ]
+    },
+    "1095": {
+      "subject": "Resolve dropped .msg emails that ANSI-encode the Message-ID, and attach ones the mailbox cannot find (#1095)",
+      "commits": [
+        "8e852d859e32d33e2b5fbaccb5957d2aac6e5d9b"
+      ]
+    },
+    "1097": {
+      "subject": "Merge pull request #1097 from EratoLab/feature/ermain-747-fix-mcp-oauth2-resourcescope-mismatch-with-microsoft-entra",
+      "commits": [
+        "05fa4f7e1feab732500805d7c47af6d8b1115589"
+      ]
+    },
+    "1096": {
+      "subject": "Move the capsule dialect, the alert frame and selected state onto themable channels (#1096)",
+      "commits": [
+        "45290f9da21a481eef3da4bb17d414ebe4e11a57"
+      ]
+    },
+    "1098": {
+      "subject": "Merge pull request #1098 from EratoLab/feature/ermain-749-message-edit-action-missing-from-user-message-in-pinned-chat",
+      "commits": [
+        "2c63225849ad6879fb23b719f556a508417dd261"
+      ]
+    },
+    "1100": {
+      "subject": "Move the popover family onto a shared panel primitive and themable shape channels (#1100)",
+      "commits": [
+        "24c7b04207565cbb58a32eb1d3fe47f164f19c9a"
+      ]
+    },
+    "1086": {
+      "subject": "Make the centered new-chat composer layout the default (ERMAIN-736) (#1086)",
+      "commits": [
+        "e515a78349407db8239504917d81f2bce7376f79"
+      ]
+    },
+    "1099": {
+      "subject": "Merge pull request #1099 from EratoLab/feature/ermain-748-handle-mcp-progress-notifications-and-forward-them-to-the",
+      "commits": [
+        "f331502e959219771dd89ac54b387e88313bef1e"
+      ]
+    },
+    "1087": {
+      "subject": "Reduce and reorganize the new-chat welcome content (ERMAIN-737) (#1087)",
+      "commits": [
+        "b906e7b56d305780e8593ef2b5a8c959340aa9da"
+      ]
+    },
+    "1101": {
+      "subject": "Move menu and sidebar rows onto one Row primitive (#1101)",
+      "commits": [
+        "da358ac1dd4b2e48a11bc9cf4c344cd5bb8e6713"
+      ]
+    },
+    "1106": {
+      "subject": "Merge pull request #1106 from EratoLab/fix-kubescape",
+      "commits": [
+        "e1d5e0c1e36a2c9ac077c9c960d277812b65e7c7"
+      ]
+    },
+    "1112": {
+      "subject": "Merge pull request #1112 from EratoLab/feature/ermain-786-main-url-should-be-used-as-oauth2-callback-route",
+      "commits": [
+        "095a6bf60b4ce683350f60f2441b9cf55d838836"
+      ]
+    },
+    "1105": {
+      "subject": "Move the card family onto one Card primitive and themable geometry and skin channels (#1105)",
+      "commits": [
+        "e6125d6b6217452aeee0d7a2088bb0080691b131"
+      ]
+    },
+    "1113": {
+      "subject": "Fix Gemini 3 thinking level for audio transcription (#1113)",
+      "commits": [
+        "30f9f3fb268e6b80f95f2c87785055f9d1fdf666"
+      ]
+    },
+    "1114": {
+      "subject": "Align host i18n ids with the component kit (#1114)",
+      "commits": [
+        "2cc3259e64644a658969d2ff27ce39cbcebd5a6a"
+      ]
+    },
+    "1117": {
+      "subject": "Keep the selected microphone across device-list churn (ERMAIN-795) (#1117)",
+      "commits": [
+        "45777be1380c2815b71b02f050d52cb954914d08"
+      ]
+    },
+    "1116": {
+      "subject": "Surface provider content blocks in audio transcription as a user-facing error (#1116)",
+      "commits": [
+        "16045b730aed93d6137896eecba1c7f38367d0dc"
+      ]
+    },
+    "934": {
+      "subject": "feat: enforce configured file-size limits across all local upload paths (#934)",
+      "commits": [
+        "b3ba25b8c06396352017247cab4c637aa47bfd77"
+      ]
+    },
+    "1115": {
+      "subject": "Move the attachment chip family onto one tile primitive and themable corner and tint channels (#1115)",
+      "commits": [
+        "646e7bcf6eabbbcf0c5a3fc01a7f4e6329510f57"
+      ]
+    },
+    "1122": {
+      "subject": "Merge pull request #1122 from EratoLab/sidecar-certificate-distribution",
+      "commits": [
+        "5ae905793a510b6e3e9e4762b085ded46925e4a1"
+      ]
+    },
+    "1124": {
+      "subject": "Merge pull request #1124 from EratoLab/feature/ermain-787-investigate-chat-latency-under-concurrency-locally-match-dex",
+      "commits": [
+        "8c32899dca5941af9df75549df3dbe51263acffd"
+      ]
+    },
+    "1120": {
+      "subject": "Seat the share button in one chat top bar with the kit accessory (#1120)",
+      "commits": [
+        "1ddd35216c2f06fbe6c539955ad0012e201a4389"
+      ]
+    },
+    "1125": {
+      "subject": "Blink a pending dot on the tab favicon for the open chat (#1125)",
+      "commits": [
+        "6e5662deb62bb4232536c69740cdae519e6c1787"
+      ]
+    },
+    "1104": {
+      "subject": "Support shared mailboxes in the Outlook add-in (ERMAIN-752) (#1104)",
+      "commits": [
+        "992579c6987c345edd02d752fd6395d1f9aeca8f"
+      ]
+    },
+    "1126": {
+      "subject": "Shared-mailbox follow-ups: row routing, scope binding, sign-in retry, manifest checks (#1126)",
+      "commits": [
+        "c638b64e6ee80c42a28ebf8f36257b7768f0cf0a"
+      ]
+    },
+    "1103": {
+      "subject": "Anchor the pane to the conversation when a thread header is selected (ERMAIN-753) (#1103)",
+      "commits": [
+        "f0e7eb540d686986dba05c305448e2c987d84e4e"
+      ]
+    },
+    "1129": {
+      "subject": "Move the tab family onto one TabRail primitive and themable rail and track channels (#1129)",
+      "commits": [
+        "1586830a0e667266de339df6e15ddd55f6b80e27"
+      ]
+    },
+    "1118": {
+      "subject": "Give every dropped file feedback and stage drops through a visible pipeline (#1118)",
+      "commits": [
+        "9055679cb02dd833ff257fdf09f4afc711b8e957"
+      ]
+    },
+    "1119": {
+      "subject": "Stage emails before send: eager resolution, per-part verdicts and a composer size gate (#1119)",
+      "commits": [
+        "9c388f5412c132cdd1cbf21e0443081551a22ed9"
+      ]
+    },
+    "1121": {
+      "subject": "Reach the files inside forwarded emails (#1121)",
+      "commits": [
+        "dba64b311ab7e7f0b73e4644b326dee832824f7b"
+      ]
+    },
+    "1130": {
+      "subject": "Match the Markdown field's focus highlight to its frame (#1130)",
+      "commits": [
+        "0b0da5d63fd26dcf2f1e2f7c26f5929d474465a1"
+      ]
+    },
+    "1128": {
+      "subject": "Merge pull request #1128 from EratoLab/hobofan/ermain-804-replace-global-policy-rebuilds-with-r",
+      "commits": [
+        "1400bfbf4a1d675b3d5bed98c30ae6f1a6831184"
+      ]
+    },
+    "1132": {
+      "subject": "Merge pull request #1132 from EratoLab/feature/ermain-808-share-frontendregistry-via-arc-and-cache-runtime-po-to-json",
+      "commits": [
+        "9fc9afa3e8b65a7e625e705ca9748824b74873de"
+      ]
+    },
+    "1133": {
+      "subject": "Move the sidebar bands and toggles onto SidebarBand and SidebarToggle (#1133)",
+      "commits": [
+        "2e1dc7c813d75ff2b98c62d817dab1e45d3af981"
+      ]
+    },
+    "1138": {
+      "subject": "Declare the component-kit surface and the themable host class names (#1138)",
+      "commits": [
+        "e00a6597b51631c9c153e715cd448dafd1b0c8d3"
+      ]
+    },
+    "1139": {
+      "subject": "Request email scope explicitly for Outlook sign-in (#1139)",
+      "commits": [
+        "af93cde0eaaf9adf86eec5fea7f54c5ae463bf5e"
+      ]
+    },
+    "1102": {
+      "subject": "Let theme packs declare optional assets instead of 404ing on them (#1102)",
+      "commits": [
+        "eddfbad3d87d5227f4e9bb9a1f1035f0eafb8b77"
+      ]
+    },
+    "1141": {
+      "subject": "Let the sidebar test's logo path reach the theme mock (#1141)",
+      "commits": [
+        "bcc923d22e4e596a7644d1b6465cc7b99c1c4555"
+      ]
+    },
+    "1137": {
+      "subject": "Merge pull request #1137 from EratoLab/feature/ermain-800-use-hash-of-all-inline-configmaps-to-determine-redeployment",
+      "commits": [
+        "c4140619459969821a0d619a4c83c804f41d7dee"
+      ]
+    },
+    "1131": {
+      "subject": "Add an unarchive endpoint for chats (ERMAIN-794) (#1131)",
+      "commits": [
+        "0176e298580a0d1a1829e559ef6a2f2be19921c6"
+      ]
+    },
+    "1134": {
+      "subject": "Share an unarchive action across both chat hosts (ERMAIN-794) (#1134)",
+      "commits": [
+        "c86c17595daeb27467f93317335ab65d49d09241"
+      ]
+    },
+    "1135": {
+      "subject": "Mark archived chats in history and offer unarchive (ERMAIN-794) (#1135)",
+      "commits": [
+        "dc95ca95114b1c9a2744ab0a44b498bfa09e73b2"
+      ]
+    },
+    "1142": {
+      "subject": "Merge pull request #1142 from EratoLab/ermain-802-configurable-port",
+      "commits": [
+        "40e930d8fb9d15c11e9589b41cfea0a08146b60a"
+      ]
+    },
+    "1136": {
+      "subject": "Close the composer on an archived chat and explain it (ERMAIN-794) (#1136)",
+      "commits": [
+        "88f75682a76a4d1104040e080aaaf2d046f935ef"
+      ]
+    },
+    "1143": {
+      "subject": "Merge pull request #1143 from EratoLab/ermain-811-protocol-adjustments",
+      "commits": [
+        "a0729d844569c46669086ec9cf2e5ef0534874c8"
+      ]
+    },
+    "1144": {
+      "subject": "Merge pull request #1144 from EratoLab/ermain-811-protocol-adjustments",
+      "commits": [
+        "7e542487541e62d30b6ba05e6d63328a1801dcae"
+      ]
+    },
+    "1145": {
+      "subject": "Stop a component kit silently dropping host behaviour from the chat history row (#1145)",
+      "commits": [
+        "fdd9cb1ea154e8f8f93a2bb67cb1af1d0640656b"
+      ]
+    },
+    "1146": {
+      "subject": "Enumerate an MCP server's tools for the user with the effective projection (#1146)",
+      "commits": [
+        "516e884be391ff997ca9f163ae0dddddae16d5f7"
+      ]
+    },
+    "1147": {
+      "subject": "Let a user deny an MCP tool for themselves and enforce it at both generation sites (#1147)",
+      "commits": [
+        "026b92b1de7c109c1c9ffa1ed2418ebd745ec9d4"
+      ]
+    },
+    "1148": {
+      "subject": "Add a per-chat write-operations switch and the composer Connectors section (#1148)",
+      "commits": [
+        "731adbef0e9fe67a41a19ce5e35c356b595b98a5"
+      ]
+    },
+    "1149": {
+      "subject": "Switch MCP servers off per chat from the composer connectors (#1149)",
+      "commits": [
+        "33bbad5524b6c2f7c2244c61ad8bc0f3389355f9"
+      ]
+    },
+    "1150": {
+      "subject": "Switch single MCP tools off per chat from the tool browser (#1150)",
+      "commits": [
+        "0d6065f6b4f4f7b234d9bb0010622c64373f0b3d"
+      ]
+    },
+    "1152": {
+      "subject": "Add a per-tool Ask decision, the effective state on the wire and bulk tool decisions (#1152)",
+      "commits": [
+        "669c75d3df9281d5d5f52df7d1830037aae81a94"
+      ]
+    },
+    "1107": {
+      "subject": "Lift delegation config to `[delegation]` and reserve the `erato` tool namespace (ERMAIN-754) (#1107)",
+      "commits": [
+        "eefe802b9dcd4b151f65fa3bf4c75ed155f7732a"
+      ]
+    },
+    "1108": {
+      "subject": "Rename `AssistantConfiguration` to `ChatConfiguration` with an optional assistant and a task spec (ERMAIN-755) (#1108)",
+      "commits": [
+        "2bf64b01d003b1fd009f48a24b39e327dcdf9a19"
+      ]
+    },
+    "1109": {
+      "subject": "Split `dispatch_delegate_tool_call` into launch and await (ERMAIN-756) (#1109)",
+      "commits": [
+        "ebf118a9532d5d551a7934f0d5fa0818c92886f8"
+      ]
+    },
+    "1157": {
+      "subject": "Release the MCP consent card when the decision is accepted and stream the continuation (#1157)",
+      "commits": [
+        "ca16c701587a384a8f7cdf5d7d0fc63caf9ef94d"
+      ]
+    },
+    "1110": {
+      "subject": "Select reserved `erato/*` tools with the client-tool collector (ERMAIN-758) (#1110)",
+      "commits": [
+        "1f11f8963b26fcb96919bc664874e211fad20fbc"
+      ]
+    },
+    "1159": {
+      "subject": "Merge pull request #1159 from EratoLab/feature/ermain-813-add-mechanism-to-control-mailbox-indexing-configuration",
+      "commits": [
+        "633f413fe67dac5b6f29e2c02f367859ddd10859"
+      ]
+    },
+    "1158": {
+      "subject": "Merge pull request #1158 from EratoLab/feature/ermain-817-stabilize-experimental-config-keys",
+      "commits": [
+        "96d0051f7e5c524221bf9a76f688d8fc4e20eadf"
+      ]
+    },
+    "1160": {
+      "subject": "Merge pull request #1160 from EratoLab/feature/ermain-818-set-up-sidecar-indexing-benchmarking-mechanism",
+      "commits": [
+        "b41aa7154610b4863ef19128967faa850d607fb4"
+      ]
+    },
+    "1161": {
+      "subject": "Hand a message renderer the MCP notices and the action-facet context (#1161)",
+      "commits": [
+        "5b8df7ce9eb22e39b49fd768ac58e6327a467185"
+      ]
+    },
+    "1173": {
+      "subject": "Let a message renderer consume host behaviour instead of copying it (#1173)",
+      "commits": [
+        "5025dc40549735222a0990ad27865a5c70b491fc"
+      ]
+    },
+    "1174": {
+      "subject": "Share grouped attachment behavior and rendering with component kits (#1174)",
+      "commits": [
+        "9f6c5d87179f4f423619c4cbb2c38eefe29c429c"
+      ]
+    },
+    "1162": {
+      "subject": "Accept the delegation status vocabulary and the `delegate_task` tool name (ERMAIN-763) (#1162)",
+      "commits": [
+        "fa1a5eee9a419d54bb8588e778efc88b2383d0fb"
+      ]
+    },
+    "1168": {
+      "subject": "Make the add-in client-action stack host-neutral (ERMAIN-543, ERMAIN-546) (#1168)",
+      "commits": [
+        "3c2564758d298b6fe07307543cdd660e11ebe405"
+      ]
+    },
+    "1163": {
+      "subject": "Report why a delegated run ended and frame the child's answer (ERMAIN-767) (#1163)",
+      "commits": [
+        "6a2bb0a5d84dfa496f8f70dbb498268cf2a4be49"
+      ]
+    },
+    "1178": {
+      "subject": "Share attachment tile and composer rendering with component kits (#1178)",
+      "commits": [
+        "a93b6d3f31eddd4986e9f2090f5afb9646a55ed4"
+      ]
+    },
+    "1179": {
+      "subject": "Bound how long a turn waits on a silent chat provider (ERMAIN-824) (#1179)",
+      "commits": [
+        "8c896fe35b6013dd1bd9fcc021e0377766278cba"
+      ]
+    },
+    "1183": {
+      "subject": "Share assistant welcome configuration with component kits (#1183)",
+      "commits": [
+        "9a7a34387d2936614a93168b10232f731749b437"
+      ]
+    },
+    "1164": {
+      "subject": "Offer and dispatch `delegate_task` awaited and serial (ERMAIN-770) (#1164)",
+      "commits": [
+        "5d0bc1e12e767cbf5320a9eb54f990cc368a48a1"
+      ]
+    },
+    "1176": {
+      "subject": "Show a trace step as running from its own status, not its position (ERMAIN-771) (#1176)",
+      "commits": [
+        "fd2bc36c58e6fe54ca156d8597ff3e2c41131e94"
+      ]
+    },
+    "1177": {
+      "subject": "Keep the MCP session map and configuration free while a server is slow (ERMAIN-760) (#1177)",
+      "commits": [
+        "eaf7b30bad2a94cfc8da66c1958b067eb020ede7"
+      ]
+    },
+    "1165": {
+      "subject": "Bound a task run with two independent tool-call budgets (ERMAIN-774) (#1165)",
+      "commits": [
+        "69afa604597d6f9edd02613ffdecbbf4266d1d65"
+      ]
+    },
+    "1184": {
+      "subject": "Merge pull request #1184 from EratoLab/feature/ermain-827-add-generalized-sources-rpc-commands",
+      "commits": [
+        "e2457dd6ed7db022175ab92b5a346f21b054413f"
+      ]
+    },
+    "1166": {
+      "subject": "Render what a delegated task actually ran (ERMAIN-775) (#1166)",
+      "commits": [
+        "6c2f6c39249f7937989bc4767f3f90890f20ebb1"
+      ]
+    },
+    "1185": {
+      "subject": "Merge pull request #1185 from EratoLab/feature/ermain-828-extend-sidecar-search-query-with-generic-metadata-filter",
+      "commits": [
+        "dacc3583c2bee4d372c9a2da1fbaac6c7cf4bc6d"
+      ]
+    },
+    "1180": {
+      "subject": "Put a delegated task on disk at the slot it will settle into (ERMAIN-764) (#1180)",
+      "commits": [
+        "9d357bc27007eb23a2937fee2ff928b026b2147d"
+      ]
+    },
+    "1181": {
+      "subject": "Run a turn's delegated tasks side by side, bounded (ERMAIN-768) (#1181)",
+      "commits": [
+        "06760318f36b3ae9bb46e36450b7cc1bfbb20f72"
+      ]
+    },
+    "1186": {
+      "subject": "Merge pull request #1186 from EratoLab/feature/ermain-841-extend-search-results-with-externally-relatable-identifiers",
+      "commits": [
+        "00f6e02c4e818e8e0a4ec42c37f818ec289b7774"
+      ]
+    },
+    "1187": {
+      "subject": "Show MCP authorization progress across web and add-in (#1187)",
+      "commits": [
+        "5449155014fe904d8394ccbd0c824f4728184684"
+      ]
+    },
+    "1193": {
+      "subject": "Speed up MCP server listing with bounded parallel probes (#1193)",
+      "commits": [
+        "aa88ef72fa80bb74074945d0609a88b80d150f0e"
+      ]
+    },
+    "1194": {
+      "subject": "Report MCP authorization through the house feedback components (#1194)",
+      "commits": [
+        "c8784f33016bf4b4ff522b0b1a15dba6bed8889c"
+      ]
+    },
+    "1195": {
+      "subject": "Make the two MCP approval surfaces agree (#1195)",
+      "commits": [
+        "8f5c163b8eacf4aeb18f79f2b27dc46166d891be"
+      ]
+    },
+    "1188": {
+      "subject": "Refuse a second write into a generating chat instead of taking it over (ERMAIN-776) (#1188)",
+      "commits": [
+        "9e97079f71d098494f62fe5924a276631ef4897f"
+      ]
+    },
+    "1189": {
+      "subject": "Carry a delegated task's result back into the chat that started it (ERMAIN-777) (#1189)",
+      "commits": [
+        "f66dfbd59cb66ba5f28b6319ea85c7c2eefb3970"
+      ]
+    },
+    "1190": {
+      "subject": "Keep a delivered task result on the thread when a stale client replies (ERMAIN-778) (#1190)",
+      "commits": [
+        "0b06314706b126472aa2ba328bf31735fabae9b5"
+      ]
+    },
+    "1191": {
+      "subject": "Render a delivered task result in the conversation (ERMAIN-779-A, 1/2) (#1191)",
+      "commits": [
+        "ebe6e7f2e5a861b603db67e06da0e496356ec29f"
+      ]
+    },
+    "1192": {
+      "subject": "Dispatch and deliver async delegated tasks (ERMAIN-780) (#1192)",
+      "commits": [
+        "8dfae53cdf7e8bbd73cec4582009e6b77732eb55"
+      ]
+    },
+    "1196": {
+      "subject": "Recover a stranded async task result without a user request (ERMAIN-781-A) (#1196)",
+      "commits": [
+        "1b69a9906bca2b746c8f9f5a6abe1505e66107f0"
+      ]
+    },
+    "1197": {
+      "subject": "Let a client ask for the reaction a delivered task result never got (ERMAIN-781-B) (#1197)",
+      "commits": [
+        "d13dee458ffb3a766c2f31f4c90d4fd1df62a797"
+      ]
+    },
+    "1199": {
+      "subject": "Tell the sidebar a delegated run is still in flight (ERMAIN-782) (#1199)",
+      "commits": [
+        "8aa4b9079521484178a14e906b4324052bce027b"
+      ]
+    },
+    "1200": {
+      "subject": "React to a delivered task result without a reload (ERMAIN-779-B) (#1200)",
+      "commits": [
+        "fc41f3654dbbb410fb8d334dcc7814c3034e469e"
+      ]
+    },
+    "1201": {
+      "subject": "Retry a failed delegated task from the origin chat (ERMAIN-783) (#1201)",
+      "commits": [
+        "6b4cc103dae991a6e308bb17b3410ddcc33b0893"
+      ]
+    },
+    "1202": {
+      "subject": "Index the async delivery lookups and the latest-generation probe (ERMAIN perf follow-up) (#1202)",
+      "commits": [
+        "4027876d7b31ef99ad9ac7f90bf3268e5fe5fda1"
+      ]
+    },
+    "1210": {
+      "subject": "Fix Teams document kinds in desktop sidecar protocol (#1210)",
+      "commits": [
+        "2d51602a2a85785e796b8f5847402dc88b850933"
+      ]
+    },
+    "1211": {
+      "subject": "Fix sidecar mailbox IDs and keep indexing status in settings (#1211)",
+      "commits": [
+        "055aa417895e51fb8cb35158b69cd37d5993a89c"
+      ]
+    },
+    "1215": {
+      "subject": "Add validated client submissions with bounded corrections (#1215)",
+      "commits": [
+        "0efbbcceab05e90cbcef7b06218a3f8450d30259"
+      ]
+    },
+    "1213": {
+      "subject": "Merge pull request #1213 from EratoLab/feature/optional-sidecar-chat-tools",
+      "commits": [
+        "0718eebcf9c367d3504f716e883e65e8a27282f8"
+      ]
+    },
+    "1216": {
+      "subject": "Merge pull request #1216 from EratoLab/feature/sidecar-metadata-tools",
+      "commits": [
+        "29f8a4efaf2db62f6305d4936771b40498d24994"
+      ]
+    },
+    "1217": {
+      "subject": "fix: stream tool argument preparation into the chat trace (#1217)",
+      "commits": [
+        "ee13a2b036a9420c15c6fd263e5a7116049ee99a"
+      ]
+    },
+    "1219": {
+      "subject": "Add optional sidecar mailbox and folder browsing tools (#1219)",
+      "commits": [
+        "a22dc5cec102f1d60909f2d3b622667408685de7"
+      ]
+    },
+    "1218": {
+      "subject": "Merge pull request #1218 from EratoLab/feature/ermain-852-allow-client-tools-to-add-files-to-their-response",
+      "commits": [
+        "2b49d2c3e7f770e7342e750b9e3ef2682b351d8e"
+      ]
+    },
+    "1225": {
+      "subject": "Merge pull request #1225 from EratoLab/feature/ermain-855-extend-sidecar-to-make-every-document-retrievable-as-file",
+      "commits": [
+        "878efb612dffdd4037d3725aabe1ec2173f32af6"
+      ]
+    },
+    "1227": {
+      "subject": "Merge pull request #1227 from EratoLab/feature/ermain-788-ensure-that-url-for-mcp-servers-is-sanitized-before-logging",
+      "commits": [
+        "8cadb56cbc8f7933036d2927e5d829d73e07c571"
+      ]
+    },
+    "1229": {
+      "subject": "Merge pull request #1229 from EratoLab/feature/ermain-855-extend-sidecar-to-make-every-document-retrievable-as-file-2",
+      "commits": [
+        "c09af56c18788e0cfc51194d4b07c89c52df8971"
+      ]
+    },
+    "1231": {
+      "subject": "Merge pull request #1231 from EratoLab/feature/ermain-856-rework-mcp-settings-dialog",
+      "commits": [
+        "99f238e8cad072a7ffbb849cc0a8023ceb1f5a08"
+      ]
+    },
+    "1230": {
+      "subject": "Delegation Level D: approvals for delegated tasks, with end-to-end coverage (#1230)",
+      "commits": [
+        "1b2213d39b55948f6c1bce0e03f1c3d4c11af32d"
+      ]
+    },
+    "1233": {
+      "subject": "Merge pull request #1233 from EratoLab/feature/erdscar-8-extend-protocol-for-allowing-deep-links-for-outlook-files",
+      "commits": [
+        "b81143340907e2ecfb3ef569b4f58bb717cb06d3"
+      ]
+    },
+    "1234": {
+      "subject": "Merge pull request #1234 from EratoLab/feature/ermain-857-add-approval-flow-for-adding-files-resulting-from-client",
+      "commits": [
+        "0444deefc1bf041d58942d401264f1c16c56ae34"
+      ]
+    },
+    "1235": {
+      "subject": "Merge pull request #1235 from EratoLab/feature/ermain-859-track-external-ews-id-on-file-uploads-originating-from",
+      "commits": [
+        "bfda87041b0b0da38fc5cf9b1fc64784f663cf59"
+      ]
+    },
+    "1232": {
+      "subject": "Add Word add-in with structured document authoring (#1232)",
+      "commits": [
+        "9d58dd36bd4da4167f7cba9b833def9111cd7aa2"
+      ]
+    },
+    "1236": {
+      "subject": "Settle crash-orphaned tool calls, and stop calling them done (#1236)",
+      "commits": [
+        "adf137d9825fde278ccd249d1f076e9ee11bb0e7"
+      ]
+    },
+    "1238": {
+      "subject": "Composer: say in advance when delegated work needs approving (#1238)",
+      "commits": [
+        "658c341821b9effd565ada480d5809a86c11e45a"
+      ]
+    },
+    "1239": {
+      "subject": "Define Outlook source references for uploaded files (#1239)",
+      "commits": [
+        "818d148bcaee37d819f71db14ab749eb64a7b272"
+      ]
+    },
+    "1240": {
+      "subject": "Settle an origin slot its own turn will never come back for (#1240)",
+      "commits": [
+        "9405b9ad98fe12079584f9a25bfb7f24529beb53"
+      ]
+    },
+    "1241": {
+      "subject": "Persist Outlook source references on uploaded files (#1241)",
+      "commits": [
+        "5d8ee086485cb957d1e6122bc234a64591402e0e"
+      ]
+    },
+    "1242": {
+      "subject": "Merge pull request #1242 from EratoLab/feature/erdscar-7-add-command-to-open-sidecar-data-directory",
+      "commits": [
+        "d948d19b6afb38a822cc30a630c05455a26689bb"
+      ]
+    },
+    "1245": {
+      "subject": "Merge pull request #1245 from EratoLab/feature/ermain-870-assistant-hub-assistants-should-be-selectable-in-delegation",
+      "commits": [
+        "7e0e04dfcc7582a20e9f31d6af9e9cb473799723"
+      ]
+    },
+    "1244": {
+      "subject": "Merge pull request #1244 from EratoLab/feature/ermain-869-render-html-line-breaks-in-markdown-table-cells",
+      "commits": [
+        "a8d93b6b56e2833320e316067ee1245c09d086af"
+      ]
+    },
+    "1247": {
+      "subject": "Merge pull request #1247 from EratoLab/feature/ermain-873-completion-can-be-stuck-after-sidecar-related-tool-calls",
+      "commits": [
+        "8c002601bef856c6c354dce141e59d01636bb552"
+      ]
+    },
+    "1243": {
+      "subject": "feat: open source emails from previews and upload consent (#1243)",
+      "commits": [
+        "6f2e165bd0487703abdfe7a7439915ee8bc04082"
+      ]
+    },
+    "1248": {
+      "subject": "Merge pull request #1248 from EratoLab/feature/ermain-555-production-distribution-for-the-combined-outlook-teams-app",
+      "commits": [
+        "de31f87c5bafc7d7a8cf158d69ca5cc67acb5906"
+      ]
+    },
+    "1250": {
+      "subject": "feat(prompt-composition): replay earlier-turn client tool calls as receipts; count tool parts in token estimate (ERMAIN-868) (#1250)",
+      "commits": [
+        "ea564314b87409a2592fada48d586040cd6413e1"
+      ]
+    },
+    "1249": {
+      "subject": "Add disabled durable client-operation foundation (#1249)",
+      "commits": [
+        "c31200e101ab71c3d24df9dfc9a648ffd17e82db"
+      ]
+    },
+    "1237": {
+      "subject": "ERMAIN-862: Native local evidence as a durable client operation (#1237)",
+      "commits": [
+        "2de68f62eba7fd0dc2e2426e18b50ade2e77bbe9"
+      ]
+    },
+    "1251": {
+      "subject": "Show add-in UI in the host application's display language (#1251)",
+      "commits": [
+        "c71bff3b06de4bf6d20a6c27c1632e1480f6be5d"
+      ]
+    },
+    "1252": {
+      "subject": "fix(frontend): build local sidecar protocol before dev startup (#1252)",
+      "commits": [
+        "3685732cfcefef06ada097dd5aae1e11b774f740"
+      ]
+    },
+    "1253": {
+      "subject": "Add Teams bot tables and user Entra object ID (#1253)",
+      "commits": [
+        "1ff9c38af02a6b441fa67c18be0b15419337a131"
+      ]
+    },
+    "1254": {
+      "subject": "Show Teams bot setup steps and add the Teams bot guide (#1254)",
+      "commits": [
+        "94e11101fdb468dbf589941ce34e0547d237299a"
+      ]
+    },
+    "1255": {
+      "subject": "Merge pull request #1255 from EratoLab/feature/ermain-874-add-support-for-allowing-model-to-retrieve-images-from-pdf",
+      "commits": [
+        "3f5867419590e3a57339a41196f95f1eb709377d"
+      ]
+    },
+    "1256": {
+      "subject": "Merge pull request #1256 from EratoLab/feature/ermain-876-when-using-the-outlook-adding-when-drafting-an-email-add",
+      "commits": [
+        "3d3a237cb15c6542a3f0e4fb558c716df7de68a2"
+      ]
+    },
+    "1262": {
+      "subject": "Merge pull request #1262 from EratoLab/feature/ermain-878-returning-to-an-assistants-landing-page-keeps-the-previous",
+      "commits": [
+        "f94f280084b7cb4b277c0d481c695dda6e9c8433"
+      ]
+    },
+    "1261": {
+      "subject": "Merge pull request #1261 from EratoLab/feature/ermain-729-when-the-tool-call-limit-is-encountered-force-the-model-to",
+      "commits": [
+        "6035beb9fb5be338bb8a88267d72aea1a89e8fb3"
+      ]
+    },
+    "1263": {
+      "subject": "Merge pull request #1263 from EratoLab/feature/ermain-877-gpt-5-tool-arguments-containing-nul-cause-final-message-save",
+      "commits": [
+        "e122129530f0ee591d79679802e611e0f49a3d8e"
+      ]
+    },
+    "1259": {
+      "subject": "Show Word messages immediately while the document is prepared (#1259)",
+      "commits": [
+        "7577146171378f8f9ea44a8066416c39672a81ab"
+      ]
+    },
+    "1260": {
+      "subject": "Record where chats were created and filter the chat list by source (#1260)",
+      "commits": [
+        "81d83b6f9a5ebf405cc2d8500c6ed7ebed460eab"
+      ]
+    },
+    "1257": {
+      "subject": "Precise Word plan diagnostics and normalize misplaced built-in styles (#1257)",
+      "commits": [
+        "c23541c295e00f78907b4dd91f7a36b820efc79a"
+      ]
+    },
+    "1258": {
+      "subject": "Show Word apply progress on the Apply button and read documents less often (#1258)",
+      "commits": [
+        "d64024cf4524c0cdecacd281ab826c0defba50af"
+      ]
+    },
+    "1265": {
+      "subject": "Repair rejected Word plans with small patches (#1265)",
+      "commits": [
+        "4c48c4fa821a42c294393b884730f5e5123bf486"
+      ]
+    }
+  },
+  "unmatched_commits": [
+    {
+      "commit": "030f0c965e0327c694fa2e2a34f5edbf7b97de14",
+      "subject": "Unify the rename dialog's generated-title field with the shared Input"
+    }
+  ],
+  "errors": {},
+  "collected": {
+    "780": [
+      "fb80522f20eb0df7c180269c00fe44f6eeda3942"
+    ],
+    "781": [
+      "6c32f6a42d90f282784291bd9099c622728bbde9"
+    ],
+    "783": [
+      "74f74135ea4689b5289d86c807afc0359911dfcf"
+    ],
+    "782": [
+      "b8f674132400c17b2353761150d80b6129f0050c"
+    ],
+    "787": [
+      "b52000816986c0ada10e04f1eedf3e350388ea54"
+    ],
+    "788": [
+      "63159435ebb23927726305176fe1cf7eba9a0623"
+    ],
+    "789": [
+      "a56840eca641474e2dfefc56bbb548c2f43fcef9"
+    ],
+    "785": [
+      "d1a5aed8ab9ce5ed1403c9777c9f12362b752d8a"
+    ],
+    "790": [
+      "d2b07751e8212bc66a8fcb9ee4ee82f5120a9495"
+    ],
+    "791": [
+      "83fe1c012b2fc9412be96cb84126c1dfc8923f79"
+    ],
+    "792": [
+      "37bc5ed75508a75626d5d2300ae4034fbe576c7b"
+    ],
+    "793": [
+      "e5a9cd6f5beb2f3ba0070713bda48e218670b595"
+    ],
+    "794": [
+      "ab9f619b39cdc8fbd03a47791ab967222e3e0af7"
+    ],
+    "786": [
+      "3423b2d870993e2adb54eef20f58bc25be6a7f35"
+    ],
+    "795": [
+      "b2b3f7a3553ba3736710e72b6f190cd802657a80"
+    ],
+    "797": [
+      "1bad198238bdf77ff1bf2fdd471fcc3d010b232c"
+    ],
+    "799": [
+      "ffae23fc174d9d8d0c7d2e5b6256614617c33164"
+    ],
+    "798": [
+      "6f0ea4d3c11fe7e58f06bca596164ea969fe77a3"
+    ],
+    "800": [
+      "40bfd87c881e4b75bb9d264c010deaed8606d2f0"
+    ],
+    "801": [
+      "b302282d89c4bbfe43f90dde1db1b96a9232b107"
+    ],
+    "784": [
+      "9757a1a2545a89b179226a4dd82ba3918449e2cb"
+    ],
+    "802": [
+      "a2d61fef32ec246d48a174770ee4987aca7fa866"
+    ],
+    "803": [
+      "885875983cb16b4c0e9a4557bab9e1e39ac7052f"
+    ],
+    "804": [
+      "136f90247cc18501f7d25d6d8c2b9919cd1b17a4"
+    ],
+    "806": [
+      "afe2803bb12134bddf11ecc2d06153fdf18a02d1"
+    ],
+    "807": [
+      "d875175c9e364c5616c1b9aedcaa0884186e36da"
+    ],
+    "808": [
+      "8f313068390ab6c8f85b84b19afed726090bbc62"
+    ],
+    "810": [
+      "b9c530b68d99b440165c4916ea616c86a1895935"
+    ],
+    "809": [
+      "30fe303d44578f220a9f7c61356abe194ca9a8fb"
+    ],
+    "811": [
+      "d4f6b2f8d61412322c8783a0af47d5fc1193f3fc"
+    ],
+    "812": [
+      "cd3adaadcf2ac5172ba8ce7af4323980cbd1a134"
+    ],
+    "813": [
+      "71189f55d99fe2e6479fdb1365a1526246bf0f86"
+    ],
+    "814": [
+      "0ea0933300d62fdffd9ff5b60f4a83dff6bfdd1b"
+    ],
+    "815": [
+      "77469acbeabf3fdd87861e0a276806ee45e9fe4f"
+    ],
+    "816": [
+      "742a8b198b30a18942cd6d9362992f3c706c5786"
+    ],
+    "817": [
+      "0a80f5029fc473bada642bb5ee1f4ed475df9f7b"
+    ],
+    "818": [
+      "6c08082a96a88df877ae0bf6422355035605ef90"
+    ],
+    "820": [
+      "89429f127b359a241985f1a3fead19d08f08f71c"
+    ],
+    "821": [
+      "b8987c157a2c9af1abc38b906f69b32e29f66e08"
+    ],
+    "823": [
+      "dab2e8bf50cafc9a2057bfd810609339644bb1a1"
+    ],
+    "822": [
+      "9a057fbe3cbb3f928ec51648674850499338d585"
+    ],
+    "824": [
+      "6f62254ab93903a548159a40050c2f835e9131d4"
+    ],
+    "825": [
+      "a25f29ae35b10f0e78601ec7888de5855aa21a49"
+    ],
+    "826": [
+      "147cfe425546a99fd4c26d2c297bb97400ff61f4"
+    ],
+    "829": [
+      "086c27b8a78cb0d94aa7d6b39d6ab30a779c01b5"
+    ],
+    "830": [
+      "e3ec9d5ee5dd05fe881a1b70530222ff88671040"
+    ],
+    "819": [
+      "a1663636fa49d2c14582adaeb24a0a2b4ef2dcb2"
+    ],
+    "827": [
+      "48d8f898afb90795a05765556133d567a6a89dc4"
+    ],
+    "831": [
+      "d2b5585ccd1a3833a060abb4340daab95f2b6eca"
+    ],
+    "796": [
+      "bfdd756506c91e756e516a66d25fe14baeabb6b0"
+    ],
+    "832": [
+      "ceef1fca7009e60fc4df9280683f5fd2a29d119c"
+    ],
+    "828": [
+      "feb3b07a141b41df07deab6c02e4159eca3a986f"
+    ],
+    "833": [
+      "b693c62cbdb2b91c42ddc3ce5eb5eca21d67f422"
+    ],
+    "834": [
+      "6cec69e201cb20e3aaef4dc01f5279de54da83d7"
+    ],
+    "835": [
+      "8bdf3a99bc13a484b75360eae57388399c56fdd8"
+    ],
+    "744": [
+      "3d50181c8352e8596079939b2b9c627910ab1bad"
+    ],
+    "839": [
+      "1af012a56a4bbc694ef97c4ec76e58642622c12d"
+    ],
+    "838": [
+      "964111b1c447af3ef834b4e79a45a6bda9b5e3e3"
+    ],
+    "837": [
+      "e9cef949196e6678f2536cc7dfac25cb1008f7b3"
+    ],
+    "840": [
+      "f86e5681bb54eab12342ee78ec62e32678cf3ea3"
+    ],
+    "836": [
+      "67b9ca86903016b1220bd06dfb40a505a72dfbaf"
+    ],
+    "842": [
+      "22664ebea91c4421e58dee89456ce7796dc60427"
+    ],
+    "841": [
+      "456ddbabc985170d47a59f87e930845b0e703e01"
+    ],
+    "843": [
+      "e07491db7845974c8d0c6a15982ea23c10f6c9d4"
+    ],
+    "846": [
+      "e5af1e07133bb31d1ec05b071cc9473430228392"
+    ],
+    "844": [
+      "e3b487ef811d75a9bc9a988a162e757b3254b66a"
+    ],
+    "847": [
+      "514787643cded016135c5cff4e4ffc88655f6fd3"
+    ],
+    "845": [
+      "f3a4effd72e2084849d38affbced1843171082d0"
+    ],
+    "848": [
+      "9b9e04b963f3e2b1e580fa3bffe7a1eb14b7afe7"
+    ],
+    "849": [
+      "d498da146b30a160633f2eaa4f75c2ff7031deda"
+    ],
+    "850": [
+      "3958374af914e58264d894230d6483467e965c6e"
+    ],
+    "853": [
+      "ef24966a755fd5bc6980024218cf1c572030e36c"
+    ],
+    "851": [
+      "e499b8b856ae181c4379e2d40f2a4c7bbc9f459d"
+    ],
+    "852": [
+      "470a7dd7dc00f533cb278317a8fd3c923607be7e"
+    ],
+    "854": [
+      "f1a4d849fa10a14fea92532fc1892d35d0681694"
+    ],
+    "856": [
+      "047dad476c3d5311048664e773476cc328b42a62"
+    ],
+    "857": [
+      "ef35ea3cb60212275b8c8b533ab99455e84459df"
+    ],
+    "860": [
+      "d8b55cd994044e0bd6ac59510f6407dc480ad9ec"
+    ],
+    "861": [
+      "9c0e5e61206a36078b1d6092a046132ab9a1f4c3"
+    ],
+    "858": [
+      "957bd180ff17d2adbc25433de2a29552b1d536f4"
+    ],
+    "855": [
+      "08bcb312f8f14193c28df721a260247f68fd3f62"
+    ],
+    "864": [
+      "e32109f1589b91367f87c63eb5600736a2bdece3"
+    ],
+    "859": [
+      "873627b572de9610352731fa157bc12cf6031f9a"
+    ],
+    "867": [
+      "6febc8051f2323cccf5cfe8ae83e007f033fdd20"
+    ],
+    "863": [
+      "55083e43adf6d4945694d0bf44242d3f40687965"
+    ],
+    "869": [
+      "5812d6bb7b01b6551b1a4c3a4cabe6c6c5df30bc"
+    ],
+    "871": [
+      "204de63813cd0c9d143901d930149c73ba80bb68"
+    ],
+    "870": [
+      "6955a81524bd2d536af4bb12c50c784e95085855"
+    ],
+    "872": [
+      "083327e7a2b5765e01ec70c1339d973db388345c"
+    ],
+    "874": [
+      "a048af936f039f37916ed539f1a02939b868b054"
+    ],
+    "873": [
+      "79575c9ef4aa29d49cc87b6298d698c2e1bbdd4f"
+    ],
+    "868": [
+      "901efffe352fcdbcd5f94ea3f2bf23dae0580341"
+    ],
+    "875": [
+      "28e3797a75927167bad5e3e2fd3f382511a761cf"
+    ],
+    "876": [
+      "b4265db3740a8949d6f8ee04e0f56a733de79cb5"
+    ],
+    "877": [
+      "d80e95d35bad43774940a3de087d4e0638e6e3e8"
+    ],
+    "865": [
+      "df6ad11c28c1b79c0c7c04c87547ce390c244262"
+    ],
+    "881": [
+      "9f60bde68832e7c5a3bbc135806134396481f7fd"
+    ],
+    "866": [
+      "97de8293794a5acdc84bbe39ce80e15e1cd6b2bf"
+    ],
+    "879": [
+      "72cceb8c7d6f6e96c6af7bb39e1652c141bdb7d3"
+    ],
+    "885": [
+      "7b049263c6ae01cb7e4bd030952dc2390ce0a551"
+    ],
+    "884": [
+      "e20fa5b5b9182f4e81b08696514eaad96a899164"
+    ],
+    "886": [
+      "2e2b5a1411c28c8401bf9e3e96163eac1b0c9c50"
+    ],
+    "888": [
+      "bed67b3a4d96b8c3c78e85295275a89fc40901af"
+    ],
+    "889": [
+      "cfd26d01160a075c2256c39d7c7f4bb4c99c66ca"
+    ],
+    "890": [
+      "d930d3ccd3a71d12442305e8ef7c1d25b4c46600"
+    ],
+    "891": [
+      "e546bfb4738e019fe21a798c16126810d9c68ce3"
+    ],
+    "893": [
+      "5db0634c763c2e36615afbd1d37169795caaf58d"
+    ],
+    "887": [
+      "cd7c2354f5f8bc89b2d9ca4d5ffa4b20ff84bea3"
+    ],
+    "894": [
+      "fd02a0f2b9da1aaff07ff2e7fd36a87357974455"
+    ],
+    "895": [
+      "8fbc8676148a8da7f04f2840b32cb34eb66c4ad9"
+    ],
+    "892": [
+      "3fb8e394c2c883cbf32aa9f2d65de9030f1e35e2"
+    ],
+    "896": [
+      "a161cb6650c25ed86ffbd2f979d722b15403a43d"
+    ],
+    "897": [
+      "7e803c1e6b099bb02900f6a503640113362bfdc8"
+    ],
+    "899": [
+      "f90ccafc5d58748cd097548bbbbd1c635a95aabf"
+    ],
+    "900": [
+      "9eb13cdc16f4db43638780363ce7cda1b1d74e57"
+    ],
+    "901": [
+      "5e408cd4528ac257961c957dba08aed459261b19"
+    ],
+    "902": [
+      "31ad0373454c8e7ebd27cb02b7d41189767f2968"
+    ],
+    "904": [
+      "1033ad3329d70e449d9ac183d8aa809b78fe1431"
+    ],
+    "903": [
+      "ab2d788c2210e7896af71896b52cb6bbaea48fc9"
+    ],
+    "898": [
+      "fc5914345c15c8d8e5b3c6c4148ad091fa631135"
+    ],
+    "906": [
+      "41d115e609efdf807586b0ef472a985b63ca8049"
+    ],
+    "905": [
+      "75068c12717096e0d5fbd752ee925119dce4ed6c"
+    ],
+    "907": [
+      "954d686f7b29dd847d1373c623ff929646081e51"
+    ],
+    "908": [
+      "6ac60f276419e74e4b6c439021f176b2d8145637"
+    ],
+    "909": [
+      "ad4c8410535310ba93c2c7bbbc634f1dcf9698f4"
+    ],
+    "910": [
+      "f2f7b05672c10bc0d2180e8e4e6d99e6769d851c"
+    ],
+    "911": [
+      "ce5ba6af982571c15d84d912223a18f0a51cc5fe"
+    ],
+    "913": [
+      "c243c3f63e490ca749fc3fbf4d9715e4542683da"
+    ],
+    "914": [
+      "54f1268d0e1b89eabe9c387aaa569c12a54a6f10"
+    ],
+    "916": [
+      "8e2ec3cd40f0e6c348727e3d9c12fbc7a34bd1a7"
+    ],
+    "915": [
+      "2c99731652798806f3c45c05eea9841635a6bd97"
+    ],
+    "917": [
+      "bb1b5fb57bcc5006fbabd967161a1a664fd760c5"
+    ],
+    "918": [
+      "4edb9075deb7aa9dd1d971bf16f47de3260f91aa"
+    ],
+    "919": [
+      "12dec16119d64bc03f8635b7151cb8fc0c588a3b"
+    ],
+    "921": [
+      "29e889c58d7030c053c2392e8f97a7ccdef11dbb"
+    ],
+    "912": [
+      "2ac5d388b4878774247a334ef9847a649c5de424"
+    ],
+    "922": [
+      "7e6fe5d30771418d873d3aa3f9606ba0fe8e1d24"
+    ],
+    "926": [
+      "c10e8d3ba3db59bf9f7483aa82ea1638d8608a26"
+    ],
+    "923": [
+      "c31800f71a7e0681c387151d92cd4d259162e7a3"
+    ],
+    "927": [
+      "e2eb456b56ab79e890dcf9da998b50394d86eceb"
+    ],
+    "928": [
+      "1394215c37669f1f69529e6d7b5b464fac9f0e51"
+    ],
+    "929": [
+      "0c7d698fa060cdd527a8204134aa3e7bf2745979"
+    ],
+    "935": [
+      "34921f8c4f206c2d3da803f1ff314da4226b0f53"
+    ],
+    "936": [
+      "c4211344e91e86afa25a897fa081a48970096517"
+    ],
+    "937": [
+      "d7fda29f905c7b4e7c0dde91b07406908684e134"
+    ],
+    "930": [
+      "2a57286822477b30fa805d26ed0a041e37ba65f8"
+    ],
+    "931": [
+      "b4cf75e5fd4ce807cfe351a99d68a3c03f2b5d9d"
+    ],
+    "932": [
+      "23ebc51d6ca8279b875ed7cdaf395c0bd33ebc55"
+    ],
+    "939": [
+      "df7ac6d6ff2ce4fdef4205b7d8f85456aea9174a"
+    ],
+    "940": [
+      "8b9b81b652f34f4317304d308804742d2bee102a"
+    ],
+    "938": [
+      "4ba99b963f8608e3bb261fe7432842c79fc819a2"
+    ],
+    "941": [
+      "88ed05bd1104cf3b804b0ed456f302a93b0e23cf"
+    ],
+    "945": [
+      "dd67cb9d679ae4d4e48b89bf663de7e913cc024b"
+    ],
+    "943": [
+      "8eef1b4bffcb449205f9a43f4e69f64041974d59"
+    ],
+    "946": [
+      "a85c65124f5bc3cb8b1ff7d222e53beb95b2c9a8"
+    ],
+    "942": [
+      "d8921e001de4f9d7be3a6f710a34865f5c638e79"
+    ],
+    "947": [
+      "a4df2d2f7e90013e23fb62d527dcbdbd080903d3"
+    ],
+    "960": [
+      "99320ef777c6df66b5f4d9941cc9565676e8a48b"
+    ],
+    "959": [
+      "81c37d5a5550283808bbd19b65d1e651f0308bf2"
+    ],
+    "962": [
+      "82ea6e8ac83174e9aff9785919f11f21ad82bc2c"
+    ],
+    "961": [
+      "9f6aa7c9033f6bdf2e6429b0c54d93d5b7a0496d"
+    ],
+    "948": [
+      "5725a090868ff54238f3439a3623b9fbb9c1d429"
+    ],
+    "949": [
+      "1642666ca9336a83139218efee9d26e5a45e21b9"
+    ],
+    "964": [
+      "54e9c134a9b1f1dfd0bfab6359226701d586f8f2"
+    ],
+    "950": [
+      "ba218358a8a9470e23b0d17a50239da0c8603bcd"
+    ],
+    "965": [
+      "fabc49e7c1a19da0735f1aa20a3bbaf42223cf73"
+    ],
+    "951": [
+      "818135a8f3a08f5d0c726581df223974f7c11389"
+    ],
+    "953": [
+      "4995faba2f64fc539456c06f2502799aef869fd1"
+    ],
+    "955": [
+      "9f5fa352332e4c6859f938893af3b94953327ddd"
+    ],
+    "956": [
+      "56972ce7f49f0203892c7608a6b593eb94b24628"
+    ],
+    "957": [
+      "e78446adc3d41dfeb7c5c3ec077ddb7ca7d81c85"
+    ],
+    "958": [
+      "ff74e8743f2bfd23f614a20b4a7584a237389268"
+    ],
+    "966": [
+      "480b95d73a62f28e0ba6a9cd238f295d65781aa3"
+    ],
+    "963": [
+      "dc0b6691539d2aaf3d21e970a3a2680a41f2c3c8"
+    ],
+    "968": [
+      "eed7585befa4b21449f69a54904673a0e46f81a7"
+    ],
+    "967": [
+      "7db608f22ef908249997d7c1d0930c4dfe92e962"
+    ],
+    "969": [
+      "df2170a834bbe29de39ae0f702d5a5ec470afd36"
+    ],
+    "970": [
+      "9a4063764ff3a27d9923d876a70fabefc5c7d512"
+    ],
+    "971": [
+      "8c09bc2a5deddc7e25afe8a3ae3c095209c7138e"
+    ],
+    "972": [
+      "a8add0432078cc18693e41c1853d6e873c8955a2"
+    ],
+    "973": [
+      "290fe21d246da547f1dac2544ac3cae1380e4310"
+    ],
+    "974": [
+      "81e80b035acb0972736224b0a5847bb4128b9faf"
+    ],
+    "975": [
+      "80586ae882fd2cf867f684d0d2c8263b1a16e4dd"
+    ],
+    "976": [
+      "f88193119647711d9a7c46ff37aa09334afaf76c"
+    ],
+    "988": [
+      "2cdb96409ee8d421adc5b49ca38712d3c8f49593"
+    ],
+    "978": [
+      "8df3122b1ddb653d2246a3d6c7929536e155ef12"
+    ],
+    "989": [
+      "dc7331735e82389d42212ff0d634cf4916fa3631"
+    ],
+    "990": [
+      "faf25b17563380336b07e437dd2a1a56cf29e75c"
+    ],
+    "979": [
+      "dd78a32d50ee6401155fc9cd8bd28ca0783883b5"
+    ],
+    "991": [
+      "285a8085679add05239e446208d961f026f2a013"
+    ],
+    "980": [
+      "505cf25453d9af10d14f78e0059857ff2c3575de"
+    ],
+    "981": [
+      "b367420d49cac113036afee4408328562e2b68a9"
+    ],
+    "982": [
+      "77c7bce0df506c91f7094ceca3f18a7260aa2c81"
+    ],
+    "984": [
+      "39ac74686ebefa3e8dd7577f0e5a39de56dec00d"
+    ],
+    "985": [
+      "3c3aab783df9c00d8abec96ef8c5a286ee2bd585"
+    ],
+    "986": [
+      "e266d042841d0c305f9a0604f267b4a148e4007e"
+    ],
+    "996": [
+      "eda523b1bb5d8d8c44eafc84545715dfe9afe452"
+    ],
+    "987": [
+      "8305ac97edf2b1636b923c7fe318ab5507c821bf"
+    ],
+    "995": [
+      "31da1e5397f56898fa60a8912058d6e8009bc1bb"
+    ],
+    "992": [
+      "ab5760b017aea975191d1c94f643dd1f9fda0bb4"
+    ],
+    "997": [
+      "08cdd776317d5b5d28f925c4e39dc4af12af6242"
+    ],
+    "993": [
+      "f8776147f516c73389016c0ee52eac27625173bc"
+    ],
+    "994": [
+      "5c2b4d8d78c150fe95d34440b8118f4187f96aba"
+    ],
+    "999": [
+      "90e27bbae8eabcbb39c92990a25ed6c8beb1baec"
+    ],
+    "998": [
+      "76611e4ddeec9feede45771a71967f8d93e5099c"
+    ],
+    "1002": [
+      "7c1d00181412e08e25e38d3faa3b9af27c56ac0d"
+    ],
+    "1003": [
+      "3547fd367557e7cb57baba8fad9504a5543a1504"
+    ],
+    "1010": [
+      "d7df4d012dd627d84453d9ca5cd543eb61662a5f"
+    ],
+    "1000": [
+      "af26f2e30cf152dcf36a79fd9a426a3a89414b62"
+    ],
+    "1004": [
+      "372b5059adbcfeed9a0625d767e3317b7bc2f553"
+    ],
+    "1005": [
+      "081d9444292236765bdcd66059947c0f329afaf3"
+    ],
+    "1006": [
+      "be3009eb59260f4731feff15df2d636a7924a33c"
+    ],
+    "1007": [
+      "96c11df39111dae91a8b5d4182cb98cc7bdd28eb"
+    ],
+    "1008": [
+      "d93c3f4691b997a4c5d5bb186d3ee1e96ec69fa1"
+    ],
+    "1009": [
+      "41ee0992397db2c1843553b24ed43593cbcdab55"
+    ],
+    "1011": [
+      "d720781abdd0ed49eb73a318fff193198f777c07"
+    ],
+    "1012": [
+      "dfa46388c2dddd0fa2a1b07f2376370aa39dfc23"
+    ],
+    "1013": [
+      "4d0706540ab98d10d5cb5a1ef8635f1ba5a8dc45"
+    ],
+    "1014": [
+      "7f253653c54cb673917088c491bab2be6ec6e764"
+    ],
+    "1016": [
+      "9d6963031262207a3be056c381e1774dcb7596c1"
+    ],
+    "1017": [
+      "2e6a6a65af3f9f871d72f399289a86b1935929e1"
+    ],
+    "1018": [
+      "023ab9bb35600d8b68ad9cee075ec35e04e23d68"
+    ],
+    "1020": [
+      "83f28cb34cf76c97dc63e80fbe649c296b7d18d9"
+    ],
+    "1022": [
+      "25ce727b885304aa67b445b8c1795f05726abd92"
+    ],
+    "1021": [
+      "7f58dcb87a254eec41faaa82793e21c49217ce78"
+    ],
+    "1023": [
+      "169a00ec061b59d226da41397a17da108e70cb26"
+    ],
+    "1024": [
+      "607b303c6c901c677f7022e26035ca40529002e2"
+    ],
+    "1026": [
+      "2112ef4c31bc6f63dcbb6610372e6f07261d93e8"
+    ],
+    "1025": [
+      "bd14759189f0c946c5816cb666a856c30b052b39"
+    ],
+    "1027": [
+      "8a94f05c5f53645bdf58de1dd9a1ec624918835c"
+    ],
+    "1032": [
+      "dc0649c7926c3ac0c6b09bbe5542726181c626a7"
+    ],
+    "1033": [
+      "8ce550098aded732e78fdf9bdb12acafa505eb24"
+    ],
+    "1035": [
+      "07f12be81400622da384bd179025262da892880c"
+    ],
+    "1036": [
+      "5f8279c4d2ec2497d8797c386138bb8a0d600f31"
+    ],
+    "1037": [
+      "cc19e19818a15d469a8475ea818e044cc87d825e"
+    ],
+    "1038": [
+      "170ee3f33b37c1b47788edbdcb78f03fa0d54166"
+    ],
+    "1039": [
+      "181de6f12a63875c37822bb6fa6bdc1533c684bc"
+    ],
+    "1042": [
+      "4800b7c255be3b9a8dd726e76d4a17d4bfa2a63c"
+    ],
+    "1040": [
+      "d3564def08675570d74d7fbaeeed994dc7c8ab97"
+    ],
+    "1041": [
+      "2ab9ee4b825f691590068ed905446599984e8c62"
+    ],
+    "1043": [
+      "5c6337fcb162e0fa530d958f0ae1ae2913dd0b4a"
+    ],
+    "1045": [
+      "bff7e630499e0849a4c2e7495a3825d6c3004a88"
+    ],
+    "1044": [
+      "e01f01bc87cf4ed98cdf2264f6a981fdfc791198"
+    ],
+    "1046": [
+      "1e570d101921bd497be4fd96746e5f4e75163870"
+    ],
+    "1047": [
+      "dd6c669f88897859da048db7c63af8893b89a04d"
+    ],
+    "1049": [
+      "7a91fe3728e17323dcb2d82704b1ff838cf75987"
+    ],
+    "1050": [
+      "ac177154da8728a96047ca7b8eca088098a4047b"
+    ],
+    "1051": [
+      "abab6b9a92b72db51e1a02eaa8e6a0aaa1a39b07"
+    ],
+    "1055": [
+      "b63b9de099926dc11be09b4f05a1734fa70d63df"
+    ],
+    "1056": [
+      "f4d24d280ba75609eb4c0863b58ea040e6388d54"
+    ],
+    "1052": [
+      "07b10916f80593c4f8bfbdab93dafbe2c92d810a"
+    ],
+    "1053": [
+      "08dace2b04456fa64fae3d01ead94496c28b1ca6"
+    ],
+    "1059": [
+      "cf65219e6fd276e4f7fcce1f53521d029f7f1022"
+    ],
+    "1057": [
+      "26d2f9dea74496ce5159437582451d36c3a6c45c"
+    ],
+    "1058": [
+      "55193dfa0ae274e0fc2b7a2b359c58ca908e1c6e"
+    ],
+    "1060": [
+      "96b44c2c4406664886ac7fb401ae4ca98e6d3308"
+    ],
+    "1061": [
+      "b685352c664f5413df17bcaa729b45effc025c3d"
+    ],
+    "1062": [
+      "0e37908b937e204ff0ff596b29e92a96506dae00"
+    ],
+    "1064": [
+      "81e7afabca8eb773afda277f501dedd9fa00de80"
+    ],
+    "1063": [
+      "5aeb23d61cf4ee94188b631a227cab3d2efd83e3"
+    ],
+    "1066": [
+      "5b489576eb190e7fe310ca25e9228ab42c51a997"
+    ],
+    "1067": [
+      "82e27e73f74c1cb23a60f77315bab4c328b0b7a7"
+    ],
+    "1065": [
+      "03f6154dcacf5d715200d2fd5690b399eaa8c5c8"
+    ],
+    "1068": [
+      "f3c595b1c2ac5ff8fa2ccdb08c6fef70d81ac0b6"
+    ],
+    "1069": [
+      "3f40b7fff49ddc56a50c13d23ecf89f8dd6c1424"
+    ],
+    "1070": [
+      "fa4547640435711e60df1f349cd1f2c6acb2cc82"
+    ],
+    "1075": [
+      "36b4b7ee0af052fc6e5aed7f8310eb08d93cf641"
+    ],
+    "1076": [
+      "5f170bff016e5939dd4076099cd30034ec1e87ae"
+    ],
+    "1078": [
+      "a40e7a3f14770beb45084a9a0f96f410bc8b252e"
+    ],
+    "1079": [
+      "672fc793bc0dc3335808fc1dbfdf376b7402d9f7"
+    ],
+    "1080": [
+      "03f2767e19ba856036aeb7af6e0ed8ff4e367ad4"
+    ],
+    "1071": [
+      "de91aa4de1a3b921a876bf00a1223cea02730034"
+    ],
+    "1072": [
+      "72bb63df04f6ace2986f1e559955801b38a84010"
+    ],
+    "1073": [
+      "b9c44f66a9d0ea9c6009932eb49e2c900edc89ea"
+    ],
+    "1077": [
+      "e0e614750f9da10e4cac3e367e543e366909daa2"
+    ],
+    "1081": [
+      "d9825cce4f8584e42d4b356b19e886ad59893191"
+    ],
+    "1083": [
+      "a1c85f56d6dc472e99d0ee881bc18f548aafc992"
+    ],
+    "1084": [
+      "b9cb127f2829da3ef2905014ff69999008584d4d"
+    ],
+    "1085": [
+      "7d7bd0e1727f35bd71b479082f30fc295c077268"
+    ],
+    "1082": [
+      "085b877c113c3adb4d8711b3f9219867a496d947"
+    ],
+    "1088": [
+      "0337026c89326d3d19fd16d23ef1aba985490949"
+    ],
+    "1091": [
+      "68ceb2de28cb4db8ad15df62d295600b155c2954"
+    ],
+    "1094": [
+      "98852fd27fbb4a4925cde14d36b553d2a3387a38"
+    ],
+    "1093": [
+      "9127ec68136b7e889cb7c603428e69990211309b"
+    ],
+    "1092": [
+      "d4962b5d3b887f90cb3111a9d318608aeb454799"
+    ],
+    "1089": [
+      "c05f615ba1d2c2c848bfc27679eaa8e72486c77e"
+    ],
+    "1095": [
+      "8e852d859e32d33e2b5fbaccb5957d2aac6e5d9b"
+    ],
+    "1097": [
+      "05fa4f7e1feab732500805d7c47af6d8b1115589"
+    ],
+    "1096": [
+      "45290f9da21a481eef3da4bb17d414ebe4e11a57"
+    ],
+    "1098": [
+      "2c63225849ad6879fb23b719f556a508417dd261"
+    ],
+    "1100": [
+      "24c7b04207565cbb58a32eb1d3fe47f164f19c9a"
+    ],
+    "1086": [
+      "e515a78349407db8239504917d81f2bce7376f79"
+    ],
+    "1099": [
+      "f331502e959219771dd89ac54b387e88313bef1e"
+    ],
+    "1087": [
+      "b906e7b56d305780e8593ef2b5a8c959340aa9da"
+    ],
+    "1101": [
+      "da358ac1dd4b2e48a11bc9cf4c344cd5bb8e6713"
+    ],
+    "1106": [
+      "e1d5e0c1e36a2c9ac077c9c960d277812b65e7c7"
+    ],
+    "1112": [
+      "095a6bf60b4ce683350f60f2441b9cf55d838836"
+    ],
+    "1105": [
+      "e6125d6b6217452aeee0d7a2088bb0080691b131"
+    ],
+    "1113": [
+      "30f9f3fb268e6b80f95f2c87785055f9d1fdf666"
+    ],
+    "1114": [
+      "2cc3259e64644a658969d2ff27ce39cbcebd5a6a"
+    ],
+    "1117": [
+      "45777be1380c2815b71b02f050d52cb954914d08"
+    ],
+    "1116": [
+      "16045b730aed93d6137896eecba1c7f38367d0dc"
+    ],
+    "934": [
+      "b3ba25b8c06396352017247cab4c637aa47bfd77"
+    ],
+    "1115": [
+      "646e7bcf6eabbbcf0c5a3fc01a7f4e6329510f57"
+    ],
+    "1122": [
+      "5ae905793a510b6e3e9e4762b085ded46925e4a1"
+    ],
+    "1124": [
+      "8c32899dca5941af9df75549df3dbe51263acffd"
+    ],
+    "1120": [
+      "1ddd35216c2f06fbe6c539955ad0012e201a4389"
+    ],
+    "1125": [
+      "6e5662deb62bb4232536c69740cdae519e6c1787"
+    ],
+    "1104": [
+      "992579c6987c345edd02d752fd6395d1f9aeca8f"
+    ],
+    "1126": [
+      "c638b64e6ee80c42a28ebf8f36257b7768f0cf0a"
+    ],
+    "1103": [
+      "f0e7eb540d686986dba05c305448e2c987d84e4e"
+    ],
+    "1129": [
+      "1586830a0e667266de339df6e15ddd55f6b80e27"
+    ],
+    "1118": [
+      "9055679cb02dd833ff257fdf09f4afc711b8e957"
+    ],
+    "1119": [
+      "9c388f5412c132cdd1cbf21e0443081551a22ed9"
+    ],
+    "1121": [
+      "dba64b311ab7e7f0b73e4644b326dee832824f7b"
+    ],
+    "1130": [
+      "0b0da5d63fd26dcf2f1e2f7c26f5929d474465a1"
+    ],
+    "1128": [
+      "1400bfbf4a1d675b3d5bed98c30ae6f1a6831184"
+    ],
+    "1132": [
+      "9fc9afa3e8b65a7e625e705ca9748824b74873de"
+    ],
+    "1133": [
+      "2e1dc7c813d75ff2b98c62d817dab1e45d3af981"
+    ],
+    "1138": [
+      "e00a6597b51631c9c153e715cd448dafd1b0c8d3"
+    ],
+    "1139": [
+      "af93cde0eaaf9adf86eec5fea7f54c5ae463bf5e"
+    ],
+    "1102": [
+      "eddfbad3d87d5227f4e9bb9a1f1035f0eafb8b77"
+    ],
+    "1141": [
+      "bcc923d22e4e596a7644d1b6465cc7b99c1c4555"
+    ],
+    "1137": [
+      "c4140619459969821a0d619a4c83c804f41d7dee"
+    ],
+    "1131": [
+      "0176e298580a0d1a1829e559ef6a2f2be19921c6"
+    ],
+    "1134": [
+      "c86c17595daeb27467f93317335ab65d49d09241"
+    ],
+    "1135": [
+      "dc95ca95114b1c9a2744ab0a44b498bfa09e73b2"
+    ],
+    "1142": [
+      "40e930d8fb9d15c11e9589b41cfea0a08146b60a"
+    ],
+    "1136": [
+      "88f75682a76a4d1104040e080aaaf2d046f935ef"
+    ],
+    "1143": [
+      "a0729d844569c46669086ec9cf2e5ef0534874c8"
+    ],
+    "1144": [
+      "7e542487541e62d30b6ba05e6d63328a1801dcae"
+    ],
+    "1145": [
+      "fdd9cb1ea154e8f8f93a2bb67cb1af1d0640656b"
+    ],
+    "1146": [
+      "516e884be391ff997ca9f163ae0dddddae16d5f7"
+    ],
+    "1147": [
+      "026b92b1de7c109c1c9ffa1ed2418ebd745ec9d4"
+    ],
+    "1148": [
+      "731adbef0e9fe67a41a19ce5e35c356b595b98a5"
+    ],
+    "1149": [
+      "33bbad5524b6c2f7c2244c61ad8bc0f3389355f9"
+    ],
+    "1150": [
+      "0d6065f6b4f4f7b234d9bb0010622c64373f0b3d"
+    ],
+    "1152": [
+      "669c75d3df9281d5d5f52df7d1830037aae81a94"
+    ],
+    "1107": [
+      "eefe802b9dcd4b151f65fa3bf4c75ed155f7732a"
+    ],
+    "1108": [
+      "2bf64b01d003b1fd009f48a24b39e327dcdf9a19"
+    ],
+    "1109": [
+      "ebf118a9532d5d551a7934f0d5fa0818c92886f8"
+    ],
+    "1157": [
+      "ca16c701587a384a8f7cdf5d7d0fc63caf9ef94d"
+    ],
+    "1110": [
+      "1f11f8963b26fcb96919bc664874e211fad20fbc"
+    ],
+    "1159": [
+      "633f413fe67dac5b6f29e2c02f367859ddd10859"
+    ],
+    "1158": [
+      "96d0051f7e5c524221bf9a76f688d8fc4e20eadf"
+    ],
+    "1160": [
+      "b41aa7154610b4863ef19128967faa850d607fb4"
+    ],
+    "1161": [
+      "5b8df7ce9eb22e39b49fd768ac58e6327a467185"
+    ],
+    "1173": [
+      "5025dc40549735222a0990ad27865a5c70b491fc"
+    ],
+    "1174": [
+      "9f6c5d87179f4f423619c4cbb2c38eefe29c429c"
+    ],
+    "1162": [
+      "fa1a5eee9a419d54bb8588e778efc88b2383d0fb"
+    ],
+    "1168": [
+      "3c2564758d298b6fe07307543cdd660e11ebe405"
+    ],
+    "1163": [
+      "6a2bb0a5d84dfa496f8f70dbb498268cf2a4be49"
+    ],
+    "1178": [
+      "a93b6d3f31eddd4986e9f2090f5afb9646a55ed4"
+    ],
+    "1179": [
+      "8c896fe35b6013dd1bd9fcc021e0377766278cba"
+    ],
+    "1183": [
+      "9a7a34387d2936614a93168b10232f731749b437"
+    ],
+    "1164": [
+      "5d0bc1e12e767cbf5320a9eb54f990cc368a48a1"
+    ],
+    "1176": [
+      "fd2bc36c58e6fe54ca156d8597ff3e2c41131e94"
+    ],
+    "1177": [
+      "eaf7b30bad2a94cfc8da66c1958b067eb020ede7"
+    ],
+    "1165": [
+      "69afa604597d6f9edd02613ffdecbbf4266d1d65"
+    ],
+    "1184": [
+      "e2457dd6ed7db022175ab92b5a346f21b054413f"
+    ],
+    "1166": [
+      "6c2f6c39249f7937989bc4767f3f90890f20ebb1"
+    ],
+    "1185": [
+      "dacc3583c2bee4d372c9a2da1fbaac6c7cf4bc6d"
+    ],
+    "1180": [
+      "9d357bc27007eb23a2937fee2ff928b026b2147d"
+    ],
+    "1181": [
+      "06760318f36b3ae9bb46e36450b7cc1bfbb20f72"
+    ],
+    "1186": [
+      "00f6e02c4e818e8e0a4ec42c37f818ec289b7774"
+    ],
+    "1187": [
+      "5449155014fe904d8394ccbd0c824f4728184684"
+    ],
+    "1193": [
+      "aa88ef72fa80bb74074945d0609a88b80d150f0e"
+    ],
+    "1194": [
+      "c8784f33016bf4b4ff522b0b1a15dba6bed8889c"
+    ],
+    "1195": [
+      "8f5c163b8eacf4aeb18f79f2b27dc46166d891be"
+    ],
+    "1188": [
+      "9e97079f71d098494f62fe5924a276631ef4897f"
+    ],
+    "1189": [
+      "f66dfbd59cb66ba5f28b6319ea85c7c2eefb3970"
+    ],
+    "1190": [
+      "0b06314706b126472aa2ba328bf31735fabae9b5"
+    ],
+    "1191": [
+      "ebe6e7f2e5a861b603db67e06da0e496356ec29f"
+    ],
+    "1192": [
+      "8dfae53cdf7e8bbd73cec4582009e6b77732eb55"
+    ],
+    "1196": [
+      "1b69a9906bca2b746c8f9f5a6abe1505e66107f0"
+    ],
+    "1197": [
+      "d13dee458ffb3a766c2f31f4c90d4fd1df62a797"
+    ],
+    "1199": [
+      "8aa4b9079521484178a14e906b4324052bce027b"
+    ],
+    "1200": [
+      "fc41f3654dbbb410fb8d334dcc7814c3034e469e"
+    ],
+    "1201": [
+      "6b4cc103dae991a6e308bb17b3410ddcc33b0893"
+    ],
+    "1202": [
+      "4027876d7b31ef99ad9ac7f90bf3268e5fe5fda1"
+    ],
+    "1210": [
+      "2d51602a2a85785e796b8f5847402dc88b850933"
+    ],
+    "1211": [
+      "055aa417895e51fb8cb35158b69cd37d5993a89c"
+    ],
+    "1215": [
+      "0efbbcceab05e90cbcef7b06218a3f8450d30259"
+    ],
+    "1213": [
+      "0718eebcf9c367d3504f716e883e65e8a27282f8"
+    ],
+    "1216": [
+      "29f8a4efaf2db62f6305d4936771b40498d24994"
+    ],
+    "1217": [
+      "ee13a2b036a9420c15c6fd263e5a7116049ee99a"
+    ],
+    "1219": [
+      "a22dc5cec102f1d60909f2d3b622667408685de7"
+    ],
+    "1218": [
+      "2b49d2c3e7f770e7342e750b9e3ef2682b351d8e"
+    ],
+    "1225": [
+      "878efb612dffdd4037d3725aabe1ec2173f32af6"
+    ],
+    "1227": [
+      "8cadb56cbc8f7933036d2927e5d829d73e07c571"
+    ],
+    "1229": [
+      "c09af56c18788e0cfc51194d4b07c89c52df8971"
+    ],
+    "1231": [
+      "99f238e8cad072a7ffbb849cc0a8023ceb1f5a08"
+    ],
+    "1230": [
+      "1b2213d39b55948f6c1bce0e03f1c3d4c11af32d"
+    ],
+    "1233": [
+      "b81143340907e2ecfb3ef569b4f58bb717cb06d3"
+    ],
+    "1234": [
+      "0444deefc1bf041d58942d401264f1c16c56ae34"
+    ],
+    "1235": [
+      "bfda87041b0b0da38fc5cf9b1fc64784f663cf59"
+    ],
+    "1232": [
+      "9d58dd36bd4da4167f7cba9b833def9111cd7aa2"
+    ],
+    "1236": [
+      "adf137d9825fde278ccd249d1f076e9ee11bb0e7"
+    ],
+    "1238": [
+      "658c341821b9effd565ada480d5809a86c11e45a"
+    ],
+    "1239": [
+      "818d148bcaee37d819f71db14ab749eb64a7b272"
+    ],
+    "1240": [
+      "9405b9ad98fe12079584f9a25bfb7f24529beb53"
+    ],
+    "1241": [
+      "5d8ee086485cb957d1e6122bc234a64591402e0e"
+    ],
+    "1242": [
+      "d948d19b6afb38a822cc30a630c05455a26689bb"
+    ],
+    "1245": [
+      "7e0e04dfcc7582a20e9f31d6af9e9cb473799723"
+    ],
+    "1244": [
+      "a8d93b6b56e2833320e316067ee1245c09d086af"
+    ],
+    "1247": [
+      "8c002601bef856c6c354dce141e59d01636bb552"
+    ],
+    "1243": [
+      "6f2e165bd0487703abdfe7a7439915ee8bc04082"
+    ],
+    "1248": [
+      "de31f87c5bafc7d7a8cf158d69ca5cc67acb5906"
+    ],
+    "1250": [
+      "ea564314b87409a2592fada48d586040cd6413e1"
+    ],
+    "1249": [
+      "c31200e101ab71c3d24df9dfc9a648ffd17e82db"
+    ],
+    "1237": [
+      "2de68f62eba7fd0dc2e2426e18b50ade2e77bbe9"
+    ],
+    "1251": [
+      "c71bff3b06de4bf6d20a6c27c1632e1480f6be5d"
+    ],
+    "1252": [
+      "3685732cfcefef06ada097dd5aae1e11b774f740"
+    ],
+    "1253": [
+      "1ff9c38af02a6b441fa67c18be0b15419337a131"
+    ],
+    "1254": [
+      "94e11101fdb468dbf589941ce34e0547d237299a"
+    ],
+    "1255": [
+      "3f5867419590e3a57339a41196f95f1eb709377d"
+    ],
+    "1256": [
+      "3d3a237cb15c6542a3f0e4fb558c716df7de68a2"
+    ],
+    "1262": [
+      "f94f280084b7cb4b277c0d481c695dda6e9c8433"
+    ],
+    "1261": [
+      "6035beb9fb5be338bb8a88267d72aea1a89e8fb3"
+    ],
+    "1263": [
+      "e122129530f0ee591d79679802e611e0f49a3d8e"
+    ],
+    "1259": [
+      "7577146171378f8f9ea44a8066416c39672a81ab"
+    ],
+    "1260": [
+      "81d83b6f9a5ebf405cc2d8500c6ed7ebed460eab"
+    ],
+    "1257": [
+      "c23541c295e00f78907b4dd91f7a36b820efc79a"
+    ],
+    "1258": [
+      "d64024cf4524c0cdecacd281ab826c0defba50af"
+    ],
+    "1265": [
+      "4c48c4fa821a42c294393b884730f5e5123bf486"
+    ]
+  },
+  "titles": {
+    "780": "Split out sqitch migration system into separate Docker image",
+    "781": "Switch from native-tls to rustls",
+    "783": "Mobile model selector placement and alignment",
+    "782": "Switch base image from trixie to chainguard/glibc-dynamic:dev",
+    "787": "Fix lint error due to new msal versions",
+    "788": "Updated various backend dependencies",
+    "789": "Add option to deselect individual guardrails",
+    "785": "Add assistant hub reviews",
+    "790": "Publishing assistant in assistant store also marks as current",
+    "791": "Fix feedback <-> trace correlation in Langfuse OTEL",
+    "792": "Add per-process cache key for theme translations",
+    "793": "Fix transient \"Error loading file\" during generation",
+    "794": "Fix \"SSE connection error\" on navigation during streaming",
+    "786": "Client-executed tool round-trip for action facets (client_tools)",
+    "795": "Honor global tool_call_allowlist for client tools (globally-active)",
+    "797": "Clean up license information for cargo-deny",
+    "799": "Client-tool round-trip — frontend (executor registry + result handler)",
+    "798": "Client-side Outlook calendar/free-busy data sourcing (EXO Graph + SE EWS)",
+    "800": "fix: write text/html to clipboard when copying HTML email drafts (ERMAIN-417)",
+    "801": "Outlook appointment scheduling seam: fetch_availability client tool + outlook_schedule facet",
+    "784": "ERMAIN-411: Mac 'pin the add-in' hint for the unpinned/frozen task pane",
+    "802": "Client tools: portable-name hygiene + offering-loop hardening",
+    "803": "fix(edit): mirror regenerate action-facet fallback in edit_message_sse",
+    "804": "ERMAIN-387: create-appointment confirm path (outlook.create_appointment + erato-appointment fence)",
+    "806": "Fix shared chat not using profile picture of chat creator",
+    "807": "Add apple-touch-icon",
+    "808": "Added compact variant of page headers",
+    "810": "Show less details about assistants by default on new chat page",
+    "809": "Remember collapsed state of recent chats in localStorage",
+    "811": "Adjust assistant create/edit pages to also use compact header",
+    "812": "Ensure stable translation ids for assistant/assistant-hub pages",
+    "813": "Add compat flag to make Anthropic + Bifrost + reasoning replay work",
+    "814": "Adjust compat_no_replay_summary behaviour",
+    "815": "Make copy error button available for frontend errors",
+    "816": "Persist traces more often to Langfuse during generation including errors",
+    "817": "Deactivate flaky autoscroll test",
+    "818": "Multi-attendee availability & deterministic slot ranking (ERMAIN-434/388)",
+    "820": "Improve handling and persistence of errors during generation task",
+    "821": "Upgrade to rust-genai fork to handle missing response.status",
+    "823": "Force interactive login on sign-in button",
+    "822": "Export message-rendering surface for component kits + stable i18n ids",
+    "824": "Add hash suffix to react runtime module",
+    "825": "Pass host MessageContent to ChatMessageRenderer overrides",
+    "826": "Versioned ERATO_KIT_RUNTIME host surface for component kits",
+    "829": "Remove outdated image-generation chat mode",
+    "830": "Upgrade from kreuzberg to xberg",
+    "819": "Slot→appointment loop: copy-exact ISO slots + resilient scheduling stickiness",
+    "827": "Share host modules with component kits via import maps",
+    "831": "Composer UX consistency: token-driven styling, attachment tree restructure, first-message consent fix",
+    "796": "Hidden facets: platform-scoped, always-on system-prompt injection",
+    "832": "Adjust local-auth dex to consistently use 127.0.0.1",
+    "828": "Recover the turn when the model calls an unoffered tool (no more empty assistant message)",
+    "833": "Fix chat-history dropdown overflow and double scrollbar (ERMAIN-464)",
+    "834": "Dropdown: pointerdown outside-close for touch tap-outside dismiss (ERMAIN-465)",
+    "835": "Make sidebar Assistants section collapsible",
+    "744": "Add XLSX file preview",
+    "839": "Storybook stories for confirm/consent components",
+    "838": "Add PPTX file preview",
+    "837": "Chat input stays usable while a response is generating (ERMAIN-466)",
+    "840": "Keep chat composer usable while a response streams (ERMAIN-466)",
+    "836": "Dropdown menus: soft active highlight + arrow-key roving navigation",
+    "842": "Fix queued-message chip theming and narrow-pane layout (ERMAIN-470)",
+    "841": "E2E: streaming composer + message queue (ERMAIN-466/470)",
+    "843": "Separate button geometry from colour variant (theming contract)",
+    "846": "E2E: harden the queue/streaming spec + cover the mid-stream error path",
+    "844": "Reuse the shared Button for the add-menu trigger",
+    "847": "Take dropdown trigger geometry from the control token",
+    "845": "Put the file-upload button on the shared Button and tokenise its styles",
+    "848": "Take button radii from theme tokens (frontend + add-in)",
+    "849": "Drop the whole superseded tail when editing or regenerating a non-last message (ERMAIN-469)",
+    "850": "Cover the message-edit path before the in-place editor lands",
+    "853": "Edit user messages in place instead of in the composer (ERMAIN-471)",
+    "851": "Move popover and sidebar-row surfaces out of inline styles",
+    "852": "Move the remaining documented hooks' surfaces out of inline styles",
+    "854": "Pin a type scale per button size",
+    "856": "Make sm the default button size",
+    "857": "Define protocol for desktop-sidecar",
+    "860": "Add desktop-sidecar distribution contract",
+    "861": "Show a new chat in the sidebar while its first turn runs",
+    "858": "Show the user message when returning to a streaming chat",
+    "855": "Drop redundant recent-chats refetches on rename",
+    "864": "Add sidecar restart command to sidecar protocol spec",
+    "859": "Fix sidebar dropping an unrelated chat when archiving",
+    "867": "Extend MCP file mechanism with metadata marker for filenames",
+    "863": "Map invalid and archived chat ids to 404/409 instead of 500",
+    "869": "Extend sidecar protocol with mailbox listing and email listing",
+    "871": "Add configuration method for desktop sidecar",
+    "870": "Parallelize e2e CI: shard many-models, worker knob, raise e2e backend memory",
+    "872": "Add desktop-sidecar distribution page",
+    "874": "Move profiling image build into manual triggered job",
+    "873": "Run basic e2e with 2 workers; record traces only on first retry",
+    "868": "Show per-chat generation status in the history sidebar",
+    "875": "Replace e2e settle sleeps with observable waits; enforce via eslint",
+    "876": "Layer sendFirstMessage failure diagnosis; widen mcp-auth first-response margin",
+    "877": "Run every e2e test in CI by default; port token-warning coverage",
+    "865": "Allow users to retract message feedback",
+    "881": "Emit chat_created before the policy rebuild (ERMAIN-494)",
+    "866": "Serve shared chats via a dedicated active-thread-only messages route",
+    "879": "Withhold owner feedback from share-link viewers",
+    "885": "Update k3d to v5.9.0",
+    "884": "Restructure assistant hub and assistants pages to share structure",
+    "886": "Integrate assistants hub and existing assistants pages",
+    "888": "Add config option - generation.max_tool_calls_per_message",
+    "889": "Add MCP server allow/exclude tool filtering",
+    "890": "Fix outlook addin import map injection",
+    "891": "Add optional file scanning with magika",
+    "893": "Add runtime_configuration table and startup mirroring",
+    "887": "Add outlook.get_conversation.v1 (ERMAIN-501)",
+    "894": "Extract config modules into erato_config crate",
+    "895": "Fix cargo-deny for erato_config first-party crate",
+    "892": "Add-in: sidecar-backed thread fetcher (ERMAIN-503)",
+    "896": "Fix on-prem detection for hybrid mailboxes; record Windows sidecar qualification",
+    "897": "Extend config mirroring to .po translation files",
+    "899": "Authorization retry with throttling for cross-replica staleness",
+    "900": "Add support for Gateway API in Helm chart",
+    "901": "Add optional backend service load balancer to Helm chart",
+    "902": "Add description for reviewer and version comment in assistant hub",
+    "904": "Collapse more than two assistant versions into \"Show more\"",
+    "903": "Add special share grant to share with whole organization",
+    "898": "Enable cross-replica sharing of generation state",
+    "906": "Unpublish de-reviewed assistants in assistants hub",
+    "905": "Generate serve.json maps; Enforce via E2E tests",
+    "907": "On \"my submission\" assistant hub page, order by most recent",
+    "908": "Order review queue by status, then oldest first",
+    "909": "Add alternative 5 star rating system for assistant hub",
+    "910": "Add sidecar.progress.v1: poll-based incremental progress delivery (ERMAIN-534)",
+    "911": "Adjust intermediate load balancer network policy",
+    "913": "Add configuration change listener",
+    "914": "Extend mirroring of .po files to more directories",
+    "916": "Add optional settings tab for desktop sidecar",
+    "915": "Add tool call approval interaction",
+    "917": "Implement distribution customization for desktop-sidecar",
+    "918": "MCP tool approval UX follow-ups",
+    "919": "Merge settings into an entity-first MCP & Apps pane",
+    "921": "MCP approval follow-up fixes",
+    "912": "Never let a progress observer break the observed request",
+    "922": "Extract host-neutral add-in core, isolate Outlook composition",
+    "926": "Treat cloud.microsoft endpoints as Exchange Online",
+    "923": "Default appointment card and sidecar client identity",
+    "927": "fix(office-addin): fix background color inconsistency in add-in chat view",
+    "928": "fix(eml-preview): recover PDF MIME type from extension when email declares octet-stream (ERMAIN-550)",
+    "929": "Expose Erato in Outlook organizer appointment compose",
+    "935": "Add numbering of pasted screenshots",
+    "936": "Add support for rendering Mermaid diagrams",
+    "937": "Add edit sharing for assistants",
+    "930": "feat(office-addin): generate a local unified app package",
+    "931": "feat(office-addin): add the Teams personal app route",
+    "932": "fix(office-addin): correct the app icons and give the ribbon its own assets",
+    "939": "feat(office-addin): add Teams chats as a context source in the chat composer",
+    "940": "feat(office-addin): attach files and images shared in Teams conversations",
+    "938": "Add support for rendering math equations in Markdown",
+    "941": "feat(frontend): client-side PDF preview (ERMAIN-566)",
+    "945": "Fix missing fallback for empty translation strings in JIT-compiled mode",
+    "943": "Add optional pinned chats",
+    "946": "Reactivate Kubescape CI by switching to our fork",
+    "942": "feat(frontend): restore PDF text selection and copy (ERMAIN-570)",
+    "947": "Add pin/unpin icon; Add enforcement of pin limit",
+    "960": "Show target audience on assistant hub review page",
+    "959": "Fix JIT translation to correctly integrate fallback",
+    "962": "Add Markdown preview to assistant hub description edit field",
+    "961": "Force \"whole organization\" option to be at top of share grants",
+    "948": "fix(office-addin): upload the Teams transcript as text/plain",
+    "949": "Carry Graph's message subject into the Teams transcript",
+    "964": "Add config settings for max_files in normal chat and assistants",
+    "950": "Name the viewer in Teams chat transcripts",
+    "965": "Bump oauth2-proxy to v7.15.2-erato.4",
+    "951": "Add a chat-input seam for grouped attachment previews",
+    "953": "Preview attached Teams chats as a conversation",
+    "955": "fix: keep table cells and fenced code intact in html-to-text",
+    "956": "Cite Teams transcript messages by ordinal",
+    "957": "Index the Teams transcript's identifiers and strip them before the model",
+    "958": "Render the Teams composer preview from the transcript's index block",
+    "966": "Show an attached Teams transcript as a conversation before sending",
+    "963": "Add licenses notice generation to build process",
+    "968": "fix(dev): gate linked add-in reloads on library build completion (ERMAIN-565)",
+    "967": "Open a stored Teams transcript as its conversation",
+    "969": "Teach and resolve Teams transcript message citations",
+    "970": "Add sort by for chats",
+    "971": "Pin Teams message windows to creation time, pace chat reads, gate add-menu rows on the file limit",
+    "972": "Align chat add menu with the dropdown theme-token channel",
+    "973": "Sidebar geometry: alignment contract, slim centering, resizable width (ERMAIN-608)",
+    "974": "Sidebar & search UI polish: default icons, collapse animation, aligned search input (ERMAIN-612)",
+    "975": "Focus rings: keyboard-only, inset on sidebar rows, aligned trailing controls",
+    "976": "On-device search part 1: sidecar search protocol, nested trace rendering, client-tool abort plumbing (ERMAIN-616)",
+    "988": "Refactor to establish clear distribution structure",
+    "978": "Delegation config & server-side gating (ERMAIN-619)",
+    "989": "Skip check for sibling .json files before mirroring .po files",
+    "990": "Add pin dropdown actions to more places",
+    "979": "Chat provenance envelope, seed_chat_lineage, ContextRebase (ERMAIN-620)",
+    "991": "Add ability to consome translation authored via admin-panel",
+    "980": "Mention validation & persistence on submit/edit/regenerate (ERMAIN-621)",
+    "981": "delegate_to_assistant: tool offer, dispatch branch, awaited child run (ERMAIN-622)",
+    "982": "Listing surface: hide delegated runs by default, provenance on RecentChat (ERMAIN-623)",
+    "984": "Composer assistant mentions: @-picker, add-menu and Tools sections (ERMAIN-618)",
+    "985": "Delegation trace: nested child steps in the tool call, open-run link (ERMAIN-624)",
+    "986": "Assistant space: delegated runs segment, origin hint, attention passthrough (ERMAIN-625)",
+    "996": "Split up lint GH Actions job",
+    "987": "Highlight tracked assistant mentions behind the composer text (ERMAIN-629)",
+    "995": "Make MCP call and output processing errors recoverable",
+    "992": "Delegated chat lifecycle: archive cascade, age reaping, orphan cleanup, in-flight guard (ERMAIN-627)",
+    "997": "Reduce build cache thrash by using branch-aware cache tags",
+    "993": "Contain third-party assistant metadata in the delegation tool offer (ERMAIN-626)",
+    "994": "Pin continuestream tool scope, share the generation task lifecycle (ERMAIN-628)",
+    "999": "Prepare frontend library for Git consumers",
+    "998": "Compose the delegation preamble instead of storing it in the child's message (ERMAIN-630)",
+    "1002": "Make replicaCount for oauth2Proxy configureable in Helm chart",
+    "1003": "Improve frontend build layer caching",
+    "1010": "Generate SBOM and license artifacts before the source copy (ERMAIN-656)",
+    "1000": "Delegated chats open on a run header, not a machine-written message (ERMAIN-631)",
+    "1004": "Carry a per-request delegation run mode through submit, edit and regenerate (ERMAIN-634)",
+    "1005": "Detached delegation dispatch: background runs return at launch (ERMAIN-635)",
+    "1006": "Bound delegated runs: in-task deadline, reaper backstop, background concurrency cap (ERMAIN-636)",
+    "1007": "Recent chats: optional origin_chat_id filter (ERMAIN-637)",
+    "1008": "Derive a delegated run's outcome from its chat so completion survives retention (ERMAIN-638)",
+    "1009": "Drain in-flight generations on shutdown so their fate is recorded (ERMAIN-639)",
+    "1011": "Ask wait-or-background when sending a message with tracked mentions (ERMAIN-640)",
+    "1012": "Delegation trace: settled background presentation for detached runs (ERMAIN-641)",
+    "1013": "Delegated background runs of the open chat above the composer (ERMAIN-642)",
+    "1014": "Delegated runs list: dismiss finished background runs (ERMAIN-643)",
+    "1016": "Record MCP servers skipped for missing OAuth authorization in generation metadata (ERMAIN-657)",
+    "1017": "Assistant editor: attach MCP servers with per-user connection affordance (ERMAIN-657)",
+    "1018": "Chat: point at unconnected MCP servers instead of silently dropping their tools (ERMAIN-657)",
+    "1020": "Render tracked assistant mentions in sent user messages (ERMAIN-661)",
+    "1022": "Delegated runs list: surface a background run the moment it is dispatched (ERMAIN-664)",
+    "1021": "Delegation surfaces: kit-aligned badges and chevrons, keyboard reveal, SPA origin link (ERMAIN-665)",
+    "1023": "Do not seed a pending sidebar chat from replayed chat_created frames (ERMAIN-666)",
+    "1024": "feat: show loading spinner on save button in assistant create/edit form",
+    "1026": "Do not clear a still-unlisted chat's placeholder on turn completion (ERMAIN-666)",
+    "1025": "Surface delegated background runs in the add-in pane (ERMAIN-644)",
+    "1027": "Extract router-free chat-history primitives for host reuse (ERMAIN-614)",
+    "1032": "Add-in: skip the oauth2-proxy session warm for custom-audience tokens",
+    "1033": "Add-in: AddinStartView extension point with start/chat view switcher",
+    "1035": "Access dynamic translation IDs without causing console warnings",
+    "1036": "Add option for configure model preference",
+    "1037": "Improve error message for prompt injection guardrail",
+    "1038": "Block chat composer after encountering guardrail",
+    "1039": "Add chat_providers.providers.<id>.validate_availability",
+    "1042": "Route local admin panel through auth proxies",
+    "1040": "Add wait tool for actions that require it",
+    "1041": "Add model switching indicator",
+    "1043": "Model switch marker: add-in parity and shared transcript notice",
+    "1045": "Add a delegated-runs filter and pane attention badge",
+    "1044": "Increase the default file limits to 10 files with 50MB each",
+    "1046": "Unify staged attachment previews into a shared tile",
+    "1047": "Draw sent-message attachments with the shared tile",
+    "1049": "Move staged attachments inside the composer shell",
+    "1050": "Draw grouped attachment items with the shared tile",
+    "1051": "Promote attachment tile geometry to theme tokens",
+    "1055": "Pin the kit-facing shared surface",
+    "1056": "Clamp long code blocks with a reveal control",
+    "1052": "Keep the picked file size on staged attachments",
+    "1053": "Let images grow in place before the full preview",
+    "1059": "Fold the redundant attachments seam into one registry key",
+    "1057": "Share the growth control between attached and generated images",
+    "1058": "Group a sent Teams conversation and name its shared files",
+    "1060": "Fail CI when the kit shared surface drifts",
+    "1061": "Paint the code block surface on the element that clips",
+    "1062": "Keep the composer upload button usable after a file error (ERMAIN-163)",
+    "1064": "Make the info tooltip reachable by keyboard",
+    "1063": "Let keyboard users move through the segmented control tabs",
+    "1066": "new hook useChatHistoryRowPresentation",
+    "1067": "Pin FilePreviewButton and ChatAttentionStatusDot to the kit-facing shared surface",
+    "1065": "Let deployments declare Office add-in launch events in config",
+    "1068": "Make theming fail loudly instead of silently, and hoist user attachments above the message body",
+    "1069": "Resolve dropdown and media borders through the merged theme",
+    "1070": "Add option to disable categories in Assistant Hub",
+    "1075": "Highlight selected item in SegmentControl",
+    "1076": "Improve frontend bundle spliting; Bucket icon catalogs",
+    "1078": "Extend Helm chart to allow for automatic building of upstreams",
+    "1079": "Expose complete generated API client in frontend library",
+    "1080": "Make MCP server configuration reloadable",
+    "1071": "Add experience policy document as a runtime configuration source type (ERMAIN-694)",
+    "1072": "Serve the per-user starting assistant on GET /me/starting-assistant (ERMAIN-695)",
+    "1073": "Let a person override or clear their start screen, and land them there (ERMAIN-696)",
+    "1077": "Let an audience expire: read-time expires_at in the starting-assistant resolver",
+    "1081": "erato: per-setting resolution orders + stable audience ids on the wire (dual-written, invisible at one setting)",
+    "1083": "Allow controlling Outlook default settings from config",
+    "1084": "Add chaos creator server for chaos testing",
+    "1085": "Improve robustness of generation when dropping client connection",
+    "1082": "Audience snapshot provenance, and the gate for re-keying the audiences map by id (ERMAIN-721)",
+    "1088": "Derive dropdown row radius from a panel radius token and four-sided inset",
+    "1091": "Give customer themes hooks and tokens for cards, tab rails, attachments, and the add-in header",
+    "1094": "Support MCP server file output of non-image files",
+    "1093": "Add assistant usage view",
+    "1092": "Move every loading ring onto one themable spinner primitive",
+    "1089": "Add a user text-size setting to the Appearance tab (ERMAIN-739)",
+    "1095": "Resolve dropped .msg emails that ANSI-encode the Message-ID, and attach ones the mailbox cannot find",
+    "1097": "Upgrade to rmcp 3.2.0; Support OAuth2 resource override",
+    "1096": "Move the capsule dialect, the alert frame and selected state onto themable channels",
+    "1098": "Fix edit action and other state differences in pinned chats",
+    "1100": "Move the popover family onto a shared panel primitive and themable shape channels",
+    "1086": "Make the centered new-chat composer layout the default (ERMAIN-736)",
+    "1099": "Fully wire up tool progress updates and show progress message",
+    "1087": "Reduce and reorganize the new-chat welcome content (ERMAIN-737)",
+    "1101": "Move menu and sidebar rows onto one Row primitive",
+    "1106": "Update Kubescape and pin controls version",
+    "1112": "Fix to use the Application root URL as OAuth2 callback URL",
+    "1105": "Move the card family onto one Card primitive and themable geometry and skin channels",
+    "1113": "Fix Gemini 3 thinking level for audio transcription",
+    "1114": "Align host i18n ids with the component kit",
+    "1117": "Keep the selected microphone across device-list churn (ERMAIN-795)",
+    "1116": "Surface provider content blocks in audio transcription as a user-facing error",
+    "934": "feat: enforce configured file-size limits across all local upload paths",
+    "1115": "Move the attachment chip family onto one tile primitive and themable corner and tint channels",
+    "1122": "Add sidecar TLS bootstrapping",
+    "1124": "Set up dial9 profiling",
+    "1120": "Seat the share button in one chat top bar with the kit accessory",
+    "1125": "Blink a pending dot on the tab favicon for the open chat",
+    "1104": "Support shared mailboxes in the Outlook add-in (ERMAIN-752)",
+    "1126": "Shared-mailbox follow-ups: row routing, scope binding, sign-in retry, manifest checks",
+    "1103": "Anchor the pane to the conversation when a thread header is selected (ERMAIN-753)",
+    "1129": "Move the tab family onto one TabRail primitive and themable rail and track channels",
+    "1118": "Give every dropped file feedback and stage drops through a visible pipeline",
+    "1119": "Stage emails before send: eager resolution, per-part verdicts and a composer size gate",
+    "1121": "Reach the files inside forwarded emails",
+    "1130": "Match the Markdown field's focus highlight to its frame",
+    "1128": "Implement more granular policy data rebuild",
+    "1132": "Clone FrontendRegistry to avoid recompilation",
+    "1133": "Move the sidebar bands and toggles onto SidebarBand and SidebarToggle",
+    "1138": "Declare the component-kit surface and the themable host class names",
+    "1139": "Request email scope explicitly for Outlook sign-in",
+    "1102": "Let theme packs declare optional assets instead of 404ing on them",
+    "1141": "Let the sidebar test's logo path reach the theme mock",
+    "1137": "Add configmap hash based redeployment to Helm chart",
+    "1131": "Add an unarchive endpoint for chats (ERMAIN-794)",
+    "1134": "Share an unarchive action across both chat hosts (ERMAIN-794)",
+    "1135": "Mark archived chats in history and offer unarchive (ERMAIN-794)",
+    "1142": "Make port, directory, icon, name for sidecar configurable",
+    "1136": "Close the composer on an archived chat and explain it (ERMAIN-794)",
+    "1143": "Protocol adjustments for sidecar indexing",
+    "1144": "Protocol adjustments for sidecar indexing",
+    "1145": "Stop a component kit silently dropping host behaviour from the chat history row",
+    "1146": "Enumerate an MCP server's tools for the user with the effective projection",
+    "1147": "Let a user deny an MCP tool for themselves and enforce it at both generation sites",
+    "1148": "Add a per-chat write-operations switch and the composer Connectors section",
+    "1149": "Switch MCP servers off per chat from the composer connectors",
+    "1150": "Switch single MCP tools off per chat from the tool browser",
+    "1152": "Add a per-tool Ask decision, the effective state on the wire and bulk tool decisions",
+    "1107": "Lift delegation config to `[delegation]` and reserve the `erato` tool namespace (ERMAIN-754)",
+    "1108": "Rename `AssistantConfiguration` to `ChatConfiguration` with an optional assistant and a task spec (ERMAIN-755)",
+    "1109": "Split `dispatch_delegate_tool_call` into launch and await (ERMAIN-756)",
+    "1157": "Release the MCP consent card when the decision is accepted and stream the continuation",
+    "1110": "Select reserved `erato/*` tools with the client-tool collector (ERMAIN-758)",
+    "1159": "Add controls for sidecar mailbox activation and priority",
+    "1158": "Stabilize all experimental config keys",
+    "1160": "Extend sidecar RPC for benchmarking",
+    "1161": "Hand a message renderer the MCP notices and the action-facet context",
+    "1173": "Let a message renderer consume host behaviour instead of copying it",
+    "1174": "Share grouped attachment behavior and rendering with component kits",
+    "1162": "Accept the delegation status vocabulary and the `delegate_task` tool name (ERMAIN-763)",
+    "1168": "Make the add-in client-action stack host-neutral (ERMAIN-543, ERMAIN-546)",
+    "1163": "Report why a delegated run ended and frame the child's answer (ERMAIN-767)",
+    "1178": "Share attachment tile and composer rendering with component kits",
+    "1179": "Bound how long a turn waits on a silent chat provider (ERMAIN-824)",
+    "1183": "Share assistant welcome configuration with component kits",
+    "1164": "Offer and dispatch `delegate_task` awaited and serial (ERMAIN-770)",
+    "1176": "Show a trace step as running from its own status, not its position (ERMAIN-771)",
+    "1177": "Keep the MCP session map and configuration free while a server is slow (ERMAIN-760)",
+    "1165": "Bound a task run with two independent tool-call budgets (ERMAIN-774)",
+    "1184": "Extend sidecar RPC with generalized source listing and folders",
+    "1166": "Render what a delegated task actually ran (ERMAIN-775)",
+    "1185": "Extend sidebar protocol with generic metadata filter",
+    "1180": "Put a delegated task on disk at the slot it will settle into (ERMAIN-764)",
+    "1181": "Run a turn's delegated tasks side by side, bounded (ERMAIN-768)",
+    "1186": "Extend RPC search.query response with external identifiers",
+    "1187": "Show MCP authorization progress across web and add-in",
+    "1193": "Speed up MCP server listing with bounded parallel probes",
+    "1194": "Report MCP authorization through the house feedback components",
+    "1195": "Make the two MCP approval surfaces agree",
+    "1188": "Refuse a second write into a generating chat instead of taking it over (ERMAIN-776)",
+    "1189": "Carry a delegated task's result back into the chat that started it (ERMAIN-777)",
+    "1190": "Keep a delivered task result on the thread when a stale client replies (ERMAIN-778)",
+    "1191": "Render a delivered task result in the conversation (ERMAIN-779-A)",
+    "1192": "Dispatch and deliver async delegated tasks (ERMAIN-780)",
+    "1196": "Recover a stranded async task result without a user request (ERMAIN-781-A)",
+    "1197": "Let a client ask for the reaction a delivered task result never got (ERMAIN-781-B)",
+    "1199": "Tell the sidebar a delegated run is still in flight (ERMAIN-782)",
+    "1200": "React to a delivered task result without a reload (ERMAIN-779-B)",
+    "1201": "Retry a failed delegated task from the origin chat (ERMAIN-783)",
+    "1202": "Index the async delivery lookups and the latest-generation probe (ERMAIN perf follow-up)",
+    "1210": "Fix Teams document kinds in desktop sidecar protocol",
+    "1211": "Fix sidecar mailbox IDs and keep indexing status in settings",
+    "1215": "Add validated client submissions with bounded corrections",
+    "1213": "Add optional sidecar search and Outlook read tools to web and add-ins",
+    "1216": "Expose sidecar search metadata discovery to chat clients",
+    "1217": "fix: stream tool argument preparation into the chat trace",
+    "1219": "Add optional sidecar mailbox and folder browsing tools",
+    "1218": "Allow client tool calls to attach files to response",
+    "1225": "Extend sidecar protocol for full document retrieval",
+    "1227": "Add global log filter that sanitizes URLs",
+    "1229": "Extend client tools with document retrieval",
+    "1231": "Rework MCP settings pane",
+    "1230": "Delegation Level D: approvals for delegated tasks, with end-to-end coverage",
+    "1233": "Extend sidecar protocol for deep linking",
+    "1234": "Add approval flow for file uploads from client tools",
+    "1235": "Track EWS IDs on sidecar file uploads",
+    "1232": "Add Word add-in with structured document authoring",
+    "1236": "Settle crash-orphaned tool calls, and stop calling them done",
+    "1238": "Composer: say in advance when delegated work needs approving",
+    "1239": "Define Outlook source references for uploaded files",
+    "1240": "Settle an origin slot its own turn will never come back for",
+    "1241": "Persist Outlook source references on uploaded files",
+    "1242": "Extend sidecar protocol with \"open data directory\" command",
+    "1245": "Allow assistant hub assistants to be selected in delegation window",
+    "1244": "Allow rendering of inline HTML in Markdown; For table line breaks",
+    "1247": "Precompile prompt injection patterns at startup and reuse",
+    "1243": "feat: open source emails from previews and upload consent",
+    "1248": "Implement standalone distribution for MS Teams",
+    "1250": "feat(prompt-composition): replay earlier-turn client tool calls as receipts; count tool parts in token estimate (ERMAIN-868)",
+    "1249": "Add disabled durable client-operation foundation",
+    "1237": "ERMAIN-862: Native local evidence as a durable client operation",
+    "1251": "Show add-in UI in the host application's display language",
+    "1252": "fix(frontend): build local sidecar protocol before dev startup",
+    "1253": "Add Teams bot tables and user Entra object ID",
+    "1254": "Show Teams bot setup steps and add the Teams bot guide",
+    "1255": "Add optional tool for retrieval of embedded images",
+    "1256": "Add recipients as context for outlook actions",
+    "1262": "Returning to assistant landing page clears active chat",
+    "1261": "Implement tool call limit continuation approval workflow",
+    "1263": "Sanitize NUL chracters in tool request/response before storing",
+    "1259": "Show Word messages immediately while the document is prepared",
+    "1260": "Record where chats were created and filter the chat list by source",
+    "1257": "Precise Word plan diagnostics and normalize misplaced built-in styles",
+    "1258": "Show Word apply progress on the Apply button and read documents less often",
+    "1265": "Repair rejected Word plans with small patches"
+  }
+}
