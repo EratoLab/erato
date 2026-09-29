@@ -57,6 +57,12 @@ interface ActionConfirmationCardProps {
   /** Disables the buttons while the allowed action is executing. */
   isBusy?: boolean;
   /**
+   * Progress of the allowed action. While set, the allow button that was
+   * pressed shows a spinner with this label and stays focusable instead of
+   * disabling, so focus does not drop while the action runs.
+   */
+  progressLabel?: string;
+  /**
    * Scroll the card into view when it mounts. Used when the card is
    * surfaced by the application (e.g. after a fresh assistant completion)
    * rather than by a user click, so it can't appear off-screen unnoticed.
@@ -116,6 +122,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   status = "pending",
   resolvedLabel,
   isBusy = false,
+  progressLabel,
   scrollIntoViewOnMount = false,
   className = "",
   "data-testid": dataTestId,
@@ -123,6 +130,10 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   const cardRef = useRef<HTMLElement | null>(null);
   const alwaysAllowReasonId = useId();
   const isPending = status === "pending";
+  const [allowedWith, setAllowedWith] = useState<"once" | "always">("once");
+  const onceInProgress = progressLabel !== undefined && allowedWith === "once";
+  const alwaysInProgress =
+    progressLabel !== undefined && allowedWith === "always";
 
   useEffect(() => {
     if (scrollIntoViewOnMount) {
@@ -212,14 +223,25 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
             <Button
               variant="primary"
               size="sm"
-              onClick={onAllowOnce}
-              disabled={isBusy}
+              onClick={
+                onceInProgress
+                  ? undefined
+                  : () => {
+                      setAllowedWith("once");
+                      onAllowOnce();
+                    }
+              }
+              disabled={isBusy && !onceInProgress}
+              busy={onceInProgress}
+              aria-disabled={onceInProgress || undefined}
             >
-              {allowOnceLabel ??
-                t({
-                  id: "actionConfirmation.allowOnce",
-                  message: "Allow once",
-                })}
+              {onceInProgress
+                ? progressLabel
+                : (allowOnceLabel ??
+                  t({
+                    id: "actionConfirmation.allowOnce",
+                    message: "Allow once",
+                  }))}
             </Button>
             {onAlwaysAllow && (
               <Button
@@ -228,19 +250,37 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
                 // aria-disabled instead of disabled keeps the button in the
                 // tab order so keyboard/SR users can discover the option and
                 // the reason; the click guard makes it inert.
-                onClick={alwaysAllowDisabledReason ? undefined : onAlwaysAllow}
-                disabled={isBusy}
-                aria-disabled={alwaysAllowDisabledReason ? true : undefined}
+                onClick={
+                  alwaysAllowDisabledReason || alwaysInProgress
+                    ? undefined
+                    : () => {
+                        setAllowedWith("always");
+                        onAlwaysAllow();
+                      }
+                }
+                disabled={isBusy && !alwaysInProgress}
+                busy={alwaysInProgress}
+                aria-disabled={
+                  alwaysAllowDisabledReason || alwaysInProgress
+                    ? true
+                    : undefined
+                }
                 aria-describedby={
                   alwaysAllowDisabledReason ? alwaysAllowReasonId : undefined
                 }
-                className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                className={
+                  alwaysAllowDisabledReason
+                    ? "aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                    : undefined
+                }
               >
-                {alwaysAllowLabel ??
-                  t({
-                    id: "actionConfirmation.alwaysAllow",
-                    message: "Always allow",
-                  })}
+                {alwaysInProgress
+                  ? progressLabel
+                  : (alwaysAllowLabel ??
+                    t({
+                      id: "actionConfirmation.alwaysAllow",
+                      message: "Always allow",
+                    }))}
               </Button>
             )}
             <Button

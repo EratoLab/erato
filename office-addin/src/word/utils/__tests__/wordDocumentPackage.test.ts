@@ -12,6 +12,7 @@ import {
   WORD_DOCUMENT_IMPORT_OPTIONS,
 } from "../wordDocumentPackage";
 import { readWordPackage, wordXmlText } from "../wordDocumentPackageCodec";
+import { wordDocumentFingerprint } from "../wordDocumentXml";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -178,6 +179,26 @@ describe("native complete-document capture", () => {
       expect(host.close).toHaveBeenCalledOnce();
     },
   );
+
+  it("requests Office's maximum slice size so one read covers a supported document", async () => {
+    const host = officeFile(wordDocumentOoxmlToFile(fixture()));
+    await readWordDocumentFile();
+    expect(host.document.getFileAsync).toHaveBeenCalledWith(
+      "compressed",
+      { sliceSize: 4 * 1024 * 1024 },
+      expect.any(Function),
+    );
+  });
+
+  it("computes the package fingerprint on first read and matches the snapshot fingerprint", async () => {
+    officeFile(wordDocumentOoxmlToFile(fixture()));
+    const captured = await captureWordDocumentPackage();
+    expect(
+      Object.getOwnPropertyDescriptor(captured, "fingerprint")?.get,
+    ).toBeTypeOf("function");
+    expect(captured.fingerprint).toBe(wordDocumentFingerprint(captured.ooxml));
+    expect(captured.fingerprint).toBe(captured.fingerprint);
+  });
 
   it("includes changes outside the body in the stale-state fingerprint", async () => {
     officeFile(wordDocumentOoxmlToFile(fixture()));

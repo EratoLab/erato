@@ -6,9 +6,12 @@ import { ActionConfirmationCard } from "./ActionConfirmationCard";
 vi.mock("../Controls/Button", () => ({
   Button: ({
     children,
+    busy,
     ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { busy?: boolean }) => (
+    <button {...props} aria-busy={busy ? true : undefined}>
+      {children}
+    </button>
   ),
 }));
 
@@ -135,6 +138,49 @@ describe("ActionConfirmationCard", () => {
     expect(screen.getByText("Allow once")).toBeDisabled();
     expect(screen.getByText("Always allow")).toBeDisabled();
     expect(screen.getByText("Deny once")).toBeDisabled();
+  });
+
+  it("shows progress on the pressed Allow once button and keeps it focusable", () => {
+    const onAllowOnce = vi.fn();
+    const props = {
+      onAllowOnce,
+      onAlwaysAllow: vi.fn(),
+      onDeny: vi.fn(),
+    };
+    const { rerender } = render(<ActionConfirmationCard {...props} />);
+    fireEvent.click(screen.getByText("Allow once"));
+    rerender(
+      <ActionConfirmationCard
+        {...props}
+        isBusy
+        progressLabel="Saving backup…"
+      />,
+    );
+    const progress = screen.getByRole("button", { name: "Saving backup…" });
+    expect(progress).toHaveAttribute("aria-busy", "true");
+    expect(progress).toHaveAttribute("aria-disabled", "true");
+    expect(progress).toBeEnabled();
+    expect(screen.getByText("Always allow")).toBeDisabled();
+    expect(screen.getByText("Deny once")).toBeDisabled();
+    fireEvent.click(progress);
+    expect(onAllowOnce).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows progress on Always allow when that decision started the action", () => {
+    const onAlwaysAllow = vi.fn();
+    const props = { onAllowOnce: vi.fn(), onAlwaysAllow, onDeny: vi.fn() };
+    const { rerender } = render(<ActionConfirmationCard {...props} />);
+    fireEvent.click(screen.getByText("Always allow"));
+    rerender(
+      <ActionConfirmationCard {...props} isBusy progressLabel="Verifying…" />,
+    );
+    expect(screen.getByRole("button", { name: "Verifying…" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    expect(screen.getByText("Allow once")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Verifying…" }));
+    expect(onAlwaysAllow).toHaveBeenCalledTimes(1);
   });
 
   it("renders a compact resolved row instead of buttons once resolved", () => {

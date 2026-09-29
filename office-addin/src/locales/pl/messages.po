@@ -1740,6 +1740,26 @@ msgid "officeAddin.teams.signInToLoad.title"
 msgstr "Zaloguj się, aby załadować czaty z usługi Teams"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.apply.stage.backup"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.apply.stage.checking"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.apply.stage.verifying"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.apply.stage.writing"
+msgstr ""
+
+#. js-lingui-explicit-id
 #. placeholder {0}: headings.length
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.afterOutline"
@@ -1762,8 +1782,8 @@ msgstr "Zastosuj nową wersję dokumentu"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
-msgid "officeAddin.word.authoring.applying"
-msgstr "Stosowanie i sprawdzanie nowej wersji dokumentu…"
+#~ msgid "officeAddin.word.authoring.applying"
+#~ msgstr "Stosowanie i sprawdzanie nowej wersji dokumentu…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx

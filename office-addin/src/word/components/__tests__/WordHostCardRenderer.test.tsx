@@ -5,6 +5,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -762,6 +763,38 @@ describe("WordHostCardRenderer", () => {
       fireEvent.click(screen.getByRole("button", { name: "Show in Word ↗" }));
       await flush();
       expect(word.word.selections()).toEqual([["id-2"], ["id-2"]]);
+    });
+
+    it("keeps the Apply button focused and busy while Word works, then releases it", async () => {
+      renderCard({ artifact: makeArtifact() });
+      await flush();
+      const run = word.word.run.getMockImplementation()!;
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      word.word.run.mockImplementation(async (callback) => {
+        await held;
+        return run(callback);
+      });
+      const apply = screen.getByRole("button", { name: "Apply edit" });
+      apply.focus();
+      fireEvent.click(apply);
+      const busy = await screen.findByRole("button", {
+        name: "Checking document…",
+      });
+      expect(busy).toBe(apply);
+      expect(busy).toHaveAttribute("aria-busy", "true");
+      expect(busy).toHaveFocus();
+      fireEvent.click(busy);
+      release();
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: /Apply edit|…$/ }),
+        ).toBeNull(),
+      );
+      expect(word.word.writes()).toHaveLength(1);
+      expect(document.querySelector('[aria-busy="true"]')).toBeNull();
     });
 
     it("retains outcomes and comparison across a card remount and prevents replay", async () => {

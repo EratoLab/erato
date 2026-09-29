@@ -27,6 +27,7 @@ import {
   wordClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
 import { revertWordEdits } from "../utils/wordApplyEdits";
+import { wordApplyStageLabel } from "../utils/wordAuthoringMessages";
 import {
   offerableWordClientActionsForFacet,
   wordActionForFence,
@@ -182,6 +183,7 @@ function WordActionCard({
     review.status === "idle" ||
     review.status === "no-capture" ||
     review.status === "identity-mismatch";
+  const applying = review.status === "applying";
   const execute = useCallback(async (): Promise<boolean> => {
     const live = resolveWordWriteGate({
       capture,
@@ -200,13 +202,18 @@ function WordActionCard({
       !beginOperation()
     )
       return false;
-    updateReview(batchKey, { status: "applying", capture: live.capture });
+    updateReview(batchKey, {
+      status: "applying",
+      applyStage: "checking",
+      capture: live.capture,
+    });
     try {
       const mode = await readWordTrackingMode();
       setTracking(mode);
       const run = await entry.execute({
         fenceContent: content,
         capture: live.capture,
+        onStage: (applyStage) => updateReview(batchKey, { applyStage }),
       });
       if (run.snapshotOoxml && messageId)
         setRevertSlot({
@@ -216,6 +223,7 @@ function WordActionCard({
           ooxml: run.snapshotOoxml,
         });
       updateReview(batchKey, {
+        applyStage: undefined,
         detailsExpanded: false,
         status:
           run.ok || (payload.kind === "edits" && run.hostFailed === false)
@@ -235,6 +243,7 @@ function WordActionCard({
       return run.ok;
     } catch {
       updateReview(batchKey, {
+        applyStage: undefined,
         status: "write-failed",
         outcomes:
           payload.kind === "edits"
@@ -449,7 +458,7 @@ function WordActionCard({
       }
       footer={
         <div className="word-review__footer">
-          {idle && offeredActions.length > 0 && (
+          {(idle || applying) && offeredActions.length > 0 && (
             <>
               <p className="word-review__hint">
                 {payload.kind === "edits"
@@ -464,15 +473,21 @@ function WordActionCard({
                     })}
               </p>
               {!confirmCard && (
+                // Busy rather than disabled keeps focus on the button while Word works.
                 <Button
                   type="button"
                   variant="primary"
+                  busy={applying}
+                  aria-disabled={applying || undefined}
                   disabled={
-                    operationInProgress || isConfirmPending || !gate.allowed
+                    !applying &&
+                    (operationInProgress || isConfirmPending || !gate.allowed)
                   }
-                  onClick={() => void execute()}
+                  onClick={applying ? undefined : () => void execute()}
                 >
-                  {applyLabel}
+                  {applying
+                    ? wordApplyStageLabel(review.applyStage)
+                    : applyLabel}
                 </Button>
               )}
             </>
@@ -532,6 +547,9 @@ function WordActionCard({
                 updateReview(batchKey, { status: "denied", capture });
               }}
               isBusy={operationInProgress || !gate.allowed || !idle}
+              progressLabel={
+                applying ? wordApplyStageLabel(review.applyStage) : undefined
+              }
               scrollIntoViewOnMount={confirmCard.autoTriggered}
             />
           )}

@@ -2,6 +2,7 @@ import type {
   WordDocumentApplyStatus,
   WordDocumentDiagnostic,
 } from "./wordApplyDocumentPlan";
+import type { WordApplyStage } from "./wordApplyProgress";
 import type { WordDocumentCapture } from "./wordDocumentCapture";
 import type { WordEditOutcome } from "./wordEditPlan";
 import type { WordReviewAnchor, WordTrackingMode } from "./wordReviewLocation";
@@ -29,6 +30,8 @@ export interface WordReviewState {
   detailsExpanded?: boolean;
   documentPlanStatus?: WordDocumentApplyStatus | "revert-stale";
   documentPlanDiagnostic?: WordDocumentDiagnostic;
+  /** Kept in the provider so the busy label survives card remounts. */
+  applyStage?: WordApplyStage;
 }
 export const EMPTY_WORD_REVIEW: WordReviewState = {
   status: "idle",

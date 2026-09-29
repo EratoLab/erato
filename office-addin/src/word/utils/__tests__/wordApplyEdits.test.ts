@@ -68,6 +68,24 @@ describe("applyWordEdits", () => {
     expect(result.hostFailed).toBe(false);
   });
 
+  it("reports each stage in order, and only checking when nothing is applicable", async () => {
+    const stages: string[] = [];
+    await applyWordEdits({
+      edits: [{ paragraph: 2, text: "Bravo, revised." }],
+      capture: captureOf(texts),
+      onStage: (stage) => stages.push(stage),
+    });
+    expect(stages).toEqual(["checking", "backup", "writing", "verifying"]);
+
+    stages.length = 0;
+    await applyWordEdits({
+      edits: [{ paragraph: 2, text: "Bravo, again." }],
+      capture: captureOf(texts),
+      onStage: (stage) => stages.push(stage),
+    });
+    expect(stages).toEqual(["checking"]);
+  });
+
   it("applies in DESCENDING document order", async () => {
     await applyWordEdits({
       edits: [

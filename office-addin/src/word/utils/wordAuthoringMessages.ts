@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
+import type { WordApplyStage } from "./wordApplyProgress";
 import type { WordPlanIssue } from "./wordDocumentPlan";
 
 export function wordDocumentDiagnosticText(
@@ -177,6 +178,31 @@ function wordAuthoringDetailText(detail: string): string {
         id: "officeAddin.word.authoring.unverifiedContent",
         message:
           "The captured document structure could not be verified for restructuring.",
+      });
+  }
+}
+
+export function wordApplyStageLabel(stage: WordApplyStage | undefined): string {
+  switch (stage) {
+    case "backup":
+      return t({
+        id: "officeAddin.word.apply.stage.backup",
+        message: "Saving backup…",
+      });
+    case "writing":
+      return t({
+        id: "officeAddin.word.apply.stage.writing",
+        message: "Applying…",
+      });
+    case "verifying":
+      return t({
+        id: "officeAddin.word.apply.stage.verifying",
+        message: "Verifying…",
+      });
+    default:
+      return t({
+        id: "officeAddin.word.apply.stage.checking",
+        message: "Checking document…",
       });
   }
 }

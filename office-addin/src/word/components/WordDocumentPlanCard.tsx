@@ -24,6 +24,7 @@ import {
 } from "../utils/clientActionPolicy";
 import { revertWordDocumentPlan } from "../utils/wordApplyDocumentPlan";
 import {
+  wordApplyStageLabel,
   wordAuthoringIssueText,
   wordDocumentDiagnosticText,
 } from "../utils/wordAuthoringMessages";
@@ -86,6 +87,7 @@ export function WordDocumentPlanCard({
     currentIdentity: host.documentIdentity,
   });
   const idle = review.status === "idle";
+  const applying = review.status === "applying";
   const issue = plan ? validateWordDocumentPlan(plan, snapshot) : "invalid";
   const enforcedAskActions = useMemo(
     () => artifact?.alwaysAskClientActions ?? [],
@@ -113,6 +115,7 @@ export function WordDocumentPlanCard({
     if (!ready || !capture || !host.beginOperation()) return false;
     host.updateReview(key, {
       status: "applying",
+      applyStage: "checking",
       capture,
       documentPlanDiagnostic: undefined,
     });
@@ -121,6 +124,7 @@ export function WordDocumentPlanCard({
         fenceContent: content,
         capture,
         messageId,
+        onStage: (applyStage) => host.updateReview(key, { applyStage }),
         onBeforeDocumentWrite: (before) => {
           if (messageId)
             host.setRevertSlot({
@@ -147,6 +151,7 @@ export function WordDocumentPlanCard({
         );
       }
       host.updateReview(key, {
+        applyStage: undefined,
         status: run.ok
           ? "done"
           : result?.status === "interrupted"
@@ -163,6 +168,7 @@ export function WordDocumentPlanCard({
       return run.ok;
     } catch {
       host.updateReview(key, {
+        applyStage: undefined,
         status: "write-failed",
         documentPlanStatus: "interrupted",
         documentPlanDiagnostic: { stage: "write", reason: "host-error" },
@@ -318,17 +324,12 @@ export function WordDocumentPlanCard({
                 message:
                   "The rewrite could not be applied. No document changes were made.",
               })
-            : review.status === "applying"
+            : review.status === "reverting"
               ? t({
-                  id: "officeAddin.word.authoring.applying",
-                  message: "Applying and verifying the document rewrite…",
+                  id: "officeAddin.word.authoring.reverting",
+                  message: "Checking and restoring the document…",
                 })
-              : review.status === "reverting"
-                ? t({
-                    id: "officeAddin.word.authoring.reverting",
-                    message: "Checking and restoring the document…",
-                  })
-                : undefined;
+              : undefined;
   if (generating)
     return (
       <Card variant="surface" size="sm">
@@ -354,7 +355,7 @@ export function WordDocumentPlanCard({
       data-testid="word-document-plan-card"
       footer={
         <div className="word-review__footer">
-          {idle && offered && (
+          {(idle || applying) && offered && (
             <>
               <p className="word-review__hint">
                 {t({
@@ -364,15 +365,21 @@ export function WordDocumentPlanCard({
                 })}
               </p>
               {!confirmCard && (
+                // Busy rather than disabled keeps focus on the button while Word works.
                 <Button
                   type="button"
                   variant="primary"
+                  busy={applying}
+                  aria-disabled={applying || undefined}
                   disabled={
-                    !ready || host.operationInProgress || isConfirmPending
+                    !applying &&
+                    (!ready || host.operationInProgress || isConfirmPending)
                   }
-                  onClick={() => void execute()}
+                  onClick={applying ? undefined : () => void execute()}
                 >
-                  {entry.displayLabel()}
+                  {applying
+                    ? wordApplyStageLabel(review.applyStage)
+                    : entry.displayLabel()}
                 </Button>
               )}
             </>
@@ -419,6 +426,9 @@ export function WordDocumentPlanCard({
                 host.updateReview(key, { status: "denied", capture });
               }}
               isBusy={host.operationInProgress || !ready}
+              progressLabel={
+                applying ? wordApplyStageLabel(review.applyStage) : undefined
+              }
               scrollIntoViewOnMount={confirmCard.autoTriggered}
             />
           )}

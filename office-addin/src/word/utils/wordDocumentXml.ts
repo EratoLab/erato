@@ -132,6 +132,8 @@ export function captureWordAuthoringSnapshot(
   };
   try {
     const doc = parse(ooxml);
+    // Same result as wordDocumentFingerprint(ooxml) without a second parse; the comparison only reads.
+    const fingerprint = createWordXmlComparison(doc).fingerprint();
     const body = wordMainBody(doc)!;
     const styleNodes = all(doc, "style");
     base.styles = styleNodes
@@ -357,7 +359,7 @@ export function captureWordAuthoringSnapshot(
     )
       base.issue = "too-large";
     if (tracking !== "Off") base.issue = "tracking";
-    base.fingerprint = wordDocumentFingerprint(ooxml);
+    base.fingerprint = fingerprint;
   } catch {
     base.issue = "unavailable";
   }

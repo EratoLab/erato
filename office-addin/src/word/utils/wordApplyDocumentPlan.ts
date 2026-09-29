@@ -1,3 +1,4 @@
+import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
 import {
   unlockWordContentControlsForImport,
   restoreWordContentControlLocks,
@@ -27,6 +28,7 @@ import {
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
 import { wordWriteHost } from "./wordWriteHost";
 
+import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
 import type { WordContentControlLocks } from "./wordContentControlWrite";
 import type {
   WordAuthoringSnapshot,
@@ -123,7 +125,34 @@ export async function applyWordDocumentPlan(
   snapshot: WordAuthoringSnapshot | undefined,
   messageId?: string,
   onBeforeWrite?: (before: string) => void,
+  onStage?: (stage: WordApplyStage) => void,
 ): Promise<WordDocumentApplyResult> {
+  const progress = trackWordApply("plan", onStage);
+  let result: WordDocumentApplyResult | undefined;
+  try {
+    result = await applyPlan(
+      content,
+      snapshot,
+      messageId,
+      onBeforeWrite,
+      progress,
+    );
+    return result;
+  } finally {
+    progress.finish(result?.status ?? "error");
+  }
+}
+
+async function applyPlan(
+  content: string,
+  snapshot: WordAuthoringSnapshot | undefined,
+  messageId: string | undefined,
+  onBeforeWrite: ((before: string) => void) | undefined,
+  progress: WordApplyProgress,
+): Promise<WordDocumentApplyResult> {
+  progress.stage("checking");
+  // Parsing, compiling and verifying below are synchronous; let the busy button paint first.
+  await yieldToPaint();
   const parsed = parseWordDocumentPlan(content);
   const plan = parsed && normalizeWordDocumentPlan(parsed, snapshot);
   const host = wordWriteHost();
@@ -159,8 +188,15 @@ export async function applyWordDocumentPlan(
         diagnostic: diagnostic("compile", "compile-failed"),
       };
     if (snapshot.fullDocument)
-      return await applyFullDocument(plan, snapshot, compiled, onBeforeWrite);
+      return await applyFullDocument(
+        plan,
+        snapshot,
+        compiled,
+        onBeforeWrite,
+        progress,
+      );
     stage = "preflight";
+    progress.stage("backup");
     return await host.run(async (context) => {
       context.document.load("changeTrackingMode");
       const live = context.document.body.getOoxml();
@@ -179,10 +215,12 @@ export async function applyWordDocumentPlan(
       onBeforeWrite?.(before);
       snapshot.used = true;
       stage = "write";
+      progress.stage("writing");
       writing = true;
       context.document.body.insertOoxml(compiled, "Replace");
       await context.sync();
       stage = "verify";
+      progress.stage("verifying");
       const after = context.document.body.getOoxml();
       context.document.load("changeTrackingMode");
       await context.sync();
@@ -289,7 +327,8 @@ async function applyFullDocument(
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,
   compiled: string,
-  onBeforeWrite?: (before: string) => void,
+  onBeforeWrite: ((before: string) => void) | undefined,
+  progress: WordApplyProgress,
 ): Promise<WordDocumentApplyResult> {
   const host = wordWriteHost();
   if (!host || !supportsWordDocumentPackage())
@@ -306,6 +345,7 @@ async function applyFullDocument(
   try {
     const bytes = wordDocumentOoxmlToFile(compiled);
     stage = "preflight";
+    progress.stage("backup");
     return await host.run(async (context) => {
       const live = await captureWordDocumentPackage();
       documentUrl = live.documentUrl;
@@ -328,6 +368,7 @@ async function applyFullDocument(
       onBeforeWrite?.(before);
       snapshot.used = true;
       stage = "write";
+      progress.stage("writing");
       await unlockWordContentControlsForImport(context, {
         onLocksCaptured: (value) => {
           locks = value;
@@ -346,6 +387,7 @@ async function applyFullDocument(
       imported = true;
       await finishWordEmptyDocumentImport(context, compiled);
       stage = "verify";
+      progress.stage("verifying");
       const after = await captureWordDocumentPackage();
       if (
         after.documentUrl !== live.documentUrl ||
@@ -365,14 +407,16 @@ async function applyFullDocument(
         true,
         "verify",
       );
+      // The snapshot fingerprints the same package; the lazy package fingerprint is only a fallback.
+      const afterFingerprint = actual.fingerprint || after.fingerprint;
       if (!verifyWordPlanOutput(plan, snapshot, actual))
         return {
           status: "interrupted",
           before,
-          afterFingerprint: after.fingerprint,
+          afterFingerprint,
           diagnostic: diagnostic("verify", "output-mismatch"),
         };
-      return { status: "applied", before, afterFingerprint: after.fingerprint };
+      return { status: "applied", before, afterFingerprint };
     });
   } catch (error) {
     if (!imported && locks.length)
@@ -472,13 +516,14 @@ async function revertFullDocument(
         true,
         "verify",
       );
+      const afterFingerprint = restored.fingerprint || after.fingerprint;
       if (!sameWordBodyContent(expected, restored))
         return {
           status: "interrupted",
-          afterFingerprint: after.fingerprint,
+          afterFingerprint,
           diagnostic: diagnostic("restore", "output-mismatch"),
         };
-      return { status: "reverted", afterFingerprint: after.fingerprint };
+      return { status: "reverted", afterFingerprint };
     });
   } catch (error) {
     if (!imported && locks.length)

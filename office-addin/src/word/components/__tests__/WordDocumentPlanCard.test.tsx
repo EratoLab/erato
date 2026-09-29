@@ -54,13 +54,16 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
     onDeny,
     onAlwaysAllow,
     isBusy,
+    progressLabel,
   }: {
     onAllowOnce: () => void;
     onDeny: () => void;
     onAlwaysAllow: () => void;
     isBusy: boolean;
+    progressLabel?: string;
   }) => (
     <div>
+      {progressLabel && <output>{progressLabel}</output>}
       <button disabled={isBusy} onClick={onAllowOnce}>
         Allow once
       </button>
@@ -154,6 +157,25 @@ function setup() {
     },
     fingerprint: () => wordDocumentFingerprint(current),
   };
+}
+/** Hold every Word batch until released, to observe the in-progress UI. */
+function holdWord() {
+  const word = (
+    globalThis as unknown as {
+      Word: { run: (callback: never) => Promise<unknown> };
+    }
+  ).Word;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.stubGlobal("Word", {
+    run: async (callback: never) => {
+      await held;
+      return word.run(callback);
+    },
+  });
+  return release;
 }
 beforeEach(() => {
   i18n.load("en", {});
@@ -284,6 +306,53 @@ describe("structural document review", () => {
     await waitFor(() =>
       expect(screen.getByText(/Revert was not run/)).toBeInTheDocument(),
     );
+    expect(state.insert).toHaveBeenCalledTimes(1);
+  });
+  it("keeps the Apply button focused and busy with the current stage, then releases it", async () => {
+    const state = setup();
+    state.mount();
+    const release = holdWord();
+    const apply = screen.getByRole("button", {
+      name: "Apply document rewrite",
+    });
+    apply.focus();
+    fireEvent.click(apply);
+    const busy = await screen.findByRole("button", { name: "Saving backup…" });
+    expect(busy).toBe(apply);
+    expect(busy).toHaveAttribute("aria-busy", "true");
+    expect(busy).toHaveAttribute("aria-disabled", "true");
+    expect(busy).toHaveFocus();
+    expect(
+      screen.queryByText(/Applying and verifying/),
+    ).not.toBeInTheDocument();
+    fireEvent.click(busy);
+    release();
+    await screen.findByText("Document rewrite applied");
+    expect(state.insert).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+  it("releases the busy Apply button after a failed write", async () => {
+    const state = setup();
+    state.fail();
+    state.mount();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply document rewrite" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
+    );
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+  it("shows the current stage on the consent card while applying", async () => {
+    mock.artifact.clientActionPresentation = "auto_prompt";
+    mock.artifact.proposedClientAction = "word.apply_document_plan";
+    const state = setup();
+    state.mount();
+    const release = holdWord();
+    fireEvent.click(await screen.findByRole("button", { name: "Allow once" }));
+    expect(await screen.findByText("Saving backup…")).toBeInTheDocument();
+    release();
+    await screen.findByText("Document rewrite applied");
     expect(state.insert).toHaveBeenCalledTimes(1);
   });
   it("blocks a forged complete-read token and never writes", () => {
