@@ -29,8 +29,12 @@ import {
   WORD_SUBMIT_PLAN_TOOL,
 } from "../utils/wordDocumentSubmission";
 import { captureWordImageAssets } from "../utils/wordImageAssets";
+import { markWordSend } from "../utils/wordSendTiming";
 
-import type { AddinChatInputRenderProps } from "../../core/AddinChatCore";
+import type {
+  AddinChatInputRenderProps,
+  AddinSendPreparation,
+} from "../../core/AddinChatCore";
 import type { AddinChatInputCoreProps } from "../../core/AddinChatInputCore";
 import type { WordDocumentPreview } from "../hooks/useWordDocumentSource";
 import type { WordDocumentCapture } from "../utils/wordDocumentCapture";
@@ -144,6 +148,7 @@ export function WordChatInput({
       const send = (
         actionFacet: ReturnType<typeof resolveWordActionFacet>,
         hostContextIdentity: string | null,
+        prepare?: AddinSendPreparation,
       ) => {
         chatInputProps.onSendMessage(
           message,
@@ -157,6 +162,7 @@ export function WordChatInput({
           mcpWriteToolsEnabled,
           disabledMcpServerIds,
           disabledMcpTools,
+          prepare,
         );
       };
 
@@ -166,101 +172,126 @@ export function WordChatInput({
         return;
       }
 
+      const contextChanged = () =>
+        sendingContextRef.current.chatId !== chatId ||
+        sendingContextRef.current.documentIdentity !== documentIdentity;
+      const finishPreparing = () => {
+        preparingRef.current = false;
+        setPreparing(false);
+      };
+      const prepareDocument: AddinSendPreparation["run"] = async (signal) => {
+        const withoutDocument = () => {
+          stagePendingCapture(null);
+          return { actionFacet: undefined, hostContextIdentity: null };
+        };
+        // Images are independent of the document read and are only kept when
+        // authoring is available, so both start together.
+        const images =
+          authoringAvailable && inputFileIds?.length
+            ? captureWordImageAssets(inputFileIds).catch(() => null)
+            : null;
+        let build: Awaited<ReturnType<typeof capture>>;
+        try {
+          build = await capture();
+          markWordSend("capture-end");
+        } catch {
+          return signal.aborted || contextChanged() ? null : withoutDocument();
+        }
+        const captured = images && (await images);
+        if (build?.authoring && !build.authoring.issue && captured) {
+          build.authoring.assets = captured.assets;
+          build.authoring.imageAssetIssues = captured.unavailable;
+        }
+        if (signal.aborted) return null;
+        if (build?.authoring && !build.authoring.issue) {
+          const budget = await checkWordAuthoringBudget(build.authoring, {
+            message,
+            chatId,
+            assistantId: chatInputProps.assistantId,
+            modelId:
+              modelId ??
+              chatInputProps.controlledSelectedModel?.chat_provider_id,
+            fileIds: inputFileIds,
+          });
+          if (!budget.ok) {
+            build.authoring.issue = budget.issue;
+            build.authoring.issueDetails = budget.details;
+          }
+          markWordSend("budget-end");
+        }
+        if (signal.aborted || contextChanged()) return null;
+        if (!readEnabledRef.current) {
+          clearReadSession();
+          return withoutDocument();
+        }
+        // Finalize paging limits before exposing whole-document availability.
+        wordDocumentReadSession.activate(build?.authoring);
+        setAuthoringNotice({
+          authoringIssue: build?.authoring?.issue,
+          authoringDetails: build?.authoring?.issueDetails,
+        });
+        const actionFacet = resolveWordActionFacet({
+          chipEnabled: true,
+          documentName: resolveWordDocumentName(),
+          documentIdentity,
+          documentArgs: build?.args ?? null,
+          hasContent: build?.coverage.hasContent ?? false,
+          authoring: build?.authoring,
+          availableFacetIds,
+        });
+        if (!actionFacet) {
+          clearReadSession();
+        }
+        stagePendingCapture(
+          actionFacet
+            ? {
+                identity: documentIdentity,
+                authoring: build?.authoring,
+                ordinalMap: build?.ordinalMap ?? new Map(),
+                paragraphsSent: build?.coverage.paragraphsSent ?? 0,
+                renderedOrdinals: build?.renderedOrdinals ?? new Set(),
+                partialOrdinal: build?.partialOrdinal ?? null,
+              }
+            : null,
+        );
+        if (actionFacet && build?.authoring) {
+          stopRequestBindingRef.current = bindWordDocumentReadRequest(
+            wordDocumentReadSession,
+            build.authoring.token,
+            chatId,
+          );
+        }
+        return {
+          actionFacet,
+          hostContextIdentity: actionFacet ? documentIdentity : null,
+        };
+      };
+
       preparingRef.current = true;
       setPreparing(true);
-      void capture()
-        .then(
-          async (build) => {
-            if (
-              build?.authoring &&
-              !build.authoring.issue &&
-              inputFileIds?.length
-            ) {
-              const images = await captureWordImageAssets(inputFileIds);
-              build.authoring.assets = images.assets;
-              build.authoring.imageAssetIssues = images.unavailable;
-            }
-            if (build?.authoring && !build.authoring.issue) {
-              const budget = await checkWordAuthoringBudget(build.authoring, {
-                message,
-                chatId,
-                assistantId: chatInputProps.assistantId,
-                modelId:
-                  modelId ??
-                  chatInputProps.controlledSelectedModel?.chat_provider_id,
-                fileIds: inputFileIds,
-              });
-              if (!budget.ok) {
-                build.authoring.issue = budget.issue;
-                build.authoring.issueDetails = budget.details;
-              }
-            }
-            if (
-              sendingContextRef.current.chatId !== chatId ||
-              sendingContextRef.current.documentIdentity !== documentIdentity
-            )
-              return;
-            if (!readEnabledRef.current) {
-              clearReadSession();
-              stagePendingCapture(null);
-              send(undefined, null);
-              return;
-            }
-            // Finalize paging limits before exposing whole-document availability.
-            wordDocumentReadSession.activate(build?.authoring);
-            setAuthoringNotice({
-              authoringIssue: build?.authoring?.issue,
-              authoringDetails: build?.authoring?.issueDetails,
-            });
-            const actionFacet = resolveWordActionFacet({
-              chipEnabled: true,
-              documentName: resolveWordDocumentName(),
-              documentIdentity,
-              documentArgs: build?.args ?? null,
-              hasContent: build?.coverage.hasContent ?? false,
-              authoring: build?.authoring,
-              availableFacetIds,
-            });
-            if (!actionFacet) {
-              clearReadSession();
-            }
-            stagePendingCapture(
-              actionFacet
-                ? {
-                    identity: documentIdentity,
-                    authoring: build?.authoring,
-                    ordinalMap: build?.ordinalMap ?? new Map(),
-                    paragraphsSent: build?.coverage.paragraphsSent ?? 0,
-                    renderedOrdinals: build?.renderedOrdinals ?? new Set(),
-                    partialOrdinal: build?.partialOrdinal ?? null,
-                  }
-                : null,
-            );
-            if (actionFacet && build?.authoring) {
-              stopRequestBindingRef.current = bindWordDocumentReadRequest(
-                wordDocumentReadSession,
-                build.authoring.token,
-                chatId,
-              );
-            }
-            send(actionFacet, actionFacet ? documentIdentity : null);
-          },
-          () => {
-            if (
-              sendingContextRef.current.chatId !== chatId ||
-              sendingContextRef.current.documentIdentity !== documentIdentity
-            )
-              return;
-            stagePendingCapture(null);
-            send(undefined, null);
-          },
-        )
-        .finally(() => {
-          preparingRef.current = false;
-          setPreparing(false);
-        });
+      send(undefined, null, {
+        label: t({
+          id: "officeAddin.word.send.preparingDocument",
+          message: "Preparing document…",
+        }),
+        run: async (signal) => {
+          markWordSend("prepare-start");
+          try {
+            return await prepareDocument(signal);
+          } finally {
+            markWordSend("prepare-end");
+            finishPreparing();
+          }
+        },
+        onAbandoned: () => {
+          clearReadSession();
+          stagePendingCapture(null);
+          finishPreparing();
+        },
+      });
     },
     [
+      authoringAvailable,
       availableFacetIds,
       chatId,
       capture,

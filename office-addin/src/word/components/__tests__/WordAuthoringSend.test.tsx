@@ -126,10 +126,31 @@ function setup() {
       },
     });
   });
+  // Mirrors AddinChatCore: the request, and so the stream, starts only once
+  // the preparation resolved its facet and identity.
+  const onSendMessage = (
+    ...args: Parameters<AddinChatInputRenderProps["onSendMessage"]>
+  ) => {
+    const prepare = args[11];
+    if (!prepare) {
+      send(...args);
+      return;
+    }
+    void prepare.run(new AbortController().signal).then((prepared) => {
+      if (!prepared) {
+        prepare.onAbandoned?.();
+        return;
+      }
+      const effective = args.slice(0, 11);
+      effective[4] = prepared.actionFacet;
+      effective[5] = prepared.hostContextIdentity;
+      send(...effective);
+    });
+  };
   const stage = vi.fn();
   const props = {
     chatId: "chat-A",
-    onSendMessage: send,
+    onSendMessage,
     controlledSelectedModel: { chat_provider_id: "model-A" },
   } as unknown as AddinChatInputRenderProps;
   render(

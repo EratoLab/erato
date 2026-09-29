@@ -432,6 +432,7 @@ export const DEFAULT_STUBS = {
     silentChatId: null,
     error: null,
     setError: noop,
+    uploadedFiles: [],
   })),
   useGenerationStatusStore: createStoreStub(() => ({
     setCurrentChatId: noop,

@@ -3027,6 +3027,11 @@ msgid "officeAddin.word.rich.updateObject"
 msgstr "{label} aktualisieren"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.preparingDocument"
+msgstr "Dokument wird vorbereitet…"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysInsert"
 msgstr "Fügt Text ohne Nachfrage an der aktuellen Cursorposition ein. Für diese Aktion gibt es keine Erato-Wiederherstellung. Nutze bei Bedarf „Rückgängig“ in Word."

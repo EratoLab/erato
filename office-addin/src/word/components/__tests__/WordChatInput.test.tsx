@@ -54,12 +54,33 @@ const IDENTITY =
 describe("WordChatInput", () => {
   let word: MockWordHost;
   let sends: SendCall[];
+  let handedOver: SendCall[];
   let staged: (WordDocumentCapture | null)[];
 
+  // Mirrors AddinChatCore: a prepared send reaches the server with the facet
+  // and identity its preparation resolved.
   const chatInputProps = (chatId: string | null): AddinChatInputRenderProps =>
     ({
       chatId,
-      onSendMessage: (...args: SendCall) => sends.push(args),
+      onSendMessage: (...args: SendCall) => {
+        handedOver.push(args);
+        const prepare = args[11];
+        if (!prepare) {
+          sends.push(args);
+          return;
+        }
+        void prepare.run(new AbortController().signal).then((prepared) => {
+          if (!prepared) {
+            prepare.onAbandoned?.();
+            return;
+          }
+          const effective = [...args] as SendCall;
+          effective[4] = prepared.actionFacet;
+          effective[5] = prepared.hostContextIdentity;
+          effective[11] = undefined;
+          sends.push(effective);
+        });
+      },
     }) as unknown as AddinChatInputRenderProps;
 
   const renderInput = (
@@ -83,6 +104,7 @@ describe("WordChatInput", () => {
     i18n.activate("en");
     advertised.ids = [...BOTH_FACETS];
     sends = [];
+    handedOver = [];
     staged = [];
     word = installMockWordDocument([
       { text: "The Annual Report", styleBuiltIn: "Title" },
@@ -169,6 +191,21 @@ describe("WordChatInput", () => {
       document_name: "report.docx",
       document_identity: IDENTITY,
     });
+  });
+
+  it("hands the message over before the document is captured", async () => {
+    renderInput();
+    fireEvent.click(chip());
+    await waitFor(() => expect(chip()).toHaveTextContent("Document included"));
+
+    send();
+
+    expect(handedOver).toHaveLength(1);
+    expect(handedOver[0][4]).toBeUndefined();
+    expect(handedOver[0][11]?.label).toBe("Preparing document…");
+    expect(sends).toHaveLength(0);
+    await waitFor(() => expect(sends).toHaveLength(1));
+    expect(lastFacet()?.id).toBe("word_document_review");
   });
 
   it("still sends when the document cannot be read", async () => {
