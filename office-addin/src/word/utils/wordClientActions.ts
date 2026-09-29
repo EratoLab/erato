@@ -7,6 +7,7 @@ import { insertWordTextAtCursor } from "./wordInsertText";
 import { extractProposedClientAction as extractProposedClientActionFor } from "../../core/clientActions/proposedClientAction";
 
 import type { WordDocumentApplyResult } from "./wordApplyDocumentPlan";
+import type { WordApplyStage } from "./wordApplyProgress";
 import type { WordDocumentCapture } from "./wordDocumentCapture";
 import type { WordEditOutcome } from "./wordEditPlan";
 import type { WordReviewAnchor } from "./wordReviewLocation";
@@ -30,6 +31,7 @@ export interface WordClientActionContext {
   messageId?: string;
   /** Retain recovery before entering a structural write, even if it later fails. */
   onBeforeDocumentWrite?: (before: string) => void;
+  onStage?: (stage: WordApplyStage) => void;
 }
 
 export interface WordClientActionRun {
@@ -73,12 +75,14 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
         capture,
         messageId,
         onBeforeDocumentWrite,
+        onStage,
       }) => {
         const result = await applyWordDocumentPlan(
           fenceContent,
           capture.authoring,
           messageId,
           onBeforeDocumentWrite,
+          onStage,
         );
         return {
           ok: result.status === "applied",
@@ -102,12 +106,12 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
           id: "officeAddin.word.clientActions.applyEdits",
           message: "Apply the changes to the document",
         }),
-      execute: async ({ fenceContent, capture }) => {
+      execute: async ({ fenceContent, capture, onStage }) => {
         const edits = parseWordEdits(fenceContent);
         if (!edits) {
           return { ok: false, outcomes: [], snapshotOoxml: null };
         }
-        const result = await applyWordEdits({ edits, capture });
+        const result = await applyWordEdits({ edits, capture, onStage });
         return {
           ok: result.outcomes.some((outcome) => outcome.status === "applied"),
           outcomes: result.outcomes,

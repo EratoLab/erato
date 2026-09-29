@@ -241,6 +241,36 @@ describe("coherent structural execution", () => {
     );
     expect(host.insert).toHaveBeenCalledTimes(1);
   });
+  it("reports each stage in order and stops at a stale preflight", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    const stages: string[] = [];
+    const plan = JSON.stringify(examplePlan(s.token));
+    expect(
+      (
+        await applyWordDocumentPlan(plan, s, "message-A", undefined, (stage) =>
+          stages.push(stage),
+        )
+      ).status,
+    ).toBe("applied");
+    expect(stages).toEqual(["checking", "backup", "writing", "verifying"]);
+
+    const stale = readySnapshot();
+    host.set(stale.ooxml.replace("<w:r>", "<w:r><w:rPr><w:b/></w:rPr>"));
+    stages.length = 0;
+    expect(
+      (
+        await applyWordDocumentPlan(
+          JSON.stringify(examplePlan(stale.token)),
+          stale,
+          "message-A",
+          undefined,
+          (stage) => stages.push(stage),
+        )
+      ).status,
+    ).toBe("stale");
+    expect(stages).toEqual(["checking", "backup"]);
+  });
   it("rejects stale formatting before any mutation", async () => {
     const s = readySnapshot();
     const host = word(s.ooxml.replace("<w:r>", "<w:r><w:rPr><w:b/></w:rPr>"));

@@ -591,6 +591,30 @@ describe("complete-document writer", { timeout: 15_000 }, () => {
     expect(host.insert).toHaveBeenCalledOnce();
   });
 
+  it("reports each stage and guards Revert with the fingerprint of the written package", async () => {
+    const { host, source, plan } = await sourceAndPlan();
+    const stages: string[] = [];
+    const result = await applyWordDocumentPlan(
+      plan,
+      source,
+      "message-A",
+      undefined,
+      (stage) => stages.push(stage),
+    );
+    expect(result.status, JSON.stringify(result.diagnostic)).toBe("applied");
+    expect(stages).toEqual(["checking", "backup", "writing", "verifying"]);
+    expect(result.afterFingerprint).toBe(
+      (await captureWordDocumentPackage()).fingerprint,
+    );
+    expect(
+      (await revertWordDocumentPlan(result.before!, result.afterFingerprint!))
+        .status,
+    ).toBe("reverted");
+    expect(wordDocumentFileToOoxml(host.get())).not.toContain(
+      "Revised test header",
+    );
+  });
+
   it.each(["hdr", "ftr"] as const)(
     "detects a %s-only change before Apply and performs zero writes",
     async (kind) => {

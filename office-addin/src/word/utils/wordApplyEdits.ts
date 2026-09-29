@@ -1,3 +1,4 @@
+import { trackWordApply } from "./wordApplyProgress";
 import {
   buildWordEditReport,
   planWordEdits,
@@ -5,6 +6,7 @@ import {
 } from "./wordEditPlan";
 import { wordWriteHost } from "./wordWriteHost";
 
+import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
 import type { WordDocumentCapture } from "./wordDocumentCapture";
 import type { WordEdit, WordEditOutcome } from "./wordEditPlan";
 import type { WordReviewAnchor } from "./wordReviewLocation";
@@ -22,8 +24,26 @@ export interface WordApplyResult {
 export async function applyWordEdits(args: {
   edits: readonly WordEdit[];
   capture: WordDocumentCapture;
+  onStage?: (stage: WordApplyStage) => void;
 }): Promise<WordApplyResult> {
-  const { edits, capture } = args;
+  const progress = trackWordApply("edits", args.onStage);
+  let result: WordApplyResult | undefined;
+  try {
+    result = await applyEdits(args.edits, args.capture, progress);
+    return result;
+  } finally {
+    progress.finish(
+      !result ? "error" : result.hostFailed ? "host-failed" : "completed",
+    );
+  }
+}
+
+async function applyEdits(
+  edits: readonly WordEdit[],
+  capture: WordDocumentCapture,
+  progress: WordApplyProgress,
+): Promise<WordApplyResult> {
+  progress.stage("checking");
   const plan = planWordEdits(edits, capture);
 
   const failure = (outcomes: WordEditOutcome[]): WordApplyResult => ({
@@ -90,10 +110,12 @@ export async function applyWordEdits(args: {
 
       let snapshotOoxml: string | null = null;
       try {
+        progress.stage("backup");
         const snapshot = context.document.body.getOoxml();
         await context.sync();
         snapshotOoxml = snapshot.value;
 
+        progress.stage("writing");
         for (const edit of verified.applicable) {
           writeReplacement(context, edit.targets, edit.text);
         }
@@ -122,6 +144,7 @@ export async function applyWordEdits(args: {
       }
 
       const resultAnchors = new Map<number, WordReviewAnchor>();
+      progress.stage("verifying");
       try {
         const candidates = verified.applicable.filter(
           (edit) => edit.targets.length === 1 && !/[\r\n\v\f]/u.test(edit.text),
