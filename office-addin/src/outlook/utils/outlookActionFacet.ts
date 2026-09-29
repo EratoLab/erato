@@ -28,18 +28,21 @@ export interface OutlookActionFacetInput {
   draftBody: string;
   /**
    * The draft-context fingerprint last sent in this chat, or `null` if none
-   * yet: the raw body for message drafts, the JSON metadata+description
-   * fingerprint for appointments (see `draftContextFingerprint`). Encodes
+   * yet: body plus supported recipient context for message drafts, the JSON
+   * metadata+description fingerprint for appointments. Encodes
    * change #4 — client-side de-dup. (The backend is intentionally
    * action-facet toggle-stateless and strips prior-turn facet directives on
    * replay, so the "did we already send this?" memory must live on the
    * client.)
    */
   lastSentDraftFingerprint: string | null;
-  /** De-dup key for appointment metadata + description; defaults to draftBody. */
+  /** Explicit de-dup key for appointment metadata + description. */
   draftContextFingerprint?: string;
   /** Compose body format; included in the rewrite facet args when known. */
   bodyFormat?: string;
+  /** JSON To/CC/BCC context; only attached when the server accepts the argument. */
+  recipients?: string;
+  availableFacetArgs?: ReadonlyMap<string, ReadonlySet<string>>;
   /** The user is in an Outlook compose context (reply/new mail), body may be empty. */
   isComposeMode: boolean;
   /**
@@ -99,7 +102,7 @@ export interface OutlookActionFacetResult {
   facet: ActionFacetRequest | undefined;
   /**
    * When a review facet was produced, the fingerprint to remember so the next
-   * unchanged send de-dupes (raw body for message drafts, metadata fingerprint
+   * unchanged send de-dupes (body and recipients for message drafts, metadata fingerprint
    * for appointments). `null` means "leave the dedup marker untouched" — i.e.
    * selection sends and skipped/unchanged drafts.
    */
@@ -120,7 +123,19 @@ export function resolveOutlookActionFacet(
   input: OutlookActionFacetInput,
 ): OutlookActionFacetResult {
   const { itemKind } = input;
-  const draftFingerprint = input.draftContextFingerprint ?? input.draftBody;
+  const recipientArgs = (facetId: string): Record<string, string> =>
+    itemKind === "message" &&
+    input.isComposeMode &&
+    input.recipients !== undefined &&
+    input.availableFacetArgs?.get(facetId)?.has("recipients")
+      ? { recipients: input.recipients }
+      : {};
+  const reviewRecipientArgs = recipientArgs("outlook_review_draft");
+  const draftFingerprint =
+    input.draftContextFingerprint ??
+    (reviewRecipientArgs.recipients !== undefined
+      ? JSON.stringify({ body: input.draftBody, recipients: input.recipients })
+      : input.draftBody);
   const scheduleReady = input.scheduleFacetAvailable && input.calendarAvailable;
   const scheduleFacet = (): OutlookActionFacetResult => ({
     facet: {
@@ -142,6 +157,7 @@ export function resolveOutlookActionFacet(
             ? "outlook_rewrite_appointment_selection"
             : "outlook_rewrite_selection",
         args: {
+          ...recipientArgs("outlook_rewrite_selection"),
           selected_text: input.selectionData,
           source_property: input.selectionSource,
           ...(input.bodyFormat ? { body_format: input.bodyFormat } : {}),
@@ -210,6 +226,7 @@ export function resolveOutlookActionFacet(
       facet: {
         id: "outlook_review_draft",
         args: {
+          ...reviewRecipientArgs,
           full_body: input.draftBody,
           body_format: "text",
         },
@@ -232,7 +249,10 @@ export function resolveOutlookActionFacet(
     return {
       facet: {
         id: "compose_email",
-        args: { body_format: input.bodyFormat ?? "text" },
+        args: {
+          ...recipientArgs("compose_email"),
+          body_format: input.bodyFormat ?? "text",
+        },
       },
       sentDraftFingerprint: null,
     };

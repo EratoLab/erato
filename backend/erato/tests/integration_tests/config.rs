@@ -3714,14 +3714,22 @@ enable_builtin_ms_office_addin = true
     assert_eq!(rewrite.platform.as_deref(), Some("outlook"));
     assert_eq!(
         rewrite.allowed_args,
-        vec!["selected_text", "source_property", "body_format"]
+        vec![
+            "selected_text",
+            "source_property",
+            "body_format",
+            "recipients"
+        ]
     );
     assert!(rewrite.template.contains("{{selected_text}}"));
     assert!(rewrite.template.contains("erato-email-html"));
 
     let review = &config.action_facets.facets["outlook_review_draft"];
     assert_eq!(review.platform.as_deref(), Some("outlook"));
-    assert_eq!(review.allowed_args, vec!["full_body", "body_format"]);
+    assert_eq!(
+        review.allowed_args,
+        vec!["full_body", "body_format", "recipients"]
+    );
     assert!(review.template.contains("{{full_body}}"));
     assert!(review.template.contains("erato-email-html"));
 }

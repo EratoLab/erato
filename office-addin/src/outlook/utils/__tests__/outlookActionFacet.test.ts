@@ -444,3 +444,88 @@ describe("resolveOutlookActionFacet", () => {
     expect(result.facet?.id).toBe("outlook_reply_from_read");
   });
 });
+
+describe("optional compose recipient context", () => {
+  const recipients = JSON.stringify({
+    to: [{ displayName: "Mark", emailAddress: "mark@example.com" }],
+    cc: [],
+    bcc: [],
+  });
+  const availableFacetArgs = new Map(
+    ["outlook_rewrite_selection", "outlook_review_draft", "compose_email"].map(
+      (id) => [id, new Set(["recipients"])],
+    ),
+  );
+  const compose = {
+    ...base,
+    itemKind: "message" as const,
+    isComposeMode: true,
+    recipients,
+    availableFacetArgs,
+  };
+  it("supplies recipients for empty draft, review, and selection facets", () => {
+    for (const input of [
+      { ...compose, composeEmailAvailable: true },
+      { ...compose, draftContextIncluded: true, draftBody: "Hello" },
+      { ...compose, hasActiveSelection: true, selectionData: "Hello" },
+    ]) {
+      expect(resolveOutlookActionFacet(input).facet?.args?.recipients).toBe(
+        recipients,
+      );
+    }
+  });
+  it("omits recipients on old servers and custom facets without support", () => {
+    for (const args of [
+      undefined,
+      new Map(),
+      new Map([["compose_email", new Set(["body_format"])]]),
+    ]) {
+      expect(
+        resolveOutlookActionFacet({
+          ...compose,
+          composeEmailAvailable: true,
+          availableFacetArgs: args,
+        }).facet?.args,
+      ).toEqual({ body_format: "text" });
+    }
+  });
+  it("includes recipient edits in draft deduplication", () => {
+    const input = {
+      ...compose,
+      draftContextIncluded: true,
+      draftBody: "Hello",
+    };
+    const first = resolveOutlookActionFacet(input);
+    expect(
+      resolveOutlookActionFacet({
+        ...input,
+        lastSentDraftFingerprint: first.sentDraftFingerprint,
+      }).facet,
+    ).toBeUndefined();
+    expect(
+      resolveOutlookActionFacet({
+        ...input,
+        recipients: '{"to":[]}',
+        lastSentDraftFingerprint: first.sentDraftFingerprint,
+      }).facet?.args?.recipients,
+    ).toBe('{"to":[]}');
+  });
+  it("never includes email recipients on appointment or read facets", () => {
+    expect(
+      resolveOutlookActionFacet({
+        ...compose,
+        itemKind: "appointment",
+        hasActiveSelection: true,
+        appointmentRewriteAvailable: true,
+      }).facet?.args?.recipients,
+    ).toBeUndefined();
+    expect(
+      resolveOutlookActionFacet({
+        ...compose,
+        isComposeMode: false,
+        isReadMode: true,
+        replyFromReadAvailable: true,
+      }).facet?.args?.recipients,
+    ).toBeUndefined();
+  });
+});

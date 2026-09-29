@@ -19,6 +19,10 @@ export type AbortStreamResponse = {
 
 export type ActionFacetInfo = {
   /**
+   * Argument keys accepted by this facet. Clients can gate optional context on this list.
+   */
+  allowed_args?: string[];
+  /**
    * Fixed identifiers of client-side actions the model may propose via the
    * `propose_client_action` tool when this facet is active. The client
    * must only execute actions from this list, after user confirmation.

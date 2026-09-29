@@ -68,3 +68,18 @@ export function useActionFacetClientActions(): Map<
     [data],
   );
 }
+
+/** Missing argument metadata on an older server means optional args are omitted. */
+export function useAvailableActionFacetArgs(): Map<string, Set<string>> {
+  const { data } = useFacets({});
+  return useMemo(
+    () =>
+      new Map(
+        (data?.action_facets ?? []).map((facet) => [
+          facet.id,
+          new Set(facet.allowed_args ?? []),
+        ]),
+      ),
+    [data],
+  );
+}
