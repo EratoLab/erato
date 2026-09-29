@@ -24,219 +24,485 @@ Typical "Notable changes" categories to copy & paste:
 
 ## [Unreleased]
 
+This draft covers changes merged after 0.6.2, through `4c48c4fa` (PR #1265). Release date is intentionally unset while 0.7.0 is in preparation. Every listed change should be checked against its individual pending summary before release.
+
 ### Notable changes
 
 #### Features and enhancements
 
-- Added a disabled foundation for durable client-operation attempts. Registered kinds can retain timed-out or disconnected client work and resume the same assistant message through the existing continuation pipeline on any replica. No production kinds are enabled yet. Migration `0051_add_client_operation_attempts` adds the logged account inbox; `[client_tools].durable_operations_enabled` defaults to `false`. Approval continuations also retain the original client-tool selection and consumed submission allowances.
+**Delegated assistants and model planned tasks.** Users can mention assistants for work in a separate conversation, and deployments can enable the model to plan bounded sub-tasks. Results, progress, approvals, and retries now flow back to the originating chat; delegated runs can also be dispatched in the background. Model planned tasks remain off by default and require both `[delegation.tasks].enabled = true` and an offered facet that allows `erato/delegate_task`. Runs are bounded by per-task budgets and concurrency settings. [#978](https://github.com/EratoLab/erato/pull/978), [#979](https://github.com/EratoLab/erato/pull/979), [#980](https://github.com/EratoLab/erato/pull/980), [#981](https://github.com/EratoLab/erato/pull/981), [#982](https://github.com/EratoLab/erato/pull/982), [#984](https://github.com/EratoLab/erato/pull/984), [#985](https://github.com/EratoLab/erato/pull/985), [#986](https://github.com/EratoLab/erato/pull/986), [#992](https://github.com/EratoLab/erato/pull/992), [#998](https://github.com/EratoLab/erato/pull/998), [#1000](https://github.com/EratoLab/erato/pull/1000), [#1004](https://github.com/EratoLab/erato/pull/1004), [#1005](https://github.com/EratoLab/erato/pull/1005), [#1006](https://github.com/EratoLab/erato/pull/1006), [#1007](https://github.com/EratoLab/erato/pull/1007), [#1008](https://github.com/EratoLab/erato/pull/1008), [#1009](https://github.com/EratoLab/erato/pull/1009), [#1011](https://github.com/EratoLab/erato/pull/1011), [#1012](https://github.com/EratoLab/erato/pull/1012), [#1013](https://github.com/EratoLab/erato/pull/1013), [#1014](https://github.com/EratoLab/erato/pull/1014), [#1022](https://github.com/EratoLab/erato/pull/1022), [#1025](https://github.com/EratoLab/erato/pull/1025), [#1045](https://github.com/EratoLab/erato/pull/1045), [#1163](https://github.com/EratoLab/erato/pull/1163), [#1164](https://github.com/EratoLab/erato/pull/1164), [#1165](https://github.com/EratoLab/erato/pull/1165), [#1166](https://github.com/EratoLab/erato/pull/1166), [#1179](https://github.com/EratoLab/erato/pull/1179), [#1180](https://github.com/EratoLab/erato/pull/1180), [#1181](https://github.com/EratoLab/erato/pull/1181), [#1188](https://github.com/EratoLab/erato/pull/1188), [#1189](https://github.com/EratoLab/erato/pull/1189), [#1190](https://github.com/EratoLab/erato/pull/1190), [#1191](https://github.com/EratoLab/erato/pull/1191), [#1192](https://github.com/EratoLab/erato/pull/1192), [#1196](https://github.com/EratoLab/erato/pull/1196), [#1197](https://github.com/EratoLab/erato/pull/1197), [#1199](https://github.com/EratoLab/erato/pull/1199), [#1200](https://github.com/EratoLab/erato/pull/1200), [#1201](https://github.com/EratoLab/erato/pull/1201), [#1230](https://github.com/EratoLab/erato/pull/1230), [#1238](https://github.com/EratoLab/erato/pull/1238), [#1245](https://github.com/EratoLab/erato/pull/1245)
 
-- **The composer now says in advance when delegated work will stop to be approved.** On a deployment whose `[delegation.tasks.approval] mode` can interrupt a dispatch, a quiet line beneath the composer states it before the user sends, rather than letting the approval stop be the first they hear of the policy — which reads as the product refusing to act rather than asking. The wording follows what the mode actually stops: every run under `always`, the plan under `plan`, background tasks under `async_only`. It stays silent when nothing can be stopped, including on a default deployment and wherever `async_only` is set but `async` is not an offered run mode.
-- Delegation configuration moved to a top-level `[delegation]` section, in preparation for model-planned delegated tasks. The `erato` tool namespace and the tool names `delegate_task` / `collect_tasks` are now reserved for built-in tools.
-- A delegated run now reports **why** it ended, not just that it did, and the delegate's answer reaches the delegating model inside an `untrusted-data` frame so a child's output cannot issue instructions to its parent.
-- **Model-planned delegated tasks (`delegate_task`).** The model can run a self-contained sub-task in a separate conversation and get its result back in the same turn, to keep long or noisy work out of the main conversation. Off by default.
+**Structured document authoring in Word.** A new Word add-in can read an open document, propose structured edits or rewrites, let users review them, and apply or recover the result. Large proposals can be repaired with targeted changes and show progress while applying. [#1232](https://github.com/EratoLab/erato/pull/1232), [#1233](https://github.com/EratoLab/erato/pull/1233), [#1234](https://github.com/EratoLab/erato/pull/1234), [#1235](https://github.com/EratoLab/erato/pull/1235), [#1236](https://github.com/EratoLab/erato/pull/1236), [#1237](https://github.com/EratoLab/erato/pull/1237), [#1239](https://github.com/EratoLab/erato/pull/1239), [#1240](https://github.com/EratoLab/erato/pull/1240), [#1241](https://github.com/EratoLab/erato/pull/1241), [#1257](https://github.com/EratoLab/erato/pull/1257), [#1258](https://github.com/EratoLab/erato/pull/1258), [#1259](https://github.com/EratoLab/erato/pull/1259), [#1265](https://github.com/EratoLab/erato/pull/1265)
 
-  Turning it on takes two things, not one: `[delegation.tasks] enabled = true`, **and** a selected facet whose `tool_call_allowlist` selects `erato/delegate_task`. Enabling the feature alone offers the tool to nobody.
+**Microsoft Teams conversations and bot.** Teams messages and channels can be attached as readable, navigable chat context, including shared files and images. Transcript citations link back to messages, and deployments can distribute a standalone Teams app and configure its bot. Chat history can filter by where a chat was created. [#930](https://github.com/EratoLab/erato/pull/930), [#931](https://github.com/EratoLab/erato/pull/931), [#932](https://github.com/EratoLab/erato/pull/932), [#939](https://github.com/EratoLab/erato/pull/939), [#940](https://github.com/EratoLab/erato/pull/940), [#948](https://github.com/EratoLab/erato/pull/948), [#949](https://github.com/EratoLab/erato/pull/949), [#950](https://github.com/EratoLab/erato/pull/950), [#953](https://github.com/EratoLab/erato/pull/953), [#956](https://github.com/EratoLab/erato/pull/956), [#957](https://github.com/EratoLab/erato/pull/957), [#958](https://github.com/EratoLab/erato/pull/958), [#966](https://github.com/EratoLab/erato/pull/966), [#967](https://github.com/EratoLab/erato/pull/967), [#969](https://github.com/EratoLab/erato/pull/969), [#1248](https://github.com/EratoLab/erato/pull/1248), [#1253](https://github.com/EratoLab/erato/pull/1253), [#1254](https://github.com/EratoLab/erato/pull/1254), [#1260](https://github.com/EratoLab/erato/pull/1260)
 
-  ```toml
-  [delegation.tasks]
-  enabled = true
+**Outlook scheduling and shared mailboxes.** Calendar availability can be read on Exchange Online and Exchange Server to find and rank meeting times. The Outlook add-in also supports shared mailboxes where its data access path is supported, and can open source emails from file previews. Appointment actions remain user confirmed. [#798](https://github.com/EratoLab/erato/pull/798), [#801](https://github.com/EratoLab/erato/pull/801), [#804](https://github.com/EratoLab/erato/pull/804), [#818](https://github.com/EratoLab/erato/pull/818), [#892](https://github.com/EratoLab/erato/pull/892), [#896](https://github.com/EratoLab/erato/pull/896), [#926](https://github.com/EratoLab/erato/pull/926), [#929](https://github.com/EratoLab/erato/pull/929), [#1104](https://github.com/EratoLab/erato/pull/1104), [#1126](https://github.com/EratoLab/erato/pull/1126), [#1139](https://github.com/EratoLab/erato/pull/1139), [#1243](https://github.com/EratoLab/erato/pull/1243), [#1256](https://github.com/EratoLab/erato/pull/1256)
 
-  [facets.facets.plan]
-  display_name = "Plan & delegate"
-  # Always pair the reserved pattern with a real MCP pattern: an allowlist
-  # naming only reserved tools narrows the turn's MCP tool set to nothing.
-  tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
-  ```
+**Desktop Sidecar for local sources.** The desktop protocol and add-in support optional access to local mailboxes, folders, documents, and search. Users can find local material and pass selected files into chat through controlled client tools. This requires a configured and connected Sidecar; capabilities and tools remain individually gated. [#857](https://github.com/EratoLab/erato/pull/857), [#860](https://github.com/EratoLab/erato/pull/860), [#864](https://github.com/EratoLab/erato/pull/864), [#867](https://github.com/EratoLab/erato/pull/867), [#869](https://github.com/EratoLab/erato/pull/869), [#871](https://github.com/EratoLab/erato/pull/871), [#872](https://github.com/EratoLab/erato/pull/872), [#892](https://github.com/EratoLab/erato/pull/892), [#910](https://github.com/EratoLab/erato/pull/910), [#916](https://github.com/EratoLab/erato/pull/916), [#917](https://github.com/EratoLab/erato/pull/917), [#976](https://github.com/EratoLab/erato/pull/976), [#1025](https://github.com/EratoLab/erato/pull/1025), [#1032](https://github.com/EratoLab/erato/pull/1032), [#1104](https://github.com/EratoLab/erato/pull/1104), [#1118](https://github.com/EratoLab/erato/pull/1118), [#1119](https://github.com/EratoLab/erato/pull/1119), [#1121](https://github.com/EratoLab/erato/pull/1121), [#1122](https://github.com/EratoLab/erato/pull/1122), [#1159](https://github.com/EratoLab/erato/pull/1159), [#1160](https://github.com/EratoLab/erato/pull/1160), [#1184](https://github.com/EratoLab/erato/pull/1184), [#1185](https://github.com/EratoLab/erato/pull/1185), [#1186](https://github.com/EratoLab/erato/pull/1186), [#1210](https://github.com/EratoLab/erato/pull/1210), [#1211](https://github.com/EratoLab/erato/pull/1211), [#1213](https://github.com/EratoLab/erato/pull/1213), [#1215](https://github.com/EratoLab/erato/pull/1215), [#1216](https://github.com/EratoLab/erato/pull/1216), [#1218](https://github.com/EratoLab/erato/pull/1218), [#1219](https://github.com/EratoLab/erato/pull/1219), [#1225](https://github.com/EratoLab/erato/pull/1225), [#1229](https://github.com/EratoLab/erato/pull/1229), [#1233](https://github.com/EratoLab/erato/pull/1233), [#1234](https://github.com/EratoLab/erato/pull/1234), [#1242](https://github.com/EratoLab/erato/pull/1242), [#1243](https://github.com/EratoLab/erato/pull/1243)
 
-  A task run is a real chat the user can open, scoped by the facets its brief asked for, and it is never offered a delegation tool of its own — delegated work does not nest. `max_tasks_per_turn` (default 5) bounds how many a single message may start, counting attempts rather than successful dispatches. `delegate_task` is a new `tool_name` on the wire and needs the frontend of this release.
+**Assistant Hub and assistant sharing.** Reviewers get improved version, audience, feedback, and review queue views; administrators can tune categories and rating behavior. Assistant access can be granted to the whole organization or selected people, with optional edit sharing. [#785](https://github.com/EratoLab/erato/pull/785), [#790](https://github.com/EratoLab/erato/pull/790), [#884](https://github.com/EratoLab/erato/pull/884), [#886](https://github.com/EratoLab/erato/pull/886), [#902](https://github.com/EratoLab/erato/pull/902), [#903](https://github.com/EratoLab/erato/pull/903), [#904](https://github.com/EratoLab/erato/pull/904), [#906](https://github.com/EratoLab/erato/pull/906), [#907](https://github.com/EratoLab/erato/pull/907), [#908](https://github.com/EratoLab/erato/pull/908), [#909](https://github.com/EratoLab/erato/pull/909), [#937](https://github.com/EratoLab/erato/pull/937), [#947](https://github.com/EratoLab/erato/pull/947), [#960](https://github.com/EratoLab/erato/pull/960), [#961](https://github.com/EratoLab/erato/pull/961), [#962](https://github.com/EratoLab/erato/pull/962), [#990](https://github.com/EratoLab/erato/pull/990), [#1070](https://github.com/EratoLab/erato/pull/1070), [#1093](https://github.com/EratoLab/erato/pull/1093), [#1245](https://github.com/EratoLab/erato/pull/1245)
 
-  Each task run is bounded by **two independent tool-call budgets**: `max_server_tool_calls_per_task` (default 5) and `max_client_tool_calls_per_task` (default 30). They are never summed and neither constrains the other — a server-executed call makes the backend hold a session, a connection and a slot in the tool loop, while a client-executed call runs on the user's own device. `0` forbids a class outright. Running out is not a failure: the call is refused, the run finishes in prose, and the result comes back as `completed` with `reason: "cap_exceeded"` and a partial but usable answer. The built-in tools (`delegate_task`, `delegate_to_assistant`, `propose_client_action`, `wait`) count against neither budget; they have bounds of their own.
+**Customer themes and component kits.** The frontend exposes a shared, versioned runtime and reusable component surfaces so custom kits can share more of the host's message, attachment, trace, and theme behavior. More UI styling now follows theme tokens. [#822](https://github.com/EratoLab/erato/pull/822), [#825](https://github.com/EratoLab/erato/pull/825), [#826](https://github.com/EratoLab/erato/pull/826), [#827](https://github.com/EratoLab/erato/pull/827), [#830](https://github.com/EratoLab/erato/pull/830), [#831](https://github.com/EratoLab/erato/pull/831), [#839](https://github.com/EratoLab/erato/pull/839), [#848](https://github.com/EratoLab/erato/pull/848), [#851](https://github.com/EratoLab/erato/pull/851), [#852](https://github.com/EratoLab/erato/pull/852), [#854](https://github.com/EratoLab/erato/pull/854), [#856](https://github.com/EratoLab/erato/pull/856), [#1091](https://github.com/EratoLab/erato/pull/1091), [#1092](https://github.com/EratoLab/erato/pull/1092), [#1096](https://github.com/EratoLab/erato/pull/1096), [#1100](https://github.com/EratoLab/erato/pull/1100), [#1101](https://github.com/EratoLab/erato/pull/1101), [#1105](https://github.com/EratoLab/erato/pull/1105), [#1114](https://github.com/EratoLab/erato/pull/1114), [#1115](https://github.com/EratoLab/erato/pull/1115), [#1120](https://github.com/EratoLab/erato/pull/1120), [#1129](https://github.com/EratoLab/erato/pull/1129), [#1133](https://github.com/EratoLab/erato/pull/1133), [#1138](https://github.com/EratoLab/erato/pull/1138), [#1145](https://github.com/EratoLab/erato/pull/1145), [#1161](https://github.com/EratoLab/erato/pull/1161), [#1173](https://github.com/EratoLab/erato/pull/1173), [#1174](https://github.com/EratoLab/erato/pull/1174), [#1178](https://github.com/EratoLab/erato/pull/1178), [#1183](https://github.com/EratoLab/erato/pull/1183)
 
-- Two new listing fields let a client keep watching an async task it started, rather than polling the whole time or waiting for a reload:
+**MCP controls.** People can see authorization state and choose whether individual servers and tools are enabled, denied, or require approval. A per-chat switch controls write operations, and settings now expose effective tool state. [#1016](https://github.com/EratoLab/erato/pull/1016), [#1017](https://github.com/EratoLab/erato/pull/1017), [#1018](https://github.com/EratoLab/erato/pull/1018), [#1099](https://github.com/EratoLab/erato/pull/1099), [#1146](https://github.com/EratoLab/erato/pull/1146), [#1147](https://github.com/EratoLab/erato/pull/1147), [#1148](https://github.com/EratoLab/erato/pull/1148), [#1149](https://github.com/EratoLab/erato/pull/1149), [#1150](https://github.com/EratoLab/erato/pull/1150), [#1152](https://github.com/EratoLab/erato/pull/1152), [#1157](https://github.com/EratoLab/erato/pull/1157), [#1187](https://github.com/EratoLab/erato/pull/1187), [#1193](https://github.com/EratoLab/erato/pull/1193), [#1194](https://github.com/EratoLab/erato/pull/1194), [#1195](https://github.com/EratoLab/erato/pull/1195), [#1231](https://github.com/EratoLab/erato/pull/1231)
 
-  - `RecentChat.delegated_runs_in_flight` — always present; true while an async delegated run spawned from the chat is still unfinished or its result is not yet delivered.
-  - `GeneratingChat.initiator` — `"user"` or `"task_result"`; absent means a person started the generation.
-
-- **A failed delegated task can be run again from the conversation that started it.** `POST /api/v1beta/me/chats/{chat_id}/delegated_runs/{child_chat_id}/retry` with `{"kind": "task"}` re-dispatches a failed `delegate_task` child as a **new async run**, carrying the original brief, budgets, persona and scheduling, and re-checking the owner's facets at retry time — a facet they have lost since the first dispatch is dropped from the replacement rather than refusing it. The reply is `202` with the new `child_chat_id`; the failed run's own record is never rewritten, so what went wrong stays on it.
-
-  This exists for the failure that leaves no other trace: a run reaped after a replica crash writes no result and no delivery record, so nothing requeues it and the origin's slot still reads "dispatched". The delegated-runs list is the only place it surfaces, and that is where the retry is offered — plus the failed `delegate_task` step in the trace and the delivered task-result card. Both of those say in words that the answer arrives separately, because neither is ever rewritten in place.
-
-  A refusal is a `409` carrying `code: "not_retryable"` and a `state` from a closed vocabulary: `retry_in_flight` (only one live retry per failed run, enforced in the database so a reload cannot reopen it), `completed`, `working`, `not_a_task_run`, `brief_unavailable` (the origin's own tool call is gone, so the brief cannot be reconstructed honestly), `concurrency_cap` and `launch_refused`. An archived origin is refused with a plain-text `409`, and an origin that is already generating with the same `generation_running` body any other write path on a busy chat returns. `kind` accepts only `"task"` today — anything else, including `"delivery"`, is a `422`.
-
-  `RecentChat` gains an optional `retry_of` naming the failed run a listed run replaces, so a client can durably swap a failed run's retry button for a link to its replacement instead of remembering the swap itself. The same value is recorded on the child's provenance as JSONB — **no migration**. The retry endpoint and its client affordance are served only where `[delegation.tasks]` is enabled with the `async` run mode; elsewhere the route is a `404` and no control is shown.
-
-- **The web client now renders the approval stops the backend learned to raise.** A parked delegated task and a planned batch of tasks each get their own card instead of the generic one: a task card names the sub-task by its brief and shows the call the CHILD stopped on — the tool, its server and its arguments — rather than the parent's `delegate_task` dispatch, and a plan card lists the tasks the model wants to run so they can be allowed or declined one at a time. One card covers the whole stop, however many items it has, and its answers are sent together, because the server takes a decision that covers every open approval or none.
-
-  "Always allow" is offered only where a grant can be written: on a parked task, keyed on the child's own server and tool. A plan has no always-allow at all — what may be dispatched unasked is the deployment's to say. Every card also offers **Withdraw**, which denies everything still open and lets the turn finish in prose, and a child card refused with `409 covered_by_parent` now says where the question actually is and links to the chat that started the task, instead of showing the refusal. Decisions already taken are shown beside the step they settled in the thinking trace, on the parent's task step as well as on a plain tool call.
+**More configurable assistant discovery and content.** Administrators can define experience policies, pin starting assistants for audiences, and let people override their own start screen. Chat also gains source/type filters, sorting, and an appearance text-size preference. Users can preview spreadsheets, presentations, PDFs, diagrams, and equations, with improvements to email and attachment handling. [#744](https://github.com/EratoLab/erato/pull/744), [#783](https://github.com/EratoLab/erato/pull/783), [#838](https://github.com/EratoLab/erato/pull/838), [#936](https://github.com/EratoLab/erato/pull/936), [#938](https://github.com/EratoLab/erato/pull/938), [#941](https://github.com/EratoLab/erato/pull/941), [#942](https://github.com/EratoLab/erato/pull/942), [#970](https://github.com/EratoLab/erato/pull/970), [#1071](https://github.com/EratoLab/erato/pull/1071), [#1072](https://github.com/EratoLab/erato/pull/1072), [#1073](https://github.com/EratoLab/erato/pull/1073), [#1077](https://github.com/EratoLab/erato/pull/1077), [#1081](https://github.com/EratoLab/erato/pull/1081), [#1086](https://github.com/EratoLab/erato/pull/1086), [#1087](https://github.com/EratoLab/erato/pull/1087), [#1089](https://github.com/EratoLab/erato/pull/1089), [#1095](https://github.com/EratoLab/erato/pull/1095), [#1113](https://github.com/EratoLab/erato/pull/1113), [#1116](https://github.com/EratoLab/erato/pull/1116), [#1260](https://github.com/EratoLab/erato/pull/1260)
 
 #### Stability improvements
 
-- **A tool call the server never finished is now named as interrupted, and is eventually settled.** A hard crash mid-turn leaves the assistant row holding `tool_use` parts that no exit will ever answer. Two changes end them.
-
-  In the UI, such a call used to render on reload with the rail's green check — the interface asserted success for a call that never returned. It now renders as **interrupted**, a new trace step state distinct from a failure, because the call did not fail: it was abandoned. The rule fires only on positive evidence that nothing is left to settle the part, so a turn parked on an approval, a generation still running on another replica, and a detached `async` dispatch all keep their previous rendering.
-
-  In the backend, the cleanup worker's tick now also settles those parts durably, in the same crash-recovery half as the task-result delivery backstop (so it deletes nothing and is not behind the data-retention opt-in). A `working` or `queued` delegation placeholder on a chat with no writer left becomes a terminal `cancelled` part carrying the new reason `interrupted`, keeping its child ids where a run had actually launched. Pre-existing orphaned rows are picked up by the first tick after upgrade; a live generation, an approval park, and a slot whose child is still writing are never touched.
-
-- **A delegated task answered from its own chat no longer leaves the conversation that asked for it still asking.** A `wait` task is awaited by the turn that dispatched it, and that turn is what writes the answer into its slot. If the origin chat was archived while the task was parked on a tool approval, the task stayed answerable on its own — but nothing was left to carry the outcome home, so the origin kept showing "waiting for your decision" indefinitely, visible again the moment the chat was unarchived. The outcome is now written back into the slot it was owed to. The origin's own card keeps its authority: while it still holds the open approval for that task, nothing settles the slot behind it.
-- A chat whose provider connection stalls without closing no longer stays "running" forever. A turn that receives no content from its provider for `generation_status.provider_idle_timeout_secs` (new, default 600) now fails as a provider error and releases the chat's generation lease. The budget bounds silence, not length: an answer that keeps streaming is never cut off, however long it takes. Note that it is measured on content rather than on socket traffic — keep-alive pings and empty deltas are dropped by the provider adapter and do not reset it. Set the option to `0` for the previous unbounded behaviour.
-
-#### Wire changes
-
-**Every MCP tool-approval continuation behaves differently, and none of it is behind a feature flag.** `POST /me/messages/continuestream` now works from the set of approvals a parked turn still has open rather than from the last content part of its row.
-
-- **The rest of the batch runs.** Calls a model made after the one that hit the approval gate used to be dropped — they lived only in an in-memory queue that died with the turn. They are now recorded on the approval part (`pending_tool_calls`) and dispatched after the decision, through the same filtered tool set: a call whose tool has since been denied, disabled or switched off is refused with an error the model can work around rather than executed.
-- **The resumed turn sees what it already did.** The model context is derived from the row's own parts, so the calls that ran before the gated one are replayed with their results instead of vanishing between the park and the answer.
-- **A retry after a crash resumes instead of answering `400`.** A continuation writes the decision and the gated call's outcome before it contacts the model, precisely so a retry is possible, but the old entry guard asked whether the row's last part was still an approval request. A `continuestream` retried after a restart now resumes the model call, decides nothing again and re-runs no tool it finds already recorded. A turn that did produce its answer is never resumed, whatever the chat's most recent generation did.
-- **A duplicate resume answers `409 { "code": "already_continued" }`** instead of `400`. Two tabs, or one retried request, is a conflict rather than a malformed body, and a client has to tell it apart from a decision the server refused. Like the other `409`s on this route it is discriminated by `code`; the generated schema declares `GenerationRunningError` for the status and carries `AlreadyContinuedError` as a type of its own. The web client does not render it specially yet.
-- **`withdraw` rejects every approval the turn has open**, each with `reason: "withdrawn"`, and the turn still finishes in prose rather than leaving the chat on a card the user dismissed.
-
-A continuation on the **task route** also keeps its `delegate_task` offer across the park, so a model interrupted mid-plan can finish it; the `@`-mention offer is still not replayed, and a turn reacting to a delivered task result is still not offered the tool at all.
-
-No deployment ordering is required: the legacy single-`decision` body stays accepted while exactly one approval is open, which is all the MCP gate opens today, so an older frontend keeps working against the new backend.
-
-**Delegated-run results report a new status vocabulary.** This changes values the shipped `@`-mention delegation route already emits, and it is not behind a feature flag.
-
-Deploy the frontend of this release **before or with** the backend: an older frontend renders any status other than `completed` as a failed step, so it would show the new values as errors.
-
-| Before | Now |
-| --- | --- |
-| `"status": "timeout"` | `"status": "cancelled"` with `"reason": "timeout"` |
-| `"status": "failed"` on a run that produced no text | `"status": "completed"` with `"reason": "no_answer"` |
-| `"status": "failed"` on a run stopped by an approval it could not raise | `"status": "input_required"` with `"reason": "approval_pending"` while the decision is outstanding; a run that cannot ask at all has the CALL refused and still reports `completed` with its partial answer. `"reason": "approval_unavailable"` stays in the vocabulary but is no longer emitted |
-
-`failed` now means infrastructure failure only — a run that could not be carried out. The result envelope also gains `reason`, `child_run_id` (the same value as the existing `delegate_chat_id`, which is kept) and `parent_tool_call_id`, and `assistant_id` / `assistant_name` became optional: they are omitted entirely for a task child that runs on the bare model rather than as an assistant.
-
-**Delegated tasks now run side by side.** When the model plans several tasks in one turn, they run at the same time instead of one after another, so a turn waits about as long as its slowest task rather than as long as all of them added together.
-
-Concurrency is bounded by the new `delegation.tasks.max_parallel` (default `3`, also overridable per facet). A batch larger than that starts what it may and queues the rest, launching each as a slot frees up. A queued task is already visible in the conversation, marked as waiting, before it starts.
-
-The model is still answered in the order it asked, whatever order the tasks finish in. A task is written to the conversation as soon as it settles rather than at the end of the turn, so a reload mid-turn shows the work that is already done.
-
-**A second write into a chat that is already generating is now refused instead of silently taking over** — only when `delegation.tasks.enabled` is `true`. Submitting, editing or regenerating while a turn is running answers `409` with a JSON body `{ "code": "generation_running", "chat_id", "initiator", "started_at" }`, and the client holds the draft until the turn ends. The same applies to an approval continuation, which previously assumed it could only ever resume the generation it had parked.
-
-Before, the later write replaced the running generation's lease and both kept writing to the same chat. That was survivable while a person was the only writer; it stops being survivable once a delegated task can deliver its own result into the conversation.
-
-The new key is `delegation.tasks.multitask_strategy` (default `"reject"`, the only implemented value). `"enqueue"` and `"interrupt"` are reserved spellings and are **rejected at startup** rather than silently treated as `"reject"`.
-
-The visible consequence with the flag on: a double submit from two browser tabs now returns `409` to the second tab instead of appearing to work. Other `409`s on these routes — archived chat, live delegated run — are unchanged plain text, so only clients that read `code` see any difference.
-
-**The model can now dispatch a task it does not wait for (`run_mode = "async"`).** Off by default: the tool offers only `wait` unless a deployment says otherwise.
-
-```toml
-[delegation.tasks]
-enabled = true
-run_modes = ["wait", "async"]
-# What happens when an async result comes home. "silent" stores it without replying.
-scheduling = "when_idle"
-```
-
-An `async` call settles at launch and the origin turn finishes without the sub-task's answer, so a long lookup no longer keeps the user waiting. Only the modes listed in `run_modes` appear in the tool schema, and a call naming an unoffered mode is refused rather than quietly downgraded, so the model cannot come to believe it detached work that in fact ran inline. `wait` is always available, even if a facet override omits it.
-
-Both keys can be overridden per facet. `run_modes` is **unioned** with the global list rather than replacing it — a run mode is a capability the facet's author meant to grant — while `scheduling` takes the first selected facet that states one. The reserved spelling `scheduling = "interrupt"` is rejected at startup rather than silently treated as `"when_idle"`.
-
-An async run counts against `delegation.max_concurrent_background_runs` exactly as a background run does: the cap bounds concurrent load, and the two cost the same.
-
-On the wire, a dispatched async task's tool part carries `"run_mode": "async"` beside the existing `"background": true`, so a client can tell a run whose answer is coming back from one whose never will; `RecentChat.provenance_run_mode` may now read `"async"`; and the injected frontend environment gains `DELEGATION_TASKS_ALLOW_ASYNC`, derived from `run_modes` rather than configured separately. The request-side `delegation_run_mode` field is unchanged and still accepts only `wait` and `background` — `async` is a mode the server chooses for a delegated run, not one a client may ask for.
-
-**A finished async task's result now arrives in the conversation that started it, and the model answers it.** This is the half that makes `run_mode = "async"` worth using; it is behind the same `delegation.tasks.enabled` gate and only happens for runs dispatched as `async`.
-
-When the sub-task finishes, its result is recorded as owed and then delivered into the origin chat as a `task_result` message, and — unless the run asked for `scheduling = "silent"` — a reaction turn runs over it, so the conversation gets an answer rather than a raw dump. The reaction is marked as started by the delivery rather than by the user, and it is deliberately not offered the `delegate_task` tool: a reaction that could plan its own tasks is a loop with nothing to bound it.
-
-Recording and delivering are separate, idempotent steps, because either can be interrupted by a process dying. A result whose own run never got to deliver it is still owed, and the next turn to finish in the origin chat — from any replica — delivers it. A delivery into a chat that is busy is deferred rather than forced: the claim goes back in the queue and the origin turn's own tail drains it on the way out. A chat parked on a tool approval is left alone entirely. Re-delivering after a crash appends the result once, not twice, because the delivery id is the idempotency key.
-
-Terminal cases are reported rather than swallowed. An archived origin closes the delivery as `superseded`; an origin whose owner no longer matches the run's is refused outright and nothing is written; and a run whose answer row is gone delivers a `failed` result with reason `result_missing`, rather than an empty success that would invite the model to move on from work that never reported.
-
-A delegated run with a result still owed is exempt from the automatic retention pass, so the cleanup cannot archive a child out from under a delivery the origin is about to receive.
-
-**A finished background task's result can now re-enter the conversation it was started from.** This release adds the wire and composition half; nothing emits these yet, so there is no visible behaviour change.
-
-A delivered result arrives as a user-role message carrying a new `task_result` content part, and `ChatMessage` gains two derived fields: `task_result` (present on such a row) and `initiator` (`user` or `task_result`, absent meaning a user). Both are additive.
-
-Unlike the request-scoped directive markers, a delivered result stays in the conversation: it is composed into every later turn, because the conversation genuinely contains it.
-
-How it is presented to the model is tunable via the new `delegation.tasks.result_template`, but only its prose is. The run's status and reason, the identifiers, the `untrusted-data` frame around the child's answer and the safety guidance are emitted around the template and cannot be edited away — the status is the only thing distinguishing a failed task from a successful one, and the frame and guidance are what stop a child's answer being read as instructions. A template that does not contain `{{result}}` is rejected at startup rather than silently rendering a result with the answer missing.
-
-**A message sent from a client that had not yet seen a delivered task result is now placed below it, rather than branching it away.** Only with `[delegation.tasks] enabled = true`.
-
-A delivered result and the turn that reacted to it sit below the assistant message a client last saw, so submitting on that anchor would have knocked both off the conversation. The `user_message_saved` event's `message.previous_message_id` may therefore differ from the `previous_message_id` the client sent; clients already replace their optimistic row with the server's.
-
-Editing or regenerating a turn is still a branch operation and still branches. If the turn that started the task is itself still on the thread, the result is delivered again on the new branch — once, so repeated branching cannot accumulate re-appended results. If the user rewrote the very turn that started the task, the result is stale by definition and is marked superseded.
-
-**An approval stop can now describe more than one decision, and the continuation body can name which one it answers.** Additive: no existing approval behaviour changes, and rows written before this release keep resuming exactly as they did.
-
-`ContentPartToolApprovalRequest` gains three fields: `kind` (`"mcp_tool"`, `"delegated_task"` or `"task_plan"`; absent means `"mcp_tool"`), `approvals[]` — one entry per decision the stop covers, each with an `approval_id` and, for a decision that stands in for a delegated child, a `child` block naming that child's chat, message and gated call — and `pending_tool_calls[]`, the calls of the same batch that have not run yet. An MCP approval records itself as a single `approvals[]` entry whose `approval_id` is the tool call id, so nothing about the shipped single-call flow changes. **A client must branch on `kind` before reading `tool_name` and `mcp_server_id`:** for every kind but `mcp_tool` those describe no MCP tool, and `mcp_server_id` is an empty string.
-
-`ContinueStreamRequest` gains `decisions: [{ approval_id, decision }]`. The legacy body `{ message_id, decision }` is still accepted, but only while exactly one approval is open — it names no approval, so on a wider stop it could only guess. A body that leaves an open approval unanswered, or names one the turn does not have open, is a `400` with `{ "code": "decisions_mismatch", "missing": [...], "unknown": [...] }`, and the turn stays parked and answerable.
-
-`ToolApprovalDecision` gains `"withdraw"`: taking the question back rather than answering it. It rejects the open approvals with `reason: "withdrawn"` and the turn continues with those denials — a decision value, not an endpoint; there is no `withdrawapproval` route. `ContentPartToolApproval` and `ContentPartToolRejection` gain optional `approval_id` and `child_chat_id` recording which decision they settled, and `ContentPartToolRejection` gains an optional `reason` whose only value is `withdrawn`.
-
-No new configuration key, and no migration: the approval part is JSONB.
-
-**A delegated task that needs an approval now asks, on the turn that dispatched it.** New key `delegation.tasks.propagate_child_mcp_approvals` (default `true`) — on by default, so this changes behaviour for any deployment that has `[delegation.tasks]` on with the `wait` run mode.
-
-Before, a task child that reached an approval-gated MCP call had the call refused and finished without it: a child has no card of its own on the turn waiting for it, so nobody could be asked. Now the child stops, and the turn that dispatched it grows one approval part with `kind: "delegated_task"` — one item per parked child, `approval_id` naming the `delegate_task` call it covers, and a `child` block carrying that child's gated call so the card renders without a second chat read. The rest of the batch is still awaited and settled first; the part is appended last, so the row reads as parked exactly as an MCP stop does. Set the key to `false` to keep the old refusal.
-
-Answering that card resumes the child, not the parent: approving runs the call inside the child and its answer settles the origin's slot, denying reaches the child as an ordinary refused tool call it finishes around, and "always allow" is stored against the **child's** `(mcp_server_id, tool_name)` — never the synthetic `delegate_task` name. A child that hits a second gate re-parks the turn with a new card.
-
-Two wire consequences for a client:
-
-- The parked child's `delegate_task` part keeps its index and stays `in_progress` with `output.status: "input_required"` and `output.reason: "approval_pending"`. It is never written with a null output, and the continuation overwrites the same part with the settled envelope.
-- `POST /me/messages/continuestream` against a child whose request the origin is currently asking about answers `409 { "code": "covered_by_parent", "parent_message_id": … }` — the origin holds the slot the answer is owed to, so its card is the one that can act. The refusal lasts only while that approval is open: once it is settled or withdrawn, or the origin chat is archived or deleted, the child is an ordinary parked chat its owner can answer. A decision taken there settles the child alone; feeding it back into the origin's slot is a later change.
-
-An `@`-mentioned assistant's run still has its gated calls refused, because there is no turn to carry the request to and no card of its own to raise. An `async` task parks too — see below.
-
-**The user can now be asked before the model's planned tasks are dispatched at all.** New sub-table `[delegation.tasks.approval]` with `mode` (default `"async_only"`) and `plan_min_tasks` (default `2`, must be at least 2), plus the per-facet twin `[facets.facets.<facet-id>.delegation.approval]` carrying the same two keys.
-
-The shipped default is the literal `async_only`, not a value derived from `run_modes`: it asks before every `async` dispatch and leaves awaited tasks alone. **A deployment that already offers `run_modes = ["wait", "async"]` therefore starts asking where it did not before** — set `mode = "never"` to keep the old behaviour. With the default `run_modes = ["wait"]` there is nothing for it to ask about and the gate is inert, so most deployments see no change. The other modes are `always` (ask about any batch containing a task) and `plan` (ask once a batch reaches `plan_min_tasks` tasks).
-
-The gate runs over the whole batch before any of it is dispatched, so **no child chat, run or placeholder exists when the card appears**. It is one approval part with `kind: "task_plan"` and **one item per task** — `approval_id` is `"plan:<batch>:<n>"`, `tool_name` is `delegate_task`, `input` is the call's own arguments, and there is no `child` block, because there is no child yet. The task calls the policy did not target and the rest of the batch ride along in `pending_tool_calls` and run once the decision is in. As on every other approval part, `mcp_server_id` is `""` and a client must branch on `kind` first.
-
-A plan can be approved in part: the items the user keeps are re-seeded at the head of the batch in the order the model asked for them and dispatch through the normal path, so the per-turn and concurrency caps apply unchanged, while each item denied settles as a refusal `ToolUse` carrying `{"status": "rejected", "error": "The user declined this task."}` — no `reason`, because "the user said no" is not a run outcome. `withdraw` denies every open item and the turn still finishes in prose. There is no "always allow" for a plan: what may be dispatched unasked is the deployment's to say, not a per-user setting's.
-
-Where two selected planning facets both state a policy, the merge narrows rather than combines — strictest `mode` (`always` > `plan` > `async_only` > `never`) and lowest `plan_min_tasks` — so selecting a second facet can only ever make a turn ask more. Retrying a failed run from the origin chat never asks: the user's click is the approval.
-
-The injected frontend environment gains `DELEGATION_TASKS_APPROVAL_MODE`, the effective **global** mode as its config spelling, so a composer can say in advance that a plan will need approving. Per-facet overrides are deliberately not published: they are resolved per turn from the facet selection, and a client that read one would promise a policy the next turn might not run.
-
-**An `async` task that needs an approval now parks and says so, instead of finishing without the tool.** No new configuration key: this is the same `delegation.tasks.propagate_child_mcp_approvals` (default `true`) as an awaited task's park, and it only happens where `run_modes` contains `async`.
-
-Nothing is waiting on a detached task, so there is no turn to raise a card on — which is why such a run used to have its gated call refused. It now stops on its own card, in its own chat, and the conversation that started the task is told: a `task_result` row arrives with `"status": "input_required"` and `"reason": "approval_pending"`, and the reaction turn over it points at the run. There is no approval part on the origin; the run's own chat is the only place the question can be answered.
-
-**One `async` run can therefore deliver two `task_result` rows, told apart by `sequence`** — the notification, then the answer that follows the decision one higher. Usually `0` and `1`; if the origin branched away from the notification and it was delivered again in between, the pair is higher, so a client must compare the two rather than test for `1`. A client that treats a delivered result as final, or that keys a card on the child chat id alone, will see the second row replace nothing and must render both. Deciding on the run's card is what produces the second: the decision runs through `continuestream` on the child chat, so the child's own generation tails re-arm the delivery rather than the origin's. Denying is not cancelling — the run finishes in prose without the tool and the second row reads `completed`, exactly as an awaited task's denial does. Two is the maximum, not a promise: if the decision is taken before the notification has been delivered — an origin that is busy, or parked on an approval of its own, holds it — the answer replaces it and the conversation is told once, at `sequence` 1.
-
-**`task_result` parts gain `redeliveries`, and it — not `sequence` — is what means "you have seen this result before".** `sequence` counts deliveries owed by the run, so it is bumped both when a branch write knocks a delivery off the active thread and when a parked run is re-armed with its real answer; only the first of those is the same result arriving twice. A client that labelled a row as a repeat because `sequence > 0` will label a parked run's answer — the row the reader has been waiting for — as something they already saw, and must switch to `redeliveries > 0`. The field is absent on results delivered before this change, and those rows must keep reading `sequence > 0` as the repeat — back then nothing else could raise it — so a client that switches wholesale rather than falling back would silently de-badge every repeat already in its transcripts.
-
-A run that parks again after a decision does not deliver a third row: the notification the conversation already holds still describes the situation, and the `sequence` bump is spent on the answer.
-
-#### Deprecations
-
-**`[assistants.delegation]` is deprecated; use `[delegation]` and `[delegation.assistants]`.**
-
-The table is still read until version `0.8.0`. A configuration that only sets `[assistants.delegation]` boots with a deprecation warning and behaves identically. Setting both `[assistants.delegation]` and `[delegation]` is rejected at startup — move the keys rather than duplicating them.
-
-| Deprecated key | Replacement |
-| --- | --- |
-| `assistants.delegation.enabled` | `delegation.assistants.enabled` |
-| `assistants.delegation.max_mentions_per_message` | `delegation.assistants.max_mentions_per_message` |
-| `assistants.delegation.allow_background` | `delegation.allow_background` |
-| `assistants.delegation.max_concurrent_background_runs` | `delegation.max_concurrent_background_runs` |
-| `assistants.delegation.run_timeout_seconds` | `delegation.run_timeout_seconds` |
-| `assistants.delegation.result_max_chars` | `delegation.result_max_chars` |
-| `assistants.delegation.auto_archive_after_days` | `delegation.auto_archive_after_days` |
-| `assistants.delegation.preamble` | `delegation.preamble` |
-
-Two further startup checks are new: an MCP server may no longer be given the id `erato`, and a configured client tool may no longer use the `erato` namespace or take one of the reserved tool names.
-
-The bundled k3d scenario configuration (`infrastructure/k3d/erato-local/config/erato.scenario-assistants.toml`) deliberately keeps the deprecated table for one release so the deprecation path stays covered by the end-to-end environment.
-
-#### Stability improvements
-
-**MCP calls no longer serialize process-wide.** A tool call used to hold the shared session map for as long as the server took to answer, so one slow tool stalled every other MCP call in the process. Calls on distinct sessions now overlap, which is what lets several delegated runs use MCP tools at the same time. Two wire-level tests pin it.
-
-**A configuration reload no longer waits behind a connecting MCP server.** Opening a session dials the server and lists its tools; the configuration lock was held for that whole round trip, and because the lock prefers writers, a reload queued behind it stalled every later reader — including in-flight tool calls on unrelated servers. The connect now runs with nothing held.
-
-A session can still be dropped while one of its calls is in flight, but only deliberately: a configuration reload, an OAuth disconnect, or an explicit invalidation. Idle expiry cannot do it, because a session with a registered call never counts as idle. Such a call fails with a session error and is retried once against a fresh session.
-
-The unused `McpSessionManager::refresh_tools` entry point was removed. It had no callers, and its lock behaviour was the one place the old process-wide stall survived.
+- Delegated work can run concurrently within configured limits; failures and abandoned tasks are surfaced, recoverable runs can be retried, and completed background results return to the conversation that started them. [#992](https://github.com/EratoLab/erato/pull/992), [#1006](https://github.com/EratoLab/erato/pull/1006), [#1008](https://github.com/EratoLab/erato/pull/1008), [#1009](https://github.com/EratoLab/erato/pull/1009), [#1014](https://github.com/EratoLab/erato/pull/1014), [#1181](https://github.com/EratoLab/erato/pull/1181), [#1188](https://github.com/EratoLab/erato/pull/1188), [#1190](https://github.com/EratoLab/erato/pull/1190), [#1192](https://github.com/EratoLab/erato/pull/1192), [#1196](https://github.com/EratoLab/erato/pull/1196), [#1201](https://github.com/EratoLab/erato/pull/1201)
+- Long running or disconnected turns recover more cleanly. Chats expose generation status, silent providers time out after configurable inactivity, and the generation loop recovers from unoffered tools and client disconnects. [#794](https://github.com/EratoLab/erato/pull/794), [#816](https://github.com/EratoLab/erato/pull/816), [#820](https://github.com/EratoLab/erato/pull/820), [#821](https://github.com/EratoLab/erato/pull/821), [#828](https://github.com/EratoLab/erato/pull/828), [#868](https://github.com/EratoLab/erato/pull/868), [#876](https://github.com/EratoLab/erato/pull/876), [#877](https://github.com/EratoLab/erato/pull/877), [#1085](https://github.com/EratoLab/erato/pull/1085), [#1179](https://github.com/EratoLab/erato/pull/1179), [#1236](https://github.com/EratoLab/erato/pull/1236)
+- MCP calls no longer hold shared configuration locks while a server responds, and slow server probes are bounded. [#1099](https://github.com/EratoLab/erato/pull/1099), [#1177](https://github.com/EratoLab/erato/pull/1177), [#1193](https://github.com/EratoLab/erato/pull/1193)
+- Outlook and Teams source handling better preserves message identity, shared mailbox context, attachment relationships, and file previews. [#928](https://github.com/EratoLab/erato/pull/928), [#939](https://github.com/EratoLab/erato/pull/939), [#940](https://github.com/EratoLab/erato/pull/940), [#948](https://github.com/EratoLab/erato/pull/948), [#953](https://github.com/EratoLab/erato/pull/953), [#957](https://github.com/EratoLab/erato/pull/957), [#1095](https://github.com/EratoLab/erato/pull/1095), [#1104](https://github.com/EratoLab/erato/pull/1104), [#1118](https://github.com/EratoLab/erato/pull/1118), [#1119](https://github.com/EratoLab/erato/pull/1119), [#1121](https://github.com/EratoLab/erato/pull/1121), [#1126](https://github.com/EratoLab/erato/pull/1126), [#1241](https://github.com/EratoLab/erato/pull/1241), [#1243](https://github.com/EratoLab/erato/pull/1243)
+
+#### Bug fixes
+
+- Fixed chat history, streaming, and composer issues, including archived chat behavior, edits, navigation, and the sidebar while the first response is running. [#803](https://github.com/EratoLab/erato/pull/803), [#809](https://github.com/EratoLab/erato/pull/809), [#810](https://github.com/EratoLab/erato/pull/810), [#811](https://github.com/EratoLab/erato/pull/811), [#833](https://github.com/EratoLab/erato/pull/833), [#834](https://github.com/EratoLab/erato/pull/834), [#835](https://github.com/EratoLab/erato/pull/835), [#849](https://github.com/EratoLab/erato/pull/849), [#855](https://github.com/EratoLab/erato/pull/855), [#858](https://github.com/EratoLab/erato/pull/858), [#859](https://github.com/EratoLab/erato/pull/859), [#861](https://github.com/EratoLab/erato/pull/861), [#863](https://github.com/EratoLab/erato/pull/863), [#881](https://github.com/EratoLab/erato/pull/881), [#1086](https://github.com/EratoLab/erato/pull/1086), [#1087](https://github.com/EratoLab/erato/pull/1087), [#1098](https://github.com/EratoLab/erato/pull/1098), [#1125](https://github.com/EratoLab/erato/pull/1125), [#1130](https://github.com/EratoLab/erato/pull/1130), [#1131](https://github.com/EratoLab/erato/pull/1131), [#1134](https://github.com/EratoLab/erato/pull/1134), [#1135](https://github.com/EratoLab/erato/pull/1135), [#1136](https://github.com/EratoLab/erato/pull/1136), [#1262](https://github.com/EratoLab/erato/pull/1262)
+- Improved add-in, authentication, provider, and file handling across Outlook and the desktop clients. [#787](https://github.com/EratoLab/erato/pull/787), [#793](https://github.com/EratoLab/erato/pull/793), [#800](https://github.com/EratoLab/erato/pull/800), [#806](https://github.com/EratoLab/erato/pull/806), [#814](https://github.com/EratoLab/erato/pull/814), [#815](https://github.com/EratoLab/erato/pull/815), [#823](https://github.com/EratoLab/erato/pull/823), [#832](https://github.com/EratoLab/erato/pull/832), [#890](https://github.com/EratoLab/erato/pull/890), [#899](https://github.com/EratoLab/erato/pull/899), [#905](https://github.com/EratoLab/erato/pull/905), [#927](https://github.com/EratoLab/erato/pull/927), [#945](https://github.com/EratoLab/erato/pull/945), [#968](https://github.com/EratoLab/erato/pull/968), [#1032](https://github.com/EratoLab/erato/pull/1032), [#1112](https://github.com/EratoLab/erato/pull/1112), [#1139](https://github.com/EratoLab/erato/pull/1139), [#1244](https://github.com/EratoLab/erato/pull/1244), [#1247](https://github.com/EratoLab/erato/pull/1247), [#1252](https://github.com/EratoLab/erato/pull/1252), [#1263](https://github.com/EratoLab/erato/pull/1263)
+
+#### Deprecations and upgrade notes
+
+`[assistants.delegation]` is deprecated in favor of `[delegation]` and `[delegation.assistants]`; it remains supported through 0.8.0. Configuring both old and new tables is rejected at startup. The `erato` MCP server id, namespace, and reserved built-in tool names can no longer be assigned to custom tools. Deploy the matching frontend with the backend for delegated-run status and approval wire changes. New optional features, including planned delegation and durable client operations, remain disabled unless configured. [#978](https://github.com/EratoLab/erato/pull/978), [#1107](https://github.com/EratoLab/erato/pull/1107), [#1110](https://github.com/EratoLab/erato/pull/1110), [#1162](https://github.com/EratoLab/erato/pull/1162), [#1230](https://github.com/EratoLab/erato/pull/1230), [#1237](https://github.com/EratoLab/erato/pull/1237), [#1249](https://github.com/EratoLab/erato/pull/1249), [#1250](https://github.com/EratoLab/erato/pull/1250)
+
+#### Documentation
+
+- Added deployment and user guidance for Teams, desktop Sidecar, and related configuration. [#860](https://github.com/EratoLab/erato/pull/860), [#872](https://github.com/EratoLab/erato/pull/872), [#1254](https://github.com/EratoLab/erato/pull/1254)
+- Added the frontend shared API/client and component-kit distribution surfaces for consumers. [#822](https://github.com/EratoLab/erato/pull/822), [#826](https://github.com/EratoLab/erato/pull/826), [#999](https://github.com/EratoLab/erato/pull/999), [#1079](https://github.com/EratoLab/erato/pull/1079), [#1138](https://github.com/EratoLab/erato/pull/1138)
+
+#### Dependency changes
+
+- Updated the file extraction library, Rust crates, MSAL, and other application dependencies. [#781](https://github.com/EratoLab/erato/pull/781), [#787](https://github.com/EratoLab/erato/pull/787), [#788](https://github.com/EratoLab/erato/pull/788), [#830](https://github.com/EratoLab/erato/pull/830), [#885](https://github.com/EratoLab/erato/pull/885), [#891](https://github.com/EratoLab/erato/pull/891), [#1097](https://github.com/EratoLab/erato/pull/1097), [#1106](https://github.com/EratoLab/erato/pull/1106)
+
+#### Full list of changes
+
+
+- Add XLSX file preview [#744](https://github.com/EratoLab/erato/pull/744)
+- Split out sqitch migration system into separate Docker image [#780](https://github.com/EratoLab/erato/pull/780)
+- Switch from native-tls to rustls [#781](https://github.com/EratoLab/erato/pull/781)
+- Switch base image from trixie to chainguard/glibc-dynamic:dev [#782](https://github.com/EratoLab/erato/pull/782)
+- Mobile model selector placement and alignment [#783](https://github.com/EratoLab/erato/pull/783)
+- ERMAIN-411: Mac 'pin the add-in' hint for the unpinned/frozen task pane [#784](https://github.com/EratoLab/erato/pull/784)
+- Add assistant hub reviews [#785](https://github.com/EratoLab/erato/pull/785)
+- Client-executed tool round-trip for action facets (client_tools) [#786](https://github.com/EratoLab/erato/pull/786)
+- Fix lint error due to new msal versions [#787](https://github.com/EratoLab/erato/pull/787)
+- Updated various backend dependencies [#788](https://github.com/EratoLab/erato/pull/788)
+- Add option to deselect individual guardrails [#789](https://github.com/EratoLab/erato/pull/789)
+- Publishing assistant in assistant store also marks as current [#790](https://github.com/EratoLab/erato/pull/790)
+- Fix feedback <-> trace correlation in Langfuse OTEL [#791](https://github.com/EratoLab/erato/pull/791)
+- Add per-process cache key for theme translations [#792](https://github.com/EratoLab/erato/pull/792)
+- Fix transient "Error loading file" during generation [#793](https://github.com/EratoLab/erato/pull/793)
+- Fix "SSE connection error" on navigation during streaming [#794](https://github.com/EratoLab/erato/pull/794)
+- Honor global tool_call_allowlist for client tools (globally-active) [#795](https://github.com/EratoLab/erato/pull/795)
+- Hidden facets: platform-scoped, always-on system-prompt injection [#796](https://github.com/EratoLab/erato/pull/796)
+- Clean up license information for cargo-deny [#797](https://github.com/EratoLab/erato/pull/797)
+- Client-side Outlook calendar/free-busy data sourcing (EXO Graph + SE EWS) [#798](https://github.com/EratoLab/erato/pull/798)
+- Client-tool round-trip — frontend (executor registry + result handler) [#799](https://github.com/EratoLab/erato/pull/799)
+- fix: write text/html to clipboard when copying HTML email drafts (ERMAIN-417) [#800](https://github.com/EratoLab/erato/pull/800)
+- Outlook appointment scheduling seam: fetch_availability client tool + outlook_schedule facet [#801](https://github.com/EratoLab/erato/pull/801)
+- Client tools: portable-name hygiene + offering-loop hardening [#802](https://github.com/EratoLab/erato/pull/802)
+- fix(edit): mirror regenerate action-facet fallback in edit_message_sse [#803](https://github.com/EratoLab/erato/pull/803)
+- ERMAIN-387: create-appointment confirm path (outlook.create_appointment + erato-appointment fence) [#804](https://github.com/EratoLab/erato/pull/804)
+- Fix shared chat not using profile picture of chat creator [#806](https://github.com/EratoLab/erato/pull/806)
+- Add apple-touch-icon [#807](https://github.com/EratoLab/erato/pull/807)
+- Added compact variant of page headers [#808](https://github.com/EratoLab/erato/pull/808)
+- Remember collapsed state of recent chats in localStorage [#809](https://github.com/EratoLab/erato/pull/809)
+- Show less details about assistants by default on new chat page [#810](https://github.com/EratoLab/erato/pull/810)
+- Adjust assistant create/edit pages to also use compact header [#811](https://github.com/EratoLab/erato/pull/811)
+- Ensure stable translation ids for assistant/assistant-hub pages [#812](https://github.com/EratoLab/erato/pull/812)
+- Add compat flag to make Anthropic + Bifrost + reasoning replay work [#813](https://github.com/EratoLab/erato/pull/813)
+- Adjust compat_no_replay_summary behaviour [#814](https://github.com/EratoLab/erato/pull/814)
+- Make copy error button available for frontend errors [#815](https://github.com/EratoLab/erato/pull/815)
+- Persist traces more often to Langfuse during generation including errors [#816](https://github.com/EratoLab/erato/pull/816)
+- Deactivate flaky autoscroll test [#817](https://github.com/EratoLab/erato/pull/817)
+- Multi-attendee availability & deterministic slot ranking (ERMAIN-434/388) [#818](https://github.com/EratoLab/erato/pull/818)
+- Slot→appointment loop: copy-exact ISO slots + resilient scheduling stickiness [#819](https://github.com/EratoLab/erato/pull/819)
+- Improve handling and persistence of errors during generation task [#820](https://github.com/EratoLab/erato/pull/820)
+- Upgrade to rust-genai fork to handle missing response.status [#821](https://github.com/EratoLab/erato/pull/821)
+- Export message-rendering surface for component kits + stable i18n ids [#822](https://github.com/EratoLab/erato/pull/822)
+- Force interactive login on sign-in button [#823](https://github.com/EratoLab/erato/pull/823)
+- Add hash suffix to react runtime module [#824](https://github.com/EratoLab/erato/pull/824)
+- Pass host MessageContent to ChatMessageRenderer overrides [#825](https://github.com/EratoLab/erato/pull/825)
+- Versioned ERATO_KIT_RUNTIME host surface for component kits [#826](https://github.com/EratoLab/erato/pull/826)
+- Share host modules with component kits via import maps [#827](https://github.com/EratoLab/erato/pull/827)
+- Recover the turn when the model calls an unoffered tool (no more empty assistant message) [#828](https://github.com/EratoLab/erato/pull/828)
+- Remove outdated image-generation chat mode [#829](https://github.com/EratoLab/erato/pull/829)
+- Upgrade from kreuzberg to xberg [#830](https://github.com/EratoLab/erato/pull/830)
+- Composer UX consistency: token-driven styling, attachment tree restructure, first-message consent fix [#831](https://github.com/EratoLab/erato/pull/831)
+- Adjust local-auth dex to consistently use 127.0.0.1 [#832](https://github.com/EratoLab/erato/pull/832)
+- Fix chat-history dropdown overflow and double scrollbar (ERMAIN-464) [#833](https://github.com/EratoLab/erato/pull/833)
+- Dropdown: pointerdown outside-close for touch tap-outside dismiss (ERMAIN-465) [#834](https://github.com/EratoLab/erato/pull/834)
+- Make sidebar Assistants section collapsible [#835](https://github.com/EratoLab/erato/pull/835)
+- Dropdown menus: soft active highlight + arrow-key roving navigation [#836](https://github.com/EratoLab/erato/pull/836)
+- Chat input stays usable while a response is generating (ERMAIN-466) [#837](https://github.com/EratoLab/erato/pull/837)
+- Add PPTX file preview [#838](https://github.com/EratoLab/erato/pull/838)
+- Storybook stories for confirm/consent components [#839](https://github.com/EratoLab/erato/pull/839)
+- Keep chat composer usable while a response streams (ERMAIN-466) [#840](https://github.com/EratoLab/erato/pull/840)
+- E2E: streaming composer + message queue (ERMAIN-466/470) [#841](https://github.com/EratoLab/erato/pull/841)
+- Fix queued-message chip theming and narrow-pane layout (ERMAIN-470) [#842](https://github.com/EratoLab/erato/pull/842)
+- Separate button geometry from colour variant (theming contract) [#843](https://github.com/EratoLab/erato/pull/843)
+- Reuse the shared Button for the add-menu trigger [#844](https://github.com/EratoLab/erato/pull/844)
+- Put the file-upload button on the shared Button and tokenise its styles [#845](https://github.com/EratoLab/erato/pull/845)
+- E2E: harden the queue/streaming spec + cover the mid-stream error path [#846](https://github.com/EratoLab/erato/pull/846)
+- Take dropdown trigger geometry from the control token [#847](https://github.com/EratoLab/erato/pull/847)
+- Take button radii from theme tokens (frontend + add-in) [#848](https://github.com/EratoLab/erato/pull/848)
+- Drop the whole superseded tail when editing or regenerating a non-last message (ERMAIN-469) [#849](https://github.com/EratoLab/erato/pull/849)
+- Cover the message-edit path before the in-place editor lands [#850](https://github.com/EratoLab/erato/pull/850)
+- Move popover and sidebar-row surfaces out of inline styles [#851](https://github.com/EratoLab/erato/pull/851)
+- Move the remaining documented hooks' surfaces out of inline styles [#852](https://github.com/EratoLab/erato/pull/852)
+- Edit user messages in place instead of in the composer (ERMAIN-471) [#853](https://github.com/EratoLab/erato/pull/853)
+- Pin a type scale per button size [#854](https://github.com/EratoLab/erato/pull/854)
+- Drop redundant recent-chats refetches on rename [#855](https://github.com/EratoLab/erato/pull/855)
+- Make sm the default button size [#856](https://github.com/EratoLab/erato/pull/856)
+- Define protocol for desktop-sidecar [#857](https://github.com/EratoLab/erato/pull/857)
+- Show the user message when returning to a streaming chat [#858](https://github.com/EratoLab/erato/pull/858)
+- Fix sidebar dropping an unrelated chat when archiving [#859](https://github.com/EratoLab/erato/pull/859)
+- Add desktop-sidecar distribution contract [#860](https://github.com/EratoLab/erato/pull/860)
+- Show a new chat in the sidebar while its first turn runs [#861](https://github.com/EratoLab/erato/pull/861)
+- Map invalid and archived chat ids to 404/409 instead of 500 [#863](https://github.com/EratoLab/erato/pull/863)
+- Add sidecar restart command to sidecar protocol spec [#864](https://github.com/EratoLab/erato/pull/864)
+- Allow users to retract message feedback [#865](https://github.com/EratoLab/erato/pull/865)
+- Serve shared chats via a dedicated active-thread-only messages route [#866](https://github.com/EratoLab/erato/pull/866)
+- Extend MCP file mechanism with metadata marker for filenames [#867](https://github.com/EratoLab/erato/pull/867)
+- Show per-chat generation status in the history sidebar [#868](https://github.com/EratoLab/erato/pull/868)
+- Extend sidecar protocol with mailbox listing and email listing [#869](https://github.com/EratoLab/erato/pull/869)
+- Parallelize e2e CI: shard many-models, worker knob, raise e2e backend memory [#870](https://github.com/EratoLab/erato/pull/870)
+- Add configuration method for desktop sidecar [#871](https://github.com/EratoLab/erato/pull/871)
+- Add desktop-sidecar distribution page [#872](https://github.com/EratoLab/erato/pull/872)
+- Run basic e2e with 2 workers; record traces only on first retry [#873](https://github.com/EratoLab/erato/pull/873)
+- Move profiling image build into manual triggered job [#874](https://github.com/EratoLab/erato/pull/874)
+- Replace e2e settle sleeps with observable waits; enforce via eslint [#875](https://github.com/EratoLab/erato/pull/875)
+- Layer sendFirstMessage failure diagnosis; widen mcp-auth first-response margin [#876](https://github.com/EratoLab/erato/pull/876)
+- Run every e2e test in CI by default; port token-warning coverage [#877](https://github.com/EratoLab/erato/pull/877)
+- Withhold owner feedback from share-link viewers [#879](https://github.com/EratoLab/erato/pull/879)
+- Emit chat_created before the policy rebuild (ERMAIN-494) [#881](https://github.com/EratoLab/erato/pull/881)
+- Restructure assistant hub and assistants pages to share structure [#884](https://github.com/EratoLab/erato/pull/884)
+- Update k3d to v5.9.0 [#885](https://github.com/EratoLab/erato/pull/885)
+- Integrate assistants hub and existing assistants pages [#886](https://github.com/EratoLab/erato/pull/886)
+- Add outlook.get_conversation.v1 (ERMAIN-501) [#887](https://github.com/EratoLab/erato/pull/887)
+- Add config option - generation.max_tool_calls_per_message [#888](https://github.com/EratoLab/erato/pull/888)
+- Add MCP server allow/exclude tool filtering [#889](https://github.com/EratoLab/erato/pull/889)
+- Fix outlook addin import map injection [#890](https://github.com/EratoLab/erato/pull/890)
+- Add optional file scanning with magika [#891](https://github.com/EratoLab/erato/pull/891)
+- Add-in: sidecar-backed thread fetcher (ERMAIN-503) [#892](https://github.com/EratoLab/erato/pull/892)
+- Add runtime_configuration table and startup mirroring [#893](https://github.com/EratoLab/erato/pull/893)
+- Extract config modules into erato_config crate [#894](https://github.com/EratoLab/erato/pull/894)
+- Fix cargo-deny for erato_config first-party crate [#895](https://github.com/EratoLab/erato/pull/895)
+- Fix on-prem detection for hybrid mailboxes; record Windows sidecar qualification [#896](https://github.com/EratoLab/erato/pull/896)
+- Extend config mirroring to .po translation files [#897](https://github.com/EratoLab/erato/pull/897)
+- Enable cross-replica sharing of generation state [#898](https://github.com/EratoLab/erato/pull/898)
+- Authorization retry with throttling for cross-replica staleness [#899](https://github.com/EratoLab/erato/pull/899)
+- Add support for Gateway API in Helm chart [#900](https://github.com/EratoLab/erato/pull/900)
+- Add optional backend service load balancer to Helm chart [#901](https://github.com/EratoLab/erato/pull/901)
+- Add description for reviewer and version comment in assistant hub [#902](https://github.com/EratoLab/erato/pull/902)
+- Add special share grant to share with whole organization [#903](https://github.com/EratoLab/erato/pull/903)
+- Collapse more than two assistant versions into "Show more" [#904](https://github.com/EratoLab/erato/pull/904)
+- Generate serve.json maps; Enforce via E2E tests [#905](https://github.com/EratoLab/erato/pull/905)
+- Unpublish de-reviewed assistants in assistants hub [#906](https://github.com/EratoLab/erato/pull/906)
+- On "my submission" assistant hub page, order by most recent [#907](https://github.com/EratoLab/erato/pull/907)
+- Order review queue by status, then oldest first [#908](https://github.com/EratoLab/erato/pull/908)
+- Add alternative 5 star rating system for assistant hub [#909](https://github.com/EratoLab/erato/pull/909)
+- Add sidecar.progress.v1: poll-based incremental progress delivery (ERMAIN-534) [#910](https://github.com/EratoLab/erato/pull/910)
+- Adjust intermediate load balancer network policy [#911](https://github.com/EratoLab/erato/pull/911)
+- Never let a progress observer break the observed request [#912](https://github.com/EratoLab/erato/pull/912)
+- Add configuration change listener [#913](https://github.com/EratoLab/erato/pull/913)
+- Extend mirroring of .po files to more directories [#914](https://github.com/EratoLab/erato/pull/914)
+- Add tool call approval interaction [#915](https://github.com/EratoLab/erato/pull/915)
+- Add optional settings tab for desktop sidecar [#916](https://github.com/EratoLab/erato/pull/916)
+- Implement distribution customization for desktop-sidecar [#917](https://github.com/EratoLab/erato/pull/917)
+- MCP tool approval UX follow-ups [#918](https://github.com/EratoLab/erato/pull/918)
+- Merge settings into an entity-first MCP & Apps pane [#919](https://github.com/EratoLab/erato/pull/919)
+- MCP approval follow-up fixes [#921](https://github.com/EratoLab/erato/pull/921)
+- Extract host-neutral add-in core, isolate Outlook composition [#922](https://github.com/EratoLab/erato/pull/922)
+- Default appointment card and sidecar client identity [#923](https://github.com/EratoLab/erato/pull/923)
+- Treat cloud.microsoft endpoints as Exchange Online [#926](https://github.com/EratoLab/erato/pull/926)
+- fix(office-addin): fix background color inconsistency in add-in chat view [#927](https://github.com/EratoLab/erato/pull/927)
+- fix(eml-preview): recover PDF MIME type from extension when email declares octet-stream (ERMAIN-550) [#928](https://github.com/EratoLab/erato/pull/928)
+- Expose Erato in Outlook organizer appointment compose [#929](https://github.com/EratoLab/erato/pull/929)
+- feat(office-addin): generate a local unified app package [#930](https://github.com/EratoLab/erato/pull/930)
+- feat(office-addin): add the Teams personal app route [#931](https://github.com/EratoLab/erato/pull/931)
+- fix(office-addin): correct the app icons and give the ribbon its own assets [#932](https://github.com/EratoLab/erato/pull/932)
+- feat: enforce configured file-size limits across all local upload paths [#934](https://github.com/EratoLab/erato/pull/934)
+- Add numbering of pasted screenshots [#935](https://github.com/EratoLab/erato/pull/935)
+- Add support for rendering Mermaid diagrams [#936](https://github.com/EratoLab/erato/pull/936)
+- Add edit sharing for assistants [#937](https://github.com/EratoLab/erato/pull/937)
+- Add support for rendering math equations in Markdown [#938](https://github.com/EratoLab/erato/pull/938)
+- feat(office-addin): add Teams chats as a context source in the chat composer [#939](https://github.com/EratoLab/erato/pull/939)
+- feat(office-addin): attach files and images shared in Teams conversations [#940](https://github.com/EratoLab/erato/pull/940)
+- feat(frontend): client-side PDF preview (ERMAIN-566) [#941](https://github.com/EratoLab/erato/pull/941)
+- feat(frontend): restore PDF text selection and copy (ERMAIN-570) [#942](https://github.com/EratoLab/erato/pull/942)
+- Add optional pinned chats [#943](https://github.com/EratoLab/erato/pull/943)
+- Fix missing fallback for empty translation strings in JIT-compiled mode [#945](https://github.com/EratoLab/erato/pull/945)
+- Reactivate Kubescape CI by switching to our fork [#946](https://github.com/EratoLab/erato/pull/946)
+- Add pin/unpin icon; Add enforcement of pin limit [#947](https://github.com/EratoLab/erato/pull/947)
+- fix(office-addin): upload the Teams transcript as text/plain [#948](https://github.com/EratoLab/erato/pull/948)
+- Carry Graph's message subject into the Teams transcript [#949](https://github.com/EratoLab/erato/pull/949)
+- Name the viewer in Teams chat transcripts [#950](https://github.com/EratoLab/erato/pull/950)
+- Add a chat-input seam for grouped attachment previews [#951](https://github.com/EratoLab/erato/pull/951)
+- Preview attached Teams chats as a conversation [#953](https://github.com/EratoLab/erato/pull/953)
+- fix: keep table cells and fenced code intact in html-to-text [#955](https://github.com/EratoLab/erato/pull/955)
+- Cite Teams transcript messages by ordinal [#956](https://github.com/EratoLab/erato/pull/956)
+- Index the Teams transcript's identifiers and strip them before the model [#957](https://github.com/EratoLab/erato/pull/957)
+- Render the Teams composer preview from the transcript's index block [#958](https://github.com/EratoLab/erato/pull/958)
+- Fix JIT translation to correctly integrate fallback [#959](https://github.com/EratoLab/erato/pull/959)
+- Show target audience on assistant hub review page [#960](https://github.com/EratoLab/erato/pull/960)
+- Force "whole organization" option to be at top of share grants [#961](https://github.com/EratoLab/erato/pull/961)
+- Add Markdown preview to assistant hub description edit field [#962](https://github.com/EratoLab/erato/pull/962)
+- Add licenses notice generation to build process [#963](https://github.com/EratoLab/erato/pull/963)
+- Add config settings for max_files in normal chat and assistants [#964](https://github.com/EratoLab/erato/pull/964)
+- Bump oauth2-proxy to v7.15.2-erato.4 [#965](https://github.com/EratoLab/erato/pull/965)
+- Show an attached Teams transcript as a conversation before sending [#966](https://github.com/EratoLab/erato/pull/966)
+- Open a stored Teams transcript as its conversation [#967](https://github.com/EratoLab/erato/pull/967)
+- fix(dev): gate linked add-in reloads on library build completion (ERMAIN-565) [#968](https://github.com/EratoLab/erato/pull/968)
+- Teach and resolve Teams transcript message citations [#969](https://github.com/EratoLab/erato/pull/969)
+- Add sort by for chats [#970](https://github.com/EratoLab/erato/pull/970)
+- Pin Teams message windows to creation time, pace chat reads, gate add-menu rows on the file limit [#971](https://github.com/EratoLab/erato/pull/971)
+- Align chat add menu with the dropdown theme-token channel [#972](https://github.com/EratoLab/erato/pull/972)
+- Sidebar geometry: alignment contract, slim centering, resizable width (ERMAIN-608) [#973](https://github.com/EratoLab/erato/pull/973)
+- Sidebar & search UI polish: default icons, collapse animation, aligned search input (ERMAIN-612) [#974](https://github.com/EratoLab/erato/pull/974)
+- Focus rings: keyboard-only, inset on sidebar rows, aligned trailing controls [#975](https://github.com/EratoLab/erato/pull/975)
+- On-device search part 1: sidecar search protocol, nested trace rendering, client-tool abort plumbing (ERMAIN-616) [#976](https://github.com/EratoLab/erato/pull/976)
+- Delegation config & server-side gating (ERMAIN-619) [#978](https://github.com/EratoLab/erato/pull/978)
+- Chat provenance envelope, seed_chat_lineage, ContextRebase (ERMAIN-620) [#979](https://github.com/EratoLab/erato/pull/979)
+- Mention validation & persistence on submit/edit/regenerate (ERMAIN-621) [#980](https://github.com/EratoLab/erato/pull/980)
+- delegate_to_assistant: tool offer, dispatch branch, awaited child run (ERMAIN-622) [#981](https://github.com/EratoLab/erato/pull/981)
+- Listing surface: hide delegated runs by default, provenance on RecentChat (ERMAIN-623) [#982](https://github.com/EratoLab/erato/pull/982)
+- Composer assistant mentions: @-picker, add-menu and Tools sections (ERMAIN-618) [#984](https://github.com/EratoLab/erato/pull/984)
+- Delegation trace: nested child steps in the tool call, open-run link (ERMAIN-624) [#985](https://github.com/EratoLab/erato/pull/985)
+- Assistant space: delegated runs segment, origin hint, attention passthrough (ERMAIN-625) [#986](https://github.com/EratoLab/erato/pull/986)
+- Highlight tracked assistant mentions behind the composer text (ERMAIN-629) [#987](https://github.com/EratoLab/erato/pull/987)
+- Refactor to establish clear distribution structure [#988](https://github.com/EratoLab/erato/pull/988)
+- Skip check for sibling .json files before mirroring .po files [#989](https://github.com/EratoLab/erato/pull/989)
+- Add pin dropdown actions to more places [#990](https://github.com/EratoLab/erato/pull/990)
+- Add ability to consome translation authored via admin-panel [#991](https://github.com/EratoLab/erato/pull/991)
+- Delegated chat lifecycle: archive cascade, age reaping, orphan cleanup, in-flight guard (ERMAIN-627) [#992](https://github.com/EratoLab/erato/pull/992)
+- Contain third-party assistant metadata in the delegation tool offer (ERMAIN-626) [#993](https://github.com/EratoLab/erato/pull/993)
+- Pin continuestream tool scope, share the generation task lifecycle (ERMAIN-628) [#994](https://github.com/EratoLab/erato/pull/994)
+- Make MCP call and output processing errors recoverable [#995](https://github.com/EratoLab/erato/pull/995)
+- Split up lint GH Actions job [#996](https://github.com/EratoLab/erato/pull/996)
+- Reduce build cache thrash by using branch-aware cache tags [#997](https://github.com/EratoLab/erato/pull/997)
+- Compose the delegation preamble instead of storing it in the child's message (ERMAIN-630) [#998](https://github.com/EratoLab/erato/pull/998)
+- Prepare frontend library for Git consumers [#999](https://github.com/EratoLab/erato/pull/999)
+- Delegated chats open on a run header, not a machine-written message (ERMAIN-631) [#1000](https://github.com/EratoLab/erato/pull/1000)
+- Make replicaCount for oauth2Proxy configureable in Helm chart [#1002](https://github.com/EratoLab/erato/pull/1002)
+- Improve frontend build layer caching [#1003](https://github.com/EratoLab/erato/pull/1003)
+- Carry a per-request delegation run mode through submit, edit and regenerate (ERMAIN-634) [#1004](https://github.com/EratoLab/erato/pull/1004)
+- Detached delegation dispatch: background runs return at launch (ERMAIN-635) [#1005](https://github.com/EratoLab/erato/pull/1005)
+- Bound delegated runs: in-task deadline, reaper backstop, background concurrency cap (ERMAIN-636) [#1006](https://github.com/EratoLab/erato/pull/1006)
+- Recent chats: optional origin_chat_id filter (ERMAIN-637) [#1007](https://github.com/EratoLab/erato/pull/1007)
+- Derive a delegated run's outcome from its chat so completion survives retention (ERMAIN-638) [#1008](https://github.com/EratoLab/erato/pull/1008)
+- Drain in-flight generations on shutdown so their fate is recorded (ERMAIN-639) [#1009](https://github.com/EratoLab/erato/pull/1009)
+- Generate SBOM and license artifacts before the source copy (ERMAIN-656) [#1010](https://github.com/EratoLab/erato/pull/1010)
+- Ask wait-or-background when sending a message with tracked mentions (ERMAIN-640) [#1011](https://github.com/EratoLab/erato/pull/1011)
+- Delegation trace: settled background presentation for detached runs (ERMAIN-641) [#1012](https://github.com/EratoLab/erato/pull/1012)
+- Delegated background runs of the open chat above the composer (ERMAIN-642) [#1013](https://github.com/EratoLab/erato/pull/1013)
+- Delegated runs list: dismiss finished background runs (ERMAIN-643) [#1014](https://github.com/EratoLab/erato/pull/1014)
+- Record MCP servers skipped for missing OAuth authorization in generation metadata (ERMAIN-657) [#1016](https://github.com/EratoLab/erato/pull/1016)
+- Assistant editor: attach MCP servers with per-user connection affordance (ERMAIN-657) [#1017](https://github.com/EratoLab/erato/pull/1017)
+- Chat: point at unconnected MCP servers instead of silently dropping their tools (ERMAIN-657) [#1018](https://github.com/EratoLab/erato/pull/1018)
+- Render tracked assistant mentions in sent user messages (ERMAIN-661) [#1020](https://github.com/EratoLab/erato/pull/1020)
+- Delegation surfaces: kit-aligned badges and chevrons, keyboard reveal, SPA origin link (ERMAIN-665) [#1021](https://github.com/EratoLab/erato/pull/1021)
+- Delegated runs list: surface a background run the moment it is dispatched (ERMAIN-664) [#1022](https://github.com/EratoLab/erato/pull/1022)
+- Do not seed a pending sidebar chat from replayed chat_created frames (ERMAIN-666) [#1023](https://github.com/EratoLab/erato/pull/1023)
+- feat: show loading spinner on save button in assistant create/edit form [#1024](https://github.com/EratoLab/erato/pull/1024)
+- Surface delegated background runs in the add-in pane (ERMAIN-644) [#1025](https://github.com/EratoLab/erato/pull/1025)
+- Do not clear a still-unlisted chat's placeholder on turn completion (ERMAIN-666) [#1026](https://github.com/EratoLab/erato/pull/1026)
+- Extract router-free chat-history primitives for host reuse (ERMAIN-614) [#1027](https://github.com/EratoLab/erato/pull/1027)
+- Add-in: skip the oauth2-proxy session warm for custom-audience tokens [#1032](https://github.com/EratoLab/erato/pull/1032)
+- Add-in: AddinStartView extension point with start/chat view switcher [#1033](https://github.com/EratoLab/erato/pull/1033)
+- Access dynamic translation IDs without causing console warnings [#1035](https://github.com/EratoLab/erato/pull/1035)
+- Add option for configure model preference [#1036](https://github.com/EratoLab/erato/pull/1036)
+- Improve error message for prompt injection guardrail [#1037](https://github.com/EratoLab/erato/pull/1037)
+- Block chat composer after encountering guardrail [#1038](https://github.com/EratoLab/erato/pull/1038)
+- Add chat_providers.providers.<id>.validate_availability [#1039](https://github.com/EratoLab/erato/pull/1039)
+- Add wait tool for actions that require it [#1040](https://github.com/EratoLab/erato/pull/1040)
+- Add model switching indicator [#1041](https://github.com/EratoLab/erato/pull/1041)
+- Route local admin panel through auth proxies [#1042](https://github.com/EratoLab/erato/pull/1042)
+- Model switch marker: add-in parity and shared transcript notice [#1043](https://github.com/EratoLab/erato/pull/1043)
+- Increase the default file limits to 10 files with 50MB each [#1044](https://github.com/EratoLab/erato/pull/1044)
+- Add a delegated-runs filter and pane attention badge [#1045](https://github.com/EratoLab/erato/pull/1045)
+- Unify staged attachment previews into a shared tile [#1046](https://github.com/EratoLab/erato/pull/1046)
+- Draw sent-message attachments with the shared tile [#1047](https://github.com/EratoLab/erato/pull/1047)
+- Move staged attachments inside the composer shell [#1049](https://github.com/EratoLab/erato/pull/1049)
+- Draw grouped attachment items with the shared tile [#1050](https://github.com/EratoLab/erato/pull/1050)
+- Promote attachment tile geometry to theme tokens [#1051](https://github.com/EratoLab/erato/pull/1051)
+- Keep the picked file size on staged attachments [#1052](https://github.com/EratoLab/erato/pull/1052)
+- Let images grow in place before the full preview [#1053](https://github.com/EratoLab/erato/pull/1053)
+- Pin the kit-facing shared surface [#1055](https://github.com/EratoLab/erato/pull/1055)
+- Clamp long code blocks with a reveal control [#1056](https://github.com/EratoLab/erato/pull/1056)
+- Share the growth control between attached and generated images [#1057](https://github.com/EratoLab/erato/pull/1057)
+- Group a sent Teams conversation and name its shared files [#1058](https://github.com/EratoLab/erato/pull/1058)
+- Fold the redundant attachments seam into one registry key [#1059](https://github.com/EratoLab/erato/pull/1059)
+- Fail CI when the kit shared surface drifts [#1060](https://github.com/EratoLab/erato/pull/1060)
+- Paint the code block surface on the element that clips [#1061](https://github.com/EratoLab/erato/pull/1061)
+- Keep the composer upload button usable after a file error (ERMAIN-163) [#1062](https://github.com/EratoLab/erato/pull/1062)
+- Let keyboard users move through the segmented control tabs [#1063](https://github.com/EratoLab/erato/pull/1063)
+- Make the info tooltip reachable by keyboard [#1064](https://github.com/EratoLab/erato/pull/1064)
+- Let deployments declare Office add-in launch events in config [#1065](https://github.com/EratoLab/erato/pull/1065)
+- new hook useChatHistoryRowPresentation [#1066](https://github.com/EratoLab/erato/pull/1066)
+- Pin FilePreviewButton and ChatAttentionStatusDot to the kit-facing shared surface [#1067](https://github.com/EratoLab/erato/pull/1067)
+- Make theming fail loudly instead of silently, and hoist user attachments above the message body [#1068](https://github.com/EratoLab/erato/pull/1068)
+- Resolve dropdown and media borders through the merged theme [#1069](https://github.com/EratoLab/erato/pull/1069)
+- Add option to disable categories in Assistant Hub [#1070](https://github.com/EratoLab/erato/pull/1070)
+- Add experience policy document as a runtime configuration source type (ERMAIN-694) [#1071](https://github.com/EratoLab/erato/pull/1071)
+- Serve the per-user starting assistant on GET /me/starting-assistant (ERMAIN-695) [#1072](https://github.com/EratoLab/erato/pull/1072)
+- Let a person override or clear their start screen, and land them there (ERMAIN-696) [#1073](https://github.com/EratoLab/erato/pull/1073)
+- Highlight selected item in SegmentControl [#1075](https://github.com/EratoLab/erato/pull/1075)
+- Improve frontend bundle spliting; Bucket icon catalogs [#1076](https://github.com/EratoLab/erato/pull/1076)
+- Let an audience expire: read-time expires_at in the starting-assistant resolver [#1077](https://github.com/EratoLab/erato/pull/1077)
+- Extend Helm chart to allow for automatic building of upstreams [#1078](https://github.com/EratoLab/erato/pull/1078)
+- Expose complete generated API client in frontend library [#1079](https://github.com/EratoLab/erato/pull/1079)
+- Make MCP server configuration reloadable [#1080](https://github.com/EratoLab/erato/pull/1080)
+- erato: per-setting resolution orders + stable audience ids on the wire (dual-written, invisible at one setting) [#1081](https://github.com/EratoLab/erato/pull/1081)
+- Audience snapshot provenance, and the gate for re-keying the audiences map by id (ERMAIN-721) [#1082](https://github.com/EratoLab/erato/pull/1082)
+- Allow controlling Outlook default settings from config [#1083](https://github.com/EratoLab/erato/pull/1083)
+- Add chaos creator server for chaos testing [#1084](https://github.com/EratoLab/erato/pull/1084)
+- Improve robustness of generation when dropping client connection [#1085](https://github.com/EratoLab/erato/pull/1085)
+- Make the centered new-chat composer layout the default (ERMAIN-736) [#1086](https://github.com/EratoLab/erato/pull/1086)
+- Reduce and reorganize the new-chat welcome content (ERMAIN-737) [#1087](https://github.com/EratoLab/erato/pull/1087)
+- Derive dropdown row radius from a panel radius token and four-sided inset [#1088](https://github.com/EratoLab/erato/pull/1088)
+- Add a user text-size setting to the Appearance tab (ERMAIN-739) [#1089](https://github.com/EratoLab/erato/pull/1089)
+- Give customer themes hooks and tokens for cards, tab rails, attachments, and the add-in header [#1091](https://github.com/EratoLab/erato/pull/1091)
+- Move every loading ring onto one themable spinner primitive [#1092](https://github.com/EratoLab/erato/pull/1092)
+- Add assistant usage view [#1093](https://github.com/EratoLab/erato/pull/1093)
+- Support MCP server file output of non-image files [#1094](https://github.com/EratoLab/erato/pull/1094)
+- Resolve dropped .msg emails that ANSI-encode the Message-ID, and attach ones the mailbox cannot find [#1095](https://github.com/EratoLab/erato/pull/1095)
+- Move the capsule dialect, the alert frame and selected state onto themable channels [#1096](https://github.com/EratoLab/erato/pull/1096)
+- Upgrade to rmcp 3.2.0; Support OAuth2 resource override [#1097](https://github.com/EratoLab/erato/pull/1097)
+- Fix edit action and other state differences in pinned chats [#1098](https://github.com/EratoLab/erato/pull/1098)
+- Fully wire up tool progress updates and show progress message [#1099](https://github.com/EratoLab/erato/pull/1099)
+- Move the popover family onto a shared panel primitive and themable shape channels [#1100](https://github.com/EratoLab/erato/pull/1100)
+- Move menu and sidebar rows onto one Row primitive [#1101](https://github.com/EratoLab/erato/pull/1101)
+- Let theme packs declare optional assets instead of 404ing on them [#1102](https://github.com/EratoLab/erato/pull/1102)
+- Anchor the pane to the conversation when a thread header is selected (ERMAIN-753) [#1103](https://github.com/EratoLab/erato/pull/1103)
+- Support shared mailboxes in the Outlook add-in (ERMAIN-752) [#1104](https://github.com/EratoLab/erato/pull/1104)
+- Move the card family onto one Card primitive and themable geometry and skin channels [#1105](https://github.com/EratoLab/erato/pull/1105)
+- Update Kubescape and pin controls version [#1106](https://github.com/EratoLab/erato/pull/1106)
+- Lift delegation config to `[delegation]` and reserve the `erato` tool namespace (ERMAIN-754) [#1107](https://github.com/EratoLab/erato/pull/1107)
+- Rename `AssistantConfiguration` to `ChatConfiguration` with an optional assistant and a task spec (ERMAIN-755) [#1108](https://github.com/EratoLab/erato/pull/1108)
+- Split `dispatch_delegate_tool_call` into launch and await (ERMAIN-756) [#1109](https://github.com/EratoLab/erato/pull/1109)
+- Select reserved `erato/*` tools with the client-tool collector (ERMAIN-758) [#1110](https://github.com/EratoLab/erato/pull/1110)
+- Fix to use the Application root URL as OAuth2 callback URL [#1112](https://github.com/EratoLab/erato/pull/1112)
+- Fix Gemini 3 thinking level for audio transcription [#1113](https://github.com/EratoLab/erato/pull/1113)
+- Align host i18n ids with the component kit [#1114](https://github.com/EratoLab/erato/pull/1114)
+- Move the attachment chip family onto one tile primitive and themable corner and tint channels [#1115](https://github.com/EratoLab/erato/pull/1115)
+- Surface provider content blocks in audio transcription as a user-facing error [#1116](https://github.com/EratoLab/erato/pull/1116)
+- Keep the selected microphone across device-list churn (ERMAIN-795) [#1117](https://github.com/EratoLab/erato/pull/1117)
+- Give every dropped file feedback and stage drops through a visible pipeline [#1118](https://github.com/EratoLab/erato/pull/1118)
+- Stage emails before send: eager resolution, per-part verdicts and a composer size gate [#1119](https://github.com/EratoLab/erato/pull/1119)
+- Seat the share button in one chat top bar with the kit accessory [#1120](https://github.com/EratoLab/erato/pull/1120)
+- Reach the files inside forwarded emails [#1121](https://github.com/EratoLab/erato/pull/1121)
+- Add sidecar TLS bootstrapping [#1122](https://github.com/EratoLab/erato/pull/1122)
+- Set up dial9 profiling [#1124](https://github.com/EratoLab/erato/pull/1124)
+- Blink a pending dot on the tab favicon for the open chat [#1125](https://github.com/EratoLab/erato/pull/1125)
+- Shared-mailbox follow-ups: row routing, scope binding, sign-in retry, manifest checks [#1126](https://github.com/EratoLab/erato/pull/1126)
+- Implement more granular policy data rebuild [#1128](https://github.com/EratoLab/erato/pull/1128)
+- Move the tab family onto one TabRail primitive and themable rail and track channels [#1129](https://github.com/EratoLab/erato/pull/1129)
+- Match the Markdown field's focus highlight to its frame [#1130](https://github.com/EratoLab/erato/pull/1130)
+- Add an unarchive endpoint for chats (ERMAIN-794) [#1131](https://github.com/EratoLab/erato/pull/1131)
+- Clone FrontendRegistry to avoid recompilation [#1132](https://github.com/EratoLab/erato/pull/1132)
+- Move the sidebar bands and toggles onto SidebarBand and SidebarToggle [#1133](https://github.com/EratoLab/erato/pull/1133)
+- Share an unarchive action across both chat hosts (ERMAIN-794) [#1134](https://github.com/EratoLab/erato/pull/1134)
+- Mark archived chats in history and offer unarchive (ERMAIN-794) [#1135](https://github.com/EratoLab/erato/pull/1135)
+- Close the composer on an archived chat and explain it (ERMAIN-794) [#1136](https://github.com/EratoLab/erato/pull/1136)
+- Add configmap hash based redeployment to Helm chart [#1137](https://github.com/EratoLab/erato/pull/1137)
+- Declare the component-kit surface and the themable host class names [#1138](https://github.com/EratoLab/erato/pull/1138)
+- Request email scope explicitly for Outlook sign-in [#1139](https://github.com/EratoLab/erato/pull/1139)
+- Let the sidebar test's logo path reach the theme mock [#1141](https://github.com/EratoLab/erato/pull/1141)
+- Make port, directory, icon, name for sidecar configurable [#1142](https://github.com/EratoLab/erato/pull/1142)
+- Protocol adjustments for sidecar indexing [#1143](https://github.com/EratoLab/erato/pull/1143)
+- Protocol adjustments for sidecar indexing [#1144](https://github.com/EratoLab/erato/pull/1144)
+- Stop a component kit silently dropping host behaviour from the chat history row [#1145](https://github.com/EratoLab/erato/pull/1145)
+- Enumerate an MCP server's tools for the user with the effective projection [#1146](https://github.com/EratoLab/erato/pull/1146)
+- Let a user deny an MCP tool for themselves and enforce it at both generation sites [#1147](https://github.com/EratoLab/erato/pull/1147)
+- Add a per-chat write-operations switch and the composer Connectors section [#1148](https://github.com/EratoLab/erato/pull/1148)
+- Switch MCP servers off per chat from the composer connectors [#1149](https://github.com/EratoLab/erato/pull/1149)
+- Switch single MCP tools off per chat from the tool browser [#1150](https://github.com/EratoLab/erato/pull/1150)
+- Add a per-tool Ask decision, the effective state on the wire and bulk tool decisions [#1152](https://github.com/EratoLab/erato/pull/1152)
+- Release the MCP consent card when the decision is accepted and stream the continuation [#1157](https://github.com/EratoLab/erato/pull/1157)
+- Stabilize all experimental config keys [#1158](https://github.com/EratoLab/erato/pull/1158)
+- Add controls for sidecar mailbox activation and priority [#1159](https://github.com/EratoLab/erato/pull/1159)
+- Extend sidecar RPC for benchmarking [#1160](https://github.com/EratoLab/erato/pull/1160)
+- Hand a message renderer the MCP notices and the action-facet context [#1161](https://github.com/EratoLab/erato/pull/1161)
+- Accept the delegation status vocabulary and the `delegate_task` tool name (ERMAIN-763) [#1162](https://github.com/EratoLab/erato/pull/1162)
+- Report why a delegated run ended and frame the child's answer (ERMAIN-767) [#1163](https://github.com/EratoLab/erato/pull/1163)
+- Offer and dispatch `delegate_task` awaited and serial (ERMAIN-770) [#1164](https://github.com/EratoLab/erato/pull/1164)
+- Bound a task run with two independent tool-call budgets (ERMAIN-774) [#1165](https://github.com/EratoLab/erato/pull/1165)
+- Render what a delegated task actually ran (ERMAIN-775) [#1166](https://github.com/EratoLab/erato/pull/1166)
+- Make the add-in client-action stack host-neutral (ERMAIN-543, ERMAIN-546) [#1168](https://github.com/EratoLab/erato/pull/1168)
+- Let a message renderer consume host behaviour instead of copying it [#1173](https://github.com/EratoLab/erato/pull/1173)
+- Share grouped attachment behavior and rendering with component kits [#1174](https://github.com/EratoLab/erato/pull/1174)
+- Show a trace step as running from its own status, not its position (ERMAIN-771) [#1176](https://github.com/EratoLab/erato/pull/1176)
+- Keep the MCP session map and configuration free while a server is slow (ERMAIN-760) [#1177](https://github.com/EratoLab/erato/pull/1177)
+- Share attachment tile and composer rendering with component kits [#1178](https://github.com/EratoLab/erato/pull/1178)
+- Bound how long a turn waits on a silent chat provider (ERMAIN-824) [#1179](https://github.com/EratoLab/erato/pull/1179)
+- Put a delegated task on disk at the slot it will settle into (ERMAIN-764) [#1180](https://github.com/EratoLab/erato/pull/1180)
+- Run a turn's delegated tasks side by side, bounded (ERMAIN-768) [#1181](https://github.com/EratoLab/erato/pull/1181)
+- Share assistant welcome configuration with component kits [#1183](https://github.com/EratoLab/erato/pull/1183)
+- Extend sidecar RPC with generalized source listing and folders [#1184](https://github.com/EratoLab/erato/pull/1184)
+- Extend sidebar protocol with generic metadata filter [#1185](https://github.com/EratoLab/erato/pull/1185)
+- Extend RPC search.query response with external identifiers [#1186](https://github.com/EratoLab/erato/pull/1186)
+- Show MCP authorization progress across web and add-in [#1187](https://github.com/EratoLab/erato/pull/1187)
+- Refuse a second write into a generating chat instead of taking it over (ERMAIN-776) [#1188](https://github.com/EratoLab/erato/pull/1188)
+- Carry a delegated task's result back into the chat that started it (ERMAIN-777) [#1189](https://github.com/EratoLab/erato/pull/1189)
+- Keep a delivered task result on the thread when a stale client replies (ERMAIN-778) [#1190](https://github.com/EratoLab/erato/pull/1190)
+- Render a delivered task result in the conversation (ERMAIN-779-A) [#1191](https://github.com/EratoLab/erato/pull/1191)
+- Dispatch and deliver async delegated tasks (ERMAIN-780) [#1192](https://github.com/EratoLab/erato/pull/1192)
+- Speed up MCP server listing with bounded parallel probes [#1193](https://github.com/EratoLab/erato/pull/1193)
+- Report MCP authorization through the house feedback components [#1194](https://github.com/EratoLab/erato/pull/1194)
+- Make the two MCP approval surfaces agree [#1195](https://github.com/EratoLab/erato/pull/1195)
+- Recover a stranded async task result without a user request (ERMAIN-781-A) [#1196](https://github.com/EratoLab/erato/pull/1196)
+- Let a client ask for the reaction a delivered task result never got (ERMAIN-781-B) [#1197](https://github.com/EratoLab/erato/pull/1197)
+- Tell the sidebar a delegated run is still in flight (ERMAIN-782) [#1199](https://github.com/EratoLab/erato/pull/1199)
+- React to a delivered task result without a reload (ERMAIN-779-B) [#1200](https://github.com/EratoLab/erato/pull/1200)
+- Retry a failed delegated task from the origin chat (ERMAIN-783) [#1201](https://github.com/EratoLab/erato/pull/1201)
+- Index the async delivery lookups and the latest-generation probe (ERMAIN perf follow-up) [#1202](https://github.com/EratoLab/erato/pull/1202)
+- Fix Teams document kinds in desktop sidecar protocol [#1210](https://github.com/EratoLab/erato/pull/1210)
+- Fix sidecar mailbox IDs and keep indexing status in settings [#1211](https://github.com/EratoLab/erato/pull/1211)
+- Add optional sidecar search and Outlook read tools to web and add-ins [#1213](https://github.com/EratoLab/erato/pull/1213)
+- Add validated client submissions with bounded corrections [#1215](https://github.com/EratoLab/erato/pull/1215)
+- Expose sidecar search metadata discovery to chat clients [#1216](https://github.com/EratoLab/erato/pull/1216)
+- fix: stream tool argument preparation into the chat trace [#1217](https://github.com/EratoLab/erato/pull/1217)
+- Allow client tool calls to attach files to response [#1218](https://github.com/EratoLab/erato/pull/1218)
+- Add optional sidecar mailbox and folder browsing tools [#1219](https://github.com/EratoLab/erato/pull/1219)
+- Extend sidecar protocol for full document retrieval [#1225](https://github.com/EratoLab/erato/pull/1225)
+- Add global log filter that sanitizes URLs [#1227](https://github.com/EratoLab/erato/pull/1227)
+- Extend client tools with document retrieval [#1229](https://github.com/EratoLab/erato/pull/1229)
+- Delegation Level D: approvals for delegated tasks, with end-to-end coverage [#1230](https://github.com/EratoLab/erato/pull/1230)
+- Rework MCP settings pane [#1231](https://github.com/EratoLab/erato/pull/1231)
+- Add Word add-in with structured document authoring [#1232](https://github.com/EratoLab/erato/pull/1232)
+- Extend sidecar protocol for deep linking [#1233](https://github.com/EratoLab/erato/pull/1233)
+- Add approval flow for file uploads from client tools [#1234](https://github.com/EratoLab/erato/pull/1234)
+- Track EWS IDs on sidecar file uploads [#1235](https://github.com/EratoLab/erato/pull/1235)
+- Settle crash-orphaned tool calls, and stop calling them done [#1236](https://github.com/EratoLab/erato/pull/1236)
+- ERMAIN-862: Native local evidence as a durable client operation [#1237](https://github.com/EratoLab/erato/pull/1237)
+- Composer: say in advance when delegated work needs approving [#1238](https://github.com/EratoLab/erato/pull/1238)
+- Define Outlook source references for uploaded files [#1239](https://github.com/EratoLab/erato/pull/1239)
+- Settle an origin slot its own turn will never come back for [#1240](https://github.com/EratoLab/erato/pull/1240)
+- Persist Outlook source references on uploaded files [#1241](https://github.com/EratoLab/erato/pull/1241)
+- Extend sidecar protocol with "open data directory" command [#1242](https://github.com/EratoLab/erato/pull/1242)
+- feat: open source emails from previews and upload consent [#1243](https://github.com/EratoLab/erato/pull/1243)
+- Allow rendering of inline HTML in Markdown; For table line breaks [#1244](https://github.com/EratoLab/erato/pull/1244)
+- Allow assistant hub assistants to be selected in delegation window [#1245](https://github.com/EratoLab/erato/pull/1245)
+- Precompile prompt injection patterns at startup and reuse [#1247](https://github.com/EratoLab/erato/pull/1247)
+- Implement standalone distribution for MS Teams [#1248](https://github.com/EratoLab/erato/pull/1248)
+- Add disabled durable client-operation foundation [#1249](https://github.com/EratoLab/erato/pull/1249)
+- feat(prompt-composition): replay earlier-turn client tool calls as receipts; count tool parts in token estimate (ERMAIN-868) [#1250](https://github.com/EratoLab/erato/pull/1250)
+- Show add-in UI in the host application's display language [#1251](https://github.com/EratoLab/erato/pull/1251)
+- fix(frontend): build local sidecar protocol before dev startup [#1252](https://github.com/EratoLab/erato/pull/1252)
+- Add Teams bot tables and user Entra object ID [#1253](https://github.com/EratoLab/erato/pull/1253)
+- Show Teams bot setup steps and add the Teams bot guide [#1254](https://github.com/EratoLab/erato/pull/1254)
+- Add optional tool for retrieval of embedded images [#1255](https://github.com/EratoLab/erato/pull/1255)
+- Add recipients as context for outlook actions [#1256](https://github.com/EratoLab/erato/pull/1256)
+- Precise Word plan diagnostics and normalize misplaced built-in styles [#1257](https://github.com/EratoLab/erato/pull/1257)
+- Show Word apply progress on the Apply button and read documents less often [#1258](https://github.com/EratoLab/erato/pull/1258)
+- Show Word messages immediately while the document is prepared [#1259](https://github.com/EratoLab/erato/pull/1259)
+- Record where chats were created and filter the chat list by source [#1260](https://github.com/EratoLab/erato/pull/1260)
+- Implement tool call limit continuation approval workflow [#1261](https://github.com/EratoLab/erato/pull/1261)
+- Returning to assistant landing page clears active chat [#1262](https://github.com/EratoLab/erato/pull/1262)
+- Sanitize NUL chracters in tool request/response before storing [#1263](https://github.com/EratoLab/erato/pull/1263)
+- Repair rejected Word plans with small patches [#1265](https://github.com/EratoLab/erato/pull/1265)
+
+Direct commit without a PR: unify the generated chat-title field with the shared input component (`030f0c965e03`).
 
 ## [0.6.2] - 2026-06-26
 
