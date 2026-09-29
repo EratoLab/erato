@@ -4,4 +4,5 @@ export default {
   opentelemetry: "",
   prometheus: "",
   sharepoint: "SharePoint / OneDrive",
+  ms_teams: "Microsoft Teams bot",
 };

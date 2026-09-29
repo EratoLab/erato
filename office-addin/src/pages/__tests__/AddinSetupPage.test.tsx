@@ -173,3 +173,85 @@ describe("AddinSetupRoute Word branch", () => {
     ).toBeVisible();
   });
 });
+
+describe("AddinSetupRoute Teams bot section", () => {
+  const originalOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
+  const botId = "11111111-2222-3333-4444-555555555555";
+
+  function stubTeamsManifest(manifest: object) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({
+        ok: true,
+        text: async () =>
+          String(url).includes("teams/manifest.json")
+            ? JSON.stringify(manifest)
+            : "<OfficeApp />",
+      })),
+    );
+  }
+
+  async function selectTeams() {
+    render(<AddinSetupRoute />);
+    fireEvent.click(await screen.findByRole("button", { name: "Teams" }));
+    const preview = screen.getByLabelText<HTMLTextAreaElement>(
+      "Teams manifest preview (JSON)",
+    );
+    await waitFor(() => expect(preview.value).toContain("webApplicationInfo"));
+  }
+
+  beforeEach(() => {
+    Reflect.deleteProperty(globalThis, "Office");
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    if (originalOffice) {
+      Object.defineProperty(globalThis, "Office", originalOffice);
+    }
+  });
+
+  it("stays hidden when the manifest has no bot", async () => {
+    stubTeamsManifest({
+      webApplicationInfo: { id: "tab", resource: "api://tab" },
+    });
+    await selectTeams();
+
+    expect(
+      screen.queryByRole("heading", { name: "Teams bot" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the messaging endpoint, token exchange URL and setup guide", async () => {
+    stubTeamsManifest({
+      bots: [{ botId }],
+      webApplicationInfo: { id: botId, resource: `api://botid-${botId}` },
+    });
+    await selectTeams();
+
+    expect(screen.getByRole("heading", { name: "Teams bot" })).toBeVisible();
+    expect(screen.getByText(botId)).toBeVisible();
+    expect(
+      screen.getByText(
+        `${window.location.origin}/api/integrations/ms_teams/messages`,
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(`api://botid-${botId}`)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Teams bot setup guide" }),
+    ).toHaveAttribute("href", "https://erato.chat/docs/integrations/ms_teams");
+  });
+
+  it("omits the token exchange URL when silent SSO is not configured", async () => {
+    stubTeamsManifest({
+      bots: [{ botId }],
+      webApplicationInfo: { id: "tab", resource: "api://tab" },
+    });
+    await selectTeams();
+
+    expect(screen.getByRole("heading", { name: "Teams bot" })).toBeVisible();
+    expect(screen.queryByText("api://tab")).not.toBeInTheDocument();
+  });
+});

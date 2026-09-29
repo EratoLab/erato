@@ -1,0 +1,121 @@
+# Microsoft Teams bot
+
+Erato can answer in Microsoft Teams personal chats, group chats and channels. Chats started in Teams are ordinary Erato chats: they appear in the web app and the Teams tab, keep their history, and use the same assistants, models, policies, MCP tools and [SharePoint integration](./sharepoint) as the web app.
+
+## Overview
+
+- **Personal chats** stream the answer while it is generated.
+- **Group chats and channels** answer when the bot is @mentioned, reply in the thread and mention the requester. The preceding messages of the conversation are attached as context.
+- **Files** uploaded in a personal chat, pasted images, and SharePoint/OneDrive files shared in a conversation become chat files.
+- **Tool approvals** appear as an Adaptive Card; only the person who asked can decide.
+- **Background tasks** post their result back into the Teams conversation once they finish.
+- `/new` starts a fresh Erato chat in the current conversation.
+
+Users are recognized by their Entra object ID, which Erato records whenever they sign in to the web app or the Teams tab. People who have never opened Erato are asked to do so once.
+
+## Prerequisites
+
+- Erato signs users in with Microsoft Entra ID.
+- The [Teams app](../configuration#integrationsms_officeteamsenabled) (`integrations.ms_office.teams`) is enabled, so the bot can be shipped in the same app package as the tab.
+- You can create an app registration and an Azure Bot resource in the customer's tenant, and grant admin consent.
+
+## Setup
+
+Repeat these steps for each environment (for example test and production).
+
+### 1. Bot app registration
+
+Create a single-tenant app registration for the bot and add a client secret. Its application (client) ID is the bot's app ID.
+
+### 2. Azure Bot resource
+
+Create an Azure Bot resource that uses this app registration, then:
+
+- Under **Configuration**, set the messaging endpoint to `https://<erato host>/api/integrations/ms_teams/messages`.
+- Under **Channels**, add **Microsoft Teams**.
+
+### 3. OAuth connection
+
+On the Azure Bot resource, add an OAuth connection with the **Azure Active Directory v2** provider (or federated credentials). The bot uses it to get the user's delegated Microsoft Graph token, which replaces the access token oauth2-proxy forwards for web users.
+
+Request the Graph scopes your web login uses, plus:
+
+| Scope                                  | Used for                                 |
+| -------------------------------------- | ---------------------------------------- |
+| `User.Read`, `GroupMember.Read.All`    | Identity and group-based policies        |
+| `Files.Read.All`, `Sites.Read.All`     | Files shared in group chats and channels |
+| `Chat.Read`, `ChannelMessage.Read.All` | Surrounding messages attached as context |
+
+Grant admin consent. The connection's name goes into `oauth_connection_name`.
+
+### 4. Silent sign-in (optional)
+
+Without this step, users confirm sign-in once with a button. To sign them in silently:
+
+1. On the bot app registration, expose the API `api://botid-<bot app id>` with an `access_as_user` scope and pre-authorize the Teams clients.
+2. Set the OAuth connection's **Token Exchange URL** to that URI.
+3. Set `sso_app_id` and `sso_resource` in the Erato configuration. The rendered Teams manifest then points `webApplicationInfo` at the bot. Verify that the Teams tab still signs in afterwards.
+
+### 5. Network routing
+
+oauth2-proxy strips the `Authorization` header on every route, including routes in `skip_auth_regex`, so the Bot Connector's token would never reach Erato. Route the exact path `/api/integrations/ms_teams/messages` to the backend directly. The backend checks the Bot Connector's signed token itself and only accepts activities from the configured tenant.
+
+With the Helm chart:
+
+```yaml filename="values.yaml"
+msTeamsBot:
+  directRoute:
+    enabled: true
+    # Required while backend.networkPolicy.enabled is true
+    ingressFrom:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+```
+
+### 6. Erato configuration
+
+```toml filename="erato.toml"
+[integrations.ms_office.teams.bot]
+enabled = true
+app_id = "<bot app id>"
+app_password = "<bot client secret>"
+tenant_id = "<tenant id>"
+oauth_connection_name = "graph"
+public_base_url = "https://erato.example.com"
+# Regional bots use their token service, e.g. https://europe.token.botframework.com
+# token_service_url = "https://token.botframework.com"
+# Optional silent sign-in (step 4)
+# sso_app_id = "<bot app id>"
+# sso_resource = "api://botid-<bot app id>"
+```
+
+All options are listed in the [configuration reference](../configuration#integrationsms_officeteamsbot).
+
+### 7. Install the app
+
+Open `https://<erato host>/office-addin/setup`, choose **Teams** and download the app package. With the bot enabled, the package contains both the tab and the bot, and the page shows the messaging endpoint and token exchange URL for this deployment. Upload the package in the Microsoft 365 admin center under **Integrated apps**.
+
+## Configuration Options
+
+| Option                  | Type    | Default                            | Description                                                                 |
+| ----------------------- | ------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| `enabled`               | boolean | `false`                            | Whether the Teams bot is enabled                                            |
+| `app_id`                | string  |                                    | Bot app registration ID                                                     |
+| `app_password`          | string  |                                    | Bot client secret                                                           |
+| `tenant_id`             | string  |                                    | Entra tenant whose activities are accepted                                  |
+| `oauth_connection_name` | string  |                                    | Azure Bot OAuth connection that yields the user's Graph token               |
+| `token_service_url`     | string  | `"https://token.botframework.com"` | Bot Framework token service                                                 |
+| `sso_app_id`            | string  |                                    | App ID for silent sign-in; set together with `sso_resource`                 |
+| `sso_resource`          | string  |                                    | Token exchange URL for silent sign-in, typically `api://botid-<app_id>`     |
+| `public_base_url`       | string  |                                    | HTTPS origin used for links from Teams back to Erato chats                  |
+| `assistant_id`          | string  |                                    | Assistant that new Teams chats are bound to                                 |
+| `context_message_count` | integer | `20`                               | Preceding group chat or channel messages attached as context (`0` disables) |
+| `streaming`             | boolean | `true`                             | Stream answers in personal chats                                            |
+| `security_groups_only`  | boolean | `true`                             | Resolve only security groups; match the web login's `groups` claim setup    |
+
+## Limitations
+
+- MCP servers that forward the user's OIDC ID token receive none on Teams requests; servers using access-token forwarding get the Graph token.
+- Client tools that run in the desktop sidecar are not available in Teams. The answer links to the chat in Erato instead.
+- In group chats and channels, answers built from the requester's data are visible to everyone in the conversation.

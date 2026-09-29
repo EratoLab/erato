@@ -11,6 +11,8 @@ const EXCHANGE_LIMIT_ACCESS_DOCS_URL =
   "https://learn.microsoft.com/en-us/exchange/manage-user-access-to-add-ins-2013-help#use-the-exchange-management-shell-to-limit-add-in-availability-to-specific-users";
 const SHAREPOINT_CATALOG_DOCS_URL =
   "https://learn.microsoft.com/en-us/office/dev/add-ins/publish/publish-task-pane-and-content-add-ins-to-an-add-in-catalog";
+const TEAMS_BOT_DOCS_URL = "https://erato.chat/docs/integrations/ms_teams";
+const TEAMS_BOT_MESSAGES_PATH = "/api/integrations/ms_teams/messages";
 
 type OfficeProduct = "outlook" | "teams" | "word" | "excel" | "powerpoint";
 type ExchangeSetup = "exchange-online" | "exchange-server";
@@ -19,6 +21,13 @@ type ProductOption = {
   id: OfficeProduct;
   label: string;
   selectable: boolean;
+};
+
+/** Bot details read from the rendered Teams manifest; absent when the bot is disabled. */
+type TeamsBotSetup = {
+  botId: string;
+  /** Token exchange URL for silent SSO, set when the manifest's SSO app is the bot. */
+  ssoResource: string | null;
 };
 
 type ExchangeSetupOption = {
@@ -91,6 +100,22 @@ function getManifestUrl(
   ).toString();
 }
 
+function readTeamsBotSetup(manifest: unknown): TeamsBotSetup | null {
+  const document = manifest as {
+    bots?: { botId?: unknown }[];
+    webApplicationInfo?: { id?: unknown; resource?: unknown };
+  } | null;
+  const botId = document?.bots?.[0]?.botId;
+  if (typeof botId !== "string" || !botId) {
+    return null;
+  }
+  const { id, resource } = document?.webApplicationInfo ?? {};
+  return {
+    botId,
+    ssoResource: id === botId && typeof resource === "string" ? resource : null,
+  };
+}
+
 function getSpaRedirectUri(): string {
   return `brk-multihub://${window.location.host}`;
 }
@@ -102,6 +127,7 @@ export function AddinSetupPage() {
     useState<ExchangeSetup>("exchange-online");
   const [manifestXml, setManifestXml] = useState("");
   const [manifestJson, setManifestJson] = useState("");
+  const [teamsBot, setTeamsBot] = useState<TeamsBotSetup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -116,6 +142,7 @@ export function AddinSetupPage() {
         setError(null);
         setManifestXml("");
         setManifestJson("");
+        setTeamsBot(null);
 
         const response = await window.fetch(
           getManifestUrl(selectedProduct, selectedExchangeSetup),
@@ -130,7 +157,9 @@ export function AddinSetupPage() {
 
         const manifest = await response.text();
         if (selectedProduct === "teams") {
-          setManifestJson(JSON.stringify(JSON.parse(manifest), null, 2));
+          const parsed: unknown = JSON.parse(manifest);
+          setManifestJson(JSON.stringify(parsed, null, 2));
+          setTeamsBot(readTeamsBotSetup(parsed));
         } else {
           setManifestXml(manifest);
         }
@@ -254,7 +283,7 @@ export function AddinSetupPage() {
         />
 
         {selectedProduct === "teams" ? (
-          <TeamsInstructions />
+          <TeamsInstructions bot={teamsBot} />
         ) : selectedProduct === "word" ? (
           <WordInstructions spaRedirectUri={spaRedirectUri} />
         ) : selectedExchangeSetup === "exchange-online" ? (
@@ -532,7 +561,16 @@ function WordInstructions({ spaRedirectUri }: { spaRedirectUri: string }) {
   );
 }
 
-function TeamsInstructions() {
+function TeamsInstructions({ bot }: { bot: TeamsBotSetup | null }) {
+  return (
+    <>
+      <TeamsAppInstructions />
+      {bot ? <TeamsBotInstructions bot={bot} /> : null}
+    </>
+  );
+}
+
+function TeamsAppInstructions() {
   return (
     <ol className="office-setup-steps">
       <li>
@@ -555,6 +593,70 @@ function TeamsInstructions() {
         </Trans>
       </li>
     </ol>
+  );
+}
+
+function TeamsBotInstructions({ bot }: { bot: TeamsBotSetup }) {
+  const messagingEndpoint = new URL(
+    TEAMS_BOT_MESSAGES_PATH,
+    window.location.origin,
+  ).toString();
+
+  return (
+    <section className="office-setup-section">
+      <h2 className="office-setup-subtitle">
+        <Trans id="officeAddin.teams.bot.setup.title">Teams bot</Trans>
+      </h2>
+      <p className="office-setup-copy">
+        <Trans id="officeAddin.teams.bot.setup.copy">
+          The package above already contains the bot. Before users chat with it,
+          configure the Azure Bot resource for app ID <code>{bot.botId}</code>:
+        </Trans>
+      </p>
+      <ol className="office-setup-steps">
+        <li>
+          <Trans id="officeAddin.teams.bot.setup.endpointInstruction">
+            Under Configuration, set the messaging endpoint:
+          </Trans>
+          <CopyableCodeField content={messagingEndpoint} />
+        </li>
+        <li>
+          <Trans id="officeAddin.teams.bot.setup.channelInstruction">
+            Under Channels, add Microsoft Teams.
+          </Trans>
+        </li>
+        <li>
+          <Trans id="officeAddin.teams.bot.setup.oauthInstruction">
+            Add an OAuth connection (Azure Active Directory v2) with the
+            Microsoft Graph scopes from the setup guide. Its name must match{" "}
+            <code>oauth_connection_name</code> in the Erato configuration.
+          </Trans>
+        </li>
+        {bot.ssoResource ? (
+          <li>
+            <Trans id="officeAddin.teams.bot.setup.ssoInstruction">
+              For silent sign-in, set the OAuth connection&apos;s token exchange
+              URL:
+            </Trans>
+            <CopyableCodeField content={bot.ssoResource} />
+          </li>
+        ) : null}
+      </ol>
+      <p className="office-setup-copy">
+        <Trans id="officeAddin.teams.bot.setup.docsInstruction">
+          Permissions, network routing and all options are described in the{" "}
+          <a
+            href={TEAMS_BOT_DOCS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="office-setup-link"
+          >
+            Teams bot setup guide
+          </a>
+          .
+        </Trans>
+      </p>
+    </section>
   );
 }
 
