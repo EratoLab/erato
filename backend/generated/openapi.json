@@ -4543,6 +4543,13 @@
           "display_name"
         ],
         "properties": {
+          "allowed_args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Argument keys accepted by this facet. Clients can gate optional context on this list."
+          },
           "client_actions": {
             "type": "array",
             "items": {

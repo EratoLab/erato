@@ -184,6 +184,10 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
     assert_eq!(action_facets[0]["id"], "outlook_reply_from_read");
     assert_eq!(action_facets[0]["platform"], "outlook");
     assert_eq!(
+        action_facets[0]["allowed_args"],
+        serde_json::json!(["body_format"])
+    );
+    assert_eq!(
         action_facets[0]["client_actions"],
         serde_json::json!(["outlook.reply", "outlook.reply_all"])
     );

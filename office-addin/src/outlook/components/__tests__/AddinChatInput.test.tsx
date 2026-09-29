@@ -30,6 +30,8 @@ const h = vi.hoisted(() => {
   const emailSource: Record<string, unknown> = {};
   return {
     uploadedFile,
+    mailItem: null as Record<string, unknown> | null,
+    availableFacetArgs: new Map<string, Set<string>>(),
     controls: {
       setDraftMessage: vi.fn(),
       focusInput: vi.fn(),
@@ -146,7 +148,8 @@ vi.mock("../../../providers/OfficeProvider", () => ({
   useOffice: () => ({ host: "Outlook" }),
 }));
 vi.mock("../../../core/clientActions/useAvailableActionFacets", () => ({
-  useAvailableActionFacetIds: () => new Set<string>(),
+  useAvailableActionFacetIds: () => new Set(h.availableFacetArgs.keys()),
+  useAvailableActionFacetArgs: () => h.availableFacetArgs,
 }));
 vi.mock("../../hooks/useOutlookCalendarFetcher", () => ({
   useOutlookCalendarFetcher: () => ({
@@ -160,7 +163,7 @@ vi.mock("../../hooks/useOutlookComposeSelection", () => ({
 vi.mock("../../providers/OutlookMailItemProvider", () => ({
   NO_ITEM_SEND_IDENTITY: "no-item",
   readAppointmentComposeSnapshot: vi.fn(),
-  useOutlookMailItem: () => ({ mailItem: null, itemIdentity: "item-1" }),
+  useOutlookMailItem: () => ({ mailItem: h.mailItem, itemIdentity: "item-1" }),
 }));
 vi.mock("../../providers/OutlookEmailSourceProvider", () => ({
   useOutlookEmailSource: () => h.emailSource,
@@ -262,6 +265,8 @@ async function expectDeclinedSend(onSendMessage: ReturnType<typeof vi.fn>) {
 
 describe("AddinChatInput", () => {
   beforeEach(() => {
+    h.mailItem = null;
+    h.availableFacetArgs = new Map();
     i18n.activate("en");
     vi.spyOn(console, "warn").mockImplementation(() => {});
     (
@@ -304,6 +309,48 @@ describe("AddinChatInput", () => {
     cleanup();
     vi.clearAllMocks();
     vi.restoreAllMocks();
+  });
+
+  it("reads live compose recipients and sends them with the compose facet", async () => {
+    h.mailItem = {
+      itemKind: "message",
+      isComposeMode: true,
+      bodyText: "",
+      subject: "",
+    };
+    h.availableFacetArgs = new Map([
+      ["compose_email", new Set(["recipients"])],
+    ]);
+    const recipient = { displayName: "Mark", emailAddress: "mark@example.com" };
+    const getAsync = vi.fn((callback) =>
+      callback({
+        status: Office.AsyncResultStatus.Succeeded,
+        value: [recipient],
+      }),
+    );
+    (Office.context.mailbox as unknown as { item: unknown }).item = {
+      subject: {},
+      to: { getAsync },
+      body: {
+        getTypeAsync: (callback: (result: unknown) => void) =>
+          callback({
+            status: Office.AsyncResultStatus.Succeeded,
+            value: Office.CoercionType.Text,
+          }),
+      },
+    };
+    h.fetchUploadFile.mockResolvedValueOnce({ files: [{ id: "u1" }] });
+    const { onSendMessage } = renderInput();
+    fireEvent.click(screen.getByText("send"));
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+    expect(getAsync).toHaveBeenCalledTimes(1);
+    expect(onSendMessage.mock.calls[0][4]).toEqual({
+      id: "compose_email",
+      args: {
+        body_format: "text",
+        recipients: JSON.stringify({ to: [recipient] }),
+      },
+    });
   });
 
   it("sends the uploaded email ids with the message and releases the drop", async () => {

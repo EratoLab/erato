@@ -1035,6 +1035,9 @@ pub struct GlobalFacetSettings {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ActionFacetInfo {
     id: String,
+    /// Argument keys accepted by this facet. Clients can gate optional context on this list.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    allowed_args: Vec<String>,
     /// Human readable name for the facet, e.g. for client settings UIs.
     display_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1167,6 +1170,7 @@ pub async fn facets(
         .iter()
         .map(|(id, af)| ActionFacetInfo {
             id: id.clone(),
+            allowed_args: af.allowed_args.clone(),
             display_name: af.display_name.clone(),
             platform: af.platform.clone(),
             client_actions: af.client_actions.clone(),

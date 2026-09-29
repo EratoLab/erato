@@ -38,7 +38,10 @@ import {
 } from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
-import { useAvailableActionFacetIds } from "../../core/clientActions/useAvailableActionFacets";
+import {
+  useAvailableActionFacetArgs,
+  useAvailableActionFacetIds,
+} from "../../core/clientActions/useAvailableActionFacets";
 import { useOffice } from "../../providers/OfficeProvider";
 import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
@@ -50,6 +53,7 @@ import {
 } from "../providers/OutlookMailItemProvider";
 import {
   isAppointmentCompose as isAppointmentComposeItem,
+  isMessageRead,
   resolveSupportedMailboxItem,
 } from "../sessionPolicy";
 import {
@@ -58,6 +62,10 @@ import {
 } from "../utils/buildDropEmailGroup";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
+import {
+  readComposeRecipients,
+  serializeComposeRecipients,
+} from "../utils/outlookComposeRecipients";
 import {
   getComposeBodyType,
   type BodyFormat,
@@ -225,6 +233,7 @@ export const AddinChatInput = forwardRef<
 ) {
   const { host } = useOffice();
   const availableFacetIds = useAvailableActionFacetIds();
+  const availableFacetArgs = useAvailableActionFacetArgs();
   const composeEmailAvailable = availableFacetIds.has("compose_email");
   const appointmentRewriteAvailable = availableFacetIds.has(
     "outlook_rewrite_appointment_selection",
@@ -865,13 +874,29 @@ export const AddinChatInput = forwardRef<
       const sendItemIdentity = itemIdentity ?? NO_ITEM_SEND_IDENTITY;
       setSendFailure(null);
 
+      // Recipient edits do not fire ItemChanged. Read the live fields at send
+      // time, and only when an email facet accepts the optional context.
+      const liveItem = resolveSupportedMailboxItem(Office.context.mailbox.item);
+
+      const recipients =
+        mailItem?.itemKind === "message" &&
+        mailItem.isComposeMode &&
+        liveItem &&
+        !isMessageRead(liveItem) &&
+        !isAppointmentComposeItem(liveItem) &&
+        [
+          "outlook_rewrite_selection",
+          "outlook_review_draft",
+          "compose_email",
+        ].some((id) => availableFacetArgs.get(id)?.has("recipients"))
+          ? serializeComposeRecipients(await readComposeRecipients(liveItem))
+          : undefined;
       // Appointment fields are re-read from the LIVE item at send time:
       // editing an appointment form fires no ItemChanged, so the provider's
       // bind-time state is frozen at pane-open and would ship a stale (often
       // empty) snapshot — and poison the de-dup fingerprint with it. Reads
       // are bounded and fall back per-field to the provider state, so a
       // wedged host degrades to the old behavior instead of losing the send.
-      const liveItem = resolveSupportedMailboxItem(Office.context.mailbox.item);
       const appointmentSnapshot =
         isAppointmentCompose && liveItem && isAppointmentComposeItem(liveItem)
           ? await readAppointmentComposeSnapshot(liveItem, {
@@ -939,6 +964,8 @@ export const AddinChatInput = forwardRef<
           lastSentDraftFingerprint: lastSentDraftFingerprintRef.current,
           draftContextFingerprint,
           bodyFormat,
+          recipients,
+          availableFacetArgs,
           isComposeMode: !!mailItem?.isComposeMode,
           composeEmailAvailable,
           appointmentRewriteAvailable,
@@ -1144,6 +1171,7 @@ export const AddinChatInput = forwardRef<
       clearSentDrops();
     },
     [
+      availableFacetArgs,
       calendarFetcher,
       chatId,
       chatInputProps,

@@ -589,7 +589,7 @@ chat_provider_ids = ["test-token-limit"]
 #
 # Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
 # """
-# allowed_args = ["selected_text", "source_property", "body_format"]
+# allowed_args = ["selected_text", "source_property", "body_format", "recipients"]
 #
 # [action_facets.facets.outlook_review_draft]
 # display_name = "Outlook Review Draft"
@@ -606,7 +606,13 @@ chat_provider_ids = ["test-token-limit"]
 #
 # For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 # """
-# allowed_args = ["full_body", "body_format"]
+# allowed_args = ["full_body", "body_format", "recipients"]
+#
+# Optional Outlook compose recipient context: add "recipients" to allowed_args
+# for compose_email or custom overrides of the two builtins. The add-in sends
+# JSON with To/CC/BCC names and email addresses only when /me/facets advertises
+# this argument. The server appends it as contextual data for these three facets;
+# templates and older clients do not need to supply a recipients placeholder.
 #
 # Client-action proposals: an action facet may additionally declare a fixed
 # set of client-side action identifiers via `client_actions`. While such a
