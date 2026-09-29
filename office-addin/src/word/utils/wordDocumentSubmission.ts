@@ -11,6 +11,10 @@ import {
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "./wordDocumentXml";
+import {
+  expandWordTableCellSubmission,
+  WordTableCellSubmissionError,
+} from "./wordTableCellSubmission";
 
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
 import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
@@ -74,9 +78,11 @@ export function createWordDocumentSubmissionExecutor(
           ok: false,
           error: "A document plan has already been accepted for this request.",
         };
-      const value = session.drafts.materialize(
-        JSON.parse(serialized) as Record<string, unknown>,
-      );
+      const submitted = JSON.parse(serialized) as Record<string, unknown>;
+      const value =
+        "table_cell" in submitted
+          ? expandWordTableCellSubmission(submitted, snapshot)
+          : session.drafts.materialize(submitted);
       const prepared = await prepareWordDocumentSubmission(
         value,
         context,
@@ -94,14 +100,17 @@ export function createWordDocumentSubmissionExecutor(
       let result = prepared;
       if (prepared.ok) {
         session.drafts.accepted = true;
-        if ("draft_id" in input && prepared.disposition !== "local_only")
+        if (
+          ("draft_id" in input || "table_cell" in input) &&
+          prepared.disposition !== "local_only"
+        )
           result = {
             ...prepared,
             result: { ...(prepared.result as object), plan: value },
           };
       } else if (prepared.validationErrors?.length) {
         const feedback = session.drafts.reject(
-          value,
+          value as unknown as Record<string, unknown>,
           prepared.validationErrors,
         );
         result = {
@@ -126,11 +135,20 @@ export function createWordDocumentSubmissionExecutor(
       }
       return session.drafts.remember(context.toolCallId, serialized, result);
     } catch (error) {
-      if (!(error instanceof WordDraftRepairError)) throw error;
+      if (
+        !(error instanceof WordDraftRepairError) &&
+        !(error instanceof WordTableCellSubmissionError)
+      )
+        throw error;
       const failure: ClientToolExecutionResult = {
         ok: false,
-        error: "Document repair rejected.",
-        submissionFeedback: session.drafts.feedback(),
+        error:
+          error instanceof WordDraftRepairError
+            ? "Document repair rejected."
+            : "Table cell edit rejected.",
+        ...(error instanceof WordDraftRepairError
+          ? { submissionFeedback: session.drafts.feedback() }
+          : {}),
         validationErrors: [
           { path: error.path, code: error.code, message: error.message },
         ],
@@ -217,6 +235,10 @@ async function prepareWordDocumentSubmission(
         "Bookmark names must be unique across the resulting document.",
       "Overlapping native edit targets":
         "Native edit targets cannot overlap within a source fragment.",
+      "table-cell-content":
+        "textEdit requires an unmerged retained cell containing one plain-text paragraph with uniform run formatting.",
+      "table-cell-text-mismatch":
+        "textEdit.expectedText must match the original captured cell text exactly.",
     };
     return {
       ok: false,
@@ -282,7 +304,8 @@ export function acceptedWordDocumentSubmission(
   const output = part.output;
   if (!object(output) || !object(output.result)) return undefined;
   const plan =
-    object(part.input) && "draft_id" in part.input
+    object(part.input) &&
+    ("draft_id" in part.input || "table_cell" in part.input)
       ? output.result.plan
       : part.input;
   if (

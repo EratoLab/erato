@@ -651,7 +651,23 @@ export function validateWordDocumentPlan(
         }
       }
       if (block.type === "list-item" && block.list) {
-        if (lists.has(block.list) && lists.get(block.list) !== block.ordered)
+        if (block.list.startsWith("existing-")) {
+          const source = snapshot.blocks.find(
+            (source) =>
+              source.type === "list-item" &&
+              source.list === block.list &&
+              (source.level ?? 0) === (block.level ?? 0),
+          );
+          if (!source || source.ordered !== block.ordered)
+            return reject(
+              `${blockPath}/list`,
+              "list-reference",
+              "Continue a captured list using its returned list name, level and ordered value; use a new group name to create a separate list.",
+            );
+        } else if (
+          lists.has(block.list) &&
+          lists.get(block.list) !== block.ordered
+        )
           return reject(
             `${blockPath}/ordered`,
             "list-consistency",

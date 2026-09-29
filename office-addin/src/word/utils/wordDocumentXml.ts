@@ -539,7 +539,13 @@ export function compileWordDocumentPlan(
   const body = wordMainBody(doc)!;
   const section = child(body, "sectPr")?.cloneNode(true);
   const originalSections = extractWordSections(doc);
-  const lists = new Map<string, string>();
+  // Captured list names refer to numbering instances, including their restart
+  // overrides. Reusing the instance continues kept items in that same list.
+  const lists = new Map(
+    snapshot.blocks
+      .filter((b) => b.type === "list-item" && b.list)
+      .map((b) => [b.list!, b.list!.slice("existing-".length)]),
+  );
   const outputBlocks = new Map<string, Element>();
   const output = wordPlanOutput(plan, snapshot);
   const unwrap = (fragment: Element): Element[] =>
@@ -671,6 +677,8 @@ export function compileWordDocumentPlan(
           );
         else props.append(make(doc, "pStyle", b.styleRef ?? "Normal"));
         if (b.type === "list-item" && b.list) {
+          if (b.list.startsWith("existing-") && !lists.has(b.list))
+            throw new Error("Unknown captured list");
           if (!lists.has(b.list)) lists.set(b.list, newList(doc, !!b.ordered));
           const num = make(doc, "numPr");
           num.append(
@@ -827,7 +835,9 @@ export function verifyWordPlanOutput(
         (e.block.type !== "heading" || e.block.level === actual.level) &&
         (e.block.type !== "list-item" ||
           ((e.block.level ?? 0) === (actual.level ?? 0) &&
-            e.block.ordered === actual.ordered)) &&
+            e.block.ordered === actual.ordered &&
+            (!e.block.list?.startsWith("existing-") ||
+              e.block.list === actual.list))) &&
         (!e.block.styleRef || e.block.styleRef === actual.styleRef)
       );
     })

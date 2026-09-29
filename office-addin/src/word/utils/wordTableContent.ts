@@ -11,9 +11,14 @@ import {
   WORDPROCESSING_NS,
 } from "./wordBlockFormatting";
 import { wordPlanError, wordPointerSegment } from "./wordPlanDiagnostics";
+import {
+  applyWordTableCellTextEdit,
+  parseWordTableCellTextEdit,
+} from "./wordTableCellText";
 
 import type { WordBorders } from "./wordBlockFormatting";
 import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
+import type { WordTableCellTextEdit } from "./wordTableCellText";
 
 export interface WordCellMargins {
   top?: number;
@@ -63,6 +68,8 @@ export interface WordTableCell<T> {
   format?: WordTableCellFormatting;
   /** Omit to retain a source cell's complete native contents. [] clears it. */
   blocks?: T[];
+  /** Exact plain-text replacement retaining the source paragraph/run properties. */
+  textEdit?: WordTableCellTextEdit;
 }
 export interface WordTableRow<T> {
   /** Zero-based row index; source rows and cells can be reordered or omitted. */
@@ -446,6 +453,7 @@ export function parseWordTableBlock<T extends { text: string }>(
           "rowSpan",
           "format",
           "blocks",
+          "textEdit",
         ]) ||
         (cell.sourceIndex !== undefined &&
           (row.sourceIndex === undefined ||
@@ -482,6 +490,23 @@ export function parseWordTableBlock<T extends { text: string }>(
           "cell-format",
           "Unsupported cell formatting; use the cell format contract.",
         );
+      const textEdit =
+        cell.textEdit === undefined
+          ? undefined
+          : parseWordTableCellTextEdit(cell.textEdit);
+      if (
+        textEdit === null ||
+        (textEdit &&
+          (cell.sourceIndex === undefined ||
+            cell.blocks !== undefined ||
+            (cell.colSpan ?? 1) !== 1 ||
+            (cell.rowSpan ?? 1) !== 1))
+      )
+        return fail(
+          `${cellPath}/textEdit`,
+          "table-cell-text-edit",
+          "textEdit requires a retained, unmerged source cell, expectedText and text (single-line, at most 10000 characters), and no blocks.",
+        );
       const blocks =
         cell.blocks === undefined
           ? undefined
@@ -501,6 +526,7 @@ export function parseWordTableBlock<T extends { text: string }>(
           : { rowSpan: cell.rowSpan as number }),
         ...(cellFormat ? { format: cellFormat } : {}),
         ...(blocks ? { blocks: blocks as T[] } : {}),
+        ...(textEdit ? { textEdit } : {}),
       });
     }
     rows.push({
@@ -523,7 +549,12 @@ export function parseWordTableBlock<T extends { text: string }>(
     text: rows
       .map((row) =>
         row.cells
-          .map((cell) => cell.blocks?.map((b) => b.text).join("\n") ?? "")
+          .map(
+            (cell) =>
+              cell.textEdit?.text ??
+              cell.blocks?.map((b) => b.text).join("\n") ??
+              "",
+          )
           .join("\t"),
       )
       .join("\n"),
@@ -945,6 +976,20 @@ export function compileWordTableBlock<T>(
         putWordProperty(cellProps, cellWidth);
       }
       if (cell.format) applyCellFormat(cellProps, cell.format);
+      if (!continuation && cell.textEdit) {
+        if (
+          !originalCell ||
+          cell.blocks !== undefined ||
+          (Number(
+            wordAttribute(
+              wordChild(wordChild(originalCell, "tcPr"), "gridSpan"),
+            ),
+          ) || 1) !== 1 ||
+          wordChild(wordChild(originalCell, "tcPr"), "vMerge")
+        )
+          throw new Error("table-cell-content");
+        applyWordTableCellTextEdit(tc, cell.textEdit);
+      }
       if (!continuation && cell.blocks !== undefined) {
         Array.from(tc.children)
           .filter((e) => e !== cellProps)
