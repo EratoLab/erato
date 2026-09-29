@@ -48,8 +48,8 @@ Files in each release directory:
 - `notes.md`: the AI-assisted, human-reviewed release draft.
 
 Every sync automatically creates a `[release-scratch]` commit containing the
-release configuration, manifest, individual summaries and draft, including edits
-made since the previous sync. Even an unchanged sync creates a checkpoint. These
+release configuration, manifest, individual summaries, draft, and the working
+`CHANGELOG.md`, including edits made since the previous sync. Even an unchanged sync creates a checkpoint. These
 commits live only on the preparation branch. Partial retrieval failures and
 handled interruptions also checkpoint the work collected so far. A hard process
 kill cannot create a commit; rerun sync to checkpoint the saved files.
@@ -67,8 +67,8 @@ own commits in the release inventory. Resolve changelog conflicts by retaining
 new upstream material and regenerating the release draft from the PR summaries.
 
 Run sync on a named preparation branch with no pre-existing staged changes.
-The automatic scratch commit includes only that release's directory; unrelated
-working-tree edits stay outside it. Complete Git author setup before syncing.
+The automatic scratch commit includes that release's directory and
+`CHANGELOG.md`; unrelated working-tree edits stay outside it. Complete Git author setup before syncing.
 Normal commit hooks run, so a failed hook must be resolved to create the checkpoint.
 After editing AI summaries or the draft, rerun sync to checkpoint them.
 

@@ -208,7 +208,8 @@ def commit_paths(paths, message, allow_empty=False):
 
 
 def checkpoint(directory, release):
-    commit_paths([directory], f"[release-scratch] Sync release notes {release}", allow_empty=True)
+    commit_paths([directory, ROOT / "CHANGELOG.md"],
+                 f"[release-scratch] Sync release notes {release}", allow_empty=True)
 
 
 def finalize(directory, manifest, config, args):
