@@ -297,7 +297,9 @@ describe("structured submission of restated styles", () => {
       table: "Normal",
     });
     tablePlan.readToken = snapshot.readToken!;
-    expect(await submit(tablePlan, context)).toMatchObject({
+    expect(
+      await submit(tablePlan, { ...context, toolCallId: "table-style" }),
+    ).toMatchObject({
       ok: false,
       validationErrors: [
         { path: "/entries/0/blocks/1/styleRef", code: "table-style-placement" },
