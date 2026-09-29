@@ -140,7 +140,13 @@ impl From<ContentPart> for GenAiMessageContent {
 }
 
 impl InputMessage {
-    pub fn into_chat_message(self) -> ChatMessage {
+    pub fn into_chat_message(mut self) -> ChatMessage {
+        if let ContentPart::ToolUse(tool_use) = &mut self.content
+            && tool_use.tool_name == crate::services::embedded_images::TOOL_NAME
+            && let Some(output) = &mut tool_use.output
+        {
+            crate::services::embedded_images::take_output_image(output);
+        }
         match self.role {
             MessageRole::System => ChatMessage::system(self.content),
             MessageRole::User => ChatMessage::user(self.content),
@@ -174,7 +180,31 @@ impl GenerationInputMessages {
         let messages = self
             .messages
             .into_iter()
-            .map(InputMessage::into_chat_message)
+            .flat_map(|message| {
+                // Keep the image in the durable tool result until conversion:
+                // raw ContentPart::Image cannot round-trip its internally tagged
+                // discriminator and MIME type, both named content_type.
+                let image = if message.role == MessageRole::Tool {
+                    match &message.content {
+                        ContentPart::ToolUse(tool_use)
+                            if tool_use.tool_name
+                                == crate::services::embedded_images::TOOL_NAME =>
+                        {
+                            tool_use.output.clone().and_then(|mut output| {
+                                crate::services::embedded_images::take_output_image(&mut output)
+                            })
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                let mut messages = vec![message.into_chat_message()];
+                if let Some(image) = image {
+                    messages.push(ChatMessage::user(ContentPart::Image(image)));
+                }
+                messages
+            })
             .collect();
         ChatRequest {
             messages,

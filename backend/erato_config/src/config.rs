@@ -1781,6 +1781,16 @@ impl AppConfig {
         Ok(())
     }
 
+    pub fn embedded_image_retrieval_enabled(&self, provider_id: &str) -> bool {
+        self.get_chat_provider(provider_id)
+            .enable_embedded_image_retrieval_tool
+            .unwrap_or_else(|| {
+                self.chat_providers.as_ref().is_some_and(|providers| {
+                    providers.all_providers.enable_embedded_image_retrieval_tool
+                })
+            })
+    }
+
     pub fn chat_provider_guardrails(
         &self,
         provider_id: Option<&str>,
@@ -2289,6 +2299,9 @@ pub struct ChatProvidersConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct AllChatProvidersConfig {
+    // Allow models to retrieve embedded PDF images. Defaults to false.
+    #[serde(default)]
+    pub enable_embedded_image_retrieval_tool: bool,
     #[serde(default)]
     pub guardrails: ChatProviderGuardrailsConfig,
 }
@@ -2378,6 +2391,8 @@ pub struct PromptOptimizerConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
 pub struct ChatProviderConfig {
+    // Overrides the all_providers setting when specified. Defaults to false.
+    pub enable_embedded_image_retrieval_tool: Option<bool>,
     // May be one of:
     // - "openai" (OpenAI-compatible Chat Completions API)
     // - "openai_responses" (OpenAI Responses API)
@@ -2556,6 +2571,7 @@ impl ChatProviderConfig {
         }
 
         Ok(ChatProviderConfig {
+            enable_embedded_image_retrieval_tool: self.enable_embedded_image_retrieval_tool,
             provider_kind: provider_kind.to_string(),
             model_name: self.model_name,
             validate_availability: self.validate_availability,

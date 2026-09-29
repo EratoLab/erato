@@ -140,7 +140,7 @@ fn detect_mime_type(file_bytes: &[u8]) -> Result<String, Report> {
     Ok(mime_type)
 }
 
-fn extract_xberg_bytes_sync(
+pub(crate) fn extract_xberg_bytes_sync(
     content: &[u8],
     mime_type: &str,
     config: &xberg::ExtractionConfig,
@@ -1528,7 +1528,7 @@ fn is_raw_nested_message_attachment_duplicate(child: &xberg::ArchiveEntry) -> bo
         && child.result.content.contains("Content-Transfer-Encoding:")
 }
 
-fn content_with_page_markers(
+pub(crate) fn content_with_page_markers(
     content: String,
     pages: Option<Vec<xberg::PageContent>>,
     marker_format: &str,

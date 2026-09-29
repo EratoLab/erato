@@ -974,6 +974,23 @@ An ordered list of provider IDs that defines the priority for provider selection
 
 **Example:** `["primary", "backup", "local"]`
 
+#### Embedded PDF image retrieval
+
+{/* erato_toml_config_key: chat_providers.all_providers.enable_embedded_image_retrieval_tool */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.enable_embedded_image_retrieval_tool */}
+
+`enable_embedded_image_retrieval_tool` enables the `retrieve_embedded_image` tool for PDFs included in the conversation. It defaults to `false`. A provider's explicit `true` or `false` overrides the `all_providers` setting. Use an image-capable model and enable `model_capabilities.supports_image_understanding`.
+
+PDF image markers include an `embeddedId` such as `file-embed://<file-id>/0`. The model can request that ID to receive a tool response followed by the image. Retrieval is restricted to images offered in the current prompt and checks file access permissions again. Retrieved images remain available in later conversation turns.
+
+```toml
+[chat_providers.all_providers]
+enable_embedded_image_retrieval_tool = true
+
+[chat_providers.providers.text_only]
+enable_embedded_image_retrieval_tool = false
+```
+
 #### `chat_providers.all_providers.guardrails.filter_input_prompt_injection`
 
 {/* erato_toml_config_key: chat_providers.all_providers.guardrails.filter_input_prompt_injection.enabled */}

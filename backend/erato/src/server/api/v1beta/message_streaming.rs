@@ -3455,12 +3455,31 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     .await?;
 
     // Resolve TextFilePointer to Text by extracting file contents JIT
-    let resolved_generation_input_messages = resolve_file_pointers_in_generation_input(
+    let mut resolved_generation_input_messages = resolve_file_pointers_in_generation_input(
         app_state,
         generation_input_messages.clone(),
         me_profile_input.access_token,
     )
     .await?;
+
+    let effective_model_settings = build_model_settings_for_facets(
+        &chat_provider_config.model_settings,
+        &app_state.config.facets,
+        &effective_selected_facet_ids,
+    );
+    let embedded_image_tool = crate::services::embedded_images::prepare(
+        app_state,
+        policy,
+        &me_profile_input.subject,
+        &generation_input_messages,
+        &mut resolved_generation_input_messages,
+        me_profile_input.access_token,
+        app_state
+            .config
+            .embedded_image_retrieval_enabled(&chat_provider_id),
+        effective_model_settings.compat_omit_strict,
+    )
+    .await;
 
     // Render any per-turn directive markers against the current config.
     // Saved snapshot keeps the markers; only the about-to-be-sent
@@ -3473,11 +3492,6 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     );
 
     // Build genai ChatRequest (messages + tools) + ChatOptions
-    let effective_model_settings = build_model_settings_for_facets(
-        &chat_provider_config.model_settings,
-        &app_state.config.facets,
-        &effective_selected_facet_ids,
-    );
 
     let mut chat_request = resolved_generation_input_messages
         .clone()
@@ -3774,6 +3788,13 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &mut chat_request_tools,
         &mut offered_client_tools,
     )?;
+    if let Some(tool) = embedded_image_tool
+        && !chat_request_tools
+            .iter()
+            .any(|existing| existing.name == tool.name)
+    {
+        chat_request_tools.push(tool);
+    }
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -5217,6 +5238,7 @@ async fn stream_generate_chat_completion<
         // of order, and the model is answered in the order it asked.
         let batch_call_count = unfinished_tool_calls.len();
         let mut current_turn_tool_responses: Vec<(usize, genai::chat::ToolResponse)> = vec![];
+        let mut retrieved_images = Vec::new();
         let mut pending_waits = Vec::new();
         let mut in_flight: futures::stream::FuturesUnordered<InFlightTask<'_>> =
             futures::stream::FuturesUnordered::new();
@@ -5636,6 +5658,95 @@ async fn stream_generate_chat_completion<
                     genai::chat::ToolResponse {
                         call_id: unfinished_tool_call.call_id.clone(),
                         content: error_message,
+                    },
+                ));
+                continue;
+            }
+
+            if unfinished_tool_call.fn_name == crate::services::embedded_images::TOOL_NAME
+                && !offered_client_tools.contains_key(crate::services::embedded_images::TOOL_NAME)
+                && !available_mcp_tools_by_name
+                    .contains_key(crate::services::embedded_images::TOOL_NAME)
+            {
+                let started_at = tool_call_started_at
+                    .remove(&unfinished_tool_call.call_id)
+                    .unwrap_or_else(now_timestamp);
+                let result = crate::services::embedded_images::retrieve(
+                    app_state,
+                    policy,
+                    subject,
+                    &current_turn_chat_request,
+                    &unfinished_tool_call.fn_arguments,
+                    mcp_auth_context.access_token,
+                )
+                .await;
+                let (status, saved_status, output, image) = match result {
+                    Ok(image) => (
+                        ToolCallStatus::Success,
+                        MessageToolCallStatus::Success,
+                        json!({"status": "success", "embedded_id": unfinished_tool_call.fn_arguments["embedded_id"], "image_content": "The requested image follows the tool response."}),
+                        Some(image),
+                    ),
+                    Err(error) => {
+                        tracing::warn!(%error, "Embedded image retrieval failed");
+                        (
+                            ToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({"status": "error", "error": "Embedded image unavailable or access denied."}),
+                            None,
+                        )
+                    }
+                };
+                persist_otel_tool_call(
+                    tracing_client.as_ref(),
+                    &unfinished_tool_call,
+                    Some(output.clone()),
+                    otel_tool_call_start_time,
+                    Some(SystemTime::now()),
+                    tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id),
+                    assistant_id,
+                    &langfuse_trace_enrichment.platform,
+                    output.get("error").and_then(JsonValue::as_str),
+                )
+                .await;
+                // Persist the image in the tool result immediately: another
+                // call in this batch may park before model input is assembled.
+                let mut persisted_output = output.clone();
+                if let Some(image) = &image {
+                    persisted_output[crate::services::embedded_images::IMAGE_OUTPUT_KEY] =
+                        serde_json::to_value(image)?;
+                }
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        output: Some(persisted_output),
+                        status: saved_status,
+                        started_at: Some(started_at),
+                        ended_at: Some(now_timestamp()),
+                        ..Default::default()
+                    },
+                );
+                if let Some(image) = image {
+                    retrieved_images.push(image);
+                }
+                send_tool_generation_update::<MSG>(
+                    assistant_message_id,
+                    tool_index,
+                    &unfinished_tool_call,
+                    status,
+                    None,
+                    streaming_task,
+                    &tx,
+                )
+                .await?;
+                current_turn_tool_responses.push((
+                    batch_position,
+                    genai::chat::ToolResponse {
+                        call_id: unfinished_tool_call.call_id.clone(),
+                        content: output.to_string(),
                     },
                 ));
                 continue;
@@ -7511,6 +7622,12 @@ async fn stream_generate_chat_completion<
                 ),
                 options: None,
             });
+        }
+
+        for image in retrieved_images {
+            current_turn_chat_request
+                .messages
+                .push(GenAiChatMessage::user(ContentPart::Image(image)));
         }
 
         let provider_guardrails = app_state.config.chat_provider_guardrails(chat_provider_id);
@@ -16712,16 +16829,36 @@ async fn resume_parked_generation(
     {
         return Err(eyre!("The original model is no longer authorized"));
     }
-    let generation_input_messages = resolve_file_pointers_in_generation_input(
+    let source_generation_input_messages = generation_input_messages.clone();
+    let mut generation_input_messages = resolve_file_pointers_in_generation_input(
         app_state,
         generation_input_messages,
         me_user.access_token.as_deref(),
     )
     .await?;
+    let provider = app_state.config.get_chat_provider(&chat_provider_id);
+    let compat_omit_strict = crate::services::prompt_composition::build_model_settings_for_facets(
+        &provider.model_settings,
+        &app_state.config.facets,
+        &effective_selected_facet_ids,
+    )
+    .compat_omit_strict;
+    let embedded_image_tool = crate::services::embedded_images::prepare(
+        app_state,
+        policy,
+        &me_user.to_subject(),
+        &source_generation_input_messages,
+        &mut generation_input_messages,
+        me_user.access_token.as_deref(),
+        app_state
+            .config
+            .embedded_image_retrieval_enabled(&chat_provider_id),
+        compat_omit_strict,
+    )
+    .await;
     let generation_input_messages =
         resolve_directive_markers_in_generation_input(app_state, generation_input_messages);
     let mut chat_request = generation_input_messages.into_chat_request();
-    let provider = app_state.config.get_chat_provider(&chat_provider_id);
     let mut continuation_tools =
         convert_mcp_tools_to_genai_tools(available_mcp_tools.clone(), false);
 
@@ -16731,12 +16868,6 @@ async fn resume_parked_generation(
     // it abandon the plan and answer around it. Only the task route — the
     // mention offer is aimed at assistants named in the user's message and is
     // deliberately not replayed (`test_continued_turn_does_not_reoffer_the_delegation_tool`).
-    let compat_omit_strict = crate::services::prompt_composition::build_model_settings_for_facets(
-        &provider.model_settings,
-        &app_state.config.facets,
-        &effective_selected_facet_ids,
-    )
-    .compat_omit_strict;
     let client_tool_allowlist = effective_client_tool_allowlist(
         &app_state.config.facets,
         &app_state.config.action_facets,
@@ -16878,6 +17009,13 @@ async fn resume_parked_generation(
         &mut continuation_tools,
         &mut offered_client_tools,
     )?;
+    if let Some(tool) = embedded_image_tool
+        && !continuation_tools
+            .iter()
+            .any(|existing| existing.name == tool.name)
+    {
+        continuation_tools.push(tool);
+    }
     chat_request.tools = (!continuation_tools.is_empty()).then_some(continuation_tools);
     let allowed_tool_names: HashSet<String> = chat_request
         .tools
