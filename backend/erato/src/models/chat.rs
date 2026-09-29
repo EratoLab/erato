@@ -405,7 +405,8 @@ impl From<&chats::Model> for Resource {
 /// If `assistant_id` is provided when creating a new chat, the assistant configuration will be stored.
 /// `mcp_write_tools_enabled`, `disabled_mcp_server_ids` and
 /// `disabled_mcp_tools` seed the new chat's tool settings; `None` keeps the
-/// column default.
+/// column default. `created_via` records the surface a new chat is created
+/// from.
 ///
 /// Returns a tuple of (chat model, creation status) where the status indicates whether
 /// the chat was newly created or already existed.
@@ -421,6 +422,7 @@ pub async fn get_or_create_chat(
     mcp_write_tools_enabled: Option<bool>,
     disabled_mcp_server_ids: Option<Vec<String>>,
     disabled_mcp_tools: Option<Vec<String>>,
+    created_via: ChatCreatedVia,
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(existing_chat_id) = existing_chat_id {
         let existing_chat: Option<chats::Model> =
@@ -457,6 +459,7 @@ pub async fn get_or_create_chat(
             disabled_mcp_tools: disabled_mcp_tools
                 .map(|patterns| ActiveValue::Set(dedup_keep_order(patterns)))
                 .unwrap_or(ActiveValue::NotSet),
+            created_via: ActiveValue::Set(created_via.as_str().to_owned()),
             ..Default::default()
         };
         let observation = policy.observe_facts().await?;
@@ -494,6 +497,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
     mcp_write_tools_enabled: Option<bool>,
     disabled_mcp_server_ids: Option<Vec<String>>,
     disabled_mcp_tools: Option<Vec<String>>,
+    created_via: ChatCreatedVia,
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(message_id) = previous_message_id {
         // Find the message to get its chat_id
@@ -518,6 +522,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
             None, // mcp_write_tools_enabled is ignored when existing_chat_id is provided
             None, // disabled_mcp_server_ids is ignored when existing_chat_id is provided
             None, // disabled_mcp_tools is ignored when existing_chat_id is provided
+            created_via,
         )
         .await
     } else {
@@ -534,6 +539,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
             mcp_write_tools_enabled,
             disabled_mcp_server_ids,
             disabled_mcp_tools,
+            created_via,
         )
         .await
     }
@@ -555,7 +561,8 @@ pub fn chat_is_delegated_run(chat: &chats::Model) -> bool {
 /// `POST /me/chats` pattern) — this function only authorizes chat creation.
 /// The write toggle, the disabled servers and the disabled tools are copied
 /// from the parent row: a run spawned from a chat with writes off, or with a
-/// server or tool switched off, must not regain them.
+/// server or tool switched off, must not regain them. So is `created_via`, so
+/// a run lists under the same surface as the chat it was delegated from.
 ///
 /// `assistant_id` is `None` for a task child that runs on the bare model. The
 /// envelope then simply omits the key, which keeps the generated
@@ -583,6 +590,17 @@ pub async fn create_delegated_chat(
         provenance: Some(provenance),
         task,
     };
+    let created_via = match configuration
+        .provenance
+        .as_ref()
+        .and_then(|provenance| provenance.origin_chat_id)
+    {
+        Some(origin_chat_id) => Chats::find_by_id(origin_chat_id)
+            .one(conn)
+            .await?
+            .map(|origin_chat| origin_chat.created_via),
+        None => None,
+    };
     let new_chat = chats::ActiveModel {
         owner_user_id: ActiveValue::Set(owner_user_id.to_owned()),
         assistant_configuration: ActiveValue::Set(Some(configuration.to_json()?)),
@@ -590,6 +608,9 @@ pub async fn create_delegated_chat(
         mcp_write_tools_enabled: ActiveValue::Set(mcp_write_tools_enabled),
         disabled_mcp_server_ids: ActiveValue::Set(disabled_mcp_server_ids),
         disabled_mcp_tools: ActiveValue::Set(disabled_mcp_tools),
+        created_via: created_via
+            .map(ActiveValue::Set)
+            .unwrap_or(ActiveValue::NotSet),
         ..Default::default()
     };
     Ok(chats::Entity::insert(new_chat)
@@ -778,6 +799,8 @@ pub struct RecentChat {
     /// The failed delegated run this one was started to replace; present only
     /// on a retry child. Read out of the provenance envelope by the listing.
     pub retry_of: Option<Uuid>,
+    /// Surface the chat was created from, as stored (see [`ChatCreatedVia`]).
+    pub created_via: String,
 }
 
 /// Statistics for a list of chats
@@ -825,6 +848,7 @@ struct ChatWithLatestMessage {
     delegated_run_outcome: Option<String>,
     delegated_runs_in_flight: bool,
     retry_of: Option<Uuid>,
+    created_via: String,
     // Latest message fields
     latest_message_at: DateTimeWithTimeZone,
 }
@@ -837,6 +861,69 @@ pub enum RecentChatTypeFilter {
     Chat,
     /// Chats that are based on an assistant.
     Assistant,
+}
+
+/// Surface a chat was created from, stored in `chats.created_via`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatCreatedVia {
+    /// Created before the surface was recorded and not attributable since.
+    Legacy,
+    /// The web app.
+    Web,
+    /// The Outlook add-in.
+    Outlook,
+    /// The Word add-in.
+    Word,
+    /// The host-neutral Office add-in page.
+    OfficeAddin,
+    /// The Erato tab in Microsoft Teams.
+    MsTeamsTab,
+    /// The Microsoft Teams bot.
+    MsTeamsBot,
+}
+
+impl ChatCreatedVia {
+    pub const ALL: [ChatCreatedVia; 7] = [
+        ChatCreatedVia::Legacy,
+        ChatCreatedVia::Web,
+        ChatCreatedVia::Outlook,
+        ChatCreatedVia::Word,
+        ChatCreatedVia::OfficeAddin,
+        ChatCreatedVia::MsTeamsTab,
+        ChatCreatedVia::MsTeamsBot,
+    ];
+
+    /// Column value, matching the `chats_created_via_check` constraint.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ChatCreatedVia::Legacy => "legacy",
+            ChatCreatedVia::Web => "web",
+            ChatCreatedVia::Outlook => "outlook",
+            ChatCreatedVia::Word => "word",
+            ChatCreatedVia::OfficeAddin => "office_addin",
+            ChatCreatedVia::MsTeamsTab => "ms_teams_tab",
+            ChatCreatedVia::MsTeamsBot => "ms_teams_bot",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<ChatCreatedVia> {
+        Self::ALL.into_iter().find(|via| via.as_str() == value)
+    }
+
+    /// Surface of a chat created over HTTP, from its `X-Erato-Platform` value.
+    /// `teams` over HTTP is always the tab: the Teams bot creates its chats
+    /// in-process with [`ChatCreatedVia::MsTeamsBot`]. Values that name no
+    /// surface fall back to the web app, like a missing header does.
+    pub fn from_platform(platform: &str) -> ChatCreatedVia {
+        match platform {
+            "outlook" => ChatCreatedVia::Outlook,
+            "word" => ChatCreatedVia::Word,
+            "addin-neutral" => ChatCreatedVia::OfficeAddin,
+            "teams" => ChatCreatedVia::MsTeamsTab,
+            _ => ChatCreatedVia::Web,
+        }
+    }
 }
 
 /// Filtering and pagination options for recent chat listing.
@@ -861,6 +948,26 @@ pub struct RecentChatsFilter<'a> {
     /// composes with `include_delegated` rather than overriding it, so
     /// listing a chat's delegated runs requires both.
     pub origin_chat_id: Option<Uuid>,
+    /// If not empty, only chats created via one of these surfaces are returned.
+    pub created_via: &'a [ChatCreatedVia],
+    /// Chats created via one of these surfaces are left out.
+    pub exclude_created_via: &'a [ChatCreatedVia],
+}
+
+/// `AND "chats"."created_via" [NOT] IN (...)`, or nothing for an empty list.
+/// The values are the enum's fixed spellings, so they are inlined rather than
+/// bound.
+fn created_via_condition(values: &[ChatCreatedVia], negate: bool) -> String {
+    if values.is_empty() {
+        return String::new();
+    }
+    let list = values
+        .iter()
+        .map(|via| format!("'{}'", via.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let operator = if negate { "NOT IN" } else { "IN" };
+    format!("AND \"chats\".\"created_via\" {operator} ({list})")
 }
 
 /// SQL expression deriving a delegated run's terminal outcome from the chat's
@@ -963,6 +1070,11 @@ pub async fn get_recent_chats(
     } else {
         ""
     };
+    let created_via_conditions = format!(
+        "{} {}",
+        created_via_condition(filter.created_via, false),
+        created_via_condition(filter.exclude_created_via, true),
+    );
     let resolved_title_search_vector = r#"to_tsvector(
                 'simple'::regconfig,
                 COALESCE(
@@ -1028,6 +1140,7 @@ pub async fn get_recent_chats(
             "chats"."disabled_mcp_server_ids",
             "chats"."disabled_mcp_tools",
             "chats"."assistant_id",
+            "chats"."created_via",
             CASE
                 WHEN "chats"."archived_at" IS NULL
                     AND "chats"."generation_state" = 'running'
@@ -1075,6 +1188,7 @@ pub async fn get_recent_chats(
             {}
             {}
             {}
+            {}
         ORDER BY latest_msg.created_at DESC
         LIMIT $2
         OFFSET $3
@@ -1085,6 +1199,7 @@ pub async fn get_recent_chats(
         pinned_condition,
         chat_type_condition,
         delegated_condition,
+        created_via_conditions,
         // The typed spellings rather than bare literals, for the same reason
         // `ResultDeliveryState::as_str` exists: this predicate and the delivery
         // writers compare the same strings, and a literal in one of the two is
@@ -1146,6 +1261,7 @@ pub async fn get_recent_chats(
                         {}
                         {}
                         {}
+                        {}
                 ) AS sub_query
                 "#,
                 archived_condition,
@@ -1153,7 +1269,8 @@ pub async fn get_recent_chats(
                 origin_condition(2 + search_param_count),
                 pinned_condition,
                 chat_type_condition,
-                delegated_condition
+                delegated_condition,
+                created_via_conditions
             );
 
             #[derive(Debug, FromQueryResult)]
@@ -1361,6 +1478,7 @@ pub async fn get_recent_chats(
                 delegated_run_outcome: chat_with_msg.delegated_run_outcome.clone(),
                 delegated_runs_in_flight: chat_with_msg.delegated_runs_in_flight,
                 retry_of: chat_with_msg.retry_of,
+                created_via: chat_with_msg.created_via.clone(),
             }
         })
         .collect();
@@ -1406,6 +1524,8 @@ pub struct ChatDetail {
     pub expected_output: Option<String>,
     /// Delegation only: the limits the delegate must work within.
     pub constraints: Option<String>,
+    /// Surface the chat was created from.
+    pub created_via: ChatCreatedVia,
 }
 
 /// Load one chat, authorized the same way its message history is.
@@ -1464,6 +1584,7 @@ pub async fn get_chat_detail(
 
     Ok(ChatDetail {
         id: chat.id,
+        created_via: ChatCreatedVia::parse(&chat.created_via).unwrap_or(ChatCreatedVia::Legacy),
         title_resolved: resolve_chat_display_name(
             chat.title_by_user_provided.as_deref(),
             chat.title_by_summary.as_deref(),

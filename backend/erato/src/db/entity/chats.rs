@@ -30,6 +30,8 @@ pub struct Model {
     pub mcp_write_tools_enabled: bool,
     pub disabled_mcp_server_ids: Vec<String>,
     pub disabled_mcp_tools: Vec<String>,
+    #[sea_orm(column_type = "Text")]
+    pub created_via: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

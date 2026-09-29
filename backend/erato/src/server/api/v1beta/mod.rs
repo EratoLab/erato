@@ -29,11 +29,11 @@ use crate::db::entity_ext::{chats, messages};
 use crate::models;
 use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
-    RecentChatTypeFilter, RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
-    get_frequent_assistants, get_generating_chats, get_or_create_chat, get_recent_chats,
-    resolve_chat_display_name, unarchive_chat, update_chat_disabled_mcp_server_ids,
-    update_chat_disabled_mcp_tools, update_chat_is_pinned, update_chat_mcp_write_tools_enabled,
-    update_chat_title_by_user_provided,
+    ChatCreatedVia, RecentChatTypeFilter, RecentChatsFilter,
+    archive_all_unarchived_chats_for_owner, archive_chat, get_frequent_assistants,
+    get_generating_chats, get_or_create_chat, get_recent_chats, resolve_chat_display_name,
+    unarchive_chat, update_chat_disabled_mcp_server_ids, update_chat_disabled_mcp_tools,
+    update_chat_is_pinned, update_chat_mcp_write_tools_enabled, update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
@@ -87,8 +87,8 @@ use crate::server::api::v1beta::message_streaming::{
     EditMessageStreamingResponseMessage, GenerationRunningError, MessageSubmitRequest,
     MessageSubmitStreamingResponseMessage, NothingToReactError, ReactToTaskResultRequest,
     ResumeStreamRequest, abort_message_stream, client_tool_result, continue_message_sse,
-    edit_message_sse, message_submit_sse, react_to_task_result_sse, regenerate_message_sse,
-    resume_message_sse,
+    edit_message_sse, message_submit_sse, platform_from_headers, react_to_task_result_sse,
+    regenerate_message_sse, resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
@@ -547,6 +547,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ChatMessagesResponse,
         RecentChatStats,
         RecentChatTypeFilter,
+        ChatCreatedVia,
         RecentChatsResponse,
         GenerationChatState,
         GeneratingChat,
@@ -1501,6 +1502,9 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     retry_of: Option<String>,
+    /// Surface the chat was created from. `legacy` for chats that predate
+    /// recording it and could not be attributed afterwards.
+    created_via: ChatCreatedVia,
 }
 
 /// A single chat, for surfaces that open one directly rather than picking it
@@ -1582,6 +1586,8 @@ pub struct ChatDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     constraints: Option<String>,
+    /// Surface the chat was created from.
+    created_via: ChatCreatedVia,
 }
 
 /// Sentiment for message feedback
@@ -3090,6 +3096,26 @@ async fn assemble_chat_messages_response(
     })
 }
 
+/// Parses a comma-separated `created_via` query value. Empty segments are
+/// skipped; an unknown value is a bad request rather than silently widening
+/// the listing.
+fn parse_created_via_list(value: Option<&String>) -> Result<Vec<ChatCreatedVia>, StatusCode> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let mut parsed = Vec::new();
+    for segment in value.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let via = ChatCreatedVia::parse(segment).ok_or_else(|| {
+            tracing::warn!("Invalid created_via value: {}", segment);
+            StatusCode::BAD_REQUEST
+        })?;
+        if !parsed.contains(&via) {
+            parsed.push(via);
+        }
+    }
+    Ok(parsed)
+}
+
 #[utoipa::path(
     get,
     path = "/me/recent_chats", 
@@ -3101,11 +3127,13 @@ async fn assemble_chat_messages_response(
         ("pinned" = Option<bool>, Query, description = "If provided, filter chats by their pinned state."),
         ("type" = Option<RecentChatTypeFilter>, Query, description = "If provided, only return chats of the given kind: `chat` for chats without an assistant, `assistant` for assistant-based chats."),
         ("include_delegated" = Option<bool>, Query, description = "Whether to include delegated runs (chats spawned by in-chat delegation). Defaults to false; delegated runs are hidden from listings unless requested."),
-        ("origin_chat_id" = Option<Uuid>, Query, description = "If provided, only return chats spawned from this origin chat. Composes with `include_delegated` rather than overriding it, so listing a chat's delegated runs requires passing both.")
+        ("origin_chat_id" = Option<Uuid>, Query, description = "If provided, only return chats spawned from this origin chat. Composes with `include_delegated` rather than overriding it, so listing a chat's delegated runs requires passing both."),
+        ("created_via" = Option<String>, Query, description = "Comma-separated `ChatCreatedVia` values. If provided, only return chats created via one of these surfaces."),
+        ("exclude_created_via" = Option<String>, Query, description = "Comma-separated `ChatCreatedVia` values. Chats created via one of these surfaces are left out. Composes with `created_via`.")
     ),
     responses(
         (status = OK, body = RecentChatsResponse, description = "Successfully retrieved chats with pagination metadata"),
-        (status = BAD_REQUEST, description = "Invalid origin_chat_id format"),
+        (status = BAD_REQUEST, description = "Invalid origin_chat_id format, or an unknown created_via value"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error while retrieving chats")
     ),
     security(
@@ -3150,6 +3178,8 @@ pub async fn recent_chats(
     } else {
         None
     };
+    let created_via = parse_created_via_list(params.get("created_via"))?;
+    let exclude_created_via = parse_created_via_list(params.get("exclude_created_via"))?;
 
     policy
         .rebuild_data_if_needed(&app_state.db, &app_state.config)
@@ -3177,6 +3207,8 @@ pub async fn recent_chats(
             search_query,
             include_delegated,
             origin_chat_id,
+            created_via: &created_via,
+            exclude_created_via: &exclude_created_via,
         },
         app_state.config.generation_status.stale_after_secs,
     )
@@ -3422,6 +3454,7 @@ async fn extend_recent_chats_to_api_model(
             delegated_run_outcome: chat.delegated_run_outcome,
             delegated_runs_in_flight: chat.delegated_runs_in_flight,
             retry_of: chat.retry_of.map(|id| id.to_string()),
+            created_via: ChatCreatedVia::parse(&chat.created_via).unwrap_or(ChatCreatedVia::Legacy),
         });
     }
 
@@ -3655,6 +3688,9 @@ pub struct UpdateChatResponse {
     post,
     path = "/me/chats",
     request_body = CreateChatRequest,
+    params(
+        ("X-Erato-Platform" = Option<String>, Header, nullable = false, description = "Client surface creating the chat (`web`, `outlook`, `word`, `addin-neutral`, `teams`). Recorded as the chat's `created_via`; defaults to `web`.")
+    ),
     responses(
         (status = OK, body = CreateChatResponse, description = "Successfully created a new chat"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
@@ -3668,6 +3704,7 @@ pub async fn create_chat(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
+    headers: HeaderMap,
     Json(request): Json<CreateChatRequest>,
 ) -> Result<Json<CreateChatResponse>, StatusCode> {
     let CreateChatRequest {
@@ -3716,6 +3753,7 @@ pub async fn create_chat(
         None,
         None,
         None,
+        ChatCreatedVia::from_platform(&platform_from_headers(&headers)),
     )
     .await
     .map_err(log_internal_server_error)?;
@@ -3796,6 +3834,7 @@ pub async fn chat_detail(
         adopted_at: chat.adopted_at,
         expected_output: chat.expected_output,
         constraints: chat.constraints,
+        created_via: chat.created_via,
     }))
 }
 

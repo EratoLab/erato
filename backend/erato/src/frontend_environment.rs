@@ -8,6 +8,7 @@ use crate::distribution::frontend_bundles::{
     OFFICE_ADDIN_MOUNT_PATH,
 };
 use crate::distribution::translations::TranslationDistribution;
+use crate::models::chat::ChatCreatedVia;
 use ::axum::http::HeaderValue;
 use lol_html::html_content::ContentType;
 use lol_html::{HtmlRewriter, Settings, element};
@@ -84,6 +85,7 @@ const FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA: &str =
     "SIDEBAR_CHAT_HISTORY_SHOW_METADATA";
 const FRONTEND_ENV_KEY_PINNED_CHATS_ENABLED: &str = "PINNED_CHATS_ENABLED";
 const FRONTEND_ENV_KEY_PINNED_CHATS_LIMIT: &str = "PINNED_CHATS_LIMIT";
+const FRONTEND_ENV_KEY_CHAT_CREATED_VIA_SOURCES: &str = "CHAT_CREATED_VIA_SOURCES";
 const FRONTEND_ENV_KEY_MSAL_CLIENT_ID: &str = "MSAL_CLIENT_ID";
 const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
 const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_TEXT";
@@ -549,6 +551,15 @@ fn build_frontend_environment(
         FRONTEND_ENV_KEY_PINNED_CHATS_LIMIT.to_string(),
         Value::Number(config.frontend.pinned_chats_limit.into()),
     );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_CHAT_CREATED_VIA_SOURCES.to_string(),
+        Value::Array(
+            chat_created_via_sources(config)
+                .into_iter()
+                .map(|via| Value::String(via.as_str().to_owned()))
+                .collect(),
+        ),
+    );
 
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT.to_string(),
@@ -606,6 +617,29 @@ fn build_frontend_environment(
     }
 
     env
+}
+
+/// Surfaces chats can be created from in this deployment, for the chat list's
+/// source filter. `legacy` is always listed: older chats exist regardless of
+/// which integrations are enabled now.
+fn chat_created_via_sources(config: &AppConfig) -> Vec<ChatCreatedVia> {
+    let ms_office = &config.integrations.ms_office;
+    let mut sources = vec![ChatCreatedVia::Web];
+    if ms_office.addin.enabled {
+        sources.extend([
+            ChatCreatedVia::Outlook,
+            ChatCreatedVia::Word,
+            ChatCreatedVia::OfficeAddin,
+        ]);
+    }
+    if ms_office.teams.enabled {
+        sources.push(ChatCreatedVia::MsTeamsTab);
+    }
+    if ms_office.teams.bot.enabled {
+        sources.push(ChatCreatedVia::MsTeamsBot);
+    }
+    sources.push(ChatCreatedVia::Legacy);
+    sources
 }
 
 #[derive(Debug, Clone)]
@@ -1407,6 +1441,35 @@ mod tests {
                 Some(&Value::Bool(true))
             );
         }
+    }
+
+    #[test]
+    fn chat_created_via_sources_follow_enabled_integrations() {
+        let sources = |config: &AppConfig| {
+            build_frontend_environment(config, FrontendKind::Web)
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_CHAT_CREATED_VIA_SOURCES)
+                .cloned()
+        };
+
+        let mut config = AppConfig::default();
+        assert_eq!(sources(&config), Some(serde_json::json!(["web", "legacy"])));
+
+        config.integrations.ms_office.addin.enabled = true;
+        config.integrations.ms_office.teams.enabled = true;
+        config.integrations.ms_office.teams.bot.enabled = true;
+        assert_eq!(
+            sources(&config),
+            Some(serde_json::json!([
+                "web",
+                "outlook",
+                "word",
+                "office_addin",
+                "ms_teams_tab",
+                "ms_teams_bot",
+                "legacy"
+            ]))
+        );
     }
 
     #[test]

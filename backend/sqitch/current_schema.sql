@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict M0oDyk2P5Y7jybWh6Yh9NFNdKoQHRsiR3MhKdDIOpwpHLhy87W8pg9acuPQMxZ5
+\restrict 5rfytVX4hncnwi8X4KkhATJBYwa5nTQQ7V7VKqzIN8L3rDliow8BZGoQUdlfpE3
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -303,7 +303,9 @@ CREATE TABLE public.chats (
     origin_chat_id uuid GENERATED ALWAYS AS (((assistant_configuration #>> '{provenance,origin_chat_id}'::text[]))::uuid) STORED,
     mcp_write_tools_enabled boolean DEFAULT true NOT NULL,
     disabled_mcp_server_ids text[] DEFAULT '{}'::text[] NOT NULL,
-    disabled_mcp_tools text[] DEFAULT '{}'::text[] NOT NULL
+    disabled_mcp_tools text[] DEFAULT '{}'::text[] NOT NULL,
+    created_via text DEFAULT 'legacy'::text NOT NULL,
+    CONSTRAINT chats_created_via_check CHECK ((created_via = ANY (ARRAY['legacy'::text, 'web'::text, 'outlook'::text, 'word'::text, 'office_addin'::text, 'ms_teams_tab'::text, 'ms_teams_bot'::text])))
 );
 
 
@@ -1828,5 +1830,5 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict M0oDyk2P5Y7jybWh6Yh9NFNdKoQHRsiR3MhKdDIOpwpHLhy87W8pg9acuPQMxZ5
+\unrestrict 5rfytVX4hncnwi8X4KkhATJBYwa5nTQQ7V7VKqzIN8L3rDliow8BZGoQUdlfpE3
 

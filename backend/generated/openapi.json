@@ -1653,6 +1653,17 @@
         "summary": "Create a new chat without an initial message",
         "description": "This endpoint allows creating a new chat without requiring an initial message.\nThis is useful for scenarios where you want to upload files before sending the first message.",
         "operationId": "create_chat",
+        "parameters": [
+          {
+            "name": "X-Erato-Platform",
+            "in": "header",
+            "description": "Client surface creating the chat (`web`, `outlook`, `word`, `addin-neutral`, `teams`). Recorded as the chat's `created_via`; defaults to `web`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3642,6 +3653,24 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "created_via",
+            "in": "query",
+            "description": "Comma-separated `ChatCreatedVia` values. If provided, only return chats created via one of these surfaces.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "exclude_created_via",
+            "in": "query",
+            "description": "Comma-separated `ChatCreatedVia` values. Chats created via one of these surfaces are left out. Composes with `created_via`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3656,7 +3685,7 @@
             }
           },
           "400": {
-            "description": "Invalid origin_chat_id format"
+            "description": "Invalid origin_chat_id format, or an unknown created_via value"
           },
           "500": {
             "description": "Server error while retrieving chats"
@@ -5867,6 +5896,19 @@
         },
         "deprecated": true
       },
+      "ChatCreatedVia": {
+        "type": "string",
+        "description": "Surface a chat was created from, stored in `chats.created_via`.",
+        "enum": [
+          "legacy",
+          "web",
+          "outlook",
+          "word",
+          "office_addin",
+          "ms_teams_tab",
+          "ms_teams_bot"
+        ]
+      },
       "ChatDetail": {
         "type": "object",
         "description": "A single chat, for surfaces that open one directly rather than picking it\nout of a listing.\n\nDelegated runs are why this exists: `/me/recent_chats` hides them unless\nasked for, so a client that follows a link into one has no listing row to\nread its provenance and run parameters from.",
@@ -5877,7 +5919,8 @@
           "mcp_write_tools_enabled",
           "disabled_mcp_server_ids",
           "disabled_mcp_tools",
-          "can_edit"
+          "can_edit",
+          "created_via"
         ],
         "properties": {
           "adopted_at": {
@@ -5905,6 +5948,10 @@
           "constraints": {
             "type": "string",
             "description": "Delegated runs only: the limits the delegate was told to work within."
+          },
+          "created_via": {
+            "$ref": "#/components/schemas/ChatCreatedVia",
+            "description": "Surface the chat was created from."
           },
           "disabled_mcp_server_ids": {
             "type": "array",
@@ -10120,7 +10167,8 @@
           "disabled_mcp_server_ids",
           "disabled_mcp_tools",
           "can_edit",
-          "delegated_runs_in_flight"
+          "delegated_runs_in_flight",
+          "created_via"
         ],
         "properties": {
           "active_generation_started_at": {
@@ -10144,6 +10192,10 @@
           "can_edit": {
             "type": "boolean",
             "description": "Whether the current user can edit this chat (e.g., edit messages)\n\nNOTE: Currently this is true only for the chat owner. In the future,\nthis may include collaborators/roles/policy-based permissions."
+          },
+          "created_via": {
+            "$ref": "#/components/schemas/ChatCreatedVia",
+            "description": "Surface the chat was created from. `legacy` for chats that predate\nrecording it and could not be attributed afterwards."
           },
           "delegated_run_outcome": {
             "type": "string",

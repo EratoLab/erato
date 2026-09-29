@@ -52,7 +52,8 @@
     "deploy/0050_add_outlook_provenance_to_file_uploads.sql",
     "deploy/0051_add_client_operation_attempts.sql",
     "deploy/0052_add_local_evidence_exports.sql",
-    "deploy/0053_add_ms_teams_bot.sql"
+    "deploy/0053_add_ms_teams_bot.sql",
+    "deploy/0054_add_chat_created_via.sql"
   ],
-  "latest_change": "3630d8241c40d4b7a094da4dcc0f56f23ee03cca"
+  "latest_change": "2b54d3afe29df8a960509eabe18542b9afe37367"
 }
