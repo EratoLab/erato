@@ -299,6 +299,7 @@ impl Host {
             None,
             None,
             None,
+            crate::models::chat::ChatCreatedVia::MsTeamsBot,
         )
         .await?;
         // The chat service commits on its own connection; the mapping update

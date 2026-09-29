@@ -4,6 +4,7 @@ import { useMountedState } from "react-use";
 import { useThrottledCallback } from "use-debounce";
 /* eslint-disable lingui/no-unlocalized-strings */
 
+import { clientPlatformHeaders } from "@/lib/clientPlatform";
 import {
   fetchGetFile,
   useCreateChat,
@@ -712,6 +713,7 @@ export function useAudioTranscriptionRecorder({
                 ? { chat_provider_id: selectedModel.chat_provider_id }
                 : {}),
             },
+            headers: clientPlatformHeaders(),
           })
         ).chat_id;
       if (!chatId && !silentChatId) {
@@ -1010,6 +1012,7 @@ export function useAudioTranscriptionRecorder({
                   ? { chat_provider_id: selectedModel.chat_provider_id }
                   : {}),
               },
+              headers: clientPlatformHeaders(),
             })
           ).chat_id;
         if (!chatId && !silentChatId) {

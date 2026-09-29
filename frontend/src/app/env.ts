@@ -73,6 +73,8 @@ export type Env = {
   sidebarChatHistoryShowMetadata: boolean;
   pinnedChatsEnabled?: boolean;
   pinnedChatsLimit?: number;
+  /** `created_via` values chats can have in this deployment. */
+  chatCreatedViaSources?: string[];
   msalClientId: string | null;
   msalAuthority: string | null;
   maskReasoningTraceText: boolean;
@@ -139,6 +141,7 @@ declare global {
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
     PINNED_CHATS_ENABLED?: boolean;
     PINNED_CHATS_LIMIT?: number;
+    CHAT_CREATED_VIA_SOURCES?: string[];
     MSAL_CLIENT_ID?: string;
     MSAL_AUTHORITY?: string;
     MASK_REASONING_TRACE_TEXT?: boolean;
@@ -435,6 +438,13 @@ export const env = (): Env => {
   const pinnedChatsLimit = import.meta.env.VITE_PINNED_CHATS_LIMIT
     ? Number(import.meta.env.VITE_PINNED_CHATS_LIMIT)
     : (window.PINNED_CHATS_LIMIT ?? 5);
+  const chatCreatedViaSources = import.meta.env.VITE_CHAT_CREATED_VIA_SOURCES
+    ? String(import.meta.env.VITE_CHAT_CREATED_VIA_SOURCES).split(",")
+    : Array.isArray(window.CHAT_CREATED_VIA_SOURCES)
+      ? window.CHAT_CREATED_VIA_SOURCES.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : undefined;
   const msalClientId =
     import.meta.env.VITE_MSAL_CLIENT_ID ?? window.MSAL_CLIENT_ID ?? null;
   const msalAuthority =
@@ -506,6 +516,7 @@ export const env = (): Env => {
     sidebarChatHistoryShowMetadata,
     pinnedChatsEnabled,
     pinnedChatsLimit,
+    chatCreatedViaSources,
     msalClientId,
     msalAuthority,
     maskReasoningTraceText,

@@ -1682,6 +1682,71 @@ msgstr "Auf Standard zurücksetzen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source"
+msgstr "Quelle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.hideValue"
+msgstr "Ausgeblendet: {selectedLabels}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.legacy"
+msgstr "Ältere Chats"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.mode.all"
+msgstr "Alle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.mode.hide"
+msgstr "Auswahl ausblenden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.mode.only"
+msgstr "Nur Auswahl"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.officeAddin"
+msgstr "Office-Add-in"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.onlyValue"
+msgstr "Nur: {selectedLabels}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.outlook"
+msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.sources"
+msgstr "Quellen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.teams"
+msgstr "Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.web"
+msgstr "Web-App"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.word"
+msgstr "Word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.status"
 msgstr "Status"
 

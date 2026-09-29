@@ -376,6 +376,7 @@ pub async fn token_usage_estimate(
             mcp_write_tools_enabled: true,
             disabled_mcp_server_ids: Vec::new(),
             disabled_mcp_tools: Vec::new(),
+            created_via: crate::models::chat::ChatCreatedVia::Web.as_str().to_owned(),
         };
         chat = Some(synthetic_chat);
     }

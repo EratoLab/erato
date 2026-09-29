@@ -1682,6 +1682,71 @@ msgstr "Réinitialiser les valeurs par défaut"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source"
+msgstr "Source"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.hideValue"
+msgstr "Masqués : {selectedLabels}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.legacy"
+msgstr "Anciens chats"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.mode.all"
+msgstr "Toutes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.mode.hide"
+msgstr "Masquer la sélection"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.mode.only"
+msgstr "Sélection uniquement"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.officeAddin"
+msgstr "Complément Office"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.onlyValue"
+msgstr "Uniquement : {selectedLabels}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.outlook"
+msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.sources"
+msgstr "Sources"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.teams"
+msgstr "Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.web"
+msgstr "Application web"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.source.word"
+msgstr "Word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.status"
 msgstr "Statut"
 

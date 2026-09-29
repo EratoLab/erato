@@ -102,6 +102,7 @@ export const handlers = [
           file_uploads: [],
           can_edit: true,
           delegated_runs_in_flight: false,
+          created_via: "web",
         },
       ],
       stats: {

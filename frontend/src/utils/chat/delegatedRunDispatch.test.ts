@@ -46,6 +46,7 @@ const dispatchUpdate = (
 const existingRun = (id: string): RecentChat => ({
   id,
   title_resolved: `Title of ${id}`,
+  created_via: "web",
   can_edit: true,
   file_uploads: [],
   last_message_at: "2026-08-19T12:00:00.000Z",

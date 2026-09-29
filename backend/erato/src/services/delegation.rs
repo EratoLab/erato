@@ -3832,6 +3832,7 @@ mod tests {
             mcp_write_tools_enabled: false,
             disabled_mcp_server_ids: Vec::new(),
             disabled_mcp_tools: Vec::new(),
+            created_via: "legacy".to_string(),
         }
     }
 

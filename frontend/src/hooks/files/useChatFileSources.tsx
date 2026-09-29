@@ -28,6 +28,7 @@ import {
 } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
+import { clientPlatformHeaders } from "@/lib/clientPlatform";
 import {
   useCreateChat,
   useLinkFile,
@@ -261,6 +262,7 @@ export function useChatFileSources({
                 ...(assistantId ? { assistant_id: assistantId } : {}),
                 ...(chatProviderId ? { chat_provider_id: chatProviderId } : {}),
               },
+              headers: clientPlatformHeaders(),
             });
             linkChatId = createChatResult.chat_id;
             setSilentChatId(linkChatId);

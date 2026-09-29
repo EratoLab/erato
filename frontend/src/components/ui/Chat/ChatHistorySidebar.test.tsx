@@ -51,6 +51,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
     collapsedMode: mockedCollapsedMode,
     logoPath: mockedLogoPath,
     logoDarkPath: null,
+    chatHistorySources: [],
   }),
 }));
 

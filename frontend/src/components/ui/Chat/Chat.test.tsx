@@ -248,6 +248,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 const chatDetail = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
   id: "origin-1",
+  created_via: "web",
   title_resolved: "Origin",
   is_pinned: false,
   can_edit: true,
@@ -261,6 +262,7 @@ const backgroundRun = (id: string) =>
   ({
     id,
     title_resolved: id,
+    created_via: "web",
     can_edit: false,
     file_uploads: [],
     is_pinned: false,

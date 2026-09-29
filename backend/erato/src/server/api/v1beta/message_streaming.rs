@@ -7,7 +7,7 @@ use crate::metrics::{
     report_chat_provider_time_to_last_token,
 };
 use crate::models::chat::{
-    ChatCreationStatus, get_chat_by_message_id, get_or_create_chat,
+    ChatCreatedVia, ChatCreationStatus, get_chat_by_message_id, get_or_create_chat,
     get_or_create_chat_by_previous_message_id,
 };
 use crate::models::message::{
@@ -2924,8 +2924,9 @@ impl LangfuseTraceEnrichment {
     }
 }
 
-fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationRequestContext {
-    let platform = headers
+/// The `X-Erato-Platform` value of a request, `"web"` when absent or malformed.
+pub(crate) fn platform_from_headers(headers: &HeaderMap) -> String {
+    headers
         .get(X_ERATO_PLATFORM_HEADER)
         .and_then(|value| match value.to_str() {
             Ok(value) => Some(value),
@@ -2941,10 +2942,12 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
-        .unwrap_or_else(|| DEFAULT_ERATO_PLATFORM.to_string());
+        .unwrap_or_else(|| DEFAULT_ERATO_PLATFORM.to_string())
+}
 
+fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationRequestContext {
     GenerationRequestContext {
-        platform: Some(platform),
+        platform: Some(platform_from_headers(headers)),
         registered_client_tools: crate::services::client_tools::registered_client_tools(headers),
         executor: crate::services::client_operations::ExecutorBinding::from_headers(headers),
     }
@@ -11649,6 +11652,7 @@ pub(crate) async fn start_message_submit(
                 None,
                 None,
                 None,
+                ChatCreatedVia::from_platform(platform),
             )
             .await
             .map_err(|e| {
@@ -11689,6 +11693,7 @@ pub(crate) async fn start_message_submit(
                 request.mcp_write_tools_enabled,
                 request.disabled_mcp_server_ids.clone(),
                 request.disabled_mcp_tools.clone(),
+                ChatCreatedVia::from_platform(platform),
             )
             .await
             .map_err(|e| {
@@ -12744,6 +12749,7 @@ pub(crate) async fn save_user_message_for_submit(
         None,
         None,
         None,
+        ChatCreatedVia::Legacy, // ignored when loading an existing chat
     )
     .await
     .wrap_err("Failed to get chat")?
@@ -14261,6 +14267,7 @@ pub async fn abort_message_stream(
         None,
         None,
         None,
+        ChatCreatedVia::Legacy, // ignored when loading an existing chat
     )
     .await
     .map_err(|e| {
@@ -14357,6 +14364,7 @@ pub async fn client_tool_result(
         None,
         None,
         None,
+        ChatCreatedVia::Legacy, // ignored when loading an existing chat
     )
     .await
     .map_err(|e| {
@@ -16081,6 +16089,7 @@ pub(crate) async fn run_continuation(
         None,
         None,
         None,
+        ChatCreatedVia::Legacy, // ignored when loading an existing chat
     )
     .await?
     .0;
@@ -17604,6 +17613,7 @@ pub async fn resume_message_sse(
         None,
         None,
         None,
+        ChatCreatedVia::Legacy, // ignored when loading an existing chat
     )
     .await
     .map_err(|e| {

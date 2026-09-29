@@ -3,6 +3,7 @@
 pub mod assistant_hub;
 pub mod assistants;
 pub mod auth;
+pub mod chat_created_via;
 pub mod chats;
 pub mod delegation;
 pub mod edit;

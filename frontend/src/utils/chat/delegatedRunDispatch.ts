@@ -105,6 +105,9 @@ export function seedDispatchedDelegatedRun(
       disabled_mcp_server_ids: [],
       disabled_mcp_tools: [],
       file_uploads: [],
+      // Also inherited from the origin chat; the runs list never filters by
+      // it, and the refetched listing carries the real value.
+      created_via: "legacy",
     };
     if (!current) {
       return {

@@ -193,7 +193,10 @@ vi.mock("@erato/frontend/library", async () => {
     }),
     useChatSharingFeature: () => ({ enabled: spies.sharingEnabled.current }),
     useFeatureConfig: () => ({
-      sidebar: { chatHistoryShowMetadata: spies.showMetadata.current },
+      sidebar: {
+        chatHistoryShowMetadata: spies.showMetadata.current,
+        chatHistorySources: [],
+      },
     }),
     useGroupedChatSessions: (sessions: { id: string }[]) =>
       sessions.length === 0

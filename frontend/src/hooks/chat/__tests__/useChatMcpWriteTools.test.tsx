@@ -21,6 +21,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 const chatDetail = (mcpWriteToolsEnabled: boolean): ChatDetail => ({
   id: "chat-1",
+  created_via: "web",
   title_resolved: "Chat",
   is_pinned: false,
   mcp_write_tools_enabled: mcpWriteToolsEnabled,

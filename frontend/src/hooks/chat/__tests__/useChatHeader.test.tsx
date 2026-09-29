@@ -29,6 +29,7 @@ const renderHeader = (header: ReactNode) =>
 
 const delegatedRun = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
   id: "run-1",
+  created_via: "web",
   title_resolved: "Summarize the numbers",
   is_pinned: false,
   mcp_write_tools_enabled: true,

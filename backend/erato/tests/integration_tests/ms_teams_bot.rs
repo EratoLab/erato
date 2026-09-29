@@ -2,7 +2,7 @@
 
 use crate::test_utils::{MockLlmConfig, setup_mock_llm_server};
 use crate::{MIGRATOR, test_app_state};
-use erato::db::entity::prelude::Messages;
+use erato::db::entity::prelude::{Chats, Messages};
 use erato::db::entity::{messages, users};
 use erato::models::user::{
     find_user_by_entra_object_id, get_or_create_user, record_entra_object_id,
@@ -91,6 +91,12 @@ async fn test_teams_conversation_continues_one_chat(pool: Pool<Postgres>) {
         .expect("conversation");
     let (chat_id, created) = host.ensure_chat(&session, &row, None).await.expect("chat");
     assert!(created);
+    let chat = Chats::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .expect("chat lookup")
+        .expect("chat exists");
+    assert_eq!(chat.created_via, "ms_teams_bot");
 
     let first = host
         .submit(&session, chat_id, "Hi".to_string(), Vec::new())

@@ -54,3 +54,4 @@
 0051_add_client_operation_attempts 2026-09-27T00:00:00Z Codex <codex@openai.com> # Logged durable client operation attempts
 0052_add_local_evidence_exports [0051_add_client_operation_attempts] 2026-09-28T10:00:00Z Daniel Person <daniel@erato.ai> # Native consent/export extension for durable operations
 0053_add_ms_teams_bot [0052_add_local_evidence_exports] 2026-09-28T14:00:00Z bdart <dfiebig@bdart.de> # Teams bot: user oid, conversation mapping, SSO exchange dedupe
+0054_add_chat_created_via [0053_add_ms_teams_bot] 2026-09-29T12:00:00Z bdart <dfiebig@bdart.de> # Record which surface created each chat

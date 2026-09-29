@@ -14,6 +14,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
 
+import type { ChatHistorySource } from "@/hooks/chat/store/chatHistoryFilterStore";
 import type { Messages } from "@lingui/core";
 
 describe("ChatHistoryFilterMenu", () => {
@@ -24,12 +25,17 @@ describe("ChatHistoryFilterMenu", () => {
     useChatHistoryFilterStore.getState().resetToDefaults();
   });
 
-  function renderMenu(assistantsEnabled = true, delegationEnabled = true) {
+  function renderMenu(
+    assistantsEnabled = true,
+    delegationEnabled = true,
+    availableSources: readonly ChatHistorySource[] = [],
+  ) {
     return render(
       <I18nProvider i18n={i18n}>
         <ChatHistoryFilterMenu
           assistantsEnabled={assistantsEnabled}
           delegationEnabled={delegationEnabled}
+          availableSources={availableSources}
         />
       </I18nProvider>,
     );
@@ -106,6 +112,75 @@ describe("ChatHistoryFilterMenu", () => {
       expect(state.delegatedFilter).toBe("shown");
       expect(state.typeFilter).toBe("assistant");
       flushCloseDelay();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("offers the source row only when an integration is available", () => {
+    renderMenu(true, true, ["web", "legacy"]);
+    openMenu();
+    expect(
+      screen.queryByTestId("chat-history-filter-menu-row-source"),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    renderMenu(true, true, ["web", "teams", "legacy"]);
+    openMenu();
+    expect(
+      screen.getByTestId("chat-history-filter-menu-row-source"),
+    ).toHaveTextContent("All");
+  });
+
+  it("picks a source mode and several sources without closing the menu", () => {
+    vi.useFakeTimers();
+    try {
+      renderMenu(true, true, ["web", "outlook", "teams", "legacy"]);
+      openMenu();
+      fireEvent.click(
+        screen.getByTestId("chat-history-filter-menu-row-source"),
+      );
+
+      const teams = screen.getByTestId(
+        "chat-history-filter-menu-option-source-teams",
+      );
+      expect(teams).toHaveAttribute("role", "menuitemcheckbox");
+      // Sources only matter once a mode narrows the list.
+      expect(teams).toHaveAttribute("aria-disabled", "true");
+      expect(
+        screen.queryByTestId("chat-history-filter-menu-option-source-word"),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(
+        screen.getByTestId("chat-history-filter-menu-option-source-hide"),
+      );
+      fireEvent.click(teams);
+      fireEvent.click(
+        screen.getByTestId("chat-history-filter-menu-option-source-legacy"),
+      );
+      flushCloseDelay();
+
+      expect(useChatHistoryFilterStore.getState().sourceFilter).toEqual({
+        mode: "hide",
+        sources: ["teams", "legacy"],
+      });
+      expect(teams).toHaveAttribute("aria-checked", "true");
+      expect(
+        screen.getByTestId("chat-history-filter-menu-submenu"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-history-filter-menu-row-source"),
+      ).toHaveTextContent("Hiding: Teams, Older chats");
+      expect(
+        screen.getByTestId("chat-history-filter-menu-active-indicator"),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("chat-history-filter-menu-reset"));
+      flushCloseDelay();
+      expect(useChatHistoryFilterStore.getState().sourceFilter).toEqual({
+        mode: "all",
+        sources: [],
+      });
     } finally {
       vi.useRealTimers();
     }
