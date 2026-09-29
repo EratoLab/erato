@@ -365,14 +365,16 @@ async function applyFullDocument(
         true,
         "verify",
       );
+      // The snapshot fingerprints the same package; the lazy package fingerprint is only a fallback.
+      const afterFingerprint = actual.fingerprint || after.fingerprint;
       if (!verifyWordPlanOutput(plan, snapshot, actual))
         return {
           status: "interrupted",
           before,
-          afterFingerprint: after.fingerprint,
+          afterFingerprint,
           diagnostic: diagnostic("verify", "output-mismatch"),
         };
-      return { status: "applied", before, afterFingerprint: after.fingerprint };
+      return { status: "applied", before, afterFingerprint };
     });
   } catch (error) {
     if (!imported && locks.length)
@@ -472,13 +474,14 @@ async function revertFullDocument(
         true,
         "verify",
       );
+      const afterFingerprint = restored.fingerprint || after.fingerprint;
       if (!sameWordBodyContent(expected, restored))
         return {
           status: "interrupted",
-          afterFingerprint: after.fingerprint,
+          afterFingerprint,
           diagnostic: diagnostic("restore", "output-mismatch"),
         };
-      return { status: "reverted", afterFingerprint: after.fingerprint };
+      return { status: "reverted", afterFingerprint };
     });
   } catch (error) {
     if (!imported && locks.length)

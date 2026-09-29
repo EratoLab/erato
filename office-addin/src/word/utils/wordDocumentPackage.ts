@@ -48,6 +48,9 @@ export const WORD_DOCUMENT_IMPORT_OPTIONS: Word.InsertFileOptions = {
   importCustomXmlParts: true,
 };
 
+/** Office's documented maximum and default; one slice covers every supported DOCX. */
+const WORD_FILE_SLICE_BYTES = 4 * 1024 * 1024;
+
 /** Office keeps only two file handles; close ours on every slice/size failure. */
 export async function readWordDocumentFile(): Promise<Uint8Array> {
   const document = globalThis.Office?.context?.document;
@@ -56,7 +59,7 @@ export async function readWordDocumentFile(): Promise<Uint8Array> {
   const file = await new Promise<Office.File>((resolve, reject) => {
     document.getFileAsync(
       Office.FileType.Compressed,
-      { sliceSize: 64 * 1024 },
+      { sliceSize: WORD_FILE_SLICE_BYTES },
       (result) => {
         if (result.status === Office.AsyncResultStatus.Succeeded)
           resolve(result.value);
@@ -76,6 +79,7 @@ export async function readWordDocumentFile(): Promise<Uint8Array> {
       file.size > MAX_WORD_DOCX_BYTES ||
       !Number.isSafeInteger(file.sliceCount) ||
       file.sliceCount <= 0 ||
+      // Bounded as for 64 KB slices, so a host that returns smaller slices is still accepted.
       file.sliceCount > Math.ceil(MAX_WORD_DOCX_BYTES / 65536)
     )
       throw new Error("Full-document editing supports DOCX files up to 4 MB.");
@@ -205,11 +209,18 @@ export async function captureWordDocumentPackage(): Promise<WordDocumentPackageS
   if (currentWordDocumentUrl() !== documentUrl)
     throw new Error("The open document changed during capture.");
   const ooxml = wordDocumentFileToOoxml(bytes);
+  let fingerprint: string | undefined;
+  // A full parse and canonicalization; computed only by callers that compare it.
   return {
     bytes,
     ooxml,
     documentUrl,
-    fingerprint: createWordXmlComparison(parseWordXml(ooxml)).fingerprint(),
+    get fingerprint() {
+      fingerprint ??= createWordXmlComparison(
+        parseWordXml(ooxml),
+      ).fingerprint();
+      return fingerprint;
+    },
   };
 }
 
