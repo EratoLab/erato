@@ -17,7 +17,14 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable lingui/no-unlocalized-strings */
 import { useQueryClient, skipToken } from "@tanstack/react-query";
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+} from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
 import { useChatHistory } from "@/hooks";
@@ -359,6 +366,23 @@ export function useChatMessaging(
   const [newlyCreatedChatId, setNewlyCreatedChatId] = useState<string | null>(
     null,
   );
+  const previousChatIdRef = useRef(chatId);
+  // Returning to a landing page starts a fresh composer. Detach before paint
+  // so the old stream cannot render or disable it, even if it is still running.
+  // Also cover a provider remount after navigation consumed the created id.
+  useLayoutEffect(() => {
+    const store = useMessagingStore.getState();
+    if (
+      !chatId &&
+      (previousChatIdRef.current !== null ||
+        (store.streamKeyAliases[NEW_CHAT_STREAM_KEY] &&
+          !store.newlyCreatedChatId))
+    ) {
+      store.releaseNewChatStream();
+      setNewlyCreatedChatId(null);
+    }
+    previousChatIdRef.current = chatId;
+  }, [chatId]);
   const isSubmittingForKey = useCallback(
     (key: string) => isSubmittingByKeyRef.current[key] === true,
     [],
