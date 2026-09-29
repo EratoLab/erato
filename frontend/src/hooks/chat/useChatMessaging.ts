@@ -2625,7 +2625,11 @@ export function useChatMessaging(
           // stands, and an approved plan item is dispatched later in the turn —
           // only a call this continuation makes itself, or refuses outright, gets
           // a part here.
-          if (kind === "delegated_task" || (kind === "task_plan" && approved)) {
+          if (
+            kind === "tool_call_limit" ||
+            kind === "delegated_task" ||
+            (kind === "task_plan" && approved)
+          ) {
             return [decisionPart];
           }
           const toolUsePart = {

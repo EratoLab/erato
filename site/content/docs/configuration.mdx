@@ -116,9 +116,11 @@ enabled = true
 
 {/* erato_toml_config_key: generation.max_tool_calls_per_message */}
 
-Maximum number of tool calls the backend may execute while generating one assistant message. Increase this value for tasks that require longer chains of tool use.
+Initial tool-call budget while generating one assistant message. Increase this value for tasks that require longer chains of tool use.
 
 The limit applies across all sequential and parallel tool calls made for the message.
+
+When another tool call would exceed the budget, the chat pauses for your decision. **Continue tool calls** doubles the total budget, retaining calls already used; repeated extensions double it again. **Generate answer now** generates a final answer using the results collected so far, with no tools available. **Stop** ends generation and keeps the partial response. Delegated task runs retain their own tool budgets and backstop behavior.
 
 **Default value:** `15`
 

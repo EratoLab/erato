@@ -3680,7 +3680,11 @@ export type ToolApprovalDecision =
  * Which surface a durable approval stop belongs to. `McpTool` is the
  * default so rows written before the other kinds existed keep parsing.
  */
-export type ToolApprovalKind = "mcp_tool" | "delegated_task" | "task_plan";
+export type ToolApprovalKind =
+  | "mcp_tool"
+  | "delegated_task"
+  | "task_plan"
+  | "tool_call_limit";
 
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 

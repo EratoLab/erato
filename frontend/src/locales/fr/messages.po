@@ -5131,6 +5131,31 @@ msgid "toolcall.output.title"
 msgstr "Sortie"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolCallLimit.answer"
+msgstr "Générer la réponse maintenant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolCallLimit.continue"
+msgstr "Continuer les appels aux outils"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolCallLimit.description"
+msgstr "Continuer avec un budget d’appels aux outils doublé, générer une réponse à partir des informations déjà recueillies ou arrêter cette réponse."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolCallLimit.stop"
+msgstr "Arrêter"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolCallLimit.title"
+msgstr "Limite d’appels aux outils atteinte"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.background"
 msgstr "Envoyé en arrière-plan"
