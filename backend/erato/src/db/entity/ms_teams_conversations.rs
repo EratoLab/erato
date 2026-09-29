@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "teams_conversations")]
+#[sea_orm(table_name = "ms_teams_conversations")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
@@ -14,7 +14,7 @@ pub struct Model {
     #[sea_orm(column_type = "Text")]
     pub service_url: String,
     #[sea_orm(column_type = "Text")]
-    pub teams_user_id: String,
+    pub ms_teams_user_id: String,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

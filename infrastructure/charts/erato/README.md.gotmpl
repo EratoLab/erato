@@ -366,7 +366,7 @@ chart.
 
 ### Microsoft Teams bot
 
-The Teams bot endpoint `/api/integrations/teams/messages` must bypass oauth2-proxy:
+The Teams bot endpoint `/api/integrations/ms_teams/messages` must bypass oauth2-proxy:
 oauth2-proxy strips client `Authorization` headers on every route, including routes in
 `skip_auth_regex`, and the backend verifies the Bot Connector token itself. Enable the
 direct route, which adds an exact-path rule to the Ingress or HTTPRoute that targets the
@@ -374,7 +374,7 @@ Erato application Service, and allow the ingress controller or Gateway pods thro
 backend NetworkPolicy:
 
 ```yaml
-teamsBot:
+msTeamsBot:
   directRoute:
     enabled: true
     ingressFrom:

@@ -138,14 +138,14 @@ tests:
       gatewayApi.enabled: true
       gatewayApi.parentRefs:
         - name: shared-gateway
-      teamsBot.directRoute.enabled: true
+      msTeamsBot.directRoute.enabled: true
     asserts:
       - equal:
           path: spec.rules[0].matches[0].path.type
           value: Exact
       - equal:
           path: spec.rules[0].matches[0].path.value
-          value: /api/integrations/teams/messages
+          value: /api/integrations/ms_teams/messages
       - equal:
           path: spec.rules[0].backendRefs[0].name
           value: RELEASE-NAME-erato-app

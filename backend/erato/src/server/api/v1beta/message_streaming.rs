@@ -2958,7 +2958,7 @@ pub(crate) fn is_known_platform(config: &crate::config::AppConfig, platform: &st
     if platform == DEFAULT_ERATO_PLATFORM {
         return true;
     }
-    if platform == crate::teams_bot::TEAMS_PLATFORM
+    if platform == crate::ms_teams_bot::TEAMS_PLATFORM
         && config.integrations.ms_office.teams.bot.enabled
     {
         return true;

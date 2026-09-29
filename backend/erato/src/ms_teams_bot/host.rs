@@ -7,8 +7,8 @@
 use super::activity::ConversationKind;
 use super::cards::{ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet};
 use super::graph::{GraphIdentity, SharedItem};
-use crate::db::entity::prelude::{Chats, Messages, TeamsConversations, TeamsTokenExchanges};
-use crate::db::entity::{teams_conversations, teams_token_exchanges, users};
+use crate::db::entity::prelude::{Chats, Messages, MsTeamsConversations, MsTeamsTokenExchanges};
+use crate::db::entity::{ms_teams_conversations, ms_teams_token_exchanges, users};
 use crate::models::message::{
     ContentPart, GenerationRequestContext, MessageSchema, ToolApprovalKind,
 };
@@ -197,26 +197,26 @@ impl Host {
         kind: ConversationKind,
         user_id: Uuid,
         service_url: &str,
-        teams_user_id: &str,
-    ) -> Result<teams_conversations::Model, Report> {
-        let row = teams_conversations::ActiveModel {
+        ms_teams_user_id: &str,
+    ) -> Result<ms_teams_conversations::Model, Report> {
+        let row = ms_teams_conversations::ActiveModel {
             conversation_id: ActiveValue::Set(conversation_id.to_string()),
             conversation_type: ActiveValue::Set(kind.as_str().to_string()),
             user_id: ActiveValue::Set(user_id),
             service_url: ActiveValue::Set(service_url.to_string()),
-            teams_user_id: ActiveValue::Set(teams_user_id.to_string()),
+            ms_teams_user_id: ActiveValue::Set(ms_teams_user_id.to_string()),
             ..Default::default()
         };
-        Ok(TeamsConversations::insert(row)
+        Ok(MsTeamsConversations::insert(row)
             .on_conflict(
                 OnConflict::columns([
-                    teams_conversations::Column::ConversationId,
-                    teams_conversations::Column::UserId,
+                    ms_teams_conversations::Column::ConversationId,
+                    ms_teams_conversations::Column::UserId,
                 ])
                 .update_columns([
-                    teams_conversations::Column::ServiceUrl,
-                    teams_conversations::Column::TeamsUserId,
-                    teams_conversations::Column::ConversationType,
+                    ms_teams_conversations::Column::ServiceUrl,
+                    ms_teams_conversations::Column::MsTeamsUserId,
+                    ms_teams_conversations::Column::ConversationType,
                 ])
                 .to_owned(),
             )
@@ -226,15 +226,15 @@ impl Host {
 
     pub async fn set_current_chat(
         &self,
-        row: &teams_conversations::Model,
+        row: &ms_teams_conversations::Model,
         chat_id: Option<Uuid>,
     ) -> Result<(), Report> {
-        let update = teams_conversations::ActiveModel {
+        let update = ms_teams_conversations::ActiveModel {
             id: ActiveValue::Unchanged(row.id),
             current_chat_id: ActiveValue::Set(chat_id),
             ..Default::default()
         };
-        TeamsConversations::update(update)
+        MsTeamsConversations::update(update)
             .exec(&self.app_state.db)
             .await?;
         Ok(())
@@ -245,7 +245,7 @@ impl Host {
     pub async fn ensure_chat(
         &self,
         session: &Session,
-        row: &teams_conversations::Model,
+        row: &ms_teams_conversations::Model,
         assistant_id: Option<Uuid>,
     ) -> Result<(Uuid, bool), Report> {
         // Fast path without a lock: the mapping already points at a usable chat.
@@ -262,7 +262,7 @@ impl Host {
         // messages right after `/new`) end up in one chat: the second waits
         // here, then re-reads the winner's chat instead of creating its own.
         let txn = self.app_state.db.begin().await?;
-        let locked = TeamsConversations::find_by_id(row.id)
+        let locked = MsTeamsConversations::find_by_id(row.id)
             .lock_exclusive()
             .one(&txn)
             .await?
@@ -303,7 +303,7 @@ impl Host {
         .await?;
         // The chat service commits on its own connection; the mapping update
         // joins the locking transaction, which releases the row on commit.
-        TeamsConversations::update(teams_conversations::ActiveModel {
+        MsTeamsConversations::update(ms_teams_conversations::ActiveModel {
             id: ActiveValue::Unchanged(locked.id),
             current_chat_id: ActiveValue::Set(Some(chat.id)),
             ..Default::default()
@@ -444,9 +444,9 @@ impl Host {
     pub async fn conversations_for_chat(
         &self,
         chat_id: Uuid,
-    ) -> Result<Vec<teams_conversations::Model>, Report> {
-        Ok(TeamsConversations::find()
-            .filter(teams_conversations::Column::CurrentChatId.eq(chat_id))
+    ) -> Result<Vec<ms_teams_conversations::Model>, Report> {
+        Ok(MsTeamsConversations::find()
+            .filter(ms_teams_conversations::Column::CurrentChatId.eq(chat_id))
             .all(&self.app_state.db)
             .await?)
     }
@@ -498,17 +498,17 @@ impl Host {
     /// already processed the same exchange.
     pub async fn claim_token_exchange(&self, exchange_id: &str) -> Result<bool, Report> {
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(1);
-        TeamsTokenExchanges::delete_many()
-            .filter(teams_token_exchanges::Column::CreatedAt.lt(cutoff))
+        MsTeamsTokenExchanges::delete_many()
+            .filter(ms_teams_token_exchanges::Column::CreatedAt.lt(cutoff))
             .exec(&self.app_state.db)
             .await?;
-        let row = teams_token_exchanges::ActiveModel {
+        let row = ms_teams_token_exchanges::ActiveModel {
             exchange_id: ActiveValue::Set(exchange_id.to_string()),
             ..Default::default()
         };
-        let inserted = TeamsTokenExchanges::insert(row)
+        let inserted = MsTeamsTokenExchanges::insert(row)
             .on_conflict(
-                OnConflict::column(teams_token_exchanges::Column::ExchangeId)
+                OnConflict::column(ms_teams_token_exchanges::Column::ExchangeId)
                     .do_nothing()
                     .to_owned(),
             )

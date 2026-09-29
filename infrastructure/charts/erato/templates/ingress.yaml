@@ -27,9 +27,9 @@ spec:
           {{- with .Values.ingress.extraPaths }}
           {{- tpl (. | toYaml | nindent 10) $ }}
           {{- end }}
-          {{- if and .Values.teamsBot.directRoute.enabled .Values.oauth2Proxy.enabled }}
+          {{- if and .Values.msTeamsBot.directRoute.enabled .Values.oauth2Proxy.enabled }}
           # Teams bot webhook: authenticated by the backend, not oauth2-proxy
-          - path: /api/integrations/teams/messages
+          - path: /api/integrations/ms_teams/messages
             pathType: Exact
             backend:
               service:

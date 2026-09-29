@@ -114,11 +114,11 @@ tests:
 
   - it: should route the Teams bot webhook directly to the backend
     set:
-      teamsBot.directRoute.enabled: true
+      msTeamsBot.directRoute.enabled: true
     asserts:
       - equal:
           path: spec.rules[0].http.paths[0].path
-          value: /api/integrations/teams/messages
+          value: /api/integrations/ms_teams/messages
       - equal:
           path: spec.rules[0].http.paths[0].pathType
           value: Exact
@@ -134,7 +134,7 @@ tests:
 
   - it: should not add the Teams route when oauth2-proxy is disabled
     set:
-      teamsBot.directRoute.enabled: true
+      msTeamsBot.directRoute.enabled: true
       oauth2Proxy.enabled: false
     asserts:
       - equal:

@@ -49,14 +49,14 @@ impl UserTokenClient {
     pub async fn get_token(
         &self,
         connector: &Connector,
-        teams_user_id: &str,
+        ms_teams_user_id: &str,
         code: Option<&str>,
     ) -> Result<Option<String>, Report> {
         let mut url = self.url("/api/usertoken/GetToken")?;
         {
             let mut query = url.query_pairs_mut();
             query
-                .append_pair("userId", teams_user_id)
+                .append_pair("userId", ms_teams_user_id)
                 .append_pair("connectionName", &self.connection_name)
                 .append_pair("channelId", TEAMS_CHANNEL);
             if let Some(code) = code {
@@ -83,12 +83,12 @@ impl UserTokenClient {
     pub async fn exchange(
         &self,
         connector: &Connector,
-        teams_user_id: &str,
+        ms_teams_user_id: &str,
         sso_token: &str,
     ) -> Result<Option<String>, Report> {
         let mut url = self.url("/api/usertoken/exchange")?;
         url.query_pairs_mut()
-            .append_pair("userId", teams_user_id)
+            .append_pair("userId", ms_teams_user_id)
             .append_pair("connectionName", &self.connection_name)
             .append_pair("channelId", TEAMS_CHANNEL);
         let response = connector

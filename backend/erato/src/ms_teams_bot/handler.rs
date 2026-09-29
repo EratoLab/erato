@@ -704,7 +704,7 @@ fn file_name(file: &IncomingFile) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::teams_bot::cards::{ApprovalKind, PendingApprovalItem, PendingApprovalSet};
+    use crate::ms_teams_bot::cards::{ApprovalKind, PendingApprovalItem, PendingApprovalSet};
 
     fn completion(text: &str) -> Completion {
         Completion {

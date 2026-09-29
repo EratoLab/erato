@@ -44,7 +44,7 @@ use user_token::UserTokenClient;
 /// The `X-Erato-Platform` value recorded on messages sent through Teams.
 pub const TEAMS_PLATFORM: &str = "teams";
 /// Path of the messaging endpoint configured on the Azure Bot resource.
-pub const MESSAGES_ROUTE: &str = "/api/integrations/teams/messages";
+pub const MESSAGES_ROUTE: &str = "/api/integrations/ms_teams/messages";
 const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const IDENTITY_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 
@@ -122,7 +122,7 @@ impl TeamsBot {
     }
 }
 
-/// `POST /api/integrations/teams/messages`: the Azure Bot messaging endpoint.
+/// `POST /api/integrations/ms_teams/messages`: the Azure Bot messaging endpoint.
 ///
 /// Outside oauth2-proxy and the user middleware; authenticated by the Bot
 /// Connector's signed JWT and restricted to the deployment's tenant.
@@ -131,7 +131,7 @@ pub async fn messages_route(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let Some(bot) = app_state.teams_bot.clone() else {
+    let Some(bot) = app_state.ms_teams_bot.clone() else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let Ok(activity) = serde_json::from_slice::<Activity>(&body) else {
@@ -168,7 +168,7 @@ pub async fn messages_route(
 /// Called when a delivered background task result was answered: chats that
 /// live in Teams get the answer pushed there. Fire and forget.
 pub fn notify_task_reaction(app_state: &AppState, chat_id: Uuid, message_id: Uuid) {
-    let Some(bot) = app_state.teams_bot.clone() else {
+    let Some(bot) = app_state.ms_teams_bot.clone() else {
         return;
     };
     let host = Host::new(app_state.clone());

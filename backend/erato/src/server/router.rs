@@ -906,8 +906,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             get(teams_app_package),
         )
         .route(
-            crate::teams_bot::MESSAGES_ROUTE,
-            axum::routing::post(crate::teams_bot::messages_route),
+            crate::ms_teams_bot::MESSAGES_ROUTE,
+            axum::routing::post(crate::ms_teams_bot::messages_route),
         )
         .nest("/api/v1beta", crate::server::api::v1beta::router(app_state));
 

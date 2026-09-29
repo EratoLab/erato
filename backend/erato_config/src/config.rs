@@ -5413,7 +5413,7 @@ impl MsOfficeTeamsAppConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct TeamsBotConfig {
-    // Whether the Teams bot endpoint `/api/integrations/teams/messages` is enabled.
+    // Whether the Teams bot endpoint `/api/integrations/ms_teams/messages` is enabled.
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,

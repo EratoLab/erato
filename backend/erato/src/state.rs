@@ -103,7 +103,7 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub local_delegation_signer: Option<Arc<crate::services::local_delegation::signing::Signer>>,
     /// Teams bot runtime; `None` unless `integrations.ms_office.teams.bot.enabled`.
-    pub teams_bot: Option<Arc<crate::teams_bot::TeamsBot>>,
+    pub ms_teams_bot: Option<Arc<crate::ms_teams_bot::TeamsBot>>,
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub config: AppConfig,
@@ -309,8 +309,8 @@ impl AppState {
             &config.file_type_detection,
         )?;
 
-        let teams_bot =
-            crate::teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams.bot)?;
+        let ms_teams_bot =
+            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams.bot)?;
 
         Ok(Self {
             db,
@@ -318,7 +318,7 @@ impl AppState {
                 local_delegation_signer.as_ref(),
             ),
             local_delegation_signer,
-            teams_bot,
+            ms_teams_bot,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
             config,

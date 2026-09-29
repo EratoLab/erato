@@ -26,7 +26,7 @@ mod api;
 mod config;
 mod db;
 mod llm;
-mod teams_bot;
+mod ms_teams_bot;
 mod test_utils;
 
 // Using a (possibly brittle?) life-before-main method to set the DATABASE_URL before any tests run.
@@ -197,7 +197,7 @@ async fn test_app_state_internal(
             local_delegation_signer.as_ref(),
         ),
         local_delegation_signer,
-        teams_bot: None,
+        ms_teams_bot: None,
         db: db.clone(),
         default_file_storage_provider: None,
         file_storage_providers,

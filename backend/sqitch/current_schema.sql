@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ggWVPYiqIBzmlGDznkgkb0lIsGgkW539faqLudbWV0tgXNprY3HXMMBn33cuBRq
+\restrict M0oDyk2P5Y7jybWh6Yh9NFNdKoQHRsiR3MhKdDIOpwpHLhy87W8pg9acuPQMxZ5
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -471,6 +471,34 @@ CREATE TABLE public.message_feedbacks (
 
 
 --
+-- Name: ms_teams_conversations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ms_teams_conversations (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    conversation_id text NOT NULL,
+    conversation_type text NOT NULL,
+    user_id uuid NOT NULL,
+    current_chat_id uuid,
+    service_url text NOT NULL,
+    ms_teams_user_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ms_teams_conversations_conversation_type_check CHECK ((conversation_type = ANY (ARRAY['personal'::text, 'groupChat'::text, 'channel'::text])))
+);
+
+
+--
+-- Name: ms_teams_token_exchanges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ms_teams_token_exchanges (
+    exchange_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: runtime_configuration; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -513,34 +541,6 @@ CREATE TABLE public.share_links (
     enabled boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: teams_conversations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.teams_conversations (
-    id uuid DEFAULT public.uuidv7() NOT NULL,
-    conversation_id text NOT NULL,
-    conversation_type text NOT NULL,
-    user_id uuid NOT NULL,
-    current_chat_id uuid,
-    service_url text NOT NULL,
-    teams_user_id text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT teams_conversations_conversation_type_check CHECK ((conversation_type = ANY (ARRAY['personal'::text, 'groupChat'::text, 'channel'::text])))
-);
-
-
---
--- Name: teams_token_exchanges; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.teams_token_exchanges (
-    exchange_id text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -881,6 +881,30 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: ms_teams_conversations ms_teams_conversations_conversation_id_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_conversations
+    ADD CONSTRAINT ms_teams_conversations_conversation_id_user_id_key UNIQUE (conversation_id, user_id);
+
+
+--
+-- Name: ms_teams_conversations ms_teams_conversations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_conversations
+    ADD CONSTRAINT ms_teams_conversations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ms_teams_token_exchanges ms_teams_token_exchanges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_token_exchanges
+    ADD CONSTRAINT ms_teams_token_exchanges_pkey PRIMARY KEY (exchange_id);
+
+
+--
 -- Name: runtime_configuration runtime_configuration_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -918,30 +942,6 @@ ALTER TABLE ONLY public.share_links
 
 ALTER TABLE ONLY public.share_links
     ADD CONSTRAINT share_links_unique_resource UNIQUE (resource_type, resource_id);
-
-
---
--- Name: teams_conversations teams_conversations_conversation_id_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.teams_conversations
-    ADD CONSTRAINT teams_conversations_conversation_id_user_id_key UNIQUE (conversation_id, user_id);
-
-
---
--- Name: teams_conversations teams_conversations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.teams_conversations
-    ADD CONSTRAINT teams_conversations_pkey PRIMARY KEY (id);
-
-
---
--- Name: teams_token_exchanges teams_token_exchanges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.teams_token_exchanges
-    ADD CONSTRAINT teams_token_exchanges_pkey PRIMARY KEY (exchange_id);
 
 
 --
@@ -1310,17 +1310,17 @@ CREATE UNIQUE INDEX idx_users_issuer_subject ON public.users USING btree (issuer
 
 
 --
+-- Name: ms_teams_conversations_current_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ms_teams_conversations_current_chat ON public.ms_teams_conversations USING btree (current_chat_id) WHERE (current_chat_id IS NOT NULL);
+
+
+--
 -- Name: runtime_configuration_source_service_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX runtime_configuration_source_service_idx ON public.runtime_configuration USING btree (source_service);
-
-
---
--- Name: teams_conversations_current_chat; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX teams_conversations_current_chat ON public.teams_conversations USING btree (current_chat_id) WHERE (current_chat_id IS NOT NULL);
 
 
 --
@@ -1492,10 +1492,10 @@ CREATE TRIGGER on_update_set_updated_columns_share_links BEFORE UPDATE ON public
 
 
 --
--- Name: teams_conversations on_update_set_updated_columns_teams_conversations; Type: TRIGGER; Schema: public; Owner: -
+-- Name: ms_teams_conversations on_update_set_updated_columns_teams_conversations; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER on_update_set_updated_columns_teams_conversations BEFORE UPDATE ON public.teams_conversations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+CREATE TRIGGER on_update_set_updated_columns_teams_conversations BEFORE UPDATE ON public.ms_teams_conversations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
 
 
 --
@@ -1753,19 +1753,19 @@ ALTER TABLE ONLY public.messages
 
 
 --
--- Name: teams_conversations teams_conversations_current_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ms_teams_conversations ms_teams_conversations_current_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.teams_conversations
-    ADD CONSTRAINT teams_conversations_current_chat_id_fkey FOREIGN KEY (current_chat_id) REFERENCES public.chats(id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.ms_teams_conversations
+    ADD CONSTRAINT ms_teams_conversations_current_chat_id_fkey FOREIGN KEY (current_chat_id) REFERENCES public.chats(id) ON DELETE SET NULL;
 
 
 --
--- Name: teams_conversations teams_conversations_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ms_teams_conversations ms_teams_conversations_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.teams_conversations
-    ADD CONSTRAINT teams_conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.ms_teams_conversations
+    ADD CONSTRAINT ms_teams_conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1828,5 +1828,5 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ggWVPYiqIBzmlGDznkgkb0lIsGgkW539faqLudbWV0tgXNprY3HXMMBn33cuBRq
+\unrestrict M0oDyk2P5Y7jybWh6Yh9NFNdKoQHRsiR3MhKdDIOpwpHLhy87W8pg9acuPQMxZ5
 

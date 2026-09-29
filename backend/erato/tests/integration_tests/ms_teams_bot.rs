@@ -7,9 +7,9 @@ use erato::db::entity::{messages, users};
 use erato::models::user::{
     find_user_by_entra_object_id, get_or_create_user, record_entra_object_id,
 };
-use erato::teams_bot::activity::ConversationKind;
-use erato::teams_bot::graph::GraphIdentity;
-use erato::teams_bot::host::{Completion, GenerationUpdate, Host};
+use erato::ms_teams_bot::activity::ConversationKind;
+use erato::ms_teams_bot::graph::GraphIdentity;
+use erato::ms_teams_bot::host::{Completion, GenerationUpdate, Host};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -286,7 +286,7 @@ async fn test_approval_continuation_completes_in_teams(pool: Pool<Postgres>) {
     use crate::test_utils::{
         build_openai_tool_calls_streaming_response, setup_mock_llm_server_with_mocks,
     };
-    use erato::teams_bot::cards::{ApprovalChoice, ApprovalKind};
+    use erato::ms_teams_bot::cards::{ApprovalChoice, ApprovalKind};
     use mocktail::MockSet;
 
     let mut mocks = MockSet::new();

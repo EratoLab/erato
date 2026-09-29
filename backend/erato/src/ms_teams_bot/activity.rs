@@ -77,7 +77,7 @@ pub struct Attachment {
     pub name: Option<String>,
 }
 
-/// Where a conversation happens. Stored as `teams_conversations.conversation_type`.
+/// Where a conversation happens. Stored as `ms_teams_conversations.conversation_type`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationKind {
     Personal,
