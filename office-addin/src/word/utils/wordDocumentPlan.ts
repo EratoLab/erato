@@ -1,3 +1,7 @@
+import {
+  isBuiltInHeadingStyle,
+  isDefaultTableStyle,
+} from "./wordBuiltInStyles";
 import { wordPlanError } from "./wordPlanDiagnostics";
 import { resolveWordSource, wordSourceDetails } from "./wordRichContent";
 import { parseWordBlock, wordBlockChildEntries } from "./wordRichPlan";
@@ -306,6 +310,52 @@ export type WordPlanIssue =
   | "protected-content"
   | "section-order"
   | "invalid";
+/**
+ * Drops heading and table styleRefs that only restate the style the host applies
+ * anyway. Pure and deterministic: review restore and apply re-derive the same plan
+ * from the stored, unnormalized tool arguments.
+ */
+export function normalizeWordDocumentPlan(
+  plan: WordDocumentPlan,
+  snapshot?: WordAuthoringSnapshot,
+): WordDocumentPlan {
+  if (!snapshot) return plan;
+  const redundant = (block: WordPlanBlock): boolean => {
+    const styleRef = block.styleRef;
+    if (!styleRef) return false;
+    if (block.type === "heading" && block.level !== undefined) {
+      const level = block.level;
+      // Mirrors ensureHeading: the first matching paragraph style, or Heading{level} when none exists.
+      const builtIn = snapshot.styles.find(
+        (style) =>
+          style.type === "paragraph" &&
+          isBuiltInHeadingStyle(style.id, style.name, level),
+      );
+      return builtIn
+        ? builtIn.id === styleRef
+        : styleRef.toLowerCase() === `heading${level}`;
+    }
+    if (block.type === "table") {
+      const style = snapshot.styles.find((s) => s.id === styleRef);
+      return style
+        ? style.type === "table" && isDefaultTableStyle(style.id, style.name)
+        : styleRef.toLowerCase() === "tablenormal";
+    }
+    return false;
+  };
+  const normalized = JSON.parse(JSON.stringify(plan)) as WordDocumentPlan;
+  const visit = (blocks: WordPlanBlock[]) => {
+    for (const block of blocks) {
+      if (redundant(block)) delete block.styleRef;
+      visit(wordBlockChildEntries(block, "").map((child) => child.block));
+    }
+  };
+  for (const entry of normalized.entries)
+    if (entry.kind !== "keep") visit(entry.blocks);
+  for (const story of normalized.stories ?? []) visit(story.blocks ?? []);
+  return normalized;
+}
+
 export function validateWordDocumentPlan(
   plan: WordDocumentPlan,
   snapshot?: WordAuthoringSnapshot,
@@ -458,6 +508,18 @@ export function validateWordDocumentPlan(
         );
       outputIds.add(block.id);
       if (body) bodyAnchors.set(block.id, block);
+      if (block.type === "heading" && block.styleRef)
+        return reject(
+          `${blockPath}/styleRef`,
+          "heading-style",
+          "Headings take no styleRef; the host applies the built-in heading style for the level. Remove styleRef.",
+        );
+      if (block.type === "table" && block.styleRef)
+        return reject(
+          `${blockPath}/styleRef`,
+          "table-style-placement",
+          "Tables take no styleRef; put a table style ID from the read tool in format.styleRef, or omit it for the default table style.",
+        );
       if (
         block.styleRef &&
         !snapshot.styles.some(

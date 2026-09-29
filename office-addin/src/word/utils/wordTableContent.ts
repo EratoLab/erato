@@ -10,7 +10,7 @@ import {
   wordElement,
   WORDPROCESSING_NS,
 } from "./wordBlockFormatting";
-import { wordPlanError } from "./wordPlanDiagnostics";
+import { wordPlanError, wordPointerSegment } from "./wordPlanDiagnostics";
 
 import type { WordBorders } from "./wordBlockFormatting";
 import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
@@ -75,6 +75,8 @@ export interface WordTableBlock<T> {
   id: string;
   text: string;
   sourceRef?: string;
+  /** Parsed so normalization can drop Word's default table style; validation rejects any other value. */
+  styleRef?: string;
   columns?: number[];
   format?: WordTableFormatting;
   rows: WordTableRow<T>[];
@@ -305,36 +307,90 @@ export function parseWordTableBlock<T extends { text: string }>(
 ): WordTableBlock<T> | null {
   const fail = (at: string, code: string, message: string) =>
     wordPlanError(issues, at, code, message);
-  if (
-    !object(value) ||
-    !only(value, [
-      "type",
-      "id",
-      "text",
-      "sourceRef",
-      "columns",
-      "format",
-      "rows",
-    ]) ||
-    value.type !== "table" ||
-    !identifier(value.id) ||
-    (value.text !== undefined && !safeText(value.text, 256 * 1024)) ||
-    (value.sourceRef !== undefined && !identifier(value.sourceRef)) ||
-    (value.columns !== undefined &&
-      (!Array.isArray(value.columns) ||
-        value.columns.length === 0 ||
-        value.columns.length > MAX_COLUMNS ||
-        !value.columns.every((w) => finite(w, 1, 3168)) ||
-        value.columns.reduce((total: number, w: number) => total + w, 0) >
-          3168)) ||
-    !Array.isArray(value.rows) ||
-    value.rows.length === 0 ||
-    value.rows.length > MAX_ROWS
-  )
+  if (!object(value) || value.type !== "table")
     return fail(
       path,
       "table-shape",
-      "Invalid table fields, columns or rows; use the table contract and limits.",
+      "Invalid table block; use the table contract.",
+    );
+  const unknownKey = Object.keys(value).find(
+    (key) =>
+      ![
+        "type",
+        "id",
+        "text",
+        "sourceRef",
+        "styleRef",
+        "columns",
+        "format",
+        "rows",
+      ].includes(key),
+  );
+  if (unknownKey !== undefined)
+    return fail(
+      `${path}/${wordPointerSegment(unknownKey.slice(0, 40))}`,
+      "table-key",
+      `Unsupported table field "${unknownKey.slice(0, 40)}"; tables accept id, sourceRef, columns, format and rows.`,
+    );
+  if (!identifier(value.id))
+    return fail(
+      `${path}/id`,
+      "table-id",
+      "Tables need an identifier of 1–100 letters, digits, underscores or hyphens.",
+    );
+  if (value.text !== undefined && !safeText(value.text, 256 * 1024))
+    return fail(`${path}/text`, "table-text", "Invalid table text.");
+  if (value.sourceRef !== undefined && !identifier(value.sourceRef))
+    return fail(
+      `${path}/sourceRef`,
+      "table-source",
+      "sourceRef must be a captured table reference.",
+    );
+  if (
+    value.styleRef !== undefined &&
+    (typeof value.styleRef !== "string" || value.styleRef.length > 200)
+  )
+    return fail(
+      `${path}/styleRef`,
+      "style-shape",
+      "styleRef must be a string of at most 200 characters.",
+    );
+  if (value.columns !== undefined) {
+    if (
+      !Array.isArray(value.columns) ||
+      value.columns.length === 0 ||
+      value.columns.length > MAX_COLUMNS
+    )
+      return fail(
+        `${path}/columns`,
+        "table-columns",
+        `columns must list 1–${MAX_COLUMNS} column widths.`,
+      );
+    const invalidWidth = value.columns.findIndex((w) => !finite(w, 1, 3168));
+    if (invalidWidth >= 0)
+      return fail(
+        `${path}/columns/${invalidWidth}`,
+        "table-column-width",
+        "Each column width must be a number from 1 to 3168.",
+      );
+    if (value.columns.reduce((total: number, w: number) => total + w, 0) > 3168)
+      return fail(
+        `${path}/columns`,
+        "table-column-total",
+        "Column widths must add up to at most 3168.",
+      );
+  }
+  if (!Array.isArray(value.rows) || value.rows.length === 0)
+    return fail(
+      `${path}/rows`,
+      "table-rows",
+      "Tables require a non-empty rows array.",
+    );
+  if (value.rows.length > MAX_ROWS)
+    return fail(
+      `${path}/rows`,
+      "table-rows",
+      `Tables cannot have more than ${MAX_ROWS} rows.`,
     );
   const format =
     value.format === undefined
@@ -472,6 +528,7 @@ export function parseWordTableBlock<T extends { text: string }>(
       )
       .join("\n"),
     ...(value.sourceRef ? { sourceRef: value.sourceRef } : {}),
+    ...(value.styleRef !== undefined ? { styleRef: value.styleRef } : {}),
     ...(value.columns ? { columns: value.columns } : {}),
     ...(format ? { format } : {}),
     rows,

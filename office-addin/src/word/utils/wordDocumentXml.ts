@@ -5,6 +5,7 @@ import {
   readWordParagraphFormatting,
   readWordRunFormatting,
 } from "./wordBlockFormatting";
+import { isBuiltInHeadingStyle } from "./wordBuiltInStyles";
 import {
   MAX_DOCUMENT_BLOCKS,
   MAX_SOURCE_BYTES,
@@ -415,8 +416,7 @@ function ensureHeading(doc: Document, level: number): string {
   const existing = styleDefinitions.find(
     (s) =>
       attr(s, "type") === "paragraph" &&
-      (attr(s, "styleId").toLowerCase() === `heading${level}` ||
-        attr(child(s, "name")).toLowerCase() === `heading ${level}`),
+      isBuiltInHeadingStyle(attr(s, "styleId"), attr(child(s, "name")), level),
   );
   if (existing) return attr(existing, "styleId");
   const existingIds = new Set(

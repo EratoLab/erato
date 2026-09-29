@@ -33,6 +33,7 @@ import {
   isWordDocumentBackup,
 } from "../utils/wordDocumentPackage";
 import {
+  normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
 } from "../utils/wordDocumentPlan";
@@ -75,7 +76,10 @@ export function WordDocumentPlanCard({
       ? host.capturesByAssistantMessageId.get(messageId)
       : undefined) ?? review.capture;
   const snapshot = capture?.authoring;
-  const plan = useMemo(() => parseWordDocumentPlan(content), [content]);
+  const plan = useMemo(() => {
+    const parsed = parseWordDocumentPlan(content);
+    return parsed && normalizeWordDocumentPlan(parsed, snapshot);
+  }, [content, snapshot]);
   const gate = resolveWordWriteGate({
     capture,
     expectedIdentity: artifact?.itemIdentity,

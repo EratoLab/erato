@@ -13,6 +13,7 @@ import {
   wordDocumentOoxmlToFile,
 } from "./wordDocumentPackage";
 import {
+  normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
 } from "./wordDocumentPlan";
@@ -123,7 +124,8 @@ export async function applyWordDocumentPlan(
   messageId?: string,
   onBeforeWrite?: (before: string) => void,
 ): Promise<WordDocumentApplyResult> {
-  const plan = parseWordDocumentPlan(content);
+  const parsed = parseWordDocumentPlan(content);
+  const plan = parsed && normalizeWordDocumentPlan(parsed, snapshot);
   const host = wordWriteHost();
   const invalid = !host
     ? "host-unavailable"

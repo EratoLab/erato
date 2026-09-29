@@ -12,6 +12,7 @@ import {
   readWordTableContent,
 } from "../wordTableContent";
 
+import type { WordPlanDiagnostics } from "../wordPlanDiagnostics";
 import type { WordTableBlock } from "../wordTableContent";
 
 interface TextBlock {
@@ -402,5 +403,55 @@ describe("typed Word table authoring", () => {
     expect(
       compileWordTableBlock(d, replacement, compile(d)).textContent,
     ).toContain("Replacement");
+  });
+});
+
+describe("table diagnostics", () => {
+  const issuesFor = (value: unknown) => {
+    const issues: WordPlanDiagnostics = [];
+    expect(parseWordTableBlock(value, parseBlock, issues, "/t")).toBeNull();
+    return issues.map(({ path, code }) => ({ path, code }));
+  };
+  const row = { cells: [{ blocks: [] }, { blocks: [] }] };
+
+  it("names the offending field, including escaped pointer segments", () => {
+    expect(issuesFor(raw([row], { caption: "x" }))).toEqual([
+      { path: "/t/caption", code: "table-key" },
+    ]);
+    expect(issuesFor(raw([row], { "a/b~c": 1 }))).toEqual([
+      { path: "/t/a~1b~0c", code: "table-key" },
+    ]);
+  });
+
+  it("separates identifier, column and row limits", () => {
+    expect(issuesFor(raw([row], { id: "has space" }))).toEqual([
+      { path: "/t/id", code: "table-id" },
+    ]);
+    expect(issuesFor(raw([row], { columns: [] }))).toEqual([
+      { path: "/t/columns", code: "table-columns" },
+    ]);
+    expect(issuesFor(raw([row], { columns: [100, 0] }))).toEqual([
+      { path: "/t/columns/1", code: "table-column-width" },
+    ]);
+    expect(issuesFor(raw([row], { columns: [3000, 300] }))).toEqual([
+      { path: "/t/columns", code: "table-column-total" },
+    ]);
+    expect(issuesFor(raw([]))).toEqual([
+      { path: "/t/rows", code: "table-rows" },
+    ]);
+    expect(issuesFor(raw(Array.from({ length: 1001 }, () => row)))).toEqual([
+      { path: "/t/rows", code: "table-rows" },
+    ]);
+  });
+
+  it("parses a styleRef so plan validation can judge it against the document styles", () => {
+    const table = parseWordTableBlock(
+      raw([row], { styleRef: "TableNormal", columns: [150, 300] }),
+      parseBlock,
+    );
+    expect(table?.styleRef).toBe("TableNormal");
+    expect(issuesFor(raw([row], { styleRef: 7 }))).toEqual([
+      { path: "/t/styleRef", code: "style-shape" },
+    ]);
   });
 });

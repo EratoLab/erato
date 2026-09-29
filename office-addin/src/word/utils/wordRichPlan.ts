@@ -9,7 +9,7 @@ import {
   isWordNativeStructureEdit,
 } from "./wordInlineStructures";
 import { isWordImageSpec, isWordDrawingSpec } from "./wordMediaContent";
-import { wordPlanError } from "./wordPlanDiagnostics";
+import { wordPlanError, wordPointerSegment } from "./wordPlanDiagnostics";
 import { parseWordTableBlock } from "./wordTableContent";
 
 import type { WordPlanBlock, WordPlanRun } from "./wordDocumentPlan";
@@ -169,24 +169,31 @@ export function parseWordBlock(
       ),
     } as WordPlanBlock;
   }
-  if (
-    !keys(value, [
-      "id",
-      "type",
-      "text",
-      "runs",
-      "level",
-      "styleRef",
-      "list",
-      "ordered",
-      "format",
-    ]) ||
-    !text(value.text) ||
-    /[\r\n]/.test(value.text)
-  )
+  const unknownKey = Object.keys(value).find(
+    (key) =>
+      ![
+        "id",
+        "type",
+        "text",
+        "runs",
+        "level",
+        "styleRef",
+        "list",
+        "ordered",
+        "format",
+      ].includes(key),
+  );
+  if (unknownKey !== undefined)
+    return fail(
+      "block-key",
+      `Unsupported field "${unknownKey.slice(0, 40)}" on a text block; use only the documented fields.`,
+      `${path}/${wordPointerSegment(unknownKey.slice(0, 40))}`,
+    );
+  if (!text(value.text) || /[\r\n]/.test(value.text))
     return fail(
       "paragraph-shape",
-      "Text blocks require text without newlines or control characters and only the documented fields.",
+      "Text blocks require text without newlines or control characters.",
+      `${path}/text`,
     );
   if (
     value.runs !== undefined &&
@@ -220,40 +227,56 @@ export function parseWordBlock(
       "styleRef must be a string of at most 200 characters.",
       `${path}/styleRef`,
     );
+  const present = (fields: string[]) =>
+    fields.find((field) => value[field] !== undefined);
   if (value.type === "paragraph") {
-    if (
-      value.level !== undefined ||
-      value.list !== undefined ||
-      value.ordered !== undefined
-    )
+    const extra = present(["level", "list", "ordered"]);
+    if (extra)
       return fail(
         "paragraph-fields",
-        "Paragraphs do not accept level, list or ordered.",
+        `Paragraphs do not accept ${extra}; use a heading or list-item block instead.`,
+        `${path}/${extra}`,
       );
   } else if (value.type === "heading") {
     if (
       !Number.isInteger(value.level) ||
       Number(value.level) < 1 ||
-      Number(value.level) > 9 ||
-      value.list !== undefined ||
-      value.ordered !== undefined ||
-      value.styleRef !== undefined
+      Number(value.level) > 9
     )
       return fail(
-        "heading-fields",
-        "Headings require level 1–9; styleRef, list and ordered are not supported.",
+        "heading-level",
+        "Headings require an integer level from 1 to 9.",
+        `${path}/level`,
+      );
+    const extra = present(["list", "ordered"]);
+    if (extra)
+      return fail(
+        "heading-list",
+        `Headings do not accept ${extra}; use list-item blocks for lists.`,
+        `${path}/${extra}`,
       );
   } else if (value.type === "list-item") {
+    if (!id(value.list))
+      return fail(
+        "list-id",
+        "List items require a list identifier of 1–100 letters, digits, underscores or hyphens.",
+        `${path}/list`,
+      );
+    if (typeof value.ordered !== "boolean")
+      return fail(
+        "list-ordered",
+        "List items require ordered as a boolean.",
+        `${path}/ordered`,
+      );
     if (
-      !id(value.list) ||
-      typeof value.ordered !== "boolean" ||
       !Number.isInteger(value.level) ||
       Number(value.level) < 0 ||
       Number(value.level) > 8
     )
       return fail(
-        "list-fields",
-        "List items require a list identifier, ordered boolean and level 0–8.",
+        "list-level",
+        "List items require an integer level from 0 to 8.",
+        `${path}/level`,
       );
   } else
     return fail(
