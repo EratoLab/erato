@@ -593,6 +593,7 @@ export type {
   MessageControlsContext,
 } from "@/types/message-controls";
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
+export type { SendMessagePreparation } from "@/hooks/chat/sendMessagePreparation";
 export type { AssistantMention } from "@/utils/chat/assistantMentions";
 export type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export type {

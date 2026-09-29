@@ -23,6 +23,8 @@ export interface StreamingState {
   currentMessageId: string | null;
   content: ContentPart[];
   createdAt: string | null; // Timestamp for message ordering
+  /** Host preparation still running before the request is sent. */
+  pendingLabel?: string | null;
 }
 
 // Add user messages to the store

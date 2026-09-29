@@ -3795,4 +3795,199 @@ describe("useChatMessaging", () => {
       });
     });
   });
+
+  describe("prepared sends", () => {
+    const submitBodies = () =>
+      mockCreateSSEConnection.mock.calls
+        .filter((call: unknown[]) =>
+          (call[0] as string).includes("/submitstream"),
+        )
+        .map((call: unknown[]) =>
+          JSON.parse((call[1] as { body: string }).body),
+        );
+    const deferred = <T>() => {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((settle) => {
+        resolve = settle;
+      });
+      return { promise, resolve };
+    };
+    const hasUserText = (
+      messages: Record<string, { role: string; content: unknown[] }>,
+      text: string,
+    ) =>
+      Object.values(messages).some(
+        (message) =>
+          message.role === "user" &&
+          JSON.stringify(message.content).includes(text),
+      );
+
+    const sendPrepared = (
+      result: { current: ReturnType<typeof useChatMessaging> },
+      text: string,
+      prepare: Parameters<
+        ReturnType<typeof useChatMessaging>["sendMessage"]
+      >[11],
+    ) =>
+      result.current.sendMessage(
+        text,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        prepare,
+      );
+
+    it("shows the message before the preparation finishes and sends its action facet", async () => {
+      mockCreateSSEConnection.mockClear();
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      const pending = deferred<{
+        actionFacet?: { id: string; args?: Record<string, string> };
+      } | null>();
+      let sent: Promise<string | undefined> | undefined;
+      await act(async () => {
+        sent = sendPrepared(result, "Rewrite the report", {
+          label: "Preparing document…",
+          run: () => pending.promise,
+        });
+        await Promise.resolve();
+      });
+
+      expect(hasUserText(result.current.messages, "Rewrite the report")).toBe(
+        true,
+      );
+      expect(result.current.pendingLabel).toBe("Preparing document…");
+      expect(result.current.isPendingResponse).toBe(true);
+      expect(submitBodies()).toHaveLength(0);
+
+      await act(async () => {
+        pending.resolve({
+          actionFacet: { id: "word_document_authoring", args: { a: "1" } },
+        });
+        await sent;
+      });
+
+      expect(submitBodies()).toHaveLength(1);
+      expect(submitBodies()[0].action_facet).toEqual({
+        id: "word_document_authoring",
+        args: { a: "1" },
+      });
+      expect(result.current.pendingLabel).toBeNull();
+    });
+
+    it("removes the message and reports the drop when the preparation resolves null", async () => {
+      mockCreateSSEConnection.mockClear();
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      const onAbandoned = vi.fn();
+      await act(async () => {
+        await sendPrepared(result, "Changed document", {
+          run: () => Promise.resolve(null),
+          onAbandoned,
+        });
+      });
+
+      expect(onAbandoned).toHaveBeenCalledTimes(1);
+      expect(submitBodies()).toHaveLength(0);
+      expect(hasUserText(result.current.messages, "Changed document")).toBe(
+        false,
+      );
+      expect(result.current.isPendingResponse).toBe(false);
+    });
+
+    it("treats a failed preparation as a drop", async () => {
+      mockCreateSSEConnection.mockClear();
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      const onAbandoned = vi.fn();
+      await act(async () => {
+        await sendPrepared(result, "Boom", {
+          run: () => Promise.reject(new Error("capture failed")),
+          onAbandoned,
+        });
+      });
+
+      expect(onAbandoned).toHaveBeenCalledTimes(1);
+      expect(submitBodies()).toHaveLength(0);
+      expect(result.current.isPendingResponse).toBe(false);
+    });
+
+    it("stops a running preparation without asking the server to abort", async () => {
+      mockCreateSSEConnection.mockClear();
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response(null));
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      const onAbandoned = vi.fn();
+      let observed: AbortSignal | undefined;
+      const pending = deferred<{ actionFacet?: undefined } | null>();
+      let sent: Promise<string | undefined> | undefined;
+      await act(async () => {
+        sent = sendPrepared(result, "Stop me", {
+          run: (signal) => {
+            observed = signal;
+            return pending.promise;
+          },
+          onAbandoned,
+        });
+        await Promise.resolve();
+      });
+
+      act(() => {
+        result.current.cancelMessage();
+      });
+      expect(observed?.aborted).toBe(true);
+
+      // A host that ignores the signal still gets its send dropped.
+      await act(async () => {
+        pending.resolve({});
+        await sent;
+      });
+
+      expect(onAbandoned).toHaveBeenCalledTimes(1);
+      expect(submitBodies()).toHaveLength(0);
+      expect(hasUserText(result.current.messages, "Stop me")).toBe(false);
+      expect(
+        fetchSpy.mock.calls.some((call) =>
+          String(call[0]).includes("abortstream"),
+        ),
+      ).toBe(false);
+      fetchSpy.mockRestore();
+    });
+
+    it("reports a prepared send refused as a duplicate", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      const pending = deferred<null>();
+      await act(async () => {
+        void sendPrepared(result, "First", { run: () => pending.promise });
+        await Promise.resolve();
+      });
+      const onAbandoned = vi.fn();
+      const run = vi.fn();
+      await act(async () => {
+        await sendPrepared(result, "Second", { run, onAbandoned });
+      });
+
+      expect(run).not.toHaveBeenCalled();
+      expect(onAbandoned).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        pending.resolve(null);
+        await Promise.resolve();
+      });
+    });
+  });
 });

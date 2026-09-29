@@ -81,6 +81,7 @@ import {
 import { useExplicitNavigation } from "./useExplicitNavigation";
 import { useReactToTaskResult } from "./useReactToTaskResult";
 
+import type { SendMessagePreparation } from "./sendMessagePreparation";
 import type {
   ActionFacetRequest,
   ContentPart,
@@ -334,6 +335,7 @@ export function useChatMessaging(
   const isSubmittingByKeyRef = useRef<Record<string, boolean>>({});
   const recentlyCompletedByKeyRef = useRef<Record<string, number>>({});
   const resumeAttemptsByKeyRef = useRef<Record<string, number>>({});
+  const preparationAbortByKeyRef = useRef<Record<string, AbortController>>({});
   const lastResumeAttemptedChatIdRef = useRef<string | null>(null);
   /**
    * Stream key whose refused submit is now watching a server-started turn.
@@ -779,6 +781,12 @@ export function useChatMessaging(
 
   // For backward compatibility with tests
   const cancelMessage = useCallback(() => {
+    const preparation = preparationAbortByKeyRef.current[streamKey];
+    if (preparation) {
+      // Nothing has reached the server yet; sendMessage rolls the send back.
+      preparation.abort();
+      return;
+    }
     const currentStreaming = useMessagingStore
       .getState()
       .getStreaming(streamKey);
@@ -1741,12 +1749,14 @@ export function useChatMessaging(
       mcpWriteToolsEnabled?: boolean,
       disabledMcpServerIds?: string[],
       disabledMcpTools?: string[],
+      prepare?: SendMessagePreparation,
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
         logger.warn(
           `[DEBUG_STREAMING] Preventing duplicate message submission for streamKey: ${streamKey}`,
         );
+        prepare?.onAbandoned?.();
         return undefined;
       }
       logger.log(
@@ -1798,6 +1808,52 @@ export function useChatMessaging(
       logger.log(
         "[DEBUG_STREAMING] sendMessage: isSubmittingRef.current set to true.",
       );
+
+      let effectiveActionFacet = actionFacet;
+      if (prepare) {
+        const controller = new AbortController();
+        preparationAbortByKeyRef.current[streamKey] = controller;
+        resetStreaming(streamKey);
+        useMessagingStore.getState().setStreaming(
+          {
+            isStreaming: false,
+            currentMessageId: `temp-assistant-${Date.now()}`,
+            content: [],
+            createdAt: new Date().toISOString(),
+            isFinalizing: false,
+            pendingLabel: prepare.label ?? null,
+          },
+          streamKey,
+        );
+        let prepared: Awaited<ReturnType<SendMessagePreparation["run"]>> = null;
+        try {
+          prepared = await prepare.run(controller.signal);
+        } catch (error) {
+          logger.warn(
+            "[DEBUG_STREAMING] sendMessage: preparation failed; dropping the send.",
+            error,
+          );
+        } finally {
+          if (preparationAbortByKeyRef.current[streamKey] === controller) {
+            delete preparationAbortByKeyRef.current[streamKey];
+          }
+        }
+        if (!prepared || controller.signal.aborted) {
+          // Nothing reached the server, so no refetch can restore these rows.
+          removeUserMessages([userMessage.id], streamKey);
+          resetStreaming(streamKey);
+          if (silentChatId) {
+            setAwaitingFirstStreamChunkForNewChat(false);
+            setNewlyCreatedChatId(null);
+            setNewlyCreatedChatIdInStore(null);
+          }
+          setSubmittingForKey(streamKey, false);
+          prepare.onAbandoned?.();
+          return undefined;
+        }
+        effectiveActionFacet = prepared.actionFacet;
+      }
+
       // A brand-new chat gets its seed on chat_created, once it has an id.
       if (streamKey !== NEW_CHAT_STREAM_KEY) {
         useGenerationStatusStore
@@ -1889,7 +1945,7 @@ export function useChatMessaging(
           modelId,
           assistantId,
           selectedFacetIds,
-          actionFacet,
+          effectiveActionFacet,
           mentionedAssistants?.map((mention) => mention.id),
           delegationRunMode,
           effectiveChatIdForRequest ? undefined : mcpWriteToolsEnabled,
@@ -2156,6 +2212,7 @@ export function useChatMessaging(
     [
       silentChatId,
       addUserMessage,
+      removeUserMessages,
       resetStreaming,
       findMostRecentAssistantMessageId,
       chatId,
@@ -2896,6 +2953,7 @@ export function useChatMessaging(
     messages,
     isLoading: chatMessagesQuery.isLoading,
     isStreaming: streaming.isStreaming,
+    pendingLabel: streaming.pendingLabel ?? null,
     isPendingResponse, // True immediately when send is clicked (for input disabling)
     isFinalizing: streaming.isFinalizing,
     streamingContent: streaming.content,
