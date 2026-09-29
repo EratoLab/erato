@@ -14,6 +14,8 @@ pub use super::mcp_server_oauth_clients::Entity as McpServerOauthClients;
 pub use super::mcp_server_oauth_credentials::Entity as McpServerOauthCredentials;
 pub use super::message_feedbacks::Entity as MessageFeedbacks;
 pub use super::messages::Entity as Messages;
+pub use super::ms_teams_conversations::Entity as MsTeamsConversations;
+pub use super::ms_teams_token_exchanges::Entity as MsTeamsTokenExchanges;
 pub use super::runtime_configuration::Entity as RuntimeConfiguration;
 pub use super::share_grants::Entity as ShareGrants;
 pub use super::share_links::Entity as ShareLinks;

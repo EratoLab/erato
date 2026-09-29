@@ -25,6 +25,16 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
+    {{- if and .Values.msTeamsBot.directRoute.enabled .Values.oauth2Proxy.enabled }}
+    # Teams bot webhook: authenticated by the backend, not oauth2-proxy
+    - matches:
+        - path:
+            type: Exact
+            value: /api/integrations/ms_teams/messages
+      backendRefs:
+        - name: {{ printf "%s-erato-app" .Release.Name }}
+          port: 3130
+    {{- end }}
     - matches:
         - path:
             type: PathPrefix

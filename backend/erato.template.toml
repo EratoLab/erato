@@ -223,6 +223,25 @@ chat_provider_ids = ["test-token-limit"]
 # color_icon = "assets/color-icon-192x192.png"
 # outline_icon = "assets/outline-icon-32x32.png"
 # small_color_icon = "assets/color-icon-32x32.png"
+#
+# # Conversational Teams bot (personal chats, group chats, channels). Point the
+# # Azure Bot messaging endpoint at <origin>/api/integrations/ms_teams/messages and
+# # route that exact path to the backend around oauth2-proxy (Helm:
+# # `msTeamsBot.directRoute`); oauth2-proxy would strip the Authorization header,
+# # and the backend checks the Bot Connector's signed token itself.
+# [integrations.ms_office.teams.bot]
+# enabled = true
+# app_id = "<bot Entra app ID>"
+# app_password = "<bot client secret>"
+# tenant_id = "<tenant ID>"
+# oauth_connection_name = "graph"   # Azure Bot OAuth connection with the web login's Graph scopes
+# token_service_url = "https://europe.token.botframework.com"
+# public_base_url = "https://erato.example.com"
+# # Optional: silent SSO; must equal the OAuth connection's token exchange URL.
+# # sso_app_id = "<bot Entra app ID>"
+# # sso_resource = "api://botid-<bot Entra app ID>"
+# # assistant_id = "<assistant UUID new Teams chats are bound to>"
+# # context_message_count = 20
 
 # Frontend configuration options for embedded scenarios
 # [frontend]

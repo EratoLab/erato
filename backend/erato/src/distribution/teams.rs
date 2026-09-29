@@ -104,6 +104,7 @@ impl TeamsAppDistribution {
         document["webApplicationInfo"]["resource"] = json!(format!("api://{client_id}"));
         document["webApplicationInfo"]["nestedAppAuthInfo"][0]["redirectUri"] =
             json!(format!("brk-multihub://{authority}"));
+        apply_bot(&mut document, app, host);
 
         validate_manifest(&document, app)?;
         serde_json::to_vec_pretty(&document).wrap_err("failed to serialize rendered Teams manifest")
@@ -183,6 +184,36 @@ fn release_version() -> String {
     )
 }
 
+/// Scopes the bot is installable in: personal chats, group chats, and teams
+/// (channels, where it answers @mentions).
+const BOT_SCOPES: [&str; 3] = ["personal", "team", "groupChat"];
+
+/// Add the conversational bot to the same Teams app as the tab, when enabled.
+fn apply_bot(document: &mut Value, app: &MsOfficeTeamsAppConfig, host: &str) {
+    let bot = &app.bot;
+    let Some(bot_app_id) = bot.app_id.as_deref().filter(|_| bot.enabled) else {
+        return;
+    };
+    document["bots"] = json!([{
+        "botId": bot_app_id.trim(),
+        "scopes": BOT_SCOPES,
+        "supportsFiles": true,
+        "isNotificationOnly": false,
+        "commandLists": [{
+            "scopes": BOT_SCOPES,
+            "commands": [{"title": "/new", "description": "Start a new Erato chat"}],
+        }],
+    }]);
+    // The sign-in button opens the Bot Framework token service.
+    document["validDomains"] = json!([host, "token.botframework.com"]);
+    if let (Some(sso_app_id), Some(sso_resource)) =
+        (bot.sso_app_id.as_deref(), bot.sso_resource.as_deref())
+    {
+        document["webApplicationInfo"]["id"] = json!(sso_app_id.trim());
+        document["webApplicationInfo"]["resource"] = json!(sso_resource.trim());
+    }
+}
+
 fn validate_manifest(document: &Value, app: &MsOfficeTeamsAppConfig) -> Result<()> {
     ensure!(
         document["manifestVersion"] == "1.29",
@@ -206,6 +237,12 @@ fn validate_manifest(document: &Value, app: &MsOfficeTeamsAppConfig) -> Result<(
         document["staticTabs"][0]["scopes"][0] == "personal",
         "Teams manifest must contain the personal tab"
     );
+    if app.bot.enabled {
+        ensure!(
+            document["bots"][0]["botId"].as_str() == app.bot.app_id.as_deref().map(str::trim),
+            "rendered Teams bot ID does not match configuration"
+        );
+    }
     for key in ["color", "outline", "color32x32"] {
         ensure!(
             document["icons"][key].as_str().is_some(),
@@ -226,4 +263,70 @@ fn validate_manifest(document: &Value, app: &MsOfficeTeamsAppConfig) -> Result<(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEMPLATE: &str = include_str!("../../../../office-addin/manifests/manifest-teams.json");
+
+    fn distribution() -> TeamsAppDistribution {
+        TeamsAppDistribution {
+            bundle_root: PathBuf::from("."),
+            template: serde_json::from_str(TEMPLATE).expect("template parses"),
+        }
+    }
+
+    fn addin() -> MsOfficeAddinConfig {
+        MsOfficeAddinConfig {
+            msal_client_id: Some("06d98d69-523a-4c2e-893d-44bd98226b31".to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn render(app: &MsOfficeTeamsAppConfig) -> Value {
+        let bytes = distribution()
+            .render_manifest("https://erato.example.com", app, &addin())
+            .expect("manifest renders");
+        serde_json::from_slice(&bytes).expect("manifest is JSON")
+    }
+
+    #[test]
+    fn renders_the_tab_without_a_bot_by_default() {
+        let manifest = render(&MsOfficeTeamsAppConfig::default());
+        assert!(manifest["bots"].is_null());
+        assert_eq!(manifest["validDomains"], json!(["erato.example.com"]));
+    }
+
+    #[test]
+    fn adds_the_bot_and_sso_override_when_enabled() {
+        let mut app = MsOfficeTeamsAppConfig::default();
+        app.bot.enabled = true;
+        app.bot.app_id = Some("11111111-2222-3333-4444-555555555555".to_string());
+        app.bot.sso_app_id = Some("11111111-2222-3333-4444-555555555555".to_string());
+        app.bot.sso_resource = Some("api://botid-11111111-2222-3333-4444-555555555555".to_string());
+        let manifest = render(&app);
+        assert_eq!(
+            manifest["bots"][0]["botId"],
+            "11111111-2222-3333-4444-555555555555"
+        );
+        assert_eq!(
+            manifest["bots"][0]["scopes"],
+            json!(["personal", "team", "groupChat"])
+        );
+        assert_eq!(
+            manifest["validDomains"],
+            json!(["erato.example.com", "token.botframework.com"])
+        );
+        assert_eq!(
+            manifest["webApplicationInfo"]["resource"],
+            "api://botid-11111111-2222-3333-4444-555555555555"
+        );
+        // The tab's nested app auth stays as it was.
+        assert_eq!(
+            manifest["webApplicationInfo"]["nestedAppAuthInfo"][0]["redirectUri"],
+            "brk-multihub://erato.example.com"
+        );
+    }
 }

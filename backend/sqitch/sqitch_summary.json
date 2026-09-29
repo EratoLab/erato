@@ -51,7 +51,8 @@
     "deploy/0049_add_external_id_ews_id_to_file_uploads.sql",
     "deploy/0050_add_outlook_provenance_to_file_uploads.sql",
     "deploy/0051_add_client_operation_attempts.sql",
-    "deploy/0052_add_local_evidence_exports.sql"
+    "deploy/0052_add_local_evidence_exports.sql",
+    "deploy/0053_add_ms_teams_bot.sql"
   ],
-  "latest_change": "39049f8b3fa9c1060385b6941d18d0f099d68690"
+  "latest_change": "3630d8241c40d4b7a094da4dcc0f56f23ee03cca"
 }

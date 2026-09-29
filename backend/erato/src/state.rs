@@ -102,6 +102,8 @@ impl GlobalPolicyEngine {
 pub struct AppState {
     pub db: DatabaseConnection,
     pub local_delegation_signer: Option<Arc<crate::services::local_delegation::signing::Signer>>,
+    /// Teams bot runtime; `None` unless `integrations.ms_office.teams.bot.enabled`.
+    pub ms_teams_bot: Option<Arc<crate::ms_teams_bot::TeamsBot>>,
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub config: AppConfig,
@@ -307,12 +309,16 @@ impl AppState {
             &config.file_type_detection,
         )?;
 
+        let ms_teams_bot =
+            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams.bot)?;
+
         Ok(Self {
             db,
             client_operations: crate::services::local_delegation::tool::registry(
                 local_delegation_signer.as_ref(),
             ),
             local_delegation_signer,
+            ms_teams_bot,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
             config,

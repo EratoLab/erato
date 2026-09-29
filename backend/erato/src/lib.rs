@@ -33,6 +33,7 @@ pub mod server;
 pub use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 pub mod services;
 pub use erato_config::startup_log;
+pub mod ms_teams_bot;
 pub mod state;
 pub mod telemetry;
 pub mod translation_po;

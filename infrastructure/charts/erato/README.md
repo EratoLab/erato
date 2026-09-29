@@ -362,6 +362,25 @@ required `ReferenceGrant` in the Gateway namespace. Gateway listeners, including
 termination and their certificates, are configured on the Gateway rather than in this
 chart.
 
+### Microsoft Teams bot
+
+The Teams bot endpoint `/api/integrations/ms_teams/messages` must bypass oauth2-proxy:
+oauth2-proxy strips client `Authorization` headers on every route, including routes in
+`skip_auth_regex`, and the backend verifies the Bot Connector token itself. Enable the
+direct route, which adds an exact-path rule to the Ingress or HTTPRoute that targets the
+Erato application Service, and allow the ingress controller or Gateway pods through the
+backend NetworkPolicy:
+
+```yaml
+msTeamsBot:
+  directRoute:
+    enabled: true
+    ingressFrom:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+```
+
 ## Requirements
 
 | Repository | Name | Version |
@@ -463,9 +482,11 @@ chart.
 | ingress.host | string | `"app.erato.internal"` | Default host for the ingress record |
 | ingress.tls.enabled | bool | `false` | Enable TLS configuration for the host defined at ingress.host |
 | ingress.tls.secretName | string | `""` | Secret containing TLS certificate |
+| msTeamsBot.directRoute.enabled | bool | `false` | Route the Microsoft Teams bot endpoint (`/api/integrations/ms_teams/messages`, exact path) straight to the backend Service instead of through oauth2-proxy, which strips the Bot Connector's `Authorization` header. The backend verifies that token itself. Only relevant while oauth2-proxy is enabled; enable together with `integrations.ms_office.teams.bot` in the Erato configuration. |
+| msTeamsBot.directRoute.ingressFrom | list | `[]` | NetworkPolicy peers (for example the ingress controller or Gateway pods) allowed to reach the backend port for the direct route. Required while `backend.networkPolicy.enabled` is true; keep it narrow, because these peers reach every backend route on that port. Example: ingressFrom:   - namespaceSelector:       matchLabels:         kubernetes.io/metadata.name: ingress-nginx |
 | nameOverride | string | `""` | String to partially override common.names.fullname |
 | namespaceOverride | string | `""` | String to fully override the namespace for all chart resources |
-| oauth2Proxy.config | string | `"# Example configuration - replace with your own\n# http_address = \"0.0.0.0:4180\"\n# upstreams = [\"http://localhost:8080\"]\n# email_domains = [\"*\"]\n# cookie_secret = \"\"\n# cookie_secure = true\n# skip_auth_regex = [\"^/health\", \"^/metrics\"]\n"` | Full configuration file content for oauth2-proxy |
+| oauth2Proxy.config | string | `"# Example configuration - replace with your own\n# http_address = \"0.0.0.0:4180\"\n# upstreams = [\"http://localhost:8080\"]\n# email_domains = [\"*\"]\n# cookie_secret = \"\"\n# cookie_secure = true\n# skip_auth_regex = [\"^/health\", \"^/metrics\"]\n# The Teams bot endpoint cannot be exempted here (oauth2-proxy strips the\n# Authorization header on every route); use `msTeamsBot.directRoute` instead.\n"` | Full configuration file content for oauth2-proxy |
 | oauth2Proxy.deploymentAnnotations | object | `{}` | Annotations to add to the oauth2-proxy deployment |
 | oauth2Proxy.deploymentStrategy | object | `{}` | Optional deployment strategy for oauth2-proxy (e.g., RollingUpdate/Recreate). Example: deploymentStrategy:   type: RollingUpdate   rollingUpdate:     maxUnavailable: 25%     maxSurge: 25% |
 | oauth2Proxy.enabled | bool | `true` | Enable OAuth2 Proxy for authentication |

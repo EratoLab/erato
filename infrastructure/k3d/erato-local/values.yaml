@@ -25,6 +25,16 @@ erato:
   commonAnnotations:
     reloader.stakater.com/auto: "true"
 
+  # The Teams bot webhook bypasses oauth2-proxy (which strips its Authorization
+  # header); ingress-nginx reaches the backend directly for that exact path.
+  msTeamsBot:
+    directRoute:
+      enabled: true
+      ingressFrom:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+
   ingress:
     enabled: true
     host: app.erato.internal

@@ -62,6 +62,18 @@ gatewayApi:
   #           value: /custom-path
   extraRules: []
 
+msTeamsBot:
+  directRoute:
+    # -- Route the Microsoft Teams bot endpoint (`/api/integrations/ms_teams/messages`, exact path) straight to the backend Service instead of through oauth2-proxy, which strips the Bot Connector's `Authorization` header. The backend verifies that token itself. Only relevant while oauth2-proxy is enabled; enable together with `integrations.ms_office.teams.bot` in the Erato configuration.
+    enabled: false
+    # -- NetworkPolicy peers (for example the ingress controller or Gateway pods) allowed to reach the backend port for the direct route. Required while `backend.networkPolicy.enabled` is true; keep it narrow, because these peers reach every backend route on that port.
+    # Example:
+    # ingressFrom:
+    #   - namespaceSelector:
+    #       matchLabels:
+    #         kubernetes.io/metadata.name: ingress-nginx
+    ingressFrom: []
+
 oauth2Proxy:
   # -- Enable OAuth2 Proxy for authentication
   enabled: true
@@ -97,6 +109,8 @@ oauth2Proxy:
     # cookie_secret = ""
     # cookie_secure = true
     # skip_auth_regex = ["^/health", "^/metrics"]
+    # The Teams bot endpoint cannot be exempted here (oauth2-proxy strips the
+    # Authorization header on every route); use `msTeamsBot.directRoute` instead.
   upstreams:
     # -- Automatically inject OAUTH2_PROXY_UPSTREAMS. Disable this to manage upstreams through oauth2Proxy.config or external environment variables.
     enabled: true

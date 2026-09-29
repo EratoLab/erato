@@ -32,8 +32,8 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
     parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
 };
 use crate::services::background_tasks::{
-    BackgroundTaskManager, StreamingEvent, StreamingTask, Takeover, TaskCleanupGuard, TaskOutcome,
-    ToolCallStatus as BgToolCallStatus,
+    BackgroundTaskManager, ClientStreamGuard, StreamingEvent, StreamingTask, Takeover,
+    TaskCleanupGuard, TaskOutcome, ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
@@ -1768,6 +1768,27 @@ pub struct ContinueStreamRequest {
     decision: Option<ToolApprovalDecision>,
 }
 
+impl ContinueStreamRequest {
+    /// The decisions an approval card submitted, one per approval id. The
+    /// set is validated like any other continuation (exact, no duplicates).
+    pub(crate) fn with_decisions(
+        message_id: Uuid,
+        decisions: Vec<(String, ToolApprovalDecision)>,
+    ) -> Self {
+        Self {
+            message_id,
+            decisions: decisions
+                .into_iter()
+                .map(|(approval_id, decision)| ApprovalDecisionItem {
+                    approval_id,
+                    decision,
+                })
+                .collect(),
+            decision: None,
+        }
+    }
+}
+
 #[derive(serde::Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct AbortStreamRequest {
@@ -2641,8 +2662,9 @@ pub(crate) async fn settle_tail_deliveries(
 /// share: a cleanup guard around the run, the failure frame, the closing stream
 /// end, and the terminal outcome on the chat's generation lease. The edit,
 /// regenerate and continue paths run their own tail instead — each owns its
-/// request's response channel and forwards a failure over that, so neither the
-/// broadcast failure frame nor a stream end applies to them.
+/// request's response channel and forwards a failure over that. The continue
+/// tail also broadcasts the failure frame and stream end, because the Teams
+/// bot and resumestream follow a continuation through the broadcast.
 ///
 /// A failure is captured even where the caller absorbs it: delegation turns a
 /// failed child into a `failed` envelope the parent recovers from in prose, and
@@ -2771,6 +2793,34 @@ impl MessageSubmitRequest {
     /// `user_message` is never read past the user-row save, and a delivery does
     /// not do that save: its row is the `task_result` part, written before this
     /// request exists.
+    /// A plain user turn from an in-process surface such as the Teams bot,
+    /// appended to `chat_id` after `previous_message_id` (the chat's active
+    /// thread tip; `None` only for the first message of a fresh chat, which is
+    /// also what triggers title generation).
+    pub(crate) fn for_integration(
+        chat_id: Uuid,
+        previous_message_id: Option<Uuid>,
+        user_message: String,
+        input_files_ids: Vec<Uuid>,
+    ) -> Self {
+        Self {
+            previous_message_id,
+            existing_chat_id: Some(chat_id),
+            user_message,
+            input_files_ids,
+            chat_provider_id: None,
+            assistant_id: None,
+            title_by_user_provided: None,
+            mcp_write_tools_enabled: None,
+            disabled_mcp_server_ids: None,
+            disabled_mcp_tools: None,
+            selected_facet_ids: Vec::new(),
+            action_facet: None,
+            mentioned_assistant_ids: None,
+            delegation_run_mode: None,
+        }
+    }
+
     pub(crate) fn for_result_delivery(
         chat_id: Uuid,
         chat_provider_id: Option<String>,
@@ -2906,6 +2956,11 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
 /// on configured action facets in `erato.toml`.
 pub(crate) fn is_known_platform(config: &crate::config::AppConfig, platform: &str) -> bool {
     if platform == DEFAULT_ERATO_PLATFORM {
+        return true;
+    }
+    if platform == crate::ms_teams_bot::TEAMS_PLATFORM
+        && config.integrations.ms_office.teams.bot.enabled
+    {
         return true;
     }
 
@@ -8657,6 +8712,20 @@ async fn stream_update_assistant_message_completion<
     .wrap_err("Failed to hydrate image URLs")?;
     updated_assistant_message_wrapped.content = hydrated_final_content_parts.clone();
 
+    // The request-scoped SSE channel is not the only audience: resumestream
+    // clients and in-process consumers (the Teams bot) follow the task
+    // broadcast, which the delta events of these paths already reach.
+    send_background_event(
+        task,
+        StreamingEvent::AssistantMessageCompleted {
+            message_id: updated_assistant_message.id,
+            content: hydrated_final_content_parts.clone(),
+            message: updated_assistant_message_wrapped.clone(),
+        },
+        "broadcast assistant message completion",
+    )
+    .await;
+
     let message_completed_event: MSG = MessageSubmitStreamingResponseMessageComplete {
         message_id: updated_assistant_message.id, // This is assistant_message_id
         content: hydrated_final_content_parts,
@@ -11379,41 +11448,35 @@ async fn accept_user_write_into_delegated_run(
     Ok(())
 }
 
-#[utoipa::path(
-    post,
-    path = "/me/messages/submitstream",
-    request_body = MessageSubmitRequest,
-    responses(
-        (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
-        (status = BAD_REQUEST, description = "When validation fails (e.g., invalid previous_message_id)"),
-        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
-        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
-        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
-    ),
-    security(
-        ("bearer_auth" = [])
-    )
-)]
-pub async fn message_submit_sse(
-    State(app_state): State<AppState>,
-    Extension(policy): Extension<PolicyEngine>,
-    Extension(me_user): Extension<MeProfile>,
-    headers: HeaderMap,
-    Json(request): Json<MessageSubmitRequest>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
+/// A submit whose generation is running in the background: the chat it
+/// writes to, its event feed, and the guard that tells the generation whether
+/// the originating client is still attached.
+pub(crate) struct StartedGeneration {
+    pub chat_id: Uuid,
+    pub events: tokio::sync::broadcast::Receiver<StreamingEvent>,
+    pub client_stream_guard: ClientStreamGuard,
+}
+
+/// Validate a submit, take the chat's generation lease and spawn the
+/// generation. Shared by the SSE route and in-process surfaces (Teams bot).
+pub(crate) async fn start_message_submit(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    generation_request_context: GenerationRequestContext,
+    request: MessageSubmitRequest,
+) -> Result<StartedGeneration, StreamRouteError> {
     // Validate request parameters
     validate_submit_request(
-        &app_state,
-        &policy,
-        &me_user,
+        app_state,
+        policy,
+        me_user,
         request.previous_message_id.as_ref(),
         request.input_files_ids.as_slice(),
     )
     .await?;
 
     // Validate action facet before spawning background task (returns HTTP 400 on failure)
-    let generation_request_context = generation_request_context_from_headers(&headers);
     let platform = generation_request_context
         .platform
         .as_deref()
@@ -11426,7 +11489,7 @@ pub async fn message_submit_sse(
         if let Some(existing_chat_id) = request.existing_chat_id {
             let (chat, _) = get_or_create_chat(
                 &app_state.db,
-                &policy,
+                policy,
                 &me_user.to_subject(),
                 Some(&existing_chat_id),
                 &me_user.id,
@@ -11455,7 +11518,7 @@ pub async fn message_submit_sse(
                 }
             })?;
             reject_if_archived(&chat)?;
-            accept_user_write_into_delegated_run(&app_state, &chat).await?;
+            accept_user_write_into_delegated_run(app_state, &chat).await?;
             (
                 existing_chat_id,
                 false,
@@ -11466,7 +11529,7 @@ pub async fn message_submit_sse(
             // Need to get or create chat to determine the chat_id
             let (chat, chat_status) = get_or_create_chat_by_previous_message_id(
                 &app_state.db,
-                &policy,
+                policy,
                 &me_user.to_subject(),
                 request.previous_message_id.as_ref(),
                 &me_user.id,
@@ -11499,7 +11562,7 @@ pub async fn message_submit_sse(
             // unaffected; only writes resolved onto an existing archived chat 409.
             reject_if_archived(&chat)?;
             // A previous_message_id can resolve onto a live delegated run.
-            accept_user_write_into_delegated_run(&app_state, &chat).await?;
+            accept_user_write_into_delegated_run(app_state, &chat).await?;
 
             let was_created = chat_status == ChatCreationStatus::Created;
 
@@ -11514,8 +11577,8 @@ pub async fn message_submit_sse(
     // Validate assistant mentions before spawning (returns HTTP 400 on failure).
     // The validated targets feed the delegation tool offer.
     let delegation_targets = crate::services::delegation::validate_mentioned_assistants(
-        &app_state,
-        &policy,
+        app_state,
+        policy,
         &me_user.to_subject(),
         request.mentioned_assistant_ids.as_deref(),
         chat_assistant_id,
@@ -11525,7 +11588,7 @@ pub async fn message_submit_sse(
 
     // Take the chat's generation lease. message_id is set later.
     let (broadcast_rx, task) =
-        acquire_user_generation_lease(&app_state, chat_id, Uuid::new_v4()).await?;
+        acquire_user_generation_lease(app_state, chat_id, Uuid::new_v4()).await?;
 
     let client_stream_guard = task.client_stream_guard();
 
@@ -11577,6 +11640,50 @@ pub async fn message_submit_sse(
         }
         .in_current_span(),
     );
+
+    Ok(StartedGeneration {
+        chat_id,
+        events: broadcast_rx,
+        client_stream_guard,
+    })
+}
+
+#[utoipa::path(
+    post,
+    path = "/me/messages/submitstream",
+    request_body = MessageSubmitRequest,
+    responses(
+        (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
+        (status = BAD_REQUEST, description = "When validation fails (e.g., invalid previous_message_id)"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn message_submit_sse(
+    State(app_state): State<AppState>,
+    Extension(policy): Extension<PolicyEngine>,
+    Extension(me_user): Extension<MeProfile>,
+    headers: HeaderMap,
+    Json(request): Json<MessageSubmitRequest>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
+    let generation_request_context = generation_request_context_from_headers(&headers);
+    let StartedGeneration {
+        events: broadcast_rx,
+        client_stream_guard,
+        ..
+    } = start_message_submit(
+        &app_state,
+        &policy,
+        &me_user,
+        generation_request_context,
+        request,
+    )
+    .await?;
 
     // Convert broadcast receiver to SSE stream
     let event_stream = {
@@ -15044,34 +15151,28 @@ fn resolve_submitted_decisions(
         })
         .collect())
 }
-#[utoipa::path(
-    post,
-    path = "/me/messages/continuestream",
-    request_body = ContinueStreamRequest,
-    responses(
-        (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
-        (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
-        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), or the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError)"),
-        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
-        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
-    ),
-    security(
-        ("bearer_auth" = [])
-    )
-)]
-pub async fn continue_message_sse(
-    State(app_state): State<AppState>,
-    Extension(policy): Extension<PolicyEngine>,
-    Extension(me_user): Extension<MeProfile>,
-    Json(request): Json<ContinueStreamRequest>,
-) -> Result<Sse<SseEventStreamWithKeepAlive>, StreamRouteError> {
+/// A continuation running in the background, and its event feed.
+pub(crate) struct StartedContinuation {
+    pub chat_id: Uuid,
+    pub events: tokio::sync::broadcast::Receiver<StreamingEvent>,
+}
+
+/// Validate an approval decision, take the chat's lease and resume the parked
+/// turn. `tx` receives the SSE rendering; in-process callers pass a detached
+/// sink and read `events` instead.
+pub(crate) async fn start_continuation(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    request: ContinueStreamRequest,
+    tx: Sender<Result<Event, Report>>,
+) -> Result<StartedContinuation, StreamRouteError> {
     let mcp = app_state.mcp_state().await;
     // Check ownership and fail before opening an SSE response. The worker reads
     // the message again so the approval transition is based on current state.
     let message = get_message_by_id(
         &app_state.db,
-        &policy,
+        policy,
         &me_user.to_subject(),
         &request.message_id,
     )
@@ -15085,7 +15186,7 @@ pub async fn continue_message_sse(
     // state to tell a crashed continuation from a finished one.
     let chat = get_chat_by_message_id(
         &app_state.db,
-        &policy,
+        policy,
         &me_user.to_subject(),
         &request.message_id,
     )
@@ -15103,7 +15204,7 @@ pub async fn continue_message_sse(
     // decided twice, and only one of the two decisions would reach the turn
     // that is waiting.
     if let Some(parent_message_id) =
-        origin_approval_covering_child(&app_state, &policy, &me_user, &chat).await
+        origin_approval_covering_child(app_state, policy, me_user, &chat).await
     {
         return Err(StreamRouteError::CoveredByParent(Box::new(
             CoveredByParentError {
@@ -15150,9 +15251,9 @@ pub async fn continue_message_sse(
         ContinuationEntry::Decide
     };
 
-    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let app_state_for_worker = app_state.clone();
     let policy_for_worker = policy.clone();
+    let me_user_for_worker = me_user.clone();
     let chat_id = message.chat_id;
 
     // The decision starts a new generation on the chat's lease: the state
@@ -15165,8 +15266,8 @@ pub async fn continue_message_sse(
     // parked generation instead of starting a second one" — stops being true
     // once a user write can take a parked lease: the card can still be mounted
     // while another turn already owns the chat.
-    let (_abort_rx, task) =
-        acquire_user_generation_lease(&app_state, chat_id, request.message_id).await?;
+    let (events, task) =
+        acquire_user_generation_lease(app_state, chat_id, request.message_id).await?;
 
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(
@@ -15179,7 +15280,7 @@ pub async fn continue_message_sse(
             Some(tx.clone()),
             &app_state_for_worker,
             &policy_for_worker,
-            &me_user,
+            &me_user_for_worker,
             request,
             entry,
         )
@@ -15187,8 +15288,19 @@ pub async fn continue_message_sse(
         let generation_failed = result.is_err();
         if let Err(error) = result {
             log_and_capture_error("continue message background task", &error);
+            // Broadcast listeners (resumestream, Teams bot) get the same
+            // closing frames `with_generation_task_lifecycle` sends.
+            send_background_event(
+                &task,
+                StreamingEvent::Error {
+                    error: generation_failure_error_value(),
+                },
+                "broadcast continuation failure",
+            )
+            .await;
             forward_error_report(&tx, &error).await;
         }
+        send_background_event(&task, StreamingEvent::StreamEnd, "broadcast stream end").await;
         let outcome = task.derive_outcome(generation_failed);
         task.mark_completed();
         cleanup_guard.disarm();
@@ -15200,7 +15312,7 @@ pub async fn continue_message_sse(
         settle_tail_deliveries(
             &app_state_for_worker,
             &policy_for_worker,
-            &me_user,
+            &me_user_for_worker,
             chat_id,
             &task,
             outcome,
@@ -15208,6 +15320,33 @@ pub async fn continue_message_sse(
         .await;
     });
 
+    Ok(StartedContinuation { chat_id, events })
+}
+
+#[utoipa::path(
+    post,
+    path = "/me/messages/continuestream",
+    request_body = ContinueStreamRequest,
+    responses(
+        (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
+        (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), or the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError)"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn continue_message_sse(
+    State(app_state): State<AppState>,
+    Extension(policy): Extension<PolicyEngine>,
+    Extension(me_user): Extension<MeProfile>,
+    Json(request): Json<ContinueStreamRequest>,
+) -> Result<Sse<SseEventStreamWithKeepAlive>, StreamRouteError> {
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
+    start_continuation(&app_state, &policy, &me_user, request, tx).await?;
     let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
     Ok(Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
@@ -15261,7 +15400,7 @@ pub(crate) enum ContinuationEntry {
 /// Drained for its whole life rather than dropped: the channel is bounded, so a
 /// sink nobody reads would stall the generation as soon as it had emitted a
 /// channel's worth of events.
-fn detached_generation_event_sink() -> Sender<Result<Event, Report>> {
+pub(crate) fn detached_generation_event_sink() -> Sender<Result<Event, Report>> {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {

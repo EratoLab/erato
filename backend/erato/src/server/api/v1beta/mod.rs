@@ -4052,7 +4052,7 @@ fn content_type_essence(content_type: &str) -> &str {
         .trim()
 }
 
-pub(super) fn effective_upload_content_type(
+pub(crate) fn effective_upload_content_type(
     filename: &str,
     provided_content_type: Option<&str>,
 ) -> Option<String> {
