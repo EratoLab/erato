@@ -2120,6 +2120,10 @@ pub struct ClientToolResultRequest {
     /// the backend retains at most 16 issues with bounded field lengths.
     #[serde(default)]
     validation_errors: Vec<crate::services::client_tools::ClientToolValidationIssue>,
+    /// Optional host-owned correction handle and terminal rejection marker.
+    /// Only meaningful with nonempty validation_errors.
+    #[serde(default)]
+    submission_feedback: Option<crate::services::client_tools::ClientToolSubmissionFeedback>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -6254,7 +6258,7 @@ async fn stream_generate_chat_completion<
                                 code: "submission_must_be_alone".into(),
                                 message: "Call the submission tool alone after completing other tool calls.".into(),
                             }
-                        ]))
+                        ], None))
                     } else { submission.validate(&tool_input) }
                 });
                 let durable_request = if app_state.config.client_tools.durable_operations_enabled {
@@ -6506,8 +6510,11 @@ async fn stream_generate_chat_completion<
                             json!({ "status": "error", "error": error }),
                             format!("Client tool error: {error}"),
                         ),
-                        ClientToolOutcome::ValidationFailed(issues) => {
-                            let output = json!({ "status": "error", "error": "Submission validation failed", "validation_errors": issues });
+                        ClientToolOutcome::ValidationFailed(issues, feedback) => {
+                            let mut output = json!({ "status": "error", "error": "Submission validation failed", "validation_errors": issues });
+                            if let Some(feedback) = feedback {
+                                output["submission_feedback"] = json!(feedback);
+                            }
                             (
                                 ToolCallStatus::Error,
                                 BgToolCallStatus::Error,
@@ -14377,8 +14384,13 @@ pub async fn client_tool_result(
 
     let task = app_state.background_tasks.get_task(&request.chat_id).await;
     // Rejected submissions must retain their diagnostics without reading attachments.
-    let resolve_files = request.error.is_none() && request.validation_errors.is_empty();
+    let resolve_files = request.error.is_none()
+        && request.validation_errors.is_empty()
+        && request.submission_feedback.is_none();
     let mut payload = json!({ "validation_errors": request.validation_errors });
+    if let Some(feedback) = request.submission_feedback {
+        payload["submission_feedback"] = json!(feedback);
+    }
     if let Some(error) = request.error {
         payload["error"] = json!(error);
     }

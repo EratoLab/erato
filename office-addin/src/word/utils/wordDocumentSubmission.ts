@@ -1,4 +1,7 @@
+import { WordDraftRepairError } from "./wordDocumentDrafts";
 import {
+  MAX_PLAN_BYTES,
+  wordSourceReadRefs,
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
@@ -11,7 +14,12 @@ import {
 
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
 import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
-import type { ClientToolExecutor, ContentPart } from "@erato/frontend/library";
+import type {
+  ClientToolExecutor,
+  ClientToolCallContext,
+  ClientToolExecutionResult,
+  ContentPart,
+} from "@erato/frontend/library";
 
 export const WORD_SUBMIT_PLAN_TOOL = "submit_document_plan";
 export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";
@@ -26,96 +34,214 @@ export function createWordDocumentSubmissionExecutor(
         error: "Document submission unavailable or stopped.",
       };
     const snapshot = session.snapshotForSubmission(context);
-    if (!snapshot)
-      return {
-        ok: false,
-        error: "This request has no completed document read.",
-        validationErrors: [
-          {
-            path: "/snapshot",
-            code: "wrong-request",
-            message:
-              "The snapshot must have been read by this chat and assistant request.",
-          },
-        ],
-      };
-    const issues: WordPlanDiagnostics = [];
-    let content: string;
+    if (!snapshot || !object(input))
+      return prepareWordDocumentSubmission(input, context, session);
+    let serialized: string;
     try {
-      content = JSON.stringify(input);
+      serialized = JSON.stringify(input);
     } catch {
       return { ok: false, error: "Expected JSON plan arguments." };
     }
-    const parsed = parseWordDocumentPlan(content, issues);
-    const plan = parsed && normalizeWordDocumentPlan(parsed, snapshot);
-    const invalid = !plan || validateWordDocumentPlan(plan, snapshot, issues);
-    if (invalid)
+    if (new TextEncoder().encode(serialized).length > MAX_PLAN_BYTES)
       return {
         ok: false,
-        error: "Document plan validation failed.",
-        validationErrors: issues,
+        error: "Document plan exceeds maxPlanBytes.",
+        validationErrors: [
+          {
+            path: "",
+            code: "too-large",
+            message: "Submission arguments exceed maxPlanBytes.",
+          },
+        ],
       };
     try {
-      const compiled = compileWordDocumentPlan(plan, snapshot);
-      const prepared = captureWordAuthoringSnapshot(
-        compiled,
-        snapshot.identity,
-        "Off",
-        snapshot.fullDocument,
-        "verify",
-      );
-      if (prepared.issue || !verifyWordPlanOutput(plan, snapshot, prepared))
+      const previous = session.drafts.replay(context.toolCallId, serialized);
+      if (previous) return previous;
+      // Redelivery returns its receipt even if Apply has since consumed the
+      // capture. New calls still require the original completed, active read.
+      if (
+        snapshot.revoked ||
+        snapshot.used ||
+        snapshot.issue ||
+        !snapshot.readToken ||
+        wordSourceReadRefs(snapshot).some((ref) => !snapshot.read.has(ref)) ||
+        input.snapshot !== snapshot.token ||
+        input.readToken !== snapshot.readToken
+      )
+        return prepareWordDocumentSubmission(input, context, session);
+      if (session.drafts.accepted)
         return {
           ok: false,
-          error: "Document plan preparation failed.",
-          validationErrors: [
-            {
-              path: "",
-              code: "compile-verification",
-              message:
-                "The compiled structure did not match the proposed plan. Check source references, object constraints, stories and section layout.",
-            },
-          ],
+          error: "A document plan has already been accepted for this request.",
         };
+      const value = session.drafts.materialize(
+        JSON.parse(serialized) as Record<string, unknown>,
+      );
+      const prepared = await prepareWordDocumentSubmission(
+        value,
+        context,
+        session,
+      );
+      // The read session may have been cleared while preparation was pending.
+      if (
+        context.signal?.aborted ||
+        session.snapshotForSubmission(context) !== snapshot ||
+        snapshot.revoked
+      )
+        return { ok: false, error: "Document submission stopped." };
+      const redelivery = session.drafts.replay(context.toolCallId, serialized);
+      if (redelivery) return redelivery;
+      let result = prepared;
+      if (prepared.ok) {
+        session.drafts.accepted = true;
+        if ("draft_id" in input && prepared.disposition !== "local_only")
+          result = {
+            ...prepared,
+            result: { ...(prepared.result as object), plan: value },
+          };
+      } else if (prepared.validationErrors?.length) {
+        const feedback = session.drafts.reject(
+          value,
+          prepared.validationErrors,
+        );
+        result = {
+          ...prepared,
+          submissionFeedback: feedback,
+          ...(feedback.terminal
+            ? {
+                error:
+                  "The same document proposal failed with unchanged diagnostics.",
+                validationErrors: [
+                  {
+                    path: "",
+                    code: "no-progress",
+                    message:
+                      "The proposal and validation errors are unchanged. This submission turn has ended.",
+                  },
+                  ...prepared.validationErrors,
+                ].slice(0, 16),
+              }
+            : {}),
+        };
+      }
+      return session.drafts.remember(context.toolCallId, serialized, result);
     } catch (error) {
-      // Return schema paths and constraints, never document contents, in parser diagnostics.
-      const hints: Record<string, string> = {
-        "Unknown or repeated source row":
-          "Table row sourceIndex must identify a unique row in the selected source table.",
-        "Unknown or repeated source cell":
-          "Table cell sourceIndex must identify a unique cell in the selected source row.",
-        "Source table wrappers require explicit replacement":
-          "This table cannot be patched by reference; provide a new table with complete cell contents and no sourceRef or sourceIndex.",
-        "Duplicate bookmark name":
-          "Bookmark names must be unique across the resulting document.",
-        "Overlapping native edit targets":
-          "Native edit targets cannot overlap within a source fragment.",
+      if (!(error instanceof WordDraftRepairError)) throw error;
+      const failure: ClientToolExecutionResult = {
+        ok: false,
+        error: "Document repair rejected.",
+        submissionFeedback: session.drafts.feedback(),
+        validationErrors: [
+          { path: error.path, code: error.code, message: error.message },
+        ],
       };
+      return error.code === "call-conflict"
+        ? failure
+        : session.drafts.remember(context.toolCallId, serialized, failure);
+    }
+  };
+}
+
+async function prepareWordDocumentSubmission(
+  input: unknown,
+  context: ClientToolCallContext | undefined,
+  session: WordDocumentReadSession,
+): Promise<ClientToolExecutionResult> {
+  if (!context || context.signal?.aborted)
+    return {
+      ok: false,
+      error: "Document submission unavailable or stopped.",
+    };
+  const snapshot = session.snapshotForSubmission(context);
+  if (!snapshot)
+    return {
+      ok: false,
+      error: "This request has no completed document read.",
+      validationErrors: [
+        {
+          path: "/snapshot",
+          code: "wrong-request",
+          message:
+            "The snapshot must have been read by this chat and assistant request.",
+        },
+      ],
+    };
+  const issues: WordPlanDiagnostics = [];
+  let content: string;
+  try {
+    content = JSON.stringify(input);
+  } catch {
+    return { ok: false, error: "Expected JSON plan arguments." };
+  }
+  const parsed = parseWordDocumentPlan(content, issues);
+  const plan = parsed && normalizeWordDocumentPlan(parsed, snapshot);
+  const invalid = !plan || validateWordDocumentPlan(plan, snapshot, issues);
+  if (invalid)
+    return {
+      ok: false,
+      error: "Document plan validation failed.",
+      validationErrors: issues,
+    };
+  try {
+    const compiled = compileWordDocumentPlan(plan, snapshot);
+    const prepared = captureWordAuthoringSnapshot(
+      compiled,
+      snapshot.identity,
+      "Off",
+      snapshot.fullDocument,
+      "verify",
+    );
+    if (prepared.issue || !verifyWordPlanOutput(plan, snapshot, prepared))
       return {
         ok: false,
         error: "Document plan preparation failed.",
         validationErrors: [
           {
             path: "",
-            code: "compile-plan",
+            code: "compile-verification",
             message:
-              (error instanceof Error && hints[error.message]) ||
-              "The plan could not be compiled against its captured sources. Check native targets, retained table cells, bookmark names, stories and section layout.",
+              "The compiled structure did not match the proposed plan. Check source references, object constraints, stories and section layout.",
           },
         ],
       };
-    }
-    if (context.signal?.aborted)
-      return { ok: false, error: "Document submission stopped." };
-    // Key by tool call ID so a retried submission POST returns the same receipt.
-    return {
-      ok: true,
-      result: {
-        draft_id: context.toolCallId,
-        snapshot: plan.snapshot,
-        action: WORD_SUBMIT_PLAN_ACTION,
-      },
+  } catch (error) {
+    // Return schema paths and constraints, never document contents, in parser diagnostics.
+    const hints: Record<string, string> = {
+      "Unknown or repeated source row":
+        "Table row sourceIndex must identify a unique row in the selected source table.",
+      "Unknown or repeated source cell":
+        "Table cell sourceIndex must identify a unique cell in the selected source row.",
+      "Source table wrappers require explicit replacement":
+        "This table cannot be patched by reference; provide a new table with complete cell contents and no sourceRef or sourceIndex.",
+      "Duplicate bookmark name":
+        "Bookmark names must be unique across the resulting document.",
+      "Overlapping native edit targets":
+        "Native edit targets cannot overlap within a source fragment.",
     };
+    return {
+      ok: false,
+      error: "Document plan preparation failed.",
+      validationErrors: [
+        {
+          path: "",
+          code: "compile-plan",
+          message:
+            (error instanceof Error && hints[error.message]) ||
+            "The plan could not be compiled against its captured sources. Check native targets, retained table cells, bookmark names, stories and section layout.",
+        },
+      ],
+    };
+  }
+  if (context.signal?.aborted)
+    return { ok: false, error: "Document submission stopped." };
+  // Key by tool call ID so a retried submission POST returns the same receipt.
+  return {
+    ok: true,
+    result: {
+      draft_id: context.toolCallId,
+      snapshot: plan.snapshot,
+      action: WORD_SUBMIT_PLAN_ACTION,
+    },
   };
 }
 
@@ -153,7 +279,19 @@ export function acceptedWordDocumentSubmission(
   if (accepted.length !== 1) return undefined;
   const part = accepted[0];
   if (part.content_type !== "tool_use" || !part.tool_call_id) return undefined;
-  const contentJson = JSON.stringify(part.input);
+  const output = part.output;
+  if (!object(output) || !object(output.result)) return undefined;
+  const plan =
+    object(part.input) && "draft_id" in part.input
+      ? output.result.plan
+      : part.input;
+  if (
+    !object(plan) ||
+    plan.snapshot !== output.result.snapshot ||
+    (object(part.input) && plan.readToken !== part.input.readToken)
+  )
+    return undefined;
+  const contentJson = JSON.stringify(plan);
   if (!parseWordDocumentPlan(contentJson)) return undefined;
   return { toolCallId: part.tool_call_id, content: contentJson };
 }

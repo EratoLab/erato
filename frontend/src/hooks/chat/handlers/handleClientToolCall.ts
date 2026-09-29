@@ -82,6 +82,7 @@ export async function handleClientToolCall(
             ...base,
             error: outcome.error,
             validation_errors: outcome.validationErrors,
+            submission_feedback: outcome.submissionFeedback,
           };
     } catch (error) {
       body = {

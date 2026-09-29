@@ -89,6 +89,23 @@ pub struct ClientToolValidationIssue {
     pub message: String,
 }
 
+/// Opaque host-owned correction handle; it grants no permission to apply an artifact.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, ToSchema)]
+pub struct ClientToolDraftReference {
+    pub id: String,
+    pub revision: u32,
+}
+
+/// Rejection metadata, distinct from a successful submission result.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, ToSchema)]
+pub struct ClientToolSubmissionFeedback {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft: Option<ClientToolDraftReference>,
+    /// Ends an opt-in submission turn without accepting an artifact.
+    #[serde(default)]
+    pub terminal: bool,
+}
+
 const MAX_VALIDATION_ISSUES: usize = 16;
 
 fn bounded(value: &str, max_chars: usize) -> String {
@@ -128,14 +145,16 @@ impl SubmissionPolicy {
                 }
             })
             .collect::<Vec<_>>();
-        (!issues.is_empty()).then(|| ClientToolOutcome::ValidationFailed(bound_issues(issues)))
+        (!issues.is_empty())
+            .then(|| ClientToolOutcome::ValidationFailed(bound_issues(issues), None))
     }
 
     pub fn finish_after(&self, outcome: &ClientToolOutcome, attempt: u32) -> bool {
         matches!(
             outcome,
             ClientToolOutcome::Result(..) | ClientToolOutcome::Cancelled { .. }
-        ) || attempt >= self.max_attempts
+        ) || matches!(outcome, ClientToolOutcome::ValidationFailed(_, Some(feedback)) if feedback.terminal)
+            || attempt >= self.max_attempts
     }
 
     pub fn annotate(&self, output: &mut Value, outcome: &ClientToolOutcome, attempt: u32) {
@@ -406,7 +425,10 @@ pub enum ClientToolOutcome {
     /// infer attachments from arbitrary fields inside the tool's JSON result.
     Result(Value, Vec<sea_orm::prelude::Uuid>),
     Error(String),
-    ValidationFailed(Vec<ClientToolValidationIssue>),
+    ValidationFailed(
+        Vec<ClientToolValidationIssue>,
+        Option<ClientToolSubmissionFeedback>,
+    ),
     Cancelled {
         reason: String,
     },
@@ -416,14 +438,37 @@ impl ClientToolOutcome {
     /// Shared by direct delivery and the cross-instance command queue so both
     /// paths preserve diagnostics and error precedence, including explicit null.
     pub fn from_payload(payload: &Value) -> Self {
+        let feedback = match payload
+            .get("submission_feedback")
+            .filter(|value| !value.is_null())
+        {
+            Some(value) => {
+                match serde_json::from_value::<ClientToolSubmissionFeedback>(value.clone()) {
+                    Ok(feedback)
+                        if feedback.draft.as_ref().is_none_or(|draft| {
+                            !draft.id.is_empty()
+                                && draft.id.chars().count() <= 128
+                                && draft.revision > 0
+                        }) =>
+                    {
+                        Some(feedback)
+                    }
+                    _ => return Self::Error("Invalid client submission feedback".into()),
+                }
+            }
+            None => None,
+        };
         if let Some(issues) = payload.get("validation_errors") {
             match serde_json::from_value::<Vec<ClientToolValidationIssue>>(issues.clone()) {
                 Ok(issues) if !issues.is_empty() => {
-                    return Self::ValidationFailed(bound_issues(issues));
+                    return Self::ValidationFailed(bound_issues(issues), feedback);
                 }
                 Ok(_) => {}
                 Err(_) => return Self::Error("Invalid client validation diagnostics".into()),
             }
+        }
+        if feedback.is_some() {
+            return Self::Error("Submission feedback requires validation diagnostics".into());
         }
         if let Some(error) = payload.get("error") {
             return Self::Error(error.as_str().unwrap_or("client tool failed").into());
@@ -477,7 +522,7 @@ mod tests {
         assert!(policy.validate(&json!({"title":"Draft"})).is_none());
         let invalid = json!({"title": ["large-artifact".repeat(1000)]});
         let failure = policy.validate(&invalid).unwrap();
-        let ClientToolOutcome::ValidationFailed(issues) = &failure else {
+        let ClientToolOutcome::ValidationFailed(issues, _) = &failure else {
             panic!("validation failure")
         };
         assert_eq!(issues[0].path, "/title");
@@ -541,7 +586,8 @@ mod tests {
         let payload = json!({"result": {"accepted":true}, "error":"bad draft", "validation_errors":[
             {"path":"/items/0/source","code":"unknown_reference","message":"Use a current ID"}
         ]});
-        let ClientToolOutcome::ValidationFailed(issues) = ClientToolOutcome::from_payload(&payload)
+        let ClientToolOutcome::ValidationFailed(issues, _) =
+            ClientToolOutcome::from_payload(&payload)
         else {
             panic!("errors take precedence")
         };
@@ -556,6 +602,52 @@ mod tests {
         ));
         assert!(matches!(
             ClientToolOutcome::from_payload(&json!({"result":true,"validation_errors":{}})),
+            ClientToolOutcome::Error(_)
+        ));
+    }
+
+    #[test]
+    fn correction_metadata_survives_transport_and_terminal_failure_is_not_acceptance() {
+        let (config, schema) = submission();
+        let policy = OfferedClientTool::prepare(&config, &schema)
+            .unwrap()
+            .submission
+            .unwrap();
+        let mut payload = json!({
+            "validation_errors":[{"path":"/items","code":"coverage","message":"Missing source r3"}],
+            "submission_feedback":{"draft":{"id":"draft-1","revision":2},"terminal":false},
+            "result":{"must_not_be_accepted":true}
+        });
+        let outcome = ClientToolOutcome::from_payload(&payload);
+        let ClientToolOutcome::ValidationFailed(_, Some(feedback)) = &outcome else {
+            panic!("expected rejection with a correction handle");
+        };
+        assert_eq!(feedback.draft.as_ref().unwrap().revision, 2);
+        assert!(!policy.finish_after(&outcome, 1));
+        payload["submission_feedback"]["terminal"] = json!(true);
+        let outcome = ClientToolOutcome::from_payload(&payload);
+        assert!(policy.finish_after(&outcome, 1));
+        let mut output = json!({});
+        policy.annotate(&mut output, &outcome, 1);
+        assert_eq!(
+            output["submission"],
+            json!({"status":"failed","attempts_remaining":0})
+        );
+        for bad in [
+            json!({"draft":{"id":"x".repeat(129),"revision":1}}),
+            json!({"draft":{"id":"draft","revision":0}}),
+            json!({"terminal":"yes"}),
+        ] {
+            payload["submission_feedback"] = bad;
+            assert!(matches!(
+                ClientToolOutcome::from_payload(&payload),
+                ClientToolOutcome::Error(_)
+            ));
+        }
+        assert!(matches!(
+            ClientToolOutcome::from_payload(&json!({
+                "result":true,"submission_feedback":{"terminal":true}
+            })),
             ClientToolOutcome::Error(_)
         ));
     }

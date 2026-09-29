@@ -1,6 +1,17 @@
 /** Protocol vocabulary belongs here; model behavior instructions come from deployment configuration. */
 export const WORD_AUTHORING_CONTRACT = {
   version: 1,
+  repair: {
+    tool: "submit_document_plan",
+    input:
+      "{snapshot,readToken,draft_id,revision,patches:[{op:'add'|'replace',path,value}|{op:'remove',path}]}",
+    draft:
+      "A rejected submission may return submission_feedback.draft:{id,revision}. The handle is scoped to the current request and captured snapshot. Schema rejection before host execution has no draft handle.",
+    patches:
+      "Atomic RFC 6902 add/replace/remove subset, 1–32 operations. JSON Pointer paths address the submitted plan. Editable roots: scope, entries, deleted, stories, sections. Snapshot, readToken and version are immutable. Arrays use zero-based indexes; add also accepts '-' for append. Parents must exist. Each patch is applied in order; a malformed patch changes nothing.",
+    revision:
+      "Each changed rejected proposal advances the revision. Validation covers the complete materialized plan. Unchanged proposals with unchanged diagnostics end the submission turn. Full and repair submissions share the configured attempt budget. Acceptance persists the complete plan for review without writing to Word.",
+  },
   plan: "{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete.",
   ownership:
     "Every body source ref is consumed once by keep, replace or deleted. New nested block IDs are globally unique. Story sources and document_sections are separate read records, not body ownership refs. Keep preserves exact content. Replacement and deletion accept native objects. Source references are scoped to this immutable snapshot.",

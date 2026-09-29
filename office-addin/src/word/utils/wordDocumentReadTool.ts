@@ -1,5 +1,6 @@
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
+import { WordDocumentDraftStore } from "./wordDocumentDrafts";
 import { MAX_WORD_DOCX_BYTES } from "./wordDocumentPackageCodec";
 import {
   MAX_SOURCE_BYTES,
@@ -50,6 +51,7 @@ export type WordDocumentReadRequest = Pick<
 
 export class WordDocumentReadSession {
   private session: Session | null = null;
+  readonly drafts = new WordDocumentDraftStore();
   /** The host binds ownership; model arguments cannot transfer a snapshot to another turn. */
   bindRequest(token: string, request: WordDocumentReadRequest): boolean {
     const session = this.session;
@@ -79,6 +81,7 @@ export class WordDocumentReadSession {
       : undefined;
   }
   clear(): void {
+    this.drafts.clear();
     if (this.session) this.session.snapshot.revoked = true;
     this.session = null;
   }
