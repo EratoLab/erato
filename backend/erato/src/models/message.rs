@@ -1530,6 +1530,31 @@ pub async fn get_generation_chat_provider_id_for_replaced_user_message(
     Ok(None)
 }
 
+/// PostgreSQL JSONB cannot store U+0000, including in nested tool inputs/results
+/// and object keys. Work on decoded strings so literal `\u0000` text survives.
+fn remove_json_null_characters(value: &mut JsonValue) {
+    match value {
+        JsonValue::String(text) => text.retain(|character| character != '\0'),
+        JsonValue::Array(items) => {
+            for item in items {
+                remove_json_null_characters(item);
+            }
+        }
+        JsonValue::Object(object) => {
+            for item in object.values_mut() {
+                remove_json_null_characters(item);
+            }
+            if object.keys().any(|key| key.contains('\0')) {
+                *object = std::mem::take(object)
+                    .into_iter()
+                    .map(|(key, value)| (key.replace('\0', ""), value))
+                    .collect();
+            }
+        }
+        _ => {}
+    }
+}
+
 pub async fn update_message_content(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -1560,7 +1585,8 @@ pub async fn update_message_content(
     }
 
     parsed_raw_message.content = strip_image_urls_from_content(new_content_parts);
-    let updated_raw_message = parsed_raw_message.to_json()?;
+    let mut updated_raw_message = parsed_raw_message.to_json()?;
+    remove_json_null_characters(&mut updated_raw_message);
 
     let active_model = messages::ActiveModel {
         id: ActiveValue::Set(*message_id),
@@ -1922,6 +1948,32 @@ pub async fn regenerate_image_urls_in_content(
     }
 
     Ok(updated_content)
+}
+
+#[cfg(test)]
+mod json_null_character_tests {
+    use super::remove_json_null_characters;
+    use serde_json::json;
+
+    #[test]
+    fn removes_nuls_from_nested_strings_and_keys_preserving_unicode_and_literal_escapes() {
+        let mut value = json!({
+            "text": "Lichtstärke\0 😀",
+            "input": {"nested": [{"query\0": "Lichtst\0e4rke"}]},
+            "output": ["result\0", {"literal": r"\u0000", "backslashes": r"\\u0000"}],
+            "unchanged": [null, true, 42, 1.5, "\n\t\r"]
+        });
+        let expected = json!({
+            "text": "Lichtstärke 😀",
+            "input": {"nested": [{"query": "Lichtste4rke"}]},
+            "output": ["result", {"literal": r"\u0000", "backslashes": r"\\u0000"}],
+            "unchanged": [null, true, 42, 1.5, "\n\t\r"]
+        });
+        remove_json_null_characters(&mut value);
+        assert_eq!(value, expected);
+        remove_json_null_characters(&mut value);
+        assert_eq!(value, expected);
+    }
 }
 
 #[cfg(test)]

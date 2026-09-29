@@ -4228,6 +4228,25 @@ async fn test_client_action_invalid_proposal_then_valid_retry_succeeds(pool: Poo
 /// the whole turn into an empty assistant message.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_unoffered_tool_call_recovers_instead_of_killing_the_turn(pool: Pool<Postgres>) {
+    check_unoffered_tool_call_recovers(pool, false).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_nul_tool_arguments_save_and_stream_completes(pool: Pool<Postgres>) {
+    check_unoffered_tool_call_recovers(pool, true).await;
+}
+
+async fn check_unoffered_tool_call_recovers(pool: Pool<Postgres>, nuls: bool) {
+    let arguments = if nuls {
+        json!({"nested": [{"query": "Lichtst\0e4rke Lichtstärke", "literal": r"\u0000"}]})
+    } else {
+        json!({})
+    };
+    let tool_name = if nuls {
+        "totally_made_up_tool\0"
+    } else {
+        "totally_made_up_tool"
+    };
     const NOT_ALLOWED: &str = "not allowed for this request";
     let mut mocks = MockSet::new();
     // Turn 1: hallucinate a tool nothing offered.
@@ -4239,8 +4258,8 @@ async fn test_unoffered_tool_call_recovers_instead_of_killing_the_turn(pool: Poo
             then,
             build_openai_tool_calls_streaming_response(&[(
                 "call_ghost",
-                "totally_made_up_tool",
-                json!({}),
+                tool_name,
+                arguments.clone(),
             )]),
         );
     });
@@ -4260,7 +4279,7 @@ async fn test_unoffered_tool_call_recovers_instead_of_killing_the_turn(pool: Poo
     let app: Router = router(app_state.clone())
         .split_for_parts()
         .0
-        .with_state(app_state);
+        .with_state(app_state.clone());
     let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
 
     let response = server
@@ -4289,6 +4308,30 @@ async fn test_unoffered_tool_call_recovers_instead_of_killing_the_turn(pool: Poo
     assert_eq!(tool_use_parts.len(), 1, "Got: {tool_use_parts:?}");
     assert_eq!(tool_use_parts[0]["tool_call_id"], "call_ghost");
     assert_eq!(tool_use_parts[0]["status"], "error");
+    if nuls {
+        let saved = Messages::find_by_id(Uuid::parse_str(&assistant_message_id).unwrap())
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            erato::models::message::MessageSchema::validate(&saved.raw_message)
+                .unwrap()
+                .full_text(),
+            "Recovered."
+        );
+        assert_eq!(tool_use_parts[0]["tool_name"], "totally_made_up_tool");
+        assert_eq!(
+            tool_use_parts[0]["output"]["error"],
+            "Proposed tool call 'totally_made_up_tool' is not allowed for this request"
+        );
+        assert_eq!(
+            tool_use_parts[0]["input"],
+            json!({
+                "nested": [{"query": "Lichtste4rke Lichtstärke", "literal": r"\u0000"}]
+            })
+        );
+    }
     assert!(
         tool_use_parts[0]["output"]["error"]
             .as_str()
