@@ -3027,6 +3027,11 @@ msgid "officeAddin.word.rich.updateObject"
 msgstr "Zaktualizuj: {label}"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.preparingDocument"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysInsert"
 msgstr "Wstawia tekst w bieżącym miejscu kursora bez pytania. Ta czynność nie obsługuje cofania w Erato; w razie potrzeby użyj funkcji Cofnij w Wordzie."

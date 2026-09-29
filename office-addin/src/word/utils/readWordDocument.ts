@@ -39,6 +39,8 @@ export async function readWordDocument(
   const word = wordGlobal();
   if (!word) return { ok: false };
 
+  // The full package supersedes the body OOXML, which is then not fetched.
+  const packaged = includeAuthoring && supportsWordDocumentPackage();
   try {
     const result = await word.run(async (context) => {
       const paragraphs = context.document.body.paragraphs;
@@ -48,16 +50,17 @@ export async function readWordDocument(
       await context.sync();
 
       const texts = paragraphs.items.map((paragraph) => paragraph.getText());
-      const native = includeAuthoring ? context.document.body.getOoxml() : null;
+      const native =
+        includeAuthoring && !packaged ? context.document.body.getOoxml() : null;
       if (includeAuthoring) context.document.load("changeTrackingMode");
       await context.sync();
 
       return {
         ok: true as const,
-        ...(native
+        ...(includeAuthoring
           ? {
               authoring: {
-                ooxml: native.value,
+                ooxml: native?.value ?? "",
                 tracking: String(context.document.changeTrackingMode),
               },
             }
@@ -71,7 +74,7 @@ export async function readWordDocument(
         })),
       };
     });
-    if (includeAuthoring && result.authoring && supportsWordDocumentPackage()) {
+    if (packaged && result.authoring) {
       // A failed full capture must not degrade into a partial rewrite or clear.
       const full = await captureWordDocumentPackage();
       return {

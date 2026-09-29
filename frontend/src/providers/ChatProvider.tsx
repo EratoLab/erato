@@ -19,6 +19,7 @@ import {
 } from "./FeatureConfigProvider";
 import { useFileCapabilitiesContext } from "./FileCapabilitiesProvider";
 
+import type { SendMessagePreparation } from "@/hooks/chat/sendMessagePreparation";
 import type { ContinueToolApprovalInput } from "@/hooks/chat/useChatMessaging";
 import type {
   ChatsError,
@@ -91,6 +92,7 @@ export interface ChatContextValue {
     mcpWriteToolsEnabled?: boolean,
     disabledMcpServerIds?: string[],
     disabledMcpTools?: string[],
+    prepare?: SendMessagePreparation,
   ) => Promise<string | undefined>;
   editMessage: (
     messageId: string,

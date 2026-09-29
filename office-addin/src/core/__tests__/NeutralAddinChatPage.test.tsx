@@ -9,9 +9,15 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AddinChatCore } from "../AddinChatCore";
+import { AddinChatProviderCore } from "../AddinChatProviderCore";
 import { NeutralAddinChatPage } from "../NeutralAddinChatPage";
 
-import type { ChatContextValue } from "@erato/frontend/library";
+import type { AddinChatController, AddinChatHostProps } from "../AddinChatCore";
+import type {
+  ChatContextValue,
+  SendMessagePreparation,
+} from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 const spies = vi.hoisted(() => ({
@@ -33,6 +39,8 @@ const spies = vi.hoisted(() => ({
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
   chatContextValue: { current: null as ChatContextValue | null },
   sendMessage: vi.fn(async () => undefined),
+  uploadedFiles: [] as { id: string; filename: string }[],
+  controller: { current: null as AddinChatController | null },
   inputProps: {
     current: null as null | {
       onSendMessage: (
@@ -143,6 +151,14 @@ vi.mock("@erato/frontend/library", async () => {
     },
     useInfiniteRecentChats: spies.useInfiniteRecentChats,
     useUpdateChatTitle: () => spies.updateChatTitle,
+    useFileUploadStore: Object.assign(vi.fn(), {
+      getState: () => ({
+        silentChatId: null,
+        error: null,
+        setError: vi.fn(),
+        uploadedFiles: spies.uploadedFiles,
+      }),
+    }),
     useMessagingStore: Object.assign(() => spies.messagingStore, {
       getState: () => spies.messagingStore,
     }),
@@ -738,5 +754,142 @@ describe("NeutralAddinChatPage host boundary", () => {
         screen.getByTestId("addin-history-drawer-trigger"),
       ).toHaveAccessibleName("Open menu, 1 chat needs attention");
     });
+  });
+});
+
+describe("AddinChatCore prepared sends", () => {
+  const CaptureHost = ({ controller }: AddinChatHostProps) => {
+    spies.controller.current = controller;
+    return null;
+  };
+  const controls = {
+    setDraftMessage: vi.fn(),
+    addUploadedFiles: vi.fn(),
+    focusInput: vi.fn(),
+    setSelectedFacetIds: vi.fn(),
+    toggleFacetId: vi.fn(),
+    setSelectedChatProviderId: vi.fn(),
+    clearQueuedMessage: vi.fn(),
+  };
+
+  const renderCore = () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AddinChatProviderCore platform="addin-neutral">
+          <AddinChatCore Host={CaptureHost} />
+        </AddinChatProviderCore>
+      </QueryClientProvider>,
+    );
+    const controller = spies.controller.current!;
+    controller.chatInputControlsRef.current = controls;
+    return controller;
+  };
+  const beforeSend = vi.fn();
+  const lastPreparation = () =>
+    (spies.sendMessage.mock.calls.at(-1) as unknown[] | undefined)?.[11] as
+      | SendMessagePreparation
+      | undefined;
+
+  beforeEach(() => {
+    i18n.activate("en");
+    spies.sendMessage.mockClear();
+    spies.uploadedFiles = [{ id: "file-1", filename: "chart.png" }];
+    Object.values(controls).forEach((fn) => fn.mockClear());
+    beforeSend.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const sendPrepared = (
+    controller: AddinChatController,
+    prepare: NonNullable<
+      Parameters<AddinChatController["handleSendMessage"]>[11]
+    >,
+  ) => {
+    controller.hostCallbacksRef.current = { beforeSend };
+    act(() => {
+      controller.handleSendMessage(
+        "Rewrite it",
+        ["file-1"],
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        prepare,
+      );
+    });
+  };
+
+  it("keeps the unprepared send shape for other hosts", () => {
+    const controller = renderCore();
+    controller.hostCallbacksRef.current = { beforeSend };
+
+    act(() => controller.handleSendMessage("plain", undefined));
+
+    expect(beforeSend).toHaveBeenCalledWith(undefined);
+    expect(spies.sendMessage.mock.calls.at(-1)).toHaveLength(11);
+  });
+
+  it("runs beforeSend with the prepared identity only once the capture finished", async () => {
+    const controller = renderCore();
+    sendPrepared(controller, {
+      label: "Preparing document…",
+      run: async () => ({
+        actionFacet: { id: "word_document_review" },
+        hostContextIdentity: "doc-1",
+      }),
+    });
+
+    const preparation = lastPreparation();
+    expect(preparation?.label).toBe("Preparing document…");
+    expect(beforeSend).not.toHaveBeenCalled();
+
+    const prepared = await preparation!.run(new AbortController().signal);
+
+    expect(prepared).toEqual({ actionFacet: { id: "word_document_review" } });
+    expect(beforeSend).toHaveBeenCalledWith("doc-1");
+  });
+
+  it("returns the draft and its files to the composer when the send is dropped", async () => {
+    const controller = renderCore();
+    const onAbandoned = vi.fn();
+    sendPrepared(controller, { run: async () => null, onAbandoned });
+    // The composer removes the attachments right after submitting.
+    spies.uploadedFiles = [];
+
+    const preparation = lastPreparation()!;
+    expect(await preparation.run(new AbortController().signal)).toBeNull();
+    act(() => preparation.onAbandoned?.());
+
+    expect(onAbandoned).toHaveBeenCalledTimes(1);
+    expect(beforeSend).not.toHaveBeenCalled();
+    expect(controls.setDraftMessage).toHaveBeenCalledWith("Rewrite it", {
+      focus: true,
+    });
+    expect(controls.addUploadedFiles).toHaveBeenCalledWith([
+      { id: "file-1", filename: "chart.png" },
+    ]);
+  });
+
+  it("drops a preparation that finishes after the send was stopped", async () => {
+    const controller = renderCore();
+    sendPrepared(controller, {
+      run: async () => ({ hostContextIdentity: "doc-1" }),
+    });
+    const aborted = new AbortController();
+    aborted.abort();
+
+    expect(await lastPreparation()!.run(aborted.signal)).toBeNull();
+    expect(beforeSend).not.toHaveBeenCalled();
   });
 });

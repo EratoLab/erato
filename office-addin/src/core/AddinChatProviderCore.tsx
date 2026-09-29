@@ -286,6 +286,7 @@ function AddinChatDataProvider({
     messages,
     isLoading: isMessagingLoading,
     isStreaming,
+    pendingLabel,
     isPendingResponse,
     isFinalizing,
     streamingContent,
@@ -367,6 +368,9 @@ function AddinChatDataProvider({
                 : isStreaming
                   ? "typing"
                   : "done",
+              ...(pendingLabel && message.id.startsWith("temp-assistant-")
+                ? { context: pendingLabel }
+                : {}),
             },
           };
         } else {
@@ -449,6 +453,7 @@ function AddinChatDataProvider({
     messagingError,
     mountKey,
     navigateToChat,
+    pendingLabel,
     refetchHistory,
     refetchMessages,
     regenerateMessage,

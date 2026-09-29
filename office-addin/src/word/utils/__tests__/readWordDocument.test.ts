@@ -1,12 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
 import { readWordDocument } from "../readWordDocument";
+import {
+  captureWordDocumentPackage,
+  supportsWordDocumentPackage,
+} from "../wordDocumentPackage";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
+
+vi.mock("../wordDocumentPackage", () => ({
+  supportsWordDocumentPackage: vi.fn(() => false),
+  captureWordDocumentPackage: vi.fn(),
+}));
 
 describe("readWordDocument", () => {
   let word: MockWordHost;
@@ -58,6 +67,62 @@ describe("readWordDocument", () => {
 
     expect(word.word.run).toHaveBeenCalledTimes(1);
     expect(word.word.syncCount()).toBe(2);
+  });
+
+  const countBodyOoxmlReads = () => {
+    const reads = { count: 0 };
+    const run = word.word.run.getMockImplementation()!;
+    word.word.run.mockImplementationOnce((callback) =>
+      run(async (raw: unknown) => {
+        const context = raw as Word.RequestContext;
+        const getOoxml = context.document.body.getOoxml.bind(
+          context.document.body,
+        );
+        context.document.body.getOoxml = () => {
+          reads.count += 1;
+          return getOoxml();
+        };
+        return callback(context);
+      }),
+    );
+    return reads;
+  };
+
+  it("reads the body OOXML for authoring without a full package", async () => {
+    const reads = countBodyOoxmlReads();
+
+    const result = await readWordDocument(true);
+
+    expect(reads.count).toBe(1);
+    expect(result.ok && result.authoring?.fullDocument).toBeFalsy();
+    expect(result.ok && result.authoring?.ooxml).toContain("Revenue grew.");
+  });
+
+  it("skips the body OOXML when the full package replaces it", async () => {
+    vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+    vi.mocked(captureWordDocumentPackage).mockResolvedValueOnce({
+      ooxml: "<package/>",
+      documentUrl: "https://contoso.example/a.docx",
+    } as Awaited<ReturnType<typeof captureWordDocumentPackage>>);
+    const reads = countBodyOoxmlReads();
+
+    const result = await readWordDocument(true);
+
+    expect(reads.count).toBe(0);
+    expect(result.ok && result.authoring).toMatchObject({
+      ooxml: "<package/>",
+      fullDocument: true,
+      documentUrl: "https://contoso.example/a.docx",
+    });
+  });
+
+  it("resolves to a failure when the full package cannot be captured", async () => {
+    vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+    vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(
+      new Error("getFileAsync failed"),
+    );
+
+    await expect(readWordDocument(true)).resolves.toEqual({ ok: false });
   });
 
   it("resolves to a failure when the run rejects", async () => {

@@ -25,6 +25,7 @@ import {
   useChatHeader,
   useConversationDropzone,
   useFileCapabilitiesContext,
+  useFileUploadStore,
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
   useGenerationIndicatorCount,
@@ -43,6 +44,7 @@ import {
   type MessageAction,
   type MessageControlsComponent,
   type MessageControlsContext,
+  type SendMessagePreparation,
   type SidebarToggleProps,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
@@ -69,6 +71,21 @@ export interface AddinChatHostCallbacks {
   beforeRegenerate?: (assistantMessageId: string) => void;
 }
 
+/**
+ * Host capture that runs after the message is shown and before the request is
+ * built. A dropped send returns the draft to the composer.
+ */
+export interface AddinSendPreparation {
+  label?: string;
+  /** Resolving null drops the send. */
+  run: (signal: AbortSignal) => Promise<{
+    actionFacet?: ActionFacetRequest;
+    hostContextIdentity: string | null;
+  } | null>;
+  /** Called once when the send is dropped before it reaches the server. */
+  onAbandoned?: () => void;
+}
+
 export interface AddinChatInputRenderProps {
   ref: MutableRefObject<ChatInputControlsHandle | null>;
   onSendMessage: (
@@ -83,6 +100,7 @@ export interface AddinChatInputRenderProps {
     mcpWriteToolsEnabled?: boolean,
     disabledMcpServerIds?: string[],
     disabledMcpTools?: string[],
+    prepare?: AddinSendPreparation,
   ) => void;
   onFilePreview: (file: FileUploadItem) => void;
   handleFileAttachments: (files: FileUploadItem[]) => void;
@@ -221,6 +239,23 @@ function useAddinChatController({
     }),
     [],
   );
+  // The composer clears its draft right after submit, before a prepared send
+  // can fail, so the files are resolved while they are still attached.
+  const snapshotDraft = useCallback(
+    (message: string, inputFileIds?: string[]) => {
+      const uploaded = useFileUploadStore.getState().uploadedFiles;
+      const files = (inputFileIds ?? [])
+        .map((fileId) => uploaded.find((file) => file.id === fileId))
+        .filter((file): file is FileUploadItem => file !== undefined);
+      return () => {
+        const controls = chatInputControlsRef.current;
+        if (!controls) return;
+        controls.setDraftMessage(message, { focus: true });
+        if (files.length > 0) controls.addUploadedFiles(files);
+      };
+    },
+    [],
+  );
 
   const chat = useChatContext();
   const { profile } = useProfile();
@@ -295,8 +330,34 @@ function useAddinChatController({
       mcpWriteToolsEnabled,
       disabledMcpServerIds,
       disabledMcpTools,
+      prepare,
     ) => {
-      hostCallbacksRef.current.beforeSend?.(hostContextIdentity);
+      if (!prepare) {
+        hostCallbacksRef.current.beforeSend?.(hostContextIdentity);
+      }
+      const restoreDraft = prepare
+        ? snapshotDraft(message, inputFileIds)
+        : null;
+      const preparation = prepare
+        ? [
+            {
+              label: prepare.label,
+              run: async (signal: AbortSignal) => {
+                const prepared = await prepare.run(signal);
+                if (!prepared || signal.aborted) return null;
+                // The host context is only known once the capture has finished.
+                hostCallbacksRef.current.beforeSend?.(
+                  prepared.hostContextIdentity,
+                );
+                return { actionFacet: prepared.actionFacet };
+              },
+              onAbandoned: () => {
+                prepare.onAbandoned?.();
+                restoreDraft?.();
+              },
+            } satisfies SendMessagePreparation,
+          ]
+        : [];
       // No history refetch here: sendMessage resolves at dispatch, before
       // the server lists the chat, and the messaging pipeline already
       // invalidates the recent-chats listings when the stream completes.
@@ -312,9 +373,10 @@ function useAddinChatController({
         mcpWriteToolsEnabled,
         disabledMcpServerIds,
         disabledMcpTools,
+        ...preparation,
       );
     },
-    [assistantId, chat],
+    [assistantId, chat, snapshotDraft],
   );
   const cancelEdit = useCallback(() => setEditingMessageId(null), []);
   const handleEditSubmit = useCallback(

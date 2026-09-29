@@ -2,6 +2,7 @@ import { useCallback } from "react";
 
 import { createLogger } from "@/utils/debugLogger";
 
+import type { SendMessagePreparation } from "./sendMessagePreparation";
 import type {
   ActionFacetRequest,
   DelegationRunMode,
@@ -25,6 +26,7 @@ interface UseChatActionsProps {
     mcpWriteToolsEnabled?: boolean,
     disabledMcpServerIds?: string[],
     disabledMcpTools?: string[],
+    prepare?: SendMessagePreparation,
   ) => Promise<string | undefined>;
   onMessageAction?: (action: MessageAction) => Promise<boolean>;
 }

@@ -3027,6 +3027,11 @@ msgid "officeAddin.word.rich.updateObject"
 msgstr "Update {label}"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.preparingDocument"
+msgstr "Preparing document…"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysInsert"
 msgstr "Inserts text at the current cursor without asking. This action has no Erato Revert; use Word Undo if needed."
