@@ -16,6 +16,9 @@ const source: SourceDescriptor = {
   lastSuccessAt: null,
   lastErrorCode: null,
   displayName: "Work mailbox",
+  indexingEnabled: true,
+  product: "outlook",
+  product_variant: "outlook_classic",
   providerExtension: { revision: 2 },
 };
 

@@ -57,6 +57,9 @@ describe("desktop sidecar protocol extensibility", () => {
       lastSuccessAt: null,
       lastErrorCode: null,
       displayName: "Work mailbox",
+      indexingEnabled: true,
+      product: "outlook",
+      product_variant: "outlook_classic",
     };
     expect(
       validateSourcesListV1Result({
@@ -64,6 +67,23 @@ describe("desktop sidecar protocol extensibility", () => {
         futureResultField: true,
       }),
     ).toBe(true);
+    const legacySource = Object.fromEntries(
+      Object.entries(source).filter(
+        ([key]) =>
+          ![
+            "displayName",
+            "indexingEnabled",
+            "product",
+            "product_variant",
+          ].includes(key),
+      ),
+    );
+    expect(validateSourcesListV1Result({ sources: [legacySource] })).toBe(true);
+    expect(
+      validateSourcesListV1Result({
+        sources: [{ ...source, indexingEnabled: "yes" }],
+      }),
+    ).toBe(false);
 
     const start = JSON.parse(
       await readFile(

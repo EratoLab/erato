@@ -16,11 +16,32 @@
       "type": "string",
       "minLength": 1
     },
+    "displayName": {
+      "description": "Human-readable source name for direct presentation. Older sidecars may omit it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "indexingEnabled": {
+      "description": "Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.",
+      "type": "boolean"
+    },
+    "product": {
+      "description": "Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.",
+      "type": "string",
+      "minLength": 1
+    },
+    "product_variant": {
+      "description": "Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.",
+      "type": "string",
+      "minLength": 1
+    },
     "locator": {
       "type": "object",
       "additionalProperties": true
     },
     "enabled": {
+      "description": "Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.",
       "type": "boolean"
     },
     "discoveryCursor": {
