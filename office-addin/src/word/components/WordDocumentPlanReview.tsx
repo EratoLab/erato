@@ -9,6 +9,7 @@ import {
 } from "./WordRichBlockPreview";
 import { WordSectionPlanPreview } from "./WordSectionPlanPreview";
 import { wordPlanOutput, wordSourceReadRefs } from "../utils/wordDocumentPlan";
+import { createWordListNumbering } from "../utils/wordPlanReview";
 
 import type {
   WordAuthoringSnapshot,
@@ -32,25 +33,10 @@ export function WordDocumentPlanReview({
   const [filter, setFilter] = useState("all");
   const [expanded, setExpanded] = useState<string | null>(null);
   const output = wordPlanOutput(plan, snapshot);
-  const listCounts = new Map<string, number>();
-  const listLabels = new Map<string, number>();
-  for (const item of output) {
-    if (
-      item.block.type !== "list-item" ||
-      !item.block.list ||
-      !item.block.ordered
-    )
-      continue;
-    for (const key of listCounts.keys()) {
-      const [list, level] = key.split(":");
-      if (list === item.block.list && Number(level) > (item.block.level ?? 0))
-        listCounts.delete(key);
-    }
-    const listKey = `${item.block.list}:${item.block.level ?? 0}`;
-    const count = (listCounts.get(listKey) ?? 0) + 1;
-    listCounts.set(listKey, count);
-    listLabels.set(item.key, count);
-  }
+  const ordinalOf = createWordListNumbering();
+  const listLabels = new Map(
+    output.map((item) => [item.key, ordinalOf(item.block)]),
+  );
   const added = plan.entries.reduce(
     (count, e) => count + (e.kind === "insert" ? e.blocks.length : 0),
     0,

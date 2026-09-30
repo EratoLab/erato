@@ -8,8 +8,11 @@ import {
   readWordImageData,
   wordImageDimensions,
 } from "../utils/wordMediaContent";
+import {
+  createWordListNumbering,
+  wordSourceTable,
+} from "../utils/wordPlanReview";
 import { resolveWordSource, wordSourceDetails } from "../utils/wordRichContent";
-import { readWordTableContent } from "../utils/wordTableContent";
 
 import type {
   WordBorder,
@@ -25,7 +28,6 @@ import type { WordDrawingSpec, WordImageSpec } from "../utils/wordMediaContent";
 import type {
   WordTableBlock,
   WordTableCellFormatting,
-  WordTableContent,
 } from "../utils/wordTableContent";
 import type { CSSProperties } from "react";
 
@@ -154,32 +156,6 @@ function cellStyle(value: WordTableCellFormatting | undefined): CSSProperties {
   };
 }
 
-function sourceTable(
-  snapshot: WordAuthoringSnapshot,
-  ref: string | undefined,
-): WordTableContent<WordPlanBlock> | undefined {
-  if (!ref) return undefined;
-  const block = snapshot.blocks.find((source) => source.ref === ref);
-  if (block?.content) return block.content;
-  const source = resolveWordSource(snapshot, ref);
-  if (!source) return undefined;
-  const root = new DOMParser().parseFromString(
-    source.xml,
-    "application/xml",
-  ).documentElement;
-  const tables = [
-    root,
-    ...Array.from(
-      root.getElementsByTagNameNS(
-        "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-        "tbl",
-      ),
-    ),
-  ].filter((e, i, all) => e.localName === "tbl" && all.indexOf(e) === i);
-  const table = tables[source.index ?? 0];
-  return table ? readWordTableContent<WordPlanBlock>(table) : undefined;
-}
-
 function TablePreview({
   block,
   snapshot,
@@ -188,7 +164,7 @@ function TablePreview({
   snapshot: WordAuthoringSnapshot;
 }) {
   const original = useMemo(
-    () => sourceTable(snapshot, block.sourceRef),
+    () => wordSourceTable(snapshot, block.sourceRef),
     [snapshot, block.sourceRef],
   );
   const columnCount =
@@ -790,11 +766,12 @@ export function WordRichBlockSequence({
   blocks: WordPlanBlock[];
   snapshot: WordAuthoringSnapshot;
 }) {
-  const counts = new Map<string, number>();
+  const ordinalOf = createWordListNumbering();
   return (
     <>
       {blocks.map((block) => {
-        if (block.type !== "list-item")
+        const ordinal = ordinalOf(block);
+        if (ordinal === undefined)
           return (
             <WordRichBlockPreview
               key={block.id}
@@ -802,14 +779,6 @@ export function WordRichBlockSequence({
               snapshot={snapshot}
             />
           );
-        for (const key of counts.keys()) {
-          const [list, level] = key.split(":");
-          if (list === block.list && Number(level) > (block.level ?? 0))
-            counts.delete(key);
-        }
-        const key = `${block.list}:${block.level ?? 0}`;
-        const ordinal = (counts.get(key) ?? 0) + 1;
-        counts.set(key, ordinal);
         return (
           <div
             key={block.id}

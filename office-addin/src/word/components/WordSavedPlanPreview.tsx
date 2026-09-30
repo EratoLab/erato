@@ -3,6 +3,7 @@ import { t } from "@lingui/core/macro";
 import { useId, useState } from "react";
 
 import { WordRichBlockSequence } from "./WordRichBlockPreview";
+import { planCounts } from "../utils/wordPlanReview";
 
 import type {
   WordAuthoringSnapshot,
@@ -25,18 +26,8 @@ const NO_SOURCES: WordAuthoringSnapshot = {
 export function WordSavedPlanPreview({ plan }: { plan: WordDocumentPlan }) {
   const [expanded, setExpanded] = useState(false);
   const id = useId();
-  const added = plan.entries.reduce(
-    (total, entry) =>
-      total + (entry.kind === "insert" ? entry.blocks.length : 0),
-    0,
-  );
-  const kept = plan.entries.flatMap((entry) =>
-    entry.kind === "keep" ? entry.source : [],
-  );
-  const replaced = plan.entries.flatMap((entry) =>
-    entry.kind === "replace" ? entry.source : [],
-  );
-  const removed = plan.deleted.flatMap((entry) => entry.source);
+  const counts = planCounts(plan);
+  const { added } = counts;
   return (
     <div className="word-review__header">
       <h3>
@@ -48,7 +39,7 @@ export function WordSavedPlanPreview({ plan }: { plan: WordDocumentPlan }) {
       <p className="word-review__totals">
         {t({
           id: "officeAddin.word.authoring.counts",
-          message: `${kept.length} reused · ${replaced.length} rewritten · ${removed.length} removed · ${added} added`,
+          message: `${counts.kept} reused · ${counts.replaced} rewritten · ${counts.removed} removed · ${added} added`,
         })}
       </p>
       <p className="word-review__hint">
