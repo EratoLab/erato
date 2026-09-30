@@ -14,7 +14,7 @@ summary_chat_provider_id = "mock-llm-openai"
 provider_kind = "openai"
 model_name = "placeholder"
 model_display_name = "Mock-LLM"
-base_url = "http://erato-local-mock-llm-server:44320/base-openai/v1/placeholder"
+base_url = "http://{{ include "erato-local.fullname" . }}-mock-llm-server.{{ .Release.Namespace }}.svc.cluster.local:44320/base-openai/v1/placeholder"
 
 [chat_providers.providers.mock-llm-openai.model_capabilities]
 supports_audio_input = true
@@ -65,26 +65,26 @@ allow_always = true
 
 [mcp_servers.mock_mcp_approval]
 transport_type = "streamable_http"
-url = "http://erato-local-mock-mcp-server:44321/mcp/approval-policy"
+url = "http://{{ include "erato-local.fullname" . }}-mock-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:44321/mcp/approval-policy"
 
 [mcp_servers.mock_mcp_progress]
 transport_type = "streamable_http"
-url = "http://erato-local-mock-mcp-server:44321/mcp/progress"
+url = "http://{{ include "erato-local.fullname" . }}-mock-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:44321/mcp/progress"
 
 [mcp_servers.mock_mcp_image_generation]
 transport_type = "streamable_http"
-url = "http://erato-local-mock-mcp-server:44321/mcp/image-generation"
+url = "http://{{ include "erato-local.fullname" . }}-mock-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:44321/mcp/image-generation"
 
 [mcp_servers.mock_mcp_auth_none]
 transport_type = "streamable_http"
-url = "http://erato-local-mock-mcp-server:44321/mcp/auth-none"
+url = "http://{{ include "erato-local.fullname" . }}-mock-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:44321/mcp/auth-none"
 
 [mcp_servers.mock_mcp_auth_none.authentication]
 mode = "none"
 
 [mcp_servers.mock_mcp_auth_forwarded_access]
 transport_type = "streamable_http"
-url = "http://erato-local-mock-mcp-server:44321/mcp/auth-forwarded-access"
+url = "http://{{ include "erato-local.fullname" . }}-mock-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:44321/mcp/auth-forwarded-access"
 
 [mcp_servers.mock_mcp_auth_forwarded_access.authentication]
 mode = "forwarded"
@@ -94,7 +94,7 @@ credential = "access_token"
 
 [mcp_servers.mock_mcp_auth_forwarded_oidc]
 transport_type = "streamable_http"
-url = "http://erato-local-mock-mcp-server:44321/mcp/auth-forwarded-oidc"
+url = "http://{{ include "erato-local.fullname" . }}-mock-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:44321/mcp/auth-forwarded-oidc"
 
 [mcp_servers.mock_mcp_auth_forwarded_oidc.authentication]
 mode = "forwarded"
@@ -104,7 +104,7 @@ credential = "oidc_id_token"
 
 [mcp_servers.mock_mcp_auth_fixed]
 transport_type = "streamable_http"
-url = "http://erato-local-mock-mcp-server:44321/mcp/auth-fixed"
+url = "http://{{ include "erato-local.fullname" . }}-mock-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:44321/mcp/auth-fixed"
 
 [mcp_servers.mock_mcp_auth_fixed.authentication]
 mode = "fixed"
@@ -114,7 +114,7 @@ api_key = "fixed-api-key-secret"
 
 [mcp_servers.mock_mcp_unavailable_500]
 transport_type = "streamable_http"
-url = "http://erato-local-mock-mcp-server:44321/mcp/list-tools-500"
+url = "http://{{ include "erato-local.fullname" . }}-mock-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:44321/mcp/list-tools-500"
 
 [mcp_server_permissions.rules.allow_mock_mcp_progress_for_all]
 rule_type = "allow-all"

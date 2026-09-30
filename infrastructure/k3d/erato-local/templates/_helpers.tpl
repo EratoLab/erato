@@ -49,3 +49,10 @@ Selector labels
 app.kubernetes.io/name: {{ include "erato-local.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{- define "erato-local.imagePullSecrets" -}}
+{{- with .Values.global.imagePullSecrets }}
+imagePullSecrets:
+{{ toYaml . | indent 2 }}
+{{- end }}
+{{- end }}
