@@ -33,6 +33,35 @@ export const LIST_SIDECAR_MAILBOXES_TOOL = "list_sidecar_mailboxes";
 export const GET_SIDECAR_FOLDER_HIERARCHY_TOOL = "get_sidecar_folder_hierarchy";
 export const GET_SIDECAR_DOCUMENT_TOOL = "get_sidecar_document";
 
+/**
+ * Namespace the deployment's configuration packages give the sidecar tools.
+ * Tool calls carry only the bare model-facing name; per-tool decisions are
+ * keyed by the qualified name the backend filters on.
+ */
+export const SIDECAR_TOOL_NAMESPACE = "desktop";
+
+export const sidecarQualifiedToolName = (name: string) =>
+  `${SIDECAR_TOOL_NAMESPACE}/${name}`;
+
+/** Each sidecar tool and the sidecar method it needs, in display order. */
+export const SIDECAR_CHAT_TOOL_METHODS: readonly {
+  name: string;
+  method: string;
+}[] = [
+  { name: SEARCH_SIDECAR_INDEX_TOOL, method: "search.query.v1" },
+  {
+    name: READ_SIDECAR_CONVERSATION_TOOL,
+    method: "outlook.get_conversation.v1",
+  },
+  { name: GET_SIDECAR_DOCUMENT_TOOL, method: "sources.get_document.v1" },
+  { name: GET_SIDECAR_SEARCH_FIELDS_TOOL, method: "search.metadata_fields.v1" },
+  { name: LIST_SIDECAR_MAILBOXES_TOOL, method: "outlook.list_mailboxes.v1" },
+  {
+    name: GET_SIDECAR_FOLDER_HIERARCHY_TOOL,
+    method: "sources.get_folder_hierarchy.v1",
+  },
+];
+
 export interface SidecarAttachmentUpload {
   (
     file: File,
@@ -57,6 +86,7 @@ export interface SidecarChatToolOptions {
 
 export interface SidecarChatTool {
   name: string;
+  method: string;
   isAvailable: () => boolean;
   execute: ClientToolExecutor;
 }
@@ -121,6 +151,7 @@ export function createSidecarChatTools(
     execute: ClientToolExecutor,
   ): SidecarChatTool => ({
     name,
+    method,
     // Any delegation declaration blocks legacy content, even if strict support
     // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
     isAvailable: () =>

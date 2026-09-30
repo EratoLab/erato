@@ -2,6 +2,7 @@
 
 mod client_operations;
 mod client_submissions;
+mod client_tool_decisions;
 mod token_usage_tool_parts;
 mod tool_arguments;
 mod tool_call_budget;
@@ -11067,6 +11068,78 @@ async fn test_optional_client_tools_follow_registration_without_changing_legacy_
             vec!["fetch_availability"],
             vec!["fetch_availability", "search_sidecar_index"],
             vec!["fetch_availability"]
+        ]
+    );
+}
+
+/// A client tool the user never allows is withheld from the model; "ask" still offers it.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_never_allowed_client_tool_is_not_offered(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    let captured = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post().path("/v1/chat/completions").matcher(captured);
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["DECISION-ANSWER"]),
+        );
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    for name in ["search_sidecar_index", "read_sidecar_conversation"] {
+        config.client_tools.tools.insert(
+            name.into(),
+            ClientToolConfig {
+                name: name.into(),
+                namespace: Some("desktop".into()),
+                description: "Read-only test tool".into(),
+                parameters: r#"{"type":"object","properties":{}}"#.into(),
+                requires_client_registration: true,
+                timeout_ms: None,
+                submission: None,
+                replay: Default::default(),
+            },
+        );
+    }
+    config.facets.tool_call_allowlist = vec!["desktop/*".into()];
+    let state = test_app_state(config, pool).await;
+    get_or_create_user(&state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let server = app_server(state);
+    for decisions in [
+        json!({}),
+        json!({
+            "desktop/search_sidecar_index": "never_allow",
+            "desktop/read_sidecar_conversation": "ask",
+        }),
+    ] {
+        server
+            .put("/api/v1beta/me/profile/preferences")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "client_tool_decisions": decisions }))
+            .await
+            .assert_status_ok();
+        server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header(
+                "X-Erato-Client-Tools",
+                "search_sidecar_index,read_sidecar_conversation",
+            )
+            .json(&json!({ "user_message": "search locally" }))
+            .await
+            .assert_status_ok();
+    }
+    let mut offers = recorded_tool_offers(&recorder.bodies());
+    for offered in &mut offers {
+        offered.sort();
+    }
+    assert_eq!(
+        offers,
+        vec![
+            vec!["read_sidecar_conversation", "search_sidecar_index"],
+            vec!["read_sidecar_conversation"],
         ]
     );
 }

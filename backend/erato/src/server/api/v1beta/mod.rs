@@ -867,6 +867,11 @@ async fn fetch_entra_id_profile_photo_data_url(
 pub struct UpdateProfilePreferencesRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_tool_file_approval: Option<crate::config::ClientToolFileApproval>,
+    /// Replaces all per-tool client tool decisions, keyed by qualified `namespace/name`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub client_tool_decisions:
+        Option<std::collections::BTreeMap<String, models::user_preference::ClientToolDecision>>,
     /// Preferred name to address the user with.
     #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -965,12 +970,21 @@ pub async fn update_profile_preferences(
     };
     let starting_hub_assistant_id = parse_pick(request.preference_starting_hub_assistant_id)?;
     let starting_assistant_id = parse_pick(request.preference_starting_assistant_id)?;
+    if let Some(decisions) = &request.client_tool_decisions
+        && (decisions.len() > models::user_preference::MAX_CLIENT_TOOL_DECISIONS
+            || !decisions
+                .keys()
+                .all(|name| models::user_preference::is_valid_qualified_tool_name(name)))
+    {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+    }
 
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
         &user_id,
         models::user_preference::UpdateUserPreferencesInput {
             client_tool_file_approval: request.client_tool_file_approval,
+            client_tool_decisions: request.client_tool_decisions,
             nickname: request.preference_nickname,
             job_title: request.preference_job_title,
             assistant_custom_instructions: request.preference_assistant_custom_instructions,
@@ -1011,6 +1025,9 @@ pub async fn update_profile_preferences(
     profile.preference_starting_assistant_id =
         updated_prefs.starting_assistant_id.map(|id| id.to_string());
     profile.preference_starting_assistant_cleared = updated_prefs.starting_assistant_cleared;
+    profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(
+        &updated_prefs.client_tool_decisions,
+    );
 
     Ok(Json(profile))
 }

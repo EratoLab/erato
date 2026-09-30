@@ -598,35 +598,46 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
         })
         .collect::<Vec<_>>()
         .join("\n\n");
+    // A client tool runs on the user's device, never in Teams, so its approval
+    // is left to the Erato app instead of a card whose approval could not run it.
+    let client_tool_approval = matches!(
+        content.last(),
+        Some(ContentPart::ToolApprovalRequest(request))
+            if request.kind == ToolApprovalKind::ClientTool
+    );
     let approvals = match content.last() {
-        Some(ContentPart::ToolApprovalRequest(request)) => Some(PendingApprovalSet {
-            message_id: message_id.to_string(),
-            kind: match request.kind {
-                ToolApprovalKind::McpTool => ApprovalKind::McpTool,
-                ToolApprovalKind::DelegatedTask => ApprovalKind::DelegatedTask,
-                ToolApprovalKind::TaskPlan => ApprovalKind::TaskPlan,
-                ToolApprovalKind::ToolCallLimit => ApprovalKind::ToolCallLimit,
-            },
-            items: request
-                .approval_items()
-                .into_iter()
-                .map(|item| match item.child {
-                    // A delegated task's item names the parent's delegation
-                    // call; the decision is about the child's gated tool.
-                    Some(child) => PendingApprovalItem {
-                        approval_id: item.approval_id,
-                        tool_name: child.tool_name,
-                        input: child.input,
-                    },
-                    None => PendingApprovalItem {
-                        approval_id: item.approval_id,
-                        tool_name: item.tool_name,
-                        input: item.input,
-                    },
-                })
-                .collect(),
-        })
-        .filter(|set: &PendingApprovalSet| !set.items.is_empty()),
+        Some(ContentPart::ToolApprovalRequest(request)) if !client_tool_approval => {
+            Some(PendingApprovalSet {
+                message_id: message_id.to_string(),
+                kind: match request.kind {
+                    ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool => {
+                        ApprovalKind::McpTool
+                    }
+                    ToolApprovalKind::DelegatedTask => ApprovalKind::DelegatedTask,
+                    ToolApprovalKind::TaskPlan => ApprovalKind::TaskPlan,
+                    ToolApprovalKind::ToolCallLimit => ApprovalKind::ToolCallLimit,
+                },
+                items: request
+                    .approval_items()
+                    .into_iter()
+                    .map(|item| match item.child {
+                        // A delegated task's item names the parent's delegation
+                        // call; the decision is about the child's gated tool.
+                        Some(child) => PendingApprovalItem {
+                            approval_id: item.approval_id,
+                            tool_name: child.tool_name,
+                            input: child.input,
+                        },
+                        None => PendingApprovalItem {
+                            approval_id: item.approval_id,
+                            tool_name: item.tool_name,
+                            input: item.input,
+                        },
+                    })
+                    .collect(),
+            })
+            .filter(|set: &PendingApprovalSet| !set.items.is_empty())
+        }
         _ => None,
     };
     Completion {
@@ -634,7 +645,8 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
         message_id,
         text,
         approvals,
-        needs_client: matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
+        needs_client: client_tool_approval
+            || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
     }
 }
 
@@ -647,4 +659,55 @@ fn error_message(error: Option<&Value>) -> String {
         })
         .unwrap_or("The answer could not be generated.")
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::message::{ContentPartToolApprovalRequest, ToolApprovalAnnotations};
+
+    fn approval(kind: ToolApprovalKind) -> ContentPart {
+        ContentPart::ToolApprovalRequest(ContentPartToolApprovalRequest {
+            tool_call_id: "call-1".to_string(),
+            tool_name: "search_sidecar_index".to_string(),
+            mcp_server_id: "desktop".to_string(),
+            input: json!({}),
+            annotations: ToolApprovalAnnotations {
+                read_only_hint: false,
+                destructive_hint: true,
+                idempotent_hint: false,
+                open_world_hint: true,
+            },
+            preset: String::new(),
+            allow_always: true,
+            requested_at: String::new(),
+            kind,
+            approvals: Vec::new(),
+            pending_tool_calls: Vec::new(),
+        })
+    }
+
+    #[test]
+    fn a_client_tool_approval_is_left_to_the_erato_app() {
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[approval(ToolApprovalKind::ClientTool)],
+        );
+        assert!(completion.approvals.is_none());
+        assert!(completion.needs_client);
+    }
+
+    #[test]
+    fn an_mcp_tool_approval_still_gets_a_card() {
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[approval(ToolApprovalKind::McpTool)],
+        );
+        let approvals = completion.approvals.expect("an approval card");
+        assert_eq!(approvals.kind, ApprovalKind::McpTool);
+        assert_eq!(approvals.items.len(), 1);
+        assert!(!completion.needs_client);
+    }
 }

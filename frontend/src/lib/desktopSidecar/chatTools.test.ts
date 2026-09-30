@@ -5,6 +5,7 @@ import {
   createSidecarChatTools,
   GET_SIDECAR_SEARCH_FIELDS_TOOL,
   GET_SIDECAR_DOCUMENT_TOOL,
+  SIDECAR_CHAT_TOOL_METHODS,
 } from "./chatTools";
 import { resolveSidecarMailboxId } from "./mailboxAccess";
 
@@ -1011,4 +1012,18 @@ it("blocks legacy tool execution for a present but unavailable delegation declar
   }
   expect(f.request).not.toHaveBeenCalled();
   expect(f.uploadAttachment).not.toHaveBeenCalled();
+});
+
+const byName = (a: { name: string }, b: { name: string }) =>
+  a.name.localeCompare(b.name);
+
+describe("settings tool list", () => {
+  it("lists every registered tool with the sidecar method it needs", () => {
+    const registered = setup({})
+      .tools()
+      .map(({ name, method }) => ({ name, method }));
+    expect([...SIDECAR_CHAT_TOOL_METHODS].sort(byName)).toEqual(
+      registered.sort(byName),
+    );
+  });
 });

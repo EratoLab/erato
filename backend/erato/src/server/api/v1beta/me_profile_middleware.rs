@@ -21,6 +21,10 @@ pub struct UserProfile {
     /// Effective decision, including the configured default when no user override exists.
     #[serde(default)]
     pub client_tool_file_approval: crate::config::ClientToolFileApproval,
+    /// Per-tool decisions keyed by qualified `namespace/name`; absent tools keep their default.
+    #[serde(default)]
+    pub client_tool_decisions:
+        std::collections::BTreeMap<String, crate::models::user_preference::ClientToolDecision>,
     pub id: String,
     /// The user's email address. Shouldn't be used as a unique identifier, as it may change.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,6 +112,7 @@ impl UserProfile {
         Self {
             id: user_id,
             client_tool_file_approval: Default::default(),
+            client_tool_decisions: Default::default(),
             email: profile.email,
             name: profile.name,
             picture: profile.picture,
@@ -187,6 +192,10 @@ impl UserProfile {
             self.preference_starting_assistant_id =
                 prefs.starting_assistant_id.map(|id| id.to_string());
             self.preference_starting_assistant_cleared = prefs.starting_assistant_cleared;
+            self.client_tool_decisions =
+                crate::models::user_preference::client_tool_decisions_from_json(
+                    &prefs.client_tool_decisions,
+                );
         }
     }
 }

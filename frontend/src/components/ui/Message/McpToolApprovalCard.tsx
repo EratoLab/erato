@@ -5,6 +5,7 @@ import { useContext, useEffect, useState } from "react";
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { ToolCallInput } from "@/components/ui/ToolCall";
+import { getClientToolHeaders } from "@/hooks/chat/clientToolExecutors";
 import { readConflictRefusal } from "@/hooks/chat/conflictRefusal";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
@@ -12,6 +13,7 @@ import { useChatArchived } from "@/hooks/chat/useChatArchived";
 import {
   listMcpServerToolsQuery,
   listUserToolApprovalSettingsQuery,
+  profileQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   buildContinueStreamBody,
@@ -20,7 +22,7 @@ import {
 import { ChatContext } from "@/providers/ChatProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
 
-import { ResolvedIcon } from "../icons";
+import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { DelegatedTaskApprovalCard } from "./DelegatedTaskApprovalCard";
@@ -198,6 +200,7 @@ export const McpToolApprovalCard = ({
         "Content-Type": "application/json",
         // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP auth header
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...getClientToolHeaders(),
       },
       body: JSON.stringify(
         buildContinueStreamBody({
@@ -272,7 +275,14 @@ export const McpToolApprovalCard = ({
           answer.decision === "approve_always" ||
           answer.decision === "reject_always",
       );
-      if (standing.length > 0) {
+
+      if (standing.length > 0 && kind === "client_tool") {
+        // Saved in the user's preferences, which the settings list reads
+        // from the profile.
+        await queryClient.invalidateQueries({
+          queryKey: profileQuery({}).queryKey,
+        });
+      } else if (standing.length > 0) {
         // A standing decision is account-wide, and the settings roster and
         // the tool browser would otherwise keep serving the old state from
         // their cached listing. (The streamed path drops them itself, once
@@ -355,12 +365,16 @@ export const McpToolApprovalCard = ({
     );
   };
 
-  const openWorldDescription = request.annotations.openWorldHint
-    ? t({
-        id: "mcpApproval.openWorldWarning",
-        message: "This tool may send data to an external service.",
-      })
-    : null;
+  const isClientTool = kind === "client_tool";
+  // A client tool declares no annotations of its own; the defaults it carries
+  // describe nothing about what it does.
+  const openWorldDescription =
+    !isClientTool && request.annotations.openWorldHint
+      ? t({
+          id: "mcpApproval.openWorldWarning",
+          message: "This tool may send data to an external service.",
+        })
+      : null;
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.
@@ -457,7 +471,7 @@ export const McpToolApprovalCard = ({
   // Compared as a string because the value comes off the wire: a kind a newer
   // server added reaches this client although the generated union says it
   // cannot, and the turn cannot go on until it is answered either way.
-  if ((kind as string) !== "mcp_tool") {
+  if ((kind as string) !== "mcp_tool" && !isClientTool) {
     return (
       <div
         data-testid="tool-approval-generic"
@@ -494,28 +508,45 @@ export const McpToolApprovalCard = ({
     <div
       data-testid="mcp-tool-approval"
       data-tool-name={request.tool_name}
+      data-approval-kind={kind}
       className={APPROVAL_CARD_SHELL_CLASS}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <ResolvedIcon
-          iconId="simpleicons-modelcontextprotocol"
-          className="size-4 shrink-0 text-theme-fg-secondary"
-        />
+        {isClientTool ? (
+          <ComputerIcon className="size-4 shrink-0 text-theme-fg-secondary" />
+        ) : (
+          <ResolvedIcon
+            iconId="simpleicons-modelcontextprotocol"
+            className="size-4 shrink-0 text-theme-fg-secondary"
+          />
+        )}
         <span className="text-sm font-medium text-theme-fg-primary">
           {request.tool_name}
         </span>
         <span className="text-xs text-theme-fg-muted">
-          {request.mcp_server_id}
+          {isClientTool
+            ? t({
+                id: "clientToolApproval.thisDevice",
+                message: "This device",
+              })
+            : request.mcp_server_id}
         </span>
       </div>
       <div className="mt-2 max-h-48 overflow-y-auto">
         <ToolCallInput input={request.input} />
       </div>
       <ActionConfirmationCard
-        title={t({
-          id: "mcpApproval.title",
-          message: "Allow MCP tool call?",
-        })}
+        title={
+          isClientTool
+            ? t({
+                id: "clientToolApproval.title",
+                message: "Allow this tool to run on your device?",
+              })
+            : t({
+                id: "mcpApproval.title",
+                message: "Allow MCP tool call?",
+              })
+        }
         description={openWorldDescription ?? undefined}
         onAllowOnce={() => void decide("approve")}
         // Keep "Always allow" discoverable when the deployment enforces

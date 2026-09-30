@@ -6353,6 +6353,15 @@
           }
         }
       },
+      "ClientToolDecision": {
+        "type": "string",
+        "description": "A user's standing decision for one client tool, keyed by its qualified\n`namespace/name`. Tools without a decision keep their default behaviour.",
+        "enum": [
+          "never_allow",
+          "ask",
+          "always_allow"
+        ]
+      },
       "ClientToolDraftReference": {
         "type": "object",
         "description": "Opaque host-owned correction handle; it grants no permission to apply an artifact.",
@@ -11403,7 +11412,8 @@
           "mcp_tool",
           "delegated_task",
           "task_plan",
-          "tool_call_limit"
+          "tool_call_limit",
+          "client_tool"
         ]
       },
       "ToolCallStatus": {
@@ -11681,6 +11691,16 @@
       "UpdateProfilePreferencesRequest": {
         "type": "object",
         "properties": {
+          "client_tool_decisions": {
+            "type": "object",
+            "description": "Replaces all per-tool client tool decisions, keyed by qualified `namespace/name`.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ClientToolDecision"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "client_tool_file_approval": {
             "oneOf": [
               {
@@ -11777,6 +11797,16 @@
           "organization_group_ids"
         ],
         "properties": {
+          "client_tool_decisions": {
+            "type": "object",
+            "description": "Per-tool decisions keyed by qualified `namespace/name`; absent tools keep their default.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ClientToolDecision"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "client_tool_file_approval": {
             "$ref": "#/components/schemas/ClientToolFileApproval",
             "description": "Effective decision, including the configured default when no user override exists."

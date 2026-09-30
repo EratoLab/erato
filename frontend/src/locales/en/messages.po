@@ -2529,6 +2529,16 @@ msgid "chatInput.mentions.sectionHeader"
 msgstr "Assistants"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.thisDevice"
+msgstr "This device"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.title"
+msgstr "Allow this tool to run on your device?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveKind.businessLibrary"
 msgstr "Business library"
@@ -2981,6 +2991,36 @@ msgstr "Distribution has not been enabled or the configured artifacts could not 
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.unavailable.title"
 msgstr "Desktop Sidecar downloads are unavailable"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.folderHierarchy.label"
+msgstr "Read the folder structure"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.getDocument.label"
+msgstr "Retrieve a document or attachment"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.listMailboxes.label"
+msgstr "List mailboxes on this device"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.readConversation.label"
+msgstr "Read an email conversation"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.search.label"
+msgstr "Search local emails and files"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.searchFields.label"
+msgstr "List searchable fields"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -3942,6 +3982,16 @@ msgstr "Connecting..."
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.status.unavailable"
 msgstr "Not connected"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SidecarToolDecisions.tsx
+msgid "preferences.dialog.desktopSidecar.tools.heading"
+msgstr "Tools the assistant may use on this device"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SidecarToolDecisions.tsx
+msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
+msgstr "Could not save this choice. Try again."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx

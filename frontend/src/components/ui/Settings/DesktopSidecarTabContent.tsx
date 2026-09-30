@@ -11,6 +11,7 @@ import {
 
 import { ClientToolFileApprovalSetting } from "./ClientToolFileApprovalSetting";
 import { EntityRow } from "./EntityRow";
+import { SidecarToolDecisions } from "./SidecarToolDecisions";
 import { Button } from "../Controls/Button";
 import { SidecarIndexingControls } from "../DesktopSidecar/SidecarIndexingCard";
 import { ComputerIcon, FolderIcon } from "../icons";
@@ -109,6 +110,9 @@ function DesktopSidecarEntityRow({
       ) : (
         <ClientToolFileApprovalSetting />
       )}
+      {connected && !snapshot.localDelegation && client ? (
+        <SidecarToolDecisions client={client} />
+      ) : null}
       {connected &&
         !snapshot.localDelegation &&
         client?.supports("indexing.status.v1") && <SidecarIndexingControls />}

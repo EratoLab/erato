@@ -3345,6 +3345,27 @@ describe("useChatMessaging", () => {
       sseCallbacks = {};
     });
 
+    it("tells the server which client tools this device runs, since an approved one runs here", () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      act(() => {
+        void result.current.continueToolApproval({
+          messageId: parkedMessage.id,
+          decision: "approve",
+          toolCallId: "call_probe",
+          toolName: "publish_approval_probe",
+          toolInput: { channel: "release" },
+          mcpServerId: "mock_mcp_approval",
+        });
+      });
+
+      const options = getContinueCall()?.[1] as { headers?: object };
+      expect(options.headers).toHaveProperty("X-Erato-Client-Tools");
+    });
+
     it("releases the decision as soon as the server accepts it, not when the continuation ends", async () => {
       const { result } = renderHook(() => useChatMessaging("chat1"), {
         wrapper: TestWrapper,

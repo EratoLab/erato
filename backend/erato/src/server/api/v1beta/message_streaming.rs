@@ -133,10 +133,10 @@ fn now_timestamp() -> String {
     Utc::now().to_rfc3339()
 }
 
-/// What the approval gate does with one MCP tool call once the policy and
-/// the user's own decision are combined.
+/// What the approval gate does with one MCP or client tool call once the
+/// policy and the user's own decision are combined.
 #[derive(Debug, PartialEq)]
-enum McpToolCallGate {
+enum ToolCallGate {
     Run,
     /// Boxed: the request carries the whole decision list, and every call that
     /// simply runs would otherwise pay for it.
@@ -157,51 +157,105 @@ fn gate_mcp_tool_call(
     tool: &rmcp::model::Tool,
     tool_call: &genai::chat::ToolCall,
     user_decision: Option<UserToolDecision>,
-) -> McpToolCallGate {
+) -> ToolCallGate {
     let verdict = evaluate_mcp_tool_approval(config, tool);
     match effective_mcp_tool_state(config, &verdict, user_decision) {
-        McpToolEffectiveState::Allow => McpToolCallGate::Run,
-        McpToolEffectiveState::Denied => McpToolCallGate::Refuse(format!(
-            "The user has disabled the tool '{}' in their settings; the call was not executed.",
-            tool_call.fn_name
-        )),
-        McpToolEffectiveState::Ask => {
-            let display_name = sanitize_display_text(&tool_call.fn_name, MAX_DISPLAY_NAME_CHARS);
-            if display_name.truncated || display_name.text != tool_call.fn_name {
-                return McpToolCallGate::Refuse(format!(
-                    "The tool '{}' has a name that cannot be shown for approval; the call was not executed.",
-                    display_name.text
-                ));
-            }
-            McpToolCallGate::Ask(Box::new(ContentPartToolApprovalRequest {
-                tool_call_id: tool_call.call_id.clone(),
-                tool_name: display_name.text.clone(),
-                mcp_server_id: server_id.to_string(),
-                input: tool_call.fn_arguments.clone(),
-                annotations: verdict.annotations.clone(),
-                preset: match config.preset {
-                    McpToolApprovalPreset::Permissive => "permissive",
-                    McpToolApprovalPreset::Restrictive => "restrictive",
-                }
-                .to_string(),
-                allow_always: config.allow_always,
-                requested_at: now_timestamp(),
-                kind: ToolApprovalKind::McpTool,
-                // The call id doubles as the approval id: one gated MCP call
-                // is one decision, and the continuation already keys the
-                // resolved slot by it.
-                approvals: vec![ApprovalItem {
-                    approval_id: tool_call.call_id.clone(),
-                    tool_call_id: tool_call.call_id.clone(),
-                    tool_name: display_name.text,
-                    input: tool_call.fn_arguments.clone(),
-                    child: None,
-                }],
-                // The rest of the parked batch is recorded by the caller that
-                // owns the queue, not by this per-call gate.
-                pending_tool_calls: Vec::new(),
-            }))
-        }
+        McpToolEffectiveState::Allow => ToolCallGate::Run,
+        McpToolEffectiveState::Denied => refuse_denied_tool_call(tool_call),
+        McpToolEffectiveState::Ask => ask_for_tool_call(
+            tool_call,
+            ToolApprovalKind::McpTool,
+            server_id,
+            verdict.annotations.clone(),
+            match config.preset {
+                McpToolApprovalPreset::Permissive => "permissive",
+                McpToolApprovalPreset::Restrictive => "restrictive",
+            },
+            config.allow_always,
+        ),
+    }
+}
+
+fn refuse_denied_tool_call(tool_call: &genai::chat::ToolCall) -> ToolCallGate {
+    ToolCallGate::Refuse(format!(
+        "The user has disabled the tool '{}' in their settings; the call was not executed.",
+        tool_call.fn_name
+    ))
+}
+
+/// Park one tool call on an approval card. `source_id` is the MCP server id,
+/// or a client tool's namespace.
+fn ask_for_tool_call(
+    tool_call: &genai::chat::ToolCall,
+    kind: ToolApprovalKind,
+    source_id: &str,
+    annotations: crate::models::message::ToolApprovalAnnotations,
+    preset: &str,
+    allow_always: bool,
+) -> ToolCallGate {
+    let display_name = sanitize_display_text(&tool_call.fn_name, MAX_DISPLAY_NAME_CHARS);
+    if display_name.truncated || display_name.text != tool_call.fn_name {
+        return ToolCallGate::Refuse(format!(
+            "The tool '{}' has a name that cannot be shown for approval; the call was not executed.",
+            display_name.text
+        ));
+    }
+    ToolCallGate::Ask(Box::new(ContentPartToolApprovalRequest {
+        tool_call_id: tool_call.call_id.clone(),
+        tool_name: display_name.text.clone(),
+        mcp_server_id: source_id.to_string(),
+        input: tool_call.fn_arguments.clone(),
+        annotations,
+        preset: preset.to_string(),
+        allow_always,
+        requested_at: now_timestamp(),
+        kind,
+        // The call id doubles as the approval id: one gated call is one
+        // decision, and the continuation already keys the resolved slot by it.
+        approvals: vec![ApprovalItem {
+            approval_id: tool_call.call_id.clone(),
+            tool_call_id: tool_call.call_id.clone(),
+            tool_name: display_name.text,
+            input: tool_call.fn_arguments.clone(),
+            child: None,
+        }],
+        // The rest of the parked batch is recorded by the caller that owns the
+        // queue, not by this per-call gate.
+        pending_tool_calls: Vec::new(),
+    }))
+}
+
+/// The client-tool counterpart of [`gate_mcp_tool_call`]. There is no policy
+/// default: a tool the user never decided on runs, as it always has.
+///
+/// Asking parks the same durable stop an MCP approval does, so the user's time
+/// to decide never counts against the tool's result timeout.
+fn gate_client_tool_call(
+    namespace: &str,
+    tool_call: &genai::chat::ToolCall,
+    decision: Option<crate::models::user_preference::ClientToolDecision>,
+) -> ToolCallGate {
+    use crate::models::user_preference::ClientToolDecision;
+    match decision {
+        None | Some(ClientToolDecision::AlwaysAllow) => ToolCallGate::Run,
+        Some(ClientToolDecision::NeverAllow) => refuse_denied_tool_call(tool_call),
+        Some(ClientToolDecision::Ask) => ask_for_tool_call(
+            tool_call,
+            ToolApprovalKind::ClientTool,
+            namespace,
+            // A client tool declares no MCP annotations; these are the
+            // pessimistic defaults a card reads for a tool without any.
+            crate::models::message::ToolApprovalAnnotations {
+                read_only_hint: false,
+                destructive_hint: true,
+                idempotent_hint: false,
+                open_world_hint: true,
+            },
+            "",
+            // The decision is the user's own preference, so the MCP policy
+            // switch for standing grants does not apply.
+            true,
+        ),
     }
 }
 
@@ -443,6 +497,8 @@ pub struct MeProfileChatRequestInput<'a> {
     pub user_preference_job_title: Option<&'a str>,
     pub user_preference_assistant_custom_instructions: Option<&'a str>,
     pub user_preference_assistant_additional_information: Option<&'a str>,
+    pub client_tool_decisions:
+        &'a std::collections::BTreeMap<String, crate::models::user_preference::ClientToolDecision>,
 }
 
 impl<'a> MeProfileChatRequestInput<'a> {
@@ -465,6 +521,7 @@ impl<'a> MeProfileChatRequestInput<'a> {
             user_preference_assistant_additional_information: me_profile
                 .preference_assistant_additional_information
                 .as_deref(),
+            client_tool_decisions: &me_profile.client_tool_decisions,
         }
     }
 }
@@ -1766,6 +1823,9 @@ pub struct ContinueStreamRequest {
     decisions: Vec<ApprovalDecisionItem>,
     #[serde(default)]
     decision: Option<ToolApprovalDecision>,
+    /// The `X-Erato-Client-Tools` of the device answering, when it sent one.
+    #[serde(skip)]
+    registered_client_tools: Option<Vec<String>>,
 }
 
 impl ContinueStreamRequest {
@@ -1785,6 +1845,7 @@ impl ContinueStreamRequest {
                 })
                 .collect(),
             decision: None,
+            registered_client_tools: None,
         }
     }
 }
@@ -3599,6 +3660,13 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                     &client_tool_allowlist,
                 )
             })
+            // A tool the user never allows is not offered, so the model cannot plan around it.
+            .filter(|client_tool| {
+                me_profile_input
+                    .client_tool_decisions
+                    .get(&client_tool.qualified_name())
+                    != Some(&crate::models::user_preference::ClientToolDecision::NeverAllow)
+            })
             .collect();
         let selection = crate::services::client_tools::select_client_tools(
             allowlist_matched,
@@ -5021,6 +5089,9 @@ async fn stream_generate_chat_completion<
         .map(|resume| resume.consumption.clone())
         .unwrap_or_default();
     let mut resume_iteration = resume.is_some() && consumption.model_turns > 0;
+    let continuing_client_tools = resume
+        .as_ref()
+        .and_then(|resume| resume.continuing_client_tools.clone());
     let (mut unfinished_tool_calls, approved_task_call_ids): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
@@ -6167,11 +6238,98 @@ async fn stream_generate_chat_completion<
                 let tool_call_parent_observation_id =
                     tool_call_parent_observation_ids.remove(&call_id);
 
-                let Some(task) = streaming_task else {
-                    // No streaming task to park on (non-streaming caller):
-                    // answer the model with an error so it can recover.
-                    let response_text =
-                        "Client tool execution is unavailable for this request.".to_string();
+                let tool_policy = offered_client_tools.get(&tool_name);
+                // Read on every call like an MCP decision, so one stored while
+                // the turn runs holds. A call the user just approved on a card
+                // is not asked about again, and a registered operation kind
+                // asks through its own consent policy instead.
+                let gate = match tool_policy {
+                    Some(policy) if !approved_task_call_ids.contains(&call_id) => {
+                        let qualified_name = policy.config.qualified_name();
+                        let decision = match Uuid::parse_str(&user_id) {
+                            Ok(user_id) => {
+                                crate::models::user_preference::find_client_tool_decision(
+                                    &app_state.db,
+                                    &user_id,
+                                    &qualified_name,
+                                )
+                                .await?
+                            }
+                            Err(_) => None,
+                        };
+                        let registered_kind =
+                            app_state.config.client_tools.durable_operations_enabled
+                                && app_state
+                                    .client_operations
+                                    .for_operation(&qualified_name)
+                                    .is_some();
+                        match gate_client_tool_call(
+                            policy.config.namespace_or_default(),
+                            &unfinished_tool_call,
+                            decision,
+                        ) {
+                            ToolCallGate::Ask(_) if registered_kind => ToolCallGate::Run,
+                            gate => gate,
+                        }
+                    }
+                    _ => ToolCallGate::Run,
+                };
+                if let ToolCallGate::Ask(approval_request) = gate {
+                    let mut approval_request = *approval_request;
+                    approval_request.pending_tool_calls = unfinished_tool_calls
+                        .drain(..)
+                        .map(|call| crate::models::message::PendingToolCall {
+                            call_id: call.call_id,
+                            fn_name: call.fn_name,
+                            fn_arguments: call.fn_arguments,
+                        })
+                        .collect();
+                    pending_approval_part = Some(approval_request);
+                    exit_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        false,
+                        None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
+                    );
+                    exit_after_join = true;
+                    break 'pop_calls;
+                }
+                // A continuation may come from a device without this tool's
+                // executor, e.g. an approval given on another machine: answer at
+                // once instead of letting the call wait out its timeout.
+                let missing_executor = tool_policy.is_some_and(|policy| {
+                    policy.config.requires_client_registration
+                        && continuing_client_tools
+                            .as_ref()
+                            .is_some_and(|registered| !registered.contains(&policy.config.name))
+                });
+                let refusal = match gate {
+                    ToolCallGate::Refuse(message) => Some(("rejected", message)),
+                    _ if streaming_task.is_none() => Some((
+                        "error",
+                        "Client tool execution is unavailable for this request.".to_string(),
+                    )),
+                    _ if missing_executor => Some((
+                        "error",
+                        format!(
+                            "The tool '{tool_name}' is not available on this device; the call was not executed."
+                        ),
+                    )),
+                    _ => None,
+                };
+                let (Some(task), None) = (streaming_task, &refusal) else {
+                    let (status, response_text) = refusal.unwrap_or_else(|| {
+                        (
+                            "error",
+                            "Client tool execution is unavailable for this request.".to_string(),
+                        )
+                    });
                     upsert_tool_use(
                         &mut current_message_content,
                         ToolUse {
@@ -6182,7 +6340,7 @@ async fn stream_generate_chat_completion<
                             progress_message: None,
                             progress: None,
                             total: None,
-                            output: Some(json!({ "status": "error", "error": response_text })),
+                            output: Some(json!({ "status": status, "error": response_text })),
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
                         },
@@ -6190,7 +6348,7 @@ async fn stream_generate_chat_completion<
                     persist_otel_tool_call(
                         tracing_client.as_ref(),
                         &unfinished_tool_call,
-                        Some(json!({ "status": "error", "error": response_text })),
+                        Some(json!({ "status": status, "error": response_text })),
                         otel_tool_call_start_time,
                         Some(SystemTime::now()),
                         tool_call_parent_observation_id,
@@ -6208,8 +6366,6 @@ async fn stream_generate_chat_completion<
                     ));
                     continue;
                 };
-
-                let tool_policy = offered_client_tools.get(&tool_name);
                 let submission = tool_policy.and_then(|policy| policy.submission.as_ref());
                 let attempt = if submission.is_some() {
                     *tool_charges
@@ -6694,9 +6850,9 @@ async fn stream_generate_chat_completion<
                 &unfinished_tool_call,
                 user_decision,
             ) {
-                McpToolCallGate::Run => None,
-                McpToolCallGate::Refuse(error_message) => Some(error_message),
-                McpToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
+                ToolCallGate::Run => None,
+                ToolCallGate::Refuse(error_message) => Some(error_message),
+                ToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
                     // A delegated run with nowhere to ask must not park: the
                     // durable stop would surface a half-done
                     // ToolApprovalRequest tail as the delegate's result.
@@ -6710,7 +6866,7 @@ async fn stream_generate_chat_completion<
                         unfinished_tool_call.fn_name
                     ))
                 }
-                McpToolCallGate::Ask(approval_request) => {
+                ToolCallGate::Ask(approval_request) => {
                     let mut approval_request = *approval_request;
                     // The rest of the batch lives only in this local queue: the
                     // park abandons it, so without recording it here every call
@@ -10153,8 +10309,8 @@ fn merge_action_facet_into_mcp_allowlist(
 #[cfg(test)]
 mod tests {
     use super::{
-        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, McpToolCallGate,
-        ReservedSelection, StreamRouteError, ToolApprovalDecision, apply_assistant_server_filter,
+        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, ReservedSelection,
+        StreamRouteError, ToolApprovalDecision, ToolCallGate, apply_assistant_server_filter,
         derive_requested_server_ids_from_allowlist, detached_generation_event_sink,
         effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
         filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
@@ -10486,14 +10642,14 @@ mod tests {
 
         let plain = Tool::new("publish", "publish", Map::new());
         match gate_mcp_tool_call(&restrictive, "server", &plain, &call("publish"), None) {
-            McpToolCallGate::Ask(request) => assert_eq!(request.tool_name, "publish"),
+            ToolCallGate::Ask(request) => assert_eq!(request.tool_name, "publish"),
             other => panic!("expected an approval request, got {other:?}"),
         }
 
         let overridden = "publish\u{202E}hsilbup";
         let tool = Tool::new(overridden.to_string(), "publish", Map::new());
         match gate_mcp_tool_call(&restrictive, "server", &tool, &call(overridden), None) {
-            McpToolCallGate::Refuse(message) => {
+            ToolCallGate::Refuse(message) => {
                 assert!(!message.contains('\u{202E}'), "{message}");
                 assert!(message.contains("publishhsilbup"), "{message}");
             }
@@ -10504,7 +10660,7 @@ mod tests {
         let tool = Tool::new(long_name.clone(), "long", Map::new());
         assert!(matches!(
             gate_mcp_tool_call(&restrictive, "server", &tool, &call(&long_name), None),
-            McpToolCallGate::Refuse(_)
+            ToolCallGate::Refuse(_)
         ));
     }
 
@@ -10523,6 +10679,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: Some(decision),
+            registered_client_tools: None,
         }
     }
 
@@ -10537,6 +10694,7 @@ mod tests {
                 })
                 .collect(),
             decision: None,
+            registered_client_tools: None,
         }
     }
 
@@ -10556,7 +10714,7 @@ mod tests {
         let tool = Tool::new("publish", "publish", Map::new());
 
         match gate_mcp_tool_call(&restrictive, "server", &tool, &call, None) {
-            McpToolCallGate::Ask(request) => {
+            ToolCallGate::Ask(request) => {
                 assert_eq!(request.kind, ToolApprovalKind::McpTool);
                 assert_eq!(request.approvals.len(), 1);
                 let item = &request.approvals[0];
@@ -10734,6 +10892,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: None,
+            registered_client_tools: None,
         };
         assert!(matches!(
             resolve_submitted_decisions(&empty, &open),
@@ -10804,14 +10963,14 @@ mod tests {
         for (config, tool, expected) in cases {
             let gate = gate_mcp_tool_call(config, "server", tool, &call, None);
             let verdict = evaluate_mcp_tool_approval(config, tool);
-            let asks = matches!(gate, McpToolCallGate::Ask(_));
+            let asks = matches!(gate, ToolCallGate::Ask(_));
             assert_eq!(asks, expected, "{:?} {}", config, tool.name);
             assert_eq!(verdict.requires_approval, asks);
             match gate {
-                McpToolCallGate::Ask(request) => {
+                ToolCallGate::Ask(request) => {
                     assert_eq!(request.annotations, verdict.annotations)
                 }
-                other => assert_eq!(other, McpToolCallGate::Run),
+                other => assert_eq!(other, ToolCallGate::Run),
             }
         }
 
@@ -10823,11 +10982,11 @@ mod tests {
         let ask = Some(UserToolDecision::Ask);
         assert!(matches!(
             gate_mcp_tool_call(&permissive, "server", &read_only_closed, &call, ask),
-            McpToolCallGate::Ask(_)
+            ToolCallGate::Ask(_)
         ));
         assert_eq!(
             gate_mcp_tool_call(&disabled, "server", &read_only_closed, &call, ask),
-            McpToolCallGate::Run
+            ToolCallGate::Run
         );
         let granting = McpToolApprovalConfig {
             allow_always: true,
@@ -10836,11 +10995,11 @@ mod tests {
         let grant = Some(UserToolDecision::AlwaysAllow);
         assert_eq!(
             gate_mcp_tool_call(&granting, "server", &unannotated, &call, grant),
-            McpToolCallGate::Run
+            ToolCallGate::Run
         );
         assert!(matches!(
             gate_mcp_tool_call(&restrictive, "server", &unannotated, &call, grant),
-            McpToolCallGate::Ask(_)
+            ToolCallGate::Ask(_)
         ));
     }
 
@@ -10881,7 +11040,7 @@ mod tests {
         for config in [&permissive, &restrictive, &granting, &disabled] {
             for tool in [&read_only_closed, &unannotated] {
                 match gate_mcp_tool_call(config, "server", tool, &call, denied) {
-                    McpToolCallGate::Refuse(message) => {
+                    ToolCallGate::Refuse(message) => {
                         assert!(message.contains("'publish'"), "{:?} {}", config, tool.name);
                         assert!(
                             message.contains("was not executed"),
@@ -15422,9 +15581,10 @@ pub(crate) async fn start_continuation(
             )
                 .into());
         }
-        if submitted_decisions
-            .iter()
-            .any(|(_, decision)| matches!(decision, ToolApprovalDecision::ApproveAlways))
+        if state.request.kind != ToolApprovalKind::ClientTool
+            && submitted_decisions
+                .iter()
+                .any(|(_, decision)| matches!(decision, ToolApprovalDecision::ApproveAlways))
             && !mcp.config.mcp_servers_global.approval.allow_always
         {
             return Err((
@@ -15528,8 +15688,14 @@ pub async fn continue_message_sse(
     State(app_state): State<AppState>,
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
-    Json(request): Json<ContinueStreamRequest>,
+    headers: axum::http::HeaderMap,
+    Json(mut request): Json<ContinueStreamRequest>,
 ) -> Result<Sse<SseEventStreamWithKeepAlive>, StreamRouteError> {
+    // Only a device that says which client tools it runs is held to that; an
+    // older client keeps the registration its turn started with.
+    request.registered_client_tools = headers
+        .contains_key("X-Erato-Client-Tools")
+        .then(|| crate::services::client_tools::registered_client_tools(&headers));
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     start_continuation(&app_state, &policy, &me_user, request, tx).await?;
     let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
@@ -15549,8 +15715,12 @@ pub(crate) struct ParkedTurnResume {
     pub initial_unfinished_tool_calls: Vec<genai::chat::ToolCall>,
     /// Task calls the user has just approved on a `task_plan` card. The
     /// dispatch-approval pre-pass skips them, or the decision the user made
-    /// would be asked for again the moment the turn resumes.
+    /// would be asked for again the moment the turn resumes. Client tool calls
+    /// approved on a `client_tool` card are named here for the same reason.
     pub approved_task_call_ids: HashSet<String>,
+    /// The client tools the device continuing this turn registered, when it
+    /// said. `None` keeps the registration the turn started with.
+    pub continuing_client_tools: Option<Vec<String>>,
 }
 
 /// How a continuation reached the worker, decided before the generation lease
@@ -15761,6 +15931,7 @@ async fn resume_parked_child(
                 })
                 .collect(),
             decision: None,
+            registered_client_tools: None,
         };
         let resumed = run_child_approval_continuation(
             app_state.clone(),
@@ -16305,7 +16476,12 @@ pub(crate) async fn run_continuation(
     ) = match approval_request.kind {
         ToolApprovalKind::McpTool => (submitted_decisions, Vec::new(), Vec::new()),
         ToolApprovalKind::DelegatedTask => (Vec::new(), submitted_decisions, Vec::new()),
-        ToolApprovalKind::TaskPlan => (Vec::new(), Vec::new(), submitted_decisions),
+        // A client tool item, like a plan item, names a call that never
+        // reached its executor, so it settles the same way: re-seeded on
+        // approval, refused on denial.
+        ToolApprovalKind::TaskPlan | ToolApprovalKind::ClientTool => {
+            (Vec::new(), Vec::new(), submitted_decisions)
+        }
         ToolApprovalKind::ToolCallLimit => (Vec::new(), Vec::new(), Vec::new()),
     };
 
@@ -16636,15 +16812,35 @@ pub(crate) async fn run_continuation(
                 "Approval '{approval_id}' is not open on this generation"
             ));
         };
+        // A client tool's standing answer is the user's own preference, kept
+        // whether or not the call can still run; a plan has none.
+        let standing = match (approval_request.kind, decision) {
+            (ToolApprovalKind::ClientTool, ToolApprovalDecision::ApproveAlways) => {
+                Some(crate::models::user_preference::ClientToolDecision::AlwaysAllow)
+            }
+            (ToolApprovalKind::ClientTool, ToolApprovalDecision::RejectAlways) => {
+                Some(crate::models::user_preference::ClientToolDecision::NeverAllow)
+            }
+            _ => None,
+        };
+        if let Some(standing) = standing {
+            crate::models::user_preference::set_client_tool_decision(
+                &app_state.db,
+                &user_id,
+                &format!("{}/{}", approval_request.mcp_server_id, item.tool_name),
+                standing,
+            )
+            .await?;
+        }
         if decision.is_approval() {
             parsed
                 .content
                 .push(ContentPart::ToolApproval(ContentPartToolApproval {
                     tool_call_id: item.tool_call_id.clone(),
-                    // No standing grant for a plan: `[delegation.tasks.approval]`
+                    // Never set for a plan: `[delegation.tasks.approval]`
                     // decides what may be dispatched unasked, not a per-user
                     // setting.
-                    always_allow: false,
+                    always_allow: standing.is_some(),
                     user_tool_approval_setting_id: None,
                     approved_at: now_timestamp(),
                     approval_id: Some(item.approval_id.clone()),
@@ -16661,7 +16857,7 @@ pub(crate) async fn run_continuation(
             .content
             .push(ContentPart::ToolRejection(ContentPartToolRejection {
                 tool_call_id: item.tool_call_id.clone(),
-                never_allow: false,
+                never_allow: standing.is_some(),
                 user_tool_approval_setting_id: None,
                 rejected_at: now_timestamp(),
                 approval_id: Some(item.approval_id.clone()),
@@ -16681,7 +16877,11 @@ pub(crate) async fn run_continuation(
             // has none for it, and "the user said no" is not a run outcome.
             output: Some(json!({
                 "status": "rejected",
-                "error": "The user declined this task.",
+                "error": if approval_request.kind == ToolApprovalKind::ClientTool {
+                    "The user denied this tool call."
+                } else {
+                    "The user declined this task."
+                },
             })),
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
@@ -16829,6 +17029,7 @@ pub(crate) async fn run_continuation(
         approved_plan_calls,
         approval_request.pending_tool_calls,
         None,
+        request.registered_client_tools.clone(),
     )
     .await
 }
@@ -16928,6 +17129,7 @@ async fn resume_parked_generation(
     approved_plan_calls: Vec<crate::models::message::PendingToolCall>,
     pending_from_park: Vec<crate::models::message::PendingToolCall>,
     operation_attempt: Option<Uuid>,
+    continuing_client_tools: Option<Vec<String>>,
 ) -> Result<(), Report> {
     let mcp = app_state.mcp_state().await;
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
@@ -17053,6 +17255,10 @@ async fn resume_parked_generation(
                 &saved.name,
                 &client_tool_allowlist,
             ) || mcp_claimed_names.contains(name)
+                || me_profile_input
+                    .client_tool_decisions
+                    .get(&saved.qualified_name())
+                    == Some(&crate::models::user_preference::ClientToolDecision::NeverAllow)
             {
                 continue;
             }
@@ -17302,6 +17508,7 @@ async fn resume_parked_generation(
         consumption: generation_parameters.turn_consumption.clone(),
         initial_unfinished_tool_calls: pending_tool_calls,
         approved_task_call_ids,
+        continuing_client_tools,
     });
 
     let chat_options =
@@ -17589,6 +17796,7 @@ pub(crate) async fn run_client_operation_continuation(
         Vec::new(),
         pending_calls,
         Some(attempt_id),
+        None,
     )
     .await
 }

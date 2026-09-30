@@ -2529,6 +2529,16 @@ msgid "chatInput.mentions.sectionHeader"
 msgstr "Assistenten"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.thisDevice"
+msgstr "Dieses Gerät"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.title"
+msgstr "Dieses Tool auf deinem Gerät ausführen lassen?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveKind.businessLibrary"
 msgstr ""
@@ -2981,6 +2991,36 @@ msgstr "Die Verteilung wurde nicht aktiviert oder die konfigurierten Artefakte k
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.unavailable.title"
 msgstr "Desktop-Sidecar-Downloads sind nicht verfügbar"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.folderHierarchy.label"
+msgstr "Ordnerstruktur lesen"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.getDocument.label"
+msgstr "Dokument oder Anhang abrufen"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.listMailboxes.label"
+msgstr "Postfächer auf diesem Gerät auflisten"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.readConversation.label"
+msgstr "E-Mail-Verlauf lesen"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.search.label"
+msgstr "Lokale E-Mails und Dateien durchsuchen"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.searchFields.label"
+msgstr "Durchsuchbare Felder auflisten"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -3942,6 +3982,16 @@ msgstr ""
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.status.unavailable"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SidecarToolDecisions.tsx
+msgid "preferences.dialog.desktopSidecar.tools.heading"
+msgstr "Werkzeuge, die der Assistent auf diesem Gerät verwenden darf"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SidecarToolDecisions.tsx
+msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
+msgstr "Diese Auswahl konnte nicht gespeichert werden. Bitte erneut versuchen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx

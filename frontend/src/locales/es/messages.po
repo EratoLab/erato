@@ -2529,6 +2529,16 @@ msgid "chatInput.mentions.sectionHeader"
 msgstr "Asistentes"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.thisDevice"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveKind.businessLibrary"
 msgstr ""
@@ -2981,6 +2991,36 @@ msgstr "La distribución no está habilitada o no se pudieron cargar los artefac
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.unavailable.title"
 msgstr "Las descargas de Desktop Sidecar no están disponibles"
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.folderHierarchy.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.getDocument.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.listMailboxes.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.readConversation.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.search.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/desktopSidecar/toolLabels.ts
+msgid "desktopSidecar.tools.searchFields.label"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -3941,6 +3981,16 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.status.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SidecarToolDecisions.tsx
+msgid "preferences.dialog.desktopSidecar.tools.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SidecarToolDecisions.tsx
+msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
 msgstr ""
 
 #. js-lingui-explicit-id

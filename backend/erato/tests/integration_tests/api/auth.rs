@@ -1,6 +1,7 @@
 //! Authentication and user profile API tests.
 
 use axum::Router;
+use axum::http::StatusCode;
 use axum_test::TestServer;
 use erato::config::LanguageDetectionPriority;
 use erato::models::user::get_or_create_user;
@@ -225,4 +226,70 @@ async fn test_profile_preferences_update_and_delete(pool: Pool<Postgres>) {
         profile["preference_job_title"].as_str().unwrap(),
         "Engineer"
     );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_client_tool_decisions_replace_the_map_and_reject_invalid_names(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let initial = server
+        .get("/api/v1beta/me/profile")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    initial.assert_status_ok();
+    assert_eq!(
+        initial.json::<Value>()["client_tool_decisions"],
+        serde_json::json!({})
+    );
+
+    let update = |decisions: Value| {
+        server
+            .put("/api/v1beta/me/profile/preferences")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&serde_json::json!({ "client_tool_decisions": decisions }))
+    };
+    let first = update(serde_json::json!({
+        "desktop/search_sidecar_index": "never_allow",
+        "desktop/read_sidecar_conversation": "ask",
+    }))
+    .await;
+    first.assert_status_ok();
+    assert_eq!(
+        first.json::<Value>()["client_tool_decisions"],
+        serde_json::json!({
+            "desktop/read_sidecar_conversation": "ask",
+            "desktop/search_sidecar_index": "never_allow",
+        })
+    );
+
+    update(serde_json::json!({ "desktop/get_sidecar_document": "always_allow" }))
+        .await
+        .assert_status_ok();
+    let profile = server
+        .get("/api/v1beta/me/profile")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(
+        profile.json::<Value>()["client_tool_decisions"],
+        serde_json::json!({ "desktop/get_sidecar_document": "always_allow" })
+    );
+
+    for invalid in [
+        serde_json::json!({ "search_sidecar_index": "ask" }),
+        serde_json::json!({ "desktop/": "ask" }),
+        serde_json::json!({ "desktop/search index": "ask" }),
+        serde_json::json!({ format!("desktop/{}", "a".repeat(65)): "ask" }),
+    ] {
+        update(invalid)
+            .await
+            .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    update(serde_json::json!({ "desktop/search_sidecar_index": "sometimes" }))
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
 }
