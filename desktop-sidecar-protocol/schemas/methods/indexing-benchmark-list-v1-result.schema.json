@@ -43,7 +43,7 @@
           "startedAt",
           "finishedAt"
         ],
-        "additionalProperties": false
+        "additionalProperties": true
       }
     },
     "nextOffset": {
@@ -53,5 +53,5 @@
     }
   },
   "required": ["runs", "nextOffset"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

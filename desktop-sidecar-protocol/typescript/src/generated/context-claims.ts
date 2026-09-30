@@ -10,4 +10,5 @@ export interface LocalContextClaims {
   jti: string;
   iat: number;
   exp: number;
+  [k: string]: unknown;
 }

@@ -13,5 +13,7 @@ export interface SearchMetadataFieldsV1Result {
      * @minItems 1
      */
     applicable_kinds: [string, ...string[]];
+    [k: string]: unknown;
   }[];
+  [k: string]: unknown;
 }

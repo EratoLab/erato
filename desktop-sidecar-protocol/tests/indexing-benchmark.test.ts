@@ -27,9 +27,11 @@ describe("indexing benchmark contract", () => {
       {},
       { mailboxId: "bad" },
       { mailboxId: id, mode: "forever" },
-      { mailboxId: id, parallelism: 1 },
     ])
       expect(validateIndexingBenchmarkStartV1Params(value)).toBe(false);
+    expect(
+      validateIndexingBenchmarkStartV1Params({ mailboxId: id, parallelism: 1 }),
+    ).toBe(true);
     expect(validateIndexingBenchmarkStatusV1Params({ runId: id })).toBe(true);
     expect(validateIndexingBenchmarkStatusV1Params({ mailboxId: id })).toBe(
       false,

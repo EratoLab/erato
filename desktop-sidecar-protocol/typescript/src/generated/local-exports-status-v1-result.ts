@@ -12,4 +12,5 @@ export interface LocalExportsStatusV1Result {
     | "cancelled"
     | "expired"
     | "failed";
+  [k: string]: unknown;
 }

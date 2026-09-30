@@ -12,4 +12,5 @@ export interface LocalTaskPlan {
   maxBytes: number;
   executionSeconds: number;
   expiresAt: number;
+  [k: string]: unknown;
 }

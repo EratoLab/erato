@@ -4,12 +4,17 @@
   "title": "SourcesGetFolderHierarchyV1Result",
   "type": "object",
   "properties": {
-    "sourceId": { "type": "string", "format": "uuid" },
+    "sourceId": {
+      "type": "string",
+      "format": "uuid"
+    },
     "nodes": {
       "type": "array",
-      "items": { "$ref": "../source/folder-hierarchy-node.schema.json" }
+      "items": {
+        "$ref": "../source/folder-hierarchy-node.schema.json"
+      }
     }
   },
   "required": ["sourceId", "nodes"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

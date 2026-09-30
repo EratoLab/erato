@@ -3,4 +3,5 @@
 export interface LocalTasksReviewV1Params {
   contextHandle: string;
   handle: string;
+  [k: string]: unknown;
 }

@@ -4,4 +4,5 @@ export interface SearchMetadataFilter {
   field: string;
   operator: string;
   value: unknown;
+  [k: string]: unknown;
 }

@@ -6,6 +6,7 @@
 export type DocumentExternalIds = {
   key: string;
   value: string;
+  [k: string]: unknown;
 }[];
 
 export interface SourcesGetDocumentV1Result {
@@ -14,6 +15,7 @@ export interface SourcesGetDocumentV1Result {
   contentBase64: string;
   external_ids?: DocumentExternalIds;
   topLevelParent?: TopLevelParent;
+  [k: string]: unknown;
 }
 /**
  * The outermost containing document, never a folder. External IDs belong to that parent, not to the attachment.
@@ -24,4 +26,5 @@ export interface TopLevelParent {
    */
   documentId?: string;
   external_ids: DocumentExternalIds;
+  [k: string]: unknown;
 }

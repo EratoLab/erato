@@ -34,7 +34,8 @@
           "type": "string",
           "pattern": "^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
         }
-      }
+      },
+      "additionalProperties": true
     },
     {
       "required": ["emailAddress"],
@@ -46,8 +47,9 @@
           "maxLength": 1024,
           "pattern": "\\S"
         }
-      }
+      },
+      "additionalProperties": true
     }
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

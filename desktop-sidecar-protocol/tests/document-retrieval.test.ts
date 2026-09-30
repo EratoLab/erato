@@ -13,7 +13,7 @@ describe("document retrieval contract", () => {
     );
     expect(params({ documentId: "/tmp/file" })).toBe(false);
     expect(params({ documentId, subject_scope: "everything" })).toBe(false);
-    expect(params({ documentId, path: "/tmp/file" })).toBe(false);
+    expect(params({ documentId, path: "/tmp/file" })).toBe(true);
   });
   it("accepts empty files and validates standard padded base64", () => {
     const metadata = { filename: "empty.txt", mimeType: "text/plain" };

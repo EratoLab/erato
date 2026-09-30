@@ -3,4 +3,5 @@
 export interface LocalExportsReadV1Params {
   contextHandle: string;
   handle: string;
+  [k: string]: unknown;
 }

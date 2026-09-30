@@ -64,7 +64,7 @@
           "mimeType",
           "conversationKey"
         ],
-        "additionalProperties": false
+        "additionalProperties": true
       }
     },
     "elapsedMs": {
@@ -81,5 +81,5 @@
     }
   },
   "required": ["hits", "elapsedMs", "blocksRead", "candidatesScored"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

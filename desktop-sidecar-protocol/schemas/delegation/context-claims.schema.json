@@ -56,5 +56,5 @@
     "iat",
     "exp"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

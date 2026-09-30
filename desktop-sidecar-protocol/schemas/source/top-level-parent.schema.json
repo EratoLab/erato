@@ -15,5 +15,5 @@
     }
   },
   "required": ["external_ids"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

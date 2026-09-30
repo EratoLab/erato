@@ -12,4 +12,5 @@ export interface LocalTaskStatus {
     | "cancelled"
     | "expired"
     | "failed";
+  [k: string]: unknown;
 }

@@ -9,17 +9,31 @@
       "items": {
         "type": "object",
         "properties": {
-          "field": { "type": "string", "minLength": 1 },
+          "field": {
+            "type": "string",
+            "minLength": 1
+          },
           "operators": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1 },
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
             "minItems": 1
           },
-          "type": { "type": "string", "minLength": 1 },
-          "description": { "type": "string" },
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
           "applicable_kinds": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1 },
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
             "minItems": 1
           }
         },
@@ -30,10 +44,10 @@
           "description",
           "applicable_kinds"
         ],
-        "additionalProperties": false
+        "additionalProperties": true
       }
     }
   },
   "required": ["fields"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

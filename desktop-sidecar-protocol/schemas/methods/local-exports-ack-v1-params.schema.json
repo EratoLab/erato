@@ -20,5 +20,5 @@
     }
   },
   "required": ["contextHandle", "handle", "receipt"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

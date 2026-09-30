@@ -1,3 +1,5 @@
 /* This file is generated from the canonical JSON schemas. Do not edit. */
 
-export interface IndexingStopV1Params {}
+export interface IndexingStopV1Params {
+  [k: string]: unknown;
+}

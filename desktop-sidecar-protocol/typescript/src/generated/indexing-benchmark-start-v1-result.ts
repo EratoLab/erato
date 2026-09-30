@@ -20,4 +20,5 @@ export interface IndexingBenchmarkStartV1Result {
   error: string | null;
   startedAt: string;
   finishedAt: string | null;
+  [k: string]: unknown;
 }

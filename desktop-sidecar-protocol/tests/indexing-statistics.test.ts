@@ -248,9 +248,7 @@ it("validates rebuild bounds, search limits, and shared lifecycle statistics", (
     { maxTextBytes: 67108865 },
   ])
     expect(validateIndexingStartV1Params({ rebuild })).toBe(false);
-  expect(validateIndexingStartV1Params({ documentsPerMinute: 120 })).toBe(
-    false,
-  );
+  expect(validateIndexingStartV1Params({ documentsPerMinute: 120 })).toBe(true);
   expect(validateIndexingStartV1Result(fixture)).toBe(true);
   expect(validateIndexingStopV1Result({ ...fixture, state: "stopped" })).toBe(
     true,

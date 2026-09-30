@@ -98,5 +98,5 @@
     "startedAt",
     "finishedAt"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

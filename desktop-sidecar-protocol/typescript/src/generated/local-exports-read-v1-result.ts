@@ -20,6 +20,7 @@ export interface LocalExportsReadV1Result {
       sha256: string;
       byteLength: number;
       contentBase64: string;
+      [k: string]: unknown;
     },
     ...{
       artifactId: string;
@@ -28,8 +29,10 @@ export interface LocalExportsReadV1Result {
       sha256: string;
       byteLength: number;
       contentBase64: string;
+      [k: string]: unknown;
     }[],
   ];
+  [k: string]: unknown;
 }
 export interface LocalTaskBinding {
   backendOrigin: string;
@@ -40,4 +43,5 @@ export interface LocalTaskBinding {
   attemptId: string;
   toolCallId: string;
   planDigest: string;
+  [k: string]: unknown;
 }

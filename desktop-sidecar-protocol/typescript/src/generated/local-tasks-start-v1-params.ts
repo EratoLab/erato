@@ -5,6 +5,7 @@ export interface LocalTasksStartV1Params {
   binding: LocalTaskBinding;
   plan: LocalTaskPlan;
   authorization: string;
+  [k: string]: unknown;
 }
 export interface LocalTaskBinding {
   backendOrigin: string;
@@ -15,6 +16,7 @@ export interface LocalTaskBinding {
   attemptId: string;
   toolCallId: string;
   planDigest: string;
+  [k: string]: unknown;
 }
 export interface LocalTaskPlan {
   operation: "collect_evidence";
@@ -28,4 +30,5 @@ export interface LocalTaskPlan {
   maxBytes: number;
   executionSeconds: number;
   expiresAt: number;
+  [k: string]: unknown;
 }

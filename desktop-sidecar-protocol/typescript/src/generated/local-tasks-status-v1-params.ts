@@ -3,4 +3,5 @@
 export interface LocalTasksStatusV1Params {
   contextHandle: string;
   handle: string;
+  [k: string]: unknown;
 }

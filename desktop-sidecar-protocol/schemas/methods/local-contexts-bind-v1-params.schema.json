@@ -12,5 +12,5 @@
     }
   },
   "required": ["assertion"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

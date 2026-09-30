@@ -4,15 +4,40 @@
   "title": "SourceDescriptor",
   "type": "object",
   "properties": {
-    "sourceId": { "type": "string", "format": "uuid" },
-    "sourceKind": { "type": "string", "minLength": 1 },
-    "sourceKey": { "type": "string", "minLength": 1 },
-    "locator": { "type": "object" },
-    "enabled": { "type": "boolean" },
-    "discoveryCursor": { "type": ["object", "null"] },
-    "completedScanId": { "type": ["string", "null"], "format": "uuid" },
-    "lastSuccessAt": { "type": ["string", "null"], "format": "date-time" },
-    "lastErrorCode": { "type": ["string", "null"] }
+    "sourceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sourceKind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "discoveryCursor": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "completedScanId": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "lastSuccessAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "lastErrorCode": {
+      "type": ["string", "null"]
+    }
   },
   "required": [
     "sourceId",
@@ -25,5 +50,5 @@
     "lastSuccessAt",
     "lastErrorCode"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

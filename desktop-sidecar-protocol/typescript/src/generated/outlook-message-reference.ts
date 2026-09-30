@@ -30,6 +30,7 @@ export type OutlookMessageReference = (
       [k: string]: unknown;
     }[];
   mailbox?: OutlookMailboxReference;
+  [k: string]: unknown;
 };
 /**
  * Externally relatable identifiers for the document. Identifier keys are open-ended so new identifier kinds do not require a protocol change.
@@ -37,6 +38,7 @@ export type OutlookMessageReference = (
 export type DocumentExternalIds = {
   key: string;
   value: string;
+  [k: string]: unknown;
 }[];
 /**
  * Mailbox context captured with a message reference. Local IDs are scoped to the originating Outlook installation; emailAddress identifies the mailbox owner, including a shared mailbox, not necessarily the signed-in user.
@@ -69,4 +71,5 @@ export type OutlookMailboxReference = (
    * Name of the originating Outlook profile, when available. A profile name alone does not identify a mailbox.
    */
   profileName?: string;
+  [k: string]: unknown;
 };

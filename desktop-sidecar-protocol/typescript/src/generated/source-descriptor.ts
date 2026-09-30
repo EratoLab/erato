@@ -14,4 +14,5 @@ export interface SourceDescriptor {
   completedScanId: string | null;
   lastSuccessAt: string | null;
   lastErrorCode: string | null;
+  [k: string]: unknown;
 }

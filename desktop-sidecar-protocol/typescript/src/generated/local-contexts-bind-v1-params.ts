@@ -2,4 +2,5 @@
 
 export interface LocalContextsBindV1Params {
   assertion: string;
+  [k: string]: unknown;
 }

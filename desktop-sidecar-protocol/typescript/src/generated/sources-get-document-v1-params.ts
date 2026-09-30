@@ -3,4 +3,5 @@
 export interface SourcesGetDocumentV1Params {
   documentId: string;
   subject_scope?: "subject" | "subject_with_thread";
+  [k: string]: unknown;
 }

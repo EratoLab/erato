@@ -12,4 +12,5 @@ export interface LocalTasksReviewV1Result {
     | "cancelled"
     | "expired"
     | "failed";
+  [k: string]: unknown;
 }

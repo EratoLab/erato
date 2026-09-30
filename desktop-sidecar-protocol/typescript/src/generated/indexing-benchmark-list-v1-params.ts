@@ -3,4 +3,5 @@
 export interface IndexingBenchmarkListV1Params {
   limit?: number;
   offset?: number;
+  [k: string]: unknown;
 }

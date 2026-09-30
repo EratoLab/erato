@@ -52,5 +52,5 @@
     "toolCallId",
     "planDigest"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

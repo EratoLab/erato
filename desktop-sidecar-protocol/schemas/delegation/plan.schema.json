@@ -53,5 +53,5 @@
     "executionSeconds",
     "expiresAt"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

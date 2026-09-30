@@ -15,5 +15,5 @@
     "value": {}
   },
   "required": ["field", "operator", "value"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

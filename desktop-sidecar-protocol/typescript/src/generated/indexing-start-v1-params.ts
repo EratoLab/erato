@@ -6,5 +6,7 @@ export interface IndexingStartV1Params {
     b?: number;
     indexedAvgdl?: number;
     maxTextBytes?: number;
+    [k: string]: unknown;
   };
+  [k: string]: unknown;
 }

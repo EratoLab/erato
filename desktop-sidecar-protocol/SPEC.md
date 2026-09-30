@@ -23,14 +23,22 @@ be used as a compatibility shortcut.
 
 Each application method has a stable capability identifier and major revision,
 encoded in its name (for example, `diagnostics.echo.v1`). Within a method major,
-changes MUST be additive: new fields are optional, new enum values are possible,
-and existing required fields, types, and meanings do not change. A breaking
-change creates a new method major. Sidecars MAY expose multiple majors. Clients
-MUST invoke only an explicitly compiled and advertised major.
+changes MUST be additive: new fields are optional, open string vocabularies may
+gain values, and existing required fields, types, and meanings do not change. A
+breaking change creates a new method major. Sidecars MAY expose multiple
+majors. Clients MUST invoke only an explicitly compiled and advertised major.
 
-Receivers MUST ignore unknown object fields, capabilities, methods, and enum
-values unless a security decision depends on them. A client MUST NOT
-dynamically invoke an unknown method merely because discovery advertises it.
+Receivers MUST ignore unknown object fields, capabilities, and methods. Security
+decisions MUST depend only on explicitly specified fields and rules, and MUST
+NOT grant authority based on an unknown field. A client MUST NOT dynamically
+invoke an unknown method merely because discovery advertises it. Fields with
+open vocabularies MUST be specified as strings, and receivers MUST handle
+unrecognized values safely. Every object accepted or emitted at a protocol
+boundary MUST allow unknown properties, including security-sensitive and signed
+objects. Authentication, authorization, consent, execution limits, and output
+privacy are enforced by producer and consumer behavior, not by closing wire
+schemas. Explicit enum fields remain closed; a field that accepts future values
+MUST use a string contract and define a safe consumer fallback.
 
 ## 2. Request ownership and readiness
 

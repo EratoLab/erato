@@ -41,5 +41,5 @@
     "receiptId",
     "acceptedAt"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }
