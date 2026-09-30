@@ -6,6 +6,7 @@ import { wordPlanError } from "./wordPlanDiagnostics";
 import { resolveWordSource, wordSourceDetails } from "./wordRichContent";
 import { parseWordBlock, wordBlockChildEntries } from "./wordRichPlan";
 import { parseWordSections, parseWordStoryChanges } from "./wordStories";
+import { wordPlanMatchesCellScope } from "./wordTableCellScope";
 import { WORD_FINGERPRINT_PREFIX } from "./wordXmlComparison";
 
 import type {
@@ -27,6 +28,7 @@ import type {
   WordStorySource,
   WordSectionSource,
 } from "./wordStories";
+import type { WordTableCellScope } from "./wordTableCellScope";
 import type { WordTableBlock, WordTableContent } from "./wordTableContent";
 
 export interface WordPlanRun extends WordRunFormatting {
@@ -135,6 +137,8 @@ export interface WordAuthoringSnapshot {
   revoked: boolean;
   used: boolean;
   readToken?: string;
+  /** Targeted reads never populate full-document coverage or its token. */
+  cellReads?: Map<string, WordTableCellScope>;
   ownerMessageId?: string;
 }
 export const MAX_PLAN_BYTES = 256 * 1024;
@@ -435,15 +439,16 @@ export function validateWordDocumentPlan(
       "Stories and sections require scope=document.",
     );
   if (
-    !snapshot.readToken ||
-    plan.readToken !== snapshot.readToken ||
-    wordSourceReadRefs(snapshot).some((ref) => !snapshot.read.has(ref))
+    (!snapshot.readToken ||
+      plan.readToken !== snapshot.readToken ||
+      wordSourceReadRefs(snapshot).some((ref) => !snapshot.read.has(ref))) &&
+    !wordPlanMatchesCellScope(plan, snapshot)
   )
     return fail(
       "incomplete",
       "/readToken",
       "incomplete-read",
-      "All snapshot pages must be read; readToken must match the completed read for this request.",
+      "A complete read is required unless the entire plan matches exactly one authorized table-cell text edit.",
     );
 
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
@@ -651,7 +656,23 @@ export function validateWordDocumentPlan(
         }
       }
       if (block.type === "list-item" && block.list) {
-        if (lists.has(block.list) && lists.get(block.list) !== block.ordered)
+        if (block.list.startsWith("existing-")) {
+          const source = snapshot.blocks.find(
+            (source) =>
+              source.type === "list-item" &&
+              source.list === block.list &&
+              (source.level ?? 0) === (block.level ?? 0),
+          );
+          if (!source || source.ordered !== block.ordered)
+            return reject(
+              `${blockPath}/list`,
+              "list-reference",
+              "Continue a captured list using its returned list name, level and ordered value; use a new group name to create a separate list.",
+            );
+        } else if (
+          lists.has(block.list) &&
+          lists.get(block.list) !== block.ordered
+        )
           return reject(
             `${blockPath}/ordered`,
             "list-consistency",

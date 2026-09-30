@@ -1,6 +1,17 @@
 /** Protocol vocabulary belongs here; model behavior instructions come from deployment configuration. */
 export const WORD_AUTHORING_CONTRACT = {
   version: 1,
+  tableCell: {
+    tool: "submit_document_plan",
+    input:
+      "{snapshot,readToken,table_cell:{sourceRef,rowIndex,cellIndex,expectedText,text}}",
+    target:
+      "One exact text update in a standalone, unmerged body table. sourceRef is a returned table object ref or simple table block ref; rowIndex and cellIndex are original zero-based row and physical cell sourceIndex values, not visual column numbers. expectedText must match the captured cell text exactly. Both text strings are single-line, at most 10000 characters.",
+    scopedRead:
+      "read_document_blocks accepts {snapshot,documentIdentity,table_cell:{nearbyText?,header?,rowLabel?,text?,sourceRef?,rowIndex?,cellIndex?,offset?}}. Text filters are case-insensitive substrings, ANDed; header means first row at the same physical cell index, rowLabel means first cell, nearbyText searches immediate body neighbors. Filters are at most 256 characters. At most five candidates per response. Only status=ready returns exact expectedText and a cell-scoped readToken; ambiguous/not-found/unsupported results grant no scope. Refine filters or select returned sourceRef and original indexes. Scoped context is limited to 4096 UTF-8 bytes per target; snippets are truncated explicitly. Unsupported cells use complete reads and the existing full-plan workflow. Scoped tokens accept only concise submissions, not plans or repairs.",
+    preservation:
+      "The host constructs the complete plan, keeps every other body source and table cell, and preserves the target paragraph/run properties. Supports one plain-text paragraph with uniform run formatting; nested tables, merged cells, wrappers, fields, links, mixed formatting and multiple paragraphs require a complete plan. Complete or explicitly scoped read, snapshot validation, submission budget and review/Apply are unchanged. Rejected concise arguments without a draft handle may be corrected with another concise submission.",
+  },
   repair: {
     tool: "submit_document_plan",
     input:
@@ -29,7 +40,7 @@ export const WORD_AUTHORING_CONTRACT = {
     },
   },
   paragraphs:
-    "{id,type:'paragraph',text,runs?,styleRef?,format?}; heading: {id,type:'heading',text,level:1..9,runs?,format?}; list-item: {id,type:'list-item',text,list:'group-id',level:0..8,ordered:boolean,runs?,styleRef?,format?}. Each paragraph is a distinct block; text has no newline. All list items in a group share ordered. Runs concatenate exactly to text.",
+    "{id,type:'paragraph',text,runs?,styleRef?,format?}; heading: {id,type:'heading',text,level:1..9,runs?,format?}; list-item: {id,type:'list-item',text,list:'group-id',level:0..8,ordered:boolean,runs?,styleRef?,format?}. Reuse a captured existing-* list name, level and ordered value to continue that exact list. A new group name creates a separate list; its items share ordered. Each paragraph is a distinct block; text has no newline. Runs concatenate exactly to text.",
   runFormatting:
     "Each run has text plus optional bold,italic,underline,strike,caps,smallCaps:boolean; underlineStyle:single|double|dotted|dash|wave; fontFamily; fontSize in points; color/shading:6-digit hex; highlight:Word named color; verticalAlign:baseline|superscript|subscript; characterSpacing in points; language:BCP47.",
   paragraphFormatting:
@@ -38,7 +49,9 @@ export const WORD_AUTHORING_CONTRACT = {
     "{top?,left?,bottom?,right?,between?,insideH?,insideV?}; each border {style:none|single|double|dotted|dashed|thick,color?,width?,space?}. Colors are 6-digit hex, width/space points.",
   table: {
     shape:
-      "{id,type:'table',sourceRef?,columns?:[width-in-points,...],format?,rows:[{sourceIndex?,format?,cells:[{sourceIndex?,colSpan?,rowSpan?,format?,blocks?:[nested blocks]}]}]}",
+      "{id,type:'table',sourceRef?,columns?:[width-in-points,...],format?,rows:[{sourceIndex?,format?,cells:[{sourceIndex?,colSpan?,rowSpan?,format?,blocks?:[nested blocks],textEdit?:{expectedText,text}}]}]}",
+    textEdit:
+      "A retained unmerged cell may use textEdit instead of blocks to replace its exact plain text while preserving paragraph/run properties. Requires one paragraph with uniform run formatting and a complete sourceRef/row.sourceIndex/cell.sourceIndex chain. expectedText must match the original source, not a previous proposal.",
     creation:
       "Without sourceRef the table is new: row.sourceIndex and cell.sourceIndex are invalid. Every cell requires blocks; blocks:[] represents an empty cell. Output positions are determined by rows/cells array order.",
     source:
