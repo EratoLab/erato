@@ -12,4 +12,5 @@ export interface LocalExportsAckV1Result {
     | "cancelled"
     | "expired"
     | "failed";
+  [k: string]: unknown;
 }

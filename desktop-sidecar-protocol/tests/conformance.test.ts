@@ -6,6 +6,8 @@ import {
   validateDiagnosticsEchoV1Params,
   validateDiscoveryDocument,
   validateJsonRpcEnvelope,
+  validateLocalTasksStartV1Params,
+  validateLocalTasksStatusV1Result,
   validateOutlookListEmailsV1Params,
   validateOutlookListMailboxesV1Result,
   validateOutlookSearchEmailsV1Params,
@@ -17,6 +19,13 @@ import {
 
 interface InvalidMessageFixture {
   cases: { name: string; message: unknown; error: string }[];
+}
+
+interface LocalDelegationFixture {
+  binding: Record<string, unknown>;
+  plan: Record<string, unknown>;
+  contextHandle: string;
+  authorization: string;
 }
 
 describe("language-neutral conformance fixtures", () => {
@@ -39,6 +48,28 @@ describe("language-neutral conformance fixtures", () => {
       }),
     ).toBe(true);
     expect(validateDiagnosticsEchoV1Params({ message: 42 })).toBe(false);
+  });
+
+  it("accepts additive fields throughout security-sensitive delegation objects", async () => {
+    const fixture = await readFixture<LocalDelegationFixture>(
+      "local-delegation.json",
+    );
+    const start = fixture;
+    expect(
+      validateLocalTasksStartV1Params({
+        ...start,
+        futureRequestField: { version: 2 },
+        binding: { ...start.binding, futureBindingField: true },
+        plan: { ...start.plan, futurePlanField: "ignored" },
+      }),
+    ).toBe(true);
+    expect(
+      validateLocalTasksStatusV1Result({
+        handle: "h".repeat(32),
+        state: "ready_for_review",
+        futureStatusField: { revision: 2 },
+      }),
+    ).toBe(true);
   });
 
   it("accepts unknown future availability values without enabling them", async () => {

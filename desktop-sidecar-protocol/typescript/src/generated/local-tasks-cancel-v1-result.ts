@@ -12,4 +12,5 @@ export interface LocalTasksCancelV1Result {
     | "cancelled"
     | "expired"
     | "failed";
+  [k: string]: unknown;
 }

@@ -11,6 +11,8 @@ export interface IndexingBenchmarkListV1Result {
     state: "preparing" | "running" | "completed" | "failed";
     startedAt: string;
     finishedAt: string | null;
+    [k: string]: unknown;
   }[];
   nextOffset: number | null;
+  [k: string]: unknown;
 }

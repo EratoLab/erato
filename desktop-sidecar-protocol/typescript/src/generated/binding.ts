@@ -9,4 +9,5 @@ export interface LocalTaskBinding {
   attemptId: string;
   toolCallId: string;
   planDigest: string;
+  [k: string]: unknown;
 }

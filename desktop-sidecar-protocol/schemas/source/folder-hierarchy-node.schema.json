@@ -4,14 +4,34 @@
   "title": "SourceFolderHierarchyNode",
   "type": "object",
   "properties": {
-    "nodeId": { "type": "string", "minLength": 1 },
-    "parentNodeId": { "type": ["string", "null"] },
-    "name": { "type": "string" },
-    "pathName": { "type": "string" },
-    "artificialRoot": { "type": "boolean" },
-    "directLeafChildren": { "type": "integer", "minimum": 0 },
-    "totalLeafChildren": { "type": "integer", "minimum": 0 },
-    "directChildNodes": { "type": "integer", "minimum": 0 }
+    "nodeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parentNodeId": {
+      "type": ["string", "null"]
+    },
+    "name": {
+      "type": "string"
+    },
+    "pathName": {
+      "type": "string"
+    },
+    "artificialRoot": {
+      "type": "boolean"
+    },
+    "directLeafChildren": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "totalLeafChildren": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "directChildNodes": {
+      "type": "integer",
+      "minimum": 0
+    }
   },
   "required": [
     "nodeId",
@@ -23,5 +43,5 @@
     "totalLeafChildren",
     "directChildNodes"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

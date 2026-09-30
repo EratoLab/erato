@@ -6,9 +6,11 @@
   "properties": {
     "sources": {
       "type": "array",
-      "items": { "$ref": "../source/source-descriptor.schema.json" }
+      "items": {
+        "$ref": "../source/source-descriptor.schema.json"
+      }
     }
   },
   "required": ["sources"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

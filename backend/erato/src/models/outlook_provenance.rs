@@ -9,7 +9,6 @@ use utoipa::ToSchema;
 pub const MAX_OUTLOOK_PROVENANCE_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
 pub struct OutlookFileProvenance {
     /// Contract version. Only version 1 is supported.
     #[schema(minimum = 1, maximum = 1)]
@@ -20,7 +19,7 @@ pub struct OutlookFileProvenance {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct OutlookFileOrigin {
     /// The uploaded email's own identity; a thread export identifies only its anchor.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -33,7 +32,6 @@ pub struct OutlookFileOrigin {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
 pub struct OutlookMessageReference {
     /// Local catalog UUID, scoped to its originating sidecar installation.
     #[serde(rename = "documentId", skip_serializing_if = "Option::is_none")]
@@ -46,14 +44,13 @@ pub struct OutlookMessageReference {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
 pub struct OutlookExternalId {
     pub key: String,
     pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct OutlookMailboxReference {
     /// Local mailbox ID, never a Graph mailbox identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -75,13 +72,9 @@ impl OutlookFileProvenance {
         }
         let value: serde_json::Value =
             serde_json::from_slice(bytes).map_err(|_| "Invalid Outlook provenance JSON")?;
+        reject_null_optional_fields(&value)?;
         let parsed: Self = serde_json::from_value(value.clone())
             .map_err(|_| "Invalid Outlook provenance structure")?;
-        // Serde treats null optional fields as absent; the protocol disallows null.
-        // Comparing also ensures nothing in the supplied identity was silently dropped.
-        if serde_json::to_value(&parsed).map_err(|_| "Invalid Outlook provenance")? != value {
-            return Err("Outlook provenance must omit unknown optional fields, not use null");
-        }
         if parsed.version != 1 || parsed.origins.is_empty() {
             return Err("Unsupported or empty Outlook provenance");
         }
@@ -98,6 +91,36 @@ impl OutlookFileProvenance {
         }
         Ok(parsed)
     }
+}
+
+fn reject_null_optional_fields(value: &serde_json::Value) -> Result<(), &'static str> {
+    fn is_null_at(value: &serde_json::Value, key: &str) -> bool {
+        value.get(key).is_some_and(serde_json::Value::is_null)
+    }
+
+    if let Some(origins) = value.get("origins").and_then(serde_json::Value::as_array) {
+        for origin in origins {
+            if is_null_at(origin, "document") || is_null_at(origin, "topLevelParent") {
+                return Err("Optional provenance references must be omitted, not null");
+            }
+            for reference in [origin.get("document"), origin.get("topLevelParent")]
+                .into_iter()
+                .flatten()
+            {
+                if is_null_at(reference, "documentId") || is_null_at(reference, "mailbox") {
+                    return Err("Optional message reference fields must be omitted, not null");
+                }
+                if let Some(mailbox) = reference.get("mailbox")
+                    && ["mailboxId", "emailAddress", "profileName"]
+                        .iter()
+                        .any(|key| is_null_at(mailbox, key))
+                {
+                    return Err("Optional mailbox fields must be omitted, not null");
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 impl OutlookMessageReference {
@@ -207,6 +230,27 @@ mod tests {
     }
 
     #[test]
+    fn future_fields_are_ignored_but_explicit_null_is_still_rejected() {
+        let value = json!({
+            "version": 1,
+            "futureEnvelopeField": true,
+            "origins": [{
+                "futureOriginField": "ignored",
+                "document": {
+                    "external_ids": [{"key": "ews_id", "value": "Case/Sensitive+Id==", "futureIdField": 2}],
+                    "futureReferenceField": true
+                }
+            }]
+        });
+        let parsed = OutlookFileProvenance::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(parsed.origins.len(), 1);
+        assert!(OutlookFileProvenance::parse(
+            br#"{"version":1,"origins":[{"document":{"documentId":null,"external_ids":[{"key":"ews_id","value":"Case/Sensitive+Id=="}]}}]}"#
+        )
+        .is_err());
+    }
+
+    #[test]
     fn invalid_references_are_rejected_by_both_backend_and_protocol() {
         let document = json!({"external_ids": [{"key": "ews_id", "value": "Case/Sensitive+Id=="}]});
         let mut invalid = vec![
@@ -216,7 +260,6 @@ mod tests {
             json!({"version": 1, "origins": [{}]}),
             json!({"version": 1, "origins": [{"topLevelParent": null}]}),
             json!({"version": 1, "origins": [{"document": {"external_ids": []}}]}),
-            json!({"version": 1, "origins": [{"document": document, "launchUrl": "outlook:untrusted"}]}),
         ];
         for mailbox in [
             json!({}),

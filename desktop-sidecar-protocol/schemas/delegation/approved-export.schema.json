@@ -79,7 +79,7 @@
           "byteLength",
           "contentBase64"
         ],
-        "additionalProperties": false
+        "additionalProperties": true
       }
     }
   },
@@ -93,5 +93,5 @@
     "expiresAt",
     "artifacts"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

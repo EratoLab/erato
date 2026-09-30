@@ -22,5 +22,5 @@
     }
   },
   "required": ["contextHandle", "binding", "plan", "authorization"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

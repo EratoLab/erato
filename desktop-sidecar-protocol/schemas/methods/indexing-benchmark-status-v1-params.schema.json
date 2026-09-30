@@ -10,5 +10,5 @@
     }
   },
   "required": ["runId"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

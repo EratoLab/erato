@@ -2,4 +2,5 @@
 
 export interface SourcesGetFolderHierarchyV1Params {
   sourceId: string;
+  [k: string]: unknown;
 }

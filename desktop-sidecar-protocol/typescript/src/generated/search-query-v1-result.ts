@@ -6,6 +6,7 @@
 export type DocumentExternalIds = {
   key: string;
   value: string;
+  [k: string]: unknown;
 }[];
 
 export interface SearchQueryV1Result {
@@ -26,10 +27,12 @@ export interface SearchQueryV1Result {
     mimeType: string | null;
     conversationKey: string | null;
     topLevelParent?: TopLevelParent;
+    [k: string]: unknown;
   }[];
   elapsedMs: number;
   blocksRead: number;
   candidatesScored: number;
+  [k: string]: unknown;
 }
 /**
  * The outermost containing document, never a folder. External IDs belong to that parent, not to the attachment.
@@ -40,4 +43,5 @@ export interface TopLevelParent {
    */
   documentId?: string;
   external_ids: DocumentExternalIds;
+  [k: string]: unknown;
 }

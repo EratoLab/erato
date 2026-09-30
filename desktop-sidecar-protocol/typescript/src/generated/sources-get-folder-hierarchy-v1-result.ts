@@ -3,6 +3,7 @@
 export interface SourcesGetFolderHierarchyV1Result {
   sourceId: string;
   nodes: SourceFolderHierarchyNode[];
+  [k: string]: unknown;
 }
 export interface SourceFolderHierarchyNode {
   nodeId: string;
@@ -13,4 +14,5 @@ export interface SourceFolderHierarchyNode {
   directLeafChildren: number;
   totalLeafChildren: number;
   directChildNodes: number;
+  [k: string]: unknown;
 }

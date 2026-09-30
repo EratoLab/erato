@@ -6,6 +6,7 @@
 export type DocumentExternalIds = {
   key: string;
   value: string;
+  [k: string]: unknown;
 }[];
 
 /**
@@ -57,4 +58,5 @@ export interface TopLevelParent {
    */
   documentId?: string;
   external_ids: DocumentExternalIds;
+  [k: string]: unknown;
 }

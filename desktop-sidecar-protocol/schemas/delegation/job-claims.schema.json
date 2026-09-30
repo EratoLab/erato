@@ -41,5 +41,5 @@
     }
   },
   "required": ["iss", "aud", "sub", "origin", "binding", "jti", "iat", "exp"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

@@ -64,9 +64,16 @@ describe("strict local delegation contract", () => {
     ).toBe(false);
   });
 
-  it("keeps discovery available for unknown declarations without authorizing delegation", () => {
+  it("ignores additive declaration fields while keeping known security values authoritative", () => {
+    const extended = discovery();
+    extended.localDelegation = {
+      ...extended.localDelegation,
+      futureCapability: true,
+    };
+    expect(validateDiscoverResult(extended)).toBe(true);
+    expect(supportsStrictLocalDelegation(extended)).toBe(true);
+
     for (const patch of [
-      { futureCapability: true },
       { enforcement: "future" },
       { profile: "strict_snapshot_v2" },
     ]) {
@@ -116,28 +123,33 @@ describe("strict local delegation contract", () => {
     "count",
     "digest",
     "exportId",
-  ])("rejects pre-consent %s metadata", (field) => {
-    expect(validateLocalTaskStatus({ handle, state: "ready_for_review" })).toBe(
-      true,
-    );
-    expect(
-      validateLocalTaskStatus({
-        handle,
-        state: "ready_for_review",
-        [field]: "SECRET_MARKER",
-      }),
-    ).toBe(false);
-  });
+  ])(
+    "accepts future status fields without changing producer responsibilities: %s",
+    (field) => {
+      expect(
+        validateLocalTaskStatus({
+          handle,
+          state: "ready_for_review",
+          [field]: "SECRET_MARKER",
+        }),
+      ).toBe(true);
+    },
+  );
 
-  it("accepts the fixture and refuses unbounded, mutable or unknown operations", () => {
+  it("accepts additive fields while keeping known plan constraints strict", () => {
     expect(validateLocalTasksStartV1Params(start)).toBe(true);
+    expect(
+      validateLocalTasksStartV1Params({
+        ...start,
+        plan: { ...start.plan, path: "/private/cache" },
+      }),
+    ).toBe(true);
     for (const plan of [
       { ...start.plan, operation: "run_code" },
       { ...start.plan, maxBytes: 12582913 },
       { ...start.plan, executionSeconds: 301 },
       { ...start.plan, queryVariants: [] },
       { ...start.plan, queryVariants: Array(9).fill("query") },
-      { ...start.plan, path: "/private/cache" },
     ])
       expect(validateLocalTasksStartV1Params({ ...start, plan })).toBe(false);
     expect(
@@ -161,12 +173,11 @@ describe("strict local delegation contract", () => {
       { contextHandle },
       { ...bound, handle },
       { contextHandle, binding: start.binding },
-      { ...bound, approved: true },
     ])
       expect(validateLocalTasksCancelV1Params(invalid)).toBe(false);
   });
 
-  it("never accepts browser consent bits, preferences or grant credentials", () => {
+  it("allows additive fields in sensitive request schemas", () => {
     for (const validate of [
       validateLocalTasksReviewV1Params,
       validateLocalExportsReadV1Params,
@@ -178,15 +189,16 @@ describe("strict local delegation contract", () => {
         { grant: "forged" },
         { accountId: "other" },
       ])
-        expect(validate({ contextHandle, handle, ...extra })).toBe(false);
+        expect(validate({ contextHandle, handle, ...extra })).toBe(true);
     }
     expect(
       validateLocalExportsAckV1Params({
         contextHandle,
         handle,
+        receipt: `${"a".repeat(32)}.${"b".repeat(32)}.${"c".repeat(32)}`,
         uploaded: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       validateLocalContextClaims({
         iss: "https://erato.example",
@@ -200,10 +212,10 @@ describe("strict local delegation contract", () => {
         exp: 300,
         accessToken: "secret",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  it("the reference server cannot authorize a forged export", async () => {
+  it("ignores additive input when refusing forged export access", async () => {
     const server = new MockSidecar({ allowedOrigins: ["https://app.example"] });
     const address = await server.start();
     try {
@@ -222,6 +234,7 @@ describe("strict local delegation contract", () => {
             handle,
             approved: true,
             secret: "SECRET_MARKER",
+            futureExecutionScope: { path: "/private/cache", approved: true },
           },
         }),
       });

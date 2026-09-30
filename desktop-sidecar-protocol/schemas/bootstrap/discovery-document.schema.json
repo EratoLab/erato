@@ -5,13 +5,22 @@
   "type": "object",
   "required": ["openrpc", "info", "methods", "x-erato-catalogue"],
   "properties": {
-    "openrpc": { "type": "string", "pattern": "^1\\.4\\.[0-9]+$" },
+    "openrpc": {
+      "type": "string",
+      "pattern": "^1\\.4\\.[0-9]+$"
+    },
     "info": {
       "type": "object",
       "required": ["title", "version"],
       "properties": {
-        "title": { "type": "string", "minLength": 1 },
-        "version": { "type": "string", "minLength": 1 }
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "additionalProperties": true
     },
@@ -21,9 +30,17 @@
         "type": "object",
         "required": ["name", "params", "result"],
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "params": { "type": "array" },
-          "result": { "type": "object" },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "params": {
+            "type": "array"
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "x-erato-capability": {
             "$ref": "../capabilities/capability.schema.json"
           }

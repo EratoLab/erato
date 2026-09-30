@@ -7,4 +7,5 @@ export interface LocalDelegationSecurity {
   consent: "native_exact_snapshot";
   recovery: "durable_receipt_v1";
   trustModel: "installed_native_code";
+  [k: string]: unknown;
 }

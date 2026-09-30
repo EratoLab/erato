@@ -8,6 +8,7 @@ export interface LocalExportReceiptClaims {
   manifestDigest: string;
   receiptId: string;
   acceptedAt: number;
+  [k: string]: unknown;
 }
 export interface LocalTaskBinding {
   backendOrigin: string;
@@ -18,4 +19,5 @@ export interface LocalTaskBinding {
   attemptId: string;
   toolCallId: string;
   planDigest: string;
+  [k: string]: unknown;
 }

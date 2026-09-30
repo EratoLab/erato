@@ -12,10 +12,13 @@ export interface SearchQueryV1Params {
     dateTo?: number;
     fileType?: string;
     kind?: "email" | "file" | "teams_message";
+    [k: string]: unknown;
   };
+  [k: string]: unknown;
 }
 export interface SearchMetadataFilter {
   field: string;
   operator: string;
   value: unknown;
+  [k: string]: unknown;
 }

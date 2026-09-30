@@ -4,4 +4,5 @@ export interface LocalExportsAckV1Params {
   contextHandle: string;
   handle: string;
   receipt: string;
+  [k: string]: unknown;
 }

@@ -3,5 +3,5 @@
   "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json",
   "title": "SourcesListV1Params",
   "type": "object",
-  "additionalProperties": false
+  "additionalProperties": true
 }

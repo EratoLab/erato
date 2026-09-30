@@ -27,7 +27,10 @@
         "sender": {
           "type": "string"
         },
-        "sourceId": { "type": "string", "format": "uuid" },
+        "sourceId": {
+          "type": "string",
+          "format": "uuid"
+        },
         "mailboxId": {
           "type": "string"
         },
@@ -46,9 +49,9 @@
         }
       },
       "required": [],
-      "additionalProperties": false
+      "additionalProperties": true
     }
   },
   "required": [],
-  "additionalProperties": false
+  "additionalProperties": true
 }

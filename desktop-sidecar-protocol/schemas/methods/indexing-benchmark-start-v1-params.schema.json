@@ -15,5 +15,5 @@
     }
   },
   "required": ["mailboxId"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

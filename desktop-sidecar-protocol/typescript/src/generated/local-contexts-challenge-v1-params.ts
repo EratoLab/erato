@@ -1,3 +1,5 @@
 /* This file is generated from the canonical JSON schemas. Do not edit. */
 
-export interface LocalContextsChallengeV1Params {}
+export interface LocalContextsChallengeV1Params {
+  [k: string]: unknown;
+}

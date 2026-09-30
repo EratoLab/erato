@@ -4832,7 +4832,7 @@
                 "minLength": 1
               }
             },
-            "additionalProperties": false
+            "additionalProperties": true
           },
           "expiresAt": {
             "type": "integer",
@@ -4856,7 +4856,7 @@
             "pattern": "^[A-Za-z0-9_-]{32,128}$"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       },
       "ArchiveAllChatsResponse": {
         "type": "object",
@@ -9523,7 +9523,7 @@
                 "minLength": 1
               }
             },
-            "additionalProperties": false
+            "additionalProperties": true
           },
           "chatId": {
             "type": "string",
@@ -9592,7 +9592,7 @@
                 "uniqueItems": true
               }
             },
-            "additionalProperties": false
+            "additionalProperties": true
           },
           "receipt": {
             "type": "string"
@@ -10023,8 +10023,7 @@
           "value": {
             "type": "string"
           }
-        },
-        "additionalProperties": false
+        }
       },
       "OutlookFileOrigin": {
         "type": "object",
@@ -10037,8 +10036,7 @@
             "$ref": "#/components/schemas/OutlookMessageReference",
             "description": "The outermost containing mailbox message, separate from the document's identity."
           }
-        },
-        "additionalProperties": false
+        }
       },
       "OutlookFileProvenance": {
         "type": "object",
@@ -10062,8 +10060,7 @@
             "maximum": 1,
             "minimum": 1
           }
-        },
-        "additionalProperties": false
+        }
       },
       "OutlookMailboxReference": {
         "type": "object",
@@ -10079,8 +10076,7 @@
           "profileName": {
             "type": "string"
           }
-        },
-        "additionalProperties": false
+        }
       },
       "OutlookMessageReference": {
         "type": "object",
@@ -10101,8 +10097,7 @@
           "mailbox": {
             "$ref": "#/components/schemas/OutlookMailboxReference"
           }
-        },
-        "additionalProperties": false
+        }
       },
       "PendingToolCall": {
         "type": "object",

@@ -31,5 +31,5 @@
     "recovery",
     "trustModel"
   ],
-  "additionalProperties": false
+  "additionalProperties": true
 }

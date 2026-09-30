@@ -3,4 +3,5 @@
 export interface LocalContextsBindV1Result {
   contextHandle: string;
   expiresAt: number;
+  [k: string]: unknown;
 }

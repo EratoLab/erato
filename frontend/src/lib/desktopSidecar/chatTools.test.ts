@@ -413,13 +413,15 @@ describe("shared desktop sidecar tools", () => {
     expect(env.request).not.toHaveBeenCalled();
   });
 
-  it("rejects extra discovery arguments before transport", async () => {
-    const env = setup({});
+  it("forwards additive discovery arguments", async () => {
+    const env = setup({ "search.metadata_fields.v1": { fields: [] } });
     const tool = env
       .tools()
       .find((item) => item.name === GET_SIDECAR_SEARCH_FIELDS_TOOL)!;
-    expect(await tool.execute({ unknown: true })).toMatchObject({ ok: false });
-    expect(env.request).not.toHaveBeenCalled();
+    expect(await tool.execute({ unknown: true })).toMatchObject({ ok: true });
+    expect(JSON.parse(env.request.mock.calls[0][0]).params).toEqual({
+      unknown: true,
+    });
   });
 
   it("forwards metadata predicates alongside the existing filters", async () => {
@@ -911,18 +913,27 @@ describe("sidecar document retrieval", () => {
     },
   );
 
-  it.each([
-    {},
-    { documentId: "bad" },
-    { ...input, subject_scope: "all" },
-    { ...input, path: "/tmp/file" },
-  ])("rejects invalid input %j before transport", async (args) => {
+  it.each([{}, { documentId: "bad" }, { ...input, subject_scope: "all" }])(
+    "rejects invalid input %j before transport",
+    async (args) => {
+      const env = setupDocument();
+      expect(await env.tool().execute(args, context)).toMatchObject({
+        ok: false,
+      });
+      expect(env.request).not.toHaveBeenCalled();
+      expect(env.uploadAttachment).not.toHaveBeenCalled();
+    },
+  );
+
+  it("forwards additive document parameters", async () => {
     const env = setupDocument();
-    expect(await env.tool().execute(args, context)).toMatchObject({
-      ok: false,
+    expect(
+      await env.tool().execute({ ...input, path: "/tmp/file" }, context),
+    ).toMatchObject({ ok: true });
+    expect(JSON.parse(env.request.mock.calls[0][0]).params).toEqual({
+      ...input,
+      path: "/tmp/file",
     });
-    expect(env.request).not.toHaveBeenCalled();
-    expect(env.uploadAttachment).not.toHaveBeenCalled();
   });
 
   it.each(["disabled", "count", "no-chat", "unsupported", "aborted"])(

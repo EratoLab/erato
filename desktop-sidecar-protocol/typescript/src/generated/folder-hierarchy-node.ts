@@ -9,4 +9,5 @@ export interface SourceFolderHierarchyNode {
   directLeafChildren: number;
   totalLeafChildren: number;
   directChildNodes: number;
+  [k: string]: unknown;
 }

@@ -109,10 +109,11 @@ Office add-in expose the negotiated snapshot and client through
 - `typescript/` contains the reference client and generated validators/types.
 - `test-server/` contains the deterministic mock implementation.
 
-Run `pnpm run generate` after changing a schema. CI runs `pnpm run check`, which
-validates all references and examples, checks the OpenRPC document against the
-official meta-schema, regenerates code in a temporary directory, type-checks,
-and runs the compatibility/conformance tests.
+Run `pnpm run generate` after changing a schema. It regenerates the bindings,
+formats the protocol package with Prettier, and rebuilds the package. CI runs
+`pnpm run check`, which validates all references and examples, checks the
+OpenRPC document against the official meta-schema, regenerates code in a
+temporary directory, type-checks, and runs the compatibility/conformance tests.
 
 ## Release process
 

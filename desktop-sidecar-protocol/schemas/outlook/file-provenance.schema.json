@@ -32,11 +32,11 @@
             ]
           }
         },
-        "additionalProperties": false,
+        "additionalProperties": true,
         "minProperties": 1
       }
     }
   },
   "required": ["version", "origins"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

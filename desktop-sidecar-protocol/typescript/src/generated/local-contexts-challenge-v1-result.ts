@@ -4,4 +4,5 @@ export interface LocalContextsChallengeV1Result {
   challenge: string;
   deviceId: string;
   expiresAt: number;
+  [k: string]: unknown;
 }

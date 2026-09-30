@@ -2,4 +2,5 @@
 
 export interface IndexingBenchmarkStatusV1Params {
   runId: string;
+  [k: string]: unknown;
 }

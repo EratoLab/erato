@@ -16,7 +16,7 @@
         }
       },
       "required": ["contextHandle", "handle"],
-      "additionalProperties": false
+      "additionalProperties": true
     },
     {
       "type": "object",
@@ -33,7 +33,7 @@
         }
       },
       "required": ["contextHandle", "binding", "plan"],
-      "additionalProperties": false
+      "additionalProperties": true
     }
   ],
   "description": "Cancel by opaque handle, or atomically create/cancel a logical binding tombstone after a lost start acknowledgement. Binding cancellation never starts collection."

@@ -15,5 +15,5 @@
     }
   },
   "required": ["contextHandle", "expiresAt"],
-  "additionalProperties": false
+  "additionalProperties": true
 }

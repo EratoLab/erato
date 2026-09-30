@@ -199,12 +199,7 @@ describe("shared sidecar mailbox and folder tools", () => {
     expect(env.uploadAttachment).not.toHaveBeenCalled();
   });
 
-  it.each([
-    {},
-    { mailboxId },
-    { sourceId: mailboxId },
-    { sourceId, extra: true },
-  ])(
+  it.each([{}, { mailboxId }, { sourceId: mailboxId }])(
     "rejects invalid folder parameters before transport: %j",
     async (input) => {
       const env = setup({});
@@ -212,6 +207,19 @@ describe("shared sidecar mailbox and folder tools", () => {
       expect(env.request).not.toHaveBeenCalled();
     },
   );
+
+  it("forwards additive folder parameters", async () => {
+    const env = setup({
+      "sources.get_folder_hierarchy.v1": { sourceId, nodes },
+    });
+    expect(
+      await env.folders.execute({ sourceId, futureOption: true }),
+    ).toMatchObject({ ok: true });
+    expect(JSON.parse(env.request.mock.calls[0][0]).params).toEqual({
+      sourceId,
+      futureOption: true,
+    });
+  });
 
   it("rejects invalid folder counts instead of reporting them", async () => {
     const env = setup({

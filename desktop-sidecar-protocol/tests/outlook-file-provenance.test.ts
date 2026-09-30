@@ -47,9 +47,36 @@ describe("persisted Outlook file provenance contract", () => {
     { version: 1, origins: [{}] },
     { version: 1, origins: [{ document: { external_ids: [] } }] },
     { version: 1, origins: [{ topLevelParent: null }] },
-    { version: 1, origins: [{ document, launchUrl: "outlook:untrusted" }] },
   ])("rejects unsupported or empty provenance: %j", (value) => {
     expect(validateOutlookFileProvenance(value)).toBe(false);
+  });
+
+  it("accepts future fields without weakening known provenance constraints", () => {
+    expect(
+      validateOutlookFileProvenance({
+        version: 1,
+        origins: [
+          {
+            document: {
+              ...document,
+              mailbox: {
+                mailboxId: "11111111-1111-4111-8111-111111111111",
+                providerRevision: 2,
+              },
+              futureIdentityField: true,
+            },
+            futureOriginField: { revision: 2 },
+          },
+        ],
+        futureEnvelopeField: "ignored",
+      }),
+    ).toBe(true);
+    expect(
+      validateOutlookFileProvenance({
+        version: 1,
+        origins: [{ document: { ...document, documentId: null } }],
+      }),
+    ).toBe(false);
   });
 
   it.each([

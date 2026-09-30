@@ -2,6 +2,7 @@
 
 export interface SourcesListV1Result {
   sources: SourceDescriptor[];
+  [k: string]: unknown;
 }
 export interface SourceDescriptor {
   sourceId: string;
@@ -17,4 +18,5 @@ export interface SourceDescriptor {
   completedScanId: string | null;
   lastSuccessAt: string | null;
   lastErrorCode: string | null;
+  [k: string]: unknown;
 }

@@ -31,4 +31,5 @@ export type OutlookMailboxReference = (
    * Name of the originating Outlook profile, when available. A profile name alone does not identify a mailbox.
    */
   profileName?: string;
+  [k: string]: unknown;
 };

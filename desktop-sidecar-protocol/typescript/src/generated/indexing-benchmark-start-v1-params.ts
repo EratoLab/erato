@@ -3,4 +3,5 @@
 export interface IndexingBenchmarkStartV1Params {
   mailboxId: string;
   mode?: "fiveMinutes" | "fullMailbox";
+  [k: string]: unknown;
 }
