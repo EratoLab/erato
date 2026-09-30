@@ -266,5 +266,5 @@ The supported operation remains one plain-text paragraph with uniform run
 formatting in a standalone, unmerged body table. Rich/multiple paragraphs,
 wrappers, nesting, merged cells, oversized target context, row changes and
 formatting changes use complete reads and existing authoring. Existing capture
-and conservative model-budget eligibility limits are unchanged. Offline tests
-establish bounded context and preservation, not model-token or latency savings.
+and conservative model-budget eligibility limits are unchanged. Tests cover
+bounded context, scoped authorization and preservation.
