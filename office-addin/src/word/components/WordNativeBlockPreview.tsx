@@ -4,26 +4,12 @@ import { t } from "@lingui/core/macro";
 import type { WordSourceBlock } from "../utils/wordDocumentPlan";
 import type { WordPlanObjectKind } from "../utils/wordPlanReview";
 
-export function WordNativeBlockPreview({
-  block,
-  retained = true,
-}: {
-  block: WordSourceBlock;
-  retained?: boolean;
-}) {
+export function WordNativeBlockPreview({ block }: { block: WordSourceBlock }) {
   return (
     <Card variant="surface" size="sm">
       <strong>{nativeKindLabel(block.nativeKind)}</strong>
       {block.description && (
         <p className="word-review__text">{block.description}</p>
-      )}
-      {retained && (
-        <p className="word-review__hint">
-          {t({
-            id: "officeAddin.word.authoring.nativeRetained",
-            message: "Retained in Word with its native content and formatting.",
-          })}
-        </p>
       )}
       {block.text && <p className="word-review__text">{block.text}</p>}
     </Card>

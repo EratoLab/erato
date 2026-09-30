@@ -5,12 +5,15 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
   examplePlan,
+  packageXml,
+  paragraph,
   readySnapshot,
   wordSerializationNoise,
 } from "../../../test/mocks/word/authoringFixtures";
@@ -25,6 +28,10 @@ import { wordDocumentFingerprint } from "../../utils/wordDocumentXml";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
 import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+} from "../../utils/wordDocumentPlan";
 import type * as EratoLibrary from "@erato/frontend/library";
 
 const mock = vi.hoisted(() => {
@@ -87,11 +94,16 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
     </div>
   ),
 }));
-function setup() {
-  const snapshot = readySnapshot();
+function setup(
+  ooxml?: string,
+  buildPlan: (snapshot: WordAuthoringSnapshot) => WordDocumentPlan = (
+    snapshot,
+  ) => examplePlan(snapshot.token),
+) {
+  const snapshot = readySnapshot(ooxml);
   const messageId = String(mock.artifact.messageId);
   snapshot.ownerMessageId = messageId;
-  const plan = examplePlan(snapshot.token);
+  const plan = buildPlan(snapshot);
   const capture: WordDocumentCapture = {
     identity: "doc-A",
     authoring: snapshot,
@@ -168,9 +180,47 @@ function setup() {
     change: () => {
       current = current.replace("Recommendation", "Later edit");
     },
+    editSource: () => {
+      current = current.replace("Context", "Later context");
+    },
     fingerprint: () => wordDocumentFingerprint(current),
   };
 }
+const APPLIED = "Applied: Change 5 items";
+const heading = (text: string) =>
+  `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${text}</w:t></w:r></w:p>`;
+const TABLE =
+  '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>' +
+  [
+    ["Team", "Hours"],
+    ["East", "18"],
+    ["West", "18"],
+  ]
+    .map(
+      (row) =>
+        "<w:tr>" +
+        row.map((c) => `<w:tc><w:tcPr/>${paragraph(c)}</w:tc>`).join("") +
+        "</w:tr>",
+    )
+    .join("") +
+  "</w:tbl>";
+const CHAPTERS = packageXml(
+  ["Intro", "Scope", "Plan", "Notes"]
+    .map((name) => heading(name) + paragraph(`${name} body.`))
+    .join(""),
+);
+const bodyPlan = (
+  snapshot: WordAuthoringSnapshot,
+  entries: WordDocumentPlan["entries"],
+  deleted: WordDocumentPlan["deleted"] = [],
+): WordDocumentPlan => ({
+  version: 1,
+  snapshot: snapshot.token,
+  readToken: "read-proof",
+  scope: "body",
+  entries,
+  deleted,
+});
 /** Hold every Word batch until released, to observe the in-progress UI. */
 function holdWord() {
   const word = (
@@ -262,7 +312,7 @@ describe("structural document review", () => {
     const allow = await screen.findByRole("button", { name: "Allow once" });
     expect(state.insert).not.toHaveBeenCalled();
     fireEvent.click(allow);
-    await screen.findByText("Document rewrite applied");
+    await screen.findByText(APPLIED);
     expect(state.insert).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
   });
@@ -288,46 +338,58 @@ describe("structural document review", () => {
       </WordWriteProvider>,
       { wrapper: TestTheme },
     );
-    expect(screen.getByText("Saved document rewrite")).toBeVisible();
+    expect(screen.getByText(/The submitted draft is saved/)).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Apply document rewrite" }),
+      screen.getByRole("heading", { name: "Change 5 items" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Apply changes" }),
     ).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText("Recommendation")).toBeVisible();
+    expect(screen.queryByText(/reused ·|source blocks/)).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
   });
 
   it("applies one coherent plan then collapses, reopens and guards later edits", async () => {
     const state = setup();
-    state.mount();
-    expect(screen.getByText("6 of 6 source blocks read")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Full draft" }));
-    expect(screen.getByTestId("word-plan-group-0")).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Apply document rewrite" }),
+    const { container } = state.mount();
+    expect(
+      screen.getByRole("heading", { name: "Change 5 items" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Medium")).toBeInTheDocument();
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(container).not.toHaveTextContent(
+      /\bb\d\b|source blocks read|reused ·|\d pt\b/,
     );
-    await waitFor(() =>
-      expect(screen.getByText("Document rewrite applied")).toBeInTheDocument(),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview the result" }));
+    expect(
+      screen.getByRole("region", { name: "Preview of the result" }),
+    ).toHaveTextContent("Pilot in October. Retain support.");
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await waitFor(() => expect(screen.getByText(APPLIED)).toBeInTheDocument());
     expect(state.insert).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Show details" }));
-    expect(screen.getByRole("tab", { name: "Full draft" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(
+      screen.getByRole("heading", { name: "Change 5 items" }),
+    ).toBeVisible();
     state.change();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() =>
       expect(screen.getByText(/Revert was not run/)).toBeInTheDocument(),
     );
     expect(state.insert).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(screen.queryByText(/Undo available/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Download original body" }),
+    ).toBeInTheDocument();
   });
   it("keeps the Apply button focused and busy with the current stage, then releases it", async () => {
     const state = setup();
     state.mount();
     const release = holdWord();
     const apply = screen.getByRole("button", {
-      name: "Apply document rewrite",
+      name: "Apply changes",
     });
     apply.focus();
     fireEvent.click(apply);
@@ -341,7 +403,7 @@ describe("structural document review", () => {
     ).not.toBeInTheDocument();
     fireEvent.click(busy);
     release();
-    await screen.findByText("Document rewrite applied");
+    await screen.findByText(APPLIED);
     expect(state.insert).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[aria-busy="true"]')).toBeNull();
   });
@@ -349,9 +411,7 @@ describe("structural document review", () => {
     const state = setup();
     state.fail();
     state.mount();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Apply document rewrite" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
     );
@@ -366,7 +426,7 @@ describe("structural document review", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Allow once" }));
     expect(await screen.findByText("Saving backup…")).toBeInTheDocument();
     release();
-    await screen.findByText("Document rewrite applied");
+    await screen.findByText(APPLIED);
     expect(state.insert).toHaveBeenCalledTimes(1);
   });
   it("blocks a forged complete-read token and never writes", () => {
@@ -374,7 +434,7 @@ describe("structural document review", () => {
     state.plan.readToken = "forged";
     state.mount();
     expect(
-      screen.getByRole("button", { name: "Apply document rewrite" }),
+      screen.getByRole("button", { name: "Apply changes" }),
     ).toBeDisabled();
     expect(
       screen.getByText(/complete document has not been read/),
@@ -385,13 +445,11 @@ describe("structural document review", () => {
     const state = setup();
     state.fail();
     state.mount();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Apply document rewrite" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
     );
-    expect(screen.queryByText("Document rewrite applied")).toBeNull();
+    expect(screen.queryByText(APPLIED)).toBeNull();
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Download original body" }),
@@ -416,9 +474,7 @@ describe("structural document review", () => {
     state.fail();
     state.failRead();
     state.mount();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Apply document rewrite" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
     );
@@ -433,10 +489,8 @@ describe("structural document review", () => {
   it("downloads the exact pre-write body after an interrupted restoration", async () => {
     const state = setup();
     state.mount();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Apply document rewrite" }),
-    );
-    await screen.findByText("Document rewrite applied");
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await screen.findByText(APPLIED);
     state.fail();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() =>
@@ -488,12 +542,8 @@ describe("structural document review", () => {
     const state = setup();
     state.noise();
     state.mount();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Apply document rewrite" }),
-    );
-    await waitFor(() =>
-      expect(screen.getByText("Document rewrite applied")).toBeInTheDocument(),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await waitFor(() => expect(screen.getByText(APPLIED)).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(state.insert).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("alert")).toBeNull();
@@ -505,9 +555,7 @@ describe("structural document review", () => {
     };
     const state = setup();
     state.mount();
-    expect(
-      screen.queryByRole("button", { name: "Apply document rewrite" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Apply changes" })).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
   });
   it("asks separately for a rewrite even when paragraph edits are always allowed", async () => {
@@ -573,5 +621,167 @@ describe("structural document review", () => {
     expect(mock.setDecisions).not.toHaveBeenCalled();
     expect(state.insert).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Allow once" })).toBeEnabled();
+  });
+  it("shows a one-cell table edit as a small change with the new cell text", () => {
+    const state = setup(
+      packageXml(paragraph("Allocation") + TABLE),
+      (snapshot) => {
+        const table = snapshot.blocks[1];
+        return bodyPlan(snapshot, [
+          { kind: "keep", source: ["b1"] },
+          {
+            kind: "replace",
+            source: [table.ref],
+            blocks: [
+              {
+                id: "cell-edit",
+                type: "table",
+                text: "",
+                sourceRef: table.ref,
+                rows: table.content!.rows.map((row) => ({
+                  sourceIndex: row.sourceIndex,
+                  cells: row.cells.map((cell) => ({
+                    sourceIndex: cell.sourceIndex,
+                    ...(row.sourceIndex === 2 && cell.sourceIndex === 1
+                      ? { textEdit: { expectedText: "18", text: "21" } }
+                      : {}),
+                  })),
+                })),
+              },
+            ],
+          },
+        ]);
+      },
+    );
+    const { container } = state.mount();
+    expect(
+      screen.getByRole("heading", { name: "Change 1 table cell" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Small")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Apply change" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Table/ }));
+    expect(container.querySelector("ins")).toHaveTextContent("21");
+    expect(container.querySelector("del")).toHaveTextContent("18");
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(container).not.toHaveTextContent(
+      /Existing content retained|\d pt\b/,
+    );
+  });
+  it("groups a large rewrite by section, hides unchanged ones and jumps to risks", async () => {
+    const state = setup(CHAPTERS, (snapshot) =>
+      bodyPlan(
+        snapshot,
+        [
+          { kind: "keep", source: ["b1"] },
+          {
+            kind: "replace",
+            source: ["b2"],
+            blocks: [{ id: "n1", type: "paragraph", text: "New intro." }],
+          },
+          { kind: "keep", source: ["b3"] },
+          {
+            kind: "replace",
+            source: ["b4"],
+            blocks: [{ id: "n2", type: "paragraph", text: "New scope." }],
+          },
+          { kind: "keep", source: ["b7", "b8"] },
+        ],
+        [{ source: ["b5", "b6"], reason: "Plan moved elsewhere." }],
+      ),
+    );
+    state.mount();
+    expect(screen.getByText("Large")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Update 3 of 4 sections" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Only changed" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByRole("button", { name: /^Notes/ })).toBeNull();
+    const plan = screen.getByRole("button", { name: /^Plan/ });
+    expect(plan).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "1 heading is no longer in the document",
+      }),
+    );
+    expect(plan).toHaveAttribute("aria-expanded", "true");
+    const row = document.querySelector('[data-row-key="deleted:b5"]')!;
+    await waitFor(() =>
+      expect(
+        within(row as HTMLElement).getAllByRole("button")[0],
+      ).toHaveFocus(),
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "All" }));
+    expect(screen.getByRole("button", { name: /^Notes/ })).toBeInTheDocument();
+  });
+  it("shows a summary across sections as one continuous preview", () => {
+    const state = setup(CHAPTERS, (snapshot) =>
+      bodyPlan(snapshot, [
+        {
+          kind: "replace",
+          source: snapshot.blocks.map((block) => block.ref),
+          blocks: [
+            { id: "s1", type: "heading", level: 1, text: "Summary" },
+            { id: "s2", type: "paragraph", text: "All four parts, briefly." },
+          ],
+        },
+      ]),
+    );
+    state.mount();
+    expect(screen.getByText("Restructured")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Preview of the result" }),
+    ).toHaveTextContent("All four parts, briefly.");
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Scope/ })).toBeNull();
+  });
+  it("reports a stale plan without writing and without offering to apply again", async () => {
+    const state = setup();
+    state.mount();
+    state.editSource();
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "The document changed. Nothing was applied.",
+      ),
+    );
+    expect(state.insert).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Apply changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+  it("shows the restore in progress, then a receipt naming what was undone", async () => {
+    const state = setup();
+    state.mount();
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await screen.findByText(APPLIED);
+    const release = holdWord();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      await screen.findByText("Checking and restoring the document…"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    release();
+    expect(
+      await screen.findByText("Undone: Change 5 items"),
+    ).toBeInTheDocument();
+    expect(state.insert).toHaveBeenCalledTimes(2);
+  });
+  it("notes an automatic run under Always allow on the receipt", async () => {
+    mock.artifact.clientActionPresentation = "auto_prompt";
+    mock.artifact.proposedClientAction = "word.apply_document_plan";
+    mock.decisions = {
+      "word_document_authoring/word.apply_document_plan": "always",
+    };
+    const state = setup();
+    state.mount();
+    await screen.findByText(APPLIED);
+    expect(
+      screen.getByText("Automatic action under your Always allow setting."),
+    ).toBeInTheDocument();
+    expect(state.insert).toHaveBeenCalledTimes(1);
   });
 });

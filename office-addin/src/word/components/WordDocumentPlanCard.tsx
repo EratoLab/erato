@@ -22,6 +22,7 @@ import {
 } from "./WordReviewCardParts";
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { WordSavedPlanPreview } from "./WordSavedPlanPreview";
+import { wordPlanApplyLabel, wordPlanTitleText } from "./wordPlanLabels";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
@@ -46,6 +47,7 @@ import {
   validateWordDocumentPlan,
 } from "../utils/wordDocumentPlan";
 import { wordPlanDraftText } from "../utils/wordDocumentXml";
+import { buildWordPlanReview } from "../utils/wordPlanReview";
 import { showWordReviewLocation } from "../utils/wordReviewLocation";
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
@@ -88,6 +90,10 @@ export function WordDocumentPlanCard({
     const parsed = parseWordDocumentPlan(content);
     return parsed && normalizeWordDocumentPlan(parsed, snapshot);
   }, [content, snapshot]);
+  const planReview = useMemo(
+    () => plan && buildWordPlanReview(plan, snapshot),
+    [plan, snapshot],
+  );
   const gate = resolveWordWriteGate({
     capture,
     expectedIdentity: artifact?.itemIdentity,
@@ -225,8 +231,11 @@ export function WordDocumentPlanCard({
     host.revertSlot.identity === host.documentIdentity
       ? host.revertSlot
       : null;
+  // After a stale revert the slot is kept only for download: retrying would
+  // hit the same later edits, so the undo line would promise too much.
   const canRevert =
     ["done", "write-failed", "revert-failed"].includes(review.status) &&
+    review.documentPlanStatus !== "revert-stale" &&
     !!recoverySlot?.afterFingerprint;
   const revert = async () => {
     const slot = host.revertSlot;
@@ -310,36 +319,24 @@ export function WordDocumentPlanCard({
         review.status === "revert-failed" ||
           review.documentPlanStatus === "revert-stale",
       )
-    : review.documentPlanStatus === "stale"
+    : review.status === "write-failed" || review.status === "revert-failed"
       ? t({
-          id: "officeAddin.word.authoring.stale",
+          id: "officeAddin.word.authoring.interrupted",
           message:
-            "The document changed. Nothing was applied. Send a new request to refresh the plan.",
+            "Word stopped during the operation. The document may be partially changed. Inspect it before continuing; this plan will not run again.",
         })
-      : review.documentPlanStatus === "revert-stale"
+      : review.status === "error"
         ? t({
-            id: "officeAddin.word.authoring.revertStale",
+            id: "officeAddin.word.authoring.failed",
             message:
-              "The document changed after applying. Revert was not run because it could remove later edits.",
+              "The rewrite could not be applied. No document changes were made.",
           })
-        : review.status === "write-failed" || review.status === "revert-failed"
+        : review.status === "reverting"
           ? t({
-              id: "officeAddin.word.authoring.interrupted",
-              message:
-                "Word stopped during the operation. The document may be partially changed. Inspect it before continuing; this plan will not run again.",
+              id: "officeAddin.word.authoring.reverting",
+              message: "Checking and restoring the document…",
             })
-          : review.status === "error"
-            ? t({
-                id: "officeAddin.word.authoring.failed",
-                message:
-                  "The rewrite could not be applied. No document changes were made.",
-              })
-            : review.status === "reverting"
-              ? t({
-                  id: "officeAddin.word.authoring.reverting",
-                  message: "Checking and restoring the document…",
-                })
-              : undefined;
+          : undefined;
   if (generating)
     return (
       <WordReviewGenerating
@@ -349,8 +346,10 @@ export function WordDocumentPlanCard({
         })}
       />
     );
-  if (!plan)
+  if (!plan || !planReview)
     return <Alert type="error">{wordAuthoringIssueText("invalid")}</Alert>;
+  const applyLabel = wordPlanApplyLabel(planReview, plan);
+  const planTitle = wordPlanTitleText(planReview.title);
   return (
     <Card
       variant="surface"
@@ -363,41 +362,25 @@ export function WordDocumentPlanCard({
       data-testid="word-document-plan-card"
       footer={
         <div className="word-review__footer">
-          {(idle || applying) && offered && (
-            <>
-              <p className="word-review__hint">
-                {t({
-                  id: "officeAddin.word.authoring.applyScope",
-                  message:
-                    "Applies the complete structure and draft. If the source changed, the whole plan stops before writing.",
-                })}
-              </p>
-              {!confirmCard && (
-                <WordApplyButton
-                  applying={applying}
-                  applyStage={review.applyStage}
-                  disabled={
-                    !ready || host.operationInProgress || isConfirmPending
-                  }
-                  label={entry.displayLabel()}
-                  onApply={() => void execute()}
-                />
-              )}
-            </>
+          {(idle || applying) && offered && !confirmCard && (
+            <WordApplyButton
+              applying={applying}
+              applyStage={review.applyStage}
+              disabled={!ready || host.operationInProgress || isConfirmPending}
+              label={applyLabel}
+              onApply={() => void execute()}
+            />
           )}
           {confirmCard && (
             <WordReviewConfirm
               key={confirmCard.requestId}
               card={confirmCard}
               title={t({
-                id: "officeAddin.word.authoring.consent",
-                message: "Apply this document rewrite?",
+                id: "officeAddin.word.planReview.consent",
+                message: "Apply the changes reviewed above?",
               })}
-              description={t({
-                id: "officeAddin.word.authoring.consentScope",
-                message: "Apply the entire structure and draft reviewed above.",
-              })}
-              allowOnceLabel={entry.displayLabel()}
+              description={undefined}
+              allowOnceLabel={applyLabel}
               canApply={ready}
               operationInProgress={host.operationInProgress}
               enforcedAskActions={enforcedAskActions}
@@ -551,7 +534,14 @@ export function WordDocumentPlanCard({
         </div>
       }
     >
-      {collapsed && <WordReviewReceipt review={review} kind="plan" />}
+      {collapsed && (
+        <WordReviewReceipt
+          review={review}
+          kind="plan"
+          planTitle={planTitle}
+          wholeDocument={planReview.scope.wholeFile}
+        />
+      )}
       <div id={detailsId} hidden={collapsed}>
         {!snapshot && artifact?.submittedCard && (
           <WordSavedPlanPreview plan={plan} />
@@ -560,6 +550,7 @@ export function WordDocumentPlanCard({
           <WordDocumentPlanReview
             plan={plan}
             snapshot={snapshot}
+            review={planReview}
             onLocate={
               idle && gate.allowed && !host.operationInProgress
                 ? (ref) => void locate(ref)

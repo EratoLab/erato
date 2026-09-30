@@ -5,9 +5,14 @@ import type { WordReviewState } from "../utils/wordReviewState";
 export function WordReviewReceipt({
   review,
   kind,
+  planTitle = "",
+  wholeDocument = false,
 }: {
   review: WordReviewState;
   kind: "edits" | "insert" | "plan";
+  /** The plan card's own title, so the receipt names what was changed. */
+  planTitle?: string;
+  wholeDocument?: boolean;
 }) {
   const applied = review.outcomes.filter(
     (item) => item.status === "applied",
@@ -30,15 +35,25 @@ export function WordReviewReceipt({
               id: "officeAddin.word.review.denied",
               message: "Proposal declined. Nothing was written.",
             })
-          : review.status === "reverted"
-            ? t({
-                id: "officeAddin.word.review.restored",
-                message: "Document body restored",
-              })
-            : kind === "plan"
+          : kind === "plan"
+            ? review.status === "reverted"
+              ? wholeDocument
+                ? t({
+                    id: "officeAddin.word.planReceipt.restoredDocument",
+                    message: "Restored the document",
+                  })
+                : t({
+                    id: "officeAddin.word.planReceipt.undone",
+                    message: `Undone: ${planTitle}`,
+                  })
+              : t({
+                  id: "officeAddin.word.planReceipt.applied",
+                  message: `Applied: ${planTitle}`,
+                })
+            : review.status === "reverted"
               ? t({
-                  id: "officeAddin.word.authoring.applied",
-                  message: "Document rewrite applied",
+                  id: "officeAddin.word.review.restored",
+                  message: "Document body restored",
                 })
               : kind === "insert"
                 ? t({
@@ -55,14 +70,6 @@ export function WordReviewReceipt({
                       message: `${applied} edits applied`,
                     })}
       </strong>
-      {kind === "plan" && (
-        <span className="word-review__hint">
-          {t({
-            id: "officeAddin.word.authoring.receiptScope",
-            message: "The complete plan remains available in details.",
-          })}
-        </span>
-      )}
       {kind === "edits" && review.status === "done" && (
         <span className="word-review__totals">
           {t({

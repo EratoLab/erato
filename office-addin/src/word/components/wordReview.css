@@ -243,72 +243,6 @@
   gap: var(--theme-spacing-control-gap);
 }
 
-.word-authoring__tabs {
-  padding: var(--theme-spacing-message-padding-y)
-    var(--theme-spacing-message-padding-x);
-  border-bottom: 1px solid var(--theme-border);
-}
-.word-authoring__content {
-  padding: 0.75rem;
-  max-height: 28rem;
-  overflow: auto;
-  overflow-wrap: anywhere;
-}
-.word-authoring__content details {
-  padding: 0.65rem 0;
-  border-bottom: 1px solid var(--theme-border);
-}
-.word-authoring__content summary {
-  cursor: pointer;
-  font-size: var(--theme-font-size-sm);
-  line-height: var(--theme-line-height-sm);
-  letter-spacing: var(--theme-letter-spacing-sm);
-  font-weight: var(--theme-font-weight-semibold);
-}
-.word-authoring__content summary .word-review__hint {
-  display: block;
-  margin-top: 0.25rem;
-  font-weight: var(--theme-font-weight-normal);
-}
-.word-authoring__outline {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
-  font-size: var(--theme-font-size-sm);
-  line-height: var(--theme-line-height-sm);
-  letter-spacing: var(--theme-letter-spacing-sm);
-}
-.word-authoring__outline ol {
-  padding-left: 1.2rem;
-}
-.word-authoring__outline li {
-  padding: 0.35rem 0;
-}
-.word-authoring__draft {
-  padding: 0.5rem 0.25rem;
-}
-.word-authoring__block {
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--theme-border);
-}
-.word-authoring__block p {
-  white-space: pre-wrap;
-}
-.word-authoring__block h4 {
-  font-weight: var(--theme-font-weight-bold);
-  font-size: var(--theme-font-size-lg);
-  line-height: var(--theme-line-height-lg);
-  letter-spacing: var(--theme-letter-spacing-lg);
-}
-.word-authoring__block--list-item p {
-  padding-left: 0.75rem;
-}
-@media (max-width: 360px) {
-  .word-authoring__outline {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 .word-review__filters > [data-ui="select-field"] {
   flex: 1;
   min-width: 7rem;
@@ -338,4 +272,49 @@
 }
 .word-plan-row__layout dd {
   margin: 0;
+}
+
+.word-plan-review {
+  display: grid;
+  min-width: 0;
+}
+.word-plan-review__section {
+  display: grid;
+  gap: 6px;
+  padding: 0 var(--theme-spacing-message-padding-x)
+    var(--theme-spacing-message-padding-y);
+  justify-items: stretch;
+}
+.word-plan-review__section > button {
+  justify-self: start;
+}
+.word-plan-review__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-spacing-control-gap);
+}
+.word-review .word-plan-review__toolbar h4 {
+  margin: 0;
+}
+.word-plan-review__groups {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.word-plan-review__groups .word-review__list {
+  max-height: none;
+}
+.word-plan-review__preview {
+  max-height: 28rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.25rem;
+}
+.word-plan-review__hint {
+  padding: 0 var(--theme-spacing-message-padding-x)
+    var(--theme-spacing-message-padding-y);
 }

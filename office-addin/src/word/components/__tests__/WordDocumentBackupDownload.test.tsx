@@ -98,9 +98,7 @@ async function interruptedDocument() {
     </WordWriteProvider>,
     { wrapper: TestTheme },
   );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Apply document rewrite" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Replace document" }));
   await screen.findByRole("button", { name: "Download original document" });
   return { bytes, entry, container };
 }

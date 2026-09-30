@@ -1,5 +1,5 @@
 import { i18n } from "@lingui/core";
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 
 import {
   pointsToCentimeters,
@@ -7,9 +7,14 @@ import {
   wordLength,
 } from "../utils/wordPlanReview";
 
+import type { WordDocumentPlan } from "../utils/wordDocumentPlan";
 import type {
   WordLayoutProperty,
   WordLayoutValue,
+  WordPlanGroupSummary,
+  WordPlanReview,
+  WordPlanScopePart,
+  WordPlanTitle,
 } from "../utils/wordPlanReview";
 import type {
   WordPageLayout,
@@ -237,4 +242,341 @@ export function formatList(parts: string[]): string {
     style: "short",
     type: "unit",
   }).format(parts);
+}
+
+export function emptyPartLabel(): string {
+  return t({ id: "officeAddin.word.authoring.emptyPart", message: "Empty" });
+}
+
+/** Noun phrases that complete "… sections and {parts}" in the plan title. */
+function storyNoun(type: WordStoryType): string {
+  switch (type) {
+    case "header":
+      return t({
+        id: "officeAddin.word.planTitle.header",
+        message: "the header",
+      });
+    case "footer":
+      return t({
+        id: "officeAddin.word.planTitle.footer",
+        message: "the footer",
+      });
+    case "footnote":
+      return t({
+        id: "officeAddin.word.planTitle.footnotes",
+        message: "footnotes",
+      });
+    case "endnote":
+      return t({
+        id: "officeAddin.word.planTitle.endnotes",
+        message: "endnotes",
+      });
+    default:
+      return t({
+        id: "officeAddin.word.planTitle.comments",
+        message: "comments",
+      });
+  }
+}
+const layoutNoun = () =>
+  t({ id: "officeAddin.word.planTitle.layout", message: "page layout" });
+
+function extras(parts: WordStoryType[], layout: boolean): string {
+  return formatList([
+    ...new Set(parts.map(storyNoun)),
+    ...(layout ? [layoutNoun()] : []),
+  ]);
+}
+
+export function wordPlanTitleText(title: WordPlanTitle): string {
+  switch (title.kind) {
+    case "cells":
+      return t({
+        id: "officeAddin.word.planTitle.cells",
+        message: plural(title.n, {
+          one: "Change # table cell",
+          other: "Change # table cells",
+        }),
+      });
+    case "paragraphs-added":
+      return t({
+        id: "officeAddin.word.planTitle.paragraphsAdded",
+        message: plural(title.n, {
+          one: "Add # paragraph",
+          other: "Add # paragraphs",
+        }),
+      });
+    case "blocks-added":
+      return t({
+        id: "officeAddin.word.planTitle.blocksAdded",
+        message: plural(title.n, {
+          one: "Add # item",
+          other: "Add # items",
+        }),
+      });
+    case "paragraphs-changed":
+      return t({
+        id: "officeAddin.word.planTitle.paragraphsChanged",
+        message: plural(title.n, {
+          one: "Change # paragraph",
+          other: "Change # paragraphs",
+        }),
+      });
+    case "removed":
+      return t({
+        id: "officeAddin.word.planTitle.removed",
+        message: plural(title.n, {
+          one: "Remove # item",
+          other: "Remove # items",
+        }),
+      });
+    case "sections": {
+      const { changed, total } = title;
+      const also = extras(title.parts, title.layout);
+      return also
+        ? t({
+            id: "officeAddin.word.planTitle.sectionsAnd",
+            message: `Update ${changed} of ${total} sections and ${also}`,
+          })
+        : t({
+            id: "officeAddin.word.planTitle.sections",
+            message: `Update ${changed} of ${total} sections`,
+          });
+    }
+    case "layout": {
+      const also = extras(title.parts, title.sections > 0);
+      return t({
+        id: "officeAddin.word.planTitle.layoutOnly",
+        message: `Update ${also}`,
+      });
+    }
+    case "summary":
+      return t({
+        id: "officeAddin.word.planTitle.summary",
+        message: "Rewrite as a new version",
+      });
+    case "blocks-changed": {
+      const n = title.n;
+      const also = extras(title.parts, title.layout);
+      return also
+        ? t({
+            id: "officeAddin.word.planTitle.blocksChangedAnd",
+            message: plural(n, {
+              one: `Change # item and ${also}`,
+              other: `Change # items and ${also}`,
+            }),
+          })
+        : t({
+            id: "officeAddin.word.planTitle.blocksChanged",
+            message: plural(n, {
+              one: "Change # item",
+              other: "Change # items",
+            }),
+          });
+    }
+  }
+}
+
+export function wordPlanChip(review: WordPlanReview): {
+  label: string;
+  toneClassName?: string;
+} {
+  switch (review.variant) {
+    case "addition":
+      return {
+        label: t({
+          id: "officeAddin.word.planSize.addition",
+          message: "Addition",
+        }),
+        toneClassName: "bg-theme-success-bg text-theme-success-fg",
+      };
+    case "layout":
+      return {
+        label: t({ id: "officeAddin.word.planSize.layout", message: "Layout" }),
+      };
+    case "restructured":
+      return {
+        label: t({
+          id: "officeAddin.word.planSize.restructured",
+          message: "Restructured",
+        }),
+        toneClassName: "bg-theme-warning-bg text-theme-warning-fg",
+      };
+  }
+  return review.size === "large"
+    ? {
+        label: t({ id: "officeAddin.word.planSize.large", message: "Large" }),
+        toneClassName: "bg-theme-warning-bg text-theme-warning-fg",
+      }
+    : review.size === "medium"
+      ? {
+          label: t({
+            id: "officeAddin.word.planSize.medium",
+            message: "Medium",
+          }),
+        }
+      : {
+          label: t({ id: "officeAddin.word.planSize.small", message: "Small" }),
+          toneClassName: "bg-theme-bg-secondary text-theme-fg-secondary",
+        };
+}
+
+function scopePartNoun(part: WordPlanScopePart): string {
+  switch (part) {
+    case "headers":
+      return t({
+        id: "officeAddin.word.planScope.headers",
+        message: "headers",
+      });
+    case "footers":
+      return t({
+        id: "officeAddin.word.planScope.footers",
+        message: "footers",
+      });
+    case "notes":
+      return t({ id: "officeAddin.word.planScope.notes", message: "notes" });
+    case "comments":
+      return t({
+        id: "officeAddin.word.planScope.comments",
+        message: "comments",
+      });
+    case "layout":
+      return t({
+        id: "officeAddin.word.planScope.layout",
+        message: "page layout",
+      });
+  }
+}
+
+/** The one place the card states what the plan leaves alone. */
+export function wordPlanScopeText(
+  review: WordPlanReview,
+  plan: WordDocumentPlan,
+): string {
+  const sentences: string[] = [];
+  if (plan.entries.length === 0)
+    sentences.push(
+      t({
+        id: "officeAddin.word.authoring.clearBody",
+        message:
+          "The body will be cleared, leaving Word’s empty final paragraph.",
+      }),
+    );
+  if (review.scope.unchanged.length) {
+    const count = review.scope.unchanged.length;
+    const list = formatList(review.scope.unchanged.map(scopePartNoun));
+    const sentence = t({
+      id: "officeAddin.word.planScope.unchanged",
+      message: plural(count, {
+        one: `${list} stays as it is.`,
+        other: `${list} stay as they are.`,
+      }),
+    });
+    sentences.push(
+      sentence.charAt(0).toLocaleUpperCase(locale()) + sentence.slice(1),
+    );
+  }
+  if (review.scope.wholeFile && plan.scope === "document")
+    sentences.push(
+      t({
+        id: "officeAddin.word.planScope.wholeFile",
+        message: "Word reloads the whole document file to apply this.",
+      }),
+    );
+  return sentences.join(" ");
+}
+
+export function wordPlanApplyLabel(
+  review: WordPlanReview,
+  plan: WordDocumentPlan,
+): string {
+  if (review.scope.wholeFile && plan.scope === "document")
+    return t({
+      id: "officeAddin.word.planAction.replace",
+      message: "Replace document",
+    });
+  if (review.title.kind === "paragraphs-added")
+    return t({
+      id: "officeAddin.word.planAction.insert",
+      message: "Insert paragraphs",
+    });
+  const changes =
+    review.rows.filter((r) => r.family !== "unchanged").length +
+    review.partsRows.length;
+  const single =
+    review.title.kind === "cells" ? review.title.n === 1 : changes === 1;
+  return single
+    ? t({ id: "officeAddin.word.planAction.one", message: "Apply change" })
+    : t({ id: "officeAddin.word.planAction.many", message: "Apply changes" });
+}
+
+export function wordPlanGroupSummaryText(
+  summary: WordPlanGroupSummary,
+): string {
+  const parts: string[] = [];
+  if (summary.tables) {
+    const table = t({
+      id: "officeAddin.word.planRow.tableCount",
+      message: plural(summary.tables, { one: "# table", other: "# tables" }),
+    });
+    const cells = summary.cells;
+    const details = [
+      cells &&
+        t({
+          id: "officeAddin.word.planRow.cellsChanged",
+          message: plural(cells, {
+            one: "# cell changed",
+            other: "# cells changed",
+          }),
+        }),
+      summary.rowsAdded &&
+        t({
+          id: "officeAddin.word.planRow.rowsAdded",
+          message: plural(summary.rowsAdded, {
+            one: "# row added",
+            other: "# rows added",
+          }),
+        }),
+      summary.rowsRemoved &&
+        t({
+          id: "officeAddin.word.planRow.rowsRemoved",
+          message: plural(summary.rowsRemoved, {
+            one: "# row removed",
+            other: "# rows removed",
+          }),
+        }),
+    ].filter((part): part is string => !!part);
+    parts.push(details.length ? `${table} (${formatList(details)})` : table);
+  }
+  if (summary.text)
+    parts.push(
+      t({
+        id: "officeAddin.word.planRow.paragraphCount",
+        message: plural(summary.text, {
+          one: "# paragraph",
+          other: "# paragraphs",
+        }),
+      }),
+    );
+  if (summary.objects)
+    parts.push(
+      t({
+        id: "officeAddin.word.planRow.objectCount",
+        message: plural(summary.objects, {
+          one: "# other item",
+          other: "# other items",
+        }),
+      }),
+    );
+  if (summary.removed)
+    parts.push(
+      t({
+        id: "officeAddin.word.planGroup.removedCount",
+        message: plural(summary.removed, {
+          one: "# removed",
+          other: "# removed",
+        }),
+      }),
+    );
+  return parts.join(" · ");
 }

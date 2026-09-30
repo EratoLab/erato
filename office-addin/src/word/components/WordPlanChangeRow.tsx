@@ -24,6 +24,7 @@ import {
 } from "./WordRichBlockPreview";
 import {
   bindingLabel,
+  emptyPartLabel,
   formatList,
   formatWordLengths,
   layoutPropertyLabel,
@@ -35,6 +36,7 @@ import { editExcerpt } from "../utils/wordEditPlan";
 import type { WordAuthoringSnapshot } from "../utils/wordDocumentPlan";
 import type {
   WordLayoutChange,
+  WordPlanGroupStatus,
   WordPlanRow,
   WordPlanRowOf,
   WordPlanRowStatus,
@@ -46,8 +48,15 @@ import "./wordRichPreview.css";
 
 export const PLAN_ROW_PREVIEW_ROWS = 5;
 
-export function planRowStatusLabel(status: WordPlanRowStatus): string {
+type PillStatus = WordPlanRowStatus | WordPlanGroupStatus;
+
+export function planRowStatusLabel(status: PillStatus): string {
   switch (status) {
+    case "rewritten":
+      return t({
+        id: "officeAddin.word.planRow.rewritten",
+        message: "Rewritten",
+      });
     case "new":
       return t({ id: "officeAddin.word.planRow.new", message: "New" });
     case "removed":
@@ -65,12 +74,13 @@ export function planRowStatusLabel(status: WordPlanRowStatus): string {
       });
   }
 }
-const STATUS_TONE: Partial<Record<WordPlanRowStatus, string>> = {
+const STATUS_TONE: Partial<Record<PillStatus, string>> = {
   new: "bg-theme-success-bg text-theme-success-fg",
   removed: "bg-theme-error-bg text-theme-error-fg",
   kept: "bg-theme-bg-secondary text-theme-fg-secondary",
+  unchanged: "bg-theme-bg-secondary text-theme-fg-secondary",
 };
-export function WordPlanStatusPill({ status }: { status: WordPlanRowStatus }) {
+export function WordPlanStatusPill({ status }: { status: PillStatus }) {
   return (
     <SettledInfoPill
       label={planRowStatusLabel(status)}
@@ -400,6 +410,14 @@ function LayoutDetail({ row }: RowProps<"layout">) {
             </div>
           );
         })}
+        {row.stories?.map((story) => (
+          <div key={`${story.type}:${story.variant}`}>
+            <dt>
+              {storyLabel(story.type)} · {bindingLabel(story.variant)}
+            </dt>
+            <dd>{story.text ? editExcerpt(story.text) : emptyPartLabel()}</dd>
+          </div>
+        ))}
       </dl>
     </>
   );
@@ -442,7 +460,7 @@ function layoutDescription(row: WordPlanRowOf<"layout">): string {
       id: "officeAddin.word.planRow.sectionRemoved",
       message: "Section break removed",
     });
-  const count = row.changes.length;
+  const count = row.changes.length + (row.stories?.length ?? 0);
   return row.status === "new"
     ? t({
         id: "officeAddin.word.planRow.newSection",
@@ -582,7 +600,11 @@ export function WordPlanChangeRow({
             message: "Page layout",
           })}
           description={layoutDescription(row)}
-          detail={row.changes.length ? <LayoutDetail row={row} /> : undefined}
+          detail={
+            row.changes.length || row.stories?.length ? (
+              <LayoutDetail row={row} />
+            ) : undefined
+          }
         />
       );
     case "unchanged":

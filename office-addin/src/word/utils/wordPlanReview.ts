@@ -74,6 +74,12 @@ export type WordLayoutProperty =
   | "differentFirstPage"
   | "differentOddEvenPages";
 export type WordLayoutValue = string | number | boolean;
+export interface WordSectionStoryChange {
+  type: "header" | "footer";
+  variant: keyof WordSectionStories;
+  /** Undefined when the section shows no header or footer for this page kind. */
+  text?: string;
+}
 export interface WordLayoutChange {
   property: WordLayoutProperty;
   /** Lengths stay in points; the component converts them for display. */
@@ -131,6 +137,8 @@ export type WordPlanRow = WordPlanRowBase &
         sectionId: string;
         changes: WordLayoutChange[];
         beforeAvailable: boolean;
+        /** Header/footer assignments that differ from the captured section. */
+        stories?: WordSectionStoryChange[];
       }
     | {
         family: "unchanged";
@@ -496,6 +504,34 @@ function layoutChanges(
   });
 }
 
+function sectionStoryChanges(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot | undefined,
+  section: WordSectionPlan,
+  source: WordSectionSource | undefined,
+): WordSectionStoryChange[] {
+  return (["headers", "footers"] as const).flatMap((kind) =>
+    Object.entries(section[kind] ?? {}).flatMap(([variant, ref]) => {
+      if (source?.[kind]?.[variant as keyof WordSectionStories] === ref)
+        return [];
+      const changed = plan.stories?.find((s) => s.id === ref);
+      const text =
+        ref === null || changed?.kind === "delete"
+          ? undefined
+          : changed
+            ? (changed.blocks ?? []).map(blockText).join("\n")
+            : snapshot?.stories?.find((s) => s.id === ref)?.text;
+      return [
+        {
+          type: kind === "headers" ? "header" : "footer",
+          variant: variant as keyof WordSectionStories,
+          text: text || undefined,
+        } satisfies WordSectionStoryChange,
+      ];
+    }),
+  );
+}
+
 function sectionRows(
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot | undefined,
@@ -508,7 +544,8 @@ function sectionRows(
       : undefined;
     const beforeAvailable = !!source;
     const changes = layoutChanges(section.layout, source?.layout);
-    if (beforeAvailable && !changes.length) return [];
+    const stories = sectionStoryChanges(plan, snapshot, section, source);
+    if (beforeAvailable && !changes.length && !stories.length) return [];
     return [
       {
         key: `section:${section.id}`,
@@ -518,6 +555,7 @@ function sectionRows(
         sectionId: section.id,
         changes,
         beforeAvailable,
+        ...(stories.length ? { stories } : {}),
       },
     ];
   });
