@@ -602,7 +602,9 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
         Some(ContentPart::ToolApprovalRequest(request)) => Some(PendingApprovalSet {
             message_id: message_id.to_string(),
             kind: match request.kind {
-                ToolApprovalKind::McpTool => ApprovalKind::McpTool,
+                // Teams shows a client tool the way it shows an MCP tool: one
+                // named call with the same allow/deny choices.
+                ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool => ApprovalKind::McpTool,
                 ToolApprovalKind::DelegatedTask => ApprovalKind::DelegatedTask,
                 ToolApprovalKind::TaskPlan => ApprovalKind::TaskPlan,
                 ToolApprovalKind::ToolCallLimit => ApprovalKind::ToolCallLimit,

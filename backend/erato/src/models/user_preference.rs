@@ -129,6 +129,44 @@ pub async fn get_user_preferences(
     Ok(UserPreferences::find_by_id(*user_id).one(conn).await?)
 }
 
+/// The user's current decision for one client tool, read fresh so a decision
+/// stored while a generation runs holds for its next call.
+pub async fn find_client_tool_decision(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+    qualified_name: &str,
+) -> Result<Option<ClientToolDecision>, Report> {
+    Ok(get_user_preferences(conn, user_id)
+        .await?
+        .and_then(|prefs| {
+            client_tool_decisions_from_json(&prefs.client_tool_decisions).remove(qualified_name)
+        }))
+}
+
+/// Stores one standing decision without rewriting the others, so an answer
+/// given on an approval card cannot drop a decision saved in another tab.
+pub async fn set_client_tool_decision(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+    qualified_name: &str,
+    decision: ClientToolDecision,
+) -> Result<(), Report> {
+    use sea_orm::ConnectionTrait;
+    let entry = serde_json::json!({ qualified_name: decision });
+    conn.execute_raw(crate::query_metrics::named_statement_from_sql_and_values(
+        conn.get_database_backend(),
+        "user_preferences.set_client_tool_decision",
+        r#"INSERT INTO user_preferences (user_id, client_tool_decisions)
+           VALUES ($1, $2)
+           ON CONFLICT (user_id) DO UPDATE
+           SET client_tool_decisions = user_preferences.client_tool_decisions || EXCLUDED.client_tool_decisions,
+               updated_at = now()"#,
+        [(*user_id).into(), entry.into()],
+    ))
+    .await?;
+    Ok(())
+}
+
 pub async fn upsert_user_preferences(
     conn: &DatabaseConnection,
     user_id: &Uuid,

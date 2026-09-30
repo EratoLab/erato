@@ -406,6 +406,9 @@ pub enum ToolApprovalKind {
     /// A per-message tool budget decision: approve doubles the budget,
     /// reject requests an answer without tools, withdraw stops generation.
     ToolCallLimit,
+    /// A client tool the user set to ask. `mcp_server_id` carries the tool's
+    /// namespace, so `namespace/tool_name` is the key its decision is saved under.
+    ClientTool,
 }
 
 /// The gated call a delegated child parked on, copied onto the parent's

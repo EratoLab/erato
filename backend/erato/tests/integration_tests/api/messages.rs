@@ -2,6 +2,7 @@
 
 mod client_operations;
 mod client_submissions;
+mod client_tool_decisions;
 mod token_usage_tool_parts;
 mod tool_arguments;
 mod tool_call_budget;
