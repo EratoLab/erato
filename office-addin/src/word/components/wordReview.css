@@ -206,6 +206,42 @@
 .word-review__revert strong {
   font-weight: var(--theme-font-weight-semibold);
 }
+.word-review__chip {
+  justify-self: start;
+}
+.word-review__risks {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.word-review__undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--theme-spacing-control-gap);
+}
+.word-review__undo-icon {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  color: var(--review-muted);
+}
+.word-review__undo .word-review__hint {
+  flex: 1 1 12rem;
+}
+.word-review__diagnostic {
+  display: grid;
+  justify-items: start;
+  padding: 0 var(--theme-spacing-message-padding-x)
+    var(--theme-spacing-message-padding-y);
+}
+.word-review__diagnostic-body {
+  display: grid;
+  justify-items: start;
+  gap: var(--theme-spacing-control-gap);
+}
 
 .word-authoring__tabs {
   padding: var(--theme-spacing-message-padding-y)

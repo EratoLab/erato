@@ -29,7 +29,12 @@ import type * as EratoLibrary from "@erato/frontend/library";
 
 const mock = vi.hoisted(() => {
   const artifact: Record<string, unknown> = {};
-  return { artifact, decisions: {}, setDecisions: vi.fn() };
+  return {
+    artifact,
+    decisions: {},
+    setDecisions: vi.fn(),
+    messageStatus: "completed",
+  };
 });
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<typeof EratoLibrary>()),
@@ -37,7 +42,7 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
   useChatContext: () => ({
     messages: {
       [String(mock.artifact.messageId)]: {
-        status: "completed",
+        status: mock.messageStatus,
         role: "assistant",
       },
     },
@@ -53,12 +58,16 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
     onAllowOnce,
     onDeny,
     onAlwaysAllow,
+    alwaysAllowDisabledReason,
+    denyLabel,
     isBusy,
     progressLabel,
   }: {
     onAllowOnce: () => void;
     onDeny: () => void;
     onAlwaysAllow: () => void;
+    alwaysAllowDisabledReason?: string;
+    denyLabel?: string;
     isBusy: boolean;
     progressLabel?: string;
   }) => (
@@ -67,10 +76,14 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
       <button disabled={isBusy} onClick={onAllowOnce}>
         Allow once
       </button>
-      <button disabled={isBusy} onClick={onAlwaysAllow}>
+      <button
+        disabled={isBusy || !!alwaysAllowDisabledReason}
+        onClick={onAlwaysAllow}
+      >
         Always allow
       </button>
-      <button onClick={onDeny}>Deny</button>
+      {alwaysAllowDisabledReason && <p>{alwaysAllowDisabledReason}</p>}
+      <button onClick={onDeny}>{denyLabel}</button>
     </div>
   ),
 }));
@@ -182,6 +195,7 @@ beforeEach(() => {
   i18n.activate("en");
   mock.decisions = {};
   mock.setDecisions.mockClear();
+  mock.messageStatus = "completed";
   mock.artifact = {
     facetId: "word_document_authoring",
     messageId: globalThis.crypto.randomUUID(),
@@ -250,7 +264,7 @@ describe("structural document review", () => {
     fireEvent.click(allow);
     await screen.findByText("Document rewrite applied");
     expect(state.insert).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Revert batch" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
   });
 
   it("restores a saved submission for inspection after a pane reload without enabling Apply", async () => {
@@ -302,7 +316,7 @@ describe("structural document review", () => {
       "true",
     );
     state.change();
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() =>
       expect(screen.getByText(/Revert was not run/)).toBeInTheDocument(),
     );
@@ -378,7 +392,7 @@ describe("structural document review", () => {
       expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
     );
     expect(screen.queryByText("Document rewrite applied")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Revert batch" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Download original body" }),
     ).toBeInTheDocument();
@@ -424,7 +438,7 @@ describe("structural document review", () => {
     );
     await screen.findByText("Document rewrite applied");
     state.fail();
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
     );
@@ -480,7 +494,7 @@ describe("structural document review", () => {
     await waitFor(() =>
       expect(screen.getByText("Document rewrite applied")).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(state.insert).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -504,10 +518,60 @@ describe("structural document review", () => {
     state.mount();
     await screen.findByRole("button", { name: "Allow once" });
     expect(state.insert).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
       screen.getByText("Proposal declined. Nothing was written."),
     ).toBeInTheDocument();
     expect(state.insert).not.toHaveBeenCalled();
+  });
+  it("shows only a spinner while the plan is still streaming", () => {
+    mock.messageStatus = "sending";
+    const state = setup();
+    state.mount();
+    expect(
+      screen.getByText("Preparing a complete document rewrite…"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(state.insert).not.toHaveBeenCalled();
+  });
+  it("reports an unreadable plan without offering to apply it", () => {
+    const state = setup();
+    const messageId = String(mock.artifact.messageId);
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map([[messageId, state.capture]])}
+      >
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content="{not a plan"
+        />
+      </WordWriteProvider>,
+      { wrapper: TestTheme },
+    );
+    expect(
+      screen.getByText(
+        "The proposed document plan is incomplete or invalid. Ask for a corrected plan; nothing was applied.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+  it("greys out Always allow when the organization requires confirmation", async () => {
+    mock.artifact.clientActionPresentation = "auto_prompt";
+    mock.artifact.proposedClientAction = "word.apply_document_plan";
+    mock.artifact.alwaysAskClientActions = ["word.apply_document_plan"];
+    const state = setup();
+    state.mount();
+    const always = await screen.findByRole("button", { name: "Always allow" });
+    expect(always).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Your organization requires confirmation each time this action runs automatically.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(always);
+    expect(mock.setDecisions).not.toHaveBeenCalled();
+    expect(state.insert).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Allow once" })).toBeEnabled();
   });
 });

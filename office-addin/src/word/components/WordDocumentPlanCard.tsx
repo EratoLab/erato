@@ -1,9 +1,7 @@
 import {
-  ActionConfirmationCard,
   Button,
   Card,
   Alert,
-  SpinnerIcon,
   useChatContext,
   useHostArtifact,
 } from "@erato/frontend/library";
@@ -11,6 +9,17 @@ import { t } from "@lingui/core/macro";
 import { useCallback, useId, useMemo, useState } from "react";
 
 import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
+import {
+  isAutomaticWordRun,
+  WordApplyButton,
+  WordDiagnosticDetails,
+  WordReviewConfirm,
+  WordReviewDetailsToggle,
+  WordReviewGenerating,
+  WordStatusAlert,
+  WordUndoLine,
+  wordUndoLabel,
+} from "./WordReviewCardParts";
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { WordSavedPlanPreview } from "./WordSavedPlanPreview";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
@@ -18,13 +27,11 @@ import { useClientActionDecisions } from "../../core/clientActions/useClientActi
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
 import {
-  decisionKey,
   isActionDenied,
   wordClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
 import { revertWordDocumentPlan } from "../utils/wordApplyDocumentPlan";
 import {
-  wordApplyStageLabel,
   wordAuthoringIssueText,
   wordDocumentDiagnosticText,
 } from "../utils/wordAuthoringMessages";
@@ -160,10 +167,13 @@ export function WordDocumentPlanCard({
         documentPlanStatus: result?.status,
         documentPlanDiagnostic: result?.diagnostic,
         detailsExpanded: false,
-        automatic:
-          artifact?.clientActionPresentation === "auto_prompt" &&
-          decisions[decisionKey(facetId, entry.action)] === "always" &&
-          !enforcedAskActions.includes(entry.action),
+        automatic: isAutomaticWordRun({
+          presentation: artifact?.clientActionPresentation,
+          decisions,
+          facetId,
+          action: entry.action,
+          enforcedAskActions,
+        }),
       });
       return run.ok;
     } catch {
@@ -332,14 +342,12 @@ export function WordDocumentPlanCard({
               : undefined;
   if (generating)
     return (
-      <Card variant="surface" size="sm">
-        <SpinnerIcon
-          label={t({
-            id: "officeAddin.word.authoring.preparing",
-            message: "Preparing a complete document rewrite…",
-          })}
-        />
-      </Card>
+      <WordReviewGenerating
+        label={t({
+          id: "officeAddin.word.authoring.preparing",
+          message: "Preparing a complete document rewrite…",
+        })}
+      />
     );
   if (!plan)
     return <Alert type="error">{wordAuthoringIssueText("invalid")}</Alert>;
@@ -365,28 +373,22 @@ export function WordDocumentPlanCard({
                 })}
               </p>
               {!confirmCard && (
-                // Busy rather than disabled keeps focus on the button while Word works.
-                <Button
-                  type="button"
-                  variant="primary"
-                  busy={applying}
-                  aria-disabled={applying || undefined}
+                <WordApplyButton
+                  applying={applying}
+                  applyStage={review.applyStage}
                   disabled={
-                    !applying &&
-                    (!ready || host.operationInProgress || isConfirmPending)
+                    !ready || host.operationInProgress || isConfirmPending
                   }
-                  onClick={applying ? undefined : () => void execute()}
-                >
-                  {applying
-                    ? wordApplyStageLabel(review.applyStage)
-                    : entry.displayLabel()}
-                </Button>
+                  label={entry.displayLabel()}
+                  onApply={() => void execute()}
+                />
               )}
             </>
           )}
           {confirmCard && (
-            <ActionConfirmationCard
+            <WordReviewConfirm
               key={confirmCard.requestId}
+              card={confirmCard}
               title={t({
                 id: "officeAddin.word.authoring.consent",
                 message: "Apply this document rewrite?",
@@ -396,63 +398,30 @@ export function WordDocumentPlanCard({
                 message: "Apply the entire structure and draft reviewed above.",
               })}
               allowOnceLabel={entry.displayLabel()}
-              onAllowOnce={() => {
-                if (ready && !host.operationInProgress) allowCard(confirmCard);
-              }}
-              onAlwaysAllow={() => {
-                if (
-                  !ready ||
-                  host.operationInProgress ||
-                  enforcedAskActions.includes(entry.action)
-                )
-                  return;
-                setDecisions({
-                  ...decisions,
-                  [decisionKey(facetId, entry.action)]: "always",
-                });
-                allowCard(confirmCard);
-              }}
-              alwaysAllowDisabledReason={
-                enforcedAskActions.includes(entry.action)
-                  ? t({
-                      id: "officeAddin.word.card.alwaysAllowLocked",
-                      message:
-                        "Your organization requires confirmation each time this action runs automatically.",
-                    })
-                  : undefined
+              canApply={ready}
+              operationInProgress={host.operationInProgress}
+              enforcedAskActions={enforcedAskActions}
+              decisions={decisions}
+              setDecisions={setDecisions}
+              facetId={facetId}
+              allowCard={allowCard}
+              denyCard={denyCard}
+              onDenied={() =>
+                host.updateReview(key, { status: "denied", capture })
               }
-              onDeny={() => {
-                denyCard(confirmCard);
-                host.updateReview(key, { status: "denied", capture });
-              }}
-              isBusy={host.operationInProgress || !ready}
-              progressLabel={
-                applying ? wordApplyStageLabel(review.applyStage) : undefined
-              }
-              scrollIntoViewOnMount={confirmCard.autoTriggered}
+              applying={applying}
+              applyStage={review.applyStage}
             />
           )}
           <div className="word-review__actions">
             {completed && (
-              <Button
-                type="button"
-                variant="secondary"
-                aria-expanded={!collapsed}
-                aria-controls={detailsId}
-                onClick={() =>
+              <WordReviewDetailsToggle
+                collapsed={collapsed}
+                controls={detailsId}
+                onToggle={() =>
                   host.updateReview(key, { detailsExpanded: collapsed })
                 }
-              >
-                {collapsed
-                  ? t({
-                      id: "officeAddin.word.review.showDetails",
-                      message: "Show details",
-                    })
-                  : t({
-                      id: "officeAddin.word.review.hideDetails",
-                      message: "Hide details",
-                    })}
-              </Button>
+              />
             )}
             {snapshot && (
               <Button
@@ -493,29 +462,6 @@ export function WordDocumentPlanCard({
                   id: "officeAddin.word.authoring.copy",
                   message: "Copy draft",
                 })}
-              </Button>
-            )}
-            {canRevert && (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={host.operationInProgress}
-                onClick={() => void revert()}
-              >
-                {review.status === "done"
-                  ? t({
-                      id: "officeAddin.word.review.revertBatch",
-                      message: "Revert batch",
-                    })
-                  : recoverySlot && isWordDocumentBackup(recoverySlot.ooxml)
-                    ? t({
-                        id: "officeAddin.word.authoring.restoreDocument",
-                        message: "Restore original document",
-                      })
-                    : t({
-                        id: "officeAddin.word.authoring.restoreBody",
-                        message: "Restore original body",
-                      })}
               </Button>
             )}
             {recoverySlot &&
@@ -579,6 +525,24 @@ export function WordDocumentPlanCard({
                 </Button>
               )}
           </div>
+          <WordUndoLine
+            canRevert={canRevert}
+            label={
+              review.status === "done"
+                ? wordUndoLabel()
+                : recoverySlot && isWordDocumentBackup(recoverySlot.ooxml)
+                  ? t({
+                      id: "officeAddin.word.authoring.restoreDocument",
+                      message: "Restore original document",
+                    })
+                  : t({
+                      id: "officeAddin.word.authoring.restoreBody",
+                      message: "Restore original body",
+                    })
+            }
+            disabled={host.operationInProgress}
+            onUndo={() => void revert()}
+          />
           {copyNote && (
             <p role="status" className="word-review__hint">
               {copyNote}
@@ -626,43 +590,11 @@ export function WordDocumentPlanCard({
           )}
       </div>
       {status && !collapsed && (
-        <Alert
-          type={
-            review.status === "error" ||
-            review.status === "write-failed" ||
-            review.status === "revert-failed"
-              ? "error"
-              : "info"
-          }
-          className="m-3 [overflow-wrap:anywhere]"
-          role={
-            review.status === "error" ||
-            review.status === "write-failed" ||
-            review.status === "revert-failed"
-              ? "alert"
-              : "status"
-          }
-        >
-          {status}
-        </Alert>
+        <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
       )}
-      {!collapsed &&
-        (review.documentPlanDiagnostic?.officeCode ||
-          review.documentPlanDiagnostic?.officeLocation) && (
-          <p className="word-review__hint">
-            {t({
-              id: "officeAddin.word.authoring.wordDiagnostic",
-              message: "Word diagnostic",
-            })}
-            {": "}
-            {[
-              review.documentPlanDiagnostic.officeCode,
-              review.documentPlanDiagnostic.officeLocation,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-        )}
+      {!collapsed && (
+        <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
+      )}
     </Card>
   );
 }

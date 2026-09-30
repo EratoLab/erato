@@ -1,9 +1,7 @@
 import {
-  ActionConfirmationCard,
   Button,
   Card,
   Alert,
-  SpinnerIcon,
   SyntaxHighlightedCode,
   useChatContext,
   useHostArtifact,
@@ -15,6 +13,17 @@ import "./wordReview.css";
 
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
 import { WordEditReport } from "./WordEditReport";
+import {
+  isAutomaticWordRun,
+  WordApplyButton,
+  WordReviewConfirm,
+  WordReviewDetailsToggle,
+  WordReviewGenerating,
+  WordReviewHeader,
+  WordStatusAlert,
+  WordUndoLine,
+  wordUndoLabel,
+} from "./WordReviewCardParts";
 import { WordReviewPanel } from "./WordReviewPanel";
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
@@ -22,12 +31,10 @@ import { useClientActionDecisions } from "../../core/clientActions/useClientActi
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
 import {
-  decisionKey,
   isActionDenied,
   wordClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
 import { revertWordEdits } from "../utils/wordApplyEdits";
-import { wordApplyStageLabel } from "../utils/wordAuthoringMessages";
 import {
   offerableWordClientActionsForFacet,
   wordActionForFence,
@@ -235,10 +242,13 @@ function WordActionCard({
         anchors: run.resultAnchors,
         locationGeneration,
         tracking: mode,
-        automatic:
-          artifact?.clientActionPresentation === "auto_prompt" &&
-          decisions[decisionKey(facetId, entry.action)] === "always" &&
-          !enforcedAskActions.includes(entry.action),
+        automatic: isAutomaticWordRun({
+          presentation: artifact?.clientActionPresentation,
+          decisions,
+          facetId,
+          action: entry.action,
+          enforcedAskActions,
+        }),
       });
       return run.ok;
     } catch {
@@ -334,14 +344,12 @@ function WordActionCard({
   ]);
   if (isGenerating)
     return (
-      <Card variant="surface" size="sm">
-        <SpinnerIcon
-          label={t({
-            id: "officeAddin.word.review.preparing",
-            message: "Preparing changes…",
-          })}
-        />
-      </Card>
+      <WordReviewGenerating
+        label={t({
+          id: "officeAddin.word.review.preparing",
+          message: "Preparing changes…",
+        })}
+      />
     );
   if (!payload)
     return (
@@ -473,28 +481,22 @@ function WordActionCard({
                     })}
               </p>
               {!confirmCard && (
-                // Busy rather than disabled keeps focus on the button while Word works.
-                <Button
-                  type="button"
-                  variant="primary"
-                  busy={applying}
-                  aria-disabled={applying || undefined}
+                <WordApplyButton
+                  applying={applying}
+                  applyStage={review.applyStage}
                   disabled={
-                    !applying &&
-                    (operationInProgress || isConfirmPending || !gate.allowed)
+                    operationInProgress || isConfirmPending || !gate.allowed
                   }
-                  onClick={applying ? undefined : () => void execute()}
-                >
-                  {applying
-                    ? wordApplyStageLabel(review.applyStage)
-                    : applyLabel}
-                </Button>
+                  label={applyLabel}
+                  onApply={() => void execute()}
+                />
               )}
             </>
           )}
           {confirmCard && (
-            <ActionConfirmationCard
+            <WordReviewConfirm
               key={confirmCard.requestId}
+              card={confirmCard}
               title={
                 payload.kind === "edits"
                   ? t({
@@ -515,65 +517,30 @@ function WordActionCard({
                   : entry.displayLabel()
               }
               allowOnceLabel={applyLabel}
-              onAllowOnce={() => {
-                if (gate.allowed && idle && !operationInProgress)
-                  allowCard(confirmCard);
-              }}
-              onAlwaysAllow={() => {
-                if (
-                  !gate.allowed ||
-                  !idle ||
-                  operationInProgress ||
-                  enforcedAskActions.includes(confirmCard.action)
-                )
-                  return;
-                setDecisions({
-                  ...decisions,
-                  [decisionKey(facetId, confirmCard.action)]: "always",
-                });
-                allowCard(confirmCard);
-              }}
-              alwaysAllowDisabledReason={
-                enforcedAskActions.includes(confirmCard.action)
-                  ? t({
-                      id: "officeAddin.word.card.alwaysAllowLocked",
-                      message:
-                        "Your organization requires confirmation each time this action runs automatically.",
-                    })
-                  : undefined
+              canApply={gate.allowed && idle}
+              operationInProgress={operationInProgress}
+              enforcedAskActions={enforcedAskActions}
+              decisions={decisions}
+              setDecisions={setDecisions}
+              facetId={facetId}
+              allowCard={allowCard}
+              denyCard={denyCard}
+              onDenied={() =>
+                updateReview(batchKey, { status: "denied", capture })
               }
-              onDeny={() => {
-                denyCard(confirmCard);
-                updateReview(batchKey, { status: "denied", capture });
-              }}
-              isBusy={operationInProgress || !gate.allowed || !idle}
-              progressLabel={
-                applying ? wordApplyStageLabel(review.applyStage) : undefined
-              }
-              scrollIntoViewOnMount={confirmCard.autoTriggered}
+              applying={applying}
+              applyStage={review.applyStage}
             />
           )}
           <div className="word-review__actions">
             {completed && (
-              <Button
-                type="button"
-                variant="secondary"
-                aria-expanded={!collapsed}
-                aria-controls={detailsId}
-                onClick={() =>
+              <WordReviewDetailsToggle
+                collapsed={collapsed}
+                controls={detailsId}
+                onToggle={() =>
                   updateReview(batchKey, { detailsExpanded: collapsed })
                 }
-              >
-                {collapsed
-                  ? t({
-                      id: "officeAddin.word.review.showDetails",
-                      message: "Show details",
-                    })
-                  : t({
-                      id: "officeAddin.word.review.hideDetails",
-                      message: "Hide details",
-                    })}
-              </Button>
+              />
             )}
             <WordEditReport
               outcomes={review.outcomes}
@@ -581,23 +548,14 @@ function WordActionCard({
               note={message}
               reverted={review.status === "reverted"}
             />
-            {canRevert && (
-              <Button
-                type="button"
-                variant="secondary"
-                data-testid="word-revert-button"
-                disabled={operationInProgress}
-                onClick={() => {
-                  setRevertConfirmation(true);
-                }}
-              >
-                {t({
-                  id: "officeAddin.word.review.revertBatch",
-                  message: "Revert batch",
-                })}
-              </Button>
-            )}
           </div>
+          <WordUndoLine
+            canRevert={canRevert}
+            label={wordUndoLabel()}
+            disabled={operationInProgress}
+            onUndo={() => setRevertConfirmation(true)}
+            testId="word-revert-button"
+          />
           {revertConfirmation && (
             <Card
               variant="surface"
@@ -684,13 +642,12 @@ function WordActionCard({
             onLocate={onLocate}
           />
         ) : (
-          <div className="word-review__header">
-            <h3>
-              {t({
-                id: "officeAddin.word.review.insertTitle",
-                message: "Insert text",
-              })}
-            </h3>
+          <WordReviewHeader
+            title={t({
+              id: "officeAddin.word.review.insertTitle",
+              message: "Insert text",
+            })}
+          >
             <pre className="word-review__text">{payload.text}</pre>
             {blockedReason && (
               <Alert
@@ -701,29 +658,11 @@ function WordActionCard({
                 {blockedReason}
               </Alert>
             )}
-          </div>
+          </WordReviewHeader>
         )}
       </div>
       {message && !collapsed && (
-        <Alert
-          type={
-            review.status === "error" ||
-            review.status === "write-failed" ||
-            review.status === "revert-failed"
-              ? "error"
-              : "info"
-          }
-          className="m-3 [overflow-wrap:anywhere]"
-          role={
-            review.status === "error" ||
-            review.status === "write-failed" ||
-            review.status === "revert-failed"
-              ? "alert"
-              : "status"
-          }
-        >
-          {message}
-        </Alert>
+        <WordStatusAlert status={review.status}>{message}</WordStatusAlert>
       )}
     </Card>
   );
