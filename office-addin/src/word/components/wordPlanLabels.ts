@@ -238,10 +238,13 @@ export function layoutValueLabel(
   }
 }
 
-export function formatList(parts: string[]): string {
+export function formatList(
+  parts: string[],
+  type: "unit" | "conjunction" = "unit",
+): string {
   return new Intl.ListFormat(locale(), {
-    style: "short",
-    type: "unit",
+    style: type === "unit" ? "short" : "long",
+    type,
   }).format(parts);
 }
 
@@ -283,10 +286,10 @@ const layoutNoun = () =>
   t({ id: "officeAddin.word.planTitle.layout", message: "page layout" });
 
 function extras(parts: WordStoryType[], layout: boolean): string {
-  return formatList([
-    ...new Set(parts.map(storyNoun)),
-    ...(layout ? [layoutNoun()] : []),
-  ]);
+  return formatList(
+    [...new Set(parts.map(storyNoun)), ...(layout ? [layoutNoun()] : [])],
+    "conjunction",
+  );
 }
 
 export function wordPlanTitleText(title: WordPlanTitle): string {
@@ -471,8 +474,10 @@ export function wordPlanScopeText(
       }),
     );
   if (review.scope.unchanged.length) {
-    const count = review.scope.unchanged.length;
-    const list = formatList(review.scope.unchanged.map(scopePartNoun));
+    // Only "page layout" is a singular noun; every other part is plural.
+    const unchanged = review.scope.unchanged;
+    const count = unchanged.length === 1 && unchanged[0] === "layout" ? 1 : 2;
+    const list = formatList(unchanged.map(scopePartNoun), "conjunction");
     const sentence = t({
       id: "officeAddin.word.planScope.unchanged",
       message: plural(count, {

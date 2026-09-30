@@ -407,6 +407,37 @@ describe("structural document review", () => {
     expect(state.insert).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[aria-busy="true"]')).toBeNull();
   });
+  it("locks Apply on every other card while one card writes", async () => {
+    const state = setup();
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={
+          new Map([[String(mock.artifact.messageId), state.capture]])
+        }
+      >
+        {[0, 2].map((indent) => (
+          <WordHostCardRenderer
+            key={indent}
+            language="erato-word-document-plan"
+            content={JSON.stringify(state.plan, null, indent)}
+          />
+        ))}
+      </WordWriteProvider>,
+      { wrapper: TestTheme },
+    );
+    const release = holdWord();
+    const [first, second] = screen.getAllByRole("button", {
+      name: "Apply changes",
+    });
+    fireEvent.click(first);
+    await screen.findByRole("button", { name: "Saving backup…" });
+    expect(second).toBeDisabled();
+    fireEvent.click(second);
+    release();
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledTimes(1);
+  });
   it("releases the busy Apply button after a failed write", async () => {
     const state = setup();
     state.fail();
