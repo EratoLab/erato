@@ -1,26 +1,23 @@
 import { t } from "@lingui/core/macro";
 
+import { wordEditsAppliedText, wordEditTotalsText } from "./WordEditReport";
+import { wordEditCounts } from "../utils/wordEditPlan";
+
 import type { WordReviewState } from "../utils/wordReviewState";
 
 export function WordReviewReceipt({
   review,
   kind,
-  planTitle = "",
+  title = "",
   wholeDocument = false,
 }: {
   review: WordReviewState;
   kind: "edits" | "insert" | "plan";
-  /** The plan card's own title, so the receipt names what was changed. */
-  planTitle?: string;
+  /** The card's own title, so the receipt names what was changed or undone. */
+  title?: string;
   wholeDocument?: boolean;
 }) {
-  const applied = review.outcomes.filter(
-    (item) => item.status === "applied",
-  ).length;
-  const failed = review.outcomes.filter(
-    (item) => item.status === "failed",
-  ).length;
-  const skipped = review.outcomes.length - applied - failed;
+  const counts = wordEditCounts(review.outcomes);
   return (
     <div
       className="word-review__receipt focus-ring"
@@ -35,48 +32,30 @@ export function WordReviewReceipt({
               id: "officeAddin.word.review.denied",
               message: "Proposal declined. Nothing was written.",
             })
-          : kind === "plan"
-            ? review.status === "reverted"
-              ? wholeDocument
-                ? t({
-                    id: "officeAddin.word.planReceipt.restoredDocument",
-                    message: "Restored the document",
-                  })
-                : t({
-                    id: "officeAddin.word.planReceipt.undone",
-                    message: `Undone: ${planTitle}`,
-                  })
-              : t({
-                  id: "officeAddin.word.planReceipt.applied",
-                  message: `Applied: ${planTitle}`,
-                })
-            : review.status === "reverted"
+          : review.status === "reverted"
+            ? wholeDocument
               ? t({
-                  id: "officeAddin.word.review.restored",
-                  message: "Document body restored",
+                  id: "officeAddin.word.planReceipt.restoredDocument",
+                  message: "Restored the document",
+                })
+              : t({
+                  id: "officeAddin.word.planReceipt.undone",
+                  message: `Undone: ${title}`,
+                })
+            : kind === "plan"
+              ? t({
+                  id: "officeAddin.word.planReceipt.applied",
+                  message: `Applied: ${title}`,
                 })
               : kind === "insert"
                 ? t({
                     id: "officeAddin.word.card.inserted",
                     message: "Inserted into the document.",
                   })
-                : applied === 1
-                  ? t({
-                      id: "officeAddin.word.review.oneApplied",
-                      message: "1 edit applied",
-                    })
-                  : t({
-                      id: "officeAddin.word.review.appliedCount",
-                      message: `${applied} edits applied`,
-                    })}
+                : wordEditsAppliedText(counts.applied)}
       </strong>
       {kind === "edits" && review.status === "done" && (
-        <span className="word-review__totals">
-          {t({
-            id: "officeAddin.word.review.totals",
-            message: `${applied} applied · ${skipped} skipped · ${failed} failed`,
-          })}
-        </span>
+        <span className="word-review__hint">{wordEditTotalsText(counts)}</span>
       )}
       {review.automatic && review.status === "done" && (
         <span className="word-review__hint">

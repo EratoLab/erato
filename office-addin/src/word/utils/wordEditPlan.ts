@@ -73,6 +73,16 @@ export interface WordEditOutcome {
   excerpt: string;
 }
 
+export function wordEditCounts(outcomes: readonly WordEditOutcome[]): {
+  applied: number;
+  failed: number;
+  skipped: number;
+} {
+  const applied = outcomes.filter((o) => o.status === "applied").length;
+  const failed = outcomes.filter((o) => o.status === "failed").length;
+  return { applied, failed, skipped: outcomes.length - applied - failed };
+}
+
 export interface ResolvedWordEdit {
   index: number;
   paragraph: number;

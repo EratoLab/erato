@@ -12,7 +12,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import "./wordReview.css";
 
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
-import { WordEditReport } from "./WordEditReport";
+import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
 import {
   isAutomaticWordRun,
   WordApplyButton,
@@ -24,7 +24,7 @@ import {
   WordUndoLine,
   wordUndoLabel,
 } from "./WordReviewCardParts";
-import { WordReviewPanel } from "./WordReviewPanel";
+import { editedParagraphCount, WordReviewPanel } from "./WordReviewPanel";
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
@@ -468,18 +468,20 @@ function WordActionCard({
         <div className="word-review__footer">
           {(idle || applying) && offeredActions.length > 0 && (
             <>
-              <p className="word-review__hint">
-                {payload.kind === "edits"
-                  ? t({
-                      id: "officeAddin.word.review.batchScope",
-                      message: `This applies all ${total} proposed edits, including rows hidden by filters. Changed paragraphs will be skipped and listed.`,
-                    })
-                  : t({
-                      id: "officeAddin.word.card.confirmInsert",
-                      message:
-                        "This inserts the text below into the open document at the cursor. A selected passage is never replaced.",
-                    })}
-              </p>
+              {!confirmCard && (
+                <p className="word-review__hint">
+                  {payload.kind === "edits"
+                    ? t({
+                        id: "officeAddin.word.review.batchScope",
+                        message: `This applies all ${total} proposed edits, including rows hidden by filters. Changed paragraphs will be skipped and listed.`,
+                      })
+                    : t({
+                        id: "officeAddin.word.card.confirmInsert",
+                        message:
+                          "This inserts the text below into the open document at the cursor. A selected passage is never replaced.",
+                      })}
+                </p>
+              )}
               {!confirmCard && (
                 <WordApplyButton
                   applying={applying}
@@ -628,7 +630,17 @@ function WordActionCard({
         </div>
       }
     >
-      {collapsed && <WordReviewReceipt review={review} kind={payload.kind} />}
+      {collapsed && (
+        <WordReviewReceipt
+          review={review}
+          kind={payload.kind}
+          title={
+            payload.kind === "edits"
+              ? wordEditsTitleText(editedParagraphCount(payload.edits))
+              : undefined
+          }
+        />
+      )}
       <div id={detailsId} hidden={collapsed}>
         {payload.kind === "edits" ? (
           <WordReviewPanel

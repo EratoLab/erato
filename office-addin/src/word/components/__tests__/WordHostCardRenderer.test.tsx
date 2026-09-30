@@ -426,6 +426,9 @@ describe("WordHostCardRenderer", () => {
         PARAGRAPHS,
       );
       expect(screen.queryByTestId("word-revert-button")).toBeNull();
+      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+        "Undone: Change 1 paragraph",
+      );
     });
 
     it("offers Revert when Word rejected the write half-way", async () => {
@@ -479,6 +482,134 @@ describe("WordHostCardRenderer", () => {
       expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
         "0 applied · 1 skipped · 0 failed",
       );
+    });
+  });
+
+  describe("failure and expiry states", () => {
+    it("reports an edits batch Word never accepted as an error", async () => {
+      renderCard({ artifact: makeArtifact() });
+      await flush();
+      uninstallMockWordDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
+      await flush();
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Word did not accept the change. Nothing was written",
+      );
+      expect(
+        screen.getByRole("heading", { name: "Batch could not be completed" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("word-review-receipt")).toBeNull();
+      expect(screen.queryByTestId("word-revert-button")).toBeNull();
+    });
+
+    it("reports a rejected insert as an error", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      renderCard({
+        artifact: makeArtifact({
+          facetId: COMPOSE_FACET,
+          allowedClientActions: [INSERT],
+        }),
+        language: "erato-word-insert",
+        content: "A drafted paragraph.",
+      });
+      await flush();
+      word.word.run.mockRejectedValue(new Error("Insert rejected"));
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Insert the text at the cursor" }),
+      );
+      await flush();
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Word did not accept the change",
+      );
+      expect(word.word.writes()).toEqual([]);
+      expect(screen.getByText("A drafted paragraph.")).toBeVisible();
+    });
+
+    it("says Undo expired once a later batch replaced the snapshot", async () => {
+      const artifact = makeArtifact();
+      mockUseHostArtifact.mockReturnValue(artifact);
+      mockUseChatContext.mockReturnValue({
+        messages: {
+          [artifact.messageId]: { id: artifact.messageId, role: "assistant" },
+        },
+        messageOrder: [artifact.messageId],
+        currentChatId: "chat-1",
+      });
+      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
+      render(
+        <WordWriteProvider
+          documentIdentity={IDENTITY}
+          capturesByAssistantMessageId={
+            new Map([[artifact.messageId, capture()]])
+          }
+        >
+          <WordHostCardRenderer
+            language="erato-word-edits"
+            content={EDITS_FENCE}
+          />
+          <WordHostCardRenderer
+            language="erato-word-edits"
+            content={JSON.stringify({
+              edits: [{ paragraph: 3, text: "Charlie, revised." }],
+            })}
+          />
+        </WordWriteProvider>,
+        { wrapper: TestTheme },
+      );
+      await flush();
+      const [first, second] = screen
+        .getAllByTestId("word-edits-card")
+        .map((card) => within(card));
+
+      fireEvent.click(first.getByRole("button", { name: "Apply edit" }));
+      await flush();
+      expect(first.getByTestId("word-revert-button")).toBeInTheDocument();
+      fireEvent.click(second.getByRole("button", { name: "Apply edit" }));
+      await flush();
+
+      expect(first.queryByTestId("word-revert-button")).toBeNull();
+      expect(second.getByTestId("word-revert-button")).toHaveTextContent(
+        "Undo",
+      );
+      expect(first.queryByText(/Revert is unavailable/)).toBeNull();
+      fireEvent.click(first.getByRole("button", { name: "Show details" }));
+      expect(
+        first.getByText(/Its single-use snapshot was consumed or replaced/),
+      ).toBeInTheDocument();
+    });
+
+    it("heads the proposal by size and scope, not by apply progress", async () => {
+      renderCard({ artifact: makeArtifact() });
+      await flush();
+      expect(
+        screen.getByRole("heading", { name: "Change 1 paragraph" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Small")).toBeInTheDocument();
+      expect(
+        screen.getByText("3 of 3 paragraphs included in full"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Request window/)).toBeNull();
+      const run = word.word.run.getMockImplementation()!;
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      word.word.run.mockImplementation(async (callback) => {
+        await held;
+        return run(callback);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
+      await screen.findByRole("button", { name: "Checking document…" });
+      expect(screen.queryByText(/Applying \d+ edits/)).toBeNull();
+      expect(
+        screen.getByRole("heading", { name: "Change 1 paragraph" }),
+      ).toBeInTheDocument();
+      release();
+      await flush();
     });
   });
 
@@ -724,6 +855,9 @@ describe("WordHostCardRenderer", () => {
       await flush();
       expect(
         screen.getByText("107 of 320 paragraphs included in full"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/Request window: paragraphs 1–107\./),
       ).toBeInTheDocument();
       fireEvent.change(screen.getByRole("combobox", { name: "Paragraphs" }), {
         target: { value: "76" },

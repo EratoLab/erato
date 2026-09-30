@@ -1,8 +1,12 @@
-import { Button } from "@erato/frontend/library";
-import { t } from "@lingui/core/macro";
+import { Alert, Button } from "@erato/frontend/library";
+import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { WordEditOutcome, WordEditStatus } from "../utils/wordEditPlan";
+import type {
+  wordEditCounts,
+  WordEditOutcome,
+  WordEditStatus,
+} from "../utils/wordEditPlan";
 
 export function statusLabel(status: WordEditStatus): string {
   switch (status) {
@@ -40,16 +44,49 @@ export function statusLabel(status: WordEditStatus): string {
   }
 }
 
-function targetLabel(outcome: WordEditOutcome): string {
-  return outcome.through === undefined
+export function wordEditTargetLabel(target: {
+  paragraph: number;
+  through?: number;
+}): string {
+  return target.through === undefined || target.through === target.paragraph
     ? t({
         id: "officeAddin.word.report.paragraph",
-        message: `Paragraph ${outcome.paragraph}`,
+        message: `Paragraph ${target.paragraph}`,
       })
     : t({
         id: "officeAddin.word.report.paragraphRange",
-        message: `Paragraphs ${outcome.paragraph}-${outcome.through}`,
+        message: `Paragraphs ${target.paragraph}-${target.through}`,
       });
+}
+
+export function wordEditsTitleText(paragraphs: number): string {
+  return t({
+    id: "officeAddin.word.review.changeParagraphs",
+    message: plural(paragraphs, {
+      one: "Change # paragraph",
+      other: "Change # paragraphs",
+    }),
+  });
+}
+
+export function wordEditsAppliedText(applied: number): string {
+  return applied === 1
+    ? t({ id: "officeAddin.word.review.oneApplied", message: "1 edit applied" })
+    : t({
+        id: "officeAddin.word.review.appliedCount",
+        message: `${applied} edits applied`,
+      });
+}
+
+export function wordEditTotalsText({
+  applied,
+  skipped,
+  failed,
+}: ReturnType<typeof wordEditCounts>): string {
+  return t({
+    id: "officeAddin.word.review.totals",
+    message: `${applied} applied · ${skipped} skipped · ${failed} failed`,
+  });
 }
 
 export function formatWordEditReport(
@@ -59,7 +96,7 @@ export function formatWordEditReport(
   return outcomes
     .map(
       (outcome) =>
-        `${targetLabel(outcome)}: ${reverted && (outcome.status === "applied" || outcome.status === "failed") ? t({ id: "officeAddin.word.review.reverted", message: "Reverted" }) : statusLabel(outcome.status)}${
+        `${wordEditTargetLabel(outcome)}: ${reverted && (outcome.status === "applied" || outcome.status === "failed") ? t({ id: "officeAddin.word.review.reverted", message: "Reverted" }) : statusLabel(outcome.status)}${
           outcome.excerpt ? ` — ${outcome.excerpt}` : ""
         }`,
     )
@@ -124,7 +161,7 @@ export function WordEditReport({
           {outcomes.map((outcome) => (
             <li key={outcome.index} data-status={outcome.status}>
               <span className="font-medium text-theme-fg-primary">
-                {targetLabel(outcome)}
+                {wordEditTargetLabel(outcome)}
               </span>
               {": "}
               {statusLabel(outcome.status)}
@@ -144,12 +181,12 @@ export function WordEditReport({
           : t({ id: "officeAddin.word.report.copy", message: "Copy report" })}
       </Button>
       {copyFailed && (
-        <p role="status" className="text-sm text-theme-error-fg">
+        <Alert type="error">
           {t({
             id: "officeAddin.word.report.copyFailed",
             message: "The report could not be copied. Try again.",
           })}
-        </p>
+        </Alert>
       )}
     </div>
   );

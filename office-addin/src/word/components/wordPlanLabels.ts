@@ -13,6 +13,7 @@ import type {
   WordLayoutValue,
   WordPlanGroupSummary,
   WordPlanReview,
+  WordPlanReviewSize,
   WordPlanScopePart,
   WordPlanTitle,
 } from "../utils/wordPlanReview";
@@ -403,12 +404,19 @@ export function wordPlanChip(review: WordPlanReview): {
         toneClassName: "bg-theme-warning-bg text-theme-warning-fg",
       };
   }
-  return review.size === "large"
+  return wordSizeChip(review.size);
+}
+
+export function wordSizeChip(size: WordPlanReviewSize): {
+  label: string;
+  toneClassName?: string;
+} {
+  return size === "large"
     ? {
         label: t({ id: "officeAddin.word.planSize.large", message: "Large" }),
         toneClassName: "bg-theme-warning-bg text-theme-warning-fg",
       }
-    : review.size === "medium"
+    : size === "medium"
       ? {
           label: t({
             id: "officeAddin.word.planSize.medium",

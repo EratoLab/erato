@@ -21,13 +21,6 @@
   padding: var(--theme-spacing-message-padding-y)
     var(--theme-spacing-message-padding-x);
 }
-.word-review__eyebrow {
-  color: var(--review-muted);
-  font-size: var(--theme-font-size-sm);
-  line-height: var(--theme-line-height-sm);
-  letter-spacing: var(--theme-letter-spacing-sm);
-  font-weight: var(--theme-font-weight-semibold);
-}
 .word-review h3 {
   font-size: var(--theme-font-size-xl);
   line-height: var(--theme-line-height-xl);
@@ -41,8 +34,7 @@
   font-weight: var(--theme-font-weight-semibold);
   margin-block: 12px 6px;
 }
-.word-review__hint,
-.word-review__totals {
+.word-review__hint {
   color: var(--review-muted);
   font-size: var(--theme-font-size-sm);
   line-height: var(--theme-line-height-sm);
@@ -56,23 +48,6 @@
   line-height: var(--theme-line-height-sm);
   letter-spacing: var(--theme-letter-spacing-sm);
   color: var(--review-muted);
-}
-.word-review__coverage progress {
-  width: 100%;
-  height: 5px;
-  appearance: none;
-  border: 0;
-  background: var(--theme-border);
-  accent-color: var(--theme-fg-accent);
-}
-.word-review__coverage progress::-webkit-progress-bar {
-  background: var(--theme-border);
-}
-.word-review__coverage progress::-webkit-progress-value {
-  background: var(--theme-fg-accent);
-}
-.word-review__coverage progress::-moz-progress-bar {
-  background: var(--theme-fg-accent);
 }
 .word-review__filters {
   display: flex;
@@ -117,14 +92,6 @@
   width: 100%;
   text-align: left;
 }
-.word-review__number {
-  min-width: 1.5em;
-  text-align: center;
-  font-size: var(--theme-font-size-xs);
-  line-height: var(--theme-line-height-xs);
-  letter-spacing: var(--theme-letter-spacing-xs);
-  color: var(--review-muted);
-}
 .word-review__row-heading {
   display: grid;
   gap: 3px;
@@ -142,20 +109,6 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-.word-review__badge {
-  flex-shrink: 0;
-  font-size: var(--theme-font-size-xs);
-  line-height: var(--theme-line-height-xs);
-  letter-spacing: var(--theme-letter-spacing-xs);
-  font-weight: var(--theme-font-weight-semibold);
-  color: var(--review-muted);
-}
-.word-review__row[data-status="applied"] .word-review__badge {
-  color: var(--theme-success-fg);
-}
-.word-review__row[data-status="failed"] .word-review__badge {
-  color: var(--theme-error-fg);
 }
 .word-review__detail {
   padding: 0 14px 16px;

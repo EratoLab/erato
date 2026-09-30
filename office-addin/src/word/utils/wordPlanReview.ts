@@ -25,6 +25,15 @@ export const MEDIUM_MAX_TOUCHED_SECTIONS = 2;
 export const LARGE_INSERT_TABLE_ROWS = 10;
 
 export type WordPlanReviewSize = "small" | "medium" | "large";
+
+/** Size of a paragraph-edit batch, on the same scale as document plans. */
+export function wordEditBatchSize(changed: number): WordPlanReviewSize {
+  return changed <= SMALL_MAX_CHANGED_BLOCKS
+    ? "small"
+    : changed >= LARGE_MIN_CHANGED_BLOCKS
+      ? "large"
+      : "medium";
+}
 export type WordPlanReviewVariant = "addition" | "layout" | "restructured";
 export type WordPlanGroupStatus =
   | "rewritten"

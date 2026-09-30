@@ -538,7 +538,7 @@ export function WordDocumentPlanCard({
         <WordReviewReceipt
           review={review}
           kind="plan"
-          planTitle={planTitle}
+          title={planTitle}
           wholeDocument={planReview.scope.wholeFile}
         />
       )}
