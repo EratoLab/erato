@@ -11,7 +11,8 @@ import {
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "./wordDocumentXml";
-import { wordTableCellScope } from "./wordTableCellScope";
+import { wordReadScope } from "./wordReadScope";
+import { expandWordScopedSubmission } from "./wordScopedSubmission";
 import {
   expandWordTableCellSubmission,
   WordTableCellSubmissionError,
@@ -64,12 +65,17 @@ export function createWordDocumentSubmissionExecutor(
       if (previous) return previous;
       // Redelivery returns its receipt even if Apply has since consumed the
       // capture. New calls still require the original completed, active read.
-      const scoped = wordTableCellScope(snapshot, input.readToken);
-      if (scoped && !("table_cell" in input))
+      const scoped = wordReadScope(snapshot, input.readToken);
+      if (
+        scoped &&
+        !(scoped.kind === "objects"
+          ? "scoped_edit" in input
+          : "table_cell" in input)
+      )
         return {
           ok: false,
           error:
-            "A scoped read permits only a concise table_cell submission. Complete the full read for plans or repairs.",
+            "A scoped read permits only its concise edit format. Complete the full read for plans or repairs.",
           validationErrors: [
             {
               path: "/readToken",
@@ -99,9 +105,11 @@ export function createWordDocumentSubmissionExecutor(
         };
       const submitted = JSON.parse(serialized) as Record<string, unknown>;
       const value =
-        "table_cell" in submitted
-          ? expandWordTableCellSubmission(submitted, snapshot)
-          : session.drafts.materialize(submitted);
+        "scoped_edit" in submitted
+          ? expandWordScopedSubmission(submitted, snapshot)
+          : "table_cell" in submitted
+            ? expandWordTableCellSubmission(submitted, snapshot)
+            : session.drafts.materialize(submitted);
       const prepared = await prepareWordDocumentSubmission(
         value,
         context,
@@ -120,7 +128,9 @@ export function createWordDocumentSubmissionExecutor(
       if (prepared.ok) {
         session.drafts.accepted = true;
         if (
-          ("draft_id" in input || "table_cell" in input) &&
+          ("draft_id" in input ||
+            "table_cell" in input ||
+            "scoped_edit" in input) &&
           prepared.disposition !== "local_only"
         )
           result = {
@@ -164,7 +174,7 @@ export function createWordDocumentSubmissionExecutor(
         error:
           error instanceof WordDraftRepairError
             ? "Document repair rejected."
-            : "Table cell edit rejected.",
+            : "Scoped edit rejected.",
         ...(error instanceof WordDraftRepairError
           ? { submissionFeedback: session.drafts.feedback() }
           : {}),
@@ -324,7 +334,9 @@ export function acceptedWordDocumentSubmission(
   if (!object(output) || !object(output.result)) return undefined;
   const plan =
     object(part.input) &&
-    ("draft_id" in part.input || "table_cell" in part.input)
+    ("draft_id" in part.input ||
+      "table_cell" in part.input ||
+      "scoped_edit" in part.input)
       ? output.result.plan
       : part.input;
   if (

@@ -3,6 +3,7 @@ import {
   isDefaultTableStyle,
 } from "./wordBuiltInStyles";
 import { wordPlanError } from "./wordPlanDiagnostics";
+import { wordPlanMatchesObjectScope } from "./wordReadScope";
 import { resolveWordSource, wordSourceDetails } from "./wordRichContent";
 import { parseWordBlock, wordBlockChildEntries } from "./wordRichPlan";
 import { parseWordSections, parseWordStoryChanges } from "./wordStories";
@@ -22,13 +23,13 @@ import type {
 } from "./wordInlineStructures";
 import type { WordImageSpec, WordDrawingSpec } from "./wordMediaContent";
 import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
+import type { WordReadScope } from "./wordReadScope";
 import type {
   WordStoryChange,
   WordSectionPlan,
   WordStorySource,
   WordSectionSource,
 } from "./wordStories";
-import type { WordTableCellScope } from "./wordTableCellScope";
 import type { WordTableBlock, WordTableContent } from "./wordTableContent";
 
 export interface WordPlanRun extends WordRunFormatting {
@@ -138,7 +139,7 @@ export interface WordAuthoringSnapshot {
   used: boolean;
   readToken?: string;
   /** Targeted reads never populate full-document coverage or its token. */
-  cellReads?: Map<string, WordTableCellScope>;
+  readScopes?: Map<string, WordReadScope>;
   ownerMessageId?: string;
 }
 export const MAX_PLAN_BYTES = 256 * 1024;
@@ -442,13 +443,14 @@ export function validateWordDocumentPlan(
     (!snapshot.readToken ||
       plan.readToken !== snapshot.readToken ||
       wordSourceReadRefs(snapshot).some((ref) => !snapshot.read.has(ref))) &&
-    !wordPlanMatchesCellScope(plan, snapshot)
+    !wordPlanMatchesCellScope(plan, snapshot) &&
+    !wordPlanMatchesObjectScope(plan, snapshot)
   )
     return fail(
       "incomplete",
       "/readToken",
       "incomplete-read",
-      "A complete read is required unless the entire plan matches exactly one authorized table-cell text edit.",
+      "A complete read is required unless the entire plan matches an explicitly authorized scoped edit.",
     );
 
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));

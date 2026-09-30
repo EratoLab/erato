@@ -1,5 +1,6 @@
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
+import { MAX_WORD_SCOPES } from "./wordReadScope";
 import {
   expandWordTableCellSubmission,
   WordTableCellSubmissionError,
@@ -12,7 +13,7 @@ import type { ClientToolExecutionResult } from "@erato/frontend/library";
 const PAGE_SIZE = 5;
 const CELL_BYTES = 4096;
 const SNIPPET_BYTES = 256;
-const MAX_SCOPES = 16;
+
 const encoder = new TextEncoder();
 const normalize = (text: string) =>
   text.normalize("NFKC").toLowerCase().replace(/\s+/gu, " ").trim();
@@ -177,6 +178,7 @@ export function readWordTableCell(
       },
     };
   const scope: WordTableCellScope = {
+    kind: "table-cell",
     snapshot: snapshot.token,
     identity: snapshot.identity,
     fingerprint: snapshot.fingerprint,
@@ -201,7 +203,7 @@ export function readWordTableCell(
           text: scope.expectedText,
         },
       },
-      { ...snapshot, cellReads: new Map([[readToken, scope]]) },
+      { ...snapshot, readScopes: new Map([[readToken, scope]]) },
     );
   } catch (error) {
     if (!(error instanceof WordTableCellSubmissionError)) throw error;
@@ -215,13 +217,13 @@ export function readWordTableCell(
       },
     };
   }
-  snapshot.cellReads ??= new Map();
-  if (snapshot.cellReads.size >= MAX_SCOPES)
+  snapshot.readScopes ??= new Map();
+  if (snapshot.readScopes.size >= MAX_WORD_SCOPES)
     return fail(
       "cell-read-limit",
       "This request has reached its scoped-read capability limit; use a complete read or a fresh request.",
     );
-  snapshot.cellReads.set(readToken, scope);
+  snapshot.readScopes.set(readToken, scope);
   return {
     ok: true,
     result: {

@@ -13,6 +13,7 @@ import { useCallback, useId, useMemo, useState } from "react";
 import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { WordSavedPlanPreview } from "./WordSavedPlanPreview";
+import { WordScopedPlanReview } from "./WordScopedPlanReview";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
@@ -81,6 +82,7 @@ export function WordDocumentPlanCard({
     const parsed = parseWordDocumentPlan(content);
     return parsed && normalizeWordDocumentPlan(parsed, snapshot);
   }, [content, snapshot]);
+  const scoped = !!(plan && snapshot?.readScopes?.has(plan.readToken));
   const gate = resolveWordWriteGate({
     capture,
     expectedIdentity: artifact?.itemIdentity,
@@ -336,7 +338,7 @@ export function WordDocumentPlanCard({
         <SpinnerIcon
           label={t({
             id: "officeAddin.word.authoring.preparing",
-            message: "Preparing a complete document rewrite…",
+            message: "Preparing document changes…",
           })}
         />
       </Card>
@@ -358,11 +360,17 @@ export function WordDocumentPlanCard({
           {(idle || applying) && offered && (
             <>
               <p className="word-review__hint">
-                {t({
-                  id: "officeAddin.word.authoring.applyScope",
-                  message:
-                    "Applies the complete structure and draft. If the source changed, the whole plan stops before writing.",
-                })}
+                {scoped
+                  ? t({
+                      id: "officeAddin.word.scoped.applyScope",
+                      message:
+                        "Applies the reviewed changes. If the document changed, nothing is applied.",
+                    })
+                  : t({
+                      id: "officeAddin.word.authoring.applyScope",
+                      message:
+                        "Applies the complete structure and draft. If the source changed, the whole plan stops before writing.",
+                    })}
               </p>
               {!confirmCard && (
                 // Busy rather than disabled keeps focus on the button while Word works.
@@ -387,14 +395,29 @@ export function WordDocumentPlanCard({
           {confirmCard && (
             <ActionConfirmationCard
               key={confirmCard.requestId}
-              title={t({
-                id: "officeAddin.word.authoring.consent",
-                message: "Apply this document rewrite?",
-              })}
-              description={t({
-                id: "officeAddin.word.authoring.consentScope",
-                message: "Apply the entire structure and draft reviewed above.",
-              })}
+              title={
+                scoped
+                  ? t({
+                      id: "officeAddin.word.scoped.consent",
+                      message: "Apply these changes?",
+                    })
+                  : t({
+                      id: "officeAddin.word.authoring.consent",
+                      message: "Apply this document rewrite?",
+                    })
+              }
+              description={
+                scoped
+                  ? t({
+                      id: "officeAddin.word.scoped.consentScope",
+                      message: "Apply the selected changes reviewed above.",
+                    })
+                  : t({
+                      id: "officeAddin.word.authoring.consentScope",
+                      message:
+                        "Apply the entire structure and draft reviewed above.",
+                    })
+              }
               allowOnceLabel={entry.displayLabel()}
               onAllowOnce={() => {
                 if (ready && !host.operationInProgress) allowCard(confirmCard);
@@ -592,8 +615,8 @@ export function WordDocumentPlanCard({
         {!snapshot && artifact?.submittedCard && (
           <WordSavedPlanPreview plan={plan} />
         )}
-        {snapshot && (
-          <WordDocumentPlanReview
+        {snapshot && scoped && (
+          <WordScopedPlanReview
             plan={plan}
             snapshot={snapshot}
             onLocate={
@@ -602,6 +625,27 @@ export function WordDocumentPlanCard({
                 : undefined
             }
           />
+        )}
+        {snapshot && (
+          <details open={!scoped}>
+            {scoped && (
+              <summary>
+                {t({
+                  id: "officeAddin.word.scoped.details",
+                  message: "Complete document preview",
+                })}
+              </summary>
+            )}
+            <WordDocumentPlanReview
+              plan={plan}
+              snapshot={snapshot}
+              onLocate={
+                idle && gate.allowed && !host.operationInProgress
+                  ? (ref) => void locate(ref)
+                  : undefined
+              }
+            />
+          </details>
         )}
         {idle &&
           (issue ||

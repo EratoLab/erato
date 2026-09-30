@@ -1,6 +1,20 @@
 /** Protocol vocabulary belongs here; model behavior instructions come from deployment configuration. */
 export const WORD_AUTHORING_CONTRACT = {
   version: 1,
+  scopedEdit: {
+    read: "read_document_blocks accepts {snapshot,documentIdentity,target:{kind?,text?,nearbyText?,ref?,refs?,throughRef?,offset?}}. Search filters are ANDed; text searches object text/properties and nearbyText searches adjacent body blocks. Five bounded candidates per page. An ambiguous search grants no scope. Select returned refs explicitly (at most 16), or ref/throughRef for a contiguous body range. Only ready grants a readToken. Exact target context is capped at 24 KiB; larger targets require a narrower selection or complete read.",
+    input:
+      "{snapshot,readToken,scoped_edit:{body?:[],objects?:[],stories?:[],sections?:[]}}. Supply only changes. The host retains every other source. At most 16 changes per collection; overlapping changes are rejected. No full plans or draft repairs with scoped tokens.",
+    body: "{operation:'replace'|'delete'|'insert-before'|'insert-after'|'move-before'|'move-after',source?:[refs],anchor?:ref,blocks?:[typed blocks],reason?:string}. Replace/delete/move source is an explicitly read contiguous range. Insert/move anchor must also be explicitly read and retained. Replacement/insertion uses the existing typed block contract. Delete needs a reason. Moves preserve the original source exactly.",
+    objects:
+      "{ref:returned-object-ref,edit:{operation:'update'|'delete'|'unwrap',...properties}}. Read the exact object. kind and native target are host-owned. Properties and supported operations follow structures.nativeEdit. The enclosing fragment is retained.",
+    stories:
+      "Existing story changes follow the stories contract and require a complete scoped read of that story. New notes/comments need an explicitly read, retained body anchor. New headers/footers need a read section and an association in the same scoped submission. Deleting a story also removes its anchors/section references. Other stories are preserved.",
+    sections:
+      "Sparse section changes: {id,after?,layout?,headers?,footers?} or {id,delete:true}. Existing sections must be read. Changing a boundary needs a read retained body anchor; after:null makes the selected section final. Splitting a section needs its read section plus boundary. Removing a boundary requires both affected sections. Header/footer associations require read stories or stories created in the same submission. Host retains other sections and their properties.",
+    authorization:
+      "Scope is bound to document identity, immutable snapshot and request. Context neighbors do not grant write permission. Source reuse requires read references. Full-document plans still require complete pagination. Success stores the complete plan for review; it is not model continuation context.",
+  },
   tableCell: {
     tool: "submit_document_plan",
     input:

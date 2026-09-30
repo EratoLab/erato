@@ -3047,6 +3047,72 @@ msgid "officeAddin.word.rich.updateObject"
 msgstr "Actualizar: {label}"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.scoped.applyScope"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.cell"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.scoped.consent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.scoped.consentScope"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.scoped.details"
+msgstr ""
+
+#. js-lingui-explicit-id
+#. placeholder {0}: i + 1
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.locate"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.move"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.original"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.preservation"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.proposed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.removal"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.removePart"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.review"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.preparingDocument"
 msgstr ""
