@@ -62,9 +62,6 @@ export const SIDECAR_CHAT_TOOL_METHODS: readonly {
   },
 ];
 
-/** Outcome of the user's standing or per-call decision for one tool call. */
-export type SidecarToolCallDecision = "allowed" | "declined" | "disabled";
-
 export interface SidecarAttachmentUpload {
   (
     file: File,
@@ -85,12 +82,6 @@ export interface SidecarChatToolOptions {
   uploadsEnabled: boolean;
   maxUploadBytes: number;
   maxFiles: number;
-  /** Applies the user's per-tool decision before the sidecar is contacted. */
-  decideCall?: (
-    qualifiedName: string,
-    input: unknown,
-    context?: ClientToolCallContext,
-  ) => Promise<SidecarToolCallDecision>;
 }
 
 export interface SidecarChatTool {
@@ -181,20 +172,6 @@ export function createSidecarChatTools(
               "This desktop sidecar capability is unavailable on this device.",
             );
           }
-          const decision = options.decideCall
-            ? await options.decideCall(
-                sidecarQualifiedToolName(name),
-                input,
-                context,
-              )
-            : "allowed";
-          if (decision === "disabled") {
-            return { ok: false, error: "The user has turned this tool off." };
-          }
-          if (decision === "declined") {
-            return { ok: false, error: "The user declined this tool call." };
-          }
-          context?.signal?.throwIfAborted();
           return await execute(input, context);
         } catch (error) {
           return {

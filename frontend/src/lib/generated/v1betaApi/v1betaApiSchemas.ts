@@ -1084,6 +1084,12 @@ export type ClientOperationView = {
 };
 
 /**
+ * A user's standing decision for one client tool, keyed by its qualified
+ * `namespace/name`. Tools without a decision keep their default behaviour.
+ */
+export type ClientToolDecision = "never_allow" | "ask" | "always_allow";
+
+/**
  * Opaque host-owned correction handle; it grants no permission to apply an artifact.
  */
 export type ClientToolDraftReference = {
@@ -3722,7 +3728,8 @@ export type ToolApprovalKind =
   | "mcp_tool"
   | "delegated_task"
   | "task_plan"
-  | "tool_call_limit";
+  | "tool_call_limit"
+  | "client_tool";
 
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 
@@ -3901,6 +3908,12 @@ export type UpdateChatResponse = {
 };
 
 export type UpdateProfilePreferencesRequest = {
+  /**
+   * Replaces all per-tool client tool decisions, keyed by qualified `namespace/name`.
+   */
+  client_tool_decisions?: {
+    [key: string]: ClientToolDecision;
+  };
   client_tool_file_approval?: null | ClientToolFileApproval;
   /**
    * Additional contextual information about the user for the assistant.
@@ -3959,6 +3972,12 @@ export type UsageBucket = {
 };
 
 export type UserProfile = {
+  /**
+   * Per-tool decisions keyed by qualified `namespace/name`; absent tools keep their default.
+   */
+  client_tool_decisions?: {
+    [key: string]: ClientToolDecision;
+  };
   client_tool_file_approval?: ClientToolFileApproval;
   /**
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.

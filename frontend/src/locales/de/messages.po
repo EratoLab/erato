@@ -1501,16 +1501,6 @@ msgid "chat.attachments.toggle"
 msgstr "Anhänge umschalten"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/ClientToolCallApproval.tsx
-msgid "chat.clientToolCallApproval.description"
-msgstr "Der Assistent möchte den Desktop-Sidecar mit diesen Parametern verwenden. Die Ergebnisse werden mit dem KI-Anbieter geteilt."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/ClientToolCallApproval.tsx
-msgid "chat.clientToolCallApproval.title"
-msgstr "„{label}“ auf diesem Gerät erlauben?"
-
-#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Chat-Unterhaltung"
@@ -2537,6 +2527,16 @@ msgstr "Assistenten suchen..."
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "chatInput.mentions.sectionHeader"
 msgstr "Assistenten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.thisDevice"
+msgstr "Dieses Gerät"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.title"
+msgstr "Dieses Tool auf deinem Gerät ausführen lassen?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx

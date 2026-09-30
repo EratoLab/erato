@@ -1501,16 +1501,6 @@ msgid "chat.attachments.toggle"
 msgstr "Alternar adjuntos"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/ClientToolCallApproval.tsx
-msgid "chat.clientToolCallApproval.description"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/ClientToolCallApproval.tsx
-msgid "chat.clientToolCallApproval.title"
-msgstr ""
-
-#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Conversación de chat"
@@ -2537,6 +2527,16 @@ msgstr "Buscar asistentes..."
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "chatInput.mentions.sectionHeader"
 msgstr "Asistentes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.thisDevice"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.title"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx

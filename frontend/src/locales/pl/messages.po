@@ -1501,16 +1501,6 @@ msgid "chat.attachments.toggle"
 msgstr "Przełącz załączniki"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/ClientToolCallApproval.tsx
-msgid "chat.clientToolCallApproval.description"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/ClientToolCallApproval.tsx
-msgid "chat.clientToolCallApproval.title"
-msgstr ""
-
-#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Rozmowa czatu"
@@ -2537,6 +2527,16 @@ msgstr "Szukaj asystentów..."
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "chatInput.mentions.sectionHeader"
 msgstr "Asystenci"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.thisDevice"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "clientToolApproval.title"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx

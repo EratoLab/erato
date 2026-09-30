@@ -1006,17 +1006,7 @@ it("blocks legacy tool execution for a present but unavailable delegation declar
 const byName = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name);
 
-describe("per-tool decisions", () => {
-  const fields = [
-    {
-      field: "custom_source_field",
-      operators: ["eq"],
-      type: "string",
-      description: "A source-specific identifier.",
-      applicable_kinds: ["email"],
-    },
-  ];
-
+describe("settings tool list", () => {
   it("lists every registered tool with the sidecar method it needs", () => {
     const registered = setup({})
       .tools()
@@ -1024,45 +1014,5 @@ describe("per-tool decisions", () => {
     expect([...SIDECAR_CHAT_TOOL_METHODS].sort(byName)).toEqual(
       registered.sort(byName),
     );
-  });
-
-  it.each([
-    ["disabled", "The user has turned this tool off."],
-    ["declined", "The user declined this tool call."],
-  ] as const)(
-    "does not contact the sidecar when the call is %s",
-    async (decision, error) => {
-      const env = setup({ "search.metadata_fields.v1": { fields } });
-      const decideCall = vi.fn<
-        NonNullable<SidecarChatToolOptions["decideCall"]>
-      >(async () => decision);
-      const tool = createSidecarChatTools(env.client, {
-        ...env.options,
-        decideCall,
-      }).find((item) => item.name === GET_SIDECAR_SEARCH_FIELDS_TOOL)!;
-      expect(await tool.execute({}, context)).toEqual({ ok: false, error });
-      expect(decideCall).toHaveBeenCalledWith(
-        "desktop/get_sidecar_search_fields",
-        {},
-        context,
-      );
-      expect(env.request).not.toHaveBeenCalled();
-    },
-  );
-
-  it("runs an allowed call once and replays it without asking again", async () => {
-    const env = setup({ "search.metadata_fields.v1": { fields } });
-    const decideCall = vi.fn<NonNullable<SidecarChatToolOptions["decideCall"]>>(
-      async () => "allowed",
-    );
-    const tool = createSidecarChatTools(env.client, {
-      ...env.options,
-      decideCall,
-    }).find((item) => item.name === GET_SIDECAR_SEARCH_FIELDS_TOOL)!;
-    const expected = { ok: true, result: { fields } };
-    expect(await tool.execute({}, context)).toEqual(expected);
-    expect(await tool.execute({}, context)).toEqual(expected);
-    expect(decideCall).toHaveBeenCalledTimes(1);
-    expect(env.request).toHaveBeenCalledTimes(1);
   });
 });

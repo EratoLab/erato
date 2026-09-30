@@ -35,6 +35,7 @@ import {
   fetchChatMessages,
   listMcpServerToolsQuery,
   listUserToolApprovalSettingsQuery,
+  profileQuery,
   recentChatsQuery,
   useChatMessages,
   useUpdateChat,
@@ -2772,6 +2773,15 @@ export function useChatMessaging(
         if (rosters.length === 0) {
           return;
         }
+        // A client tool's standing answer is saved in the user's preferences,
+        // which the settings list reads from the profile.
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
+        if (kind === "client_tool") {
+          void queryClient.invalidateQueries({
+            queryKey: profileQuery({}).queryKey,
+          });
+          return;
+        }
         // A kind that names no MCP server of its own — a task plan — has no
         // roster to drop, and the empty id would invalidate a listing that does
         // not exist.
@@ -2920,6 +2930,9 @@ export function useChatMessaging(
             headers: {
               [X_ERATO_PLATFORM_HEADER]: platform,
               ...getAuthHeaders(),
+              // An approved client tool runs on the answering device, so the
+              // server must know which tools this device can execute.
+              ...getClientToolHeaders(),
             },
             body: JSON.stringify(
               buildContinueStreamBody({

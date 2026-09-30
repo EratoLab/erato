@@ -13,6 +13,7 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import {
   listMcpServerToolsQuery,
   listUserToolApprovalSettingsQuery,
+  profileQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { ChatContext } from "@/providers/ChatProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
@@ -1289,5 +1290,82 @@ describe("McpToolApprovalCard", () => {
       ).toBeInTheDocument();
     });
     expect(screen.getByTestId("mcp-tool-approval")).toBeInTheDocument();
+  });
+});
+
+describe("client tool approvals", () => {
+  const clientToolRequest = {
+    ...approvalRequest,
+    tool_call_id: "client-call-1",
+    tool_name: "search_sidecar_index",
+    mcp_server_id: "desktop",
+    input: { query: "quarterly report" },
+    preset: "",
+    kind: "client_tool" as const,
+  };
+
+  it("asks on the same card as an MCP tool, naming this device instead of a server", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={clientToolRequest}
+        resolution={null}
+      />,
+    );
+
+    const card = screen.getByTestId("mcp-tool-approval");
+    expect(card).toHaveAttribute("data-approval-kind", "client_tool");
+    expect(card).toHaveTextContent("search_sidecar_index");
+    expect(card).toHaveTextContent("This device");
+    expect(card).not.toHaveTextContent("desktop");
+    expect(
+      screen.getAllByText("Allow this tool to run on your device?").length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByTestId("tool-approval-generic")).toBeNull();
+    for (const label of [
+      "Allow once",
+      "Always allow",
+      "Deny once",
+      "Never allow",
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(
+      screen.queryByText("This tool may send data to an external service."),
+    ).toBeNull();
+  });
+
+  it("tells the server which client tools this device runs and refreshes the saved decisions", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response("", { status: 200 })),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { queryClient } = renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={clientToolRequest}
+        resolution={null}
+      />,
+    );
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    fireEvent.click(screen.getByText("Always allow"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mcp-tool-approval")).not.toBeInTheDocument();
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.headers).toHaveProperty("X-Erato-Client-Tools");
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: profileQuery({}).queryKey,
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: listMcpServerToolsQuery({
+        pathParams: { serverId: "desktop" },
+      }).queryKey,
+    });
   });
 });
