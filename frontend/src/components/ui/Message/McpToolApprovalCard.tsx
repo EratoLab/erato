@@ -275,7 +275,7 @@ export const McpToolApprovalCard = ({
           answer.decision === "approve_always" ||
           answer.decision === "reject_always",
       );
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
+
       if (standing.length > 0 && kind === "client_tool") {
         // Saved in the user's preferences, which the settings list reads
         // from the profile.
@@ -365,17 +365,16 @@ export const McpToolApprovalCard = ({
     );
   };
 
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
   const isClientTool = kind === "client_tool";
   // A client tool declares no annotations of its own; the defaults it carries
   // describe nothing about what it does.
   const openWorldDescription =
     !isClientTool && request.annotations.openWorldHint
-    ? t({
-        id: "mcpApproval.openWorldWarning",
-        message: "This tool may send data to an external service.",
-      })
-    : null;
+      ? t({
+          id: "mcpApproval.openWorldWarning",
+          message: "This tool may send data to an external service.",
+        })
+      : null;
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.

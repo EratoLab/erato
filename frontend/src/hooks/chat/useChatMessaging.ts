@@ -2775,7 +2775,6 @@ export function useChatMessaging(
         }
         // A client tool's standing answer is saved in the user's preferences,
         // which the settings list reads from the profile.
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
         if (kind === "client_tool") {
           void queryClient.invalidateQueries({
             queryKey: profileQuery({}).queryKey,
