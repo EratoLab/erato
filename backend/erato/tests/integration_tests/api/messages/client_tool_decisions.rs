@@ -377,6 +377,63 @@ async fn approval_from_a_device_without_the_executor_settles_at_once(pool: Pool<
     );
 }
 
+/// A client that declares no client tools at all cannot run the approved call either.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approval_from_a_client_declaring_no_tools_settles_at_once(pool: Pool<Postgres>) {
+    let setup = setup(pool, 60_000, true).await;
+    let row = park_on_ask(&setup).await;
+    let message_id: Uuid = serde_json::from_value(row["id"].clone()).unwrap();
+    let response = tokio::time::timeout(Duration::from_secs(20), async {
+        continuation(&setup, message_id, "approve", "").await
+    })
+    .await
+    .expect("an approval from a client without client tools must not wait for the timeout");
+    response.assert_status_ok();
+    assert!(dispatched_calls(&response).is_empty());
+    let row = assistant_rows(&setup).await.pop().unwrap();
+    assert_eq!(
+        tool_use_output(&row, CALL)["error"],
+        format!("The tool '{SEARCH}' is not available on this device; the call was not executed.")
+    );
+}
+
+/// A client from before the header was sent on continuations keeps the
+/// registration its turn started with, as continuations always have.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approval_without_the_header_keeps_the_turn_registration(pool: Pool<Postgres>) {
+    let setup = setup(pool, 60_000, true).await;
+    let row = park_on_ask(&setup).await;
+    let message_id: Uuid = serde_json::from_value(row["id"].clone()).unwrap();
+    let (response, answered) = tokio::time::timeout(Duration::from_secs(30), async {
+        let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
+        let request = async {
+            let response = setup
+                .server
+                .post("/api/v1beta/me/messages/continuestream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({
+                    "message_id": message_id,
+                    "decisions": [{ "approval_id": CALL, "decision": "approve" }],
+                }))
+                .await;
+            let _ = done_tx.send(());
+            response
+        };
+        tokio::join!(
+            request,
+            answer_client_calls(&setup, async {
+                let _ = done_rx.await;
+            })
+        )
+    })
+    .await
+    .expect("continuation did not finish");
+    response.assert_status_ok();
+    assert_eq!(answered, vec![SEARCH.to_string()]);
+    let row = assistant_rows(&setup).await.pop().unwrap();
+    assert_eq!(tool_use_output(&row, CALL)["result"]["hits"], 3, "{row}");
+}
+
 /// A decision saved after the tool was offered still holds when the model calls it.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn never_allow_saved_mid_turn_refuses_at_dispatch(pool: Pool<Postgres>) {
