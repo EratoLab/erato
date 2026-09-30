@@ -290,7 +290,7 @@ jobs:
         working-directory: backend
 
       - name: "Install sqitch"
-        run: sudo apt install -y sqitch
+        run: sudo apt-get update && sudo apt-get install -y sqitch
 
       # Every step here should be conditional on "success() || failure()",
       # in order to prevent failing fast, so that we can run all linting steps in one run.
