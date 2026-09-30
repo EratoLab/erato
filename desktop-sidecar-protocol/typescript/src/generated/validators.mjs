@@ -26979,7 +26979,7 @@ return errors === 0;
 
 export const validateSourcesListV1Result = validate127;
 const schema168 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":true};
-const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"locator":{"type":"object","additionalProperties":true},"enabled":{"type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
+const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"displayName":{"description":"Human-readable source name for direct presentation. Older sidecars may omit it.","type":"string","minLength":1,"maxLength":1024},"indexingEnabled":{"description":"Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.","type":"boolean"},"product":{"description":"Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"product_variant":{"description":"Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"locator":{"type":"object","additionalProperties":true},"enabled":{"description":"Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.","type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
 
 function validate127(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json" */;
@@ -27168,12 +27168,11 @@ vErrors.push(err15);
 errors++;
 }
 }
-if(data1.locator !== undefined){
-let data5 = data1.locator;
-if(data5 && typeof data5 == "object" && !Array.isArray(data5)){
-}
-else {
-const err16 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data1.displayName !== undefined){
+let data5 = data1.displayName;
+if(typeof data5 === "string"){
+if(func2(data5) > 1024){
+const err16 = {instancePath:instancePath+"/sources/" + i0+"/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/displayName/maxLength",keyword:"maxLength",params:{limit: 1024},message:"must NOT have more than 1024 characters"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -27182,10 +27181,8 @@ vErrors.push(err16);
 }
 errors++;
 }
-}
-if(data1.enabled !== undefined){
-if(typeof data1.enabled !== "boolean"){
-const err17 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(func2(data5) < 1){
+const err17 = {instancePath:instancePath+"/sources/" + i0+"/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/displayName/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -27195,10 +27192,8 @@ vErrors.push(err17);
 errors++;
 }
 }
-if(data1.discoveryCursor !== undefined){
-let data7 = data1.discoveryCursor;
-if((!(data7 && typeof data7 == "object" && !Array.isArray(data7))) && (data7 !== null)){
-const err18 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
+else {
+const err18 = {instancePath:instancePath+"/sources/" + i0+"/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/displayName/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -27208,10 +27203,9 @@ vErrors.push(err18);
 errors++;
 }
 }
-if(data1.completedScanId !== undefined){
-let data8 = data1.completedScanId;
-if((typeof data8 !== "string") && (data8 !== null)){
-const err19 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
+if(data1.indexingEnabled !== undefined){
+if(typeof data1.indexingEnabled !== "boolean"){
+const err19 = {instancePath:instancePath+"/sources/" + i0+"/indexingEnabled",schemaPath:"../source/source-descriptor.schema.json/properties/indexingEnabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -27220,9 +27214,12 @@ vErrors.push(err19);
 }
 errors++;
 }
-if(typeof data8 === "string"){
-if(!(formats0.test(data8))){
-const err20 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+}
+if(data1.product !== undefined){
+let data7 = data1.product;
+if(typeof data7 === "string"){
+if(func2(data7) < 1){
+const err20 = {instancePath:instancePath+"/sources/" + i0+"/product",schemaPath:"../source/source-descriptor.schema.json/properties/product/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -27232,11 +27229,8 @@ vErrors.push(err20);
 errors++;
 }
 }
-}
-if(data1.lastSuccessAt !== undefined){
-let data9 = data1.lastSuccessAt;
-if((typeof data9 !== "string") && (data9 !== null)){
-const err21 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
+else {
+const err21 = {instancePath:instancePath+"/sources/" + i0+"/product",schemaPath:"../source/source-descriptor.schema.json/properties/product/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -27245,9 +27239,12 @@ vErrors.push(err21);
 }
 errors++;
 }
-if(typeof data9 === "string"){
-if(!(formats6.validate(data9))){
-const err22 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+}
+if(data1.product_variant !== undefined){
+let data8 = data1.product_variant;
+if(typeof data8 === "string"){
+if(func2(data8) < 1){
+const err22 = {instancePath:instancePath+"/sources/" + i0+"/product_variant",schemaPath:"../source/source-descriptor.schema.json/properties/product_variant/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -27257,11 +27254,8 @@ vErrors.push(err22);
 errors++;
 }
 }
-}
-if(data1.lastErrorCode !== undefined){
-let data10 = data1.lastErrorCode;
-if((typeof data10 !== "string") && (data10 !== null)){
-const err23 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
+else {
+const err23 = {instancePath:instancePath+"/sources/" + i0+"/product_variant",schemaPath:"../source/source-descriptor.schema.json/properties/product_variant/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -27271,9 +27265,12 @@ vErrors.push(err23);
 errors++;
 }
 }
+if(data1.locator !== undefined){
+let data9 = data1.locator;
+if(data9 && typeof data9 == "object" && !Array.isArray(data9)){
 }
 else {
-const err24 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err24 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -27283,9 +27280,9 @@ vErrors.push(err24);
 errors++;
 }
 }
-}
-else {
-const err25 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(data1.enabled !== undefined){
+if(typeof data1.enabled !== "boolean"){
+const err25 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -27295,14 +27292,114 @@ vErrors.push(err25);
 errors++;
 }
 }
-}
-else {
-const err26 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data1.discoveryCursor !== undefined){
+let data11 = data1.discoveryCursor;
+if((!(data11 && typeof data11 == "object" && !Array.isArray(data11))) && (data11 !== null)){
+const err26 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
 if(vErrors === null){
 vErrors = [err26];
 }
 else {
 vErrors.push(err26);
+}
+errors++;
+}
+}
+if(data1.completedScanId !== undefined){
+let data12 = data1.completedScanId;
+if((typeof data12 !== "string") && (data12 !== null)){
+const err27 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err27];
+}
+else {
+vErrors.push(err27);
+}
+errors++;
+}
+if(typeof data12 === "string"){
+if(!(formats0.test(data12))){
+const err28 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+if(vErrors === null){
+vErrors = [err28];
+}
+else {
+vErrors.push(err28);
+}
+errors++;
+}
+}
+}
+if(data1.lastSuccessAt !== undefined){
+let data13 = data1.lastSuccessAt;
+if((typeof data13 !== "string") && (data13 !== null)){
+const err29 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err29];
+}
+else {
+vErrors.push(err29);
+}
+errors++;
+}
+if(typeof data13 === "string"){
+if(!(formats6.validate(data13))){
+const err30 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(vErrors === null){
+vErrors = [err30];
+}
+else {
+vErrors.push(err30);
+}
+errors++;
+}
+}
+}
+if(data1.lastErrorCode !== undefined){
+let data14 = data1.lastErrorCode;
+if((typeof data14 !== "string") && (data14 !== null)){
+const err31 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err31];
+}
+else {
+vErrors.push(err31);
+}
+errors++;
+}
+}
+}
+else {
+const err32 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err32];
+}
+else {
+vErrors.push(err32);
+}
+errors++;
+}
+}
+}
+else {
+const err33 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err33];
+}
+else {
+vErrors.push(err33);
+}
+errors++;
+}
+}
+}
+else {
+const err34 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err34];
+}
+else {
+vErrors.push(err34);
 }
 errors++;
 }
