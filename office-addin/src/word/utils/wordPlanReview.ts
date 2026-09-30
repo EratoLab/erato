@@ -107,6 +107,8 @@ export type WordPlanRow = WordPlanRowBase &
         rowsRemoved: number;
         headerRow: string[];
         changedRowIndexes: number[];
+        /** Plain text of every output cell (source cells for a removed table). */
+        cellTexts: string[][];
         block?: WordTableBlock<WordPlanBlock>;
         original?: WordTableContent<WordPlanBlock>;
       }
@@ -384,6 +386,7 @@ function tableRow(
       rowsRemoved: rows.length,
       headerRow: rows[0]?.cells.map((c) => c.text) ?? [],
       changedRowIndexes: [],
+      cellTexts: rows.map((r) => r.cells.map((c) => c.text)),
       original,
     };
   }
@@ -391,9 +394,11 @@ function tableRow(
   const usedRows = new Set<number>();
   const changedCells: WordPlanChangedCell[] = [];
   const changedRows = new Set<number>();
-  const headerRow: string[] = [];
+  const cellTexts: string[][] = [];
   let rowsAdded = 0;
   for (const [r, row] of block.rows.entries()) {
+    const texts: string[] = [];
+    cellTexts.push(texts);
     const sourceRow = bySourceIndex
       ? row.sourceIndex === undefined
         ? undefined
@@ -421,7 +426,7 @@ function tableRow(
       const before = cell.textEdit
         ? (cell.textEdit.expectedText ?? retained)
         : retained;
-      if (r === 0) headerRow.push(after);
+      texts.push(after);
       if (sourceRow && (!sourceCell || before !== after)) {
         changedCells.push({ row: r, col: c, before, after });
         changedRows.add(r);
@@ -445,8 +450,9 @@ function tableRow(
     changedCells,
     rowsAdded,
     rowsRemoved,
-    headerRow,
+    headerRow: cellTexts[0] ?? [],
     changedRowIndexes: [...changedRows].sort((a, b) => a - b),
+    cellTexts,
     block,
     original,
   };

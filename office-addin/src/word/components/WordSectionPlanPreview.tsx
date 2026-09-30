@@ -1,6 +1,16 @@
 import { Card } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
+import {
+  bindingLabel,
+  firstPageLabel,
+  marginLabels,
+  oddEvenPagesLabel,
+  orientationLabel,
+  sectionBreakLabel,
+  storyLabel,
+} from "./wordPlanLabels";
+
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -34,6 +44,7 @@ export function WordSectionPlanPreview({
   )
     [layout.width, layout.height] = [layout.height, layout.width];
   const margins = { ...source?.layout.margins, ...section.layout?.margins };
+  const labels = marginLabels();
   const headers = { ...source?.headers, ...section.headers };
   const footers = { ...source?.footers, ...section.footers };
   const binding = (value: WordSectionStories | undefined) =>
@@ -57,21 +68,7 @@ export function WordSectionPlanPreview({
                 .filter(Boolean)
                 .join(" · ") || (changed.blocks?.length ? native : empty)
             : story?.text || native;
-      const page =
-        variant === "first"
-          ? t({
-              id: "officeAddin.word.authoring.firstPage",
-              message: "First page",
-            })
-          : variant === "even"
-            ? t({
-                id: "officeAddin.word.authoring.evenPages",
-                message: "Even pages",
-              })
-            : t({
-                id: "officeAddin.word.authoring.defaultPages",
-                message: "Default pages",
-              });
+      const page = bindingLabel(variant as keyof WordSectionStories);
       return (
         <li key={variant}>
           {page}: {text.slice(0, 180)}
@@ -86,17 +83,7 @@ export function WordSectionPlanPreview({
           message: `Section ${index + 1}`,
         })}
       </strong>
-      <p>
-        {layout.orientation === "landscape"
-          ? t({
-              id: "officeAddin.word.authoring.landscape",
-              message: "Landscape",
-            })
-          : t({
-              id: "officeAddin.word.authoring.portrait",
-              message: "Portrait",
-            })}
-      </p>
+      <p>{orientationLabel(layout.orientation)}</p>
       {layout.width !== undefined && layout.height !== undefined && (
         <p>
           {t({
@@ -124,52 +111,13 @@ export function WordSectionPlanPreview({
       <dl>
         {(
           [
-            [
-              t({
-                id: "officeAddin.word.authoring.marginTop",
-                message: "Top margin",
-              }),
-              margins.top,
-            ],
-            [
-              t({
-                id: "officeAddin.word.authoring.marginBottom",
-                message: "Bottom margin",
-              }),
-              margins.bottom,
-            ],
-            [
-              t({
-                id: "officeAddin.word.authoring.marginLeft",
-                message: "Left margin",
-              }),
-              margins.left,
-            ],
-            [
-              t({
-                id: "officeAddin.word.authoring.marginRight",
-                message: "Right margin",
-              }),
-              margins.right,
-            ],
-            [
-              t({
-                id: "officeAddin.word.authoring.headerDistance",
-                message: "Header from top",
-              }),
-              margins.header,
-            ],
-            [
-              t({
-                id: "officeAddin.word.authoring.footerDistance",
-                message: "Footer from bottom",
-              }),
-              margins.footer,
-            ],
-            [
-              t({ id: "officeAddin.word.authoring.gutter", message: "Gutter" }),
-              margins.gutter,
-            ],
+            [labels.top, margins.top],
+            [labels.bottom, margins.bottom],
+            [labels.left, margins.left],
+            [labels.right, margins.right],
+            [labels.header, margins.header],
+            [labels.footer, margins.footer],
+            [labels.gutter, margins.gutter],
           ] as const
         )
           .filter(([, value]) => value !== undefined)
@@ -188,69 +136,22 @@ export function WordSectionPlanPreview({
           })}
         </p>
       )}
-      {layout.break && (
-        <p>
-          {layout.break === "continuous"
-            ? t({
-                id: "officeAddin.word.authoring.continuousSection",
-                message: "Continue on the same page",
-              })
-            : layout.break === "evenPage"
-              ? t({
-                  id: "officeAddin.word.authoring.evenSection",
-                  message: "Start on the next even page",
-                })
-              : layout.break === "oddPage"
-                ? t({
-                    id: "officeAddin.word.authoring.oddSection",
-                    message: "Start on the next odd page",
-                  })
-                : t({
-                    id: "officeAddin.word.authoring.nextPageSection",
-                    message: "Start on the next page",
-                  })}
-        </p>
-      )}
+      {layout.break && <p>{sectionBreakLabel(layout.break)}</p>}
       {layout.differentFirstPage !== undefined && (
-        <p>
-          {layout.differentFirstPage
-            ? t({
-                id: "officeAddin.word.authoring.separateFirstPage",
-                message: "Different first-page header and footer",
-              })
-            : t({
-                id: "officeAddin.word.authoring.sameFirstPage",
-                message: "Use regular header and footer on the first page",
-              })}
-        </p>
+        <p>{firstPageLabel(layout.differentFirstPage)}</p>
       )}
       {layout.differentOddEvenPages !== undefined && (
-        <p>
-          {layout.differentOddEvenPages
-            ? t({
-                id: "officeAddin.word.authoring.separateOddEvenPages",
-                message: "Different headers and footers on odd and even pages",
-              })
-            : t({
-                id: "officeAddin.word.authoring.sameOddEvenPages",
-                message:
-                  "Use the same headers and footers on odd and even pages",
-              })}
-        </p>
+        <p>{oddEvenPagesLabel(layout.differentOddEvenPages)}</p>
       )}
       {!!Object.keys(headers).length && (
         <>
-          <strong>
-            {t({ id: "officeAddin.word.authoring.header", message: "Header" })}
-          </strong>
+          <strong>{storyLabel("header")}</strong>
           <ul>{binding(headers)}</ul>
         </>
       )}
       {!!Object.keys(footers).length && (
         <>
-          <strong>
-            {t({ id: "officeAddin.word.authoring.footer", message: "Footer" })}
-          </strong>
+          <strong>{storyLabel("footer")}</strong>
           <ul>{binding(footers)}</ul>
         </>
       )}

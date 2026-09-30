@@ -2,6 +2,7 @@ import { Card } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
 import type { WordSourceBlock } from "../utils/wordDocumentPlan";
+import type { WordPlanObjectKind } from "../utils/wordPlanReview";
 
 export function WordNativeBlockPreview({
   block,
@@ -28,8 +29,14 @@ export function WordNativeBlockPreview({
     </Card>
   );
 }
-function nativeKindLabel(kind: WordSourceBlock["nativeKind"]): string {
+export function nativeKindLabel(
+  kind: WordSourceBlock["nativeKind"] | WordPlanObjectKind,
+): string {
   switch (kind) {
+    case "drawing":
+      return t({ id: "officeAddin.word.rich.drawing", message: "Drawing" });
+    case "bookmark":
+      return t({ id: "officeAddin.word.rich.bookmark", message: "Bookmark" });
     case "table":
       return t({
         id: "officeAddin.word.authoring.nativeTable",

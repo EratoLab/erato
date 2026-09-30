@@ -277,3 +277,29 @@
   flex: 1;
   min-width: 7rem;
 }
+
+.word-plan-row__trailing {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--theme-spacing-control-gap);
+}
+.word-plan-row__layout {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: var(--theme-font-size-sm);
+  line-height: var(--theme-line-height-sm);
+}
+.word-plan-row__layout > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--theme-spacing-control-gap);
+}
+.word-plan-row__layout dt {
+  color: var(--review-muted, var(--theme-fg-secondary));
+}
+.word-plan-row__layout dd {
+  margin: 0;
+}

@@ -2,6 +2,7 @@ import { Card } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
+import { formatCentimeters } from "./wordPlanLabels";
 import {
   inventoryWordMedia,
   isWordImageSpec,
@@ -156,12 +157,14 @@ function cellStyle(value: WordTableCellFormatting | undefined): CSSProperties {
   };
 }
 
-function TablePreview({
+export function WordTablePreview({
   block,
   snapshot,
+  maxRows,
 }: {
   block: WordTableBlock<WordPlanBlock>;
   snapshot: WordAuthoringSnapshot;
+  maxRows?: number;
 }) {
   const original = useMemo(
     () => wordSourceTable(snapshot, block.sourceRef),
@@ -227,7 +230,7 @@ function TablePreview({
             </colgroup>
           )}
           <tbody>
-            {block.rows.map((row, rowIndex) => (
+            {block.rows.slice(0, maxRows).map((row, rowIndex) => (
               <tr key={rowIndex}>
                 {row.cells.map((cell, cellIndex) => {
                   const retained = original?.rows
@@ -246,22 +249,21 @@ function TablePreview({
                       rowSpan={cell.rowSpan}
                       style={cellStyle({ ...retained?.format, ...cell.format })}
                     >
-                      {cell.blocks === undefined ? (
-                        <>
-                          <p className="word-rich-preview__text">
-                            {retained?.text ||
-                              t({
-                                id: "officeAddin.word.rich.emptyCell",
-                                message: "Empty cell",
-                              })}
-                          </p>
-                          <span className="word-rich-preview__hint">
-                            {t({
-                              id: "officeAddin.word.rich.cellRetained",
-                              message: "Existing content retained",
+                      {cell.textEdit ? (
+                        <CellTextEdit
+                          before={
+                            cell.textEdit.expectedText ?? retained?.text ?? ""
+                          }
+                          after={cell.textEdit.text}
+                        />
+                      ) : cell.blocks === undefined ? (
+                        <p className="word-rich-preview__text word-rich-preview__retained">
+                          {retained?.text ||
+                            t({
+                              id: "officeAddin.word.rich.emptyCell",
+                              message: "Empty cell",
                             })}
-                          </span>
-                        </>
+                        </p>
                       ) : cell.blocks.length ? (
                         <WordRichBlockSequence
                           blocks={cell.blocks}
@@ -284,6 +286,31 @@ function TablePreview({
         </table>
       </div>
     </Card>
+  );
+}
+
+export function CellTextEdit({
+  before,
+  after,
+}: {
+  before: string;
+  after: string;
+}) {
+  return (
+    <p className="word-rich-preview__text">
+      {before && before !== after && (
+        <>
+          <del className="word-rich-preview__removed">{before}</del>{" "}
+        </>
+      )}
+      <ins className="word-rich-preview__inserted">
+        {after ||
+          t({
+            id: "officeAddin.word.rich.emptyCell",
+            message: "Empty cell",
+          })}
+      </ins>
+    </p>
   );
 }
 
@@ -423,14 +450,17 @@ function MediaDimensions({
 }: {
   value: WordImageSpec | WordDrawingSpec;
 }) {
-  return value.widthPt && value.heightPt ? (
+  if (!value.widthPt || !value.heightPt) return null;
+  const width = formatCentimeters(value.widthPt);
+  const height = formatCentimeters(value.heightPt);
+  return (
     <span className="word-rich-preview__hint">
       {t({
-        id: "officeAddin.word.rich.mediaDimensions",
-        message: `${value.widthPt} × ${value.heightPt} pt`,
+        id: "officeAddin.word.rich.mediaSize",
+        message: `${width} × ${height} cm`,
       })}
     </span>
-  ) : null;
+  );
 }
 function DrawingPreview({ drawing }: { drawing: WordDrawingSpec }) {
   const label =
@@ -620,7 +650,7 @@ function NativeEditPreview({
 
 export function WordRichBlockPreview({ block, snapshot }: PreviewProps) {
   if (block.type === "table")
-    return <TablePreview block={block} snapshot={snapshot} />;
+    return <WordTablePreview block={block} snapshot={snapshot} />;
   if (block.type === "image")
     return <ImagePreview image={block.image} snapshot={snapshot} />;
   if (block.type === "drawing")

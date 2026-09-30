@@ -8,6 +8,7 @@ import {
   WordRichBlockSequence,
 } from "./WordRichBlockPreview";
 import { WordSectionPlanPreview } from "./WordSectionPlanPreview";
+import { storyLabel } from "./wordPlanLabels";
 import { wordPlanOutput, wordSourceReadRefs } from "../utils/wordDocumentPlan";
 import { createWordListNumbering } from "../utils/wordPlanReview";
 
@@ -487,27 +488,4 @@ export function WordDocumentPlanReview({
       </div>
     </>
   );
-}
-function storyLabel(type: string): string {
-  switch (type) {
-    case "header":
-      return t({ id: "officeAddin.word.authoring.header", message: "Header" });
-    case "footer":
-      return t({ id: "officeAddin.word.authoring.footer", message: "Footer" });
-    case "footnote":
-      return t({
-        id: "officeAddin.word.authoring.footnote",
-        message: "Footnote",
-      });
-    case "endnote":
-      return t({
-        id: "officeAddin.word.authoring.endnote",
-        message: "Endnote",
-      });
-    default:
-      return t({
-        id: "officeAddin.word.authoring.comment",
-        message: "Comment",
-      });
-  }
 }

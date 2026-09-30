@@ -56,14 +56,11 @@ describe("rich Word approval previews", () => {
       "Table 2 rows · 2 columns",
     );
     expect(
-      screen.getByRole("columnheader", {
-        name: "Region Existing content retained",
-      }),
+      screen.getByRole("columnheader", { name: "Region" }),
     ).toBeInTheDocument();
     expect(screen.getByText("North")).toBeInTheDocument();
     expect(screen.getByText("€48,000")).toBeInTheDocument();
     expect(screen.queryByText("€42,000")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Existing content retained")).toHaveLength(3);
     expect(container.querySelector('[data-ui="card"]')).toBeInTheDocument();
   });
 
@@ -148,8 +145,38 @@ describe("rich Word approval previews", () => {
     );
     expect(screen.getByText("North")).toBeInTheDocument();
     expect(screen.getByText("Empty cell")).toBeInTheDocument();
-    expect(screen.getAllByText("Existing content retained")).toHaveLength(1);
     expect(screen.queryByText("€42,000")).not.toBeInTheDocument();
+  });
+
+  it("shows a table-cell text edit as the new text with the old text struck", () => {
+    const source = readySnapshot(mixedAuthoringXml());
+    const table = source.blocks.find((b) => b.nativeKind === "table")!;
+    preview(
+      {
+        id: "cell-edit",
+        type: "table",
+        sourceRef: table.ref,
+        rows: [
+          {
+            sourceIndex: 1,
+            cells: [
+              { sourceIndex: 0 },
+              {
+                sourceIndex: 1,
+                textEdit: { expectedText: "€42,000", text: "€48,000" },
+              },
+            ],
+          },
+        ],
+      },
+      source,
+    );
+    const cell = screen.getByRole("cell", { name: "€42,000 €48,000" });
+    expect(within(cell).getByText("€42,000").tagName).toBe("DEL");
+    expect(within(cell).getByText("€48,000").tagName).toBe("INS");
+    expect(screen.getByText("North")).toHaveClass(
+      "word-rich-preview__retained",
+    );
   });
 
   it("uses data from the captured Word image and shows its requested dimensions", () => {
@@ -171,7 +198,7 @@ describe("rich Word approval previews", () => {
     const img = screen.getByRole("img", { name: "Pilot logo" });
     expect(img.tagName).toBe("IMG");
     expect(img.getAttribute("src")).toMatch(/^data:image\/png;base64,iVBOR/);
-    expect(screen.getByText("144 × 72 pt")).toBeInTheDocument();
+    expect(screen.getByText("5.08 × 2.54 cm")).toBeInTheDocument();
   });
 
   it("uses captured attachment bytes for asset references", () => {
