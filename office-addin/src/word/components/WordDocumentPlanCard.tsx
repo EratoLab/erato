@@ -1,6 +1,5 @@
 import {
   Button,
-  Card,
   Alert,
   useChatContext,
   useHostArtifact,
@@ -12,11 +11,12 @@ import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
 import {
   isAutomaticWordRun,
   WordApplyButton,
+  wordBlockedReasonText,
   WordDiagnosticDetails,
+  WordReviewCard,
   WordReviewConfirm,
   WordReviewDetailsToggle,
   WordReviewGenerating,
-  WordStatusAlert,
   WordUndoLine,
   wordUndoLabel,
 } from "./WordReviewCardParts";
@@ -121,6 +121,7 @@ export function WordDocumentPlanCard({
     idle &&
     !generating &&
     !issue &&
+    !planReview?.noChange &&
     gate.allowed &&
     snapshot?.ownerMessageId === messageId &&
     offered;
@@ -348,20 +349,49 @@ export function WordDocumentPlanCard({
     );
   if (!plan || !planReview)
     return <Alert type="error">{wordAuthoringIssueText("invalid")}</Alert>;
-  const applyLabel = wordPlanApplyLabel(planReview, plan);
+  const applyLabel = wordPlanApplyLabel(planReview);
   const planTitle = wordPlanTitleText(planReview.title);
+  const blockedText = issue
+    ? wordAuthoringIssueText(issue, snapshot?.issueDetails)
+    : !gate.allowed
+      ? wordBlockedReasonText(gate.reason)
+      : snapshot?.ownerMessageId !== messageId
+        ? wordAuthoringIssueText("no-capture")
+        : !offered
+          ? t({
+              id: "officeAddin.word.authoring.notAllowed",
+              message:
+                "This action is unavailable under the current action settings.",
+            })
+          : planReview.noChange
+            ? t({
+                id: "officeAddin.word.planReview.noChange",
+                message:
+                  "This plan keeps the document as it is, so there is nothing to apply.",
+              })
+            : undefined;
   return (
-    <Card
-      variant="surface"
-      size="none"
-      ref={cardRef}
-      tabIndex={-1}
-      role="region"
-      aria-label={entry.displayLabel()}
-      className="word-review focus-ring"
-      data-testid="word-document-plan-card"
+    <WordReviewCard
+      cardRef={cardRef}
+      label={entry.displayLabel()}
+      testId="word-document-plan-card"
+      collapsed={collapsed}
+      detailsId={detailsId}
+      status={review.status}
+      statusMessage={status}
+      receipt={
+        <WordReviewReceipt
+          review={review}
+          kind="plan"
+          title={planTitle}
+          wholeDocument={planReview.scope.wholeFile}
+        />
+      }
+      trailing={
+        <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
+      }
       footer={
-        <div className="word-review__footer">
+        <>
           {(idle || applying) && offered && !confirmCard && (
             <WordApplyButton
               applying={applying}
@@ -531,61 +561,33 @@ export function WordDocumentPlanCard({
               {copyNote}
             </p>
           )}
-        </div>
+        </>
       }
     >
-      {collapsed && (
-        <WordReviewReceipt
-          review={review}
-          kind="plan"
-          title={planTitle}
-          wholeDocument={planReview.scope.wholeFile}
+      {!snapshot && artifact?.submittedCard && (
+        <WordSavedPlanPreview plan={plan} />
+      )}
+      {snapshot && (
+        <WordDocumentPlanReview
+          plan={plan}
+          snapshot={snapshot}
+          review={planReview}
+          onLocate={
+            idle && gate.allowed && !host.operationInProgress
+              ? (ref) => void locate(ref)
+              : undefined
+          }
         />
       )}
-      <div id={detailsId} hidden={collapsed}>
-        {!snapshot && artifact?.submittedCard && (
-          <WordSavedPlanPreview plan={plan} />
-        )}
-        {snapshot && (
-          <WordDocumentPlanReview
-            plan={plan}
-            snapshot={snapshot}
-            review={planReview}
-            onLocate={
-              idle && gate.allowed && !host.operationInProgress
-                ? (ref) => void locate(ref)
-                : undefined
-            }
-          />
-        )}
-        {idle &&
-          (issue ||
-            !gate.allowed ||
-            !offered ||
-            snapshot?.ownerMessageId !== messageId) && (
-            <Alert
-              type="info"
-              role="status"
-              className="m-3 [overflow-wrap:anywhere]"
-            >
-              {issue
-                ? wordAuthoringIssueText(issue, snapshot?.issueDetails)
-                : !gate.allowed || snapshot?.ownerMessageId !== messageId
-                  ? wordAuthoringIssueText("no-capture")
-                  : t({
-                      id: "officeAddin.word.authoring.notAllowed",
-                      message:
-                        "This action is unavailable under the current action settings.",
-                    })}
-            </Alert>
-          )}
-      </div>
-      {status && !collapsed && (
-        <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
+      {idle && blockedText && (
+        <Alert
+          type="info"
+          role="status"
+          className="m-3 [overflow-wrap:anywhere]"
+        >
+          {blockedText}
+        </Alert>
       )}
-      {!collapsed && (
-        <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
-      )}
-    </Card>
+    </WordReviewCard>
   );
 }

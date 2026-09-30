@@ -25,12 +25,64 @@ import type { WordDocumentDiagnostic } from "../utils/wordApplyDocumentPlan";
 import type { WordApplyStage } from "../utils/wordApplyProgress";
 import type { WordPlanRisk } from "../utils/wordPlanReview";
 import type { WordReviewStatus } from "../utils/wordReviewState";
-import type { ReactNode } from "react";
+import type { WordWriteBlockReason } from "../utils/wordWriteGate";
+import type { ComponentProps, ReactNode } from "react";
 
 export function WordReviewGenerating({ label }: { label: string }) {
   return (
     <Card variant="surface" size="sm">
       <SpinnerIcon label={label} />
+    </Card>
+  );
+}
+
+/** Shared chrome of every Word review card: receipt when collapsed, details, status. */
+export function WordReviewCard({
+  cardRef,
+  label,
+  testId,
+  footer,
+  collapsed,
+  receipt,
+  detailsId,
+  status,
+  statusMessage,
+  trailing,
+  children,
+}: {
+  cardRef: ComponentProps<typeof Card>["ref"];
+  label: string;
+  testId: string;
+  footer: ReactNode;
+  collapsed: boolean;
+  receipt: ReactNode;
+  detailsId: string;
+  status: WordReviewStatus;
+  statusMessage?: string;
+  /** Rendered after the status alert while the card is expanded. */
+  trailing?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card
+      variant="surface"
+      size="none"
+      ref={cardRef}
+      tabIndex={-1}
+      role="region"
+      aria-label={label}
+      className="word-review focus-ring"
+      data-testid={testId}
+      footer={<div className="word-review__footer">{footer}</div>}
+    >
+      {collapsed && receipt}
+      <div id={detailsId} hidden={collapsed}>
+        {children}
+      </div>
+      {statusMessage && !collapsed && (
+        <WordStatusAlert status={status}>{statusMessage}</WordStatusAlert>
+      )}
+      {!collapsed && trailing}
     </Card>
   );
 }
@@ -124,8 +176,10 @@ export function WordCheckFirst({
 }) {
   if (risks.length === 0) return null;
   return (
+    // Static review content with controls inside: a polite region, not an alert.
     <Alert
       type="warning"
+      role="status"
       title={t({
         id: "officeAddin.word.checkFirst.title",
         message: "Check first",
@@ -272,6 +326,65 @@ export function WordReviewConfirm<TSummary, TAction extends string>({
   );
 }
 
+function DisclosureButton({
+  open,
+  controls,
+  onToggle,
+  children,
+}: {
+  open: boolean;
+  controls: string;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      aria-expanded={open}
+      aria-controls={controls}
+      icon={<DisclosureChevron open={open} />}
+      onClick={onToggle}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/** A labelled toggle whose body mounts only while open. */
+export function WordDisclosure({
+  label,
+  openLabel = label,
+  className,
+  bodyClassName,
+  children,
+}: {
+  label: string;
+  openLabel?: string;
+  className?: string;
+  bodyClassName?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <div className={className}>
+      <DisclosureButton
+        open={open}
+        controls={id}
+        onToggle={() => setOpen(!open)}
+      >
+        {open ? openLabel : label}
+      </DisclosureButton>
+      <Collapse isOpen={open}>
+        <div id={id} className={bodyClassName}>
+          {open && children}
+        </div>
+      </Collapse>
+    </div>
+  );
+}
+
 export function WordReviewDetailsToggle({
   collapsed,
   controls,
@@ -282,14 +395,7 @@ export function WordReviewDetailsToggle({
   onToggle: () => void;
 }) {
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      aria-expanded={!collapsed}
-      aria-controls={controls}
-      icon={<DisclosureChevron open={!collapsed} />}
-      onClick={onToggle}
-    >
+    <DisclosureButton open={!collapsed} controls={controls} onToggle={onToggle}>
       {collapsed
         ? t({
             id: "officeAddin.word.review.showDetails",
@@ -299,7 +405,7 @@ export function WordReviewDetailsToggle({
             id: "officeAddin.word.review.hideDetails",
             message: "Hide details",
           })}
-    </Button>
+    </DisclosureButton>
   );
 }
 
@@ -350,46 +456,51 @@ export function WordDiagnosticDetails({
 }: {
   diagnostic: WordDocumentDiagnostic | undefined;
 }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
   const text = [diagnostic?.officeCode, diagnostic?.officeLocation]
     .filter(Boolean)
     .join(" · ");
   if (!text) return null;
   return (
-    <div className="word-review__diagnostic">
-      <Button
-        type="button"
-        variant="ghost"
-        aria-expanded={open}
-        aria-controls={id}
-        icon={<DisclosureChevron open={open} />}
-        onClick={() => setOpen(!open)}
-      >
+    <WordDisclosure
+      label={t({
+        id: "officeAddin.word.review.supportDetails",
+        message: "Details for support",
+      })}
+      className="word-review__diagnostic"
+      bodyClassName="word-review__diagnostic-body"
+    >
+      <p className="word-review__hint">
         {t({
-          id: "officeAddin.word.review.supportDetails",
-          message: "Details for support",
+          id: "officeAddin.word.authoring.wordDiagnostic",
+          message: "Word diagnostic",
         })}
-      </Button>
-      <Collapse isOpen={open}>
-        <div id={id} className="word-review__diagnostic-body">
-          {open && (
-            <>
-              <p className="word-review__hint">
-                {t({
-                  id: "officeAddin.word.authoring.wordDiagnostic",
-                  message: "Word diagnostic",
-                })}
-                {": "}
-                <code>{text}</code>
-              </p>
-              <CopyErrorButton report={`Word diagnostic: ${text}`} />
-            </>
-          )}
-        </div>
-      </Collapse>
-    </div>
+        {": "}
+        <code>{text}</code>
+      </p>
+      <CopyErrorButton report={`Word diagnostic: ${text}`} />
+    </WordDisclosure>
   );
+}
+
+export function wordShowInWordLabel(): string {
+  return t({
+    id: "officeAddin.word.review.showInWord",
+    message: "Show in Word",
+  });
+}
+
+export function wordBlockedReasonText(reason: WordWriteBlockReason): string {
+  return reason === "no-capture"
+    ? t({
+        id: "officeAddin.word.card.blocked.noCapture",
+        message:
+          "This pane no longer has the document snapshot this answer was written against. Include the document and ask again to apply changes.",
+      })
+    : t({
+        id: "officeAddin.word.card.blocked.identity",
+        message:
+          "This answer was written about a different document than the one open now, so it cannot be applied here.",
+      });
 }
 
 const FAILED_STATUSES: readonly WordReviewStatus[] = [

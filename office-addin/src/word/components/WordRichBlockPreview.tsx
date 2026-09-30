@@ -34,7 +34,11 @@ import type { CSSProperties } from "react";
 
 import "./wordRichPreview.css";
 
-type PreviewProps = { block: WordPlanBlock; snapshot: WordAuthoringSnapshot };
+type PreviewProps = {
+  block: WordPlanBlock;
+  snapshot: WordAuthoringSnapshot;
+  maxTableRows?: number;
+};
 const color = (value: string | undefined): string | undefined =>
   value && /^#?[a-fA-F0-9]{6}$/.test(value)
     ? `#${value.replace(/^#/, "")}`
@@ -289,6 +293,17 @@ export function WordTablePreview({
   );
 }
 
+/** del/ins are not announced by most screen readers, so name each side. */
+export function WordChangeSide({ side }: { side: "before" | "after" }) {
+  return (
+    <span className="sr-only">
+      {side === "before"
+        ? t({ id: "officeAddin.word.rich.before", message: "Before:" })
+        : t({ id: "officeAddin.word.rich.after", message: "After:" })}{" "}
+    </span>
+  );
+}
+
 export function CellTextEdit({
   before,
   after,
@@ -300,10 +315,14 @@ export function CellTextEdit({
     <p className="word-rich-preview__text">
       {before && before !== after && (
         <>
-          <del className="word-rich-preview__removed">{before}</del>{" "}
+          <del className="word-rich-preview__removed">
+            <WordChangeSide side="before" />
+            {before}
+          </del>{" "}
         </>
       )}
       <ins className="word-rich-preview__inserted">
+        {before && before !== after && <WordChangeSide side="after" />}
         {after ||
           t({
             id: "officeAddin.word.rich.emptyCell",
@@ -648,9 +667,19 @@ function NativeEditPreview({
   );
 }
 
-export function WordRichBlockPreview({ block, snapshot }: PreviewProps) {
+export function WordRichBlockPreview({
+  block,
+  snapshot,
+  maxTableRows,
+}: PreviewProps) {
   if (block.type === "table")
-    return <WordTablePreview block={block} snapshot={snapshot} />;
+    return (
+      <WordTablePreview
+        block={block}
+        snapshot={snapshot}
+        maxRows={maxTableRows}
+      />
+    );
   if (block.type === "image")
     return <ImagePreview image={block.image} snapshot={snapshot} />;
   if (block.type === "drawing")
@@ -792,9 +821,11 @@ function ControlDetails({
 export function WordRichBlockSequence({
   blocks,
   snapshot,
+  maxTableRows,
 }: {
   blocks: WordPlanBlock[];
   snapshot: WordAuthoringSnapshot;
+  maxTableRows?: number;
 }) {
   const ordinalOf = createWordListNumbering();
   return (
@@ -807,6 +838,7 @@ export function WordRichBlockSequence({
               key={block.id}
               block={block}
               snapshot={snapshot}
+              maxTableRows={maxTableRows}
             />
           );
         return (

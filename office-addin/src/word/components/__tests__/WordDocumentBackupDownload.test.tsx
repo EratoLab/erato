@@ -59,7 +59,15 @@ async function interruptedDocument() {
     snapshot: snapshot.token,
     readToken: snapshot.readToken,
     scope: "document",
-    entries: [{ kind: "keep", source: snapshot.blocks.map((b) => b.ref) }],
+    entries: snapshot.blocks.map((b, i) =>
+      i === snapshot.blocks.findIndex((x) => x.type === "paragraph")
+        ? {
+            kind: "replace",
+            source: [b.ref],
+            blocks: [{ id: "n1", type: "paragraph", text: "Rewritten." }],
+          }
+        : { kind: "keep", source: [b.ref] },
+    ),
     deleted: [],
   };
   const before = encodeWordDocumentBackup({
@@ -98,7 +106,7 @@ async function interruptedDocument() {
     </WordWriteProvider>,
     { wrapper: TestTheme },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Replace document" }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply change" }));
   await screen.findByRole("button", { name: "Download original document" });
   return { bytes, entry, container };
 }

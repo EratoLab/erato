@@ -1,5 +1,9 @@
 import { wordPlanOutput } from "./wordDocumentPlan";
-import { resolveWordSource, wordSourceDetails } from "./wordRichContent";
+import {
+  parseWordNestedRef,
+  resolveWordSource,
+  wordSourceDetails,
+} from "./wordRichContent";
 import { wordBlockChildEntries } from "./wordRichPlan";
 import { readWordTableContent } from "./wordTableContent";
 
@@ -205,10 +209,13 @@ export type WordPlanTitle =
   | { kind: "blocks-added"; n: number }
   | { kind: "paragraphs-changed"; n: number }
   | { kind: "removed"; n: number }
+  | { kind: "none" }
   | {
       kind: "sections";
+      /** Existing sections only; heading groups the plan inserts are counted in `added`. */
       changed: number;
       total: number;
+      added: number;
       parts: WordStoryType[];
       layout: boolean;
     }
@@ -235,6 +242,8 @@ export interface WordPlanReview {
   risks: WordPlanRisk[];
   /** No live capture: risks cannot be computed and are omitted. */
   riskUnknown: boolean;
+  /** Every source is kept in place and no document part changes: applying would write nothing new. */
+  noChange: boolean;
   groups: WordPlanGroup[];
   rows: WordPlanRow[];
   partsRows: WordPlanRow[];
@@ -308,8 +317,7 @@ export function wordSourceTable(
 
 const TEXT_TYPES = new Set(["paragraph", "heading", "list-item"]);
 const LARGE_NATIVE_KINDS = new Set(["table", "image", "drawing"]);
-const baseRef = (ref: string) =>
-  ref.replace(/_(table|image|drawing)_[1-9][0-9]*$/, "");
+const baseRef = (ref: string) => parseWordNestedRef(ref)?.parent ?? ref;
 const blockText = (block: WordPlanBlock): string =>
   block.text ||
   wordBlockChildEntries(block, "")
@@ -1041,7 +1049,6 @@ export function buildWordPlanReview(
 
   const bodyChanged = hasReplace || hasInsert || plan.deleted.length > 0;
   const partsChanged = !!(plan.stories?.length || plan.sections?.length);
-  const changedGroups = finalGroups.filter((g) => g.status !== "unchanged");
   const touchedSections = snapshot ? touched.size : 0;
   const variant: WordPlanReviewVariant | undefined = restructured
     ? "restructured"
@@ -1061,8 +1068,7 @@ export function buildWordPlanReview(
           touchedSections <= MEDIUM_MAX_TOUCHED_SECTIONS &&
           nothingRemoved &&
           !partsChanged &&
-          !largeInsert &&
-          !(plan.scope === "document" && snapshot?.fullDocument)
+          !largeInsert
         ? "small"
         : "medium";
 
@@ -1082,8 +1088,18 @@ export function buildWordPlanReview(
         r.sameShape &&
         r.changedCells.length > 0,
     );
-  const title: WordPlanTitle =
-    variant === "restructured"
+  const keptOrder = plan.entries.flatMap((e) =>
+    e.kind === "keep" ? e.source : [],
+  );
+  const noChange =
+    !bodyChanged &&
+    !partsChanged &&
+    plan.entries.length > 0 &&
+    (!snapshot || keptOrder.every((ref, i) => snapshot.blocks[i]?.ref === ref));
+  const existingGroups = finalGroups.filter((g) => g.status !== "new");
+  const title: WordPlanTitle = noChange
+    ? { kind: "none" }
+    : variant === "restructured"
       ? { kind: "summary" }
       : variant === "layout"
         ? {
@@ -1107,8 +1123,11 @@ export function buildWordPlanReview(
             : size === "large" && finalGroups.length > 1
               ? {
                   kind: "sections",
-                  changed: changedGroups.length,
-                  total: finalGroups.length,
+                  changed: existingGroups.filter(
+                    (g) => g.status !== "unchanged",
+                  ).length,
+                  total: existingGroups.length,
+                  added: finalGroups.length - existingGroups.length,
                   parts: storyTypes,
                   layout,
                 }
@@ -1137,13 +1156,9 @@ export function buildWordPlanReview(
         : type.startsWith("comment")
           ? "comments"
           : "notes";
-  if (snapshot) {
-    snapshot.stories?.forEach((s) => present.add(categoryOf(s.type)));
-    snapshot.preservedStories?.forEach((s) => present.add(categoryOf(s)));
-  } else {
-    present.add("headers");
-    present.add("footers");
-  }
+  // Without a capture nothing proves which parts exist, so none are named.
+  snapshot?.stories?.forEach((s) => present.add(categoryOf(s.type)));
+  snapshot?.preservedStories?.forEach((s) => present.add(categoryOf(s)));
   (plan.stories ?? []).forEach((s) => present.delete(categoryOf(s.type)));
   const unchanged = (
     ["headers", "footers", "notes", "comments"] as WordPlanScopePart[]
@@ -1157,6 +1172,7 @@ export function buildWordPlanReview(
     scope: { wholeFile: !!snapshot?.fullDocument, unchanged },
     risks,
     riskUnknown: !snapshot,
+    noChange,
     groups: finalGroups,
     rows,
     partsRows,

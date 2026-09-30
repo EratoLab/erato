@@ -2158,12 +2158,12 @@ msgid "officeAddin.word.card.alwaysAllowLocked"
 msgstr "Tu organización exige confirmación cada vez que esta acción se ejecuta automáticamente."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.card.blocked.identity"
 msgstr "Esta respuesta se refiere a un documento distinto del que está abierto y no se puede aplicar aquí."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.card.blocked.noCapture"
 msgstr "Este panel ya no tiene la captura del documento usada para esta respuesta. Incluye el documento y vuelve a preguntar para aplicar cambios."
 
@@ -2399,8 +2399,18 @@ msgstr "Ocultar vista previa"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.moreBlocks"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.planReview.newVersion"
 msgstr "Nueva versión"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.planReview.noChange"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2411,6 +2421,11 @@ msgstr "Solo cambios"
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.planReview.preview"
 msgstr "Vista previa del resultado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.riskUnknown"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2550,8 +2565,8 @@ msgstr "{count, plural, one {# ajuste cambiado} other {# ajustes cambiados}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.showInWord"
-msgstr "Mostrar en Word"
+#~ msgid "officeAddin.word.planRow.showInWord"
+#~ msgstr "Mostrar en Word"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: row.tables
@@ -2706,6 +2721,11 @@ msgid "officeAddin.word.planTitle.layoutOnly"
 msgstr "Actualizar {also}"
 
 #. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.none"
+msgstr ""
+
+#. js-lingui-explicit-id
 #. placeholder {0}: title.n
 #: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.planTitle.paragraphsAdded"
@@ -2727,6 +2747,16 @@ msgstr "{0, plural, one {Eliminar # elemento} other {Eliminar # elementos}}"
 #: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.planTitle.sections"
 msgstr "Actualizar {changed} de {total} secciones"
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.sectionsAdded"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.sectionsAddedAnd"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
@@ -3088,7 +3118,7 @@ msgid "officeAddin.word.review.showDetails"
 msgstr "Mostrar detalles"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.showInWord"
 msgstr "Mostrar en Word ↗"
 
@@ -3157,6 +3187,16 @@ msgstr "Puedes deshacerlo hasta que se aplique otro cambio o se cierre el panel.
 #: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.writeFailed"
 msgstr "Word se detuvo al aplicar los cambios. Es posible que algunos ya estén en el documento. Revísalo antes de continuar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.after"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.before"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx

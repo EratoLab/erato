@@ -145,6 +145,7 @@ describe("WordReviewCardParts", () => {
       { wrapper: TestTheme },
     );
     expect(screen.getByText("Check first")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(
       screen.getByRole("button", {
         name: "2 headings are no longer in the document",

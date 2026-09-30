@@ -141,8 +141,12 @@ describe("WordPlanChangeRow", () => {
     expect(toggle).toHaveTextContent("3 settings changed");
     fireEvent.click(toggle);
     const detail = document.querySelector(".word-plan-row__layout")!;
-    expect(detail).toHaveTextContent("Page width21 cm → 29.7 cm");
-    expect(detail).toHaveTextContent("OrientationPortrait → Landscape");
+    expect(detail).toHaveTextContent(
+      "Page widthBefore: 21 cm → After: 29.7 cm",
+    );
+    expect(detail).toHaveTextContent(
+      "OrientationBefore: Portrait → After: Landscape",
+    );
     expect(detail.textContent).not.toMatch(/\bpt\b/);
   });
 

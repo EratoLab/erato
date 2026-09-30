@@ -17,8 +17,10 @@ import { plural, t } from "@lingui/core/macro";
 import { useId, useState } from "react";
 
 import { nativeKindLabel } from "./WordNativeBlockPreview";
+import { wordShowInWordLabel } from "./WordReviewCardParts";
 import {
   CellTextEdit,
+  WordChangeSide,
   WordRichBlockPreview,
   WordTablePreview,
 } from "./WordRichBlockPreview";
@@ -401,8 +403,12 @@ function LayoutDetail({ row }: RowProps<"layout">) {
               <dd>
                 {before !== undefined && row.beforeAvailable && (
                   <>
-                    <del className="word-rich-preview__removed">{before}</del>
-                    {" → "}
+                    <del className="word-rich-preview__removed">
+                      <WordChangeSide side="before" />
+                      {before}
+                    </del>
+                    <span aria-hidden="true">{" → "}</span>
+                    <WordChangeSide side="after" />
                   </>
                 )}
                 {after}
@@ -516,10 +522,7 @@ export function WordPlanChangeRow({
       icon={<OpenNewWindowIcon className={ICON} />}
       onClick={() => onLocate(ref)}
     >
-      {t({
-        id: "officeAddin.word.planRow.showInWord",
-        message: "Show in Word",
-      })}
+      {wordShowInWordLabel()}
     </Button>
   ) : undefined;
   const shell = {

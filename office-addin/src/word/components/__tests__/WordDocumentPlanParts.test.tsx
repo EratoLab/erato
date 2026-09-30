@@ -103,10 +103,10 @@ describe("Word document parts and layout review", () => {
       within(partsSection()).getByRole("button", { name: /Page layout/ }),
     );
     expect(screen.getByText("Top margin").parentElement).toHaveTextContent(
-      /2\.54 cm\s*→\s*1\.48 cm/,
+      /2\.54 cm\s*→\s*After:\s*1\.48 cm/,
     );
     expect(screen.getByText("Orientation").parentElement).toHaveTextContent(
-      /Portrait\s*→\s*Landscape/,
+      /Portrait\s*→\s*After:\s*Landscape/,
     );
     expect(screen.queryByText("Bottom margin")).toBeNull();
     expect(container).not.toHaveTextContent(/\d pt\b/);

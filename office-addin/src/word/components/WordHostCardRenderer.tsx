@@ -16,11 +16,12 @@ import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
 import {
   isAutomaticWordRun,
   WordApplyButton,
+  wordBlockedReasonText,
+  WordReviewCard,
   WordReviewConfirm,
   WordReviewDetailsToggle,
   WordReviewGenerating,
   WordReviewHeader,
-  WordStatusAlert,
   WordUndoLine,
   wordUndoLabel,
 } from "./WordReviewCardParts";
@@ -56,7 +57,6 @@ import type {
   WordLocationResult,
   WordTrackingMode,
 } from "../utils/wordReviewLocation";
-import type { WordWriteBlockReason } from "../utils/wordWriteGate";
 import type { HostCardCodeBlockProps } from "@erato/frontend/library";
 
 type WordCardPayload =
@@ -229,6 +229,9 @@ function WordActionCard({
           identity: live.capture.identity,
           ooxml: run.snapshotOoxml,
         });
+      // An earlier Undo would restore a body without this insert, so the
+      // single slot ends here as the undo line promises.
+      else if (payload.kind === "insert" && run.ok) setRevertSlot(null);
       updateReview(batchKey, {
         applyStage: undefined,
         detailsExpanded: false,
@@ -363,7 +366,7 @@ function WordActionCard({
     );
   const blockedReason = gate.allowed
     ? undefined
-    : blockedReasonText(gate.reason);
+    : wordBlockedReasonText(gate.reason);
   const total = payload.kind === "edits" ? payload.edits.length : 0;
   const completed =
     review.status === "done" ||
@@ -453,19 +456,27 @@ function WordActionCard({
                     })
                   : undefined;
   return (
-    <Card
-      variant="surface"
-      size="none"
-      ref={cardRef}
-      tabIndex={-1}
-      role="region"
-      aria-label={entry.displayLabel()}
-      className="word-review focus-ring"
-      data-testid={
-        payload.kind === "edits" ? "word-edits-card" : "word-insert-card"
+    <WordReviewCard
+      cardRef={cardRef}
+      label={entry.displayLabel()}
+      testId={payload.kind === "edits" ? "word-edits-card" : "word-insert-card"}
+      collapsed={collapsed}
+      detailsId={detailsId}
+      status={review.status}
+      statusMessage={message}
+      receipt={
+        <WordReviewReceipt
+          review={review}
+          kind={payload.kind}
+          title={
+            payload.kind === "edits"
+              ? wordEditsTitleText(editedParagraphCount(payload.edits))
+              : undefined
+          }
+        />
       }
       footer={
-        <div className="word-review__footer">
+        <>
           {(idle || applying) && offeredActions.length > 0 && (
             <>
               {!confirmCard && (
@@ -627,69 +638,39 @@ function WordActionCard({
                 })}
               </p>
             )}
-        </div>
+        </>
       }
     >
-      {collapsed && (
-        <WordReviewReceipt
+      {payload.kind === "edits" ? (
+        <WordReviewPanel
+          edits={payload.edits}
+          capture={capture}
           review={review}
-          kind={payload.kind}
-          title={
-            payload.kind === "edits"
-              ? wordEditsTitleText(editedParagraphCount(payload.edits))
-              : undefined
-          }
+          tracking={review.tracking ?? tracking}
+          busy={operationInProgress}
+          blockedReason={blockedReason}
+          locationReason={locationReason}
+          onLocate={onLocate}
         />
+      ) : (
+        <WordReviewHeader
+          title={t({
+            id: "officeAddin.word.review.insertTitle",
+            message: "Insert text",
+          })}
+        >
+          <pre className="word-review__text">{payload.text}</pre>
+          {blockedReason && (
+            <Alert
+              type="info"
+              role="status"
+              className="[overflow-wrap:anywhere]"
+            >
+              {blockedReason}
+            </Alert>
+          )}
+        </WordReviewHeader>
       )}
-      <div id={detailsId} hidden={collapsed}>
-        {payload.kind === "edits" ? (
-          <WordReviewPanel
-            edits={payload.edits}
-            capture={capture}
-            review={review}
-            tracking={review.tracking ?? tracking}
-            busy={operationInProgress}
-            blockedReason={blockedReason}
-            locationReason={locationReason}
-            onLocate={onLocate}
-          />
-        ) : (
-          <WordReviewHeader
-            title={t({
-              id: "officeAddin.word.review.insertTitle",
-              message: "Insert text",
-            })}
-          >
-            <pre className="word-review__text">{payload.text}</pre>
-            {blockedReason && (
-              <Alert
-                type="info"
-                role="status"
-                className="[overflow-wrap:anywhere]"
-              >
-                {blockedReason}
-              </Alert>
-            )}
-          </WordReviewHeader>
-        )}
-      </div>
-      {message && !collapsed && (
-        <WordStatusAlert status={review.status}>{message}</WordStatusAlert>
-      )}
-    </Card>
+    </WordReviewCard>
   );
-}
-
-function blockedReasonText(reason: WordWriteBlockReason): string {
-  return reason === "no-capture"
-    ? t({
-        id: "officeAddin.word.card.blocked.noCapture",
-        message:
-          "This pane no longer has the document snapshot this answer was written against. Include the document and ask again to apply changes.",
-      })
-    : t({
-        id: "officeAddin.word.card.blocked.identity",
-        message:
-          "This answer was written about a different document than the one open now, so it cannot be applied here.",
-      });
 }

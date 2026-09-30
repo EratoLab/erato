@@ -4,6 +4,7 @@ import {
   Card,
   CountBadge,
   DisclosureChevron,
+  OpenNewWindowIcon,
   Row,
   SettledInfoPill,
   Select,
@@ -21,7 +22,7 @@ import {
   wordEditTotalsText,
   wordRevertedLabel,
 } from "./WordEditReport";
-import { WordReviewHeader } from "./WordReviewCardParts";
+import { WordReviewHeader, wordShowInWordLabel } from "./WordReviewCardParts";
 import { wordSizeChip } from "./wordPlanLabels";
 import {
   editExcerpt,
@@ -383,11 +384,9 @@ export function WordReviewPanel({
                 aria-expanded={open}
                 aria-controls={`${id}-edit-${index}`}
                 onClick={() => setExpanded(open ? null : index)}
-              >
-                <CountBadge variant="count">{index + 1}</CountBadge>
-                <span className="word-review__row-heading">
-                  <strong>{wordEditTargetLabel(edit)}</strong>
-                  <span>
+                leading={<CountBadge variant="count">{index + 1}</CountBadge>}
+                description={
+                  <>
                     {edit.text === ""
                       ? (edit.through ?? edit.paragraph) > edit.paragraph
                         ? t({
@@ -402,16 +401,22 @@ export function WordReviewPanel({
                           id: "officeAddin.word.review.replaceText",
                           message: "Text replacement · when requested",
                         })}
+                    <span className="word-review__excerpt">
+                      {editExcerpt(original ?? edit.text)}
+                    </span>
+                  </>
+                }
+                trailing={
+                  <span className="word-plan-row__trailing">
+                    <SettledInfoPill
+                      label={compactStatus(status, reverted)}
+                      toneClassName={statusTone(status, reverted)}
+                    />
+                    <DisclosureChevron open={open} />
                   </span>
-                  <span className="word-review__excerpt">
-                    {editExcerpt(original ?? edit.text)}
-                  </span>
-                </span>
-                <SettledInfoPill
-                  label={compactStatus(status, reverted)}
-                  toneClassName={statusTone(status, reverted)}
-                />
-                <DisclosureChevron open={open} />
+                }
+              >
+                {wordEditTargetLabel(edit)}
               </Row>
               {open && (
                 <div id={`${id}-edit-${index}`} className="word-review__detail">
@@ -434,6 +439,11 @@ export function WordReviewPanel({
                     type="button"
                     variant="link"
                     className="word-review__locate"
+                    icon={
+                      reason ? undefined : (
+                        <OpenNewWindowIcon className="size-4 shrink-0" />
+                      )
+                    }
                     disabled={busy || locating !== null || !!reason}
                     onClick={() => {
                       setLocating(index);
@@ -474,10 +484,7 @@ export function WordReviewPanel({
                           id: "officeAddin.word.review.locationUnavailable",
                           message: "Location unavailable",
                         })
-                      : t({
-                          id: "officeAddin.word.review.showInWord",
-                          message: "Show in Word ↗",
-                        })}
+                      : wordShowInWordLabel()}
                   </Button>
                   {!blockedReason && (reason || locationMessages[index]) && (
                     <p className="word-review__hint" role="status">

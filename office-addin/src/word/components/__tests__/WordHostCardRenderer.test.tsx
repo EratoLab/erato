@@ -647,6 +647,60 @@ describe("WordHostCardRenderer", () => {
       expect(screen.getByText("A drafted paragraph.")).toBeVisible();
     });
 
+    it("ends an earlier Undo once text is inserted", async () => {
+      word.word.setSelection("");
+      const artifact = makeArtifact();
+      mockUseChatContext.mockReturnValue({
+        messages: {
+          [artifact.messageId]: { id: artifact.messageId, role: "assistant" },
+        },
+        messageOrder: [artifact.messageId],
+        currentChatId: "chat-1",
+      });
+      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
+      mockUseHostArtifact.mockReturnValue(artifact);
+      const cards = (withInsert: boolean) => (
+        <WordWriteProvider
+          documentIdentity={IDENTITY}
+          capturesByAssistantMessageId={
+            new Map([[artifact.messageId, capture()]])
+          }
+        >
+          <WordHostCardRenderer
+            language="erato-word-edits"
+            content={EDITS_FENCE}
+          />
+          {withInsert && (
+            <WordHostCardRenderer
+              language="erato-word-insert"
+              content="A drafted paragraph."
+            />
+          )}
+        </WordWriteProvider>
+      );
+      const view = render(cards(false), { wrapper: TestTheme });
+      await flush();
+      fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
+      await flush();
+      expect(screen.getByTestId("word-revert-button")).toBeInTheDocument();
+
+      mockUseHostArtifact.mockReturnValue({
+        ...artifact,
+        facetId: COMPOSE_FACET,
+        allowedClientActions: [INSERT],
+      });
+      view.rerender(cards(true));
+      expect(screen.getByTestId("word-revert-button")).toBeInTheDocument();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Insert the text at the cursor" }),
+      );
+      await flush();
+      expect(
+        screen.getByText("Inserted into the document."),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("word-revert-button")).toBeNull();
+    });
+
     it("goes through the same identity gate as apply", () => {
       renderCard({
         artifact: makeArtifact({
@@ -887,14 +941,14 @@ describe("WordHostCardRenderer", () => {
       await flush();
       fireEvent.click(screen.getByRole("tab", { name: "Original" }));
       expect(word.word.selections()).toHaveLength(0);
-      fireEvent.click(screen.getByRole("button", { name: "Show in Word ↗" }));
+      fireEvent.click(screen.getByRole("button", { name: "Show in Word" }));
       await flush();
       expect(word.word.selections()).toEqual([["id-2"]]);
       expect(word.word.writes()).toEqual([]);
       fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
       await flush();
       fireEvent.click(screen.getByRole("button", { name: "Show details" }));
-      fireEvent.click(screen.getByRole("button", { name: "Show in Word ↗" }));
+      fireEvent.click(screen.getByRole("button", { name: "Show in Word" }));
       await flush();
       expect(word.word.selections()).toEqual([["id-2"], ["id-2"]]);
     });

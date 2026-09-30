@@ -346,6 +346,10 @@ describe("structural document review", () => {
       screen.getByRole("button", { name: "Apply changes" }),
     ).toBeDisabled();
     expect(screen.getByText("Recommendation")).toBeVisible();
+    expect(
+      screen.getByText(/could not be checked without the document/),
+    ).toBeVisible();
+    expect(screen.queryByText(/Headers, footers/)).toBeNull();
     expect(screen.queryByText(/reused ·|source blocks/)).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
   });
@@ -769,6 +773,72 @@ describe("structural document review", () => {
     ).toHaveTextContent("All four parts, briefly.");
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Scope/ })).toBeNull();
+  });
+  it("caps a long restructured preview and points its risks at it", async () => {
+    const state = setup(
+      packageXml(
+        heading("Intro") +
+          paragraph("Intro body.") +
+          heading("Rest") +
+          paragraph("Rest body."),
+      ),
+      (snapshot) =>
+        bodyPlan(snapshot, [
+          {
+            kind: "replace",
+            source: snapshot.blocks.map((block) => block.ref),
+            blocks: Array.from({ length: 60 }, (_, i) => ({
+              id: `p${i}`,
+              type: "paragraph" as const,
+              text: `Line ${i + 1}.`,
+            })),
+          },
+        ]),
+    );
+    state.mount();
+    const preview = screen.getByRole("region", {
+      name: "Preview of the result",
+    });
+    expect(preview).toHaveTextContent("Line 40.");
+    expect(preview).not.toHaveTextContent("Line 41.");
+    expect(preview).toHaveTextContent(
+      "20 more blocks not shown here. Check them in Word after applying.",
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "2 headings are no longer in the document",
+      }),
+    );
+    await waitFor(() => expect(preview).toHaveFocus());
+  });
+  it("offers nothing to apply when the plan keeps the document as it is", () => {
+    const state = setup(undefined, (snapshot) =>
+      bodyPlan(
+        snapshot,
+        snapshot.blocks.map((block) => ({ kind: "keep", source: [block.ref] })),
+      ),
+    );
+    state.mount();
+    expect(
+      screen.getByRole("heading", { name: "Nothing to change" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Apply changes" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/keeps the document as it is, so there is nothing/),
+    ).toBeInTheDocument();
+  });
+  it("says when the plan was written for another open document", () => {
+    mock.artifact.itemIdentity = "doc-B";
+    const state = setup();
+    state.mount();
+    expect(
+      screen.getByText(/written about a different document/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Apply changes" }),
+    ).toBeDisabled();
   });
   it("reports a stale plan without writing and without offering to apply again", async () => {
     const state = setup();

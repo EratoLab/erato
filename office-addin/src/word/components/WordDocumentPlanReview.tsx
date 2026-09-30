@@ -1,17 +1,23 @@
 import {
-  Button,
   Card,
-  Collapse,
   DisclosureChevron,
   Row,
   SegmentedControl,
 } from "@erato/frontend/library";
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { WordNativeBlockPreview } from "./WordNativeBlockPreview";
-import { WordPlanChangeRow, WordPlanStatusPill } from "./WordPlanChangeRow";
-import { WordCheckFirst, WordReviewHeader } from "./WordReviewCardParts";
+import {
+  PLAN_ROW_PREVIEW_ROWS,
+  WordPlanChangeRow,
+  WordPlanStatusPill,
+} from "./WordPlanChangeRow";
+import {
+  WordCheckFirst,
+  WordDisclosure,
+  WordReviewHeader,
+} from "./WordReviewCardParts";
 import { WordRichBlockSequence } from "./WordRichBlockPreview";
 import {
   wordPlanChip,
@@ -66,6 +72,9 @@ function PlanRows({
   );
 }
 
+/** Blocks drawn in the output preview; the rest are left for Word. */
+export const PLAN_PREVIEW_MAX_BLOCKS = 40;
+
 /** The document as it will read after applying, without source mapping. */
 function WordPlanOutputPreview({
   plan,
@@ -74,11 +83,13 @@ function WordPlanOutputPreview({
   plan: WordDocumentPlan;
   snapshot: WordAuthoringSnapshot;
 }) {
+  const output = wordPlanOutput(plan, snapshot);
+  const hidden = output.length - PLAN_PREVIEW_MAX_BLOCKS;
   const runs: (
     | { key: string; native: WordSourceBlock }
     | { key: string; blocks: WordPlanBlock[] }
   )[] = [];
-  for (const item of wordPlanOutput(plan, snapshot)) {
+  for (const item of output.slice(0, PLAN_PREVIEW_MAX_BLOCKS)) {
     if (item.block.type === "native") {
       runs.push({ key: item.key, native: item.block });
       continue;
@@ -92,6 +103,7 @@ function WordPlanOutputPreview({
   return (
     <div
       className="word-plan-review__preview focus-ring"
+      data-jump-target
       // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Keyboard users need to scroll the preview.
       tabIndex={0}
       role="region"
@@ -108,39 +120,22 @@ function WordPlanOutputPreview({
             key={run.key}
             blocks={run.blocks}
             snapshot={snapshot}
+            maxTableRows={PLAN_ROW_PREVIEW_ROWS}
           />
         ),
       )}
-    </div>
-  );
-}
-
-function CollapsedPreview({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <div className="word-plan-review__section">
-      <Button
-        type="button"
-        variant="ghost"
-        aria-expanded={open}
-        aria-controls={id}
-        icon={<DisclosureChevron open={open} />}
-        onClick={() => setOpen(!open)}
-      >
-        {open
-          ? t({
-              id: "officeAddin.word.planReview.hidePreview",
-              message: "Hide preview",
-            })
-          : t({
-              id: "officeAddin.word.planReview.showPreview",
-              message: "Preview the result",
-            })}
-      </Button>
-      <Collapse isOpen={open}>
-        <div id={id}>{open && children}</div>
-      </Collapse>
+      {hidden > 0 && (
+        <p className="word-review__hint">
+          {t({
+            id: "officeAddin.word.planReview.moreBlocks",
+            message: plural(hidden, {
+              one: "# more block not shown here. Check it in Word after applying.",
+              other:
+                "# more blocks not shown here. Check them in Word after applying.",
+            }),
+          })}
+        </p>
+      )}
     </div>
   );
 }
@@ -239,8 +234,12 @@ export function WordDocumentPlanReview({
       containerRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ??
         [],
     ).find((item) => item.dataset.rowKey === focusKey);
-    target?.querySelector<HTMLElement>("button, [tabindex]")?.focus();
-    target?.scrollIntoView?.({ block: "nearest" });
+    // A restructured plan draws its text as one preview instead of rows.
+    const focusable =
+      target?.querySelector<HTMLElement>("button, [tabindex]") ??
+      containerRef.current?.querySelector<HTMLElement>("[data-jump-target]");
+    focusable?.focus();
+    focusable?.scrollIntoView?.({ block: "nearest" });
     setFocusKey(null);
   }, [focusKey]);
 
@@ -295,6 +294,15 @@ export function WordDocumentPlanReview({
         scope={wordPlanScopeText(review, plan) || undefined}
       >
         {note}
+        {review.riskUnknown && (
+          <p className="word-review__hint">
+            {t({
+              id: "officeAddin.word.planReview.riskUnknown",
+              message:
+                "Removed headings, tables and objects could not be checked without the document.",
+            })}
+          </p>
+        )}
       </WordReviewHeader>
       <WordCheckFirst risks={review.risks} onJump={jump} />
       {large ? (
@@ -362,9 +370,19 @@ export function WordDocumentPlanReview({
           )}
           <PlanRows rows={bodyRows} {...rowsProps} />
           {review.size === "medium" && !restructured && snapshot && (
-            <CollapsedPreview>
+            <WordDisclosure
+              className="word-plan-review__section"
+              label={t({
+                id: "officeAddin.word.planReview.showPreview",
+                message: "Preview the result",
+              })}
+              openLabel={t({
+                id: "officeAddin.word.planReview.hidePreview",
+                message: "Hide preview",
+              })}
+            >
               <WordPlanOutputPreview plan={plan} snapshot={snapshot} />
-            </CollapsedPreview>
+            </WordDisclosure>
           )}
         </>
       )}

@@ -171,9 +171,11 @@ describe("rich Word approval previews", () => {
       },
       source,
     );
-    const cell = screen.getByRole("cell", { name: "€42,000 €48,000" });
-    expect(within(cell).getByText("€42,000").tagName).toBe("DEL");
-    expect(within(cell).getByText("€48,000").tagName).toBe("INS");
+    const cell = screen.getByRole("cell", {
+      name: /^Before:\s*€42,000\s+After:\s*€48,000$/,
+    });
+    expect(cell.querySelector("del")).toHaveTextContent("Before: €42,000");
+    expect(cell.querySelector("ins")).toHaveTextContent("After: €48,000");
     expect(screen.getByText("North")).toHaveClass(
       "word-rich-preview__retained",
     );

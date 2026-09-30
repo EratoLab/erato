@@ -92,18 +92,6 @@
   width: 100%;
   text-align: left;
 }
-.word-review__row-heading {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
-.word-review__row-heading > span {
-  color: var(--review-muted);
-  font-size: var(--theme-font-size-sm);
-  line-height: var(--theme-line-height-sm);
-  letter-spacing: var(--theme-letter-spacing-sm);
-}
 .word-review__excerpt {
   display: block;
   overflow: hidden;

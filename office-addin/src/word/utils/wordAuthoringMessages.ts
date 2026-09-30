@@ -67,7 +67,7 @@ export function wordAuthoringIssueText(
       return t({
         id: "officeAddin.word.authoring.incomplete",
         message:
-          "The complete document has not been read for this plan. Ask for a new rewrite that reads every source block.",
+          "The complete document has not been read for this plan. Ask for a new rewrite that reads the whole document.",
       });
     case "expired":
       return t({

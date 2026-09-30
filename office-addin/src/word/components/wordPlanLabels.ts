@@ -334,9 +334,30 @@ export function wordPlanTitleText(title: WordPlanTitle): string {
           other: "Remove # items",
         }),
       });
+    case "none":
+      return t({
+        id: "officeAddin.word.planTitle.none",
+        message: "Nothing to change",
+      });
     case "sections": {
-      const { changed, total } = title;
+      const { changed, total, added } = title;
       const also = extras(title.parts, title.layout);
+      if (added)
+        return also
+          ? t({
+              id: "officeAddin.word.planTitle.sectionsAddedAnd",
+              message: plural(added, {
+                one: `Update ${changed} of ${total} sections and ${also}, and add # section`,
+                other: `Update ${changed} of ${total} sections and ${also}, and add # sections`,
+              }),
+            })
+          : t({
+              id: "officeAddin.word.planTitle.sectionsAdded",
+              message: plural(added, {
+                one: `Update ${changed} of ${total} sections and add # section`,
+                other: `Update ${changed} of ${total} sections and add # sections`,
+              }),
+            });
       return also
         ? t({
             id: "officeAddin.word.planTitle.sectionsAnd",
@@ -489,7 +510,7 @@ export function wordPlanScopeText(
       sentence.charAt(0).toLocaleUpperCase(locale()) + sentence.slice(1),
     );
   }
-  if (review.scope.wholeFile && plan.scope === "document")
+  if (review.scope.wholeFile)
     sentences.push(
       t({
         id: "officeAddin.word.planScope.wholeFile",
@@ -499,11 +520,9 @@ export function wordPlanScopeText(
   return sentences.join(" ");
 }
 
-export function wordPlanApplyLabel(
-  review: WordPlanReview,
-  plan: WordDocumentPlan,
-): string {
-  if (review.scope.wholeFile && plan.scope === "document")
+/** "Replace document" is kept for large whole-file rewrites; smaller plans name the change. */
+export function wordPlanApplyLabel(review: WordPlanReview): string {
+  if (review.scope.wholeFile && review.size === "large")
     return t({
       id: "officeAddin.word.planAction.replace",
       message: "Replace document",

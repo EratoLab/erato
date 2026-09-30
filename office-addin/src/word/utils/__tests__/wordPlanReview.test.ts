@@ -10,6 +10,7 @@ import {
 import {
   buildWordPlanReview,
   createWordListNumbering,
+  wordEditBatchSize,
   wordLength,
 } from "../wordPlanReview";
 
@@ -217,6 +218,7 @@ describe("buildWordPlanReview", () => {
       kind: "sections",
       changed: 6,
       total: 13,
+      added: 0,
       parts: ["footer"],
       layout: false,
     });
@@ -440,7 +442,7 @@ describe("buildWordPlanReview", () => {
     ]);
     expect(review.scope).toEqual({
       wholeFile: false,
-      unchanged: ["headers", "footers", "layout"],
+      unchanged: ["layout"],
     });
   });
 
@@ -567,5 +569,172 @@ describe("plan helpers", () => {
     expect(wordLength(72)).toEqual({ value: 2.54, unit: "cm" });
     expect(wordLength(144)).toEqual({ value: 5.08, unit: "cm" });
     expect(wordLength(14.4)).toEqual({ value: 5.1, unit: "mm" });
+  });
+
+  it("reports a plan that keeps every source in place as nothing to change", () => {
+    const snapshot = readySnapshot();
+    const review = buildWordPlanReview(
+      plan(snapshot, keepAll(snapshot)),
+      snapshot,
+    );
+    expect(review.noChange).toBe(true);
+    expect(review.title).toEqual({ kind: "none" });
+    const moved = buildWordPlanReview(
+      plan(snapshot, keepAll(snapshot).reverse()),
+      snapshot,
+    );
+    expect(moved.noChange).toBe(false);
+  });
+
+  it("counts inserted sections apart from the existing ones they update", () => {
+    const snapshot = withParts(chapters(4));
+    const bodies = snapshot.blocks.filter((b) => b.type === "paragraph");
+    const review = buildWordPlanReview(
+      plan(
+        snapshot,
+        [
+          ...snapshot.blocks.map<WordPlanEntry>((b) =>
+            b.ref === bodies[0].ref
+              ? {
+                  kind: "replace",
+                  source: [b.ref],
+                  blocks: [para("n1", "New body")],
+                }
+              : { kind: "keep", source: [b.ref] },
+          ),
+          {
+            kind: "insert",
+            contextRefs: [snapshot.blocks[snapshot.blocks.length - 1].ref],
+            blocks: [
+              { id: "h5", type: "heading", level: 1, text: "Chapter 5" },
+            ],
+          },
+        ],
+        {
+          scope: "document",
+          stories: [
+            {
+              kind: "upsert",
+              type: "footer",
+              id: "f1",
+              blocks: [para("footer", "Final footer")],
+            },
+          ],
+        },
+      ),
+      snapshot,
+    );
+    expect(review.size).toBe("large");
+    expect(review.title).toMatchObject({
+      kind: "sections",
+      changed: 1,
+      total: 4,
+      added: 1,
+    });
+  });
+});
+
+describe("review size boundaries", () => {
+  const longSection = (paragraphs: number) =>
+    readySnapshot(
+      packageXml(
+        heading("Only") +
+          Array.from({ length: paragraphs }, (_, i) =>
+            paragraph(`Line ${i + 1}`),
+          ).join(""),
+      ),
+    );
+  const rewrite = (snapshot: WordAuthoringSnapshot, count: number) =>
+    plan(
+      snapshot,
+      snapshot.blocks.map<WordPlanEntry>((b, i) =>
+        i >= 1 && i <= count
+          ? {
+              kind: "replace",
+              source: [b.ref],
+              blocks: [para(`n-${b.ref}`, `New ${b.text}`)],
+            }
+          : { kind: "keep", source: [b.ref] },
+      ),
+    );
+
+  it.each([
+    [5, "small"],
+    [6, "medium"],
+    [39, "medium"],
+    [40, "large"],
+  ] as const)("sizes a paragraph-edit batch of %i as %s", (n, size) => {
+    expect(wordEditBatchSize(n)).toBe(size);
+  });
+
+  it.each([
+    [5, "small"],
+    [6, "medium"],
+    [39, "medium"],
+    [40, "large"],
+  ] as const)(
+    "sizes %i replaced blocks in one section as %s",
+    (count, size) => {
+      const snapshot = longSection(45);
+      expect(buildWordPlanReview(rewrite(snapshot, count), snapshot).size).toBe(
+        size,
+      );
+    },
+  );
+
+  it("treats a one-section body change plus a document part as large", () => {
+    const snapshot = withParts(chapters(1));
+    const body = snapshot.blocks.find((b) => b.type === "paragraph")!;
+    const review = buildWordPlanReview(
+      plan(
+        snapshot,
+        snapshot.blocks.map<WordPlanEntry>((b) =>
+          b.ref === body.ref
+            ? {
+                kind: "replace",
+                source: [b.ref],
+                blocks: [para("n1", "New body")],
+              }
+            : { kind: "keep", source: [b.ref] },
+        ),
+        {
+          scope: "document",
+          stories: [
+            {
+              kind: "upsert",
+              type: "footer",
+              id: "f1",
+              blocks: [para("footer", "Final footer")],
+            },
+          ],
+        },
+      ),
+      snapshot,
+    );
+    expect(review.touchedSections).toBe(1);
+    expect(review.size).toBe("large");
+  });
+
+  it("keeps a one-paragraph whole-file rewrite small", () => {
+    const snapshot = readySnapshot();
+    snapshot.fullDocument = true;
+    const review = buildWordPlanReview(
+      plan(
+        snapshot,
+        snapshot.blocks.map<WordPlanEntry>((b, i) =>
+          i === 0
+            ? {
+                kind: "replace",
+                source: [b.ref],
+                blocks: [para("n1", "New opening")],
+              }
+            : { kind: "keep", source: [b.ref] },
+        ),
+        { scope: "document" },
+      ),
+      snapshot,
+    );
+    expect(review.size).toBe("small");
+    expect(review.scope.wholeFile).toBe(true);
   });
 });
