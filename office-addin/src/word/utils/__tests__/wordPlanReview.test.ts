@@ -10,7 +10,6 @@ import {
 import {
   buildWordPlanReview,
   createWordListNumbering,
-  planCounts,
   wordLength,
 } from "../wordPlanReview";
 
@@ -544,15 +543,6 @@ describe("buildWordPlanReview", () => {
 });
 
 describe("plan helpers", () => {
-  it("counts plan entries", () => {
-    expect(planCounts(examplePlan("s"))).toEqual({
-      kept: 2,
-      replaced: 3,
-      removed: 1,
-      added: 1,
-    });
-  });
-
   it("numbers list items per list and restarts deeper levels", () => {
     const next = createWordListNumbering();
     const item = (list: string, level = 0) => ({

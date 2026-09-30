@@ -13,11 +13,13 @@ import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState } from "react";
 
 import {
+  isRevertedOutcome,
   statusLabel,
   wordEditsAppliedText,
   wordEditsTitleText,
   wordEditTargetLabel,
   wordEditTotalsText,
+  wordRevertedLabel,
 } from "./WordEditReport";
 import { WordReviewHeader } from "./WordReviewCardParts";
 import { wordSizeChip } from "./wordPlanLabels";
@@ -81,13 +83,8 @@ function compactStatus(
   status: WordEditStatus | undefined,
   reverted: boolean,
 ): string {
-  if (reverted && (status === "applied" || status === "failed"))
-    return t({ id: "officeAddin.word.review.reverted", message: "Reverted" });
-  if (status === "applied")
-    return t({
-      id: "officeAddin.word.report.status.applied",
-      message: "Applied",
-    });
+  if (isRevertedOutcome(status, reverted)) return wordRevertedLabel();
+  if (status === "applied") return statusLabel(status);
   if (status === "failed")
     return t({ id: "officeAddin.word.review.failed", message: "Failed" });
   if (status)
@@ -105,8 +102,7 @@ function statusTone(
   status: WordEditStatus | undefined,
   reverted: boolean,
 ): string {
-  if (reverted && (status === "applied" || status === "failed"))
-    return STATUS_TONE.reverted!;
+  if (isRevertedOutcome(status, reverted)) return STATUS_TONE.reverted!;
   return (
     (status && STATUS_TONE[status]) ??
     "bg-theme-bg-secondary text-theme-fg-secondary"
@@ -425,7 +421,7 @@ export function WordReviewPanel({
                       role="status"
                       className="[overflow-wrap:anywhere]"
                     >
-                      {reverted && (status === "applied" || status === "failed")
+                      {isRevertedOutcome(status, reverted)
                         ? t({
                             id: "officeAddin.word.review.bodyRestored",
                             message:

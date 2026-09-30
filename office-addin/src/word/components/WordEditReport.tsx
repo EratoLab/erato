@@ -44,6 +44,17 @@ export function statusLabel(status: WordEditStatus): string {
   }
 }
 
+export function isRevertedOutcome(
+  status: WordEditStatus | undefined,
+  reverted: boolean,
+): boolean {
+  return reverted && (status === "applied" || status === "failed");
+}
+
+export function wordRevertedLabel(): string {
+  return t({ id: "officeAddin.word.review.reverted", message: "Reverted" });
+}
+
 export function wordEditTargetLabel(target: {
   paragraph: number;
   through?: number;
@@ -96,7 +107,7 @@ export function formatWordEditReport(
   return outcomes
     .map(
       (outcome) =>
-        `${wordEditTargetLabel(outcome)}: ${reverted && (outcome.status === "applied" || outcome.status === "failed") ? t({ id: "officeAddin.word.review.reverted", message: "Reverted" }) : statusLabel(outcome.status)}${
+        `${wordEditTargetLabel(outcome)}: ${isRevertedOutcome(outcome.status, reverted) ? wordRevertedLabel() : statusLabel(outcome.status)}${
           outcome.excerpt ? ` — ${outcome.excerpt}` : ""
         }`,
     )

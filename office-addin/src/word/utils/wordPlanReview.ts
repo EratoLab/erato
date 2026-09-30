@@ -244,29 +244,6 @@ export interface WordPlanReview {
   checkInWord: boolean;
 }
 
-export interface WordPlanCounts {
-  kept: number;
-  replaced: number;
-  removed: number;
-  added: number;
-}
-export function planCounts(plan: WordDocumentPlan): WordPlanCounts {
-  return plan.entries.reduce(
-    (counts, entry) => {
-      if (entry.kind === "keep") counts.kept += entry.source.length;
-      else if (entry.kind === "replace") counts.replaced += entry.source.length;
-      else counts.added += entry.blocks.length;
-      return counts;
-    },
-    {
-      kept: 0,
-      replaced: 0,
-      added: 0,
-      removed: plan.deleted.reduce((n, d) => n + d.source.length, 0),
-    },
-  );
-}
-
 /** Word restarts deeper levels of the same list whenever a shallower item follows. */
 export function createWordListNumbering(): (block: {
   type: string;

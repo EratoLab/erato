@@ -2768,7 +2768,6 @@ msgstr "Paragraphs {0}-{1}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
-#: src/word/components/WordReviewPanel.tsx
 msgid "officeAddin.word.report.status.applied"
 msgstr "Applied"
 
@@ -3034,7 +3033,6 @@ msgstr "Restore body"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
-#: src/word/components/WordReviewPanel.tsx
 msgid "officeAddin.word.review.reverted"
 msgstr "Reverted"
 

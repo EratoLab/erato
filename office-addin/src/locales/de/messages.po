@@ -2768,7 +2768,6 @@ msgstr "Absätze {0}–{1}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
-#: src/word/components/WordReviewPanel.tsx
 msgid "officeAddin.word.report.status.applied"
 msgstr "Angewendet"
 
@@ -3034,7 +3033,6 @@ msgstr "Dokumentinhalt wiederherstellen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
-#: src/word/components/WordReviewPanel.tsx
 msgid "officeAddin.word.review.reverted"
 msgstr "Rückgängig gemacht"
 
