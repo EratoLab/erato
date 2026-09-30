@@ -11,6 +11,7 @@ import {
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "./wordDocumentXml";
+import { wordTableCellScope } from "./wordTableCellScope";
 import {
   expandWordTableCellSubmission,
   WordTableCellSubmissionError,
@@ -63,14 +64,32 @@ export function createWordDocumentSubmissionExecutor(
       if (previous) return previous;
       // Redelivery returns its receipt even if Apply has since consumed the
       // capture. New calls still require the original completed, active read.
+      const scoped = wordTableCellScope(snapshot, input.readToken);
+      if (scoped && !("table_cell" in input))
+        return {
+          ok: false,
+          error:
+            "A scoped read permits only a concise table_cell submission. Complete the full read for plans or repairs.",
+          validationErrors: [
+            {
+              path: "/readToken",
+              code: "outside-read-scope",
+              message:
+                "Scoped tokens cannot submit full plans or draft repairs.",
+            },
+          ],
+        };
       if (
         snapshot.revoked ||
         snapshot.used ||
         snapshot.issue ||
-        !snapshot.readToken ||
-        wordSourceReadRefs(snapshot).some((ref) => !snapshot.read.has(ref)) ||
         input.snapshot !== snapshot.token ||
-        input.readToken !== snapshot.readToken
+        (!scoped &&
+          (!snapshot.readToken ||
+            wordSourceReadRefs(snapshot).some(
+              (ref) => !snapshot.read.has(ref),
+            ) ||
+            input.readToken !== snapshot.readToken))
       )
         return prepareWordDocumentSubmission(input, context, session);
       if (session.drafts.accepted)
@@ -108,7 +127,7 @@ export function createWordDocumentSubmissionExecutor(
             ...prepared,
             result: { ...(prepared.result as object), plan: value },
           };
-      } else if (prepared.validationErrors?.length) {
+      } else if (!scoped && prepared.validationErrors?.length) {
         const feedback = session.drafts.reject(
           value as unknown as Record<string, unknown>,
           prepared.validationErrors,

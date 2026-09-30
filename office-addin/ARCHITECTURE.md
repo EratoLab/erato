@@ -217,3 +217,54 @@ use the router.
 - `manifests/manifest.json` remains as a parked combined Outlook + Teams
   manifest reference for future work. It is not staged or used by the current
   standalone Teams distribution or local Teams package flow.
+
+## Scoped Word cell reads
+
+Authoring sends document identity, snapshot token, status and paragraph counts;
+`wordActionFacet.ts` withholds the paragraph excerpt and heading outline. The
+capture remains complete on the host. Review-only facets retain their excerpt.
+An authoring capture has no initially writable paragraph ordinals, so paragraph
+replacement artifacts cannot target text withheld from the model. Broader
+requests use the existing paginated read and complete-plan workflow. Application
+and customer instructions, permissions and MCP routing are unchanged.
+
+`read_document_blocks` has an additive `table_cell` query with an explicit
+`documentIdentity`. `wordTableCellRead.ts` searches the immutable inventory using
+nearby text, first-row headers, first-column labels, current cell text and exact
+source coordinates. These labels describe physical positions, not inferred
+semantic roles. Search filters are bounded ANDed substrings. Results distinguish
+not-found, ambiguous, unsupported and ready; ambiguity yields at most five
+candidates per offset page and grants no authorization. Snippets are at most
+256 serialized UTF-8 bytes and explicitly indicate truncation. A ready result
+contains the exact target text (at most 4096 UTF-8 bytes), coordinates and a
+random cell-scoped read token. At most 16 scopes are retained per request.
+
+`wordTableCellScope.ts` binds that token to snapshot, identity, fingerprint and
+exact original cell/text. Chat and assistant-request ownership remains in
+`WordDocumentReadSession`. Targeted reads never mark body, story or layout
+records as read and never create the full-read token. Scoped submissions must
+use the existing concise envelope; full plans and repairs still require full
+coverage. The host expands the concise edit into a complete plan. Validation
+compares the entire normalized plan to the deterministic one-cell expansion,
+including all keep entries and retained rows/cells, before ordinary validation,
+compilation and preservation verification. Review and Apply repeat this scope
+check; Apply also retains live fingerprint, document URL, tracking, consent and
+recovery checks. A read grants no write permission.
+
+The expanded plan is kept in the accepted receipt for review, as with the
+existing concise implementation. Acceptance terminates model generation; later
+receipt replay excludes the plan. Rejections on the scoped path expose bounded
+diagnostics, with no materialized draft. All submission forms retain the shared
+three-attempt deployment budget and existing argument/source/plan limits.
+
+Discovery, scope authorization and plan validation use snapshot data and XML
+utilities without Office.js calls. This keeps the editing core reusable by a
+future server MCP or WASM host. This change uses the existing Office.js package
+writer; it adds no native cell writer, MCP server or WASM runtime.
+
+The supported operation remains one plain-text paragraph with uniform run
+formatting in a standalone, unmerged body table. Rich/multiple paragraphs,
+wrappers, nesting, merged cells, oversized target context, row changes and
+formatting changes use complete reads and existing authoring. Existing capture
+and conservative model-budget eligibility limits are unchanged. Offline tests
+establish bounded context and preservation, not model-token or latency savings.

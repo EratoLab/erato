@@ -10,6 +10,7 @@ import {
 } from "./wordDocumentPlan";
 import { wordImageAssetMetadata } from "./wordImageAssetData";
 import { wordSourceDetails } from "./wordRichContent";
+import { readWordTableCell } from "./wordTableCellRead";
 
 import type { WordAuthoringSnapshot, WordPlanRun } from "./wordDocumentPlan";
 import type {
@@ -93,6 +94,7 @@ export class WordDocumentReadSession {
     if (!snapshot) return;
     snapshot.revoked = false;
     snapshot.read.clear();
+    snapshot.cellReads = new Map();
     snapshot.readToken = undefined;
     snapshot.ownerMessageId = undefined;
     const pages: Fragment[][] = [[]];
@@ -257,6 +259,16 @@ export class WordDocumentReadSession {
         "",
       );
     const args = input as Record<string, unknown>;
+    if ("table_cell" in args) {
+      if (snapshot.revoked || snapshot.used || snapshot.issue)
+        return fail(
+          "This capture is unavailable; use a fresh request or the existing complete-read workflow.",
+          snapshot.issue ??
+            (snapshot.used ? "snapshot-used" : "snapshot-revoked"),
+        );
+      return readWordTableCell(snapshot, args);
+    }
+
     if (
       Object.keys(args).some((k) => k !== "snapshot" && k !== "cursor") ||
       typeof args.snapshot !== "string" ||

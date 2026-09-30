@@ -1,4 +1,5 @@
 import { WORDPROCESSING_NS as W } from "./wordBlockFormatting";
+import { wordTableCellScope } from "./wordTableCellScope";
 import {
   parseWordTableCellTextEdit,
   wordTableCellTextEditIssue,
@@ -49,7 +50,8 @@ export function expandWordTableCellSubmission(
       "expired",
       "Use the current request's active, available snapshot.",
     );
-  if (!snapshot.readToken || input.readToken !== snapshot.readToken)
+  const scope = wordTableCellScope(snapshot, input.readToken);
+  if ((!snapshot.readToken || input.readToken !== snapshot.readToken) && !scope)
     return fail(
       "/readToken",
       "incomplete-read",
@@ -74,6 +76,18 @@ export function expandWordTableCellSubmission(
       "/table_cell",
       "table-cell-shape",
       "Use snapshot, readToken and table_cell:{sourceRef,rowIndex,cellIndex,expectedText,text}; indexes are original zero-based row and physical cell indexes.",
+    );
+  if (
+    scope &&
+    (edit.sourceRef !== scope.sourceRef ||
+      edit.rowIndex !== scope.rowIndex ||
+      edit.cellIndex !== scope.cellIndex ||
+      edit.expectedText !== scope.expectedText)
+  )
+    return fail(
+      "/table_cell",
+      "outside-read-scope",
+      "The scoped read authorizes only its exact returned cell and expectedText.",
     );
   const textEdit = parseWordTableCellTextEdit({
     expectedText: edit.expectedText,
@@ -139,7 +153,7 @@ export function expandWordTableCellSubmission(
   return {
     version: 1,
     snapshot: snapshot.token,
-    readToken: snapshot.readToken,
+    readToken: input.readToken as string,
     scope: "body",
     deleted: [],
     entries: snapshot.blocks.map((block) =>

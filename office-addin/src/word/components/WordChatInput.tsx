@@ -248,9 +248,15 @@ export function WordChatInput({
                 identity: documentIdentity,
                 authoring: build?.authoring,
                 ordinalMap: build?.ordinalMap ?? new Map(),
-                paragraphsSent: build?.coverage.paragraphsSent ?? 0,
-                renderedOrdinals: build?.renderedOrdinals ?? new Set(),
-                partialOrdinal: build?.partialOrdinal ?? null,
+                paragraphsSent: build?.authoring
+                  ? 0
+                  : (build?.coverage.paragraphsSent ?? 0),
+                renderedOrdinals: build?.authoring
+                  ? new Set()
+                  : (build?.renderedOrdinals ?? new Set()),
+                partialOrdinal: build?.authoring
+                  ? null
+                  : (build?.partialOrdinal ?? null),
               }
             : null,
         );

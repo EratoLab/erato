@@ -30,7 +30,7 @@ export function resolveWordActionFacet(
       args: {
         document_name: input.documentName,
         document_identity: input.documentIdentity,
-        ...input.documentArgs,
+        ...wordAuthoringDocumentArgs(input.documentArgs),
         document_snapshot: input.authoring.token,
         authoring_status: input.authoring.issue
           ? `${input.authoring.issue}${input.authoring.issueDetails?.length ? ` (${input.authoring.issueDetails.join(", ")})` : ""}`
@@ -63,5 +63,21 @@ export function resolveWordActionFacet(
       document_name: input.documentName,
       document_identity: input.documentIdentity,
     },
+  };
+}
+
+/** Authoring starts with identity and counts only. Tools explicitly deliver content.
+ * Used by hosts independently of Office.js; review-only captures keep their excerpt.
+ */
+export function wordAuthoringDocumentArgs(
+  args: WordDocumentArgs,
+): WordDocumentArgs {
+  return {
+    ...args,
+    document_text: "",
+    heading_outline: "",
+    paragraphs_sent: "0",
+    truncation_note:
+      "Document content is available through read_document_blocks; no paragraphs are included in this initial context.",
   };
 }
