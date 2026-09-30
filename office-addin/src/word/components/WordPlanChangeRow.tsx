@@ -460,19 +460,20 @@ function unchangedLabel(row: WordPlanRowOf<"unchanged">): string {
   });
 }
 
+/** New and Removed are on the status pill, so the description only names the break. */
 function layoutDescription(row: WordPlanRowOf<"layout">): string {
-  if (row.status === "removed")
-    return t({
-      id: "officeAddin.word.planRow.sectionRemoved",
-      message: "Section break removed",
-    });
+  const sectionBreak = t({
+    id: "officeAddin.word.planRow.sectionBreak",
+    message: "Section break",
+  });
+  if (row.status === "removed") return sectionBreak;
   const count = row.changes.length + (row.stories?.length ?? 0);
   return row.status === "new"
     ? t({
-        id: "officeAddin.word.planRow.newSection",
+        id: "officeAddin.word.planRow.newSectionSettings",
         message: plural(count, {
-          one: "New section · # setting",
-          other: "New section · # settings",
+          one: `${sectionBreak} · # setting`,
+          other: `${sectionBreak} · # settings`,
         }),
       })
     : t({

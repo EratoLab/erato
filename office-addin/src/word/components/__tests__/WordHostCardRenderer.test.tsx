@@ -396,9 +396,10 @@ describe("WordHostCardRenderer", () => {
         "Bravo, changed by the user.",
       );
       expect(word.word.paragraphs()[2].text).toBe("Charlie, revised.");
-      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-        "1 applied · 1 skipped · 0 failed",
-      );
+      const receipt = screen.getByTestId("word-review-receipt");
+      expect(receipt).toHaveTextContent("1 edit applied");
+      expect(receipt).toHaveTextContent("1 skipped");
+      expect(receipt).not.toHaveTextContent("failed");
       fireEvent.click(screen.getByRole("button", { name: "Show details" }));
       expect(screen.getByTestId("word-edit-report")).toHaveTextContent(
         "the paragraph changed since you asked",
@@ -429,6 +430,13 @@ describe("WordHostCardRenderer", () => {
       expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
         "Undone: Change 1 paragraph",
       );
+      fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+      expect(
+        screen.getByRole("heading", { name: "Undone: Change 1 paragraph" }),
+      ).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: /Paragraph 2/ }));
+      expect(screen.queryByText(/restored to just before/)).toBeNull();
+      expect(screen.queryByText(/Revert is unavailable/)).toBeNull();
     });
 
     it("offers Revert when Word rejected the write half-way", async () => {
@@ -480,7 +488,7 @@ describe("WordHostCardRenderer", () => {
       expect(screen.queryByTestId("word-revert-button")).toBeNull();
       expect(word.word.writes()).toEqual([]);
       expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-        "0 applied · 1 skipped · 0 failed",
+        "0 edits applied1 skipped",
       );
     });
   });
@@ -589,10 +597,9 @@ describe("WordHostCardRenderer", () => {
         screen.getByRole("heading", { name: "Change 1 paragraph" }),
       ).toBeInTheDocument();
       expect(screen.getByText("Small")).toBeInTheDocument();
-      expect(
-        screen.getByText("3 of 3 paragraphs included in full"),
-      ).toBeInTheDocument();
+      expect(screen.queryByText(/included in full/)).toBeNull();
       expect(screen.queryByText(/Request window/)).toBeNull();
+      expect(screen.queryByText(/\d+ of \d+ shown/)).toBeNull();
       const run = word.word.run.getMockImplementation()!;
       let release!: () => void;
       const held = new Promise<void>((resolve) => {
@@ -736,8 +743,12 @@ describe("WordHostCardRenderer", () => {
 
       const cards = screen.getAllByTestId("confirmation-card");
       expect(cards).toHaveLength(1);
-      const description = screen.getByTestId("confirmation-description");
-      expect(description).toHaveTextContent("Apply all 2 edits reviewed above");
+      expect(
+        screen.getByTestId("confirmation-description"),
+      ).toBeEmptyDOMElement();
+      expect(
+        screen.getByText(/Every proposed edit is applied/),
+      ).toBeInTheDocument();
       expect(screen.getAllByTestId("word-edits-list")).toHaveLength(1);
       expect(screen.getByTestId("word-edits-list")).toHaveTextContent(
         "Paragraph 1",
@@ -908,9 +919,6 @@ describe("WordHostCardRenderer", () => {
       });
       await flush();
       expect(
-        screen.getByText("107 of 320 paragraphs included in full"),
-      ).toBeInTheDocument();
-      expect(
         screen.getByText(/Request window: paragraphs 1–107\./),
       ).toBeInTheDocument();
       fireEvent.change(screen.getByRole("combobox", { name: "Paragraphs" }), {
@@ -926,9 +934,7 @@ describe("WordHostCardRenderer", () => {
       await flush();
       const receipt = within(screen.getByTestId("word-review-receipt"));
       expect(receipt.getByText("38 edits applied")).toBeVisible();
-      expect(
-        receipt.getByText("38 applied · 3 skipped · 0 failed"),
-      ).toBeVisible();
+      expect(receipt.getByText("3 skipped")).toBeVisible();
       expect(screen.getByTestId("word-edits-list")).not.toBeVisible();
       expect(
         word.word.writes().filter((write) => write.kind === "insertText"),

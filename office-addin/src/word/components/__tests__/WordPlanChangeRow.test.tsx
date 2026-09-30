@@ -162,7 +162,10 @@ describe("WordPlanChangeRow", () => {
         { property: "columnSpacing", length: true, after: 36 },
       ],
     });
-    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    const toggle = screen.getByRole("button", { expanded: false });
+    expect(toggle).toHaveTextContent("Section break · 2 settings");
+    expect(toggle.textContent?.match(/New/g)).toHaveLength(1);
+    fireEvent.click(toggle);
     expect(
       screen.getByText(
         "Previous values were not captured; only the new settings are shown.",

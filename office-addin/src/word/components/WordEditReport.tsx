@@ -89,15 +89,25 @@ export function wordEditsAppliedText(applied: number): string {
       });
 }
 
-export function wordEditTotalsText({
-  applied,
+/** The applied count is already the title, so only what did not apply is listed. */
+export function wordEditExceptionsText({
   skipped,
   failed,
 }: ReturnType<typeof wordEditCounts>): string {
-  return t({
-    id: "officeAddin.word.review.totals",
-    message: `${applied} applied · ${skipped} skipped · ${failed} failed`,
-  });
+  return [
+    skipped &&
+      t({
+        id: "officeAddin.word.review.skippedCount",
+        message: `${skipped} skipped`,
+      }),
+    failed &&
+      t({
+        id: "officeAddin.word.review.failedCount",
+        message: `${failed} failed`,
+      }),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function formatWordEditReport(

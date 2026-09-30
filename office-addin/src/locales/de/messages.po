@@ -2088,11 +2088,6 @@ msgid "officeAddin.word.authoring.sameOddEvenPages"
 msgstr "Auf geraden und ungeraden Seiten dieselben Kopf- und Fußzeilen verwenden"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordSavedPlanPreview.tsx
-msgid "officeAddin.word.authoring.savedDraftSources"
-msgstr "Der eingereichte Entwurf ist gespeichert. Ursprüngliche Inhalte und Bilddaten sind in dieser Sitzung nicht verfügbar. Zum Anwenden ist eine neue Anfrage mit dem Dokument erforderlich."
-
-#. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.sectionOrder"
 msgstr "Dieser Vorschlag ordnet Abschnittsgrenzen neu an, ohne ihr neues Layout festzulegen. Bitte fordere einen vollständigen, geordneten Abschnittsplan an."
@@ -2404,13 +2399,13 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.newVersion"
-msgstr "Neue Fassung"
+msgid "officeAddin.word.planReview.moreBlocksShort"
+msgstr "{hidden, plural, one {# weiterer Block wird hier nicht angezeigt.} other {# weitere Blöcke werden hier nicht angezeigt.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPlanCard.tsx
-msgid "officeAddin.word.planReview.noChange"
-msgstr ""
+#: src/word/components/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.newVersion"
+msgstr "Neue Fassung"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2424,8 +2419,8 @@ msgstr "Vorschau des Ergebnisses"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.riskUnknown"
-msgstr ""
+msgid "officeAddin.word.planReview.savedDraft"
+msgstr "Gespeicherter Entwurf: Das ursprüngliche Dokument ist in dieser Sitzung nicht verfügbar, daher konnten entfernte Überschriften, Tabellen und Objekte nicht geprüft werden."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2498,8 +2493,8 @@ msgstr "Neu"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.newSection"
-msgstr "{count, plural, one {Neuer Abschnitt · # Einstellung} other {Neuer Abschnitt · # Einstellungen}}"
+msgid "officeAddin.word.planRow.newSectionSettings"
+msgstr "{count, plural, one {{sectionBreak} · # Einstellung} other {{sectionBreak} · # Einstellungen}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: row.objects
@@ -2555,8 +2550,8 @@ msgstr "{0, plural, one {# Zeile entfernt} other {# Zeilen entfernt}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.sectionRemoved"
-msgstr "Abschnittsumbruch entfernt"
+msgid "officeAddin.word.planRow.sectionBreak"
+msgstr "Abschnittsumbruch"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
@@ -2864,14 +2859,8 @@ msgstr "Automatische Aktion gemäß deiner Einstellung „Immer erlauben“."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.batchScope"
-msgstr "Wendet alle {total} vorgeschlagenen Änderungen an, auch durch Filter ausgeblendete Zeilen. Veränderte Absätze werden übersprungen und aufgelistet."
-
-#. js-lingui-explicit-id
-#: src/word/components/WordHostCardRenderer.tsx
-#: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.bodyRestored"
-msgstr "Der Dokumentinhalt wurde auf den Stand direkt vor diesem Stapel zurückgesetzt."
+msgid "officeAddin.word.review.batchScopeAll"
+msgstr "Jede vorgeschlagene Änderung wird angewendet, auch in durch Filter ausgeblendeten Zeilen. Seit der Anfrage veränderte Absätze werden übersprungen und aufgelistet."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
@@ -2914,16 +2903,6 @@ msgid "officeAddin.word.review.consent"
 msgstr "Diesen Stapel anwenden?"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.consentScope"
-msgstr "Alle oben geprüften {total} Änderungen auf das geöffnete Dokument anwenden."
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.coverage"
-msgstr "{complete} von {documentTotal} Absätzen vollständig eingeschlossen"
-
-#. js-lingui-explicit-id
 #. placeholder {0}: capture.paragraphsSent
 #: src/word/components/WordReviewPanel.tsx
 msgid "officeAddin.word.review.coverageWindow"
@@ -2951,6 +2930,11 @@ msgid "officeAddin.word.review.failed"
 msgstr "Fehlgeschlagen"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.review.failedCount"
+msgstr "{failed} fehlgeschlagen"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
 #~ msgid "officeAddin.word.review.fullComparison"
 #~ msgstr ""
@@ -2959,11 +2943,6 @@ msgstr "Fehlgeschlagen"
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.hideDetails"
 msgstr "Details ausblenden"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.historical"
-msgstr "Original bei der Anfrage / vorgeschlagener Ersatz aus diesem Stapel. Spätere Änderungen in Word sind hier nicht enthalten."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
@@ -2989,6 +2968,11 @@ msgstr "Die vorgeschlagenen Änderungen sind unvollständig oder ungültig. Bitt
 #: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.keepText"
 msgstr "Aktuellen Text behalten"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.laterChangesHidden"
+msgstr "Spätere Änderungen in Word sind hier nicht enthalten."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
@@ -3053,8 +3037,8 @@ msgstr "Vorgeschlagen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.replaceText"
-msgstr "Textersatz · Stand bei Anfrage"
+msgid "officeAddin.word.review.replaceTextShort"
+msgstr "Textersatz"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
@@ -3065,11 +3049,6 @@ msgstr "Dokumentinhalt wiederherstellen"
 #: src/word/components/WordEditReport.tsx
 msgid "officeAddin.word.review.reverted"
 msgstr "Rückgängig gemacht"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.revertedComparison"
-msgstr "Vergleich aus dem rückgängig gemachten Stapel."
 
 #. js-lingui-explicit-id
 #. placeholder {0}: applied + failed
@@ -3134,6 +3113,11 @@ msgid "officeAddin.word.review.skipped"
 msgstr "Übersprungen"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.review.skippedCount"
+msgstr "{skipped} übersprungen"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.supportDetails"
 msgstr "Details für den Support"
@@ -3142,11 +3126,6 @@ msgstr "Details für den Support"
 #: src/word/components/WordReviewPanel.tsx
 #~ msgid "officeAddin.word.review.textViews"
 #~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/word/components/WordEditReport.tsx
-msgid "officeAddin.word.review.totals"
-msgstr "{applied} angewendet · {skipped} übersprungen · {failed} fehlgeschlagen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

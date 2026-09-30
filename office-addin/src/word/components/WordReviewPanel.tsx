@@ -19,7 +19,7 @@ import {
   wordEditsAppliedText,
   wordEditsTitleText,
   wordEditTargetLabel,
-  wordEditTotalsText,
+  wordEditExceptionsText,
   wordRevertedLabel,
 } from "./WordEditReport";
 import { WordReviewHeader, wordShowInWordLabel } from "./WordReviewCardParts";
@@ -186,6 +186,18 @@ export function WordReviewPanel({
   const complete = capture?.renderedOrdinals.size ?? 0;
   const documentTotal = capture?.ordinalMap.size ?? 0;
   const title = wordEditsTitleText(editedParagraphCount(edits));
+  const totals =
+    review.status === "write-failed"
+      ? t({
+          id: "officeAddin.word.review.uncertainTotals",
+          message: `${skipped} skipped · ${failed} writes unconfirmed`,
+        })
+      : reverted
+        ? t({
+            id: "officeAddin.word.review.revertedTotals",
+            message: `${applied + failed} edits reverted · ${skipped} skipped`,
+          })
+        : wordEditExceptionsText(counts);
   return (
     <div data-testid={historical ? "word-edit-report" : "word-review-panel"}>
       <WordReviewHeader
@@ -207,28 +219,10 @@ export function WordReviewPanel({
                 ? wordEditsAppliedText(applied)
                 : title
         }
-        scope={
-          capture
-            ? t({
-                id: "officeAddin.word.review.coverage",
-                message: `${complete} of ${documentTotal} paragraphs included in full`,
-              })
-            : undefined
-        }
       >
-        {historical && (
+        {historical && totals && (
           <p className="word-review__hint" role="status">
-            {review.status === "write-failed"
-              ? t({
-                  id: "officeAddin.word.review.uncertainTotals",
-                  message: `${skipped} skipped · ${failed} writes unconfirmed`,
-                })
-              : reverted
-                ? t({
-                    id: "officeAddin.word.review.revertedTotals",
-                    message: `${applied + failed} edits reverted · ${skipped} skipped`,
-                  })
-                : wordEditTotalsText(counts)}
+            {totals}
           </p>
         )}
         {review.automatic && historical && (
@@ -276,16 +270,10 @@ export function WordReviewPanel({
         <p className="word-review__hint">{trackingDescription(tracking)}</p>
         {historical && (
           <p className="word-review__hint">
-            {reverted
-              ? t({
-                  id: "officeAddin.word.review.revertedComparison",
-                  message: "Comparison from the reverted batch.",
-                })
-              : t({
-                  id: "officeAddin.word.review.historical",
-                  message:
-                    "Original when requested / proposed replacement from this batch. Later changes in Word are not reflected here.",
-                })}
+            {t({
+              id: "officeAddin.word.review.laterChangesHidden",
+              message: "Later changes in Word are not reflected here.",
+            })}
           </p>
         )}
         {blockedReason && (
@@ -343,12 +331,14 @@ export function WordReviewPanel({
             <option value="failed">{compactStatus("failed", false)}</option>
           </Select>
         )}
-        <span>
-          {t({
-            id: "officeAddin.word.review.shown",
-            message: `${filtered.length} of ${total} shown`,
-          })}
-        </span>
+        {filtered.length !== total && (
+          <span>
+            {t({
+              id: "officeAddin.word.review.shown",
+              message: `${filtered.length} of ${total} shown`,
+            })}
+          </span>
+        )}
       </div>
       <ol className="word-review__list" data-testid="word-edits-list">
         {filtered.map(({ edit, index }) => {
@@ -398,8 +388,8 @@ export function WordReviewPanel({
                             message: "Clear paragraph text",
                           })
                       : t({
-                          id: "officeAddin.word.review.replaceText",
-                          message: "Text replacement · when requested",
+                          id: "officeAddin.word.review.replaceTextShort",
+                          message: "Text replacement",
                         })}
                     <span className="word-review__excerpt">
                       {editExcerpt(original ?? edit.text)}
@@ -420,21 +410,17 @@ export function WordReviewPanel({
               </Row>
               {open && (
                 <div id={`${id}-edit-${index}`} className="word-review__detail">
-                  {status && (
-                    <Alert
-                      type="info"
-                      role="status"
-                      className="[overflow-wrap:anywhere]"
-                    >
-                      {isRevertedOutcome(status, reverted)
-                        ? t({
-                            id: "officeAddin.word.review.bodyRestored",
-                            message:
-                              "The document body was restored to just before this batch.",
-                          })
-                        : statusLabel(status)}
-                    </Alert>
-                  )}
+                  {status &&
+                    status !== "applied" &&
+                    !isRevertedOutcome(status, reverted) && (
+                      <Alert
+                        type="info"
+                        role="status"
+                        className="[overflow-wrap:anywhere]"
+                      >
+                        {statusLabel(status)}
+                      </Alert>
+                    )}
                   <Button
                     type="button"
                     variant="link"

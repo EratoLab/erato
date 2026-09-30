@@ -433,28 +433,22 @@ function WordActionCard({
               message:
                 "The body could not be fully restored. Some content may already have been restored. The single-use Revert has been consumed.",
             })
-          : review.status === "reverted"
+          : review.status === "reverting"
             ? t({
-                id: "officeAddin.word.review.bodyRestored",
-                message:
-                  "The document body was restored to just before this batch.",
+                id: "officeAddin.word.review.reverting",
+                message: "Restoring the document body…",
               })
-            : review.status === "reverting"
+            : review.status === "denied"
               ? t({
-                  id: "officeAddin.word.review.reverting",
-                  message: "Restoring the document body…",
+                  id: "officeAddin.word.review.denied",
+                  message: "Proposal declined. Nothing was written.",
                 })
-              : review.status === "denied"
+              : review.status === "done" && payload.kind === "insert"
                 ? t({
-                    id: "officeAddin.word.review.denied",
-                    message: "Proposal declined. Nothing was written.",
+                    id: "officeAddin.word.card.inserted",
+                    message: "Inserted into the document.",
                   })
-                : review.status === "done" && payload.kind === "insert"
-                  ? t({
-                      id: "officeAddin.word.card.inserted",
-                      message: "Inserted into the document.",
-                    })
-                  : undefined;
+                : undefined;
   return (
     <WordReviewCard
       cardRef={cardRef}
@@ -479,20 +473,19 @@ function WordActionCard({
         <>
           {(idle || applying) && offeredActions.length > 0 && (
             <>
-              {!confirmCard && (
-                <p className="word-review__hint">
-                  {payload.kind === "edits"
-                    ? t({
-                        id: "officeAddin.word.review.batchScope",
-                        message: `This applies all ${total} proposed edits, including rows hidden by filters. Changed paragraphs will be skipped and listed.`,
-                      })
-                    : t({
-                        id: "officeAddin.word.card.confirmInsert",
-                        message:
-                          "This inserts the text below into the open document at the cursor. A selected passage is never replaced.",
-                      })}
-                </p>
-              )}
+              <p className="word-review__hint">
+                {payload.kind === "edits"
+                  ? t({
+                      id: "officeAddin.word.review.batchScopeAll",
+                      message:
+                        "Every proposed edit is applied, including rows hidden by filters. Paragraphs changed since the request are skipped and listed.",
+                    })
+                  : t({
+                      id: "officeAddin.word.card.confirmInsert",
+                      message:
+                        "This inserts the text below into the open document at the cursor. A selected passage is never replaced.",
+                    })}
+              </p>
               {!confirmCard && (
                 <WordApplyButton
                   applying={applying}
@@ -520,14 +513,6 @@ function WordActionCard({
                       id: "officeAddin.word.review.insertConsent",
                       message: "Insert this text?",
                     })
-              }
-              description={
-                payload.kind === "edits"
-                  ? t({
-                      id: "officeAddin.word.review.consentScope",
-                      message: `Apply all ${total} edits reviewed above to the open document.`,
-                    })
-                  : entry.displayLabel()
               }
               allowOnceLabel={applyLabel}
               canApply={gate.allowed && idle}
@@ -627,9 +612,9 @@ function WordActionCard({
           {review.outcomes.some(
             (item) => item.status === "applied" || item.status === "failed",
           ) &&
+            review.status === "done" &&
             !collapsed &&
-            !canRevert &&
-            review.status !== "reverting" && (
+            !canRevert && (
               <p className="word-review__hint">
                 {t({
                   id: "officeAddin.word.review.revertExpired",

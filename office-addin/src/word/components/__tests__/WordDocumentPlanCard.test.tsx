@@ -338,7 +338,6 @@ describe("structural document review", () => {
       </WordWriteProvider>,
       { wrapper: TestTheme },
     );
-    expect(screen.getByText(/The submitted draft is saved/)).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Change 5 items" }),
     ).toBeVisible();
@@ -347,7 +346,7 @@ describe("structural document review", () => {
     ).toBeDisabled();
     expect(screen.getByText("Recommendation")).toBeVisible();
     expect(
-      screen.getByText(/could not be checked without the document/),
+      screen.getByText(/original document is not available in this session/),
     ).toBeVisible();
     expect(screen.queryByText(/Headers, footers/)).toBeNull();
     expect(screen.queryByText(/reused ·|source blocks/)).toBeNull();
@@ -825,9 +824,8 @@ describe("structural document review", () => {
     expect(
       screen.getByRole("button", { name: "Apply changes" }),
     ).toBeDisabled();
-    expect(
-      screen.getByText(/keeps the document as it is, so there is nothing/),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
   it("says when the plan was written for another open document", () => {
     mock.artifact.itemIdentity = "doc-B";

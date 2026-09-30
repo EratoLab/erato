@@ -363,13 +363,7 @@ export function WordDocumentPlanCard({
               message:
                 "This action is unavailable under the current action settings.",
             })
-          : planReview.noChange
-            ? t({
-                id: "officeAddin.word.planReview.noChange",
-                message:
-                  "This plan keeps the document as it is, so there is nothing to apply.",
-              })
-            : undefined;
+          : undefined;
   return (
     <WordReviewCard
       cardRef={cardRef}
@@ -409,7 +403,6 @@ export function WordDocumentPlanCard({
                 id: "officeAddin.word.planReview.consent",
                 message: "Apply the changes reviewed above?",
               })}
-              description={undefined}
               allowOnceLabel={applyLabel}
               canApply={ready}
               operationInProgress={host.operationInProgress}

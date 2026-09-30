@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 
-import { wordEditsAppliedText, wordEditTotalsText } from "./WordEditReport";
+import { wordEditsAppliedText, wordEditExceptionsText } from "./WordEditReport";
 import { wordEditCounts } from "../utils/wordEditPlan";
 
 import type { WordReviewState } from "../utils/wordReviewState";
@@ -17,7 +17,10 @@ export function WordReviewReceipt({
   title?: string;
   wholeDocument?: boolean;
 }) {
-  const counts = wordEditCounts(review.outcomes);
+  const exceptions =
+    kind === "edits" && review.status === "done"
+      ? wordEditExceptionsText(wordEditCounts(review.outcomes))
+      : "";
   return (
     <div
       className="word-review__receipt focus-ring"
@@ -52,11 +55,9 @@ export function WordReviewReceipt({
                     id: "officeAddin.word.card.inserted",
                     message: "Inserted into the document.",
                   })
-                : wordEditsAppliedText(counts.applied)}
+                : wordEditsAppliedText(wordEditCounts(review.outcomes).applied)}
       </strong>
-      {kind === "edits" && review.status === "done" && (
-        <span className="word-review__hint">{wordEditTotalsText(counts)}</span>
-      )}
+      {exceptions && <span className="word-review__hint">{exceptions}</span>}
       {review.automatic && review.status === "done" && (
         <span className="word-review__hint">
           {t({

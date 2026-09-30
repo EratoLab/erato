@@ -38,7 +38,6 @@ import type {
   WordPlanReview,
   WordPlanRow,
 } from "../utils/wordPlanReview";
-import type { ReactNode } from "react";
 
 type RowsProps = {
   rows: WordPlanRow[];
@@ -79,9 +78,11 @@ export const PLAN_PREVIEW_MAX_BLOCKS = 40;
 function WordPlanOutputPreview({
   plan,
   snapshot,
+  checkInWordShown,
 }: {
   plan: WordDocumentPlan;
   snapshot: WordAuthoringSnapshot;
+  checkInWordShown: boolean;
 }) {
   const output = wordPlanOutput(plan, snapshot);
   const hidden = output.length - PLAN_PREVIEW_MAX_BLOCKS;
@@ -126,14 +127,22 @@ function WordPlanOutputPreview({
       )}
       {hidden > 0 && (
         <p className="word-review__hint">
-          {t({
-            id: "officeAddin.word.planReview.moreBlocks",
-            message: plural(hidden, {
-              one: "# more block not shown here. Check it in Word after applying.",
-              other:
-                "# more blocks not shown here. Check them in Word after applying.",
-            }),
-          })}
+          {checkInWordShown
+            ? t({
+                id: "officeAddin.word.planReview.moreBlocksShort",
+                message: plural(hidden, {
+                  one: "# more block not shown here.",
+                  other: "# more blocks not shown here.",
+                }),
+              })
+            : t({
+                id: "officeAddin.word.planReview.moreBlocks",
+                message: plural(hidden, {
+                  one: "# more block not shown here. Check it in Word after applying.",
+                  other:
+                    "# more blocks not shown here. Check them in Word after applying.",
+                }),
+              })}
         </p>
       )}
     </div>
@@ -167,7 +176,12 @@ function SectionGroup({
   const rows = showUnchanged
     ? group.rows
     : group.rows.filter((row) => row.family !== "unchanged");
-  const summary = wordPlanGroupSummaryText(group.summary);
+  // The status pill already says the whole section goes.
+  const summary = wordPlanGroupSummaryText(
+    group.status === "removed"
+      ? { ...group.summary, removed: 0 }
+      : group.summary,
+  );
   return (
     <li className="word-plan-review__group" data-group-key={group.key}>
       <Card
@@ -205,14 +219,12 @@ export function WordDocumentPlanReview({
   snapshot,
   review,
   onLocate,
-  note,
 }: {
   plan: WordDocumentPlan;
   /** Absent for a saved plan: rows then come from plan data alone. */
   snapshot?: WordAuthoringSnapshot;
   review: WordPlanReview;
   onLocate?: (ref: string) => void;
-  note?: ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [openRows, setOpenRows] = useState<ReadonlySet<string>>(new Set());
@@ -293,13 +305,12 @@ export function WordDocumentPlanReview({
         title={wordPlanTitleText(review.title)}
         scope={wordPlanScopeText(review, plan) || undefined}
       >
-        {note}
         {review.riskUnknown && (
           <p className="word-review__hint">
             {t({
-              id: "officeAddin.word.planReview.riskUnknown",
+              id: "officeAddin.word.planReview.savedDraft",
               message:
-                "Removed headings, tables and objects could not be checked without the document.",
+                "Saved draft: the original document is not available in this session, so removed headings, tables and objects could not be checked.",
             })}
           </p>
         )}
@@ -365,7 +376,11 @@ export function WordDocumentPlanReview({
                   message: "New version",
                 })}
               </h4>
-              <WordPlanOutputPreview plan={plan} snapshot={snapshot} />
+              <WordPlanOutputPreview
+                plan={plan}
+                snapshot={snapshot}
+                checkInWordShown={review.checkInWord}
+              />
             </section>
           )}
           <PlanRows rows={bodyRows} {...rowsProps} />
@@ -381,7 +396,11 @@ export function WordDocumentPlanReview({
                 message: "Hide preview",
               })}
             >
-              <WordPlanOutputPreview plan={plan} snapshot={snapshot} />
+              <WordPlanOutputPreview
+                plan={plan}
+                snapshot={snapshot}
+                checkInWordShown={review.checkInWord}
+              />
             </WordDisclosure>
           )}
         </>

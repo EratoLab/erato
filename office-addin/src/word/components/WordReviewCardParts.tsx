@@ -274,7 +274,7 @@ export function WordReviewConfirm<TSummary, TAction extends string>({
 }: {
   card: ConfirmCardState<TSummary, TAction>;
   title: string;
-  description: ReactNode;
+  description?: ReactNode;
   allowOnceLabel: string;
   canApply: boolean;
   operationInProgress: boolean;
