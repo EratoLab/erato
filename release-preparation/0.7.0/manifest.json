@@ -1,6 +1,6 @@
 {
   "base_sha": "3d40f674f1829f6cb8be535bdc10678602cfac43",
-  "head_sha": "4c48c4fa821a42c294393b884730f5e5123bf486",
+  "head_sha": "e59d81a7e82f98fbc9408abbde11c4f751cfce25",
   "prs": {
     "780": {
       "subject": "Merge pull request #780 from EratoLab/feature/ermain-410-create-seperate-migrator-docker-image",
@@ -2550,6 +2550,36 @@
       "subject": "Repair rejected Word plans with small patches (#1265)",
       "commits": [
         "4c48c4fa821a42c294393b884730f5e5123bf486"
+      ]
+    },
+    "1269": {
+      "subject": "Refresh apt index before installing sqitch in backend lint (#1269)",
+      "commits": [
+        "e1c809051e7a60a10abbee6850b37aec27dcba04"
+      ]
+    },
+    "1266": {
+      "subject": "Merge pull request #1266 from EratoLab/feature/ermain-881-add-tests-that-enforce-that-sidecar-protocol-schemas-and-the",
+      "commits": [
+        "48d49b2abbc6642ad5ec12a8a82cfb1217041016"
+      ]
+    },
+    "1268": {
+      "subject": "Per-tool Ask/Never decisions for client tools, enforced in the backend like MCP (#1268)",
+      "commits": [
+        "907db45e2acba3671a92a1713014c04dfde831f6"
+      ]
+    },
+    "1270": {
+      "subject": "Edit Word table cells with bounded document reads (#1270)",
+      "commits": [
+        "215f91364f6443166ef46da71fa205d8a2966d03"
+      ]
+    },
+    "1271": {
+      "subject": "Merge pull request #1271 from EratoLab/feature/erdscar-3-extend-sourceslistv1-with-display-names-and-effective",
+      "commits": [
+        "e59d81a7e82f98fbc9408abbde11c4f751cfce25"
       ]
     }
   },
