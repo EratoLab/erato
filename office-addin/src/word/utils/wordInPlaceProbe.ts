@@ -1,10 +1,20 @@
 import { captureWordDocumentPackage } from "./wordDocumentPackage";
 import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
 import { wordPackageCounts } from "./wordFullDocumentComparison";
-import { queueWordInPlaceTextWrite } from "./wordInPlaceExecutor";
+import {
+  placedWithin,
+  queueRevisionPlacements,
+  queueWordInPlaceTextWrite,
+} from "./wordInPlaceExecutor";
+import {
+  WORD_SPAN_ENDING_MARKS,
+  planWordSpanEdits,
+  queueWordSpanEdits,
+} from "./wordInPlaceSpanWriter";
 import { wordFirstRunMarks, wordParagraphSignature } from "./wordInPlaceState";
 import { predictWordStoryParagraphs } from "./wordInPlaceStories";
 import {
+  normalizeWordParagraphText,
   predictWordBodyParagraphs,
   wordParagraphAlignmentIssue,
 } from "./wordLiveParagraphs";
@@ -103,7 +113,7 @@ const inPackage = (ooxml: string, text: string) => {
 };
 
 /**
- * Dev-only native validation of the in-place mechanisms (P1-P11). Runs only in an empty
+ * Dev-only native validation of the in-place mechanisms (P1-P13). Runs only in an empty
  * document the developer opened for it, writes nothing but its own synthetic paragraphs, and never
  * changes the Track Changes mode: with tracking on, it measures the tracked behaviour instead.
  */
@@ -179,6 +189,64 @@ export async function runWordInPlaceProbe(
         signature: wordParagraphSignature(ooxml.value),
         marks: wordFirstRunMarks(ooxml.value),
         ooxml: ooxml.value,
+      };
+    };
+    const tracking =
+      trackingMode === "TrackAll" || trackingMode === "TrackMineOnly";
+    const bodyIds = async () => {
+      const all = body.paragraphs;
+      all.load("items/uniqueLocalId");
+      await context.sync();
+      return all.items.map((p) => p.uniqueLocalId);
+    };
+    const sameIds = (a: readonly string[], b: readonly string[]) =>
+      a.length === b.length && a.every((id, i) => id === b[i]);
+    /** The probe's own synthetic paragraphs, accepted so only the change under test is pending. */
+    const accept = async (...targets: Word.Paragraph[]) => {
+      for (const target of targets) target.getTrackedChanges().acceptAll();
+      await context.sync();
+    };
+    /** The production span writer, from the paragraph's current text to `to`. */
+    const spanEdit = async (target: Word.Paragraph, to: string) => {
+      const ranges = target.getTextRanges(WORD_SPAN_ENDING_MARKS, false);
+      ranges.load("items/text");
+      target.load("text");
+      await context.sync();
+      const edits = planWordSpanEdits(
+        ranges.items.map((range) => range.text),
+        target.text,
+        [{ text: target.text, ...PLAIN }],
+        [{ text: to, ...PLAIN }],
+      );
+      if (!edits) return false;
+      queueWordSpanEdits(target, ranges.items, edits);
+      target.load("text");
+      await context.sync();
+      return target.text === to;
+    };
+    /** Each revision of `target` lies within it, and its reviewed texts are `current` and `original`. */
+    const review = async (
+      target: Word.Paragraph,
+      current: string,
+      original: string,
+    ) => {
+      const changes = target.getTrackedChanges();
+      changes.load("items/type");
+      const now = target.getReviewedText("Current");
+      const before = target.getReviewedText("Original");
+      await context.sync();
+      const placements = queueRevisionPlacements(
+        changes.items,
+        target.getRange("Whole"),
+      );
+      await context.sync();
+      return {
+        changes,
+        types: changes.items.map((change) => String(change.type)),
+        inside: placedWithin(placements),
+        reviewed:
+          normalizeWordParagraphText(now.value) === current &&
+          normalizeWordParagraphText(before.value) === original,
       };
     };
 
@@ -414,13 +482,27 @@ export async function runWordInPlaceProbe(
 
     await attempt("P10", async () => {
       const target = await paragraph("Probe ten: tabs\tand “quotes”, too.");
-      const ranges = target.getTextRanges([" "], false);
+      const ranges = target.getTextRanges(WORD_SPAN_ENDING_MARKS, false);
       ranges.load("items/text");
-      const text = target.getText();
+      target.load("text");
       await context.sync();
+      // The last range may hold the paragraph mark without showing it: the writer must neither
+      // delete it with the last word nor write past it when appending.
+      const last = await paragraph("Probe ten last word");
+      const spaced = await paragraph("Probe ten spaced ");
+      const next = await paragraph("Probe ten next");
+      const nextBefore = await signature(next);
+      const idsBefore = await bodyIds();
+      const lastWordReplaced = await spanEdit(last, "Probe ten final term");
+      const appended = await spanEdit(spaced, "Probe ten spaced end");
+      const nextAfter = await signature(next);
       return {
-        tokensRejoin: ranges.items.map((r) => r.text).join("") === text.value,
+        tokensRejoin: ranges.items.map((r) => r.text).join("") === target.text,
         tokens: ranges.items.length,
+        lastWordReplaced,
+        appended,
+        paragraphsKept: sameIds(await bodyIds(), idsBefore),
+        nextUnchanged: nextAfter.signature === nextBefore.signature,
       };
     });
 
@@ -453,56 +535,218 @@ export async function runWordInPlaceProbe(
 
     await attempt("P9", async (): Promise<Measured> => {
       // Measured only where the developer turned tracking on; the probe never sets the mode.
-      if (trackingMode !== "TrackAll" && trackingMode !== "TrackMineOnly")
-        return { result: "not-run" };
-      const target = await paragraph("Probe nine kept words");
-      // The probe's own synthetic paragraph, accepted so only the edit below is pending.
-      target.getTrackedChanges().acceptAll();
+      if (!tracking) return { result: "not-run" };
+      const words = await paragraph("Probe nine kept words");
+      const spaced = await paragraph("Probe nine spaced ");
+      const whole = await paragraph("Probe nine whole");
+      const item = await paragraph("Probe nine listed words");
+      const next = await paragraph("Probe nine next");
+      item.startNewList();
       await context.sync();
-      const original = await signature(target);
-      const ranges = target.getTextRanges([" "], false);
-      ranges.load("items/text");
+      await accept(words, spaced, whole, item, next);
+      const written = [words, spaced, whole, item];
+      const before = await signatures([...written, next]);
+      const idsBefore = await bodyIds();
+      // A middle insertion and the last word replaced, then an append after the last word.
+      const span = await spanEdit(words, "Probe nine new kept terms");
+      const append = await spanEdit(spaced, "Probe nine spaced end");
+      const listSpan = await spanEdit(item, "Probe nine listed terms");
+      queueWordInPlaceTextWrite(
+        whole,
+        [
+          { text: "Probe nine ", ...PLAIN },
+          { text: "rewritten", ...PLAIN, bold: true },
+        ],
+        wordFirstRunMarks(before[2].ooxml),
+      );
       await context.sync();
-      if (ranges.items.length !== 4) return { tokens: ranges.items.length };
-      ranges.items[2].delete();
-      ranges.items[1].insertText("new ", "After");
-      const added = target.insertParagraph("Probe nine added", "After");
-      added.load("uniqueLocalId");
-      await context.sync();
-      const changes = target.getTrackedChanges();
-      changes.load("items/type,items/text");
-      const addedChanges = added.getTrackedChanges();
-      addedChanges.load("items/type");
-      const current = target.getReviewedText("Current");
-      const previous = target.getReviewedText("Original");
-      const text = target.getText();
+      const reviews = [
+        await review(
+          words,
+          "Probe nine new kept terms",
+          "Probe nine kept words",
+        ),
+        await review(spaced, "Probe nine spaced end", "Probe nine spaced "),
+        await review(whole, "Probe nine rewritten", "Probe nine whole"),
+      ];
+      const listed = await review(
+        item,
+        "Probe nine listed terms",
+        "Probe nine listed words",
+      );
+      const text = words.getText();
       context.document.load("changeTrackingMode");
       await context.sync();
-      const types = changes.items.map((change) => String(change.type));
-      const measured = {
-        revisions: changes.items.length,
-        recordsInsertion: types.includes("Added"),
-        recordsDeletion: types.includes("Deleted"),
-        currentText: current.value === "Probe nine new words",
-        originalText: previous.value === "Probe nine kept words",
-        textExcludesDeleted: text.value === "Probe nine new words",
-        insertedParagraphTracked: addedChanges.items.length > 0,
+      const idsWritten = await bodyIds();
+      const nextWritten = await signature(next);
+      for (const { changes } of [...reviews, listed]) changes.rejectAll();
+      await context.sync();
+      const restored = await signatures(written);
+      const measured: Measured = {
+        span,
+        append,
+        recordsInsertion: reviews[0].types.includes("Added"),
+        recordsDeletion: reviews[0].types.includes("Deleted"),
+        reviewed: reviews.every((r) => r.reviewed),
+        changesInside: reviews.every((r) => r.inside),
+        listSpan,
+        listReviewed: listed.reviewed,
+        listChangesInside: listed.inside,
+        textExcludesDeleted: text.value === "Probe nine new kept terms",
+        paragraphsKept: sameIds(idsWritten, idsBefore),
+        nextUnchanged: nextWritten.signature === before[4].signature,
         modeUnchanged:
           String(context.document.changeTrackingMode) === trackingMode,
+        rejectExact: restored.every(
+          (r, i) => r.signature === before[i].signature,
+        ),
+        rejectKeepsParagraphs: sameIds(await bodyIds(), idsBefore),
       };
-      changes.rejectAll();
-      addedChanges.rejectAll();
-      await context.sync();
-      const restored = await signature(target);
+      // A table cell as the cell writer rewrites it, if P1 could make a table.
       const all = body.paragraphs;
-      all.load("items/uniqueLocalId");
+      all.load("items/tableNestingLevel,items/text");
+      await context.sync();
+      const cell = all.items.find((p) => p.tableNestingLevel > 0);
+      if (!cell) return { ...measured, cell: "not-run" };
+      await accept(cell);
+      const cellBefore = await signature(cell);
+      cell.load("text");
+      await context.sync();
+      const original = cell.text;
+      cell.insertText("Probe nine cell", "Replace");
+      await context.sync();
+      const cellReview = await review(cell, "Probe nine cell", original);
+      cellReview.changes.rejectAll();
       await context.sync();
       return {
         ...measured,
-        rejectExact: restored.signature === original.signature,
-        rejectRemovesInserted: !all.items.some(
-          (p) => p.uniqueLocalId === added.uniqueLocalId,
-        ),
+        cellReviewed: cellReview.reviewed,
+        cellChangesInside: cellReview.inside,
+        cellRejectExact:
+          (await signature(cell)).signature === cellBefore.signature,
+      };
+    });
+
+    await attempt("P13", async (): Promise<Measured> => {
+      if (!tracking) return { result: "not-run" };
+      const anchor = await paragraph("Probe thirteen anchor");
+      const next = await paragraph("Probe thirteen next");
+      const doomed = await paragraph("Probe thirteen deleted");
+      const after = await paragraph("Probe thirteen after");
+      const styled = await paragraph("Probe thirteen styled");
+      const joining = await paragraph("Probe thirteen joins");
+      const head = await paragraph("Probe thirteen list");
+      const list = head.startNewList();
+      list.load("id");
+      await context.sync();
+      await accept(anchor, next, doomed, after, styled, joining, head);
+      const measured: Measured = {};
+      const reject = async (target: Word.Paragraph) => {
+        const changes = target.getTrackedChanges();
+        changes.rejectAll();
+        await context.sync();
+      };
+
+      // Inserted as the executor inserts: an empty paragraph, its text, then its style. Word may
+      // record the new paragraph mark on the anchor, which Restore would never reject.
+      const [anchorBefore, nextBefore] = await signatures([anchor, next]);
+      let ids = await bodyIds();
+      const added = anchor.insertParagraph("", "After");
+      queueWordInPlaceTextWrite(
+        added,
+        [{ text: "Probe thirteen added", ...PLAIN }],
+        PLAIN,
+      );
+      await context.sync();
+      added.styleBuiltIn = "Normal";
+      await context.sync();
+      const neighbours = [anchor, next].map((target) => {
+        const changes = target.getTrackedChanges();
+        changes.load("items/type");
+        return changes;
+      });
+      await context.sync();
+      const inserted = await review(added, "Probe thirteen added", "");
+      inserted.changes.rejectAll();
+      await context.sync();
+      const [anchorAfter, nextAfter] = await signatures([anchor, next]);
+      Object.assign(measured, {
+        insertNeighboursUntouched: neighbours.every((c) => !c.items.length),
+        insertTracked: inserted.types.includes("Added"),
+        insertReviewed: inserted.reviewed,
+        insertChangesInside: inserted.inside,
+        insertRejectRemoves: sameIds(await bodyIds(), ids),
+        insertRejectExact:
+          anchorAfter.signature === anchorBefore.signature &&
+          nextAfter.signature === nextBefore.signature,
+      });
+
+      // A tracked deletion must stay in body.paragraphs under its ID until it is reviewed.
+      const [doomedBefore, afterBefore] = await signatures([doomed, after]);
+      ids = await bodyIds();
+      doomed.delete();
+      await context.sync();
+      const listed = sameIds(await bodyIds(), ids);
+      const deleted = await review(doomed, "", "Probe thirteen deleted");
+      const [nextKept, afterKept] = await signatures([next, after]);
+      await reject(doomed);
+      Object.assign(measured, {
+        deleteListed: listed,
+        deleteTracked: deleted.types.includes("Deleted"),
+        deleteReviewed: deleted.reviewed,
+        deleteChangesInside: deleted.inside,
+        deleteNeighboursUnchanged:
+          nextKept.signature === nextBefore.signature &&
+          afterKept.signature === afterBefore.signature,
+        deleteRejectExact:
+          (await signature(doomed)).signature === doomedBefore.signature &&
+          sameIds(await bodyIds(), ids),
+      });
+
+      // Style and list changes are revisions only while Word's "Track formatting" option is on.
+      const formatted = async (
+        target: Word.Paragraph,
+        change: () => void,
+      ): Promise<[boolean, boolean]> => {
+        const original = await signature(target);
+        change();
+        await context.sync();
+        const changes = target.getTrackedChanges();
+        changes.load("items/type");
+        await context.sync();
+        const tracked = changes.items.some(
+          (c) => String(c.type) === "Formatted",
+        );
+        await reject(target);
+        return [
+          tracked,
+          (await signature(target)).signature === original.signature,
+        ];
+      };
+      const [restyleTracked, restyleRejectExact] = await formatted(
+        styled,
+        () => {
+          styled.styleBuiltIn = "Heading2";
+        },
+      );
+      const [attachTracked, attachRejectExact] = await formatted(joining, () =>
+        joining.attachToList(list.id, 0),
+      );
+      const [detachTracked, detachRejectExact] = await formatted(head, () =>
+        head.detachFromList(),
+      );
+      context.document.load("changeTrackingMode");
+      await context.sync();
+      return {
+        ...measured,
+        restyleTracked,
+        restyleRejectExact,
+        attachTracked,
+        attachRejectExact,
+        detachTracked,
+        detachRejectExact,
+        modeUnchanged:
+          String(context.document.changeTrackingMode) === trackingMode,
       };
     });
 
@@ -535,13 +779,49 @@ export async function runWordInPlaceProbe(
           text: p.text,
         })),
       );
-      return {
+      const read: Measured = {
         predicted: predicted.length,
         live: live.items.length,
         aligned: !issue,
         createsNoPart:
           wordPackageCounts(after.ooxml).parts ===
           wordPackageCounts(file.ooxml).parts,
+      };
+      if (!tracking || !live.items.length) return read;
+      // Tracked, in a synthetic paragraph of its own that leaves the header as it found it.
+      const made = live.items[0].insertParagraph(
+        "Probe eleven kept words",
+        "Before",
+      );
+      await context.sync();
+      await accept(made);
+      const original = await signature(made);
+      const span = await spanEdit(made, "Probe eleven new words");
+      const written = await review(
+        made,
+        "Probe eleven new words",
+        "Probe eleven kept words",
+      );
+      written.changes.rejectAll();
+      await context.sync();
+      const rejectExact =
+        (await signature(made)).signature === original.signature;
+      made.delete();
+      await context.sync();
+      await accept(made);
+      const count = sections.items[0].getHeader("Primary").paragraphs;
+      count.load("items");
+      await context.sync();
+      return {
+        ...read,
+        trackedSpan: span,
+        trackedReviewed: written.reviewed,
+        trackedChangesInside: written.inside,
+        trackedRejectExact: rejectExact,
+        headerRestored:
+          count.items.length === live.items.length &&
+          wordPackageCounts((await captureWordDocumentPackage()).ooxml)
+            .parts === wordPackageCounts(file.ooxml).parts,
       };
     });
 

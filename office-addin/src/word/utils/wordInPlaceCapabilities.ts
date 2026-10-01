@@ -8,6 +8,7 @@ export const WORD_IN_PLACE_MECHANISMS_LIST = [
   "list",
   "span",
   "tracked",
+  "trackedStructure",
   "storyText",
 ] as const;
 export type WordInPlaceMechanism =
@@ -25,7 +26,8 @@ export type WordInPlaceProbeId =
   | "P9"
   | "P10"
   | "P11"
-  | "P12";
+  | "P12"
+  | "P13";
 type WordInPlacePlatform = "PC" | "Mac" | "OfficeOnline" | "unknown";
 type WordInPlaceGate = true | { probe: WordInPlaceProbeId };
 
@@ -40,6 +42,7 @@ const PENDING: Record<
   list: { probe: "P6" },
   span: { probe: "P10" },
   tracked: { probe: "P9" },
+  trackedStructure: { probe: "P13" },
   storyText: { probe: "P11" },
 };
 
@@ -87,6 +90,25 @@ export const ALL_WORD_IN_PLACE_CAPABILITIES: WordInPlaceCapabilities =
   Object.fromEntries(
     WORD_IN_PLACE_MECHANISMS_LIST.map((mechanism) => [mechanism, true]),
   ) as WordInPlaceCapabilities;
+
+/**
+ * Under Track Changes a mechanism also needs its tracked behaviour confirmed. P9 covers text and
+ * cell rewrites; inserting, deleting, splitting, restyling and relisting need P13, which measures
+ * paragraph membership, formatting revisions and reject-exactness for each of them.
+ */
+export function wordTrackedInPlaceCapabilities(
+  caps: WordInPlaceCapabilities,
+): WordInPlaceCapabilities {
+  const structure = caps.tracked && caps.trackedStructure;
+  return {
+    ...caps,
+    insert: caps.insert && structure,
+    delete: caps.delete && structure,
+    split: caps.split && structure,
+    restyle: caps.restyle && structure,
+    list: caps.list && structure,
+  };
+}
 
 export function setWordInPlaceCapabilitiesForTests(
   capabilities: WordInPlaceCapabilities | undefined,

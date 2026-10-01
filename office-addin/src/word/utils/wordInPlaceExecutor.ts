@@ -69,11 +69,14 @@ import type { WordStoryOp } from "./wordInPlaceStories";
 import type { WordLiveParagraph } from "./wordLiveParagraphs";
 import type { WordScopeRequest } from "./wordScopeGuard";
 
-/** The prediction of body.paragraphs did not hold, or a read only this route makes failed;
- * nothing was written or saved yet. */
+/** The prediction of body.paragraphs did not hold, a read only this route makes failed, or Track
+ * Changes is on for a write tracked writing does not cover; nothing was written or saved yet. */
 export interface WordInPlaceFallbackResult {
-  fallback: "alignment" | "host-error";
-  details: Pick<WordDiagnosticDetails, "paragraphs" | "locations">;
+  fallback: "alignment" | "host-error" | "tracking";
+  details: Pick<
+    WordDiagnosticDetails,
+    "paragraphs" | "locations" | "fallbackReasons"
+  >;
 }
 
 const PARAGRAPH_FIELDS =
@@ -186,6 +189,28 @@ function queueState(
       .builtIn as Word.Paragraph["styleBuiltIn"];
   else paragraph.style = target.style.name;
 }
+
+/** Where a TrackedChange may lie relative to the paragraphs the write touched. */
+const WITHIN = new Set(["Equal", "Inside", "InsideStart", "InsideEnd"]);
+type Placement = ReturnType<Word.Range["compareLocationWith"]>;
+
+/** Word coalesces adjacent revisions of one author and type, across paragraph marks too: a change
+ * listed by a touched paragraph may reach into a neighbour, and rejecting it would undo that part. */
+export function queueRevisionPlacements(
+  changes: readonly Word.TrackedChange[],
+  within: Word.Range,
+): Placement[] {
+  return changes.map((change) =>
+    change.getRange("Whole").compareLocationWith(within),
+  );
+}
+
+export const placedWithin = (placements: readonly Placement[]) =>
+  placements.every((placement) => WITHIN.has(String(placement.value)));
+
+/** The touched paragraphs of a region as one range, from its first to its last paragraph. */
+const interiorRange = (first: Word.Paragraph, last: Word.Paragraph) =>
+  first.getRange("Whole").expandTo(last.getRange("Whole"));
 
 const sameRevisions = (
   live: readonly Word.TrackedChange[],
@@ -422,6 +447,18 @@ export async function applyWordPlanInPlace(
             reason === "source-changed" ? { ...route, urlChanged } : route,
           ),
         };
+      // Captured without Track Changes, the plan may hold changes tracked writing does not cover yet.
+      if (
+        trackedWrite &&
+        !caps.trackedStructure &&
+        ops.some(
+          (op) =>
+            op.kind === "insert" ||
+            op.kind === "delete" ||
+            (op.kind === "text" && op.restyle),
+        )
+      )
+        return { fallback: "tracking", details: {} };
       const rebase = rebaseWordSnapshot(snapshot, live, request);
       if (!rebase.ok)
         return {
@@ -574,6 +611,26 @@ export async function applyWordPlanInPlace(
         cell.load("rowIndex,cellIndex");
         return cell;
       });
+      // A neighbour with pending revisions next to a tracked insertion or deletion may merge with it
+      // into one TrackedChange, which Restore could not reject without undoing the neighbour.
+      const boundaryChanges = trackedWrite
+        ? [
+            ...new Set(
+              regions
+                .filter((region) =>
+                  region.points.some((point) =>
+                    ["insert", "delete"].includes(ops[point.op].kind),
+                  ),
+                )
+                .flatMap((region) => [region.start, region.end])
+                .filter((at) => at >= 0 && at < predicted.length),
+            ),
+          ].map((at) => {
+            const changes = proxies[at].getTrackedChanges();
+            changes.load("items/type");
+            return changes;
+          })
+        : [];
       const joined = new Map(
         ops.flatMap((op) => {
           const ref =
@@ -647,6 +704,11 @@ export async function applyWordPlanInPlace(
         ]);
       if ([...joined.values()].some((list) => list.isNullObject))
         return fallback(liveB.length, ["/word/document.xml body: list"]);
+      if (boundaryChanges.some((changes) => changes.items.length))
+        return {
+          fallback: "tracking",
+          details: { fallbackReasons: ["boundary"] },
+        };
       const listIds = new Map([...joined].map(([ref, list]) => [ref, list.id]));
       // Under Track Changes each changed word becomes its own revision; a paragraph whose ranges do
       // not rejoin to its text is rewritten whole, which still verifies.
@@ -751,7 +813,12 @@ export async function applyWordPlanInPlace(
           const op = ops[i];
           if (op.kind !== "text" && op.kind !== "cell") continue;
           const span = spans[i];
-          if (span) queueWordSpanEdits(textRanges[i]!.items, span);
+          if (span)
+            queueWordSpanEdits(
+              proxies[positions[i]],
+              textRanges[i]!.items,
+              span,
+            );
           else queueWrite(proxies[positions[i]], op, inherited[i], "apply");
         }
         let chain: { anchor: number; paragraph: Word.Paragraph } | undefined;
@@ -770,7 +837,8 @@ export async function applyWordPlanInPlace(
       }
       storyOps.forEach((op, k) => {
         const span = storySpans[k];
-        if (span) queueWordSpanEdits(storyRanges[k]!.items, span);
+        if (span)
+          queueWordSpanEdits(storyProxy(op), storyRanges[k]!.items, span);
         else
           queueWrite(
             storyProxy(op),
@@ -869,6 +937,29 @@ export async function applyWordPlanInPlace(
             : { id };
         });
         await context.sync();
+        const placements = located.map((r, i) => {
+          if (!r.interior.length) return [];
+          const within = interiorRange(
+            items[at.get(r.interior[0])!],
+            items[at.get(r.interior.at(-1)!)!],
+          );
+          return r.interior.flatMap((_, k) =>
+            queueRevisionPlacements(reads[i][k].changes.items, within),
+          );
+        });
+        const storyPlacements = storyOps.map((op, k) =>
+          queueRevisionPlacements(
+            storyAfter[k].changes!.items,
+            storyProxy(op).getRange("Whole"),
+          ),
+        );
+        await context.sync();
+        if (!placements.every(placedWithin))
+          trackedIssues.push("/word/document.xml: revisions");
+        storyOps.forEach((op, k) => {
+          if (!placedWithin(storyPlacements[k]))
+            trackedIssues.push(storyLocation(op, "revisions"));
+        });
         const revisions: Record<string, [string, string][]> = {};
         located.forEach((r, i) =>
           r.interior.forEach((id, k) => {
@@ -1043,7 +1134,10 @@ export async function applyWordPlanInPlace(
       if (!verification.ok) {
         latchWordInPlace("verify-mismatch");
         // Restore must not rely on the mechanism that just misbehaved, nor miss a change outside
-        // the written paragraphs: it is the exact package restore, guarded by this package.
+        // the written paragraphs: it is the exact package restore, guarded by this package. A
+        // tracked write is the exception: the package restore cannot run under Track Changes, nor
+        // once Word noted the mode switch in settings.xml, while rejecting exactly the revisions
+        // recorded here, paragraph by paragraph, can.
         if (verification.confined)
           before = withWordInPlaceBackup(before, {
             ...record,
@@ -1052,7 +1146,9 @@ export async function applyWordPlanInPlace(
         return {
           status: "interrupted",
           before,
-          afterFingerprint: after.fingerprint,
+          afterFingerprint: record.tracked
+            ? (afterFingerprint ?? after.fingerprint)
+            : after.fingerprint,
           diagnostic: diagnostic("verify", "output-mismatch", undefined, {
             ...route,
             verifyTier: "block",
@@ -1156,42 +1252,80 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
   return host.run(async (context) => {
     const paragraphs = context.document.body.paragraphs;
     paragraphs.load("items/uniqueLocalId");
+    // Untracked, the exact package restore covers headers and footers; tracked, it cannot run, so
+    // their paragraphs are read back like the body's.
+    const stories = record.tracked
+      ? record.regions.flatMap((region, index) => {
+          const op = record.ops[region.before[0]];
+          return region.story && op?.id
+            ? [{ index, story: region.story, id: op.id }]
+            : [];
+        })
+      : [];
+    const sections = context.document.sections;
+    if (stories.length) sections.load("items");
     await context.sync();
+    const storyLists = stories.map(({ story }) => {
+      const list = wordStoryParagraphs(sections, story);
+      list.load("items/uniqueLocalId");
+      return list;
+    });
+    if (storyLists.length) await context.sync();
     const ids = paragraphs.items.map((p) => p.uniqueLocalId);
     const located = locateRegions(record.regions, ids);
     if ("missing" in located)
       throw new Error("A written region can no longer be found.");
+    const storyParagraphs = stories.map(({ id }, k) => {
+      const paragraph = storyLists[k].items.find((p) => p.uniqueLocalId === id);
+      if (!paragraph)
+        throw new Error("A written story paragraph can no longer be found.");
+      return paragraph;
+    });
     const reads = located.map((r) =>
       r.interior.map((_, k) => paragraphs.items[r.start + 1 + k].getOoxml()),
     );
+    const trackedChanges = (paragraph: Word.Paragraph) => {
+      const list = paragraph.getTrackedChanges();
+      list.load("items/type,items/text");
+      return list;
+    };
     const changes = record.tracked
       ? located.map((r) =>
-          r.interior.map((_, k) => {
-            const list = paragraphs.items[r.start + 1 + k].getTrackedChanges();
-            list.load("items/type,items/text");
-            return list;
-          }),
+          r.interior.map((_, k) =>
+            trackedChanges(paragraphs.items[r.start + 1 + k]),
+          ),
         )
       : undefined;
+    const storyReads = storyParagraphs.map((paragraph) => ({
+      ooxml: paragraph.getOoxml(),
+      changes: trackedChanges(paragraph),
+    }));
     await context.sync();
     const signatures = new Map<string, string>();
     const revisions: Record<string, [string, string][]> = {};
+    const revisionsOf = (list: Word.TrackedChangeCollection) =>
+      list.items.map(
+        (change) => [String(change.type), change.text] as [string, string],
+      );
     located.forEach((r, i) =>
       r.interior.forEach((id, k) => {
         signatures.set(id, wordParagraphSignature(reads[i][k].value));
-        if (changes)
-          revisions[id] = changes[i][k].items.map((change) => [
-            String(change.type),
-            change.text,
-          ]);
+        if (changes) revisions[id] = revisionsOf(changes[i][k]);
       }),
     );
+    stories.forEach(({ id }, k) => {
+      signatures.set(id, wordParagraphSignature(storyReads[k].ooxml.value));
+      revisions[id] = revisionsOf(storyReads[k].changes);
+    });
     const ops = record.ops.map((op) =>
       op.id && signatures.has(op.id)
         ? { ...op, afterSignature: signatures.get(op.id) }
         : op,
     );
-    const interiors = new Map(located.map((r) => [r.index, r.interior]));
+    const interiors = new Map<number, string[]>([
+      ...located.map((r) => [r.index, r.interior] as [number, string[]]),
+      ...stories.map(({ index, id }) => [index, [id]] as [number, string[]]),
+    ]);
     const regions = record.regions.map((region, index) =>
       interiors.has(index)
         ? { ...region, after: interiors.get(index) }
@@ -1213,8 +1347,7 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
         regions,
         ...(changes ? { revisions } : {}),
       },
-      // Headers and footers are not read back here; the exact package restore covers them.
-      afterFingerprint: regions.some((region) => region.story)
+      afterFingerprint: regions.some((region) => region.story && !region.after)
         ? undefined
         : scopeOf(regions, signatures),
       partial: { applied: located.length - untouched, untouched },
@@ -1433,6 +1566,34 @@ export async function revertWordPlanInPlace(
         )
           return staleAt(storyLocation(op, "changed"));
         storyPending.push(i);
+      }
+      if (changes) {
+        const placements = pending.map((r) => {
+          const i = located.indexOf(r);
+          if (!r.interior.length) return [];
+          const within = interiorRange(
+            items[position.get(r.interior[0])!],
+            items[position.get(r.interior.at(-1)!)!],
+          );
+          return r.interior.flatMap((_, k) =>
+            queueRevisionPlacements(changes[i][k].items, within),
+          );
+        });
+        const storyPlacements = storyPending.map((i) =>
+          queueRevisionPlacements(
+            storyReads[i].changes!.items,
+            storyTargets[i].paragraph.getRange("Whole"),
+          ),
+        );
+        if (placements.length || storyPlacements.length) await context.sync();
+        const spilled = pending.find((_, k) => !placedWithin(placements[k]));
+        if (spilled)
+          return stale("revisions", labelOf(spilled.region, spilled.index));
+        const story = storyPending.find(
+          (_, k) => !placedWithin(storyPlacements[k]),
+        );
+        if (story !== undefined)
+          return staleAt(storyLocation(storyTargets[story].op, "revisions"));
       }
       const restoredScope = (ids: Map<number, string[]>) =>
         encodeWordScopeFingerprint([

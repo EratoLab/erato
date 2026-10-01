@@ -152,23 +152,40 @@ function setMarks(
     range.font.underline = run.underline ? "Single" : "None";
 }
 
-/** Queue the edits last to first, so every range still covers the text it was read with. */
+/**
+ * Queue the edits last to first, so every range still covers the text it was read with. With
+ * trimSpacing false Word may keep the paragraph mark in the last range, though its text does not
+ * show it: a deletion reaching that range is clipped to the paragraph content, and text that follows
+ * it goes in at the paragraph's end, so the mark is never deleted or written past.
+ */
 export function queueWordSpanEdits(
+  paragraph: Word.Paragraph,
   ranges: readonly Word.Range[],
   edits: readonly WordSpanEdit[],
 ): void {
+  const last = ranges.length - 1;
+  let content: Word.Range | undefined;
+  const clipped = (range: Word.Range) =>
+    range.intersectWith((content ??= paragraph.getRange("Content")));
   for (const edit of [...edits].reverse()) {
-    if (edit.to > edit.from)
-      (edit.to - edit.from === 1
-        ? ranges[edit.from]
-        : ranges[edit.from].expandTo(ranges[edit.to - 1])
-      ).delete();
+    if (edit.to > edit.from) {
+      const span =
+        edit.to - edit.from === 1
+          ? ranges[edit.from]
+          : ranges[edit.from].expandTo(ranges[edit.to - 1]);
+      (edit.to - 1 === last ? clipped(span) : span).delete();
+    }
     let previous = edit.anchor.inherited;
     let range: Word.Range | undefined;
     for (const run of edit.insert) {
       range = range
         ? range.insertText(run.text, "After")
-        : ranges[edit.anchor.range].insertText(run.text, edit.anchor.location);
+        : edit.anchor.range === last && edit.anchor.location === "After"
+          ? paragraph.insertText(run.text, "End")
+          : ranges[edit.anchor.range].insertText(
+              run.text,
+              edit.anchor.location,
+            );
       setMarks(range, run, previous);
       previous = run;
     }

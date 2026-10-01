@@ -34,7 +34,10 @@ import {
   wordDocumentFingerprint,
 } from "./wordDocumentXml";
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
-import { wordInPlaceCapabilities } from "./wordInPlaceCapabilities";
+import {
+  wordInPlaceCapabilities,
+  wordTrackedInPlaceCapabilities,
+} from "./wordInPlaceCapabilities";
 import {
   applyWordPlanInPlace,
   revertWordPlanInPlace,
@@ -49,6 +52,7 @@ import { isWordScopeFingerprint } from "./wordInPlaceState";
 import {
   isWordTrackingMode,
   wordInPlaceAvailability,
+  wordInPlaceCapabilitiesUnder,
   wordTrackedWritingAvailable,
 } from "./wordInPlaceSwitch";
 import { wordWriteHost } from "./wordWriteHost";
@@ -237,6 +241,23 @@ function trackingBlocked(
   };
 }
 
+function trackedFallbacks(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  prepared: WordAuthoringSnapshot,
+): WordRouteReason[] {
+  try {
+    return wordInPlaceFallbacks(
+      plan,
+      snapshot,
+      wordTrackedInPlaceCapabilities(wordInPlaceCapabilities()),
+      prepared,
+    );
+  } catch {
+    return [];
+  }
+}
+
 /** Pure routing; a classifier failure must never block the import that worked before. */
 function routeInPlace(
   plan: WordDocumentPlan,
@@ -247,7 +268,7 @@ function routeInPlace(
     return classifyWordInPlacePlan(
       plan,
       snapshot,
-      wordInPlaceCapabilities(),
+      wordInPlaceCapabilitiesUnder(snapshot.trackingMode),
       prepared,
     );
   } catch {
@@ -330,6 +351,16 @@ async function applyPlan(
             observePackage: (url) => observeAfterFailure(true, url),
           });
           if (!("fallback" in result)) return result;
+          // Track Changes is on and the write needs something tracked writing does not cover.
+          if (result.fallback === "tracking") {
+            const live = result.details.fallbackReasons ?? [];
+            return trackingBlocked(undefined, () => [
+              ...new Set([
+                ...trackedFallbacks(plan, snapshot, prepared),
+                ...live,
+              ]),
+            ]);
+          }
           routeReason = result.fallback;
           fallbackDetails = result.details;
         }
@@ -345,7 +376,7 @@ async function applyPlan(
           return wordInPlaceFallbacks(
             plan,
             snapshot,
-            wordInPlaceCapabilities(),
+            wordInPlaceCapabilitiesUnder(snapshot.trackingMode),
             prepared,
           );
         } catch {

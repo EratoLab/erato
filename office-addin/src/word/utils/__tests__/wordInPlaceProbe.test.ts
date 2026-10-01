@@ -74,6 +74,7 @@ describe("in-place native probe", () => {
         "P10",
         "P11",
         "P12",
+        "P13",
       ].sort(),
     );
     for (const values of Object.values(result.probes))
@@ -126,7 +127,14 @@ describe("in-place native probe", () => {
       finalDeleteDropsCount: false,
       finalDeleteKeepsPrevious: false,
     });
-    for (const id of ["P9", "P11", "P12"] as const)
+    expect(result.probes.P10).toMatchObject({
+      tokensRejoin: true,
+      lastWordReplaced: true,
+      appended: true,
+      paragraphsKept: true,
+      nextUnchanged: true,
+    });
+    for (const id of ["P9", "P11", "P12", "P13"] as const)
       expect(result.probes[id]).toEqual({ result: "not-run" });
     expect(JSON.stringify(result)).not.toContain("Probe");
   });
@@ -143,16 +151,45 @@ describe("in-place native probe", () => {
     expect(result.trackingMode).toBe("TrackAll");
     expect(setter).not.toHaveBeenCalled();
     expect(result.probes.P9).toEqual({
-      revisions: 2,
+      span: true,
+      append: true,
       recordsInsertion: true,
       recordsDeletion: true,
-      currentText: true,
-      originalText: true,
+      reviewed: true,
+      changesInside: true,
+      listSpan: true,
+      listReviewed: true,
+      listChangesInside: true,
       textExcludesDeleted: true,
-      insertedParagraphTracked: true,
+      paragraphsKept: true,
+      nextUnchanged: true,
       modeUnchanged: true,
       rejectExact: true,
-      rejectRemovesInserted: true,
+      rejectKeepsParagraphs: true,
+      cellReviewed: true,
+      cellChangesInside: true,
+      cellRejectExact: true,
+    });
+    expect(result.probes.P13).toEqual({
+      insertNeighboursUntouched: true,
+      insertTracked: true,
+      insertReviewed: true,
+      insertChangesInside: true,
+      insertRejectRemoves: true,
+      insertRejectExact: true,
+      deleteListed: true,
+      deleteTracked: true,
+      deleteReviewed: true,
+      deleteChangesInside: true,
+      deleteNeighboursUnchanged: true,
+      deleteRejectExact: true,
+      restyleTracked: true,
+      restyleRejectExact: true,
+      attachTracked: true,
+      attachRejectExact: true,
+      detachTracked: true,
+      detachRejectExact: true,
+      modeUnchanged: true,
     });
     expect(result.probes.P10).toMatchObject({ tokensRejoin: true });
     expect(result.probes.P11).toEqual({
@@ -160,9 +197,48 @@ describe("in-place native probe", () => {
       live: 1,
       aligned: true,
       createsNoPart: true,
+      trackedSpan: true,
+      trackedReviewed: true,
+      trackedChangesInside: true,
+      trackedRejectExact: true,
+      headerRestored: true,
     });
+    expect(host.ooxml()).toContain(`${SENTINEL} header`);
     expect(JSON.stringify(result)).not.toContain("Probe");
     expect(JSON.stringify(result)).not.toContain(SENTINEL);
+  });
+
+  it("keeps the paragraph mark when the last word range also holds it", async () => {
+    installWordOoxmlHost(packageXml(paragraph("")), {
+      profile: "word-pc-16.0.20326",
+      textRangesIncludeParagraphMark: true,
+    });
+    const result = await runWordInPlaceProbe({ idleMs: 0 });
+    expect(result.probes.P10).toMatchObject({
+      lastWordReplaced: true,
+      appended: true,
+      paragraphsKept: true,
+      nextUnchanged: true,
+    });
+  });
+
+  it("reports a tracked insert that marks its anchor, and formatting Word leaves untracked", async () => {
+    const host = installWordOoxmlHost(scratchWithHeader(), {
+      profile: "word-pc-16.0.20326",
+      trackChanges: true,
+      insertMarksAnchor: true,
+      untrackedFormatting: true,
+    });
+    host.setTrackingMode("TrackAll");
+    const result = await runWordInPlaceProbe({ idleMs: 0 });
+    expect(result.probes.P13).toMatchObject({
+      insertNeighboursUntouched: false,
+      insertRejectExact: false,
+      restyleTracked: false,
+      restyleRejectExact: false,
+      attachTracked: false,
+      detachTracked: false,
+    });
   });
 });
 

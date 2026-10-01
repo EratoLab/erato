@@ -1,5 +1,10 @@
 import { supportsWordDocumentPackage } from "./wordDocumentPackage";
-import { wordInPlaceCapabilities } from "./wordInPlaceCapabilities";
+import {
+  wordInPlaceCapabilities,
+  wordTrackedInPlaceCapabilities,
+} from "./wordInPlaceCapabilities";
+
+import type { WordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 
 export type WordInPlaceUnavailable =
   | "disabled"
@@ -44,6 +49,16 @@ export function wordTrackedWritingAvailable(): boolean {
 /** The modes Word records revisions in; anything else is treated as unknown. */
 export function isWordTrackingMode(mode: string | undefined): boolean {
   return mode === "TrackAll" || mode === "TrackMineOnly";
+}
+
+/** What a plan may use in place when Word is in `tracking` mode. */
+export function wordInPlaceCapabilitiesUnder(
+  tracking: string | undefined,
+): WordInPlaceCapabilities {
+  const caps = wordInPlaceCapabilities();
+  return isWordTrackingMode(tracking)
+    ? wordTrackedInPlaceCapabilities(caps)
+    : caps;
 }
 
 /** Lasts until the pane reloads; earlier in-place writes can still be reverted in place. */

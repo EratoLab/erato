@@ -53,7 +53,7 @@ const EARLIER = "Earlier Reviewer";
 
 /** The realistic document with a custom style and an earlier reviewer's pending insertion in the
  * closing paragraph, which no write may touch. */
-function fixture(): string {
+function fixture(edit: (doc: Document) => void = () => {}): string {
   return editWordPackage(realisticWordPackageXml(), (doc) => {
     const styles = doc.getElementsByTagNameNS(W, "styles")[0];
     const callout = new DOMParser().parseFromString(
@@ -69,11 +69,44 @@ function fixture(): string {
       "application/xml",
     ).documentElement;
     closing.append(doc.importNode(pending, true));
+    edit(doc);
   });
 }
 
-function install(options: WordOoxmlHostOptions = {}) {
-  const host = installWordOoxmlHost(fixture(), {
+const paragraphWith = (doc: Document, text: string) =>
+  Array.from(doc.getElementsByTagNameNS(W, "t")).find(
+    (t) => t.textContent === text,
+  )!.parentElement!.parentElement!;
+const element = (doc: Document, xml: string) =>
+  doc.importNode(
+    new DOMParser().parseFromString(xml, "application/xml").documentElement,
+    true,
+  );
+/** An earlier reviewer's pending change of paragraph properties, and nothing else. */
+const formattingRevision = (doc: Document) => {
+  const props = paragraphWith(doc, SCHEDULE).getElementsByTagNameNS(
+    W,
+    "pPr",
+  )[0];
+  props.append(
+    element(
+      doc,
+      `<w:pPrChange xmlns:w="${W}" w:id="901" w:author="${EARLIER}" w:date="2026-09-01T00:00:00Z"><w:pPr/></w:pPrChange>`,
+    ),
+  );
+};
+/** A paragraph the signed-in user typed with Track Changes on, right before `text`. Word records
+ * it under the same author as the add-in's own revisions. */
+const typedBefore = (text: string) => (doc: Document) =>
+  paragraphWith(doc, text).before(
+    element(
+      doc,
+      `<w:p xmlns:w="${W}"><w:pPr><w:rPr><w:ins w:id="902" w:author="Mock Reviewer" w:date="2026-10-01T00:00:00Z"/></w:rPr></w:pPr><w:ins w:id="903" w:author="Mock Reviewer" w:date="2026-10-01T00:00:00Z"><w:r><w:t>Typed by the user.</w:t></w:r></w:ins></w:p>`,
+    ),
+  );
+
+function install(options: WordOoxmlHostOptions = {}, xml: string = fixture()) {
+  const host = installWordOoxmlHost(xml, {
     profile: "word-pc-16.0.20326",
     trackChanges: true,
     ...options,
@@ -577,6 +610,106 @@ describe("in-place writes as tracked changes", { timeout: 60_000 }, () => {
     expect(text).not.toContain(EARLIER);
   });
 
+  it("restores an unverified tracked write by rejecting it, also once Track Changes is off", async () => {
+    const host = install({ reviewedOriginalIsCurrent: true });
+    const snapshot = await capture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await apply(
+      planOf(snapshot, {
+        replace: {
+          [SCHEDULE]: [
+            listItem(snapshot, "s", `Schedule the ${SENTINEL}.`, SCHEDULE),
+          ],
+        },
+      }),
+      snapshot,
+    );
+    expect(result.status).toBe("interrupted");
+    expect(result.diagnostic?.details?.locations).toEqual([
+      expect.stringMatching(/^\/word\/document\.xml body block \d+: reviewed$/),
+    ]);
+    expect(result.afterFingerprint).toMatch(/^word-scope-v1:/);
+    // Word notes the switch in settings.xml, so the exact package restore can no longer run.
+    host.setTrackingMode("Off");
+    const reverted = await revertWordDocumentPlan(
+      result.before!,
+      result.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(reverted.outcome?.route).toBe("in-place");
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(bodySignatures(host.ooxml())).toEqual(bodySignatures(fixture()));
+    expect(revised(host.ooxml())).toEqual([]);
+    expect(earlierRevision(host.ooxml())).toBe(true);
+    const text = [
+      report(result),
+      report(reverted, "revert"),
+      ...warn.mock.calls.flat().map(String),
+    ].join("\n");
+    expect(text).not.toContain(SENTINEL);
+  });
+
+  it("keeps the paragraph mark when Word's last word range also holds it", async () => {
+    const host = install({ textRangesIncludeParagraphMark: true });
+    const snapshot = await capture();
+    const ids = host.paragraphIds();
+    const applied = await apply(
+      planOf(snapshot, {
+        replace: {
+          [SCHEDULE]: [
+            listItem(snapshot, "s", "Schedule the trial.", SCHEDULE),
+          ],
+        },
+      }),
+      snapshot,
+    );
+    expect(applied.status, report(applied)).toBe("applied");
+    expect(host.paragraphIds()).toEqual(ids);
+    const [written] = revised(host.ooxml());
+    expect(written.getElementsByTagNameNS(W, "pPr")[0].innerHTML).not.toContain(
+      "w:del",
+    );
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(bodySignatures(host.ooxml())).toEqual(bodySignatures(fixture()));
+  });
+
+  it("refuses to reject a change Word merged with the user's own pending paragraph", async () => {
+    const xml = fixture(typedBefore(QUESTIONS));
+    const host = install({ coalesceInsertions: true }, xml);
+    const snapshot = await capture();
+    expect(
+      snapshot.blocks.find((b) => b.text === "Typed by the user."),
+    ).toMatchObject({ type: "native", nativeKind: "anchored-content" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await apply(
+      planOf(snapshot, {
+        replace: { [QUESTIONS]: [paragraph("q", `First, ${QUESTIONS}`)] },
+      }),
+      snapshot,
+    );
+    expect(result.status).toBe("interrupted");
+    expect(result.diagnostic?.details?.locations).toContain(
+      "/word/document.xml: revisions",
+    );
+    const written = host.ooxml();
+    host.events.length = 0;
+    const reverted = await revertWordDocumentPlan(
+      result.before!,
+      result.afterFingerprint!,
+    );
+    expect(reverted.status).toBe("stale");
+    expect(reverted.diagnostic?.details?.locations).toEqual([
+      expect.stringMatching(/body block \d+: revisions$/),
+    ]);
+    expect(mutations(host.events)).toEqual([]);
+    expect(host.ooxml()).toBe(written);
+    expect(host.ooxml()).toContain("Typed by the user.");
+  });
+
   it("keeps tracked text out of the report when Word stops mid-write", async () => {
     const host = install();
     const snapshot = await capture();
@@ -608,6 +741,97 @@ describe("in-place writes as tracked changes", { timeout: 60_000 }, () => {
     expect(text).not.toContain(SENTINEL);
     expect(text).not.toContain("moved to review");
     expect(text).not.toContain("word-scope-v1:");
+    const reverted = await revertWordDocumentPlan(
+      result.before!,
+      result.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(bodySignatures(host.ooxml())).toEqual(bodySignatures(fixture()));
+  });
+});
+
+describe("tracked verification failures", { timeout: 60_000 }, () => {
+  beforeEach(() =>
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES),
+  );
+
+  const failure = async (
+    options: WordOoxmlHostOptions,
+    plan: (s: WordAuthoringSnapshot) => WordDocumentPlan,
+    before?: (host: ReturnType<typeof install>) => void,
+  ) => {
+    const host = install(options);
+    const snapshot = await capture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    before?.(host);
+    const result = await apply(plan(snapshot), snapshot);
+    expect(result.status).toBe("interrupted");
+    expect(result.diagnostic).toMatchObject({
+      stage: "verify",
+      reason: "output-mismatch",
+    });
+    const text = [report(result), ...warn.mock.calls.flat().map(String)].join(
+      "\n",
+    );
+    expect(text).not.toContain(SENTINEL);
+    return { host, result, locations: result.diagnostic!.details!.locations! };
+  };
+
+  it("reports a restyle Word left untracked as not rejectable", async () => {
+    const { locations } = await failure({ untrackedFormatting: true }, (s) =>
+      planOf(s, {
+        replace: {
+          [QUESTIONS]: [
+            {
+              id: "h",
+              type: "heading",
+              level: 2,
+              text: `Open ${SENTINEL} questions follow.`,
+            },
+          ],
+        },
+      }),
+    );
+    expect(locations).toContainEqual(
+      expect.stringMatching(/^\/word\/document\.xml body block \d+: rejected$/),
+    );
+  });
+
+  it("reports an insertion that also marked its anchor as a revision outside the write", async () => {
+    const { locations } = await failure({ insertMarksAnchor: true }, (s) =>
+      planOf(s, {
+        after: { [STATUS]: [paragraph("n", `${SENTINEL} next steps`)] },
+      }),
+    );
+    expect(locations).toContain("/word/document.xml: revisions");
+  });
+
+  it("reports reviewed text that does not read as the original", async () => {
+    const { locations } = await failure(
+      { reviewedOriginalIsCurrent: true },
+      (s) =>
+        planOf(s, {
+          replace: {
+            [REVIEW]: [listItem(s, "r", `Review ${SENTINEL} end.`, REVIEW)],
+          },
+        }),
+    );
+    expect(locations).toEqual([expect.stringMatching(/: reviewed$/)]);
+  });
+
+  it("reports Track Changes switched during the write, and still restores", async () => {
+    const { host, result, locations } = await failure(
+      {},
+      (s) =>
+        planOf(s, {
+          replace: {
+            [REVIEW]: [listItem(s, "r", `Review ${SENTINEL} end.`, REVIEW)],
+          },
+        }),
+      // Sync A, sync B, then the write batch.
+      (host) => host.setTrackingMode("Off", { afterSync: 3 }),
+    );
+    expect(locations).toEqual(["/word/settings.xml: tracking-changed"]);
     const reverted = await revertWordDocumentPlan(
       result.before!,
       result.afterFingerprint!,
@@ -728,6 +952,183 @@ describe("Track Changes gates", { timeout: 60_000 }, () => {
     expect(result.diagnostic?.details?.fallbackReasons).toContain(
       "native-target",
     );
+  });
+
+  it("never targets a paragraph whose only pending revision is formatting", async () => {
+    const host = install({}, fixture(formattingRevision));
+    const snapshot = await capture();
+    expect(snapshot.blocks.find((b) => b.text === SCHEDULE)).toMatchObject({
+      type: "native",
+      nativeKind: "anchored-content",
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.events.length = 0;
+    const result = await apply(
+      planOf(snapshot, {
+        replace: {
+          [SCHEDULE]: [listItem(snapshot, "s", "Schedule the trial.", CONFIRM)],
+        },
+      }),
+      snapshot,
+    );
+    expect(result.status).toBe("blocked");
+    expect(result.diagnostic?.details?.fallbackReasons).toContain(
+      "native-target",
+    );
+    expect(mutations(host.events)).toEqual([]);
+    expect(snapshot.used).toBe(false);
+  });
+
+  it("keeps a paragraph it restyled as tracked keep-only until the change is reviewed", async () => {
+    install();
+    const snapshot = await capture();
+    const applied = await apply(
+      planOf(snapshot, {
+        replace: {
+          [QUESTIONS]: [
+            { id: "h", type: "heading", level: 2, text: QUESTIONS },
+          ],
+        },
+      }),
+      snapshot,
+    );
+    expect(applied.status, report(applied)).toBe("applied");
+    const again = await captureRealisticSnapshot("message-B", "TrackAll");
+    expect(again.blocks.find((b) => b.text === QUESTIONS)).toMatchObject({
+      type: "native",
+      nativeKind: "anchored-content",
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const second = await applyWordDocumentPlan(
+      JSON.stringify(
+        planOf(again, {
+          replace: { [QUESTIONS]: [paragraph("q", "Open questions remain.")] },
+        }),
+      ),
+      again,
+      again.ownerMessageId,
+    );
+    expect(second.status).toBe("blocked");
+    expect(second.diagnostic?.details?.fallbackReasons).toContain(
+      "native-target",
+    );
+  });
+
+  it("blocks structural changes under Track Changes until their tracked probe passed", async () => {
+    setWordInPlaceCapabilitiesForTests({
+      ...ALL_WORD_IN_PLACE_CAPABILITIES,
+      trackedStructure: false,
+    });
+    const host = install();
+    const snapshot = await capture();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.events.length = 0;
+    const deleted = await apply(
+      planOf(snapshot, { delete: [SCHEDULE] }),
+      snapshot,
+    );
+    expect(deleted.status).toBe("blocked");
+    expect(deleted.diagnostic).toMatchObject({
+      stage: "validate",
+      reason: "tracking",
+      details: { fallbackReasons: ["delete"] },
+    });
+    expect(mutations(host.events)).toEqual([]);
+    const read = await capture();
+    const session = new WordDocumentReadSession();
+    session.activate(read, context);
+    await session.execute({ snapshot: read.token }, context);
+    const submit = createWordDocumentSubmissionExecutor(session);
+    const rejected = await submit(
+      {
+        ...planOf(read, {
+          replace: {
+            [QUESTIONS]: [
+              { id: "h", type: "heading", level: 2, text: QUESTIONS },
+            ],
+          },
+        }),
+        readToken: read.readToken!,
+      },
+      { ...context, toolCallId: "plan-1" },
+    );
+    expect(rejected).toMatchObject({
+      ok: false,
+      validationErrors: [
+        expect.objectContaining({
+          code: "tracking-needs-import",
+          message: expect.stringContaining("because of: restyle."),
+        }),
+      ],
+    });
+    const applied = await apply(
+      planOf(snapshot, {
+        replace: {
+          [SCHEDULE]: [
+            listItem(snapshot, "s", "Schedule the trial.", SCHEDULE),
+          ],
+        },
+      }),
+      snapshot,
+    );
+    expect(applied.status, report(applied)).toBe("applied");
+    expect(applied.outcome?.tracked).toBe(true);
+  });
+
+  it("blocks a structural plan when Track Changes came on after the capture", async () => {
+    setWordInPlaceCapabilitiesForTests({
+      ...ALL_WORD_IN_PLACE_CAPABILITIES,
+      trackedStructure: false,
+    });
+    const host = install();
+    host.setTrackingMode("Off");
+    const snapshot = await captureRealisticSnapshot();
+    host.setTrackingMode("TrackAll");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.events.length = 0;
+    const save = vi.fn();
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(planOf(snapshot, { delete: [SCHEDULE] })),
+      snapshot,
+      snapshot.ownerMessageId,
+      save,
+    );
+    expect(result.status).toBe("blocked");
+    expect(result.diagnostic).toMatchObject({
+      reason: "tracking",
+      details: { fallbackReasons: ["delete"] },
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(mutations(host.events)).toEqual([]);
+    expect(snapshot.used).toBe(false);
+  });
+
+  it("blocks a tracked insertion next to a paragraph with pending revisions", async () => {
+    const xml = fixture((doc) =>
+      paragraphWith(doc, CONFIRM).append(
+        element(
+          doc,
+          `<w:ins xmlns:w="${W}" w:id="904" w:author="${EARLIER}" w:date="2026-09-01T00:00:00Z"><w:r><w:t xml:space="preserve"> Soon.</w:t></w:r></w:ins>`,
+        ),
+      ),
+    );
+    const host = install({}, xml);
+    const snapshot = await capture();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.events.length = 0;
+    const result = await apply(
+      planOf(snapshot, {
+        after: { [STATUS]: [paragraph("n", "Next steps follow.")] },
+      }),
+      snapshot,
+    );
+    expect(result.status).toBe("blocked");
+    expect(result.diagnostic).toMatchObject({
+      reason: "tracking",
+      details: { fallbackReasons: ["boundary"] },
+    });
+    expect(mutations(host.events)).toEqual([]);
+    expect(snapshot.used).toBe(false);
   });
 
   it("keeps the earlier capture issue when tracked writing is unavailable", async () => {

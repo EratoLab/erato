@@ -11,11 +11,11 @@ import {
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "./wordDocumentXml";
-import { wordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 import { wordInPlaceFallbacks } from "./wordInPlacePlan";
 import {
   isWordTrackingMode,
   wordInPlaceAvailability,
+  wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
 import { wordReadScope } from "./wordReadScope";
 import { expandWordScopedSubmission } from "./wordScopedSubmission";
@@ -263,7 +263,7 @@ async function prepareWordDocumentSubmission(
         ? wordInPlaceFallbacks(
             plan,
             snapshot,
-            wordInPlaceCapabilities(),
+            wordInPlaceCapabilitiesUnder(snapshot.trackingMode),
             prepared,
           )
         : [availability.reason];

@@ -14,6 +14,7 @@ import {
   applyWordDocumentPlan,
   revertWordDocumentPlan,
 } from "../wordApplyDocumentPlan";
+import { decodeWordInPlaceBackup } from "../wordDocumentPackage";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -128,6 +129,18 @@ function twoSections(firstSection: string, finalHasHeader: boolean): string {
   });
 }
 const DEFAULT_HEADER = `<w:headerReference xmlns:w="${W}" xmlns:r="${R}" w:type="default" r:id="rIdHeader1"/>`;
+const SECOND_LINE = `${SENTINEL} second header line`;
+/** The header with a second paragraph after its first. */
+const twoLineHeader = () =>
+  editWordPackage(realisticWordPackageXml(), (doc) => {
+    const header = doc.getElementsByTagNameNS(W, "hdr")[0];
+    const line = header
+      .getElementsByTagNameNS(W, "p")[0]
+      .cloneNode(true) as Element;
+    line.getElementsByTagNameNS(W, "t")[0].textContent = SECOND_LINE;
+    header.append(line);
+  });
+const keptLine = { text: SECOND_LINE };
 
 afterEach(() => {
   resetWordInPlaceLatchForTests();
@@ -229,6 +242,92 @@ describe("header and footer text in place", { timeout: 60_000 }, () => {
     expect(reverted.status, report(reverted, "revert")).toBe("reverted");
     expect(partSignatures(host.ooxml())).toEqual(original);
     expect(setter).not.toHaveBeenCalled();
+  });
+
+  it("does not verify a header write that also changed the line after it", async () => {
+    const host = install({}, twoLineHeader());
+    const original = headerXml(host.ooxml());
+    const snapshot = await captureRealisticSnapshot();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.setReplaceFault("edits-next");
+    const applied = await apply(
+      storyPlan(snapshot, [
+        header({ text: `${SENTINEL} brief, revised` }, keptLine),
+      ]),
+      snapshot,
+    );
+    expect(applied.status).toBe("interrupted");
+    expect(applied.diagnostic).toMatchObject({
+      stage: "verify",
+      reason: "output-mismatch",
+      details: { route: "in-place", verifyTier: "block" },
+    });
+    expect(applied.diagnostic?.details?.locations).toEqual([
+      "/word/header1.xml: paragraph 2 signature",
+    ]);
+    const text = [report(applied), ...warn.mock.calls.flat().map(String)].join(
+      "\n",
+    );
+    expect(text).not.toContain(SENTINEL);
+    host.setReplaceFault(undefined);
+    // The exact package restore: the write did not verify.
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(reverted.outcome?.route).toBe("import");
+    expect(headerXml(host.ooxml())).toBe(original);
+  });
+
+  it("does not verify a header line written with the wrong marks", async () => {
+    const host = install();
+    await captureRealisticSnapshot();
+    host.userEdit((xml) =>
+      xml.replace(
+        `<w:t xml:space="preserve">${HEADER}</w:t>`,
+        `<w:rPr><w:b/><w:bCs/></w:rPr><w:t xml:space="preserve">${HEADER}</w:t>`,
+      ),
+    );
+    const snapshot = await captureRealisticSnapshot();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.setReplaceFault("drops-rpr");
+    const applied = await apply(
+      storyPlan(snapshot, [
+        header({
+          text: `${SENTINEL} brief`,
+          runs: [{ text: `${SENTINEL} brief`, bold: true }],
+        }),
+      ]),
+      snapshot,
+    );
+    expect(applied.status).toBe("interrupted");
+    expect(applied.diagnostic?.details?.locations).toEqual([
+      "/word/header1.xml: paragraph 1 runs",
+    ]);
+    expect(report(applied)).not.toContain(SENTINEL);
+  });
+
+  it("restores a tracked header write Word stopped halfway, by rejecting it", async () => {
+    const host = install({ trackChanges: true });
+    host.setTrackingMode("TrackAll");
+    const original = partSignatures(host.ooxml());
+    const snapshot = await captureRealisticSnapshot("message-A", "TrackAll");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.failAtCommand(2);
+    const applied = await apply(storyPlan(snapshot, [rewritten]), snapshot);
+    expect(applied.status).toBe("interrupted");
+    expect(headerXml(host.ooxml())).toContain("<w:ins ");
+    expect(applied.afterFingerprint).toMatch(/^word-scope-v1:/);
+    const record = decodeWordInPlaceBackup(applied.before!).inPlace!;
+    expect(record.regions.at(-1)?.after).toHaveLength(1);
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(partSignatures(host.ooxml())).toEqual(original);
   });
 
   it("refuses a header that changed since the capture", async () => {
