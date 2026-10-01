@@ -63,3 +63,53 @@ describe("injectFrontendEnv assistants flags", () => {
     expect(window.ASSISTANTS_DELEGATION_ENABLED).toBe(false);
   });
 });
+
+describe("injectFrontendEnv Word in-place kill switch", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    Reflect.deleteProperty(window, "WORD_FORCE_IMPORT_APPLY");
+  });
+
+  it("forces the import in production builds by default", () => {
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "");
+    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
+
+    injectFrontendEnv();
+
+    expect(window.WORD_FORCE_IMPORT_APPLY).toBe(true);
+  });
+
+  it("leaves in-place writing on for a production build that opts in", () => {
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "");
+    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "true");
+
+    injectFrontendEnv();
+
+    expect(window.WORD_FORCE_IMPORT_APPLY).toBeUndefined();
+  });
+
+  it("leaves in-place writing on in development unless forced off", () => {
+    vi.stubEnv("PROD", false);
+    vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "");
+    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
+
+    injectFrontendEnv();
+    expect(window.WORD_FORCE_IMPORT_APPLY).toBeUndefined();
+
+    vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "true");
+    injectFrontendEnv();
+    expect(window.WORD_FORCE_IMPORT_APPLY).toBe(true);
+  });
+
+  it("keeps a value the serving backend injected", () => {
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
+    window.WORD_FORCE_IMPORT_APPLY = false;
+
+    injectFrontendEnv();
+
+    expect(window.WORD_FORCE_IMPORT_APPLY).toBe(false);
+  });
+});

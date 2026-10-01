@@ -45,9 +45,10 @@ import type {
 } from "./wordInPlacePlan";
 import type { WordLiveParagraph } from "./wordLiveParagraphs";
 
-/** The prediction of body.paragraphs did not hold; nothing was written or saved yet. */
+/** The prediction of body.paragraphs did not hold, or a read only this route makes failed;
+ * nothing was written or saved yet. */
 export interface WordInPlaceFallbackResult {
-  fallback: "alignment";
+  fallback: "alignment" | "host-error";
   details: Pick<WordDiagnosticDetails, "paragraphs" | "locations">;
 }
 
@@ -115,6 +116,9 @@ const blockLocation = (ref: string, field: string) =>
   /^b\d{1,5}$/.test(ref)
     ? `/word/document.xml body block ${ref.slice(1)}: ${field}`
     : `/word/document.xml body: ${field}`;
+const paragraphLocation = (index: number, field: string) =>
+  `/word/document.xml paragraph ${index + 1}: ${field}`;
+const MAX_LOCATIONS = 8;
 
 export interface WordInPlaceApplyInput {
   snapshot: WordAuthoringSnapshot;
@@ -202,9 +206,7 @@ export async function applyWordPlanInPlace(
           liveA.length,
           structural.index === undefined
             ? []
-            : [
-                `/word/document.xml paragraph ${structural.index + 1}: ${structural.issue}`,
-              ],
+            : [paragraphLocation(structural.index, structural.issue)],
         );
       const live = await captureWordDocumentPackage();
       documentUrl = live.documentUrl;
@@ -252,24 +254,24 @@ export async function applyWordPlanInPlace(
       });
       await context.sync();
       const liveB = liveParagraphs(second);
-      const textIssue = sameLive(liveA, liveB)
-        ? wordParagraphAlignmentIssue(predicted, liveB, checked)
-        : { issue: "changed" as const, index: undefined };
-      if (textIssue)
+      if (!sameLive(liveA, liveB))
         return {
           status: "stale",
           diagnostic: diagnostic("preflight", "source-changed", undefined, {
             ...route,
             paragraphs: { predicted: predicted.length, live: liveB.length },
-            ...(textIssue.index === undefined
-              ? {}
-              : {
-                  locations: [
-                    `/word/document.xml paragraph ${textIssue.index + 1}: ${textIssue.issue}`,
-                  ],
-                }),
           }),
         };
+      // Equal reads around a capture that matched the snapshot rule out typing: a text difference
+      // is the prediction's or the host's Paragraph.text, which the import does not depend on.
+      const textIssue = wordParagraphAlignmentIssue(predicted, liveB, checked);
+      if (textIssue)
+        return fallback(
+          liveB.length,
+          textIssue.index === undefined
+            ? []
+            : [paragraphLocation(textIssue.index, textIssue.issue)],
+        );
       const misplaced = targets.findIndex(({ op, position }, i) => {
         const cell = cells[i];
         return (
@@ -342,13 +344,25 @@ export async function applyWordPlanInPlace(
       const verification =
         trackingAfter === tracking
           ? verifyWordInPlaceOutput(ops, snapshot, compiled, actual)
-          : { ok: false as const, locations: ["/word/settings.xml: tracking"] };
+          : {
+              ok: false as const,
+              locations: ["/word/settings.xml: tracking"],
+              confined: false,
+            };
       if (!verification.ok) {
         latchWordInPlace("verify-mismatch");
+        // Restore must not rely on the mechanism that just misbehaved, nor miss a change outside
+        // the written paragraphs: it is the exact package restore, guarded by this package.
+        if (verification.confined)
+          before = withWordInPlaceBackup(before, {
+            v: 1,
+            ops: record,
+            scopedFallback: true,
+          });
         return {
           status: "interrupted",
           before,
-          afterFingerprint,
+          afterFingerprint: after.fingerprint,
           diagnostic: diagnostic("verify", "output-mismatch", undefined, {
             ...route,
             verifyTier: "block",
@@ -374,6 +388,12 @@ export async function applyWordPlanInPlace(
       };
     });
   } catch (error) {
+    if (!writing && before === undefined) {
+      // Paragraph collections, Paragraph.getOoxml and cell lookups are reads the import never
+      // makes; it runs its own preflight and reports a genuinely broken host itself.
+      latchWordInPlace("host-error");
+      return { fallback: "host-error", details: {} };
+    }
     if (!writing)
       return {
         status: "blocked",
@@ -501,6 +521,15 @@ export async function revertWordPlanInPlace(
         };
       const proxies = ops.map((op) => paragraphs.items[position.get(op.id)!]);
       const reads = proxies.map((p) => p.getOoxml());
+      const written = new Set(ops.map((op) => position.get(op.id)!));
+      const neighbours = [
+        ...new Set([...written].flatMap((at) => [at - 1, at + 1])),
+      ].filter(
+        (at) => at >= 0 && at < paragraphs.items.length && !written.has(at),
+      );
+      const neighbourReads = neighbours.map((at) =>
+        paragraphs.items[at].getOoxml(),
+      );
       await context.sync();
       const pending: number[] = [];
       for (const [i, op] of ops.entries()) {
@@ -541,24 +570,42 @@ export async function revertWordPlanInPlace(
         );
       await context.sync();
       stage = "verify";
+      const recount = context.document.body.paragraphs;
+      recount.load("items/uniqueLocalId");
       const after = proxies.map((p) => p.getOoxml());
+      const neighboursAfter = neighbours.map((at) =>
+        paragraphs.items[at].getOoxml(),
+      );
       await context.sync();
       const signatures = after.map((r) => wordParagraphSignature(r.value));
-      const differing = ops.filter(
-        (op, i) => signatures[i] !== op.originalSignature,
+      const moved = recount.items.findIndex(
+        (p, i) => p.uniqueLocalId !== paragraphs.items[i]?.uniqueLocalId,
       );
-      if (differing.length)
+      const locations = [
+        ...(recount.items.length !== paragraphs.items.length
+          ? ["/word/document.xml body: count"]
+          : moved >= 0
+            ? [paragraphLocation(moved, "id")]
+            : []),
+        ...ops
+          .filter((op, i) => signatures[i] !== op.originalSignature)
+          .map((op) => blockLocation(op.ref, "signature")),
+        ...neighbours
+          .filter(
+            (_, i) =>
+              wordParagraphSignature(neighboursAfter[i].value) !==
+              wordParagraphSignature(neighbourReads[i].value),
+          )
+          .map((at) => paragraphLocation(at, "signature")),
+      ];
+      // No new scope fingerprint: another Restore would repeat what just misbehaved.
+      if (locations.length)
         return {
           status: "interrupted",
-          afterFingerprint: encodeWordScopeFingerprint(
-            ops.map((op, i) => [op.id, signatures[i]]),
-          ),
           diagnostic: diagnostic("restore", "output-mismatch", undefined, {
             ...details,
             verifyTier: "block",
-            locations: differing
-              .slice(0, 8)
-              .map((op) => blockLocation(op.ref, "signature")),
+            locations: locations.slice(0, MAX_LOCATIONS),
           }),
         };
       return { status: "reverted", afterFingerprint: originals, outcome };
@@ -569,5 +616,22 @@ export async function revertWordPlanInPlace(
       ...(writing ? { afterFingerprint: await observedScope() } : {}),
       diagnostic: diagnostic(stage, "host-error", error, details),
     };
+  }
+}
+
+/** The scope a Restore falls back to when later edits keep the exact package restore from running,
+ * for an unverified write whose differences all lie in the written paragraphs. */
+export function wordInPlaceFallbackScope(before: string): string | undefined {
+  try {
+    const record = decodeWordInPlaceBackup(before).inPlace;
+    if (!record?.scopedFallback) return undefined;
+    const entries: [string, string][] = [];
+    for (const op of record.ops) {
+      if (!op.afterSignature) return undefined;
+      entries.push([op.id, op.afterSignature]);
+    }
+    return encodeWordScopeFingerprint(entries);
+  } catch {
+    return undefined;
   }
 }

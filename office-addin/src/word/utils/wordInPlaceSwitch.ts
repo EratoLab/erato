@@ -8,8 +8,12 @@ export type WordInPlaceUnavailable =
 export type WordInPlaceAvailability =
   | { enabled: true }
   | { enabled: false; reason: WordInPlaceUnavailable };
-/** Why the session stopped writing in place: Word wrote something unexpected or stopped mid-batch. */
-export type WordInPlaceLatchCode = "verify-mismatch" | "interrupted";
+/** Why the session stopped writing in place: Word wrote something unexpected, stopped mid-batch,
+ * or failed a read only the in-place route makes. */
+export type WordInPlaceLatchCode =
+  | "verify-mismatch"
+  | "interrupted"
+  | "host-error";
 
 let latch: WordInPlaceLatchCode | undefined;
 

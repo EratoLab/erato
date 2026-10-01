@@ -412,7 +412,10 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     ]);
     expect(report(result)).toContain("Route: in-place");
     expect(result.before).toBeTruthy();
-    expect(result.afterFingerprint).toMatch(/^word-scope-v1:/);
+    expect(result.afterFingerprint).toBe(wordDocumentFingerprint(host.ooxml()));
+    expect(
+      decodeWordInPlaceBackup(result.before!).inPlace?.scopedFallback,
+    ).toBe(true);
     expect(wordInPlaceAvailability()).toEqual({
       enabled: false,
       reason: "latched",
@@ -619,5 +622,382 @@ describe("in-place failure and recovery", { timeout: 30_000 }, () => {
     });
     expect(mutations(host.events)).toEqual([]);
     expect(host.ooxml()).toContain("Status: the user's own words.");
+  });
+});
+
+const closingRewrite = (snapshot: WordAuthoringSnapshot) =>
+  rewrite(snapshot, [
+    [CLOSING, { text: "Bye.", runs: [{ text: "Bye.", language: "en-GB" }] }],
+  ]);
+
+describe("in-place routing to the import", { timeout: 30_000 }, () => {
+  it("imports when Word reports cell paragraph text differently from the package", async () => {
+    const host = install({ cellParagraphTextSuffix: "\u0007" });
+    const snapshot = await captureRealisticSnapshot();
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const save = vi.fn();
+    const table = snapshot.blocks.find((b) => b.nativeKind === "table")!;
+    const plan = expandWordTableCellSubmission(
+      {
+        snapshot: snapshot.token,
+        readToken: "read-proof",
+        table_cell: {
+          sourceRef: table.ref,
+          rowIndex: 1,
+          cellIndex: 1,
+          expectedText: "42",
+          text: "43",
+        },
+      },
+      snapshot,
+    );
+    const result = await apply(plan, snapshot, save);
+    expect(result.status, report(result)).toBe("applied");
+    expect(result.outcome?.route).toBe("import");
+    expect(save).toHaveBeenCalledOnce();
+    expect(host.insert).toHaveBeenCalledOnce();
+    expect(mutations(host.events)).toEqual([]);
+    expect(debug).toHaveBeenLastCalledWith(
+      "[erato] Word apply timings (ms)",
+      expect.objectContaining({ route: "import", routeReason: "alignment" }),
+    );
+    expect(wordInPlaceAvailability()).toEqual({ enabled: true });
+  });
+
+  it("imports and latches when a read only the in-place route makes fails", async () => {
+    const host = install();
+    const snapshot = await captureRealisticSnapshot();
+    host.failParagraphOoxml();
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const save = vi.fn();
+    const result = await apply(
+      rewrite(snapshot, [[STATUS, { text: "Status: imported." }]]),
+      snapshot,
+      save,
+    );
+    expect(result.status, report(result)).toBe("applied");
+    expect(result.outcome?.route).toBe("import");
+    expect(save).toHaveBeenCalledOnce();
+    expect(host.insert).toHaveBeenCalledOnce();
+    expect(mutations(host.events)).toEqual([]);
+    expect(debug).toHaveBeenLastCalledWith(
+      "[erato] Word apply timings (ms)",
+      expect.objectContaining({ route: "import", routeReason: "host-error" }),
+    );
+    expect(wordInPlaceAvailability()).toEqual({
+      enabled: false,
+      reason: "latched",
+    });
+  });
+
+  it("imports on a host without WordApi 1.6", async () => {
+    const host = install({
+      isSetSupported: (name, version) =>
+        !(name === "WordApi" && version === "1.6"),
+    });
+    const snapshot = await captureRealisticSnapshot();
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const result = await apply(
+      rewrite(snapshot, [[STATUS, { text: "Status: imported." }]]),
+      snapshot,
+    );
+    expect(result.status, report(result)).toBe("applied");
+    expect(result.outcome?.route).toBe("import");
+    expect(host.insert).toHaveBeenCalledOnce();
+    expect(mutations(host.events)).toEqual([]);
+    expect(debug).toHaveBeenLastCalledWith(
+      "[erato] Word apply timings (ms)",
+      expect.objectContaining({ route: "import", routeReason: "host-sets" }),
+    );
+  });
+
+  it("is unavailable without the document package", () => {
+    install({
+      isSetSupported: (name, version) =>
+        !(name === "WordApi" && version === "1.7"),
+    });
+    expect(wordInPlaceAvailability()).toEqual({
+      enabled: false,
+      reason: "no-package",
+    });
+  });
+});
+
+describe("in-place writes under Track Changes", { timeout: 30_000 }, () => {
+  it("never writes in place while Track Changes is on", async () => {
+    const host = install();
+    const snapshot = await captureRealisticSnapshot();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const setter = vi.spyOn(host.document, "changeTrackingMode", "set");
+    host.setTrackingMode("TrackAll");
+    host.events.length = 0;
+    const save = vi.fn();
+    const result = await apply(
+      rewrite(snapshot, [[STATUS, { text: "Status: tracked." }]]),
+      snapshot,
+      save,
+    );
+    expect(result.status).toBe("stale");
+    expect(result.diagnostic).toMatchObject({
+      stage: "preflight",
+      reason: "tracking",
+      details: { route: "in-place" },
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(mutations(host.events)).toEqual([]);
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(setter).not.toHaveBeenCalled();
+    expect(snapshot.used).toBe(false);
+  });
+
+  it("never reverts in place while Track Changes is on", async () => {
+    const host = install();
+    const snapshot = await captureRealisticSnapshot();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const applied = await apply(
+      rewrite(snapshot, [[STATUS, { text: "Status: rewritten." }]]),
+      snapshot,
+    );
+    expect(applied.status, report(applied)).toBe("applied");
+    const setter = vi.spyOn(host.document, "changeTrackingMode", "set");
+    host.setTrackingMode("TrackAll");
+    host.events.length = 0;
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status).toBe("stale");
+    expect(reverted.diagnostic).toMatchObject({
+      stage: "preflight",
+      reason: "tracking",
+      details: { route: "in-place" },
+    });
+    expect(mutations(host.events)).toEqual([]);
+    expect(setter).not.toHaveBeenCalled();
+    expect(host.ooxml()).toContain("Status: rewritten.");
+  });
+});
+
+describe(
+  "restore after an unverified in-place write",
+  { timeout: 30_000 },
+  () => {
+    it("restores the exact original package after Word dropped run properties", async () => {
+      const host = install({
+        profile: "word-web",
+        replaceDropsRunProperties: true,
+      });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const original = wordDocumentFingerprint(host.ooxml());
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await apply(closingRewrite(snapshot), snapshot);
+      expect(applied.status).toBe("interrupted");
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(reverted.outcome?.route).toBe("import");
+      expect(host.insert).toHaveBeenCalledOnce();
+      expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+    });
+
+    it("undoes only the written paragraphs when a later edit elsewhere blocks the exact restore", async () => {
+      const boldStatus = inPlaceFixture((doc) => {
+        const run = Array.from(doc.getElementsByTagNameNS(W, "t")).find((t) =>
+          t.textContent?.startsWith(STATUS),
+        )!.parentElement!;
+        const props = doc.createElementNS(W, "w:rPr");
+        props.append(
+          doc.createElementNS(W, "w:b"),
+          doc.createElementNS(W, "w:bCs"),
+        );
+        run.prepend(props);
+      });
+      const host = install({ replaceDropsRunProperties: true }, boldStatus);
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const original = paragraphXml(host.ooxml(), STATUS);
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await apply(
+        rewrite(snapshot, [
+          [
+            STATUS,
+            {
+              text: "Status: rewritten.",
+              runs: [{ text: "Status: rewritten.", bold: true }],
+            },
+          ],
+        ]),
+        snapshot,
+      );
+      expect(applied.status).toBe("interrupted");
+      expect(
+        decodeWordInPlaceBackup(applied.before!).inPlace?.scopedFallback,
+      ).toBe(true);
+      host.editParagraph(
+        paragraphIndex(host.ooxml(), QUESTIONS),
+        "The user kept working here.",
+      );
+      host.setReplaceFault(undefined);
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(reverted.outcome?.route).toBe("in-place");
+      expect(host.insert).not.toHaveBeenCalled();
+      expect(typed(host.ooxml()).blocks.map((b) => b.text)).toEqual(
+        snapshot.blocks.map((b) =>
+          b.text === QUESTIONS ? "The user kept working here." : b.text,
+        ),
+      );
+      expect(paragraphXml(host.ooxml(), STATUS)).toBe(original);
+    });
+
+    it("never reports a Restore that repeats Word's mistake as reverted", async () => {
+      const host = install({ replaceDropsRunProperties: true });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await apply(closingRewrite(snapshot), snapshot);
+      expect(applied.status).toBe("interrupted");
+      host.editParagraph(
+        paragraphIndex(host.ooxml(), QUESTIONS),
+        "The user kept working here.",
+      );
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status).toBe("interrupted");
+      expect(reverted.afterFingerprint).toBeUndefined();
+      const closing = snapshot.blocks.findIndex((b) => b.text === CLOSING) + 1;
+      expect(reverted.diagnostic).toMatchObject({
+        stage: "restore",
+        reason: "output-mismatch",
+        details: {
+          route: "in-place",
+          locations: [`/word/document.xml body block ${closing}: signature`],
+        },
+      });
+      expect(host.ooxml()).toContain("The user kept working here.");
+      expect(host.insert).not.toHaveBeenCalled();
+    });
+
+    it("restores the exact package after Word changed a paragraph it was not asked to", async () => {
+      const host = install({ profile: "word-web" });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const original = wordDocumentFingerprint(host.ooxml());
+      const snapshot = await captureRealisticSnapshot();
+      host.setReplaceFault("edits-next");
+      const applied = await apply(
+        rewrite(snapshot, [[STATUS, { text: "Status: rewritten." }]]),
+        snapshot,
+      );
+      expect(applied.status).toBe("interrupted");
+      const next =
+        snapshot.blocks.findIndex((b) => b.text.startsWith(STATUS)) + 2;
+      expect(applied.diagnostic?.details?.locations).toEqual([
+        `/word/document.xml body block ${next}: signature`,
+      ]);
+      expect(applied.afterFingerprint).toBe(
+        wordDocumentFingerprint(host.ooxml()),
+      );
+      expect(
+        decodeWordInPlaceBackup(applied.before!).inPlace?.scopedFallback,
+      ).toBeUndefined();
+      host.setReplaceFault(undefined);
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(reverted.outcome?.route).toBe("import");
+      expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+    });
+
+    it("keeps later edits and the download when Word also changed a paragraph it was not asked to", async () => {
+      const host = install();
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const snapshot = await captureRealisticSnapshot();
+      host.setReplaceFault("edits-next");
+      const applied = await apply(
+        rewrite(snapshot, [[STATUS, { text: "Status: rewritten." }]]),
+        snapshot,
+      );
+      expect(applied.status).toBe("interrupted");
+      host.setReplaceFault(undefined);
+      host.editParagraph(
+        paragraphIndex(host.ooxml(), QUESTIONS),
+        "The user kept working here.",
+      );
+      host.events.length = 0;
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status).toBe("stale");
+      expect(reverted.diagnostic?.reason).toBe("source-changed");
+      expect(host.insert).not.toHaveBeenCalled();
+      expect(mutations(host.events)).toEqual([]);
+      expect(host.ooxml()).toContain("The user kept working here.");
+    });
+  },
+);
+
+describe("in-place revert verification", { timeout: 30_000 }, () => {
+  async function appliedThen(
+    target: typeof STATUS | typeof CLOSING,
+    fault: "drops-rpr" | "adds-paragraph" | "edits-next",
+  ) {
+    const host = install();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const snapshot = await captureRealisticSnapshot();
+    const applied = await apply(
+      target === CLOSING
+        ? closingRewrite(snapshot)
+        : rewrite(snapshot, [[STATUS, { text: "Status: rewritten." }]]),
+      snapshot,
+    );
+    expect(applied.status, report(applied)).toBe("applied");
+    host.setReplaceFault(fault);
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status).toBe("interrupted");
+    expect(reverted.afterFingerprint).toBeUndefined();
+    expect(reverted.diagnostic).toMatchObject({
+      stage: "restore",
+      reason: "output-mismatch",
+      details: { route: "in-place", verifyTier: "block" },
+    });
+    return {
+      host,
+      snapshot,
+      locations: reverted.diagnostic!.details!.locations,
+    };
+  }
+
+  it("fails a Restore whose written paragraph does not come back exactly", async () => {
+    const { snapshot, locations } = await appliedThen(CLOSING, "drops-rpr");
+    const closing = snapshot.blocks.findIndex((b) => b.text === CLOSING) + 1;
+    expect(locations).toEqual([
+      `/word/document.xml body block ${closing}: signature`,
+    ]);
+  });
+
+  it("fails a Restore that adds a paragraph", async () => {
+    const { locations } = await appliedThen(CLOSING, "adds-paragraph");
+    expect(locations).toEqual(["/word/document.xml body: count"]);
+  });
+
+  it("fails a Restore that changes the next paragraph", async () => {
+    const { host, locations } = await appliedThen(STATUS, "edits-next");
+    const status = predictWordBodyParagraphs(host.ooxml()).findIndex((p) =>
+      p.text?.startsWith(STATUS),
+    );
+    expect(locations).toEqual([
+      `/word/document.xml paragraph ${status + 2}: signature`,
+    ]);
   });
 });

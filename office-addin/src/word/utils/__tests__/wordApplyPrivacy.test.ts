@@ -176,12 +176,30 @@ const statusIndex = (host: WordOoxmlHost) =>
   predictWordBodyParagraphs(host.ooxml()).findIndex((p) =>
     p.text?.startsWith("Status"),
   );
+/** The status paragraph with an en-GB run, which a Replace that drops run properties loses. */
+async function unverifiedStatusWrite(host: WordOoxmlHost) {
+  host.userEdit((xml) =>
+    xml.replace(
+      `<w:r><w:t xml:space="preserve">Status:`,
+      `<w:r><w:rPr><w:lang w:val="en-GB"/></w:rPr><w:t xml:space="preserve">Status:`,
+    ),
+  );
+  const snapshot = await captureRealisticSnapshot();
+  const plan = statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`);
+  const entry = plan.entries[1];
+  if (entry.kind !== "replace") throw new Error("Expected a rewrite.");
+  entry.blocks[0].runs = [
+    { text: `Status: ${SENTINEL} v2.`, language: "en-GB" },
+  ];
+  return applyWordDocumentPlan(JSON.stringify(plan), snapshot, "message-A");
+}
+
 const inPlaceFailures: [
   string,
   (
     host: WordOoxmlHost,
   ) => Promise<WordDocumentApplyResult | WordDocumentRevertResult>,
-  { status: string; reason: string },
+  { status: string; reason: string; route?: string },
 ][] = [
   [
     "stale paragraph read",
@@ -215,23 +233,36 @@ const inPlaceFailures: [
   ],
   [
     "unexpected write",
+    unverifiedStatusWrite,
+    { status: "interrupted", reason: "output-mismatch" },
+  ],
+  [
+    "Restore after an unexpected write, around a later edit",
     async (host) => {
-      host.userEdit((xml) =>
-        xml.replace(
-          `<w:r><w:t xml:space="preserve">Status:`,
-          `<w:r><w:rPr><w:lang w:val="en-GB"/></w:rPr><w:t xml:space="preserve">Status:`,
+      const applied = await unverifiedStatusWrite(host);
+      host.editParagraph(
+        predictWordBodyParagraphs(host.ooxml()).findIndex(
+          (p) => p.text === "Open questions follow.",
         ),
+        `${SENTINEL} typed later.`,
       );
-      const snapshot = await captureRealisticSnapshot();
-      const plan = statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`);
-      const entry = plan.entries[1];
-      if (entry.kind !== "replace") throw new Error("Expected a rewrite.");
-      entry.blocks[0].runs = [
-        { text: `Status: ${SENTINEL} v2.`, language: "en-GB" },
-      ];
-      return applyWordDocumentPlan(JSON.stringify(plan), snapshot, "message-A");
+      return revertWordDocumentPlan(applied.before!, applied.afterFingerprint!);
     },
     { status: "interrupted", reason: "output-mismatch" },
+  ],
+  [
+    "in-place read failure before an import failure",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      host.failParagraphOoxml(`Word quoted "${SENTINEL}" in this error`);
+      host.failImport();
+      return applyWordDocumentPlan(
+        JSON.stringify(statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`)),
+        snapshot,
+        "message-A",
+      );
+    },
+    { status: "interrupted", reason: "host-error", route: "import" },
   ],
   [
     "revert over a later edit",
@@ -261,6 +292,20 @@ const inPlaceFailures: [
     },
     { status: "interrupted", reason: "host-error" },
   ],
+  [
+    "Restore that does not verify",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await applyWordDocumentPlan(
+        JSON.stringify(statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`)),
+        snapshot,
+        "message-A",
+      );
+      host.setReplaceFault("edits-next");
+      return revertWordDocumentPlan(applied.before!, applied.afterFingerprint!);
+    },
+    { status: "interrupted", reason: "output-mismatch" },
+  ],
 ];
 
 describe("in-place diagnostics privacy", { timeout: 30_000 }, () => {
@@ -272,12 +317,14 @@ describe("in-place diagnostics privacy", { timeout: 30_000 }, () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const host = installWordOoxmlHost(realisticWordPackageXml(), {
         profile: "word-pc-16.0.20326",
-        replaceDropsRunProperties: name === "unexpected write",
+        replaceDropsRunProperties: name.includes("unexpected write"),
       });
       const result = await fail(host);
       expect(result.status).toBe(expected.status);
       expect(result.diagnostic?.reason).toBe(expected.reason);
-      expect(result.diagnostic?.details?.route).toBe("in-place");
+      expect(result.diagnostic?.details?.route).toBe(
+        expected.route ?? "in-place",
+      );
       const report = renderWordDiagnosticReport(
         "apply",
         result.status,

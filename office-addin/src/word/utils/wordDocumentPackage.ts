@@ -252,6 +252,9 @@ export type WordInPlaceBackupOp = WordInPlaceOp & {
 export interface WordInPlaceBackup {
   v: 1;
   ops: WordInPlaceBackupOp[];
+  /** The write did not verify, but every difference lies in the written paragraphs: when later
+   * edits keep the exact restore from running, undoing those paragraphs is still complete. */
+  scopedFallback?: true;
 }
 
 export function encodeWordDocumentBackup(
@@ -319,7 +322,12 @@ const isRuns = (v: unknown) =>
 function parseInPlaceBackup(value: unknown): WordInPlaceBackup | undefined {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
-  if (record.v !== 1 || !Array.isArray(record.ops) || !record.ops.length)
+  if (
+    record.v !== 1 ||
+    !Array.isArray(record.ops) ||
+    !record.ops.length ||
+    (record.scopedFallback !== undefined && record.scopedFallback !== true)
+  )
     return undefined;
   const valid = record.ops.every((entry: Record<string, unknown>) => {
     if (

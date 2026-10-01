@@ -91,10 +91,12 @@ export function decodeWordScopeFingerprint(
   }
 }
 
-/** Where a written block differs, as '/word/document.xml body block N: field'; never content. */
+/** Where a written block differs, as '/word/document.xml body block N: field'; never content.
+ * `confined`: every difference lies in a paragraph the write replaced, so rewriting those
+ * paragraphs undoes all of it. */
 export type WordInPlaceVerification =
   | { ok: true }
-  | { ok: false; locations: string[] };
+  | { ok: false; locations: string[]; confined: boolean };
 
 const MAX_LOCATIONS = 8;
 
@@ -110,12 +112,23 @@ export function verifyWordInPlaceOutput(
   after: WordAuthoringSnapshot,
 ): WordInPlaceVerification {
   const locations: string[] = [];
-  const at = (index: number, field: string) =>
+  let confined = true;
+  const at = (index: number, field: string, written = false) => {
     locations.push(`/word/document.xml body block ${index + 1}: ${field}`);
+    if (!written) confined = false;
+  };
   if (after.issue)
-    return { ok: false, locations: ["/word/document.xml: issue"] };
+    return {
+      ok: false,
+      locations: ["/word/document.xml: issue"],
+      confined: false,
+    };
   if (after.blocks.length !== baseline.blocks.length)
-    return { ok: false, locations: ["/word/document.xml body: count"] };
+    return {
+      ok: false,
+      locations: ["/word/document.xml body: count"],
+      confined: false,
+    };
   const before = createNativeContentSignature(baseline.ooxml);
   const actual = createNativeContentSignature(after.ooxml);
   const expected = createNativeContentSignature(compiled.ooxml);
@@ -126,12 +139,13 @@ export function verifyWordInPlaceOutput(
     if (!op) {
       if (before(source.xml) !== actual(written.xml)) at(i, "signature");
     } else if (op.kind === "cell") {
+      // The table also holds cells the write never touched.
       const table = compiled.blocks[i];
       if (!table || expected(table.xml) !== actual(written.xml))
         at(i, "signature");
     } else {
       const issue = wordInPlaceTypedIssue(source, op, written);
-      if (issue) at(i, issue);
+      if (issue) at(i, issue, true);
     }
   });
   const counts = [baseline.ooxml, after.ooxml].map(wordPackageCounts);
@@ -139,11 +153,14 @@ export function verifyWordInPlaceOutput(
     counts[0].parts - counts[0].webextensionParts !==
       counts[1].parts - counts[1].webextensionParts ||
     counts[0].customXmlItems !== counts[1].customXmlItems
-  )
+  ) {
     locations.push("/: package");
-  else if (!sameWordPreservedParts(baseline.ooxml, after.ooxml, "content"))
+    confined = false;
+  } else if (!sameWordPreservedParts(baseline.ooxml, after.ooxml, "content")) {
     locations.push("/: preserved parts");
+    confined = false;
+  }
   return locations.length
-    ? { ok: false, locations: locations.slice(0, MAX_LOCATIONS) }
+    ? { ok: false, locations: locations.slice(0, MAX_LOCATIONS), confined }
     : { ok: true };
 }

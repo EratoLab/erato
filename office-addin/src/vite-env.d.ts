@@ -17,6 +17,7 @@ interface ImportMetaEnv {
   readonly VITE_DELEGATION_TASKS_ALLOW_ASYNC?: string;
   readonly VITE_DELEGATION_TASKS_APPROVAL_MODE?: string;
   readonly VITE_WORD_FORCE_IMPORT_APPLY?: string;
+  readonly VITE_WORD_IN_PLACE_APPLY?: string;
 }
 
 interface OfficeAddinDefaultSettings {

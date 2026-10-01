@@ -25,6 +25,7 @@ export const WORD_ROUTE_REASONS = [
   "host-sets",
   "no-package",
   "alignment",
+  "host-error",
   ...WORD_IN_PLACE_FALLBACKS,
 ] as const;
 export type WordRouteReason = (typeof WORD_ROUTE_REASONS)[number];

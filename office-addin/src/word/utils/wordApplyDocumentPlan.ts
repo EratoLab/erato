@@ -38,6 +38,7 @@ import { wordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 import {
   applyWordPlanInPlace,
   revertWordPlanInPlace,
+  wordInPlaceFallbackScope,
 } from "./wordInPlaceExecutor";
 import { classifyWordInPlacePlan } from "./wordInPlacePlan";
 import { isWordScopeFingerprint } from "./wordInPlaceState";
@@ -412,10 +413,18 @@ async function revertPlan(
   before: string,
   expectedAfter: string,
 ): Promise<WordDocumentRevertResult> {
-  if (isWordDocumentBackup(before))
-    return isWordScopeFingerprint(expectedAfter)
-      ? revertWordPlanInPlace(before, expectedAfter)
-      : revertFullDocument(before, expectedAfter);
+  if (isWordDocumentBackup(before)) {
+    if (isWordScopeFingerprint(expectedAfter))
+      return revertWordPlanInPlace(before, expectedAfter);
+    const exact = await revertFullDocument(before, expectedAfter);
+    const scope =
+      exact.status === "stale" &&
+      exact.diagnostic?.reason === "source-changed" &&
+      !exact.diagnostic.details?.urlChanged
+        ? wordInPlaceFallbackScope(before)
+        : undefined;
+    return scope ? revertWordPlanInPlace(before, scope) : exact;
+  }
   const host = wordWriteHost();
   if (!host)
     return {

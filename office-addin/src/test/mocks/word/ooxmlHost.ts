@@ -40,7 +40,17 @@ export interface WordOoxmlHostOptions {
   includeTextBoxParagraphs?: boolean;
   /** Adversarial: insertText "Replace" drops the first run's properties. */
   replaceDropsRunProperties?: boolean;
+  /** Paragraph.text of table-cell paragraphs ends with this, as a host may report the end-of-cell mark. */
+  cellParagraphTextSuffix?: string;
 }
+
+/** Adversarial insertText "Replace" behaviour, switchable mid-test. */
+export type WordReplaceFault =
+  | "drops-rpr"
+  /** An extra empty paragraph appears after the written one. */
+  | "adds-paragraph"
+  /** The following paragraph turns bold as well. */
+  | "edits-next";
 
 type When =
   | "now"
@@ -529,6 +539,9 @@ export function installWordOoxmlHost(
     if (!id) paragraphIds.set(p, (id = newParagraphId()));
     return id;
   };
+  let replaceFault: WordReplaceFault | undefined =
+    settings.replaceDropsRunProperties ? "drops-rpr" : undefined;
+  let paragraphOoxmlFault: string | undefined;
   type Command = { write: boolean; name: string; run: () => void };
   const queue: Command[] = [];
   let failAt: number | undefined;
@@ -631,10 +644,17 @@ export function installWordOoxmlHost(
     return {
       uniqueLocalId: idOf(p),
       tableNestingLevel: nesting,
-      text: paragraphText(p),
+      text:
+        paragraphText(p) +
+        (nesting ? (settings.cellParagraphTextSuffix ?? "") : ""),
     };
   };
   const paragraphOoxml = (p: Element) => {
+    if (paragraphOoxmlFault !== undefined)
+      throw Object.assign(new Error(paragraphOoxmlFault), {
+        code: "GeneralException",
+        debugInfo: { errorLocation: "Paragraph.getOoxml" },
+      });
     const doc = live();
     const packagePart = (name: string, contentType: string, root?: Element) =>
       root
@@ -704,10 +724,19 @@ export function installWordOoxmlHost(
             const run = newRun(
               p.ownerDocument,
               text,
-              settings.replaceDropsRunProperties ? undefined : first,
+              replaceFault === "drops-rpr" ? undefined : first,
             );
             p.append(run);
             inserted = [run];
+            if (replaceFault === "adds-paragraph")
+              p.after(p.ownerDocument.createElementNS(W, "w:p"));
+            const next = p.nextElementSibling;
+            if (
+              replaceFault === "edits-next" &&
+              next?.namespaceURI === W &&
+              next.localName === "p"
+            )
+              runsOf(next).forEach((r) => setRunMark(r, ["b", "bCs"], ""));
           } else if (location === "End") {
             const run = newRun(p.ownerDocument, text, last);
             p.append(run);
@@ -1192,6 +1221,13 @@ export function installWordOoxmlHost(
       failAt = writesSeen + n;
       failMessage = message;
     },
+    setReplaceFault: (fault: WordReplaceFault | undefined) => {
+      replaceFault = fault;
+    },
+    /** Every Paragraph.getOoxml read fails with `message` until resume(). */
+    failParagraphOoxml: (message = "Word could not read the paragraph.") => {
+      paragraphOoxmlFault = message;
+    },
     paragraphIds: () => bodyParagraphs(live()).map(idOf),
     resume: () => {
       faultAfterWrite = undefined;
@@ -1201,6 +1237,7 @@ export function installWordOoxmlHost(
       cannotRead = false;
       failingReads.clear();
       failAt = undefined;
+      paragraphOoxmlFault = undefined;
     },
     transform: (value: (bytes: Uint8Array) => Uint8Array) => {
       decorateWrite = value;

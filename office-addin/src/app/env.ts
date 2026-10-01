@@ -58,8 +58,13 @@ export function injectFrontendEnv() {
       import.meta.env.VITE_DELEGATION_TASKS_APPROVAL_MODE;
   }
 
-  // Release builds set this until the in-place Word writer is confirmed on real hosts.
-  if (import.meta.env.VITE_WORD_FORCE_IMPORT_APPLY === "true") {
+  // The in-place Word writer stays off in production builds until the native probes pass on real
+  // hosts; VITE_WORD_IN_PLACE_APPLY opts a build in.
+  if (
+    import.meta.env.VITE_WORD_FORCE_IMPORT_APPLY === "true" ||
+    (import.meta.env.PROD &&
+      import.meta.env.VITE_WORD_IN_PLACE_APPLY !== "true")
+  ) {
     window.WORD_FORCE_IMPORT_APPLY ??= true;
   }
 }
