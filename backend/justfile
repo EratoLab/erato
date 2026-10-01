@@ -46,7 +46,7 @@ check_config_reference_docs:
     uv run ../site/scripts/check_config_reference_coverage.py
 
 test *args:
-    RUST_MIN_STACK=8388608 cargo nextest run --retries 2 {{args}}
+    RUST_MIN_STACK=8388608 cargo nextest run --retries 2 --no-fail-fast {{args}}
 
 test_policy:
     opa test --v1-compatible -v policy

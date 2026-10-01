@@ -114,12 +114,26 @@ fn submit(setup: &Setup) -> axum_test::TestRequest {
         .json(&json!({ "existing_chat_id": setup.chat_id, "user_message": "search locally" }))
 }
 
-fn continuation(
+async fn continuation(
     setup: &Setup,
     message_id: Uuid,
     decision: &str,
     tools: &str,
-) -> axum_test::TestRequest {
+) -> axum_test::TestResponse {
+    let approval_id = assistant_rows(setup)
+        .await
+        .into_iter()
+        .find(|row| row["id"] == json!(message_id))
+        .and_then(|row| {
+            row["content"]
+                .as_array()?
+                .iter()
+                .find(|part| part["content_type"] == "tool_approval_request")?["approvals"][0]
+                ["approval_id"]
+                .as_str()
+                .map(str::to_string)
+        })
+        .expect("parked assistant row has an approval id");
     setup
         .server
         .post("/api/v1beta/me/messages/continuestream")
@@ -127,8 +141,9 @@ fn continuation(
         .add_header("X-Erato-Client-Tools", tools)
         .json(&json!({
             "message_id": message_id,
-            "decisions": [{ "approval_id": CALL, "decision": decision }],
+            "decisions": [{ "approval_id": approval_id, "decision": decision }],
         }))
+        .await
 }
 
 /// Answers every client tool call the chat dispatches until `stop` resolves,
@@ -197,7 +212,13 @@ fn tool_use_output(row: &Value, tool_call_id: &str) -> Value {
         .as_array()
         .unwrap()
         .iter()
-        .find(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == tool_call_id)
+        .find(|part| {
+            part["content_type"] == "tool_use"
+                && (part["tool_call_id"] == tool_call_id
+                    || part["tool_call_id"]
+                        .as_str()
+                        .is_some_and(|id| id.ends_with(&format!(":{tool_call_id}"))))
+        })
         .map(|part| part["output"].clone())
         .unwrap_or(Value::Null)
 }
@@ -404,6 +425,14 @@ async fn approval_without_the_header_keeps_the_turn_registration(pool: Pool<Post
     let setup = setup(pool, 60_000, true).await;
     let row = park_on_ask(&setup).await;
     let message_id: Uuid = serde_json::from_value(row["id"].clone()).unwrap();
+    let approval_id = row["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|part| part["content_type"] == "tool_approval_request")
+        .unwrap()["approvals"][0]["approval_id"]
+        .as_str()
+        .unwrap();
     let (response, answered) = tokio::time::timeout(Duration::from_secs(30), async {
         let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
         let request = async {
@@ -413,7 +442,7 @@ async fn approval_without_the_header_keeps_the_turn_registration(pool: Pool<Post
                 .with_bearer_token(TEST_JWT_TOKEN)
                 .json(&json!({
                     "message_id": message_id,
-                    "decisions": [{ "approval_id": CALL, "decision": "approve" }],
+                    "decisions": [{ "approval_id": approval_id, "decision": "approve" }],
                 }))
                 .await;
             let _ = done_tx.send(());
@@ -450,7 +479,7 @@ async fn never_allow_saved_mid_turn_refuses_at_dispatch(pool: Pool<Postgres>) {
                         tool_call_id,
                         ..
                     } = event
-                        && tool_call_id == FIRST
+                        && tool_call_id.ends_with(FIRST)
                     {
                         set_decisions(
                             &setup.server,

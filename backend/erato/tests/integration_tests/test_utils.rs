@@ -12,6 +12,7 @@ use erato::state::AppState;
 use mocktail::prelude::*;
 use mocktail::server::MockServerConfig;
 use serde_json::{Value, json};
+use std::fmt::Display;
 use std::fs;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
@@ -19,6 +20,15 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::{Builder, NamedTempFile};
+
+/// Build the tool call ID exposed for one model-generated call in a message.
+pub fn generated_tool_call_id(
+    assistant_message_id: impl Display,
+    turn: usize,
+    provider_call_id: &str,
+) -> String {
+    format!("{assistant_message_id}:{turn}:{provider_call_id}")
+}
 
 // ============================================================================
 // Configuration Helpers

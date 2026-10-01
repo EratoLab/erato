@@ -133,6 +133,158 @@ fn now_timestamp() -> String {
     Utc::now().to_rfc3339()
 }
 
+fn generation_tool_call_id(assistant_message_id: Uuid, turn: usize, call_id: &str) -> String {
+    format!("{assistant_message_id}:{turn}:{call_id}")
+}
+
+fn namespace_stream_tool_call_ids(
+    event: ChatStreamEvent,
+    assistant_message_id: Uuid,
+    turn: usize,
+) -> ChatStreamEvent {
+    match event {
+        ChatStreamEvent::ToolCallChunk(mut chunk) => {
+            chunk.tool_call.call_id =
+                generation_tool_call_id(assistant_message_id, turn, &chunk.tool_call.call_id);
+            ChatStreamEvent::ToolCallChunk(chunk)
+        }
+        ChatStreamEvent::End(mut end) => {
+            if let Some(content) = end.captured_content.take() {
+                end.captured_content = Some(MessageContent::from_parts(
+                    content
+                        .into_parts()
+                        .into_iter()
+                        .map(|part| match part {
+                            GenAiContentPart::ToolCall(mut call) => {
+                                call.call_id = generation_tool_call_id(
+                                    assistant_message_id,
+                                    turn,
+                                    &call.call_id,
+                                );
+                                GenAiContentPart::ToolCall(call)
+                            }
+                            other => other,
+                        })
+                        .collect::<Vec<_>>(),
+                ));
+            }
+            ChatStreamEvent::End(end)
+        }
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod generation_tool_call_id_tests {
+    use super::*;
+    use crate::models::message::{ToolCallStatus, ToolUse};
+    use genai::chat::ToolCall;
+
+    fn call() -> ToolCall {
+        ToolCall {
+            call_id: "call#run_python_code#0".into(),
+            fn_name: "run_python_code".into(),
+            fn_arguments: json!({"code": "print('hello')"}),
+            thought_signatures: None,
+        }
+    }
+
+    #[test]
+    fn repeated_provider_ids_are_unique_across_model_turns_and_match_stream_events() {
+        let assistant_message_id = Uuid::parse_str("01a0f45a-6fea-7d38-b761-25f0b0436423").unwrap();
+        let first_turn = namespace_stream_tool_call_ids(
+            ChatStreamEvent::ToolCallChunk(genai::chat::ToolChunk { tool_call: call() }),
+            assistant_message_id,
+            1,
+        );
+        let second_turn = namespace_stream_tool_call_ids(
+            ChatStreamEvent::End(StreamEnd {
+                captured_content: Some(MessageContent::from_tool_calls(vec![call()])),
+                ..Default::default()
+            }),
+            assistant_message_id,
+            2,
+        );
+
+        let ChatStreamEvent::ToolCallChunk(first_turn) = first_turn else {
+            panic!("expected a tool-call chunk");
+        };
+        let ChatStreamEvent::End(second_turn) = second_turn else {
+            panic!("expected end event");
+        };
+        let first_id = first_turn.tool_call.call_id;
+        let second_id = second_turn.captured_tool_calls().unwrap()[0]
+            .call_id
+            .clone();
+
+        assert_eq!(
+            first_id,
+            "01a0f45a-6fea-7d38-b761-25f0b0436423:1:call#run_python_code#0"
+        );
+        assert_eq!(
+            second_id,
+            "01a0f45a-6fea-7d38-b761-25f0b0436423:2:call#run_python_code#0"
+        );
+        assert_ne!(first_id, second_id);
+    }
+
+    #[test]
+    fn repeated_run_python_calls_keep_each_outcome_in_generation_order() {
+        let assistant_message_id = Uuid::parse_str("01a0f45a-6fea-7d38-b761-25f0b0436423").unwrap();
+        let mut content = Vec::new();
+
+        for turn in 1..=14 {
+            let event = namespace_stream_tool_call_ids(
+                ChatStreamEvent::End(StreamEnd {
+                    captured_content: Some(MessageContent::from_tool_calls(vec![call()])),
+                    ..Default::default()
+                }),
+                assistant_message_id,
+                turn,
+            );
+            let ChatStreamEvent::End(end) = event else {
+                panic!("expected end event");
+            };
+            let tool_call = end.captured_tool_calls().unwrap()[0];
+            let status = if turn == 13 {
+                ToolCallStatus::Success
+            } else {
+                ToolCallStatus::Error
+            };
+            crate::services::tool_arguments::upsert_tool_use(
+                &mut content,
+                ToolUse {
+                    tool_call_id: tool_call.call_id.clone(),
+                    tool_name: tool_call.fn_name.clone(),
+                    status,
+                    output: (turn == 13).then(|| json!({"files": ["result.csv", "summary.txt"]})),
+                    ..Default::default()
+                },
+            );
+        }
+
+        assert_eq!(content.len(), 14);
+        for (index, part) in content.iter().enumerate() {
+            let ContentPart::ToolUse(tool_use) = part else {
+                panic!("expected tool-use part");
+            };
+            assert_eq!(
+                tool_use.tool_call_id,
+                generation_tool_call_id(assistant_message_id, index + 1, "call#run_python_code#0")
+            );
+            if index == 12 {
+                assert_eq!(tool_use.status, ToolCallStatus::Success);
+                assert_eq!(
+                    tool_use.output,
+                    Some(json!({"files": ["result.csv", "summary.txt"]}))
+                );
+            } else {
+                assert_eq!(tool_use.status, ToolCallStatus::Error);
+            }
+        }
+    }
+}
+
 /// What the approval gate does with one MCP or client tool call once the
 /// policy and the user's own decision are combined.
 #[derive(Debug, PartialEq)]
@@ -8148,7 +8300,11 @@ async fn stream_generate_chat_completion<
             };
 
             match result {
-                Ok(message) => match message {
+                Ok(message) => match namespace_stream_tool_call_ids(
+                    message,
+                    assistant_message_id,
+                    current_turn,
+                ) {
                     ChatStreamEvent::Chunk(StreamChunk { content }) => {
                         let elapsed = provider_request_start.elapsed();
                         first_response_elapsed.get_or_insert(elapsed);
