@@ -1,5 +1,11 @@
 import { t } from "@lingui/core/macro";
 
+import {
+  wordPlanAdjustedHeadline,
+  wordPlanVerifiedText,
+} from "../utils/wordAuthoringMessages";
+import { wordPlanOutcomeState } from "../utils/wordReviewState";
+
 import type { WordReviewState } from "../utils/wordReviewState";
 
 export function WordReviewReceipt({
@@ -16,6 +22,7 @@ export function WordReviewReceipt({
     (item) => item.status === "failed",
   ).length;
   const skipped = review.outcomes.length - applied - failed;
+  const outcome = kind === "plan" ? wordPlanOutcomeState(review) : undefined;
   return (
     <div
       className="word-review__receipt focus-ring"
@@ -35,26 +42,31 @@ export function WordReviewReceipt({
                 id: "officeAddin.word.review.restored",
                 message: "Document body restored",
               })
-            : kind === "plan"
-              ? t({
-                  id: "officeAddin.word.authoring.applied",
-                  message: "Document rewrite applied",
-                })
-              : kind === "insert"
+            : outcome === "adjusted"
+              ? wordPlanAdjustedHeadline()
+              : kind === "plan"
                 ? t({
-                    id: "officeAddin.word.card.inserted",
-                    message: "Inserted into the document.",
+                    id: "officeAddin.word.authoring.applied",
+                    message: "Document rewrite applied",
                   })
-                : applied === 1
+                : kind === "insert"
                   ? t({
-                      id: "officeAddin.word.review.oneApplied",
-                      message: "1 edit applied",
+                      id: "officeAddin.word.card.inserted",
+                      message: "Inserted into the document.",
                     })
-                  : t({
-                      id: "officeAddin.word.review.appliedCount",
-                      message: `${applied} edits applied`,
-                    })}
+                  : applied === 1
+                    ? t({
+                        id: "officeAddin.word.review.oneApplied",
+                        message: "1 edit applied",
+                      })
+                    : t({
+                        id: "officeAddin.word.review.appliedCount",
+                        message: `${applied} edits applied`,
+                      })}
       </strong>
+      {outcome === "verified" && (
+        <span className="word-review__hint">{wordPlanVerifiedText()}</span>
+      )}
       {kind === "plan" && (
         <span className="word-review__hint">
           {t({

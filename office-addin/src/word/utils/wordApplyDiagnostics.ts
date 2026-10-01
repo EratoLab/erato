@@ -21,6 +21,7 @@ export const WORD_APPLY_ROUTES = ["import", "body", "in-place"] as const;
 /** Closed list: why a plan did not run in place. */
 export const WORD_ROUTE_REASONS = [
   "disabled",
+  "setting",
   "latched",
   "host-sets",
   "no-package",
@@ -321,6 +322,36 @@ export function renderWordDiagnosticReport(
     `Host: ${hostLine()}`,
   ];
   return lines.join("\n");
+}
+
+/** A verified write Word adjusted on its own: routes, tiers, codes and counts, never content. */
+export function renderWordOutcomeReport(
+  operation: "apply" | "revert",
+  outcome: WordApplyOutcome,
+): string {
+  const adjustments = outcome.adjustments.filter((code) =>
+    WORD_APPLY_ADJUSTMENTS.includes(code),
+  );
+  return [
+    `Word add-in ${operation} succeeded with adjustments`,
+    ...(WORD_APPLY_ROUTES.includes(outcome.route)
+      ? [`Route: ${outcome.route}`]
+      : []),
+    ...(["strict", "content", "block"].includes(outcome.tier)
+      ? [`Verify tier: ${outcome.tier}`]
+      : []),
+    `Adjustments: ${adjustments.length ? adjustments.join(", ") : "none"}`,
+    ...(isCount(outcome.ops) ? [`In-place changes: ${outcome.ops}`] : []),
+    ...(isCount(outcome.outsideChanges)
+      ? [
+          `Changed elsewhere before apply: ${outcome.outsideChanges} blocks (left untouched)`,
+        ]
+      : []),
+    ...(typeof outcome.tracked === "boolean"
+      ? [`Tracked changes: ${outcome.tracked ? "yes" : "no"}`]
+      : []),
+    `Host: ${hostLine()}`,
+  ].join("\n");
 }
 
 export function logWordDiagnostic(

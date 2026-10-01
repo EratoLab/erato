@@ -278,6 +278,8 @@ export interface WordInPlaceBackup {
   /** Per paragraph ID inside a touched region, its tracked changes as [type, text] after the write.
    * Restore rejects only while they are exactly these, so it never undoes a reviewer's decision. */
   revisions?: Record<string, [string, string][]>;
+  /** Ops whose written paragraph did not verify, so the card can point at each one. */
+  mismatched?: number[];
 }
 
 export function encodeWordDocumentBackup(
@@ -437,6 +439,12 @@ function parseInPlaceBackup(value: unknown): WordInPlaceBackup | undefined {
     !record.regions.length ||
     (record.scopedFallback !== undefined && record.scopedFallback !== true) ||
     (record.tracked !== undefined && record.tracked !== true) ||
+    (record.mismatched !== undefined &&
+      (!Array.isArray(record.mismatched) ||
+        !record.mismatched.every(
+          (index: unknown) =>
+            isIndex(index) && index < (record.ops as unknown[]).length,
+        ))) ||
     (record.revisions !== undefined &&
       (!record.revisions ||
         typeof record.revisions !== "object" ||

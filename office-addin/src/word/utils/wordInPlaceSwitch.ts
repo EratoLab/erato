@@ -8,6 +8,7 @@ import type { WordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 
 export type WordInPlaceUnavailable =
   | "disabled"
+  | "setting"
   | "latched"
   | "host-sets"
   | "no-package";
@@ -23,10 +24,32 @@ export type WordInPlaceLatchCode =
 
 let latch: WordInPlaceLatchCode | undefined;
 
+/** Per-device Compatibility mode: every rewrite takes the full-document import. */
+export const WORD_COMPATIBILITY_MODE_KEY = "erato.word.forceImportApply";
+
+/** Storage can throw (blocked site data, private windows); unreadable means off. */
+export function readWordCompatibilityMode(): boolean {
+  try {
+    return localStorage.getItem(WORD_COMPATIBILITY_MODE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeWordCompatibilityMode(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(WORD_COMPATIBILITY_MODE_KEY, "1");
+    else localStorage.removeItem(WORD_COMPATIBILITY_MODE_KEY);
+  } catch {
+    // Unstored means off; the settings checkbox reads storage back.
+  }
+}
+
 /** In-place writing needs the exact .docx backup (package support) and stable paragraph IDs (WordApi 1.6). */
 export function wordInPlaceAvailability(): WordInPlaceAvailability {
   if (typeof window !== "undefined" && window.WORD_FORCE_IMPORT_APPLY === true)
     return { enabled: false, reason: "disabled" };
+  if (readWordCompatibilityMode()) return { enabled: false, reason: "setting" };
   if (latch) return { enabled: false, reason: "latched" };
   if (
     !globalThis.Office?.context?.requirements?.isSetSupported?.(

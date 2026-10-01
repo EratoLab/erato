@@ -2,6 +2,7 @@ import { planWordEdits } from "./wordEditPlan";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordDocumentCapture } from "./wordDocumentCapture";
+import type { WordInPlaceBackup } from "./wordDocumentPackage";
 import type { WordEdit } from "./wordEditPlan";
 
 export type WordTrackingMode = "off" | "on" | "unknown";
@@ -116,6 +117,104 @@ export async function showWordReviewLocation(
       return anchor.paragraphs.length === 1 && anchor.paragraphs[0].text === ""
         ? "cleared"
         : "selected";
+    });
+  } catch {
+    return "unavailable";
+  }
+}
+
+/** Paragraph IDs of each body region an in-place write left, in document order. */
+export function wordInPlaceWrittenRegions(
+  record: WordInPlaceBackup,
+): string[][] {
+  return record.regions.flatMap((region) =>
+    !region.story && region.after?.length ? [region.after] : [],
+  );
+}
+
+/** The written region that holds the change to captured block `ref`. */
+export function wordInPlaceRegionOf(
+  record: WordInPlaceBackup,
+  ref: string,
+): string[] | undefined {
+  return record.regions.find(
+    (region) =>
+      !region.story &&
+      !!region.after?.length &&
+      (region.before.some((i) => record.ops[i]?.ref === ref) ||
+        record.ops.some(
+          (op) =>
+            op.kind === "insert" &&
+            op.ref === ref &&
+            !!op.id &&
+            region.after!.includes(op.id),
+        )),
+  )?.after;
+}
+
+/** The body paragraph of each op whose written result did not verify. */
+export function wordInPlaceMismatchedParagraphs(
+  record: WordInPlaceBackup,
+): string[] {
+  return (record.mismatched ?? []).flatMap((i) => {
+    const op = record.ops[i];
+    return op?.id && op.kind !== "delete" && !(op.kind === "text" && op.story)
+      ? [op.id]
+      : [];
+  });
+}
+
+/** Selects the paragraphs with these IDs; they must still be adjacent, in this order. Text is not
+ * compared: the IDs come from this session's own write. */
+export async function showWordParagraphs(
+  ids: readonly string[],
+  identity: string,
+  currentIdentity: string | null,
+  tracked = false,
+): Promise<WordLocationResult> {
+  if (!currentIdentity || identity !== currentIdentity)
+    return "identity-mismatch";
+  const word = wordWriteHost();
+  if (!word || !ids.length) return "unavailable";
+  if (
+    tracked &&
+    !globalThis.Office?.context?.requirements?.isSetSupported?.(
+      "WordApi",
+      "1.6",
+    )
+  )
+    return "unavailable";
+  try {
+    return await word.run(async (context) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items/uniqueLocalId");
+      await context.sync();
+      const index = new Map(
+        paragraphs.items.map((p, i) => [p.uniqueLocalId, i] as const),
+      );
+      const positions = ids.map((id) => index.get(id) ?? -1);
+      if (
+        positions.some((p, i) => p < 0 || (i > 0 && p !== positions[i - 1] + 1))
+      )
+        return "changed";
+      const items = positions.map((p) => paragraphs.items[p]);
+      if (tracked) {
+        const changes = items.map((p) => {
+          const list = p.getTrackedChanges();
+          list.load("items/type");
+          return list;
+        });
+        await context.sync();
+        const first = changes.find((list) => list.items.length)?.items[0];
+        if (!first) return "changed";
+        first.getRange().select();
+      } else
+        items[0]
+          .getRange("Whole")
+          .expandTo(items[items.length - 1].getRange("Whole"))
+          .select();
+      await context.sync();
+      return "selected";
     });
   } catch {
     return "unavailable";

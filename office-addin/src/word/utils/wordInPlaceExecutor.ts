@@ -1115,6 +1115,7 @@ export async function applyWordPlanInPlace(
         ok: false as const,
         locations,
         confined: false,
+        blocks: [] as number[],
       });
       const verified =
         trackingAfter !== tracking
@@ -1151,15 +1152,24 @@ export async function applyWordPlanInPlace(
         : verified;
       if (!verification.ok) {
         latchWordInPlace("verify-mismatch");
+        const mismatched = [
+          ...new Set(
+            verification.blocks.flatMap((i) => {
+              const slot = liveSlots?.[i];
+              return slot?.kind === "op" ? [ops.indexOf(slot.op)] : [];
+            }),
+          ),
+        ].filter((i) => i >= 0);
         // Restore must not rely on the mechanism that just misbehaved, nor miss a change outside
         // the written paragraphs: it is the exact package restore, guarded by this package. A
         // tracked write is the exception: the package restore cannot run under Track Changes, nor
         // once Word noted the mode switch in settings.xml, while rejecting exactly the revisions
         // recorded here, paragraph by paragraph, can.
-        if (verification.confined)
+        if (verification.confined || mismatched.length)
           before = withWordInPlaceBackup(before, {
             ...record,
-            scopedFallback: true,
+            ...(verification.confined ? { scopedFallback: true as const } : {}),
+            ...(mismatched.length ? { mismatched } : {}),
           });
         return {
           status: "interrupted",

@@ -14,6 +14,7 @@ import {
   captureWordDocumentPackage,
   currentWordDocumentUrl,
   decodeWordDocumentBackup,
+  decodeWordInPlaceBackup,
   encodeWordDocumentBackup,
   insertWordDocumentFile,
   isWordDocumentBackup,
@@ -45,9 +46,9 @@ import {
 } from "./wordInPlaceExecutor";
 import {
   WORD_IN_PLACE_FALLBACKS,
-  classifyWordInPlacePlan,
   wordInPlaceFallbacks,
 } from "./wordInPlacePlan";
+import { routeWordDocumentPlan } from "./wordInPlaceRoute";
 import { isWordScopeFingerprint } from "./wordInPlaceState";
 import {
   isWordTrackingMode,
@@ -258,24 +259,6 @@ function trackedFallbacks(
   }
 }
 
-/** Pure routing; a classifier failure must never block the import that worked before. */
-function routeInPlace(
-  plan: WordDocumentPlan,
-  snapshot: WordAuthoringSnapshot,
-  prepared: WordAuthoringSnapshot,
-): ReturnType<typeof classifyWordInPlacePlan> {
-  try {
-    return classifyWordInPlacePlan(
-      plan,
-      snapshot,
-      wordInPlaceCapabilitiesUnder(snapshot.trackingMode),
-      prepared,
-    );
-  } catch {
-    return { fallback: "program-mismatch" };
-  }
-}
-
 async function applyPlan(
   content: string,
   snapshot: WordAuthoringSnapshot | undefined,
@@ -325,45 +308,48 @@ async function applyPlan(
       // All or nothing per plan: in place only when every change has an exact object-model inverse.
       let routeReason: WordRouteReason | undefined;
       let fallbackDetails: WordDiagnosticDetails = {};
-      const availability = wordInPlaceAvailability();
-      if (!availability.enabled) routeReason = availability.reason;
-      else {
-        const route = routeInPlace(plan, snapshot, prepared);
-        if ("fallback" in route) routeReason = route.fallback;
-        else if (!route.ops.length) {
-          snapshot.used = true;
-          return {
-            status: "applied",
-            outcome: {
-              route: "in-place",
-              tier: "block",
-              adjustments: [],
-              ops: 0,
-            },
-          };
-        } else {
-          const result = await applyWordPlanInPlace({
-            snapshot,
-            compiled: prepared,
-            ops: route.ops,
-            onBeforeWrite,
-            progress,
-            observePackage: (url) => observeAfterFailure(true, url),
-          });
-          if (!("fallback" in result)) return result;
-          // Track Changes is on and the write needs something tracked writing does not cover.
-          if (result.fallback === "tracking") {
-            const live = result.details.fallbackReasons ?? [];
-            return trackingBlocked(undefined, () => [
-              ...new Set([
-                ...trackedFallbacks(plan, snapshot, prepared),
-                ...live,
-              ]),
-            ]);
-          }
-          routeReason = result.fallback;
-          fallbackDetails = result.details;
+      const route = routeWordDocumentPlan(
+        plan,
+        snapshot,
+        wordInPlaceAvailability(),
+        wordInPlaceCapabilities(),
+        prepared,
+      );
+      if (route.route === "import" || route.route === "blocked")
+        routeReason = route.reason;
+      else if (route.route === "in-place" && !route.ops.length) {
+        snapshot.used = true;
+        return {
+          status: "applied",
+          outcome: {
+            route: "in-place",
+            tier: "block",
+            adjustments: [],
+            ops: 0,
+          },
+        };
+      } else if (route.route === "in-place") {
+        const result = await applyWordPlanInPlace({
+          snapshot,
+          compiled: prepared,
+          ops: route.ops,
+          onBeforeWrite,
+          progress,
+          observePackage: (url) => observeAfterFailure(true, url),
+        });
+        if (!("fallback" in result)) return result;
+        // Track Changes is on and the write needs something tracked writing does not cover.
+        if (result.fallback === "tracking") {
+          const live = result.details.fallbackReasons ?? [];
+          return trackingBlocked(undefined, () => [
+            ...new Set([
+              ...trackedFallbacks(plan, snapshot, prepared),
+              ...live,
+            ]),
+          ]);
         }
+        routeReason = result.fallback;
+        fallbackDetails = result.details;
       }
       routing.reason = routeReason;
       const fallbackReasons = (): WordRouteReason[] => {
@@ -491,6 +477,24 @@ export async function revertWordDocumentPlan(
   if (result.diagnostic)
     logWordDiagnostic("revert", result.status, result.diagnostic);
   return result;
+}
+
+/** How Revert would undo a recorded write, as revertPlan dispatches it. */
+export type WordRevertMechanism = "in-place" | "tracked" | "import" | "body";
+
+export function wordRevertMechanism(
+  before: string,
+  expectedAfter: string | undefined,
+): WordRevertMechanism {
+  if (!isWordDocumentBackup(before)) return "body";
+  if (!expectedAfter || !isWordScopeFingerprint(expectedAfter)) return "import";
+  try {
+    return decodeWordInPlaceBackup(before).inPlace?.tracked
+      ? "tracked"
+      : "in-place";
+  } catch {
+    return "in-place";
+  }
 }
 
 async function revertPlan(

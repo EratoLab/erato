@@ -120,10 +120,10 @@ export function decodeWordScopeFingerprint(
 
 /** Where a written block differs, as '/word/document.xml body block N: field'; never content.
  * `confined`: every difference lies in a paragraph the write rewrote in place, so rewriting those
- * paragraphs undoes all of it. */
+ * paragraphs undoes all of it. `blocks`: indices into the expected slots of the blocks that differ. */
 export type WordInPlaceVerification =
   | { ok: true }
-  | { ok: false; locations: string[]; confined: boolean };
+  | { ok: false; locations: string[]; confined: boolean; blocks: number[] };
 
 const MAX_LOCATIONS = 8;
 
@@ -158,12 +158,14 @@ export function verifyWordInPlaceOutput({
   after,
 }: WordInPlaceVerifyInput): WordInPlaceVerification {
   const locations: string[] = [];
+  const blocks: number[] = [];
   const ops = slots.flatMap((slot) => (slot.kind === "op" ? [slot.op] : []));
   let confined = ops.every(
     (op) => op.kind === "cell" || (op.kind === "text" && !op.restyle),
   );
   const at = (index: number, field: string, written = false) => {
     locations.push(`/word/document.xml body block ${index + 1}: ${field}`);
+    blocks.push(index);
     if (!written) confined = false;
   };
   if (after.issue)
@@ -171,12 +173,14 @@ export function verifyWordInPlaceOutput({
       ok: false,
       locations: ["/word/document.xml: issue"],
       confined: false,
+      blocks,
     };
   if (after.blocks.length !== slots.length)
     return {
       ok: false,
       locations: ["/word/document.xml body: count"],
       confined: false,
+      blocks,
     };
   const before = createNativeContentSignature(base.ooxml);
   const actual = createNativeContentSignature(after.ooxml);
@@ -233,7 +237,12 @@ export function verifyWordInPlaceOutput({
     }
   }
   return locations.length
-    ? { ok: false, locations: locations.slice(0, MAX_LOCATIONS), confined }
+    ? {
+        ok: false,
+        locations: locations.slice(0, MAX_LOCATIONS),
+        confined,
+        blocks,
+      }
     : { ok: true };
 }
 
@@ -255,10 +264,12 @@ export function verifyWordTrackedRevisions(
   input: WordTrackedVerifyInput,
 ): WordInPlaceVerification {
   const { afterOoxml, ids, touched, base, snapshot } = input;
+  const blocks: number[] = [];
   const fail = (locations: string[]): WordInPlaceVerification => ({
     ok: false,
     locations: locations.slice(0, MAX_LOCATIONS),
     confined: false,
+    blocks,
   });
   const parse = (xml: string) =>
     new DOMParser().parseFromString(xml, "application/xml");
@@ -299,7 +310,10 @@ export function verifyWordTrackedRevisions(
       "verify",
     );
   const block = verifyWordInPlaceOutput({ ...input, after: view(accepted) });
-  if (!block.ok) locations.push(...block.locations);
+  if (!block.ok) {
+    locations.push(...block.locations);
+    blocks.push(...block.blocks);
+  }
   const original = view(rejected);
   const expected = createNativeContentSignature(base.ooxml);
   const actual = createNativeContentSignature(original.ooxml);

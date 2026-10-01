@@ -413,9 +413,11 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     expect(report(result)).toContain("Route: in-place");
     expect(result.before).toBeTruthy();
     expect(result.afterFingerprint).toBe(wordDocumentFingerprint(host.ooxml()));
-    expect(
-      decodeWordInPlaceBackup(result.before!).inPlace?.scopedFallback,
-    ).toBe(true);
+    const record = decodeWordInPlaceBackup(result.before!).inPlace!;
+    expect(record.scopedFallback).toBe(true);
+    expect(record.mismatched).toEqual([0]);
+    expect(host.paragraphIds()).toContain(record.ops[0].id);
+    expect(report(result)).not.toContain(record.ops[0].id!);
     expect(wordInPlaceAvailability()).toEqual({
       enabled: false,
       reason: "latched",

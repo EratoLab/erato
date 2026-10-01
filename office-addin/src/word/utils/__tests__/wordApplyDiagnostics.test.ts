@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   renderWordDiagnosticReport,
+  renderWordOutcomeReport,
   strictDifferingParts,
   wordErrorText,
   wordPackageStats,
 } from "../wordApplyDiagnostics";
+import { WORD_COMPATIBILITY_MODE_KEY } from "../wordInPlaceSwitch";
 
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -202,5 +204,58 @@ describe("Word apply diagnostics", () => {
     } finally {
       delete window.WORD_FORCE_IMPORT_APPLY;
     }
+  });
+
+  it("shows compatibility mode on the host line", () => {
+    vi.stubGlobal("Office", {
+      context: {
+        diagnostics: { host: "Word", platform: "PC", version: "16.0.20326" },
+        requirements: { isSetSupported: () => true },
+        document: { url: "", getFileAsync: () => {} },
+      },
+    });
+    localStorage.setItem(WORD_COMPATIBILITY_MODE_KEY, "1");
+    try {
+      expect(
+        renderWordDiagnosticReport("apply", "interrupted", {
+          stage: "verify",
+          reason: "output-mismatch",
+          details: { route: "import", routeReason: "setting" },
+        }),
+      ).toMatch(/Route: import \(setting\)[\s\S]*· In-place: off \(setting\)$/);
+    } finally {
+      localStorage.removeItem(WORD_COMPATIBILITY_MODE_KEY);
+    }
+  });
+
+  it("renders a success-with-adjustments report from codes and counts only", () => {
+    const report = renderWordOutcomeReport("apply", {
+      route: "import",
+      tier: "content",
+      adjustments: [
+        "numbering-identity",
+        "first-paragraph-spacing",
+        "<private>" as never,
+      ],
+      outsideChanges: 2,
+    });
+    expect(report.split("\n")).toEqual([
+      "Word add-in apply succeeded with adjustments",
+      "Route: import",
+      "Verify tier: content",
+      "Adjustments: numbering-identity, first-paragraph-spacing",
+      "Changed elsewhere before apply: 2 blocks (left untouched)",
+      expect.stringMatching(/^Host: /),
+    ]);
+    expect(
+      renderWordOutcomeReport("revert", {
+        route: "<private>" as never,
+        tier: "content",
+        adjustments: [],
+        ops: "many" as never,
+      }),
+    ).toMatch(
+      /^Word add-in revert succeeded with adjustments\nVerify tier: content\nAdjustments: none\nHost: /,
+    );
   });
 });

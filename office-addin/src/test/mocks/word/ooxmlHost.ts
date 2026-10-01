@@ -1122,6 +1122,11 @@ export function installWordOoxmlHost(
       [RANGE_RUNS]: runs,
       [RANGE_EOP]: eop,
       load: () => enqueue(false, "load", () => {}),
+      select: () =>
+        enqueue(false, "select", () => {
+          runs().forEach(alive);
+          events.push("select:range");
+        }),
       get text() {
         if (text === undefined)
           throw Object.assign(
@@ -1235,8 +1240,16 @@ export function installWordOoxmlHost(
     throw itemNotFound();
   };
   /** A range at paragraph granularity: Paragraph.getRange("Whole") and TrackedChange.getRange. */
-  const spanProxy = (span: () => Element[]) => ({
+  const spanProxy = (
+    span: () => Element[],
+    origin: "paragraphs" | "tracked-change" = "paragraphs",
+  ) => ({
     [RANGE_SPAN]: span,
+    select: () =>
+      enqueue(false, "select", () => {
+        const list = span().map(alive);
+        events.push(`select:${origin}:${list.map((p) => idOf(p)).join(",")}`);
+      }),
     expandTo: (other: { [RANGE_SPAN]: () => Element[] }) =>
       spanProxy(() => {
         const first = span()[0];
@@ -1642,7 +1655,7 @@ export function installWordOoxmlHost(
                 settings.coalesceInsertions,
               ).map((change) => ({
                 ...change,
-                getRange: () => spanProxy(() => change.span),
+                getRange: () => spanProxy(() => change.span, "tracked-change"),
               }));
             }),
           get items() {

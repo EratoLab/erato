@@ -1,7 +1,11 @@
 import { i18n } from "@lingui/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  WORD_COMPATIBILITY_MODE_KEY,
+  wordInPlaceAvailability,
+} from "../../utils/wordInPlaceSwitch";
 import { WordSettingsDialog } from "../WordSettingsDialog";
 
 import type { AddinSettingsHostContribution } from "../../../core/AddinSettingsDialogCore";
@@ -74,7 +78,12 @@ describe("WordSettingsDialog", () => {
       ]),
     );
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.removeItem(WORD_COMPATIBILITY_MODE_KEY);
+  });
 
   it("contributes no host tab — only the shared pane entity", () => {
     render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);
@@ -138,5 +147,55 @@ describe("WordSettingsDialog", () => {
     expect(
       screen.getByText(/while the applied document remains unchanged/),
     ).toBeInTheDocument();
+  });
+
+  describe("compatibility mode", () => {
+    const wordHost = () =>
+      vi.stubGlobal("Office", {
+        context: {
+          requirements: { isSetSupported: () => true },
+          document: { url: "", getFileAsync: () => {} },
+        },
+      });
+    const toggle = () =>
+      screen.getByRole("checkbox", {
+        name: "Replace the whole document when applying (compatibility mode)",
+      });
+
+    it("is stored per device and sends rewrites through the full-document import", () => {
+      wordHost();
+      render(<WordSettingsDialog isOpen onClose={() => {}} />);
+      expect(toggle()).not.toBeChecked();
+      expect(wordInPlaceAvailability()).toEqual({ enabled: true });
+
+      fireEvent.click(toggle());
+      expect(toggle()).toBeChecked();
+      expect(localStorage.getItem(WORD_COMPATIBILITY_MODE_KEY)).toBe("1");
+      expect(wordInPlaceAvailability()).toEqual({
+        enabled: false,
+        reason: "setting",
+      });
+
+      fireEvent.click(toggle());
+      expect(toggle()).not.toBeChecked();
+      expect(localStorage.getItem(WORD_COMPATIBILITY_MODE_KEY)).toBeNull();
+      expect(wordInPlaceAvailability()).toEqual({ enabled: true });
+    });
+
+    it("still renders, and leaves in-place writing on, when storage throws", () => {
+      wordHost();
+      const blocked = () => {
+        throw new Error("Access is denied for this document.");
+      };
+      vi.spyOn(localStorage, "getItem").mockImplementation(blocked);
+      vi.spyOn(localStorage, "setItem").mockImplementation(blocked);
+      render(<WordSettingsDialog isOpen onClose={() => {}} />);
+      expect(screen.getByText("Word actions")).toBeInTheDocument();
+      expect(toggle()).not.toBeChecked();
+
+      fireEvent.click(toggle());
+      expect(toggle()).not.toBeChecked();
+      expect(wordInPlaceAvailability()).toEqual({ enabled: true });
+    });
   });
 });

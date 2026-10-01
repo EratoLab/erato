@@ -1761,6 +1761,11 @@ msgstr "Applying…"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.adjusted"
+msgstr "Word adjusted some details on its own while writing; the content matches the proposal."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.adjustment.firstParagraphSpacing"
 msgstr "Word also changed the spacing before the first paragraph."
 
@@ -1779,6 +1784,11 @@ msgstr "All"
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.authoring.applied"
 msgstr "Document rewrite applied"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.appliedAdjusted"
+msgstr "Applied with Word adjustments"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -1880,6 +1890,11 @@ msgstr "Copy draft"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.copyDetails"
+msgstr "Copy details"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.copyFailed"
 msgstr "The draft could not be copied."
 
@@ -1903,6 +1918,16 @@ msgstr "{0} of {1} source blocks read"
 #: src/word/components/WordSectionPlanPreview.tsx
 msgid "officeAddin.word.authoring.defaultPages"
 msgstr "Default pages"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.detailsCopied"
+msgstr "Details copied."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.detailsCopyFailed"
+msgstr "The details could not be copied."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2198,6 +2223,11 @@ msgid "officeAddin.word.authoring.partAndSectionCounts"
 msgstr "Document parts changed: {0} · Sections configured: {1}"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.partlyWritten"
+msgstr "Word stopped after {applied} of {total} changes. Your original is saved."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.parts"
 msgstr "Document parts"
@@ -2236,6 +2266,11 @@ msgstr "Word could not read the document for this operation. No changes were mad
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.authoring.receiptScope"
 msgstr "The complete plan remains available in details."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.rejectTracked"
+msgstr "Reject these tracked changes"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2348,6 +2383,11 @@ msgid "officeAddin.word.authoring.separateOddEvenPages"
 msgstr "Different headers and footers on odd and even pages"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.showChanges"
+msgstr "Show changes in Word"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.sources"
 msgstr "Source mapping"
@@ -2389,6 +2429,11 @@ msgid "officeAddin.word.authoring.unbalancedFields"
 msgstr "A document field is incomplete in the captured content. Its complete range is needed for restructuring."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.undoChanges"
+msgstr "Undo these changes"
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.unsupported"
 msgstr "Word did not supply a complete editable structure for this document. No rewrite was applied."
@@ -2397,6 +2442,16 @@ msgstr "Word did not supply a complete editable structure for this document. No 
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.unverifiedContent"
 msgstr "The captured document structure could not be verified for restructuring."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.unverifiedPassages"
+msgstr "{count, plural, one {Word wrote the changes, but # passage doesn't match the proposal. Your original is saved for recovery.} other {Word wrote the changes, but # passages don't match the proposal. Your original is saved for recovery.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.verified"
+msgstr "Verified: the document matches the proposal."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2837,7 +2892,6 @@ msgid "officeAddin.word.review.restored"
 msgstr "Document body restored"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPlanCard.tsx
 #: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertBatch"
 msgstr "Revert batch"
@@ -3083,6 +3137,66 @@ msgid "officeAddin.word.rich.updateObject"
 msgstr "Update {label}"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.body"
+msgstr "Replaces the document body."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.formatting"
+msgstr "Replaces the whole document because it changes formatting or styles."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.lists"
+msgstr "Replaces the whole document because it changes lists."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.moves"
+msgstr "Replaces the whole document because it moves content."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.objects"
+msgstr "Replaces the whole document because it changes tables, images or other objects."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.other"
+msgstr "Replaces the whole document because this change can't be written in place."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.paragraphs"
+msgstr "Replaces the whole document because it adds, removes or splits paragraphs."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.sections"
+msgstr "Replaces the whole document because it changes sections or page layout."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.setting"
+msgstr "Replaces the whole document because compatibility mode is on."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.stories"
+msgstr "Replaces the whole document because it changes headers, footers, notes or comments."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.inPlace"
+msgstr "{passages, plural, one {Edits # passage in place.} other {Edits # passages in place.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.tracked"
+msgstr "{passages, plural, one {Edits # passage in place as tracked changes under your name.} other {Edits # passages in place as tracked changes under your name.}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.scoped.applyScope"
 msgstr "Applies the reviewed changes. If the document changed, nothing is applied."
@@ -3109,6 +3223,7 @@ msgstr "Complete document preview"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: i + 1
+#: src/word/components/WordDocumentPlanCard.tsx
 #: src/word/components/WordScopedPlanReview.tsx
 msgid "officeAddin.word.scoped.locate"
 msgstr "Locate passage {0}"
@@ -3162,6 +3277,16 @@ msgstr "Inserts text at the current cursor without asking. This action has no Er
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysPlan"
 msgstr "Applies the complete rewrite without asking, only if the document still matches the reviewed source. Erato Revert is available while the applied document remains unchanged."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.compatibilityMode"
+msgstr "Replace the whole document when applying (compatibility mode)"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.compatibilityMode.helper"
+msgstr "Rewrites go in as a complete replacement instead of editing only the changed passages. Use it if in-place edits cause problems. Rewrites can't be applied this way while Track Changes is on."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

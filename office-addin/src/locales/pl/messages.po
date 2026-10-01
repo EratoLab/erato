@@ -1761,6 +1761,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.adjusted"
+msgstr "Program Word samodzielnie dostosował niektóre szczegóły podczas zapisu; treść jest zgodna z propozycją."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.adjustment.firstParagraphSpacing"
 msgstr "Program Word zmienił również odstęp przed pierwszym akapitem."
 
@@ -1779,6 +1784,11 @@ msgstr "Wszystkie"
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.authoring.applied"
 msgstr "Zastosowano nową wersję dokumentu"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.appliedAdjusted"
+msgstr "Zastosowano z poprawkami programu Word"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -1880,6 +1890,11 @@ msgstr "Kopiuj wersję roboczą"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.copyDetails"
+msgstr "Kopiuj szczegóły"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.copyFailed"
 msgstr "Nie udało się skopiować wersji roboczej."
 
@@ -1903,6 +1918,16 @@ msgstr "Odczytano {0} z {1} bloków źródłowych"
 #: src/word/components/WordSectionPlanPreview.tsx
 msgid "officeAddin.word.authoring.defaultPages"
 msgstr "Strony domyślne"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.detailsCopied"
+msgstr "Skopiowano szczegóły."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.detailsCopyFailed"
+msgstr "Nie udało się skopiować szczegółów."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2198,6 +2223,11 @@ msgid "officeAddin.word.authoring.partAndSectionCounts"
 msgstr "Zmienione części dokumentu: {0} · Skonfigurowane sekcje: {1}"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.partlyWritten"
+msgstr "Program Word zatrzymał się po {applied} z {total} zmian. Oryginał został zapisany."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.parts"
 msgstr "Części dokumentu"
@@ -2236,6 +2266,11 @@ msgstr "Word nie mógł odczytać dokumentu na potrzeby tej operacji. Nie wprowa
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.authoring.receiptScope"
 msgstr "Pełny plan pozostaje dostępny w szczegółach."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.rejectTracked"
+msgstr "Odrzuć te śledzone zmiany"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2348,6 +2383,11 @@ msgid "officeAddin.word.authoring.separateOddEvenPages"
 msgstr "Różne nagłówki i stopki na stronach parzystych i nieparzystych"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.showChanges"
+msgstr "Pokaż zmiany w programie Word"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.sources"
 msgstr "Powiązania ze źródłem"
@@ -2389,6 +2429,11 @@ msgid "officeAddin.word.authoring.unbalancedFields"
 msgstr "Pole dokumentu jest niekompletne w przechwyconej treści. Do zmiany struktury potrzebny jest jego pełny zakres."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.authoring.undoChanges"
+msgstr "Cofnij te zmiany"
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.unsupported"
 msgstr "Program Word nie udostępnił pełnej struktury dokumentu do edycji. Nie zastosowano zmian."
@@ -2397,6 +2442,16 @@ msgstr "Program Word nie udostępnił pełnej struktury dokumentu do edycji. Nie
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.unverifiedContent"
 msgstr "Nie udało się zweryfikować przechwyconej struktury dokumentu na potrzeby zmiany struktury."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.unverifiedPassages"
+msgstr "{count, plural, one {Program Word zapisał zmiany, ale # fragment nie jest zgodny z propozycją. Oryginał został zapisany do odzyskania.} few {Program Word zapisał zmiany, ale # fragmenty nie są zgodne z propozycją. Oryginał został zapisany do odzyskania.} many {Program Word zapisał zmiany, ale # fragmentów nie jest zgodnych z propozycją. Oryginał został zapisany do odzyskania.} other {Program Word zapisał zmiany, ale # fragmentu nie jest zgodne z propozycją. Oryginał został zapisany do odzyskania.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.verified"
+msgstr "Zweryfikowano: dokument jest zgodny z propozycją."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
@@ -2837,7 +2892,6 @@ msgid "officeAddin.word.review.restored"
 msgstr "Przywrócono treść dokumentu"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPlanCard.tsx
 #: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertBatch"
 msgstr "Cofnij partię zmian"
@@ -3083,6 +3137,66 @@ msgid "officeAddin.word.rich.updateObject"
 msgstr "Zaktualizuj: {label}"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.body"
+msgstr "Zastępuje treść dokumentu."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.formatting"
+msgstr "Zastępuje cały dokument, ponieważ zmienia formatowanie lub style."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.lists"
+msgstr "Zastępuje cały dokument, ponieważ zmienia listy."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.moves"
+msgstr "Zastępuje cały dokument, ponieważ przenosi treść."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.objects"
+msgstr "Zastępuje cały dokument, ponieważ zmienia tabele, obrazy lub inne obiekty."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.other"
+msgstr "Zastępuje cały dokument, ponieważ tej zmiany nie można zapisać bezpośrednio w dokumencie."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.paragraphs"
+msgstr "Zastępuje cały dokument, ponieważ dodaje, usuwa lub dzieli akapity."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.sections"
+msgstr "Zastępuje cały dokument, ponieważ zmienia sekcje lub układ strony."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.setting"
+msgstr "Zastępuje cały dokument, ponieważ tryb zgodności jest włączony."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.stories"
+msgstr "Zastępuje cały dokument, ponieważ zmienia nagłówki, stopki, przypisy lub komentarze."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.inPlace"
+msgstr "{passages, plural, one {Edytuje # fragment bezpośrednio w dokumencie.} few {Edytuje # fragmenty bezpośrednio w dokumencie.} many {Edytuje # fragmentów bezpośrednio w dokumencie.} other {Edytuje # fragmentu bezpośrednio w dokumencie.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.tracked"
+msgstr "{passages, plural, one {Edytuje # fragment bezpośrednio w dokumencie jako śledzone zmiany pod Twoim nazwiskiem.} few {Edytuje # fragmenty bezpośrednio w dokumencie jako śledzone zmiany pod Twoim nazwiskiem.} many {Edytuje # fragmentów bezpośrednio w dokumencie jako śledzone zmiany pod Twoim nazwiskiem.} other {Edytuje # fragmentu bezpośrednio w dokumencie jako śledzone zmiany pod Twoim nazwiskiem.}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.scoped.applyScope"
 msgstr "Stosuje sprawdzone zmiany. Jeśli dokument się zmienił, żadne zmiany nie zostaną zastosowane."
@@ -3109,6 +3223,7 @@ msgstr "Podgląd całego dokumentu"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: i + 1
+#: src/word/components/WordDocumentPlanCard.tsx
 #: src/word/components/WordScopedPlanReview.tsx
 msgid "officeAddin.word.scoped.locate"
 msgstr "Znajdź fragment {0}"
@@ -3162,6 +3277,16 @@ msgstr "Wstawia tekst w bieżącym miejscu kursora bez pytania. Ta czynność ni
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysPlan"
 msgstr "Stosuje pełną nową wersję bez pytania, tylko jeśli dokument nadal odpowiada przejrzanemu źródłu. Cofnięcie w Erato jest dostępne, dopóki zastosowany dokument pozostaje niezmieniony."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.compatibilityMode"
+msgstr "Zastępuj cały dokument podczas stosowania (tryb zgodności)"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.compatibilityMode.helper"
+msgstr "Nowe wersje zastępują cały dokument zamiast edytować tylko zmienione fragmenty. Użyj tej opcji, jeśli edycja bezpośrednia powoduje problemy. W tym trybie nie można stosować nowych wersji przy włączonym śledzeniu zmian."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

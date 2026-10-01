@@ -14,8 +14,12 @@ import {
   readySnapshot,
   wordSerializationNoise,
 } from "../../../test/mocks/word/authoringFixtures";
-import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
 import {
+  editWordPackage,
+  installWordOoxmlHost,
+} from "../../../test/mocks/word/ooxmlHost";
+import {
+  SENTINEL,
   captureRealisticSnapshot,
   realisticWordPackageXml,
   statusRewritePlan,
@@ -32,10 +36,19 @@ import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   setWordInPlaceCapabilitiesForTests,
 } from "../../utils/wordInPlaceCapabilities";
-import { resetWordInPlaceLatchForTests } from "../../utils/wordInPlaceSwitch";
+import {
+  WORD_COMPATIBILITY_MODE_KEY,
+  resetWordInPlaceLatchForTests,
+} from "../../utils/wordInPlaceSwitch";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
+import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+  WordPlanEntry,
+} from "../../utils/wordDocumentPlan";
 import type * as EratoLibrary from "@erato/frontend/library";
 
 const mock = vi.hoisted(() => {
@@ -231,6 +244,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  localStorage.removeItem(WORD_COMPATIBILITY_MODE_KEY);
   delete window.WORD_FORCE_IMPORT_APPLY;
   resetWordInPlaceLatchForTests();
   setWordInPlaceCapabilitiesForTests(undefined);
@@ -291,7 +305,9 @@ describe("structural document review", () => {
     fireEvent.click(allow);
     await screen.findByText("Document rewrite applied");
     expect(state.insert).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Revert batch" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Restore original body" }),
+    ).toBeEnabled();
   });
 
   it("restores a saved submission for inspection after a pane reload without enabling Apply", async () => {
@@ -343,7 +359,9 @@ describe("structural document review", () => {
       "true",
     );
     state.change();
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore original body" }),
+    );
     await waitFor(() =>
       expect(screen.getByText(/Revert was not run/)).toBeInTheDocument(),
     );
@@ -465,7 +483,9 @@ describe("structural document review", () => {
     );
     await screen.findByText("Document rewrite applied");
     state.fail();
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore original body" }),
+    );
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
     );
@@ -521,7 +541,9 @@ describe("structural document review", () => {
     await waitFor(() =>
       expect(screen.getByText("Document rewrite applied")).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore original body" }),
+    );
     await waitFor(() => expect(state.insert).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -558,7 +580,7 @@ describe("structural document review", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Apply document rewrite" }),
     );
-    await screen.findByText("Document rewrite applied");
+    await screen.findByText("Applied with Word adjustments");
     const note = screen.getByTestId("word-plan-adjustments");
     expect(note).toBeVisible();
     expect(note).toHaveTextContent(
@@ -569,11 +591,15 @@ describe("structural document review", () => {
     expect(
       screen.queryByRole("button", { name: "Download original document" }),
     ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore original document" }),
+    );
     await screen.findByText("Document body restored");
     expect(word.insert).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Revert batch" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Restore original document" }),
+    ).toBeNull();
     expect(screen.getByTestId("word-plan-adjustments")).toHaveTextContent(
       "Word also changed the spacing before the first paragraph.",
     );
@@ -599,7 +625,7 @@ describe("structural document review", () => {
     expect(word.insert).not.toHaveBeenCalled();
     expect(word.ooxml()).toContain("Status: revised in place.");
     expect(screen.queryByTestId("word-plan-adjustments")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo these changes" }));
     await screen.findByText("Document body restored");
     expect(screen.queryByRole("alert")).toBeNull();
     expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
@@ -629,7 +655,9 @@ describe("structural document review", () => {
       "Applied as tracked changes under your name.",
     );
     expect(word.ooxml()).toContain("<w:ins ");
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reject these tracked changes" }),
+    );
     await screen.findByText("Document body restored");
     expect(screen.queryByTestId("word-plan-adjustments")).toBeNull();
     expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
@@ -679,7 +707,7 @@ describe("structural document review", () => {
     );
     await screen.findByText("Document rewrite applied");
     word.editParagraph(1, "Status: the user's own words.");
-    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo these changes" }));
     await screen.findByText(/Revert was not run/);
     expect(word.ooxml()).toContain("Status: the user's own words.");
     expect(
@@ -719,14 +747,14 @@ describe("structural document review", () => {
       screen.getByRole("button", { name: "Apply document rewrite" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Word stopped after 1 of 2 changes. Your original is saved.",
+      ),
     );
     expect(
       screen.getByRole("button", { name: "Download original document" }),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Restore original document" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Undo these changes" }));
     await screen.findByText("Document body restored");
     expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
@@ -756,5 +784,451 @@ describe("structural document review", () => {
       screen.getByText("Proposal declined. Nothing was written."),
     ).toBeInTheDocument();
     expect(state.insert).not.toHaveBeenCalled();
+  });
+});
+
+const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const CLOSING = "Closing paragraph.";
+
+/** The realistic document with an en-GB run in the closing paragraph, which a faulty
+ * insertText "Replace" loses. */
+function closingLanguageFixture(): string {
+  return editWordPackage(realisticWordPackageXml(), (doc) => {
+    const run = Array.from(doc.getElementsByTagNameNS(W, "t")).find(
+      (t) => t.textContent === CLOSING,
+    )!.parentElement!;
+    const props = doc.createElementNS(W, "w:rPr");
+    const lang = doc.createElementNS(W, "w:lang");
+    lang.setAttributeNS(W, "w:val", "en-GB");
+    props.append(lang);
+    run.prepend(props);
+  });
+}
+
+/** Keep everything and swap in `entry` for the block whose text starts with `prefix`. */
+function replaceBlock(
+  snapshot: WordAuthoringSnapshot,
+  prefix: string,
+  entry: (ref: string) => WordPlanEntry[],
+  extra: Partial<WordDocumentPlan> = {},
+): WordDocumentPlan {
+  return {
+    version: 1,
+    snapshot: snapshot.token,
+    readToken: "read-proof",
+    scope: "document",
+    deleted: [],
+    entries: snapshot.blocks.flatMap((b) =>
+      b.text.startsWith(prefix)
+        ? entry(b.ref)
+        : [{ kind: "keep", source: [b.ref] }],
+    ),
+    ...extra,
+  };
+}
+
+async function mountRealistic(
+  makePlan: (snapshot: WordAuthoringSnapshot) => WordDocumentPlan,
+  options: WordOoxmlHostOptions & { tracking?: string; xml?: string } = {},
+) {
+  const {
+    tracking = "Off",
+    xml = realisticWordPackageXml(),
+    ...host
+  } = options;
+  const word = installWordOoxmlHost(xml, {
+    profile: "word-pc-16.0.20326",
+    ...host,
+  });
+  if (tracking !== "Off") word.setTrackingMode(tracking);
+  const snapshot = await captureRealisticSnapshot(
+    String(mock.artifact.messageId),
+    tracking,
+  );
+  renderRealisticCard(snapshot, JSON.stringify(makePlan(snapshot)));
+  return { word, snapshot };
+}
+
+const routeText = () => screen.getByTestId("word-plan-route").textContent;
+const apply = () =>
+  fireEvent.click(
+    screen.getByRole("button", { name: "Apply document rewrite" }),
+  );
+
+describe("route preview", () => {
+  it("says an eligible rewrite edits its passages in place", async () => {
+    await mountRealistic((s) => statusRewritePlan(s, "Status: revised."));
+    expect(routeText()).toBe("Edits 1 passage in place.");
+  });
+
+  it("says the passages go in as tracked changes under the user's name", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    await mountRealistic((s) => statusRewritePlan(s, "Status: revised."), {
+      trackChanges: true,
+      tracking: "TrackAll",
+    });
+    expect(routeText()).toBe(
+      "Edits 1 passage in place as tracked changes under your name.",
+    );
+  });
+
+  it("warns before Apply that Track Changes blocks a full rewrite", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    const { word } = await mountRealistic(
+      (s) => ({
+        ...statusRewritePlan(s, "Status: revised."),
+        sections: [{ id: "final", source: "section-1" }],
+      }),
+      { trackChanges: true, tracking: "TrackAll" },
+    );
+    expect(routeText()).toBe(
+      "This change needs a full-document rewrite, which can't run while Track Changes is on. Turn off Track Changes or ask for a smaller edit.",
+    );
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it.each<
+    [string, (snapshot: WordAuthoringSnapshot) => WordDocumentPlan, string]
+  >([
+    [
+      "sections",
+      (s) => ({
+        ...statusRewritePlan(s, "Status: revised."),
+        sections: [{ id: "final", source: "section-1" }],
+      }),
+      "Replaces the whole document because it changes sections or page layout.",
+    ],
+    [
+      "stories",
+      (s) => ({
+        ...statusRewritePlan(s, "Status: revised."),
+        stories: [
+          {
+            kind: "upsert",
+            type: "header",
+            id: "header1",
+            blocks: [{ id: "h0", type: "paragraph", text: "Revised header" }],
+          },
+        ],
+      }),
+      "Replaces the whole document because it changes headers, footers, notes or comments.",
+    ],
+    [
+      "moves",
+      (s) => {
+        const refs = s.blocks.map((b) => b.ref);
+        return {
+          ...statusRewritePlan(s, "Status: revised."),
+          entries: [
+            { kind: "keep", source: [refs[0]] },
+            { kind: "keep", source: [refs[2]] },
+            { kind: "keep", source: [refs[1]] },
+            { kind: "keep", source: refs.slice(3) },
+          ],
+        };
+      },
+      "Replaces the whole document because it moves content.",
+    ],
+    [
+      "objects",
+      (s) =>
+        replaceBlock(s, "Region", (ref) => [
+          {
+            kind: "replace",
+            source: [ref],
+            blocks: [{ id: "t", type: "paragraph", text: "No table." }],
+          },
+        ]),
+      "Replaces the whole document because it changes tables, images or other objects.",
+    ],
+    [
+      "formatting",
+      (s) =>
+        replaceBlock(s, "Status", (ref) => [
+          {
+            kind: "replace",
+            source: [ref],
+            blocks: [
+              {
+                id: "c",
+                type: "paragraph",
+                text: "Status: centred.",
+                format: { alignment: "center" },
+              },
+            ],
+          },
+        ]),
+      "Replaces the whole document because it changes formatting or styles.",
+    ],
+    [
+      "lists",
+      (s) =>
+        replaceBlock(s, "Open questions", (ref) => [
+          {
+            kind: "replace",
+            source: [ref],
+            blocks: [
+              {
+                id: "l",
+                type: "list-item",
+                text: "Open questions follow.",
+                list: "fresh",
+                level: 0,
+                ordered: true,
+              },
+            ],
+          },
+        ]),
+      "Replaces the whole document because it changes lists.",
+    ],
+    [
+      "paragraphs",
+      (s) =>
+        replaceBlock(s, "Status", (ref) => [
+          { kind: "keep", source: [ref] },
+          {
+            kind: "insert",
+            blocks: [{ id: "a", type: "paragraph", text: "An added line." }],
+          },
+        ]),
+      "Replaces the whole document because it adds, removes or splits paragraphs.",
+    ],
+  ])(
+    "names why a %s change replaces the whole document",
+    async (_, makePlan, text) => {
+      await mountRealistic(makePlan);
+      expect(routeText()).toBe(text);
+    },
+  );
+
+  it("says compatibility mode makes every rewrite a full replacement, and Apply follows it", async () => {
+    localStorage.setItem(WORD_COMPATIBILITY_MODE_KEY, "1");
+    const { word } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      { profile: "word-web" },
+    );
+    expect(routeText()).toBe(
+      "Replaces the whole document because compatibility mode is on.",
+    );
+    apply();
+    await screen.findByText("Document rewrite applied");
+    expect(word.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to a general reason when in-place writing is switched off", async () => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    await mountRealistic((s) => statusRewritePlan(s, "Status: revised."));
+    expect(routeText()).toBe(
+      "Replaces the whole document because this change can't be written in place.",
+    );
+  });
+});
+
+describe("apply outcomes", () => {
+  it("verified in place: headline, Undo and Show changes in Word", async () => {
+    const { word } = await mountRealistic((s) =>
+      statusRewritePlan(s, "Status: revised in place."),
+    );
+    apply();
+    const receipt = await screen.findByTestId("word-review-receipt");
+    expect(receipt).toHaveTextContent("Document rewrite applied");
+    expect(receipt).toHaveTextContent(
+      "Verified: the document matches the proposal.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Undo these changes" }),
+    ).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Copy details" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Download original document" }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show changes in Word" }),
+    );
+    await waitFor(() =>
+      expect(
+        word.events.filter((e) => e.startsWith("select:paragraphs:")),
+      ).toHaveLength(1),
+    );
+    expect(screen.queryByText(/cannot be located/)).toBeNull();
+  });
+
+  it("verified as tracked changes: Show changes selects the first revision", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    const { word } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised as tracked."),
+      { trackChanges: true, tracking: "TrackAll" },
+    );
+    apply();
+    await screen.findByText("Document rewrite applied");
+    expect(
+      screen.getByRole("button", { name: "Reject these tracked changes" }),
+    ).toBeEnabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show changes in Word" }),
+    );
+    await waitFor(() =>
+      expect(
+        word.events.filter((e) => e.startsWith("select:tracked-change:")),
+      ).toHaveLength(1),
+    );
+    expect(word.events.some((e) => e.startsWith("select:paragraphs:"))).toBe(
+      false,
+    );
+  });
+
+  it("says when the written passage can no longer be found", async () => {
+    const { word } = await mountRealistic((s) =>
+      statusRewritePlan(s, "Status: revised in place."),
+    );
+    apply();
+    await screen.findByText("Document rewrite applied");
+    word.userEdit((ooxml) =>
+      editWordPackage(ooxml, (doc) =>
+        Array.from(doc.getElementsByTagNameNS(W, "p"))
+          .find((p) => p.textContent?.startsWith("Status"))!
+          .remove(),
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show changes in Word" }),
+    );
+    expect(
+      await screen.findByText(
+        "This source passage has changed or cannot be located reliably.",
+      ),
+    ).toBeInTheDocument();
+    expect(word.events.some((e) => e.startsWith("select:"))).toBe(false);
+  });
+
+  it("applied with Word adjustments: headline, disclosure and a content-free Copy details", async () => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    await mountRealistic((s) => statusRewritePlan(s, "Status: revised."), {
+      spacingDrift: true,
+    });
+    apply();
+    const receipt = await screen.findByTestId("word-review-receipt");
+    expect(receipt).toHaveTextContent("Applied with Word adjustments");
+    expect(receipt).not.toHaveTextContent("Verified");
+    expect(screen.getByTestId("word-plan-adjustments")).toHaveTextContent(
+      "Word adjusted some details on its own while writing; the content matches the proposal. Word also changed the spacing before the first paragraph.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Restore original document" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Show changes in Word" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Copy details" }));
+    await screen.findByText("Details copied.");
+    const report = writeText.mock.calls[0][0];
+    expect(report.split("\n")[0]).toBe(
+      "Word add-in apply succeeded with adjustments",
+    );
+    expect(report).toContain("Route: import");
+    expect(report).toContain("Verify tier: content");
+    expect(report).toMatch(/Adjustments: .*first-paragraph-spacing/);
+    expect(report).not.toContain(SENTINEL);
+    expect(report).not.toContain("Status:");
+  });
+
+  it("unverified: counts the passages that do not match and locates each", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic(
+      (s) =>
+        replaceBlock(s, CLOSING, (ref) => [
+          {
+            kind: "replace",
+            source: [ref],
+            blocks: [
+              {
+                id: "bye",
+                type: "paragraph",
+                text: "Bye.",
+                runs: [{ text: "Bye.", language: "en-GB" }],
+              },
+            ],
+          },
+        ]),
+      { xml: closingLanguageFixture(), replaceDropsRunProperties: true },
+    );
+    apply();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Word wrote the changes, but 1 passage doesn't match the proposal. Your original is saved for recovery.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Restore original document" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Download original document" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Show changes in Word" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Locate passage 1" }));
+    await waitFor(() =>
+      expect(
+        word.events.filter((e) => e.startsWith("select:paragraphs:")),
+      ).toHaveLength(1),
+    );
+  });
+
+  it("not written: a changed target stops before writing, with nothing to restore", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic((s) =>
+      statusRewritePlan(s, "Status: revised in place."),
+    );
+    word.editParagraph(1, "Status: the user's own words.");
+    apply();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The document changed. Nothing was applied.",
+    );
+    expect(word.events.some((e) => e.startsWith("mutation:"))).toBe(false);
+    for (const name of [
+      "Undo these changes",
+      "Restore original document",
+      "Download original document",
+    ])
+      expect(screen.queryByRole("button", { name })).toBeNull();
+  });
+
+  it("locates a written passage from the scoped review after an in-place Apply", async () => {
+    const { word, snapshot } = await mountRealistic((s) => {
+      const status = s.blocks.find((b) => b.text.startsWith("Status"))!;
+      s.readScopes = new Map([
+        [
+          "read-proof",
+          {
+            kind: "objects",
+            snapshot: s.token,
+            identity: s.identity,
+            fingerprint: s.fingerprint,
+            targets: [
+              {
+                ref: status.ref,
+                kind: "paragraph",
+                text: "",
+                bodyRef: status.ref,
+                detail: {},
+              },
+            ],
+            plans: new Set(),
+          },
+        ],
+      ]);
+      return statusRewritePlan(s, "Status: revised in place.");
+    });
+    expect(snapshot.readScopes?.size).toBe(1);
+    apply();
+    await screen.findByText("Document rewrite applied");
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Locate passage 1" }));
+    await waitFor(() =>
+      expect(
+        word.events.filter((e) => e.startsWith("select:paragraphs:")),
+      ).toHaveLength(1),
+    );
   });
 });
