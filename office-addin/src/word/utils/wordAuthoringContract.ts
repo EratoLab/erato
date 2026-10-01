@@ -1,3 +1,6 @@
+export const WORD_SECTION_PROPERTIES =
+  "headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.";
+
 /** Protocol vocabulary belongs here; model behavior instructions come from deployment configuration. */
 export const WORD_AUTHORING_CONTRACT = {
   version: 1,
@@ -93,6 +96,5 @@ export const WORD_AUTHORING_CONTRACT = {
   },
   stories:
     "scope=document, fullDocument=true only. stories:[{kind:'upsert'|'delete',type:'header'|'footer'|'footnote'|'endnote'|'comment',id,blocks?,author?,initials?,anchor?:{block:'output-id-or-kept-body-ref',start?,end?}}]. Upsert replaces all story blocks (empty clears); an omitted existing story is preserved. Delete removes the story. New note/comment requires a body paragraph anchor. Offsets are UTF-16 positions; comments use start/end, notes a point. Existing note/comment anchors stay unless explicitly moved. Existing story native sourceRef is 'story_'+id for native-edit/table/image references. Author/initials only for comments.",
-  sections:
-    "scope=document only. sections:[{id,source?:'section-1',after?:'output-id-or-kept-body-ref',layout?,headers?,footers?}]. The complete ordered section list replaces existing boundaries. The last section omits after; all others end after the named output block. The read record's afterBlock identifies its existing boundary. source retains that section's existing properties. An absent sections property preserves existing boundaries and requires their original relative order. headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.",
+  sections: `scope=document only. sections:[{id,source?:'section-1',after?:'output-id-or-kept-body-ref',layout?,headers?,footers?}]. The complete ordered section list replaces existing boundaries. The last section omits after; all others end after the named output block. The read record's afterBlock identifies its existing boundary. source retains that section's existing properties. An absent sections property preserves existing boundaries and requires their original relative order. ${WORD_SECTION_PROPERTIES}`,
 } as const;

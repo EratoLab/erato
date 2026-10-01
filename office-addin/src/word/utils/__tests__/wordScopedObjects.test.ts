@@ -225,6 +225,167 @@ function richSnapshot() {
 }
 
 describe("scoped object editing", () => {
+  it("returns only relevant guidance and metadata, with explicit guidance for new content", async () => {
+    const s = setup();
+    s.snapshot.styles = [
+      { id: "unused", name: "Unused style", type: "paragraph" },
+    ];
+    s.snapshot.assets = [
+      {
+        ref: "asset-1",
+        fileId: "private-file",
+        name: "Logo",
+        mime: "image/png",
+        base64: "private-bytes",
+        widthPx: 1,
+        heightPx: 1,
+        sizeBytes: 1,
+      },
+    ];
+    const simple = await s.read({ text: "Target" });
+    expect(simple).toMatchObject({
+      result: {
+        status: "ready",
+        styles: [],
+        contract: {
+          paragraphs: expect.any(String),
+          scopedEdit: { body: expect.any(String) },
+        },
+      },
+    });
+    const result = (simple as { result: Record<string, unknown> }).result;
+    expect(result).not.toHaveProperty("assets");
+    for (const key of [
+      "table",
+      "media",
+      "stories",
+      "sections",
+      "repair",
+      "plan",
+    ])
+      expect(result.contract).not.toHaveProperty(key);
+    expect(
+      new TextEncoder().encode(JSON.stringify(simple)).length,
+    ).toBeLessThan(6500);
+    const expanded = await s.read(
+      { text: "Target" },
+      { include: ["table", "media", "formatting", "stories", "sections"] },
+    );
+    expect(expanded).toMatchObject({
+      result: {
+        styles: s.snapshot.styles,
+        assets: [{ ref: "asset-1" }],
+        contract: {
+          table: { creation: expect.any(String) },
+          media: { image: expect.any(String) },
+          stories: expect.any(String),
+          sectionLayout: expect.any(String),
+        },
+      },
+    });
+    expect(JSON.stringify(expanded)).not.toContain("private-file");
+    expect(JSON.stringify(expanded)).not.toContain("private-bytes");
+    expect(s.snapshot.read.size).toBe(0);
+    for (const include of [["unknown"], ["table", "table"], "table"])
+      expect((await s.read({ ref: "b2" }, { include })).ok).toBe(false);
+  });
+  it("provides guidance for every existing object family, including nested objects", async () => {
+    const s = setup(richSnapshot());
+    for (const [kind, group] of [
+      ["heading", "paragraphs"],
+      ["list-item", "paragraphs"],
+      ["table", "table"],
+      ["image", "media"],
+      ["drawing", "media"],
+      ["field", "structures"],
+      ["bookmark", "structures"],
+      ["content-control", "structures"],
+      ["header", "stories"],
+      ["footer", "stories"],
+      ["footnote", "stories"],
+      ["endnote", "stories"],
+      ["comment", "stories"],
+      ["section", "sectionLayout"],
+    ]) {
+      const target = wordTargetInventory(s.snapshot).find(
+        (t) => t.kind === kind,
+      )!;
+      expect(target, kind).toBeDefined();
+      const read = await s.read({ ref: target.ref });
+      expect(read, kind).toMatchObject({
+        ok: true,
+        result: { status: "ready" },
+      });
+      expect(
+        (read as { result: { contract: unknown } }).result.contract,
+      ).toHaveProperty(group);
+    }
+  });
+  it("can replace a paragraph with a new table using explicitly requested guidance", async () => {
+    const s = setup();
+    const read = await s.read({ ref: "b2" }, { include: ["table"] });
+    expect(read).toMatchObject({
+      result: { contract: { table: { shape: expect.any(String) } } },
+    });
+    const submit = createWordDocumentSubmissionExecutor(s.session);
+    const result = await submit(
+      {
+        snapshot: s.snapshot.token,
+        readToken: (read as { result: { readToken: string } }).result.readToken,
+        scoped_edit: {
+          body: [
+            {
+              operation: "replace",
+              source: ["b2"],
+              blocks: [
+                {
+                  id: "new-table",
+                  type: "table",
+                  rows: [
+                    {
+                      cells: [
+                        {
+                          blocks: [
+                            { id: "cell", type: "paragraph", text: "New cell" },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      { ...context, toolCallId: "replace-table" },
+    );
+    const { after } = assertAccepted(result, s.snapshot);
+    expect(after.blocks.map((b) => b.text)).toEqual([
+      "Before",
+      "New cell",
+      "After",
+    ]);
+    expect(after.blocks[0].xml).toBe(s.snapshot.blocks[0].xml);
+    expect(after.blocks[2].xml).toBe(s.snapshot.blocks[2].xml);
+  });
+  it("includes guidance and metadata in the scoped response byte budget", async () => {
+    const s = setup();
+    s.snapshot.styles = Array.from({ length: 1000 }, (_, i) => ({
+      id: `style-${i}`,
+      name: "A long unused style name",
+      type: "paragraph",
+    }));
+    expect(
+      await s.read({ ref: "b2" }, { include: ["formatting"] }),
+    ).toMatchObject({
+      result: { status: "unsupported", reason: "scope-context-limit" },
+    });
+    expect(s.snapshot.readScopes?.size).toBe(0);
+    expect(await s.read({ ref: "b2" })).toMatchObject({
+      result: { status: "ready" },
+    });
+  });
   it("replaces one paragraph without reading or changing its neighbors", async () => {
     const s = setup();
     const result = await s.edit(

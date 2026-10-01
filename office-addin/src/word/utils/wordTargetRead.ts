@@ -1,5 +1,4 @@
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
-import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
 import {
   readWordParagraphFormatting,
@@ -7,16 +6,20 @@ import {
   wordChild,
   WORDPROCESSING_NS as W,
 } from "./wordBlockFormatting";
-import { wordImageAssetMetadata } from "./wordImageAssetData";
 import {
   MAX_WORD_SCOPE_BYTES,
   MAX_WORD_SCOPE_TARGETS,
   MAX_WORD_SCOPES,
 } from "./wordReadScope";
 import { wordSourceDetails } from "./wordRichContent";
+import {
+  WORD_SCOPED_GUIDANCE,
+  wordScopedReadContract,
+} from "./wordScopedReadContract";
 
 import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
 import type { WordScopeTarget } from "./wordReadScope";
+import type { WordScopedGuidance } from "./wordScopedReadContract";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 
 const encoder = new TextEncoder();
@@ -162,8 +165,16 @@ export function readWordTargets(
   const query = input.target;
   if (
     Object.keys(input).some(
-      (k) => !["snapshot", "documentIdentity", "target"].includes(k),
+      (k) => !["snapshot", "documentIdentity", "target", "include"].includes(k),
     ) ||
+    (input.include !== undefined &&
+      (!Array.isArray(input.include) ||
+        input.include.length > WORD_SCOPED_GUIDANCE.length ||
+        input.include.some(
+          (group) =>
+            !WORD_SCOPED_GUIDANCE.includes(group as WordScopedGuidance),
+        ) ||
+        new Set(input.include).size !== input.include.length)) ||
     !object(query) ||
     Object.keys(query).some(
       (k) =>
@@ -289,8 +300,11 @@ export function readWordTargets(
   // and references mentioned in properties are context, never implicit write grants.
   const context = {
     targets: matches.map(({ detail, ...t }) => ({ ...t, content: detail })),
-    styles: snapshot.styles,
-    assets: (snapshot.assets ?? []).map(wordImageAssetMetadata),
+    ...wordScopedReadContract(
+      snapshot,
+      matches,
+      input.include as WordScopedGuidance[] | undefined,
+    ),
     sectionsUsingTargets: (snapshot.sections ?? [])
       .filter((s) =>
         matches.some(
@@ -303,7 +317,18 @@ export function readWordTargets(
       )
       .map(({ xml: _xml, ...s }) => s),
   };
-  if (encoder.encode(JSON.stringify(context)).length > MAX_WORD_SCOPE_BYTES)
+  if (
+    encoder.encode(
+      JSON.stringify({
+        ...base,
+        ...context,
+        status: "ready",
+        readToken: "0".repeat(36),
+        maxContextBytes: MAX_WORD_SCOPE_BYTES,
+        fullDocument: !!snapshot.fullDocument,
+      }),
+    ).length > MAX_WORD_SCOPE_BYTES
+  )
     return {
       ok: true,
       result: {
@@ -336,7 +361,6 @@ export function readWordTargets(
       status: "ready",
       readToken,
       ...context,
-      contract: WORD_AUTHORING_CONTRACT,
       maxContextBytes: MAX_WORD_SCOPE_BYTES,
       fullDocument: !!snapshot.fullDocument,
     },
