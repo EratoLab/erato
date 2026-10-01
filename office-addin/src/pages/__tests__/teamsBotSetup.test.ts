@@ -1,94 +1,161 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import {
-  createTeamsSetupScript,
+  createTeamsSetupCommand,
   proposedSsoResource,
   readTeamsBotSetup,
+  teamsHelperRelease,
 } from "../teamsBotSetup";
 
 const botId = "11111111-1111-1111-1111-111111111111";
 const authAppId = "22222222-2222-2222-2222-222222222222";
+const tenant = "33333333-3333-3333-3333-333333333333";
+const subscription = "44444444-4444-4444-4444-444444444444";
 const origin = "https://erato.example.com";
 const resource = `api://erato.example.com/botid-${authAppId}`;
+const bot = readTeamsBotSetup({
+  bots: [{ botId }],
+  webApplicationInfo: { id: authAppId, resource },
+})!;
+
+function command(mode: "check" | "preview" | "apply" = "check") {
+  return createTeamsSetupCommand(
+    bot,
+    origin,
+    tenant,
+    subscription,
+    "graph",
+    "graph-sso",
+    mode,
+  );
+}
 
 describe("Teams setup delivery", () => {
-  it("keeps the combined SSO URI when bot and authentication IDs differ", () => {
-    const bot = readTeamsBotSetup({
-      bots: [{ botId }],
-      webApplicationInfo: { id: authAppId, resource },
-    })!;
+  it("keeps the combined SSO URI when messaging and authentication IDs differ", () => {
     expect(proposedSsoResource(bot, origin)).toBe(resource);
-  });
-
-  it("proposes a combined URI using the tab app, without claiming the tab URI enables bot SSO", () => {
-    const bot = readTeamsBotSetup({
+    const tab = readTeamsBotSetup({
       bots: [{ botId }],
       webApplicationInfo: { id: authAppId, resource: `api://${authAppId}` },
     })!;
-    expect(proposedSsoResource(bot, origin)).toBe(resource);
+    expect(proposedSsoResource(tab, origin)).toBe(resource);
   });
 
-  it("delivers one valid Bash script and treats manifest text as data", () => {
-    const directory = mkdtempSync(join(tmpdir(), "erato-teams-delivery-"));
-    try {
-      const manifest = {
-        bots: [{ botId }],
-        description: {
-          short: "Customer's $(exit 99) `exit 98`\nERATO_TEAMS_HELPER_PY",
-        },
-        webApplicationInfo: { id: authAppId, resource },
-      };
-      const bot = readTeamsBotSetup(manifest)!;
-      const script = createTeamsSetupScript(
+  it("pins a published version and verifies the exact script bytes", () => {
+    const source = readFileSync(
+      resolve(
+        `../site/public/setup/teams/${teamsHelperRelease.version}/EratoTeamsSetup.ps1`,
+      ),
+    );
+    expect(createHash("sha256").update(source).digest("hex")).toBe(
+      teamsHelperRelease.sha256,
+    );
+    expect(teamsHelperRelease.url).toBe(
+      `https://erato.chat/setup/teams/${teamsHelperRelease.version}/EratoTeamsSetup.ps1`,
+    );
+    for (const mode of ["check", "preview", "apply"] as const) {
+      expect(command(mode)).toContain("Get-FileHash $helper -Algorithm SHA256");
+      expect(command(mode)).toContain(teamsHelperRelease.sha256);
+      expect(command(mode)).not.toContain("Invoke-Expression");
+    }
+    expect(command()).not.toMatch(/-Apply|-WhatIf/);
+    expect(command("preview")).toContain("& $helper @erato -WhatIf");
+    expect(command("apply")).toContain("& $helper @erato -Apply");
+    expect(command("apply")).not.toContain("-Confirm:$false");
+  });
+
+  it("rejects incomplete target details and conflicting connection names", () => {
+    expect(() =>
+      createTeamsSetupCommand(
+        { ...bot, authAppId: null },
+        origin,
+        tenant,
+        subscription,
+        "graph",
+        "graph-sso",
+      ),
+    ).toThrow("application IDs");
+    expect(() =>
+      createTeamsSetupCommand(
         bot,
         origin,
-        "existing",
+        "",
+        subscription,
+        "graph",
+        "graph-sso",
+      ),
+    ).toThrow("tenant and subscription");
+    expect(() =>
+      createTeamsSetupCommand(
+        bot,
+        origin,
+        tenant,
+        subscription,
+        "graph",
+        "GRAPH",
+        "apply",
+      ),
+    ).toThrow("separate OAuth");
+    expect(() =>
+      createTeamsSetupCommand(
+        bot,
+        origin,
+        tenant,
+        subscription,
+        "graph",
+        "x; exit",
+      ),
+    ).toThrow("connection names");
+  });
+
+  it("PowerShell parses commands safely, passes deployment data literally, and refuses tampered downloads", () => {
+    const directory = mkdtempSync(join(tmpdir(), "erato-teams-delivery-"));
+    try {
+      const maliciousResource = `api://customer's/$(throw 'injected')/botid-${authAppId}`;
+      const input = createTeamsSetupCommand(
+        { ...bot, manifestResource: maliciousResource },
+        origin,
+        tenant,
+        subscription,
+        "graph",
         "graph-sso",
       );
-      const path = join(directory, "setup.sh");
-      writeFileSync(path, script);
-      execFileSync("bash", ["-n", path]);
-      // Stand in for Python so this checks the actual shell parsing without cloud access.
+      const fakeHelper =
+        "param($TenantId,$SubscriptionId,$BaseUrl,$BotAppId,$AuthAppId,$SsoResource,$CurrentConnection,$ConnectionName)\n$PSBoundParameters | ConvertTo-Json\n";
+      writeFileSync(join(directory, "fixture.ps1"), fakeHelper);
+      const harness = (hash: string) =>
+        `function Join-Path { param($Path,$ChildPath); [IO.Path]::Combine((Get-Location).Path,$ChildPath) }\nfunction Invoke-WebRequest { param($Uri,$OutFile); Copy-Item './fixture.ps1' $OutFile }\nfunction Get-FileHash { param($Path,$Algorithm); @{Hash='${hash}'} }\n${input}`;
       writeFileSync(
-        join(directory, "python3"),
-        '#!/bin/sh\nprintf "%s" "$ERATO_TEAMS_SETUP"\n',
-        { mode: 0o700 },
+        join(directory, "test.ps1"),
+        harness(teamsHelperRelease.sha256),
       );
-      writeFileSync(join(directory, "az"), "#!/bin/sh\nexit 99\n", {
-        mode: 0o700,
+      const result = execFileSync(
+        "pwsh",
+        ["-NoLogo", "-NoProfile", "-File", join(directory, "test.ps1")],
+        { cwd: directory, encoding: "utf8" },
+      );
+      expect(JSON.parse(result)).toMatchObject({
+        TenantId: tenant,
+        SubscriptionId: subscription,
+        BotAppId: botId,
+        AuthAppId: authAppId,
+        SsoResource: maliciousResource,
       });
-      const result = execFileSync("bash", [path], {
-        encoding: "utf-8",
-        env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
-      });
-      expect(JSON.parse(result)).toEqual({
-        baseUrl: origin,
-        botId,
-        authAppId,
-        ssoResource: resource,
-        currentConnection: "existing",
-        ssoConnection: "graph-sso",
-        manifest,
-      });
-      expect(script).toContain("def apply_sso(");
-      expect(script).not.toContain("github.com/EratoLab/infrastructure");
+      writeFileSync(join(directory, "test.ps1"), harness("incorrect"));
+      expect(() =>
+        execFileSync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-File", join(directory, "test.ps1")],
+          { cwd: directory, stdio: "pipe" },
+        ),
+      ).toThrow();
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  });
-
-  it("rejects a download without the authentication identity or with invalid connection names", () => {
-    const bot = readTeamsBotSetup({ bots: [{ botId }] })!;
-    expect(() =>
-      createTeamsSetupScript(bot, origin, "graph", "graph-sso"),
-    ).toThrow("app ID");
-    expect(() =>
-      createTeamsSetupScript({ ...bot, authAppId }, origin, "graph", "x; exit"),
-    ).toThrow("connection name");
   });
 });

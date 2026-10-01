@@ -1275,32 +1275,57 @@ msgstr "Cambiar a la vista de inicio"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.applyHelper"
+msgid "officeAddin.teams.bot.setup.applyHelp"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.authApp"
+#~ msgid "officeAddin.teams.bot.setup.applyHelper"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.applyResult"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.authAppMissing"
+#~ msgid "officeAddin.teams.bot.setup.authApp"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.authAppMissing"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.authenticationIdentity"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.authExplanation"
+#~ msgid "officeAddin.teams.bot.setup.authExplanation"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.azureResource"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.azureTitle"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.botIdentity"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.azureResource"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.azureTitle"
+msgid "officeAddin.teams.bot.setup.changesHelp"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1310,18 +1335,48 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.connectionDetails"
+msgid "officeAddin.teams.bot.setup.checkHelp"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.connectionNameInvalid"
+msgid "officeAddin.teams.bot.setup.checkTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.consent"
+msgid "officeAddin.teams.bot.setup.clipboardHelp"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.cloudIntro"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.cloudStatus"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.connectionDetails"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.connectionHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.connectionNameInvalid"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.consent"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1330,8 +1385,28 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.currentConnectionHelp"
+msgid "officeAddin.teams.bot.setup.copyApply"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.copyCommand"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.copyPreview"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.currentConnectionCheck"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.currentConnectionHelp"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1340,13 +1415,28 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.deployInstructions"
+msgid "officeAddin.teams.bot.setup.dataPermissions"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.deployTitle"
+#~ msgid "officeAddin.teams.bot.setup.deployInstructions"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.deploymentDetails"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.deploymentSettings"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.deployTitle"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1355,42 +1445,93 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.downloadHelper"
+#~ msgid "officeAddin.teams.bot.setup.downloadHelper"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.endpointInstruction"
+#~ msgstr "En Configuración, establece el punto de conexión de mensajería:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.endpointLabel"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.endpointInstruction"
-msgstr "En Configuración, establece el punto de conexión de mensajería:"
-
-#. js-lingui-explicit-id
-#: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.entraTitle"
+msgid "officeAddin.teams.bot.setup.enterTarget"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.exposeApi"
+#~ msgid "officeAddin.teams.bot.setup.entraTitle"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.exposeApi"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.finalCheck"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.guideLink"
+msgid "officeAddin.teams.bot.setup.finishHelp"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.helperIntro"
+msgid "officeAddin.teams.bot.setup.finishTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.helperLimits"
+#~ msgid "officeAddin.teams.bot.setup.guideLink"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.helperIntro"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.helperLimits"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.helperTitle"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#. placeholder {0}: teamsHelperRelease.version
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.helperVersion"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.helperTitle"
+msgid "officeAddin.teams.bot.setup.invalidConnections"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.invalidIdentity"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.invalidTarget"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.manualGuide"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1405,17 +1546,62 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.packageOnly"
+#~ msgid "officeAddin.teams.bot.setup.packageOnly"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.permissionsHelp"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.planHelper"
+msgid "officeAddin.teams.bot.setup.permissionsTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.resourceProposed"
+#~ msgid "officeAddin.teams.bot.setup.planHelper"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.previewApplyTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.previewHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.requirements"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.resourceLabel"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.resourceProposed"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.resultsHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.reviewTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.sourceLabel"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1430,17 +1616,47 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.subscriptionId"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.targetHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.targetTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.tenantId"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.title"
 msgstr "Bot de Teams"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.uploadHelper"
+#~ msgid "officeAddin.teams.bot.setup.uploadHelper"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.verifyInstructions"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.viewCommand"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.verifyInstructions"
+msgid "officeAddin.teams.bot.setup.viewScript"
 msgstr ""
 
 #. js-lingui-explicit-id

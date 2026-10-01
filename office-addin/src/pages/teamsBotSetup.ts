@@ -1,4 +1,10 @@
-import helperSource from "../../scripts/teams-bot/teams_bot_support.py?raw";
+import release from "../../../site/public/setup/teams/1.0.0/release.json";
+export { default as teamsHelperSource } from "../../../site/public/setup/teams/1.0.0/EratoTeamsSetup.ps1?raw";
+
+export const teamsHelperRelease = {
+  ...release,
+  url: `https://erato.chat/setup/teams/${release.version}/EratoTeamsSetup.ps1`,
+};
 
 export type TeamsBotSetup = {
   botId: string;
@@ -38,45 +44,64 @@ export function validConnectionName(value: string): boolean {
   return /^[A-Za-z0-9_-]{1,64}$/.test(value);
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
+export function validGuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }
 
-/** One reviewable upload, with no repository access or requests to Erato from Cloud Shell. */
-export function createTeamsSetupScript(
+function powershellQuote(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+/** Each command independently fetches and verifies the pinned public release. */
+export function createTeamsSetupCommand(
   bot: TeamsBotSetup,
   origin: string,
+  tenantId: string,
+  subscriptionId: string,
   currentConnection: string,
   ssoConnection: string,
+  mode: "check" | "preview" | "apply" = "check",
 ): string {
-  if (!bot.authAppId) throw new Error("Teams authentication app ID is missing");
+  if (!bot.authAppId || !validGuid(bot.authAppId) || !validGuid(bot.botId)) {
+    throw new Error("Teams application IDs are missing or invalid");
+  }
+  if (!validGuid(tenantId) || !validGuid(subscriptionId)) {
+    throw new Error("Enter valid tenant and subscription IDs");
+  }
   if (
     !validConnectionName(currentConnection) ||
-    !validConnectionName(ssoConnection)
+    !validConnectionName(ssoConnection) ||
+    (mode !== "check" &&
+      currentConnection.toLowerCase() === ssoConnection.toLowerCase())
   ) {
-    throw new Error("Invalid OAuth connection name");
+    throw new Error("Use valid, separate OAuth connection names");
   }
-  const setup = JSON.stringify({
-    baseUrl: origin,
-    botId: bot.botId,
-    authAppId: bot.authAppId,
-    ssoResource: proposedSsoResource(bot, origin),
-    currentConnection,
-    ssoConnection,
-    manifest: bot.manifest,
-  });
-  // JSON newlines are escaped; shell quoting also protects apostrophes and substitutions.
-  return `#!/usr/bin/env bash
-# Erato Teams setup. Run in Azure Cloud Shell (Bash).
-# Default: read-only audit. --plan-sso: preview. --apply-sso: explicit Azure/Entra writes.
-# Deployment and manifest are a snapshot from the setup page; download again after changes.
-set -eu
-for tool in az python3; do
-  command -v "$tool" >/dev/null || { echo "Open Azure Cloud Shell (Bash): $tool is required." >&2; exit 2; }
-done
-export ERATO_TEAMS_SETUP=${shellQuote(setup)}
-exec python3 - "$@" <<'ERATO_TEAMS_HELPER_PY'
-${helperSource}
-ERATO_TEAMS_HELPER_PY
-`;
+  const parameters = {
+    TenantId: tenantId,
+    SubscriptionId: subscriptionId,
+    BaseUrl: origin,
+    BotAppId: bot.botId,
+    AuthAppId: bot.authAppId,
+    SsoResource: proposedSsoResource(bot, origin),
+    CurrentConnection: currentConnection,
+    ConnectionName: ssoConnection,
+  };
+  const modeFlag =
+    mode === "preview" ? " -WhatIf" : mode === "apply" ? " -Apply" : "";
+  return `& {
+  $ErrorActionPreference = 'Stop'
+  $erato = @{
+${Object.entries(parameters)
+  .map(([key, value]) => `    ${key} = ${powershellQuote(value)}`)
+  .join("\n")}
+  }
+  $helper = Join-Path $HOME 'EratoTeamsSetup-${release.version}.ps1'
+  Invoke-WebRequest ${powershellQuote(teamsHelperRelease.url)} -OutFile $helper
+  if ((Get-FileHash $helper -Algorithm SHA256).Hash -ne '${release.sha256}') {
+    throw 'Script verification failed. Nothing was executed. Open the setup page again.'
+  }
+  & $helper @erato${modeFlag}
+}`;
 }

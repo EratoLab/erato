@@ -224,48 +224,112 @@ describe("AddinSetupRoute Teams bot section", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the messaging endpoint, token exchange URL and setup guide", async () => {
+  const authAppId = "22222222-2222-2222-2222-222222222222";
+  const tenantId = "33333333-3333-3333-3333-333333333333";
+  const subscriptionId = "44444444-4444-4444-4444-444444444444";
+
+  async function prepareCommands() {
     stubTeamsManifest({
       bots: [{ botId }],
-      webApplicationInfo: { id: botId, resource: `api://botid-${botId}` },
+      webApplicationInfo: { id: authAppId, resource: `api://${authAppId}` },
     });
     await selectTeams();
+    fireEvent.change(screen.getByLabelText("Tenant ID"), {
+      target: { value: tenantId },
+    });
+    fireEvent.change(screen.getByLabelText("Subscription ID"), {
+      target: { value: subscriptionId },
+    });
+  }
 
-    expect(screen.getByRole("heading", { name: "Teams bot" })).toBeVisible();
-    expect(screen.getAllByText(botId)[0]).toBeVisible();
-    expect(
-      screen.getByText(
-        `${window.location.origin}/api/integrations/ms_teams/messages`,
-      ),
-    ).toBeVisible();
-    expect(screen.getByText(`api://botid-${botId}`)).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: "Teams bot setup guide" }),
-    ).toHaveAttribute("href", "https://erato.chat/docs/integrations/ms_teams");
-  });
-
-  it("proposes a combined URI while explaining that Azure has not been checked", async () => {
+  it("offers Cloud Shell and reviewable source without a local download/upload", async () => {
     stubTeamsManifest({
       bots: [{ botId }],
-      webApplicationInfo: { id: "tab", resource: "api://tab" },
+      webApplicationInfo: { id: authAppId, resource: `api://${authAppId}` },
     });
     await selectTeams();
-
     expect(screen.getByRole("heading", { name: "Teams bot" })).toBeVisible();
-    expect(screen.queryByText("api://tab")).not.toBeInTheDocument();
     expect(
-      screen.getByText(`api://${window.location.host}/botid-tab`),
+      screen.getByText(/Azure settings have not been checked/),
     ).toBeVisible();
     expect(
-      screen.getByText(
-        /Azure settings and the package installed in Teams have not been checked/,
-      ),
-    ).toBeVisible();
+      screen.getByRole("link", { name: "Open Azure Cloud Shell" }),
+    ).toHaveAttribute("href", "https://shell.azure.com/powershell");
+    expect(screen.getByRole("button", { name: "View script" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy command" })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Download Cloud Shell helper" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", {
-        name: "Open Azure Cloud Shell",
-        hidden: true,
+        name: "Manual setup and troubleshooting guide",
       }),
-    ).toHaveAttribute("href", "https://shell.azure.com/");
+    ).toHaveAttribute("href", "https://erato.chat/docs/integrations/ms_teams");
+    fireEvent.click(screen.getByRole("button", { name: "View script" }));
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>("PowerShell source").value,
+    ).toContain("SupportsShouldProcess");
+  });
+
+  it("copies a check command only after target details are valid", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    await prepareCommands();
+    fireEvent.click(screen.getByRole("button", { name: "Copy command" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    const command = writeText.mock.calls[0][0] as string;
+    expect(command).toContain(tenantId);
+    expect(command).toContain(subscriptionId);
+    expect(command).toContain(
+      `api://${window.location.host}/botid-${authAppId}`,
+    );
+    expect(command).toContain("Get-FileHash");
+    expect(command).not.toContain("-Apply");
+    expect(screen.getByRole("button", { name: "Copied!" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Tenant ID"), {
+      target: { value: "wrong" },
+    });
+    expect(screen.getByRole("button", { name: "Copy command" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter complete IDs");
+  });
+
+  it("provides a selectable command if clipboard permission is denied", async () => {
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    });
+    await prepareCommands();
+    fireEvent.click(screen.getByRole("button", { name: "Copy command" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Clipboard access is unavailable",
+    );
+    expect(screen.getByLabelText("Copy command")).toBeVisible();
+  });
+
+  it("keeps apply separate and blocks reuse of the existing connection name", async () => {
+    await prepareCommands();
+    fireEvent.click(screen.getByText("Preview and apply changes"));
+    expect(
+      screen.getByRole("button", { name: "Copy preview command" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Copy apply command" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>("Copy preview command").value,
+    ).toContain("-WhatIf");
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>("Copy apply command").value,
+    ).toContain("-Apply");
+    fireEvent.change(screen.getByLabelText("SSO connection name"), {
+      target: { value: "GRAPH" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Copy apply command" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "The check can use the current connection",
+    );
+    expect(screen.getByRole("button", { name: "Copy command" })).toBeEnabled();
   });
 });

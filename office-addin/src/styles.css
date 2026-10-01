@@ -114,6 +114,7 @@ body {
   display: flex;
   flex: 1 1 auto;
   justify-content: center;
+  align-items: flex-start;
   min-height: 100%;
   width: 100%;
   overflow: auto;
@@ -276,11 +277,57 @@ body {
   padding: 0.5rem 0.75rem;
   font: inherit;
   max-width: 24rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.office-setup-field input:focus-visible,
+.office-setup-command-preview:focus-visible {
+  outline: 2px solid #0f62fe;
+  outline-offset: 2px;
+}
+
+.office-setup-field input[aria-invalid="true"] {
+  border-color: #b91c1c;
 }
 
 .office-setup-helper summary {
   cursor: pointer;
   font-weight: 600;
+}
+
+.office-setup-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+}
+
+.office-setup-targets input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.office-setup-command {
+  margin: 12px 0;
+}
+
+.office-setup-checksum {
+  overflow-wrap: anywhere;
+}
+
+.office-setup-command-preview {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  resize: vertical;
 }
 
 .office-setup-actions {
