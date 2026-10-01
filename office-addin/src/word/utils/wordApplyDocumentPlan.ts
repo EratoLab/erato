@@ -1,3 +1,10 @@
+import {
+  isWordHistorySnapshot,
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
+
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
 import {
   unlockWordContentControlsForImport,
@@ -14,11 +21,6 @@ import {
   wordDocumentOoxmlToFile,
 } from "./wordDocumentPackage";
 import {
-  normalizeWordDocumentPlan,
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "./wordDocumentPlan";
-import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
@@ -34,7 +36,7 @@ import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanIssue,
-} from "./wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 export type WordDocumentApplyStatus =
   | "applied"
@@ -160,7 +162,7 @@ async function applyPlan(
     ? "host-unavailable"
     : !plan
       ? "invalid"
-      : !snapshot
+      : !snapshot || isWordHistorySnapshot(snapshot)
         ? "no-capture"
         : !messageId || snapshot.ownerMessageId !== messageId
           ? "wrong-request"

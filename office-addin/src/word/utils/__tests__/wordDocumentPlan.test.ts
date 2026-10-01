@@ -1,14 +1,14 @@
+import {
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+  wordPlanOutput,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
   examplePlan,
   readySnapshot,
 } from "../../../test/mocks/word/authoringFixtures";
-import {
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-  wordPlanOutput,
-} from "../wordDocumentPlan";
 
 describe("structural plan ownership and schema", () => {
   it("supports reordered nonadjacent merges, splits and explicit removal", () => {

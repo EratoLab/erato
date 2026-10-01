@@ -1,35 +1,29 @@
-import { Card } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
-import type { WordSourceBlock } from "../utils/wordDocumentPlan";
+import { Card } from "@/components/ui/Container/Card";
 
-export function WordNativeBlockPreview({
-  block,
-  retained = true,
-}: {
-  block: WordSourceBlock;
-  retained?: boolean;
-}) {
+import type { WordSourceBlock } from "@/lib/wordReview/wordDocumentPlan";
+import type { WordPlanObjectKind } from "@/lib/wordReview/wordPlanReview";
+
+export function WordNativeBlockPreview({ block }: { block: WordSourceBlock }) {
   return (
     <Card variant="surface" size="sm">
       <strong>{nativeKindLabel(block.nativeKind)}</strong>
       {block.description && (
         <p className="word-review__text">{block.description}</p>
       )}
-      {retained && (
-        <p className="word-review__hint">
-          {t({
-            id: "officeAddin.word.authoring.nativeRetained",
-            message: "Retained in Word with its native content and formatting.",
-          })}
-        </p>
-      )}
       {block.text && <p className="word-review__text">{block.text}</p>}
     </Card>
   );
 }
-function nativeKindLabel(kind: WordSourceBlock["nativeKind"]): string {
+export function nativeKindLabel(
+  kind: WordSourceBlock["nativeKind"] | WordPlanObjectKind,
+): string {
   switch (kind) {
+    case "drawing":
+      return t({ id: "officeAddin.word.rich.drawing", message: "Drawing" });
+    case "bookmark":
+      return t({ id: "officeAddin.word.rich.bookmark", message: "Bookmark" });
     case "table":
       return t({
         id: "officeAddin.word.authoring.nativeTable",

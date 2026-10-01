@@ -2,7 +2,7 @@ import { t } from "@lingui/core/macro";
 
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
-import type { WordPlanIssue } from "./wordDocumentPlan";
+import type { WordPlanIssue } from "@erato/frontend/word-review";
 
 export function wordDocumentDiagnosticText(
   diagnostic: WordDocumentDiagnostic,
@@ -67,7 +67,7 @@ export function wordAuthoringIssueText(
       return t({
         id: "officeAddin.word.authoring.incomplete",
         message:
-          "The complete document has not been read for this plan. Ask for a new rewrite that reads every source block.",
+          "The complete document has not been read for this plan. Ask for a new rewrite that reads the whole document.",
       });
     case "expired":
       return t({

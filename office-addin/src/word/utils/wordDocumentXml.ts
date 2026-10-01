@@ -1,35 +1,23 @@
-import { wordReadableSourceBlock } from "./wordAuthoringReadData";
 import {
   applyWordParagraphFormatting,
   applyWordRunFormatting,
   readWordParagraphFormatting,
   readWordRunFormatting,
-} from "./wordBlockFormatting";
-import { isBuiltInHeadingStyle } from "./wordBuiltInStyles";
-import {
+  isBuiltInHeadingStyle,
   MAX_DOCUMENT_BLOCKS,
   MAX_SOURCE_BYTES,
   wordPlanOutput,
-} from "./wordDocumentPlan";
-import { sameWordFullDocumentContent } from "./wordFullDocumentComparison";
-import { resolveWordImageAsset } from "./wordImageAssetData";
-import {
+  resolveWordImageAsset,
   compileWordField,
   compileWordBookmark,
   compileWordContentControl,
   applyWordNativeStructures,
-} from "./wordInlineStructures";
-import {
   cloneWordMediaNode,
   isWordMediaElementActive,
-} from "./wordMediaComparison";
-import {
   compileWordImage,
   compileWordDrawing,
   rebindWordMediaRelationships,
   reserveWordNativeIds,
-} from "./wordMediaContent";
-import {
   nativeBodyGroups,
   nativeDescription,
   nativeVisibleText,
@@ -38,23 +26,25 @@ import {
   createNativeContentSignature,
   preservedWordStories,
   sameWordPreservedParts,
-} from "./wordNativeContent";
-import { wordSourceDetails, resolveWordSource } from "./wordRichContent";
-import {
+  wordSourceDetails,
+  resolveWordSource,
   extractWordSections,
   extractWordStories,
   compileWordSections,
   compileWordStories,
-} from "./wordStories";
-import { compileWordTableBlock } from "./wordTableContent";
-import { createWordXmlComparison } from "./wordXmlComparison";
+  compileWordTableBlock,
+  createWordXmlComparison,
+} from "@erato/frontend/word-review";
+
+import { wordReadableSourceBlock } from "./wordAuthoringReadData";
+import { sameWordFullDocumentContent } from "./wordFullDocumentComparison";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
   WordSourceBlock,
-} from "./wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";

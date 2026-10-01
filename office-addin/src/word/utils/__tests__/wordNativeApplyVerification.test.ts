@@ -1,3 +1,8 @@
+import {
+  parseWordDocumentPlan,
+  sameWordPreservedParts,
+  wordMainBody,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import mixedApplied from "../../../test/fixtures/word-authoring-state/mixed-applied.xml?raw";
@@ -7,14 +12,12 @@ import rewriteApplied from "../../../test/fixtures/word-authoring-state/rewrite-
 import rewritePlan from "../../../test/fixtures/word-authoring-state/rewrite-plan.json";
 import rewriteRestored from "../../../test/fixtures/word-authoring-state/rewrite-restored.xml?raw";
 import rewriteSource from "../../../test/fixtures/word-authoring-state/rewrite-source.xml?raw";
-import { parseWordDocumentPlan } from "../wordDocumentPlan";
 import {
   captureWordAuthoringSnapshot,
   sameWordBodyContent,
   verifyWordPlanOutput,
   wordDocumentFingerprint,
 } from "../wordDocumentXml";
-import { sameWordPreservedParts, wordMainBody } from "../wordNativeContent";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const snapshot = (xml: string) =>

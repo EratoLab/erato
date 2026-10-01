@@ -1,9 +1,9 @@
+import { createWordXmlComparison } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import { packageXml, W } from "../../../test/mocks/word/authoringFixtures";
 import { wordDocumentFingerprint } from "../wordDocumentXml";
 import { normalizeWordTablesForComparison } from "../wordTableComparison";
-import { createWordXmlComparison } from "../wordXmlComparison";
 
 const source = (grid: number[] = [4513, 4513], extra = "") =>
   packageXml(

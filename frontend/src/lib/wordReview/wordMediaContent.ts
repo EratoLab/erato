@@ -172,7 +172,7 @@ function imageData(v: unknown): v is NonNullable<WordImageSpec["data"]> {
   )
     return false;
   try {
-    const bytes = atob(v.base64);
+    const bytes = globalThis.atob(v.base64);
     if (!bytes || bytes.length > MAX_IMAGE_BYTES) return false;
     if (v.mime === "image/png")
       return bytes.startsWith("\x89PNG\r\n\x1a\n") && bytes.length >= 24;
@@ -191,7 +191,7 @@ export function wordImageDimensions(
   data: NonNullable<WordImageSpec["data"]>,
 ): { widthPx: number; heightPx: number } | undefined {
   if (!imageData(data)) return undefined;
-  const binary = atob(data.base64);
+  const binary = globalThis.atob(data.base64);
   const byte = (index: number) => binary.charCodeAt(index);
   const uint16 = (index: number) => byte(index) * 256 + byte(index + 1);
   const uint32 = (index: number) =>

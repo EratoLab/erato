@@ -1,0 +1,220 @@
+{
+  "source": "message 01a0caa8, reads removed",
+  "messages": [
+    {
+      "id": "01a0caa8-b01e-77cd-ab5f-8369a078e0b6",
+      "role": "user",
+      "content": [],
+      "action_facet_id": "word_document_authoring",
+      "action_facet_args": {
+        "document_name": "",
+        "heading_outline": "",
+        "paragraphs_sent": "10",
+        "truncation_note": "",
+        "authoring_status": "available",
+        "paragraphs_total": "10",
+        "document_identity": "pane-session:181a6a35-9e30-405c-b136-d3df64a2a244",
+        "document_snapshot": "4b00ca13-5038-4568-b795-1d42a1c0c4d3"
+      }
+    },
+    {
+      "id": "01a0caa8-b53a-7dde-b7a6-f6aaef094918",
+      "role": "assistant",
+      "previous_message_id": "01a0caa8-b01e-77cd-ab5f-8369a078e0b6",
+      "content": [
+        {
+          "text": "Ich stelle das Dokument komplett auf Deutsch neu auf, mit Titel/Untertitel, klaren Überschriften, einer Vergleichstabelle (Optionen A/B) sowie sauber formatierten nummerierten Schritten und Tipps. Inhaltlich bleibt es eine kompakte Word-Anleitung, aber deutlich strukturierter und ansprechend gesetzt.",
+          "content_type": "text"
+        },
+        {
+          "input": {
+            "scope": "body",
+            "entries": [
+              {
+                "kind": "replace",
+                "blocks": [
+                  {
+                    "id": "title-1",
+                    "text": "Anleitung: Dokumentbearbeitung in Microsoft Word",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 12
+                    },
+                    "styleRef": "Title"
+                  },
+                  {
+                    "id": "subtitle-1",
+                    "text": "Optionen, Vorgehen und schnelle Formatierungstipps",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 18
+                    },
+                    "styleRef": "Subtitle"
+                  }
+                ],
+                "source": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5",
+                  "b6",
+                  "b7",
+                  "b8",
+                  "b9",
+                  "b10"
+                ]
+              }
+            ],
+            "version": 1,
+            "snapshot": "4b00ca13-5038-4568-b795-1d42a1c0c4d3",
+            "readToken": "87948ad5-0a68-4795-a1b0-7f5a10587132"
+          },
+          "output": {
+            "error": "Submission validation failed",
+            "status": "error",
+            "submission": {
+              "status": "retry",
+              "attempts_remaining": 2
+            },
+            "validation_errors": [
+              {
+                "code": "table-shape",
+                "path": "/entries/0/blocks/5",
+                "message": "Invalid table fields, columns or rows; use the table contract and limits."
+              }
+            ]
+          },
+          "status": "error",
+          "tool_name": "submit_document_plan",
+          "content_type": "tool_use",
+          "tool_call_id": "call_iGDZOFRMH3fPI6bDXTenED3a"
+        },
+        {
+          "text": "Ich korrigiere die Tabelle gemäß dem Word-Plan-Vertrag (Tabellen-Style gehört in `format.styleRef`) und reiche den Plan erneut ein.",
+          "content_type": "text"
+        },
+        {
+          "input": {
+            "scope": "body",
+            "entries": [
+              {
+                "kind": "replace",
+                "blocks": [
+                  {
+                    "id": "title-1",
+                    "text": "Anleitung: Dokumentbearbeitung in Microsoft Word",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 12
+                    },
+                    "styleRef": "Title"
+                  },
+                  {
+                    "id": "subtitle-1",
+                    "text": "Optionen, Vorgehen und schnelle Formatierungstipps",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 18
+                    },
+                    "styleRef": "Subtitle"
+                  }
+                ],
+                "source": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5",
+                  "b6",
+                  "b7",
+                  "b8",
+                  "b9",
+                  "b10"
+                ]
+              }
+            ],
+            "version": 1,
+            "snapshot": "4b00ca13-5038-4568-b795-1d42a1c0c4d3",
+            "readToken": "87948ad5-0a68-4795-a1b0-7f5a10587132"
+          },
+          "output": {
+            "error": "Document inclusion is off.",
+            "status": "error",
+            "submission": {
+              "status": "retry",
+              "attempts_remaining": 1
+            }
+          },
+          "status": "error",
+          "tool_name": "submit_document_plan",
+          "content_type": "tool_use",
+          "tool_call_id": "call_ZX8YBZeD0CCaancYUbPyd0os"
+        },
+        {
+          "input": {
+            "scope": "document",
+            "entries": [
+              {
+                "kind": "replace",
+                "blocks": [
+                  {
+                    "id": "title-1",
+                    "text": "Anleitung: Dokumentbearbeitung in Microsoft Word",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 12
+                    },
+                    "styleRef": "Title"
+                  },
+                  {
+                    "id": "subtitle-1",
+                    "text": "Optionen, Vorgehen und schnelle Formatierungstipps",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 18
+                    },
+                    "styleRef": "Subtitle"
+                  }
+                ],
+                "source": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5",
+                  "b6",
+                  "b7",
+                  "b8",
+                  "b9",
+                  "b10"
+                ]
+              }
+            ],
+            "version": 1,
+            "snapshot": "4b00ca13-5038-4568-b795-1d42a1c0c4d3",
+            "readToken": "87948ad5-0a68-4795-a1b0-7f5a10587132"
+          },
+          "output": {
+            "error": "Document inclusion is off.",
+            "status": "error",
+            "submission": {
+              "status": "failed",
+              "attempts_remaining": 0
+            }
+          },
+          "status": "error",
+          "tool_name": "submit_document_plan",
+          "content_type": "tool_use",
+          "tool_call_id": "call_GBxEt1tcFoSPIIJG1MtTlpya"
+        }
+      ]
+    }
+  ]
+}

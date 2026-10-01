@@ -1,3 +1,7 @@
+import {
+  acceptedWordPlanFromHistory,
+  parseWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { describe, expect, it, vi, afterEach } from "vitest";
 
 import {
@@ -5,10 +9,8 @@ import {
   examplePlan,
 } from "../../../test/mocks/word/authoringFixtures";
 import { buildWordArtifact } from "../buildWordArtifact";
-import { parseWordDocumentPlan } from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
-  acceptedWordDocumentSubmission,
   createWordDocumentSubmissionExecutor,
   WORD_SUBMIT_PLAN_TOOL,
 } from "../wordDocumentSubmission";
@@ -293,15 +295,15 @@ describe("structured Word submissions", () => {
     expect(artifact?.isFreshCompletion).toBeUndefined();
     expect(artifact?.itemIdentity).toBeUndefined();
     expect(
-      acceptedWordDocumentSubmission([withPart({ status: "error" })]),
+      acceptedWordPlanFromHistory([withPart({ status: "error" })]),
     ).toBeUndefined();
     expect(
-      acceptedWordDocumentSubmission([
+      acceptedWordPlanFromHistory([
         withPart({ output: { status: "success", result: result.result } }),
       ]),
     ).toBeUndefined();
     expect(
-      acceptedWordDocumentSubmission([
+      acceptedWordPlanFromHistory([
         withPart({
           output: {
             status: "success",
@@ -311,7 +313,7 @@ describe("structured Word submissions", () => {
         }),
       ]),
     ).toBeUndefined();
-    expect(acceptedWordDocumentSubmission([part, part])).toBeUndefined();
+    expect(acceptedWordPlanFromHistory([part, part])).toBeUndefined();
     expect(
       buildWordArtifact({
         facetId: "word_document_authoring",
@@ -408,7 +410,7 @@ describe("Word draft repairs", () => {
       ]),
     ) as ContentPart[];
     session.clear();
-    expect(acceptedWordDocumentSubmission(content)).toEqual({
+    expect(acceptedWordPlanFromHistory(content)).toMatchObject({
       toolCallId: "repair",
       content: JSON.stringify(plan),
     });
@@ -428,7 +430,7 @@ describe("Word draft repairs", () => {
       content[0] as Extract<ContentPart, { content_type: "tool_use" }>
     ).output as unknown as { result: { plan?: unknown } };
     delete output.result.plan;
-    expect(acceptedWordDocumentSubmission(content)).toBeUndefined();
+    expect(acceptedWordPlanFromHistory(content)).toBeUndefined();
   });
 
   it("distinguishes transport redelivery from a new unchanged proposal", async () => {

@@ -1,6 +1,3 @@
-import { describe, expect, it } from "vitest";
-
-import { wordDocumentOoxmlToFile } from "../wordDocumentPackage";
 import {
   compileWordSections,
   compileWordStories,
@@ -9,10 +6,15 @@ import {
   parseWordSections,
   parseWordStoryChanges,
   pruneWordStoryReferences,
-} from "../wordStories";
+} from "@erato/frontend/word-review";
+import { describe, expect, it } from "vitest";
 
-import type { WordPlanBlock } from "../wordDocumentPlan";
-import type { WordStoryChange } from "../wordStories";
+import { wordDocumentOoxmlToFile } from "../wordDocumentPackage";
+
+import type {
+  WordPlanBlock,
+  WordStoryChange,
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

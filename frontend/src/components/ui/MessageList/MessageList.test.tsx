@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { MessageList } from "./MessageList";
+import { useConversationMessage } from "../Message/ConversationMessages";
 
 import type { Messages } from "@lingui/core";
 
@@ -115,6 +116,60 @@ describe("MessageList", () => {
     expect(markers).toHaveLength(1);
     // The marker introduces the turn that changed model, so it must precede it.
     expect(markers[0].nextElementSibling?.textContent).toBe("user2");
+  });
+
+  it("lets a message renderer read the request its answer replied to", () => {
+    const messages = {
+      user1: {
+        id: "user1",
+        role: "user" as const,
+        content: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        sender: "user",
+        authorId: "author-1",
+        action_facet_id: "word_document_review",
+      },
+      assistant1: {
+        id: "assistant1",
+        role: "assistant" as const,
+        content: [],
+        createdAt: "2026-01-01T00:01:00.000Z",
+        sender: "assistant",
+        authorId: "assistant",
+        previous_message_id: "user1",
+      },
+    };
+    function Renderer({
+      message,
+    }: {
+      message: { id: string; previous_message_id?: string };
+    }) {
+      const previous = useConversationMessage(message.previous_message_id);
+      return (
+        <div>
+          {message.id}:{previous?.action_facet_id ?? "none"}
+        </div>
+      );
+    }
+
+    render(
+      <I18nProvider i18n={i18n}>
+        <MessageList
+          messages={messages}
+          messageOrder={["user1", "assistant1"]}
+          loadOlderMessages={vi.fn()}
+          hasOlderMessages={false}
+          isPending={false}
+          currentSessionId="chat-1"
+          controlsContext={{}}
+          onMessageAction={vi.fn(async () => true)}
+          messageRenderer={Renderer}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("assistant1:word_document_review")).toBeTruthy();
+    expect(screen.getByText("user1:none")).toBeTruthy();
   });
 
   it("preserves an explicit numeric width override when provided", () => {

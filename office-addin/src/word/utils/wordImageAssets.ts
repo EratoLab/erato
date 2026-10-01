@@ -1,21 +1,20 @@
 import { fetchGetFile } from "@erato/frontend/library";
-
-import { wordImageDimensions } from "./wordMediaContent";
+import { wordImageDimensions } from "@erato/frontend/word-review";
 
 import type {
   WordImageAsset,
   WordImageAssetIssue,
   WordImageAssetCapture,
-} from "./wordImageAssetData";
+} from "@erato/frontend/word-review";
 export {
   resolveWordImageAsset,
   wordImageAssetMetadata,
-} from "./wordImageAssetData";
+} from "@erato/frontend/word-review";
 export type {
   WordImageAsset,
   WordImageAssetIssue,
   WordImageAssetCapture,
-} from "./wordImageAssetData";
+} from "@erato/frontend/word-review";
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_ASSET_BYTES = 8 * 1024 * 1024;
 const MAX_ASSETS = 20;

@@ -23,8 +23,7 @@ export function wordTableCellScope(
 ): WordTableCellScope | undefined {
   const scope =
     typeof token === "string" ? snapshot.cellReads?.get(token) : undefined;
-  return scope &&
-    scope.snapshot === snapshot.token &&
+  return scope?.snapshot === snapshot.token &&
     scope.identity === snapshot.identity &&
     scope.fingerprint === snapshot.fingerprint &&
     !snapshot.revoked &&

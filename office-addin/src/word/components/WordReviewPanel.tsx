@@ -2,24 +2,55 @@ import {
   Alert,
   Button,
   Card,
+  CountBadge,
   DisclosureChevron,
+  OpenNewWindowIcon,
   Row,
+  SettledInfoPill,
   Select,
   TextComparison,
+  WordReviewHeader,
+  wordShowInWordLabel,
+  wordSizeChip,
 } from "@erato/frontend/library";
+import {
+  editedParagraphCount,
+  editExcerpt,
+  planWordEdits,
+  wordEditCounts,
+  wordEditBatchSize,
+} from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState } from "react";
 
-import { statusLabel } from "./WordEditReport";
-import { editExcerpt, planWordEdits } from "../utils/wordEditPlan";
+import {
+  isRevertedOutcome,
+  statusLabel,
+  wordEditsAppliedText,
+  wordEditsTitleText,
+  wordEditTargetLabel,
+  wordEditExceptionsText,
+  wordRevertedLabel,
+} from "./WordEditReport";
+import { wordAutomaticText, wordUndoneText } from "./WordReviewReceipt";
 
-import type { WordDocumentCapture } from "../utils/wordDocumentCapture";
-import type { WordEdit, WordEditStatus } from "../utils/wordEditPlan";
 import type {
   WordLocationResult,
   WordTrackingMode,
 } from "../utils/wordReviewLocation";
 import type { WordReviewState } from "../utils/wordReviewState";
+import type {
+  WordDocumentCapture,
+  WordEdit,
+  WordEditStatus,
+} from "@erato/frontend/word-review";
+
+const locationChangedText = () =>
+  t({
+    id: "officeAddin.word.review.locationChanged",
+    message:
+      "This passage changed or moved. Its exact location can no longer be verified.",
+  });
 
 export function trackingDescription(mode: WordTrackingMode): string {
   if (mode === "off")
@@ -38,18 +69,6 @@ export function trackingDescription(mode: WordTrackingMode): string {
     message:
       "Word tracking status is unavailable. Erato will not change the setting.",
   });
-}
-
-export function reviewTargetLabel(edit: WordEdit): string {
-  return edit.through === undefined || edit.through === edit.paragraph
-    ? t({
-        id: "officeAddin.word.report.paragraph",
-        message: `Paragraph ${edit.paragraph}`,
-      })
-    : t({
-        id: "officeAddin.word.report.paragraphRange",
-        message: `Paragraphs ${edit.paragraph}-${edit.through}`,
-      });
 }
 
 function originalText(
@@ -78,18 +97,30 @@ function compactStatus(
   status: WordEditStatus | undefined,
   reverted: boolean,
 ): string {
-  if (reverted && (status === "applied" || status === "failed"))
-    return t({ id: "officeAddin.word.review.reverted", message: "Reverted" });
-  if (status === "applied")
-    return t({
-      id: "officeAddin.word.report.status.applied",
-      message: "Applied",
-    });
+  if (isRevertedOutcome(status, reverted)) return wordRevertedLabel();
+  if (status === "applied") return statusLabel(status);
   if (status === "failed")
     return t({ id: "officeAddin.word.review.failed", message: "Failed" });
   if (status)
     return t({ id: "officeAddin.word.review.skipped", message: "Skipped" });
   return t({ id: "officeAddin.word.review.proposed", message: "Proposed" });
+}
+
+const STATUS_TONE: Partial<Record<WordEditStatus | "reverted", string>> = {
+  applied: "bg-theme-success-bg text-theme-success-fg",
+  failed: "bg-theme-error-bg text-theme-error-fg",
+  reverted: "bg-theme-bg-secondary text-theme-fg-secondary",
+};
+
+function statusTone(
+  status: WordEditStatus | undefined,
+  reverted: boolean,
+): string {
+  if (isRevertedOutcome(status, reverted)) return STATUS_TONE.reverted!;
+  return (
+    (status && STATUS_TONE[status]) ??
+    "bg-theme-bg-secondary text-theme-fg-secondary"
+  );
 }
 
 export function WordReviewPanel({
@@ -137,13 +168,8 @@ export function WordReviewPanel({
       edits.map((edit) => Math.floor((edit.paragraph - 1) / 25) * 25 + 1),
     ),
   ].sort((a, b) => a - b);
-  const applied = review.outcomes.filter(
-    (outcome) => outcome.status === "applied",
-  ).length;
-  const failed = review.outcomes.filter(
-    (outcome) => outcome.status === "failed",
-  ).length;
-  const skipped = review.outcomes.length - applied - failed;
+  const counts = wordEditCounts(review.outcomes);
+  const { applied, failed, skipped } = counts;
   const total = edits.length;
   const historical = review.outcomes.length > 0;
   const reverted = review.status === "reverted";
@@ -163,113 +189,73 @@ export function WordReviewPanel({
     });
   const complete = capture?.renderedOrdinals.size ?? 0;
   const documentTotal = capture?.ordinalMap.size ?? 0;
+  const title = wordEditsTitleText(
+    editedParagraphCount(edits, capture?.paragraphsSent),
+  );
+  const totals =
+    review.status === "write-failed"
+      ? t({
+          id: "officeAddin.word.review.uncertainTotals",
+          message: `${skipped} skipped · ${failed} writes unconfirmed`,
+        })
+      : reverted
+        ? t({
+            id: "officeAddin.word.review.revertedTotals",
+            message: `${applied + failed} edits reverted · ${skipped} skipped`,
+          })
+        : wordEditExceptionsText(counts);
   return (
     <div data-testid={historical ? "word-edit-report" : "word-review-panel"}>
-      <header className="word-review__header">
-        <div className="word-review__eyebrow">
-          {t({ id: "officeAddin.word.review.title", message: "Review edits" })}
-        </div>
-        <h3>
-          {review.status === "applying"
-            ? t({
-                id: "officeAddin.word.review.applying",
-                message: `Applying ${total} edits…`,
-              })
-            : reverted
+      <WordReviewHeader
+        chip={wordSizeChip(wordEditBatchSize(total))}
+        title={
+          reverted
+            ? wordUndoneText(title)
+            : review.status === "write-failed" ||
+                review.status === "error" ||
+                review.status === "revert-failed"
               ? t({
-                  id: "officeAddin.word.review.restored",
-                  message: "Document body restored",
+                  id: "officeAddin.word.review.incomplete",
+                  message: "Batch could not be completed",
                 })
-              : review.status === "write-failed" ||
-                  review.status === "error" ||
-                  review.status === "revert-failed"
-                ? t({
-                    id: "officeAddin.word.review.incomplete",
-                    message: "Batch could not be completed",
-                  })
-                : historical
-                  ? applied === 1
-                    ? t({
-                        id: "officeAddin.word.review.oneApplied",
-                        message: "1 edit applied",
-                      })
-                    : t({
-                        id: "officeAddin.word.review.appliedCount",
-                        message: `${applied} edits applied`,
-                      })
-                  : total === 1
-                    ? t({
-                        id: "officeAddin.word.review.oneProposal",
-                        message: "1 proposed edit",
-                      })
-                    : t({
-                        id: "officeAddin.word.review.proposalCount",
-                        message: `${total} proposed edits`,
-                      })}
-        </h3>
-        {historical && (
-          <p className="word-review__totals" role="status">
-            {review.status === "write-failed"
-              ? t({
-                  id: "officeAddin.word.review.uncertainTotals",
-                  message: `${skipped} skipped · ${failed} writes unconfirmed`,
-                })
-              : reverted
-                ? t({
-                    id: "officeAddin.word.review.revertedTotals",
-                    message: `${applied + failed} edits reverted · ${skipped} skipped`,
-                  })
-                : t({
-                    id: "officeAddin.word.review.totals",
-                    message: `${applied} applied · ${skipped} skipped · ${failed} failed`,
-                  })}
+              : historical && review.status !== "applying"
+                ? wordEditsAppliedText(applied)
+                : title
+        }
+      >
+        {historical && totals && (
+          <p className="word-review__hint" role="status">
+            {totals}
           </p>
         )}
         {review.automatic && historical && (
-          <p className="word-review__hint">
-            {t({
-              id: "officeAddin.word.review.automatic",
-              message: "Automatic action under your Always allow setting.",
-            })}
-          </p>
+          <p className="word-review__hint">{wordAutomaticText()}</p>
         )}
         {capture ? (
-          <Card
-            variant="surface"
-            tone="muted"
-            size="sm"
-            nested
-            bodyClassName="word-review__coverage"
-          >
-            <strong>
-              {t({
-                id: "officeAddin.word.review.coverage",
-                message: `${complete} of ${documentTotal} paragraphs included in full`,
-              })}
-            </strong>
-            <progress
-              value={complete}
-              max={Math.max(1, documentTotal)}
-              aria-label={t({
-                id: "officeAddin.word.review.coverageLabel",
-                message: "Document coverage for this request",
-              })}
-            />
-            <span>
-              {t({
-                id: "officeAddin.word.review.coverageWindow",
-                message: `Request window: paragraphs 1–${capture.paragraphsSent}. Only included text was reviewed.`,
-              })}
-            </span>
-            {capture.partialOrdinal !== null && (
+          (complete < documentTotal || capture.partialOrdinal !== null) && (
+            <Card
+              variant="surface"
+              tone="muted"
+              size="sm"
+              nested
+              bodyClassName="word-review__coverage"
+            >
               <span>
                 {t({
-                  id: "officeAddin.word.review.partial",
-                  message: `Paragraph ${capture.partialOrdinal} was only partly included and cannot be replaced.`,
+                  id: "officeAddin.word.review.coverageWindow",
+                  message: `Request window: paragraphs 1–${capture.paragraphsSent}. Only included text was reviewed.`,
                 })}
               </span>
-            )}
-          </Card>
+              {capture.partialOrdinal !== null && (
+                <span>
+                  {t({
+                    id: "officeAddin.word.review.partial",
+                    message: `Paragraph ${capture.partialOrdinal} was only partly included and cannot be replaced.`,
+                  })}
+                </span>
+              )}
+            </Card>
+          )
         ) : (
           <Alert type="info" role="status" className="[overflow-wrap:anywhere]">
             {t({
@@ -282,16 +268,10 @@ export function WordReviewPanel({
         <p className="word-review__hint">{trackingDescription(tracking)}</p>
         {historical && (
           <p className="word-review__hint">
-            {reverted
-              ? t({
-                  id: "officeAddin.word.review.revertedComparison",
-                  message: "Comparison from the reverted batch.",
-                })
-              : t({
-                  id: "officeAddin.word.review.historical",
-                  message:
-                    "Original when requested / proposed replacement from this batch. Later changes in Word are not reflected here.",
-                })}
+            {t({
+              id: "officeAddin.word.review.laterChangesHidden",
+              message: "Later changes in Word are not reflected here.",
+            })}
           </p>
         )}
         {blockedReason && (
@@ -299,7 +279,7 @@ export function WordReviewPanel({
             {blockedReason}
           </Alert>
         )}
-      </header>
+      </WordReviewHeader>
       <div className="word-review__filters">
         <Select
           label={t({
@@ -349,12 +329,14 @@ export function WordReviewPanel({
             <option value="failed">{compactStatus("failed", false)}</option>
           </Select>
         )}
-        <span>
-          {t({
-            id: "officeAddin.word.review.shown",
-            message: `${filtered.length} of ${total} shown`,
-          })}
-        </span>
+        {filtered.length !== total && (
+          <span>
+            {t({
+              id: "officeAddin.word.review.shown",
+              message: `${filtered.length} of ${total} shown`,
+            })}
+          </span>
+        )}
       </div>
       <ol className="word-review__list" data-testid="word-edits-list">
         {filtered.map(({ edit, index }) => {
@@ -366,13 +348,7 @@ export function WordReviewPanel({
           const reason =
             blockedReason ??
             locationReason(index) ??
-            (invalidLocations.has(index)
-              ? t({
-                  id: "officeAddin.word.review.locationChanged",
-                  message:
-                    "This passage changed or moved. Its exact location can no longer be verified.",
-                })
-              : undefined);
+            (invalidLocations.has(index) ? locationChangedText() : undefined);
           return (
             <li
               key={index}
@@ -390,11 +366,9 @@ export function WordReviewPanel({
                 aria-expanded={open}
                 aria-controls={`${id}-edit-${index}`}
                 onClick={() => setExpanded(open ? null : index)}
-              >
-                <span className="word-review__number">{index + 1}</span>
-                <span className="word-review__row-heading">
-                  <strong>{reviewTargetLabel(edit)}</strong>
-                  <span>
+                leading={<CountBadge variant="count">{index + 1}</CountBadge>}
+                description={
+                  <>
                     {edit.text === ""
                       ? (edit.through ?? edit.paragraph) > edit.paragraph
                         ? t({
@@ -406,40 +380,48 @@ export function WordReviewPanel({
                             message: "Clear paragraph text",
                           })
                       : t({
-                          id: "officeAddin.word.review.replaceText",
-                          message: "Text replacement · when requested",
+                          id: "officeAddin.word.review.replaceTextShort",
+                          message: "Text replacement",
                         })}
+                    <span className="word-review__excerpt">
+                      {editExcerpt(original ?? edit.text)}
+                    </span>
+                  </>
+                }
+                trailing={
+                  <span className="word-plan-row__trailing">
+                    <SettledInfoPill
+                      label={compactStatus(status, reverted)}
+                      toneClassName={statusTone(status, reverted)}
+                    />
+                    <DisclosureChevron open={open} />
                   </span>
-                  <span className="word-review__excerpt">
-                    {editExcerpt(original ?? edit.text)}
-                  </span>
-                </span>
-                <span className="word-review__badge">
-                  {compactStatus(status, reverted)}
-                </span>
-                <DisclosureChevron open={open} />
+                }
+              >
+                {wordEditTargetLabel(edit)}
               </Row>
               {open && (
                 <div id={`${id}-edit-${index}`} className="word-review__detail">
-                  {status && (
-                    <Alert
-                      type="info"
-                      role="status"
-                      className="[overflow-wrap:anywhere]"
-                    >
-                      {reverted && (status === "applied" || status === "failed")
-                        ? t({
-                            id: "officeAddin.word.review.bodyRestored",
-                            message:
-                              "The document body was restored to just before this batch.",
-                          })
-                        : statusLabel(status)}
-                    </Alert>
-                  )}
+                  {status &&
+                    status !== "applied" &&
+                    !isRevertedOutcome(status, reverted) && (
+                      <Alert
+                        type="info"
+                        role="status"
+                        className="[overflow-wrap:anywhere]"
+                      >
+                        {statusLabel(status)}
+                      </Alert>
+                    )}
                   <Button
                     type="button"
                     variant="link"
                     className="word-review__locate"
+                    icon={
+                      reason ? undefined : (
+                        <OpenNewWindowIcon className="size-4 shrink-0" />
+                      )
+                    }
                     disabled={busy || locating !== null || !!reason}
                     onClick={() => {
                       setLocating(index);
@@ -458,11 +440,7 @@ export function WordReviewPanel({
                                     message:
                                       "Cursor moved to the cleared paragraph.",
                                   })
-                                : t({
-                                    id: "officeAddin.word.review.locationChanged",
-                                    message:
-                                      "This passage changed or moved. Its exact location can no longer be verified.",
-                                  });
+                                : locationChangedText();
                           setLocationMessages((current) => ({
                             ...current,
                             [index]: message,
@@ -480,10 +458,7 @@ export function WordReviewPanel({
                           id: "officeAddin.word.review.locationUnavailable",
                           message: "Location unavailable",
                         })
-                      : t({
-                          id: "officeAddin.word.review.showInWord",
-                          message: "Show in Word ↗",
-                        })}
+                      : wordShowInWordLabel()}
                   </Button>
                   {!blockedReason && (reason || locationMessages[index]) && (
                     <p className="word-review__hint" role="status">

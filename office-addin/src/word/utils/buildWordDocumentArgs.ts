@@ -1,4 +1,4 @@
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export interface WordParagraphRead {
   /** 1-based, dense, in document order, across EVERY paragraph. */

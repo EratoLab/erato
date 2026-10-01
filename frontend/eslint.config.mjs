@@ -559,6 +559,21 @@ const eslintConfig = [
     },
   },
 
+  // Word plan model - OOXML names, namespaces and parser paths, no UI text.
+  // It validates untrusted model JSON and document XML, so runtime checks the
+  // types call unnecessary are deliberate, and XML 1.0 forbids the control
+  // characters its patterns reject.
+  {
+    files: ["src/lib/wordReview/**/*"],
+    rules: {
+      "lingui/no-unlocalized-strings": "off",
+      "no-control-regex": "off",
+      "@typescript-eslint/no-unnecessary-condition": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/prefer-nullish-coalescing": "off",
+    },
+  },
+
   // Test files configuration - more lenient rules for testing needs
   {
     files: [

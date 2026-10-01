@@ -1,6 +1,3 @@
-import { describe, expect, it } from "vitest";
-
-import { packageXml } from "../../../test/mocks/word/authoringFixtures";
 import {
   applyWordNativeStructures,
   compileWordBookmark,
@@ -9,7 +6,10 @@ import {
   inventoryWordNativeStructures,
   isWordFieldSpec,
   isWordNativeStructureEdit,
-} from "../wordInlineStructures";
+} from "@erato/frontend/word-review";
+import { describe, expect, it } from "vitest";
+
+import { packageXml } from "../../../test/mocks/word/authoringFixtures";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const doc = (body = "<w:p/>") =>

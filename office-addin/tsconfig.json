@@ -22,6 +22,9 @@
       ],
       "@erato/frontend/teams": [
         "../frontend/dist-library/utils/teams/index.d.ts"
+      ],
+      "@erato/frontend/word-review": [
+        "../frontend/dist-library/lib/wordReview/index.d.ts"
       ]
     }
   },

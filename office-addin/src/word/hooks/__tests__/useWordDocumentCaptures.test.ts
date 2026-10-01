@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { useWordDocumentCaptures } from "../useWordDocumentCaptures";
 
 import type { AddinChatController } from "../../../core/AddinChatCore";
-import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
 import type { Message } from "@erato/frontend/library";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const capture = (identity: string): WordDocumentCapture => ({
   identity,

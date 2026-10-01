@@ -1,3 +1,4 @@
+import { wordSourceReadRefs } from "@erato/frontend/word-review";
 import { i18n } from "@lingui/core";
 import {
   cleanup,
@@ -8,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
@@ -16,13 +18,14 @@ import {
   encodeWordDocumentBackup,
   wordDocumentOoxmlToFile,
 } from "../../utils/wordDocumentPackage";
-import { wordSourceReadRefs } from "../../utils/wordDocumentPlan";
 import { captureWordAuthoringSnapshot } from "../../utils/wordDocumentXml";
 import { WordDocumentPlanCard } from "../WordDocumentPlanCard";
 
-import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
-import type { WordDocumentPlan } from "../../utils/wordDocumentPlan";
 import type * as EratoLibrary from "@erato/frontend/library";
+import type {
+  WordDocumentCapture,
+  WordDocumentPlan,
+} from "@erato/frontend/word-review";
 
 const host = vi.hoisted(() => ({ messageId: "download-message" }));
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
@@ -59,7 +62,15 @@ async function interruptedDocument() {
     snapshot: snapshot.token,
     readToken: snapshot.readToken,
     scope: "document",
-    entries: [{ kind: "keep", source: snapshot.blocks.map((b) => b.ref) }],
+    entries: snapshot.blocks.map((b, i) =>
+      i === snapshot.blocks.findIndex((x) => x.type === "paragraph")
+        ? {
+            kind: "replace",
+            source: [b.ref],
+            blocks: [{ id: "n1", type: "paragraph", text: "Rewritten." }],
+          }
+        : { kind: "keep", source: [b.ref] },
+    ),
     deleted: [],
   };
   const before = encodeWordDocumentBackup({
@@ -98,9 +109,7 @@ async function interruptedDocument() {
     </WordWriteProvider>,
     { wrapper: TestTheme },
   );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Apply document rewrite" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Apply change" }));
   await screen.findByRole("button", { name: "Download original document" });
   return { bytes, entry, container };
 }
@@ -117,7 +126,7 @@ function downloadUrls() {
   return { create, revoke };
 }
 beforeEach(() => {
-  i18n.load("en", {});
+  i18n.load("en", frontendMessages);
   i18n.activate("en");
 });
 afterEach(() => {

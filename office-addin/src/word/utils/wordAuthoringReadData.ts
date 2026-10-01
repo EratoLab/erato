@@ -1,4 +1,4 @@
-import type { WordSourceBlock } from "./wordDocumentPlan";
+import type { WordSourceBlock } from "@erato/frontend/word-review";
 
 export type WordReadableSourceBlock = Omit<
   WordSourceBlock,

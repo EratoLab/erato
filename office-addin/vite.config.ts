@@ -854,6 +854,10 @@ export default defineConfig(({ mode }) => {
               __dirname,
               "../frontend/dist-library/teams.mjs",
             ),
+            "@erato/frontend/word-review": path.resolve(
+              __dirname,
+              "../frontend/dist-library/word-review.mjs",
+            ),
             ...Object.fromEntries(
               SHARED_MODULES.filter(
                 (entry) => entry.specifier !== "@erato/frontend/shared",

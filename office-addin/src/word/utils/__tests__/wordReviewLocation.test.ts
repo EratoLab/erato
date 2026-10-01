@@ -12,7 +12,7 @@ import {
 } from "../wordReviewLocation";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
-import type { WordDocumentCapture } from "../wordDocumentCapture";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const identity = "test-document";
 const capture: WordDocumentCapture = {

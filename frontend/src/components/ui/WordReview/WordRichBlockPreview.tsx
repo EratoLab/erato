@@ -1,37 +1,58 @@
-import { Card } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
+import { Card } from "@/components/ui/Container/Card";
 import {
   inventoryWordMedia,
   isWordImageSpec,
   readWordImageData,
   wordImageDimensions,
-} from "../utils/wordMediaContent";
-import { resolveWordSource, wordSourceDetails } from "../utils/wordRichContent";
-import { readWordTableContent } from "../utils/wordTableContent";
+} from "@/lib/wordReview/wordMediaContent";
+import {
+  createWordListNumbering,
+  wordSourceTable,
+} from "@/lib/wordReview/wordPlanReview";
+import {
+  resolveWordSource,
+  wordSourceDetails,
+} from "@/lib/wordReview/wordRichContent";
+
+import { nativeKindLabel } from "./WordNativeBlockPreview";
+import { formatCentimeters } from "./wordPlanLabels";
 
 import type {
   WordBorder,
   WordParagraphFormatting,
   WordRunFormatting,
-} from "../utils/wordBlockFormatting";
+} from "@/lib/wordReview/wordBlockFormatting";
 import type {
   WordAuthoringSnapshot,
   WordPlanBlock,
-} from "../utils/wordDocumentPlan";
-import type { WordNativeStructureEdit } from "../utils/wordInlineStructures";
-import type { WordDrawingSpec, WordImageSpec } from "../utils/wordMediaContent";
+} from "@/lib/wordReview/wordDocumentPlan";
+import type { WordNativeStructureEdit } from "@/lib/wordReview/wordInlineStructures";
+import type {
+  WordDrawingSpec,
+  WordImageSpec,
+} from "@/lib/wordReview/wordMediaContent";
 import type {
   WordTableBlock,
   WordTableCellFormatting,
-  WordTableContent,
-} from "../utils/wordTableContent";
+} from "@/lib/wordReview/wordTableContent";
 import type { CSSProperties } from "react";
 
 import "./wordRichPreview.css";
 
-type PreviewProps = { block: WordPlanBlock; snapshot: WordAuthoringSnapshot };
+const emptyCellLabel = () =>
+  t({ id: "officeAddin.word.rich.emptyCell", message: "Empty cell" });
+const imageLabel = () =>
+  t({ id: "officeAddin.word.rich.image", message: "Image" });
+
+type PreviewProps = {
+  block: WordPlanBlock;
+  snapshot: WordAuthoringSnapshot;
+  maxTableRows?: number;
+};
+/* eslint-disable lingui/no-unlocalized-strings -- CSS values */
 const color = (value: string | undefined): string | undefined =>
   value && /^#?[a-fA-F0-9]{6}$/.test(value)
     ? `#${value.replace(/^#/, "")}`
@@ -61,6 +82,7 @@ const border = (value: WordBorder | undefined): string | undefined =>
   (value.style === "none"
     ? "none"
     : `${points(value.width ?? 0.5)} ${{ single: "solid", double: "double", dotted: "dotted", dashed: "dashed", thick: "solid" }[value.style]} ${color(value.color) ?? "currentColor"}`);
+/* eslint-enable lingui/no-unlocalized-strings */
 function runStyle(value: WordRunFormatting): CSSProperties {
   return {
     fontFamily: value.fontFamily,
@@ -154,41 +176,17 @@ function cellStyle(value: WordTableCellFormatting | undefined): CSSProperties {
   };
 }
 
-function sourceTable(
-  snapshot: WordAuthoringSnapshot,
-  ref: string | undefined,
-): WordTableContent<WordPlanBlock> | undefined {
-  if (!ref) return undefined;
-  const block = snapshot.blocks.find((source) => source.ref === ref);
-  if (block?.content) return block.content;
-  const source = resolveWordSource(snapshot, ref);
-  if (!source) return undefined;
-  const root = new DOMParser().parseFromString(
-    source.xml,
-    "application/xml",
-  ).documentElement;
-  const tables = [
-    root,
-    ...Array.from(
-      root.getElementsByTagNameNS(
-        "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-        "tbl",
-      ),
-    ),
-  ].filter((e, i, all) => e.localName === "tbl" && all.indexOf(e) === i);
-  const table = tables[source.index ?? 0];
-  return table ? readWordTableContent<WordPlanBlock>(table) : undefined;
-}
-
-function TablePreview({
+export function WordTablePreview({
   block,
   snapshot,
+  maxRows,
 }: {
   block: WordTableBlock<WordPlanBlock>;
   snapshot: WordAuthoringSnapshot;
+  maxRows?: number;
 }) {
   const original = useMemo(
-    () => sourceTable(snapshot, block.sourceRef),
+    () => wordSourceTable(snapshot, block.sourceRef),
     [snapshot, block.sourceRef],
   );
   const columnCount =
@@ -224,13 +222,8 @@ function TablePreview({
           }}
         >
           <caption>
-            <strong>
-              {format.caption ||
-                t({
-                  id: "officeAddin.word.authoring.nativeTable",
-                  message: "Table",
-                })}
-            </strong>{" "}
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty caption falls back too */}
+            <strong>{format.caption || nativeKindLabel("table")}</strong>{" "}
             <span className="word-rich-preview__hint">
               {t({
                 id: "officeAddin.word.rich.tableDimensions",
@@ -251,7 +244,7 @@ function TablePreview({
             </colgroup>
           )}
           <tbody>
-            {block.rows.map((row, rowIndex) => (
+            {block.rows.slice(0, maxRows).map((row, rowIndex) => (
               <tr key={rowIndex}>
                 {row.cells.map((cell, cellIndex) => {
                   const retained = original?.rows
@@ -270,22 +263,16 @@ function TablePreview({
                       rowSpan={cell.rowSpan}
                       style={cellStyle({ ...retained?.format, ...cell.format })}
                     >
-                      {cell.blocks === undefined ? (
-                        <>
-                          <p className="word-rich-preview__text">
-                            {retained?.text ||
-                              t({
-                                id: "officeAddin.word.rich.emptyCell",
-                                message: "Empty cell",
-                              })}
-                          </p>
-                          <span className="word-rich-preview__hint">
-                            {t({
-                              id: "officeAddin.word.rich.cellRetained",
-                              message: "Existing content retained",
-                            })}
-                          </span>
-                        </>
+                      {cell.textEdit ? (
+                        <CellTextEdit
+                          before={cell.textEdit.expectedText}
+                          after={cell.textEdit.text}
+                        />
+                      ) : cell.blocks === undefined ? (
+                        <p className="word-rich-preview__text word-rich-preview__retained">
+                          {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty cell gets the label too */}
+                          {retained?.text || emptyCellLabel()}
+                        </p>
                       ) : cell.blocks.length ? (
                         <WordRichBlockSequence
                           blocks={cell.blocks}
@@ -293,10 +280,7 @@ function TablePreview({
                         />
                       ) : (
                         <span className="word-rich-preview__hint">
-                          {t({
-                            id: "officeAddin.word.rich.emptyCell",
-                            message: "Empty cell",
-                          })}
+                          {emptyCellLabel()}
                         </span>
                       )}
                     </Tag>
@@ -308,6 +292,42 @@ function TablePreview({
         </table>
       </div>
     </Card>
+  );
+}
+
+/** del/ins are not announced by most screen readers, so name each side. */
+export function WordChangeSide({ side }: { side: "before" | "after" }) {
+  return (
+    <span className="sr-only">
+      {side === "before"
+        ? t({ id: "officeAddin.word.rich.before", message: "Before:" })
+        : t({ id: "officeAddin.word.rich.after", message: "After:" })}{" "}
+    </span>
+  );
+}
+
+export function CellTextEdit({
+  before,
+  after,
+}: {
+  before: string;
+  after: string;
+}) {
+  return (
+    <p className="word-rich-preview__text">
+      {before && before !== after && (
+        <>
+          <del className="word-rich-preview__removed">
+            <WordChangeSide side="before" />
+            {before}
+          </del>{" "}
+        </>
+      )}
+      <ins className="word-rich-preview__inserted">
+        {before && before !== after && <WordChangeSide side="after" />}
+        {after || emptyCellLabel()}
+      </ins>
+    </p>
   );
 }
 
@@ -326,6 +346,7 @@ function inlineImage(
       if (!packageDoc) {
         packageDoc = new DOMParser().parseFromString(
           snapshot.ooxml,
+          // eslint-disable-next-line lingui/no-unlocalized-strings -- MIME type
           "application/xml",
         );
         imagePackages.set(snapshot, packageDoc);
@@ -343,6 +364,7 @@ function inlineImage(
     !isWordImageSpec({ data: { mime: data.mime, base64: data.base64 } })
   )
     return undefined;
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- data URL
   return `data:${data.mime};base64,${data.base64}`;
 }
 
@@ -358,11 +380,12 @@ function ImagePreview({
     const source = image.sourceRef
       ? resolveWordSource(snapshot, image.sourceRef)
       : undefined;
-    const original = source
-      ? inventoryWordMedia(source.xml, image.sourceRef!).filter(
-          (item) => item.kind === "image",
-        )[source.index ?? image.sourceIndex ?? 0]
-      : undefined;
+    const original =
+      source && image.sourceRef
+        ? inventoryWordMedia(source.xml, image.sourceRef).filter(
+            (item) => item.kind === "image",
+          )[source.index ?? image.sourceIndex ?? 0]
+        : undefined;
     const asset = snapshot.assets?.find((item) => item.ref === image.assetRef);
     const dimensions = image.data ? wordImageDimensions(image.data) : asset;
     const ratio =
@@ -380,10 +403,8 @@ function ImagePreview({
       heightPt: image.heightPt ?? width / ratio,
     };
   }, [image, snapshot]);
-  const alt =
-    image.alt ||
-    image.title ||
-    t({ id: "officeAddin.word.rich.image", message: "Image" });
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty text falls back too
+  const alt = image.alt || image.title || imageLabel();
   return (
     <Card variant="surface" size="sm" className="word-rich-preview">
       <figure
@@ -447,20 +468,21 @@ function MediaDimensions({
 }: {
   value: WordImageSpec | WordDrawingSpec;
 }) {
-  return value.widthPt && value.heightPt ? (
+  if (!value.widthPt || !value.heightPt) return null;
+  const width = formatCentimeters(value.widthPt);
+  const height = formatCentimeters(value.heightPt);
+  return (
     <span className="word-rich-preview__hint">
       {t({
-        id: "officeAddin.word.rich.mediaDimensions",
-        message: `${value.widthPt} × ${value.heightPt} pt`,
+        id: "officeAddin.word.rich.mediaSize",
+        message: `${width} × ${height} cm`,
       })}
     </span>
-  ) : null;
+  );
 }
 function DrawingPreview({ drawing }: { drawing: WordDrawingSpec }) {
-  const label =
-    drawing.alt ||
-    drawing.title ||
-    t({ id: "officeAddin.word.rich.drawing", message: "Drawing" });
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty text falls back too
+  const label = drawing.alt || drawing.title || nativeKindLabel("drawing");
   const fill = color(drawing.fill) ?? "var(--theme-bg-secondary)";
   const line = color(drawing.line?.color) ?? "var(--theme-fg-secondary)";
   const stroke = drawing.line?.widthPt ?? 1;
@@ -533,17 +555,11 @@ function DrawingPreview({ drawing }: { drawing: WordDrawingSpec }) {
 
 function editLabel(edit: WordNativeStructureEdit<WordPlanBlock>) {
   const labels = {
-    field: t({
-      id: "officeAddin.word.authoring.nativeField",
-      message: "Document field",
-    }),
-    bookmark: t({ id: "officeAddin.word.rich.bookmark", message: "Bookmark" }),
-    "content-control": t({
-      id: "officeAddin.word.authoring.nativeControl",
-      message: "Content control",
-    }),
-    image: t({ id: "officeAddin.word.rich.image", message: "Image" }),
-    drawing: t({ id: "officeAddin.word.rich.drawing", message: "Drawing" }),
+    field: nativeKindLabel("field"),
+    bookmark: nativeKindLabel("bookmark"),
+    "content-control": nativeKindLabel("content-control"),
+    image: imageLabel(),
+    drawing: nativeKindLabel("drawing"),
   };
   const label = labels[edit.kind];
   return edit.operation === "delete"
@@ -642,9 +658,19 @@ function NativeEditPreview({
   );
 }
 
-export function WordRichBlockPreview({ block, snapshot }: PreviewProps) {
+export function WordRichBlockPreview({
+  block,
+  snapshot,
+  maxTableRows,
+}: PreviewProps) {
   if (block.type === "table")
-    return <TablePreview block={block} snapshot={snapshot} />;
+    return (
+      <WordTablePreview
+        block={block}
+        snapshot={snapshot}
+        maxRows={maxTableRows}
+      />
+    );
   if (block.type === "image")
     return <ImagePreview image={block.image} snapshot={snapshot} />;
   if (block.type === "drawing")
@@ -655,10 +681,7 @@ export function WordRichBlockPreview({ block, snapshot }: PreviewProps) {
     return (
       <Card variant="surface" size="sm" className="word-rich-preview">
         <span className="word-rich-preview__hint">
-          {t({
-            id: "officeAddin.word.authoring.nativeField",
-            message: "Document field",
-          })}
+          {nativeKindLabel("field")}
         </span>
         <p className="word-rich-preview__text">
           {block.field.text ||
@@ -674,11 +697,8 @@ export function WordRichBlockPreview({ block, snapshot }: PreviewProps) {
     const label =
       block.type === "bookmark"
         ? block.bookmark.name
-        : block.control.title ||
-          t({
-            id: "officeAddin.word.authoring.nativeControl",
-            message: "Content control",
-          });
+        : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty title falls back too
+          block.control.title || nativeKindLabel("content-control");
     return (
       <Card variant="surface" size="sm" className="word-rich-preview">
         <span className="word-rich-preview__hint">{label}</span>
@@ -736,13 +756,14 @@ function ControlDetails({
     binding?: "retain" | "remove";
   };
 }) {
+  const { tag } = value;
   return (
     <>
-      {value.tag && (
+      {tag && (
         <span className="word-rich-preview__hint">
           {t({
             id: "officeAddin.word.rich.controlTag",
-            message: `Tag: ${value.tag}`,
+            message: `Tag: ${tag}`,
           })}
         </span>
       )}
@@ -786,30 +807,26 @@ function ControlDetails({
 export function WordRichBlockSequence({
   blocks,
   snapshot,
+  maxTableRows,
 }: {
   blocks: WordPlanBlock[];
   snapshot: WordAuthoringSnapshot;
+  maxTableRows?: number;
 }) {
-  const counts = new Map<string, number>();
+  const ordinalOf = createWordListNumbering();
   return (
     <>
       {blocks.map((block) => {
-        if (block.type !== "list-item")
+        const ordinal = ordinalOf(block);
+        if (ordinal === undefined)
           return (
             <WordRichBlockPreview
               key={block.id}
               block={block}
               snapshot={snapshot}
+              maxTableRows={maxTableRows}
             />
           );
-        for (const key of counts.keys()) {
-          const [list, level] = key.split(":");
-          if (list === block.list && Number(level) > (block.level ?? 0))
-            counts.delete(key);
-        }
-        const key = `${block.list}:${block.level ?? 0}`;
-        const ordinal = (counts.get(key) ?? 0) + 1;
-        counts.set(key, ordinal);
         return (
           <div
             key={block.id}

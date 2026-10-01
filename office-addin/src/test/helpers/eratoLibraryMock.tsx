@@ -326,6 +326,7 @@ export const DEFAULT_STUBS = {
   seedGenerationStatusFromListing: noop,
   setAuthRecoveryHandler: noop,
   setClientPlatform: noop,
+  setWordLiveCards: noop,
   toast: { info: noop, success: noop, warning: noop, error: noop },
   transformEmailFencesForCopy: (value: string) => value,
   UploadUnknownError: class extends Error {},

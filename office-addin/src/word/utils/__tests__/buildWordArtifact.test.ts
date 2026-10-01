@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { CLIENT_ACTION_TOOL_NAME } from "../../../core/clientActions/proposedClientAction";
 import { buildWordArtifact } from "../buildWordArtifact";
 
-import type { WordDocumentCapture } from "../wordDocumentCapture";
 import type { ContentPart } from "@erato/frontend/library";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const capture: WordDocumentCapture = {
   identity: "https://contoso.sharepoint.com/report.docx",

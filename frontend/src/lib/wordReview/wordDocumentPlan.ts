@@ -13,7 +13,7 @@ import type {
   WordParagraphFormatting,
   WordRunFormatting,
 } from "./wordBlockFormatting";
-import type { WordImageAsset, WordImageAssetIssue } from "./wordImageAssets";
+import type { WordImageAsset, WordImageAssetIssue } from "./wordImageAssetData";
 import type {
   WordFieldSpec,
   WordBookmarkSpec,
@@ -140,6 +140,8 @@ export interface WordAuthoringSnapshot {
   /** Targeted reads never populate full-document coverage or its token. */
   cellReads?: Map<string, WordTableCellScope>;
   ownerMessageId?: string;
+  /** Rebuilt from stored chat history: reviewable, never writable. */
+  source?: "history";
 }
 export const MAX_PLAN_BYTES = 256 * 1024;
 export const MAX_DOCUMENT_BLOCKS = 2000;
@@ -889,22 +891,19 @@ export function wordSourceReadRefs(snapshot: WordAuthoringSnapshot): string[] {
   ];
 }
 
-export function wordPlanOutput(
-  plan: WordDocumentPlan,
-  snapshot: WordAuthoringSnapshot,
-): {
+export interface WordPlanOutputItem {
   key: string;
   block: WordPlanBlock | WordSourceBlock;
   source: string[];
   kind: WordPlanEntry["kind"];
-}[] {
+}
+
+export function wordPlanOutput(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+): WordPlanOutputItem[] {
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
-  const output = plan.entries.flatMap<{
-    key: string;
-    block: WordPlanBlock | WordSourceBlock;
-    source: string[];
-    kind: WordPlanEntry["kind"];
-  }>((e) =>
+  const output = plan.entries.flatMap<WordPlanOutputItem>((e) =>
     e.kind === "keep"
       ? e.source.flatMap((ref) => {
           const b = sources.get(ref);

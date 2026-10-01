@@ -8,7 +8,7 @@ import type {
   WordDocumentBuild,
   WordDocumentCoverage,
 } from "../utils/buildWordDocumentArgs";
-import type { WordAuthoringSnapshot } from "../utils/wordDocumentPlan";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export type WordDocumentStatus =
   | "unknown"
