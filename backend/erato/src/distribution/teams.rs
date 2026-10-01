@@ -71,7 +71,7 @@ impl TeamsAppDistribution {
         let manifest = &app.manifest;
         let mut document = self.template.clone();
         document["id"] = json!(app.app_id);
-        document["version"] = json!(release_version());
+        document["version"] = json!(manifest.version.clone().unwrap_or_else(release_version));
         document["developer"] = json!({
             "name": manifest.developer_name,
             "websiteUrl": manifest.website_url,
@@ -297,6 +297,19 @@ mod tests {
         let manifest = render(&MsOfficeTeamsAppConfig::default());
         assert!(manifest["bots"].is_null());
         assert_eq!(manifest["validDomains"], json!(["erato.example.com"]));
+        assert_eq!(manifest["version"], json!(release_version()));
+    }
+
+    #[test]
+    fn deployment_version_override_preserves_app_identity_and_bot() {
+        let mut app = MsOfficeTeamsAppConfig::default();
+        app.manifest.version = Some("0.6.3".to_string());
+        app.bot.enabled = true;
+        app.bot.app_id = Some("11111111-2222-3333-4444-555555555555".to_string());
+        let manifest = render(&app);
+        assert_eq!(manifest["version"], "0.6.3");
+        assert_eq!(manifest["id"], app.app_id);
+        assert_eq!(manifest["bots"][0]["botId"], app.bot.app_id.unwrap());
     }
 
     #[test]

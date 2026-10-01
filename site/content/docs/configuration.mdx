@@ -2747,6 +2747,7 @@ Stable GUID identifying the standalone Teams app. It must differ from the Outloo
 
 ##### `integrations.ms_office.teams.manifest`
 
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.version */}
 {/* erato_toml_config_key: integrations.ms_office.teams.manifest.developer_name */}
 {/* erato_toml_config_key: integrations.ms_office.teams.manifest.website_url */}
 {/* erato_toml_config_key: integrations.ms_office.teams.manifest.privacy_url */}
@@ -2760,9 +2761,11 @@ Stable GUID identifying the standalone Teams app. It must differ from the Outloo
 {/* erato_toml_config_key: integrations.ms_office.teams.manifest.outline_icon */}
 {/* erato_toml_config_key: integrations.ms_office.teams.manifest.small_color_icon */}
 
-Branding strings and package icon paths for the Teams app. Icon paths must be safe paths relative to the Office add-in bundle. The website, privacy, and terms URLs must use HTTPS. The package version follows the Erato release version; it has no separate configuration override.
+Branding strings and package icon paths for the Teams app. Icon paths must be safe paths relative to the Office add-in bundle. The website, privacy, and terms URLs must use HTTPS.
 
-**Default values:** Erato branding and the color, outline, and small color icons shipped in the Office add-in bundle.
+Set `version` to a three-part numeric package version such as `1.0.1` when updating an installed Teams app's branding or capabilities. Keep `integrations.ms_office.teams.app_id` unchanged and increase the version for each update. Each component must be between 0 and 65535, without leading zeros. When omitted, the package uses the Erato application release version.
+
+**Default values:** Erato branding and the color, outline, and small color icons shipped in the Office add-in bundle; no version override.
 
 ##### `integrations.ms_office.teams.bot`
 

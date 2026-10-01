@@ -898,6 +898,7 @@
   "integrations.ms_office.teams.manifest.small_color_icon": {},
   "integrations.ms_office.teams.manifest.tab_name": {},
   "integrations.ms_office.teams.manifest.terms_url": {},
+  "integrations.ms_office.teams.manifest.version": {},
   "integrations.ms_office.teams.manifest.website_url": {},
   "integrations.otel.enabled": {},
   "integrations.otel.endpoint": {},

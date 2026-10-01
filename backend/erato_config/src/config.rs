@@ -5588,6 +5588,11 @@ impl TeamsBotConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct MsOfficeTeamsManifestConfig {
+    /// Installable package version. Keep the app ID stable and increase this
+    /// when changing deployment-specific branding or bot capabilities.
+    /// When unset, the application release version is used.
+    #[serde(default)]
+    pub version: Option<String>,
     #[serde(default = "default_ms_office_teams_developer_name")]
     pub developer_name: String,
     #[serde(default = "default_ms_office_teams_website_url")]
@@ -5617,6 +5622,7 @@ pub struct MsOfficeTeamsManifestConfig {
 impl Default for MsOfficeTeamsManifestConfig {
     fn default() -> Self {
         Self {
+            version: None,
             developer_name: default_ms_office_teams_developer_name(),
             website_url: default_ms_office_teams_website_url(),
             privacy_url: default_ms_office_teams_privacy_url(),
@@ -5635,6 +5641,21 @@ impl Default for MsOfficeTeamsManifestConfig {
 
 impl MsOfficeTeamsManifestConfig {
     pub fn validate(&self) -> Result<(), Report> {
+        if let Some(version) = &self.version {
+            let parts: Vec<_> = version.split('.').collect();
+            if parts.len() != 3
+                || parts.iter().any(|part| {
+                    part.is_empty()
+                        || !part.bytes().all(|byte| byte.is_ascii_digit())
+                        || (part.len() > 1 && part.starts_with('0'))
+                        || part.parse::<u16>().is_err()
+                })
+            {
+                return Err(eyre!(
+                    "Microsoft Teams manifest `version` must have three numeric components (0..65535), without leading zeros, for example `1.0.1`."
+                ));
+            }
+        }
         for (key, value) in [
             ("developer_name", &self.developer_name),
             ("website_url", &self.website_url),
@@ -5699,6 +5720,46 @@ impl MsOfficeTeamsManifestConfig {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod teams_manifest_version_tests {
+    use super::MsOfficeTeamsManifestConfig;
+
+    #[test]
+    fn accepts_release_and_deployment_versions() {
+        assert!(MsOfficeTeamsManifestConfig::default().validate().is_ok());
+        for version in ["0.6.3", "1.0.0", "65535.65535.65535"] {
+            let config = MsOfficeTeamsManifestConfig {
+                version: Some(version.to_string()),
+                ..Default::default()
+            };
+            assert!(config.validate().is_ok(), "{version}");
+        }
+    }
+
+    #[test]
+    fn rejects_versions_teams_cannot_update() {
+        for version in [
+            "",
+            "1",
+            "1.2",
+            "1.2.3.4",
+            "01.2.3",
+            "1.2.-3",
+            "+1.2.3",
+            "1.2.3-beta",
+            "1.2.65536",
+            " 1.2.3",
+            "1.2.3 ",
+        ] {
+            let config = MsOfficeTeamsManifestConfig {
+                version: Some(version.to_string()),
+                ..Default::default()
+            };
+            assert!(config.validate().is_err(), "{version}");
+        }
     }
 }
 
