@@ -340,6 +340,40 @@ async function fixFetcherErrorHandling(filePath) {
   return false; // Indicate no change
 }
 
+// The generator preserves an existing fetcher, but recreates the stock template
+// when it is missing. Keep optional query parameters safe in both cases.
+async function fixFetcherQueryParams(filePath) {
+  const original = await fs.readFile(filePath, "utf8");
+  let content = original;
+  const replacements = [
+    {
+      from: "queryParams: Record<string, string> = {},",
+      to: "queryParams: Record<string, unknown> = {},",
+    },
+    {
+      from: "let query = new URLSearchParams(queryParams).toString();",
+      to: `let query = new URLSearchParams(
+    Object.entries(queryParams)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [key, String(value)]),
+  ).toString();`,
+    },
+  ];
+  for (const { from, to } of replacements) {
+    if (content.includes(to)) continue;
+    if (content.split(from).length !== 2) {
+      throw new Error(
+        "Unexpected fetcher query parameter template; update fixFetcherQueryParams before regenerating.",
+      );
+    }
+    content = content.replace(from, to);
+  }
+  if (content === original) return false;
+  await fs.writeFile(filePath, content, "utf8");
+  console.log("Fixed optional query parameter serialization in fetcher.");
+  return true;
+}
+
 async function fixEnabledImport(filePath) {
   try {
     let content = await fs.readFile(filePath, "utf8");
@@ -466,6 +500,10 @@ async function run() {
 
     // Fix error handling in fetcher file
     if (await fixFetcherErrorHandling(fetcherFile)) {
+      changesMade = true;
+    }
+
+    if (await fixFetcherQueryParams(fetcherFile)) {
       changesMade = true;
     }
 

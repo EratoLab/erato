@@ -202,7 +202,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const handleClick = useCallback(
       (e: React.MouseEvent<HTMLButtonElement>) => {
         setIsPressed(true);
-        pressTimerRef.current = setTimeout(() => setIsPressed(false), 200);
+        if (pressTimerRef.current !== null) {
+          clearTimeout(pressTimerRef.current);
+        }
+        pressTimerRef.current = setTimeout(() => {
+          pressTimerRef.current = null;
+          setIsPressed(false);
+        }, 200);
 
         if (confirmAction) {
           e.stopPropagation();
