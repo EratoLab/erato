@@ -507,9 +507,10 @@ export async function revertWordPlanInPlace(
           status: "stale",
           diagnostic: diagnostic("preflight", "tracking", undefined, details),
         };
-      const position = new Map(
-        paragraphs.items.map((p, i) => [p.uniqueLocalId, i]),
-      );
+      // Copies: body.paragraphs is this same collection again later in the run, and its reload
+      // replaces these items.
+      const idsBefore = paragraphs.items.map((p) => p.uniqueLocalId);
+      const position = new Map(idsBefore.map((id, i) => [id, i]));
       const missing = ops.find((op) => !position.has(op.id));
       if (missing)
         return {
@@ -524,12 +525,9 @@ export async function revertWordPlanInPlace(
       const written = new Set(ops.map((op) => position.get(op.id)!));
       const neighbours = [
         ...new Set([...written].flatMap((at) => [at - 1, at + 1])),
-      ].filter(
-        (at) => at >= 0 && at < paragraphs.items.length && !written.has(at),
-      );
-      const neighbourReads = neighbours.map((at) =>
-        paragraphs.items[at].getOoxml(),
-      );
+      ].filter((at) => at >= 0 && at < idsBefore.length && !written.has(at));
+      const neighbourProxies = neighbours.map((at) => paragraphs.items[at]);
+      const neighbourReads = neighbourProxies.map((p) => p.getOoxml());
       await context.sync();
       const pending: number[] = [];
       for (const [i, op] of ops.entries()) {
@@ -573,16 +571,14 @@ export async function revertWordPlanInPlace(
       const recount = context.document.body.paragraphs;
       recount.load("items/uniqueLocalId");
       const after = proxies.map((p) => p.getOoxml());
-      const neighboursAfter = neighbours.map((at) =>
-        paragraphs.items[at].getOoxml(),
-      );
+      const neighboursAfter = neighbourProxies.map((p) => p.getOoxml());
       await context.sync();
       const signatures = after.map((r) => wordParagraphSignature(r.value));
       const moved = recount.items.findIndex(
-        (p, i) => p.uniqueLocalId !== paragraphs.items[i]?.uniqueLocalId,
+        (p, i) => p.uniqueLocalId !== idsBefore[i],
       );
       const locations = [
-        ...(recount.items.length !== paragraphs.items.length
+        ...(recount.items.length !== idsBefore.length
           ? ["/word/document.xml body: count"]
           : moved >= 0
             ? [paragraphLocation(moved, "id")]

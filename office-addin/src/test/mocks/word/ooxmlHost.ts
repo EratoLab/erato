@@ -1147,8 +1147,22 @@ export function installWordOoxmlHost(
     AsyncResultStatus: { Succeeded: "succeeded" },
   });
   vi.stubGlobal("Word", {
-    run: async (callback: (context: Word.RequestContext) => Promise<unknown>) =>
-      callback(context as unknown as Word.RequestContext),
+    run: async (
+      callback: (context: Word.RequestContext) => Promise<unknown>,
+    ) => {
+      // Office.js gives each Word.run its own context and caches navigation properties on it:
+      // body.paragraphs is one collection per run, and each load replaces its items.
+      const paragraphs = paragraphCollection();
+      const body = Object.create(document.body, {
+        paragraphs: { get: () => paragraphs },
+      });
+      const runDocument = Object.create(document, { body: { value: body } });
+      return callback(
+        Object.create(context, {
+          document: { value: runDocument },
+        }) as Word.RequestContext,
+      );
+    },
   });
   const at = (when: When, apply: () => void) => {
     if (when === "now") apply();
