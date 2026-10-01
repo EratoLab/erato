@@ -90,6 +90,8 @@ export interface WordApplyOutcome {
   adjustments: WordApplyAdjustment[];
   /** Object-model changes, for in-place writes. */
   ops?: number;
+  /** Blocks someone changed elsewhere after the capture; an in-place write leaves them as they are. */
+  outsideChanges?: number;
 }
 export interface WordDocumentApplyResult {
   status: WordDocumentApplyStatus;

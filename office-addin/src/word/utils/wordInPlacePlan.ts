@@ -2,16 +2,23 @@ import {
   WORDPROCESSING_NS as W,
   readWordRunFormatting,
 } from "./wordBlockFormatting";
-import { isBuiltInHeadingStyle } from "./wordBuiltInStyles";
+import {
+  isBuiltInHeadingStyle,
+  wordBuiltInParagraphStyle,
+} from "./wordBuiltInStyles";
 import { wordPlanOutput } from "./wordDocumentPlan";
 import { wordBlockParagraphs } from "./wordLiveParagraphs";
 import { wordTableCellTextEditIssue } from "./wordTableCellText";
 
-import type { WordRunFormatting } from "./wordBlockFormatting";
+import type {
+  WordParagraphFormatting,
+  WordRunFormatting,
+} from "./wordBlockFormatting";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
+  WordPlanEntry,
   WordPlanRun,
   WordSourceBlock,
 } from "./wordDocumentPlan";
@@ -37,6 +44,7 @@ export const WORD_IN_PLACE_FALLBACKS = [
   "source-shape",
   "empty-text",
   "inherited-format",
+  "boundary",
   "not-invertible",
   "too-many-ops",
   "program-mismatch",
@@ -53,6 +61,22 @@ export interface WordInPlaceMarks {
 export interface WordInPlaceRun extends WordInPlaceMarks {
   text: string;
 }
+/** How the object model applies a paragraph style: by its locale-independent built-in name, or by
+ * the w:name of a custom style. */
+export type WordInPlaceStyle = { builtIn: string } | { name: string };
+/** Typed paragraph state the object model sets after writing text: list membership, then style. */
+export interface WordInPlaceState {
+  type: "paragraph" | "heading" | "list-item";
+  /** Heading level (1-9) or list level (0-8). */
+  level?: number;
+  /** The w:pStyle Word is expected to write; omitted for the default paragraph style. */
+  styleRef?: string;
+  style: WordInPlaceStyle;
+  list?: string;
+  ordered?: boolean;
+  /** A captured member of `list` that stays in it: the paragraph joins that member's live List. */
+  listRef?: string;
+}
 export type WordInPlaceOp =
   | {
       kind: "text";
@@ -61,6 +85,8 @@ export type WordInPlaceOp =
       paragraph: number;
       runs: WordInPlaceRun[];
       original: WordInPlaceRun[];
+      /** Style, heading level or list membership change, set after the text. */
+      restyle?: { from: WordInPlaceState; to: WordInPlaceState };
     }
   | {
       kind: "cell";
@@ -70,10 +96,44 @@ export type WordInPlaceOp =
       cellIndex: number;
       text: string;
       original: string;
+    }
+  | {
+      kind: "insert";
+      /** The surviving paragraph the new one is inserted next to. */
+      ref: string;
+      paragraph: 0;
+      location: "After" | "Before";
+      /** Output block ID. */
+      block: string;
+      runs: WordInPlaceRun[];
+      state: WordInPlaceState;
+    }
+  | {
+      kind: "delete";
+      ref: string;
+      paragraph: 0;
+      original: WordInPlaceRun[];
+      state: WordInPlaceState;
+      /** Undo re-creates the paragraph after the paragraph before it, or before the one after it. */
+      recreate: "After" | "Before";
     };
 export type WordInPlaceClassification =
   | { ops: WordInPlaceOp[] }
   | { fallback: WordInPlaceFallback };
+
+/** Typed state a written paragraph must have once the object model is done with it. */
+export interface WordInPlaceExpected {
+  text: string;
+  runs: WordInPlaceRun[];
+  type: WordSourceBlock["type"];
+  level?: number;
+  styleRef?: string;
+  list?: string;
+  ordered?: boolean;
+  format?: object;
+  /** Run properties other than b/i/u every run must carry. */
+  nonMark: string;
+}
 
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 const XMLNS = "http://www.w3.org/2000/xmlns/";
@@ -82,6 +142,7 @@ const MARK_ELEMENTS = new Set(["b", "bCs", "i", "iCs", "u"]);
 const TYPED = new Set(["paragraph", "heading", "list-item"]);
 /** insertText turns these into new paragraphs or breaks instead of text. */
 const STRUCTURAL_TEXT = /[\n\r\v\f\u2028\u2029]/u;
+const NO_RUN_PROPERTIES = "{}";
 
 const isW = (e: Element, name: string) =>
   e.namespaceURI === W && e.localName === name;
@@ -103,6 +164,15 @@ export function stableJson(value: unknown): string {
     ) ?? ""
   );
 }
+
+const paragraphFormat = (
+  block: WordPlanBlock,
+): WordParagraphFormatting | undefined =>
+  block.type === "paragraph" ||
+  block.type === "heading" ||
+  block.type === "list-item"
+    ? block.format
+    : undefined;
 
 /** An empty format object and no format are the same paragraph. */
 const sameFormat = (a: object | undefined, b: object | undefined) =>
@@ -148,6 +218,12 @@ export function wordPlanBlockRuns(block: {
     }),
   );
 }
+
+export const sameWordInPlaceRuns = (
+  a: readonly WordInPlaceRun[],
+  b: readonly WordInPlaceRun[],
+) =>
+  stableJson(mergeWordInPlaceRuns(a)) === stableJson(mergeWordInPlaceRuns(b));
 
 /** Run properties other than b/i/u, as the typed reader sees them. */
 export function wordNonMarkRunProperties(
@@ -205,7 +281,7 @@ export function wordInPlaceSourceRuns(paragraph: Element): SourceRuns {
     return { fallback: "source-shape" };
   const runs: WordInPlaceRun[] = [];
   let base: string | undefined;
-  let nonMark = "{}";
+  let nonMark = NO_RUN_PROPERTIES;
   let canonical = true;
   const serializer = new XMLSerializer();
   for (const run of children(paragraph, "r")) {
@@ -289,46 +365,303 @@ export function wordInPlaceSourceRuns(paragraph: Element): SourceRuns {
   return { runs: mergeWordInPlaceRuns(runs), nonMark };
 }
 
-function sameStyle(
-  source: WordSourceBlock,
+/** Paragraph properties the object model can reproduce: style and list membership only. Anything
+ * else would be inherited by a paragraph inserted next to it and cannot be cleared. */
+function paragraphProperties(source: WordSourceBlock): {
+  clean: boolean;
+  numbered: boolean;
+} {
+  const paragraph = parse(source.xml);
+  const props = isW(paragraph, "p") ? children(paragraph, "pPr") : [];
+  const pPr = props[0];
+  if (!isW(paragraph, "p") || props.length > 1)
+    return { clean: false, numbered: false };
+  if (!pPr) return { clean: true, numbered: false };
+  const numPr = children(pPr, "numPr");
+  return {
+    clean:
+      onlyAttributes(pPr, rsid) &&
+      children(pPr).every(
+        (c) =>
+          (isW(c, "pStyle") &&
+            onlyAttributes(
+              c,
+              (a) => a.namespaceURI === W && a.localName === "val",
+            )) ||
+          (isW(c, "numPr") &&
+            children(c).every(
+              (n) =>
+                (isW(n, "ilvl") || isW(n, "numId")) &&
+                onlyAttributes(
+                  n,
+                  (a) => a.namespaceURI === W && a.localName === "val",
+                ),
+            )),
+      ),
+    numbered: numPr.length === 1,
+  };
+}
+
+function styleTarget(
+  snapshot: Pick<WordAuthoringSnapshot, "styles">,
+  styleRef: string | undefined,
+): WordInPlaceStyle | undefined {
+  if (!styleRef) return { builtIn: "Normal" };
+  const style = snapshot.styles.find(
+    (s) => s.id === styleRef && (!s.type || s.type === "paragraph"),
+  );
+  if (!style) return styleRef === "Normal" ? { builtIn: "Normal" } : undefined;
+  const builtIn = wordBuiltInParagraphStyle(style.id, style.name);
+  if (builtIn) return { builtIn };
+  // Paragraph.style takes the display name; a comma there reads as a list of aliases.
+  return style.name && !style.name.includes(",")
+    ? { name: style.name }
+    : undefined;
+}
+
+type Typed = Pick<
+  WordInPlaceExpected,
+  "type" | "level" | "styleRef" | "list" | "ordered"
+>;
+
+function sourceTyped(source: WordSourceBlock): Typed {
+  return {
+    type: source.type,
+    ...(source.level === undefined ? {} : { level: source.level }),
+    ...(source.styleRef ? { styleRef: source.styleRef } : {}),
+    ...(source.list ? { list: source.list } : {}),
+    ...(source.ordered === undefined ? {} : { ordered: source.ordered }),
+  };
+}
+
+function blockTyped(
   block: WordPlanBlock,
-  snapshot: WordAuthoringSnapshot,
+  snapshot: Pick<WordAuthoringSnapshot, "styles">,
+): Typed {
+  if (block.type === "heading") {
+    const level = block.level ?? 1;
+    return {
+      type: "heading",
+      level,
+      styleRef: wordHeadingStyleId(snapshot, level),
+    };
+  }
+  return {
+    type: block.type as Typed["type"],
+    ...(block.type === "list-item" ? { level: block.level ?? 0 } : {}),
+    ...(block.styleRef ? { styleRef: block.styleRef } : {}),
+    ...(block.type === "list-item" && block.list
+      ? { list: block.list, ordered: !!block.ordered }
+      : {}),
+  };
+}
+
+function withStyle(
+  typed: Typed,
+  snapshot: Pick<WordAuthoringSnapshot, "styles">,
+): WordInPlaceState | undefined {
+  const style =
+    typed.type === "heading" && typed.styleRef === undefined
+      ? undefined
+      : typed.type === "heading" &&
+          isBuiltInHeadingStyle(
+            typed.styleRef!,
+            snapshot.styles.find((s) => s.id === typed.styleRef)?.name ?? "",
+            typed.level ?? 1,
+          )
+        ? { builtIn: `Heading${typed.level ?? 1}` }
+        : styleTarget(snapshot, typed.styleRef);
+  return style
+    ? { ...(typed as Omit<WordInPlaceState, "style">), style }
+    : undefined;
+}
+
+const styleChanged = (a: Typed, b: Typed) =>
+  (a.type === "heading") !== (b.type === "heading") ||
+  (a.type === "heading" && a.level !== b.level) ||
+  effectiveWordStyle(a.styleRef) !== effectiveWordStyle(b.styleRef);
+const listChanged = (a: Typed, b: Typed) =>
+  (a.type === "list-item") !== (b.type === "list-item") ||
+  (a.type === "list-item" && (a.list !== b.list || a.level !== b.level));
+
+/** Shared by classification, plan equivalence and verification. */
+function expectedOf(
+  op: Exclude<WordInPlaceOp, { kind: "cell" | "delete" }>,
+  source: WordSourceBlock | undefined,
+): WordInPlaceExpected {
+  const runs = mergeWordInPlaceRuns(op.runs);
+  const text = runs.map((r) => r.text).join("");
+  if (op.kind === "insert") {
+    const { style: _style, listRef: _listRef, ...typed } = op.state;
+    return { ...typed, text, runs, nonMark: NO_RUN_PROPERTIES };
+  }
+  const sourceRuns = source?.runs ?? [{ text: source?.text ?? "" }];
+  const nonMark = wordNonMarkRunProperties(sourceRuns[0]);
+  if (op.restyle) {
+    const { style: _style, listRef: _listRef, ...typed } = op.restyle.to;
+    return { ...typed, text, runs, nonMark };
+  }
+  return {
+    ...(source ? sourceTyped(source) : { type: "paragraph" }),
+    ...(source?.format ? { format: source.format } : {}),
+    text,
+    runs,
+    nonMark,
+  };
+}
+
+export function wordInPlaceExpected(
+  op: Exclude<WordInPlaceOp, { kind: "cell" | "delete" }>,
+  snapshot: Pick<WordAuthoringSnapshot, "blocks">,
+): WordInPlaceExpected {
+  return expectedOf(
+    op,
+    op.kind === "text"
+      ? snapshot.blocks.find((b) => b.ref === op.ref)
+      : undefined,
+  );
+}
+
+/** A built-in heading may land in a style Word adds under its own (localized) ID. */
+function sameStyleRef(
+  expected: Typed,
+  actual: WordSourceBlock,
+  styles: WordAuthoringSnapshot["styles"],
 ): boolean {
-  if (source.type === "heading")
-    return (
-      block.styleRef === undefined &&
-      source.styleRef === wordHeadingStyleId(snapshot, source.level ?? 1)
+  if (
+    effectiveWordStyle(actual.styleRef) ===
+    effectiveWordStyle(expected.styleRef)
+  )
+    return true;
+  const builtInHeading = (styleRef: string | undefined) =>
+    !!styleRef &&
+    isBuiltInHeadingStyle(
+      styleRef,
+      styles.find((s) => s.id === styleRef)?.name ?? "",
+      expected.level ?? 1,
     );
   return (
-    effectiveWordStyle(block.styleRef) === effectiveWordStyle(source.styleRef)
+    expected.type === "heading" &&
+    builtInHeading(expected.styleRef) &&
+    builtInHeading(actual.styleRef)
   );
+}
+
+/** Typed state a written paragraph must have. */
+export function wordInPlaceTypedIssue(
+  expected: WordInPlaceExpected,
+  actual: WordSourceBlock,
+  styles: WordAuthoringSnapshot["styles"],
+): "text" | "runs" | "type" | "format" | "style" | "list" | undefined {
+  if (actual.text !== expected.text) return "text";
+  if (actual.type !== expected.type || actual.level !== expected.level)
+    return "type";
+  if (actual.list !== expected.list || actual.ordered !== expected.ordered)
+    return "list";
+  if (!sameStyleRef(expected, actual, styles)) return "style";
+  if (!sameFormat(actual.format, expected.format)) return "format";
+  const typedRuns = actual.runs ?? [{ text: actual.text }];
+  if (
+    !sameWordInPlaceRuns(
+      typedRuns.map((run) => ({
+        text: run.text,
+        bold: !!run.bold,
+        italic: !!run.italic,
+        underline: !!run.underline,
+      })),
+      expected.runs,
+    ) ||
+    typedRuns.some((run) => wordNonMarkRunProperties(run) !== expected.nonMark)
+  )
+    return "runs";
+  return undefined;
 }
 
 type OpResult = WordInPlaceOp | WordInPlaceFallback;
 
+interface Context {
+  snapshot: WordAuthoringSnapshot;
+  caps: WordInPlaceCapabilities;
+  sources: Map<string, WordSourceBlock>;
+  order: Map<string, number>;
+  /** Removed by the plan: deleted, or merged into the block before them. */
+  removed: Set<string>;
+  /** Captured list members that leave their list. */
+  leaving: Set<string>;
+}
+
+/** The surviving member of `list` closest to `near`, whose live List the paragraph joins. */
+function listMember(
+  ctx: Context,
+  list: string,
+  near: string,
+  exclude?: string,
+): string | undefined {
+  const at = ctx.order.get(near) ?? 0;
+  return ctx.snapshot.blocks
+    .filter(
+      (b) =>
+        b.type === "list-item" &&
+        b.list === list &&
+        b.ref !== exclude &&
+        !ctx.removed.has(b.ref) &&
+        !ctx.leaving.has(b.ref),
+    )
+    .sort(
+      (a, b) =>
+        Math.abs(ctx.order.get(a.ref)! - at) -
+        Math.abs(ctx.order.get(b.ref)! - at),
+    )[0]?.ref;
+}
+
+/** The first problem with a block the object model has to create from nothing. */
+function newParagraphIssue(
+  block: WordPlanBlock,
+): WordInPlaceFallback | undefined {
+  if (!TYPED.has(block.type)) return "rich-block";
+  if (block.type === "list-item" && !block.list?.startsWith("existing-"))
+    return "new-list";
+  const format = paragraphFormat(block);
+  if (format && Object.keys(format).length) return "format";
+  const runs = block.runs ?? [{ text: block.text }];
+  if (
+    runs.some(
+      (run) =>
+        run.underlineStyle ||
+        wordNonMarkRunProperties(run) !== NO_RUN_PROPERTIES,
+    )
+  )
+    return "run-format";
+  if ([block, ...runs].some((run) => STRUCTURAL_TEXT.test(run.text)))
+    return "source-shape";
+  if (!block.text) return "empty-text";
+  return undefined;
+}
+
 function textOp(
   source: WordSourceBlock,
   block: WordPlanBlock,
-  snapshot: WordAuthoringSnapshot,
+  ctx: Context,
 ): OpResult {
+  const { snapshot, caps } = ctx;
   if (!TYPED.has(block.type)) return "rich-block";
-  if (block.type !== source.type) return "restyle";
-  if (block.type === "heading" && (block.level ?? 1) !== source.level)
-    return "restyle";
+  const from = sourceTyped(source);
+  const to = blockTyped(block, snapshot);
   if (block.type === "list-item") {
+    if (!block.list?.startsWith("existing-")) return "new-list";
+    // Joining another list, or turning a numbered item into a bullet, needs new numbering.
     if (
-      !block.list?.startsWith("existing-") ||
-      !!block.ordered !== !!source.ordered
+      source.type === "list-item" &&
+      (block.list !== source.list || !!block.ordered !== !!source.ordered)
     )
       return "new-list";
-    if (
-      block.list !== source.list ||
-      (block.level ?? 0) !== (source.level ?? 0)
-    )
-      return "list";
   }
-  if (!sameStyle(source, block, snapshot)) return "restyle";
-  const format = "format" in block ? block.format : undefined;
+  const restyled = styleChanged(from, to);
+  const relisted = listChanged(from, to);
+  if (restyled && !caps.restyle) return "restyle";
+  if (relisted && !caps.list) return "list";
+  if (relisted && !caps.restyle) return "restyle";
+  const format = paragraphFormat(block);
   if (!sameFormat(format, source.format)) return "format";
   const shape = wordInPlaceSourceRuns(parse(source.xml));
   const font = format?.font ?? {};
@@ -349,12 +682,127 @@ function textOp(
     return "source-shape";
   if (!block.text || !source.text) return "empty-text";
   if ("fallback" in shape) return shape.fallback;
-  return {
+  const op: Extract<WordInPlaceOp, { kind: "text" }> = {
     kind: "text",
     ref: source.ref,
     paragraph: 0,
     runs: wordPlanBlockRuns({ ...block, format }),
     original: shape.runs,
+  };
+  if (!restyled && !relisted) return op;
+  const props = paragraphProperties(source);
+  if (!props.clean) return "inherited-format";
+  if (relisted && source.type === "list-item" && !props.numbered)
+    return "not-invertible";
+  const fromState = withStyle(from, snapshot);
+  const toState = withStyle(to, snapshot);
+  if (!fromState || !toState) return "restyle";
+  if (relisted && to.type === "list-item") {
+    const member = listMember(ctx, to.list!, source.ref, source.ref);
+    if (!member) return "list";
+    toState.listRef = member;
+  }
+  if (relisted && from.type === "list-item") {
+    const member = listMember(ctx, from.list!, source.ref, source.ref);
+    if (!member) return "not-invertible";
+    fromState.listRef = member;
+  }
+  return { ...op, restyle: { from: fromState, to: toState } };
+}
+
+function insertOp(
+  block: WordPlanBlock,
+  anchor: { ref: string; location: "After" | "Before" },
+  ctx: Context,
+): OpResult {
+  const { caps, snapshot } = ctx;
+  if (!caps.insert) return "insert";
+  const issue = newParagraphIssue(block);
+  if (issue) return issue;
+  if (block.type === "list-item" && !caps.list) return "list";
+  if (!caps.restyle) return "restyle";
+  if (!caps.delete) return "not-invertible";
+  const state = withStyle(blockTyped(block, snapshot), snapshot);
+  if (!state) return "restyle";
+  if (state.type === "list-item") {
+    const member = listMember(ctx, state.list!, anchor.ref);
+    if (!member) return "list";
+    state.listRef = member;
+  }
+  return {
+    kind: "insert",
+    ref: anchor.ref,
+    paragraph: 0,
+    location: anchor.location,
+    block: block.id,
+    runs: wordPlanBlockRuns({ ...block, format: undefined }),
+    state,
+  };
+}
+
+/** Next to which captured paragraph a paragraph can be (re)created without inheriting anything the
+ * object model cannot clear: the one before it, else the one after it. */
+function anchorFor(
+  before: string | undefined,
+  after: string | undefined,
+  ctx: Context,
+): { ref: string; location: "After" | "Before" } | WordInPlaceFallback {
+  for (const [ref, location] of [
+    [before, "After"],
+    [after, "Before"],
+  ] as const) {
+    const source = ref ? ctx.sources.get(ref) : undefined;
+    if (!source || !TYPED.has(source.type)) continue;
+    return paragraphProperties(source).clean
+      ? { ref: source.ref, location }
+      : "inherited-format";
+  }
+  return "boundary";
+}
+
+function deleteOp(ref: string, ctx: Context): OpResult {
+  const { caps, snapshot } = ctx;
+  if (!caps.delete) return "delete";
+  const source = ctx.sources.get(ref);
+  if (!source) return "program-mismatch";
+  if (!TYPED.has(source.type)) return "native-target";
+  if (
+    !caps.insert ||
+    !caps.restyle ||
+    (source.type === "list-item" && !caps.list)
+  )
+    return "not-invertible";
+  // Word keeps a final paragraph; deleting it would merge the body into the section properties.
+  if (snapshot.blocks.at(-1)?.ref === ref) return "boundary";
+  const props = paragraphProperties(source);
+  if (!props.clean || (source.type === "list-item" && !props.numbered))
+    return "not-invertible";
+  const shape = wordInPlaceSourceRuns(parse(source.xml));
+  if ("fallback" in shape || shape.nonMark !== NO_RUN_PROPERTIES)
+    return "not-invertible";
+  const state = withStyle(sourceTyped(source), snapshot);
+  if (!state) return "not-invertible";
+  if (state.type === "list-item") {
+    const member = listMember(ctx, state.list!, ref, ref);
+    if (!member) return "not-invertible";
+    state.listRef = member;
+  }
+  const index = ctx.order.get(ref)!;
+  const neighbour = (step: number) => {
+    for (let i = index + step; i >= 0 && i < snapshot.blocks.length; i += step)
+      if (!ctx.removed.has(snapshot.blocks[i].ref))
+        return snapshot.blocks[i].ref;
+    return undefined;
+  };
+  const anchor = anchorFor(neighbour(-1), neighbour(1), ctx);
+  if (typeof anchor === "string") return anchor;
+  return {
+    kind: "delete",
+    ref,
+    paragraph: 0,
+    original: shape.runs,
+    state,
+    recreate: anchor.location,
   };
 }
 
@@ -445,6 +893,40 @@ function cellOp(source: WordSourceBlock, block: WordPlanBlock): OpResult {
 const ladder = (codes: ReadonlySet<WordInPlaceFallback>) =>
   WORD_IN_PLACE_FALLBACKS.find((code) => codes.has(code));
 
+const survivors = (entry: WordPlanEntry) =>
+  entry.kind === "keep"
+    ? entry.source
+    : entry.kind === "replace"
+      ? [entry.source[0]]
+      : [];
+
+/** Word merges adjacent tables, and the object model cannot keep two such blocks apart. */
+function joinsNonParagraphs(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  order: Map<string, number>,
+): boolean {
+  const output = wordPlanOutput(plan, snapshot);
+  return output.some((entry, i) => {
+    const previous = output[i - 1];
+    if (
+      !previous ||
+      TYPED.has(entry.block.type) ||
+      TYPED.has(previous.block.type)
+    )
+      return false;
+    const a = order.get(previous.source.at(-1) ?? "");
+    const b = order.get(entry.source[0] ?? "");
+    return (
+      previous.kind === "insert" ||
+      entry.kind === "insert" ||
+      a === undefined ||
+      b === undefined ||
+      b !== a + 1
+    );
+  });
+}
+
 /**
  * Pure: derives the object-model program for a validated, normalized plan, or the first routing
  * rule that sends it to the full-document import. No host calls.
@@ -467,28 +949,80 @@ export function classifyWordInPlacePlan(
       if (position <= last) failures.add("moved");
       last = Math.max(last, position);
     }
-  if (plan.deleted.length) failures.add("delete");
-  const ops: WordInPlaceOp[] = [];
+  const removed = new Set(plan.deleted.flatMap((d) => d.source));
+  const leaving = new Set<string>();
   for (const entry of plan.entries) {
-    if (entry.kind === "insert") failures.add("insert");
     if (entry.kind !== "replace") continue;
-    if (entry.source.length !== 1 || entry.blocks.length !== 1) {
+    entry.source.slice(1).forEach((ref) => removed.add(ref));
+    const source = sources.get(entry.source[0]);
+    const block = entry.blocks[0];
+    if (
+      source?.type === "list-item" &&
+      (block.type !== "list-item" || block.list !== source.list)
+    )
+      leaving.add(source.ref);
+  }
+  const ctx: Context = { snapshot, caps, sources, order, removed, leaving };
+  const ops: WordInPlaceOp[] = [];
+  const add = (result: OpResult) => {
+    if (typeof result === "string") failures.add(result);
+    else if (
+      (result.kind === "text" || result.kind === "cell") &&
+      !caps[result.kind]
+    )
+      failures.add("not-invertible");
+    else ops.push(result);
+  };
+  const nextSurvivor = (index: number) =>
+    plan.entries.slice(index + 1).flatMap(survivors)[0];
+  let previous: string | undefined;
+  for (const [index, entry] of plan.entries.entries()) {
+    if (entry.kind === "keep") {
+      previous = entry.source.at(-1);
+      continue;
+    }
+    if (entry.kind === "insert") {
+      const anchor = caps.insert
+        ? anchorFor(previous, nextSurvivor(index), ctx)
+        : "insert";
+      if (typeof anchor === "string") failures.add(anchor);
+      else for (const block of entry.blocks) add(insertOp(block, anchor, ctx));
+      continue;
+    }
+    const [head, ...merged] = entry.source;
+    const [first, ...split] = entry.blocks;
+    previous = head;
+    if (merged.length && split.length) {
       failures.add("split");
       continue;
     }
-    const source = sources.get(entry.source[0]);
+    if ((merged.length || split.length) && !caps.split) {
+      failures.add("split");
+      continue;
+    }
+    const source = sources.get(head);
     if (!source) {
       failures.add("program-mismatch");
       continue;
     }
-    const result =
-      source.type === "native"
-        ? cellOp(source, entry.blocks[0])
-        : textOp(source, entry.blocks[0], snapshot);
-    if (typeof result === "string") failures.add(result);
-    else if (!caps[result.kind]) failures.add("not-invertible");
-    else ops.push(result);
+    if (source.type === "native") {
+      add(
+        merged.length || split.length ? "native-target" : cellOp(source, first),
+      );
+      continue;
+    }
+    add(textOp(source, first, ctx));
+    if (split.length) {
+      const anchor = caps.insert ? anchorFor(head, undefined, ctx) : "insert";
+      if (typeof anchor === "string") failures.add(anchor);
+      else for (const block of split) add(insertOp(block, anchor, ctx));
+    }
+    for (const ref of merged) add(deleteOp(ref, ctx));
   }
+  for (const deletion of plan.deleted)
+    for (const ref of deletion.source) add(deleteOp(ref, ctx));
+  if (removed.size && joinsNonParagraphs(plan, snapshot, order))
+    failures.add("boundary");
   if (ops.length > MAX_WORD_IN_PLACE_OPS) failures.add("too-many-ops");
   const first = ladder(failures);
   if (first) return { fallback: first };
@@ -500,28 +1034,103 @@ export function classifyWordInPlacePlan(
   return { ops };
 }
 
+export type WordInPlaceSlot =
+  | { kind: "keep"; ref: string }
+  | { kind: "op"; op: Exclude<WordInPlaceOp, { kind: "delete" }> };
+
+/** The block sequence the ops leave: deleted blocks gone, inserted ones next to their anchors. */
+export function materializeWordInPlaceOps(
+  refs: readonly string[],
+  ops: readonly WordInPlaceOp[],
+  refOf: (op: WordInPlaceOp) => string | undefined = (op) => op.ref,
+): WordInPlaceSlot[] | null {
+  const known = new Set(refs);
+  const byRef = new Map<string, WordInPlaceOp>();
+  const inserted = new Map<string, WordInPlaceOp[]>();
+  for (const op of ops) {
+    const ref = refOf(op);
+    if (ref === undefined || !known.has(ref)) return null;
+    if (op.kind === "insert") {
+      const key = `${op.location}:${ref}`;
+      inserted.set(key, [...(inserted.get(key) ?? []), op]);
+    } else if (byRef.has(ref)) return null;
+    else byRef.set(ref, op);
+  }
+  const slots: WordInPlaceSlot[] = [];
+  const place = (key: string) =>
+    (inserted.get(key) ?? []).forEach((op) => {
+      if (op.kind === "insert") slots.push({ kind: "op", op });
+    });
+  for (const ref of refs) {
+    const op = byRef.get(ref);
+    if (op?.kind === "delete") {
+      if (inserted.has(`Before:${ref}`) || inserted.has(`After:${ref}`))
+        return null;
+      continue;
+    }
+    place(`Before:${ref}`);
+    slots.push(op ? { kind: "op", op } : { kind: "keep", ref });
+    place(`After:${ref}`);
+  }
+  return slots;
+}
+
+function blockExpected(
+  block: WordPlanBlock,
+  snapshot: WordAuthoringSnapshot,
+): WordInPlaceExpected {
+  const format = paragraphFormat(block);
+  const runs = wordPlanBlockRuns({ ...block, format });
+  return {
+    ...blockTyped(block, snapshot),
+    ...(format && Object.keys(format).length ? { format } : {}),
+    text: block.text,
+    runs,
+    nonMark: NO_RUN_PROPERTIES,
+  };
+}
+
+const sameTyped = (a: WordInPlaceExpected, b: WordInPlaceExpected) =>
+  a.text === b.text &&
+  stableJson(a.runs) === stableJson(b.runs) &&
+  a.type === b.type &&
+  a.level === b.level &&
+  a.list === b.list &&
+  a.ordered === b.ordered &&
+  effectiveWordStyle(a.styleRef) === effectiveWordStyle(b.styleRef) &&
+  sameFormat(a.format, b.format);
+
 /** The ops, applied to the captured blocks, must produce exactly the plan's output. */
 export function sameWordInPlaceProgram(
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,
   ops: readonly WordInPlaceOp[],
 ): boolean {
-  const byRef = new Map(ops.map((op) => [op.ref, op]));
-  if (byRef.size !== ops.length) return false;
+  const slots = materializeWordInPlaceOps(
+    snapshot.blocks.map((b) => b.ref),
+    ops,
+  );
   const output = wordPlanOutput(plan, snapshot);
-  if (output.length !== snapshot.blocks.length) return false;
-  let used = 0;
-  const ok = snapshot.blocks.every((source, i) => {
+  if (!slots || output.length !== slots.length) return false;
+  const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
+  const heads = new Set(
+    plan.entries.flatMap((e) => (e.kind === "replace" ? [e.blocks[0]] : [])),
+  );
+  return slots.every((slot, i) => {
     const entry = output[i];
-    const op = byRef.get(source.ref);
-    if (entry.source.length !== 1 || entry.source[0] !== source.ref)
-      return false;
-    if (entry.kind === "keep") return !op;
-    if (entry.kind !== "replace" || !op) return false;
-    used++;
+    if (slot.kind === "keep")
+      return entry.kind === "keep" && entry.source[0] === slot.ref;
+    if (entry.kind === "keep") return false;
+    const { op } = slot;
     const block = entry.block as WordPlanBlock;
     if (op.kind === "cell") {
-      if (block.type !== "table") return false;
+      if (
+        entry.kind !== "replace" ||
+        entry.source.length !== 1 ||
+        entry.source[0] !== op.ref ||
+        block.type !== "table"
+      )
+        return false;
       const edits = block.rows.flatMap((row) =>
         row.cells.flatMap((cell) =>
           cell.textEdit
@@ -543,59 +1152,24 @@ export function sameWordInPlaceProgram(
         edits[0].expectedText === op.original
       );
     }
-    if (!TYPED.has(block.type) || block.type !== source.type) return false;
-    const format = "format" in block ? block.format : undefined;
-    return (
-      op.paragraph === 0 &&
-      block.text === op.runs.map((r) => r.text).join("") &&
-      stableJson(wordPlanBlockRuns({ ...block, format })) ===
-        stableJson(mergeWordInPlaceRuns(op.runs)) &&
-      sameFormat(format, source.format) &&
-      sameStyle(source, block, snapshot) &&
-      (block.type !== "heading" || block.level === source.level) &&
-      (block.type !== "list-item" ||
-        ((block.level ?? 0) === (source.level ?? 0) &&
-          block.list === source.list &&
-          !!block.ordered === !!source.ordered))
+    // A rewritten paragraph is the head of its replace entry; a split's tail is inserted after it.
+    if (
+      op.kind === "text"
+        ? entry.kind !== "replace" ||
+          entry.source[0] !== op.ref ||
+          !heads.has(block)
+        : entry.kind === "replace" &&
+          (heads.has(block) ||
+            op.location !== "After" ||
+            entry.source[0] !== op.ref)
+    )
+      return false;
+    if (!TYPED.has(block.type)) return false;
+    return sameTyped(
+      blockExpected(block, snapshot),
+      expectedOf(op, sources.get(op.ref)),
     );
   });
-  return ok && used === ops.length;
-}
-
-/** Typed state a written paragraph must have; kept properties come from the source. */
-export function wordInPlaceTypedIssue(
-  source: WordSourceBlock,
-  op: Extract<WordInPlaceOp, { kind: "text" }>,
-  actual: WordSourceBlock,
-): "text" | "runs" | "type" | "format" | "style" | "list" | undefined {
-  if (actual.text !== op.runs.map((r) => r.text).join("")) return "text";
-  if (actual.type !== source.type || actual.level !== source.level)
-    return "type";
-  if (actual.list !== source.list || actual.ordered !== source.ordered)
-    return "list";
-  if (
-    effectiveWordStyle(actual.styleRef) !== effectiveWordStyle(source.styleRef)
-  )
-    return "style";
-  if (!sameFormat(actual.format, source.format)) return "format";
-  const typedRuns = actual.runs ?? [{ text: actual.text }];
-  const sourceRuns = source.runs ?? [{ text: source.text }];
-  const nonMark = wordNonMarkRunProperties(sourceRuns[0]);
-  if (
-    stableJson(
-      mergeWordInPlaceRuns(
-        typedRuns.map((run) => ({
-          text: run.text,
-          bold: !!run.bold,
-          italic: !!run.italic,
-          underline: !!run.underline,
-        })),
-      ),
-    ) !== stableJson(mergeWordInPlaceRuns(op.runs)) ||
-    typedRuns.some((run) => wordNonMarkRunProperties(run) !== nonMark)
-  )
-    return "runs";
-  return undefined;
 }
 
 /** Cross-check against the dry-run compile: the import route would produce the same typed blocks. */
@@ -604,11 +1178,15 @@ function matchesCompiledOutput(
   ops: readonly WordInPlaceOp[],
   compiled: WordAuthoringSnapshot,
 ): boolean {
-  if (compiled.blocks.length !== snapshot.blocks.length) return false;
-  const index = new Map(snapshot.blocks.map((b, i) => [b.ref, i]));
-  return ops.every((op) => {
-    const i = index.get(op.ref);
-    if (i === undefined) return false;
+  const slots = materializeWordInPlaceOps(
+    snapshot.blocks.map((b) => b.ref),
+    ops,
+  );
+  if (!slots || compiled.blocks.length !== slots.length) return false;
+  const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
+  return slots.every((slot, i) => {
+    if (slot.kind === "keep") return true;
+    const { op } = slot;
     const actual = compiled.blocks[i];
     if (op.kind === "cell")
       return (
@@ -617,6 +1195,10 @@ function matchesCompiledOutput(
           ?.cells.find((cell) => cell.sourceIndex === op.cellIndex)?.text ===
         op.text
       );
-    return !wordInPlaceTypedIssue(snapshot.blocks[i], op, actual);
+    return !wordInPlaceTypedIssue(
+      expectedOf(op, sources.get(op.ref)),
+      actual,
+      compiled.styles,
+    );
   });
 }

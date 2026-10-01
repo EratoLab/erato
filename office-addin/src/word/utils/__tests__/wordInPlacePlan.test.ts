@@ -20,7 +20,10 @@ import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
 } from "../wordDocumentXml";
-import { wordInPlaceCapabilities } from "../wordInPlaceCapabilities";
+import {
+  ALL_WORD_IN_PLACE_CAPABILITIES,
+  wordInPlaceCapabilities,
+} from "../wordInPlaceCapabilities";
 import {
   WORD_IN_PLACE_FALLBACKS,
   classifyWordInPlacePlan,
@@ -37,6 +40,7 @@ import type {
 import type { WordInPlaceFallback, WordInPlaceOp } from "../wordInPlacePlan";
 
 const caps = wordInPlaceCapabilities("PC");
+const ALL = ALL_WORD_IN_PLACE_CAPABILITIES;
 const run = (text: string, rPr = "") =>
   `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
 const p = (content: string, pPr = "") =>
@@ -402,16 +406,151 @@ describe("in-place classification", () => {
     };
     for (const [code, actual] of Object.entries(reached))
       expect(actual, code).toBe(code);
-    // Reserved for later mechanisms: no M2 plan can need them before an earlier rule fails.
+    // Only reachable once the structural mechanisms are on (see below), or reserved for stories.
     expect(
       WORD_IN_PLACE_FALLBACKS.filter((code) => !(code in reached)),
-    ).toEqual(["story-text", "inherited-format"]);
+    ).toEqual(["story-text", "inherited-format", "boundary"]);
     expect(
       fallbackOf(s, {
         ...plan(s, { b2: text("Two\nlines") }),
         sections: [{ id: "final", source: "section-1" }],
       }),
     ).toBe("sections");
+  });
+
+  it("admits structural edits only when the object model can reproduce and undo them", () => {
+    const s = snapshot();
+    const refs = s.blocks.map((b) => b.ref);
+    const all = (p: WordDocumentPlan, from = s) => {
+      const result = classifyWordInPlacePlan(p, from, ALL);
+      return "fallback" in result ? result.fallback : result.ops;
+    };
+    const insertAfter = (ref: string, from = s) =>
+      ({
+        ...plan(from, {}),
+        entries: from.blocks.flatMap((b): WordPlanEntry[] => [
+          { kind: "keep", source: [b.ref] },
+          ...(b.ref === ref
+            ? [{ kind: "insert" as const, blocks: [text("Inserted")] }]
+            : []),
+        ]),
+      }) as WordDocumentPlan;
+    const without = (ref: string, from = s): WordDocumentPlan => ({
+      ...plan(from, {}),
+      entries: from.blocks
+        .filter((b) => b.ref !== ref)
+        .map((b) => ({ kind: "keep", source: [b.ref] })),
+      deleted: [{ source: [ref], reason: "Requested" }],
+    });
+    expect(all(insertAfter("b2"))).toEqual([
+      expect.objectContaining({
+        kind: "insert",
+        ref: "b2",
+        location: "After",
+        state: { type: "paragraph", style: { builtIn: "Normal" } },
+      }),
+    ]);
+    // A centred anchor would hand its alignment to the new paragraph.
+    expect(all(insertAfter("b9"))).toBe("inherited-format");
+    // After a table the new paragraph goes before the next paragraph instead.
+    expect(all(insertAfter("b10"))).toEqual([
+      expect.objectContaining({
+        kind: "insert",
+        ref: "b11",
+        location: "Before",
+      }),
+    ]);
+    expect(
+      all({
+        ...plan(s, {}),
+        entries: [
+          { kind: "insert", blocks: [text("First")] },
+          ...refs.map((ref) => ({ kind: "keep" as const, source: [ref] })),
+        ],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "insert",
+        ref: "b1",
+        location: "Before",
+      }),
+    ]);
+    expect(all(without("b2"))).toEqual([
+      expect.objectContaining({
+        kind: "delete",
+        ref: "b2",
+        recreate: "After",
+        original: [
+          { text: "Plain text", bold: false, italic: false, underline: false },
+        ],
+      }),
+    ]);
+    // Re-creating them would lose the alignment, the language or the bold twin.
+    expect(all(without("b9"))).toBe("not-invertible");
+    expect(all(without("b8"))).toBe("not-invertible");
+    expect(all(without("b11"))).toBe("not-invertible");
+    expect(all(without("b6"))).toBe("native-target");
+    // The only item of its list could not rejoin it.
+    expect(all(without("b3"))).toBe("not-invertible");
+    expect(
+      all(plan(s, { b9: text("Heading now", { styleRef: "Heading1" }) })),
+    ).toBe("format");
+    expect(
+      all(
+        plan(s, {
+          b9: {
+            id: "h",
+            type: "heading",
+            level: 1,
+            text: "Centred heading",
+            format: { alignment: "center" },
+          },
+        }),
+      ),
+    ).toBe("inherited-format");
+    const tables = snapshot(
+      paragraph("Before") +
+        cells([["a", "b"]]) +
+        paragraph("Between") +
+        cells([["c", "d"]]) +
+        paragraph("Last"),
+    );
+    expect(all(without("b3", tables), tables)).toBe("boundary");
+    expect(all(without("b5", tables), tables)).toBe("boundary");
+    const merged = plan(s, { b1: [text("Merged")] });
+    merged.entries.splice(0, 2, {
+      kind: "replace",
+      source: ["b1", "b2"],
+      blocks: [{ id: "m", type: "heading", level: 1, text: "Merged" }],
+    });
+    expect(all(merged)).toEqual([
+      expect.objectContaining({ kind: "text", ref: "b1" }),
+      expect.objectContaining({ kind: "delete", ref: "b2", recreate: "After" }),
+    ]);
+    for (const code of [
+      "insert",
+      "delete",
+      "split",
+      "restyle",
+      "list",
+    ] as const)
+      expect(
+        fallbackOf(
+          s,
+          {
+            insert: insertAfter("b2"),
+            delete: without("b2"),
+            split: plan(s, { b2: [text("One"), { ...text("Two"), id: "t" }] }),
+            restyle: plan(s, {
+              b2: { id: "h", type: "heading", level: 2, text: "Promoted" },
+            }),
+            list: plan(s, {
+              b3: text("First item", { styleRef: "ListParagraph" }),
+            }),
+          }[code],
+        ),
+        code,
+      ).toBe(code);
   });
 
   it("routes a disabled mechanism to the import", () => {
@@ -485,12 +624,15 @@ describe("in-place program equivalence", () => {
           paragraph("Before") +
             p(run("Heading"), '<w:pStyle w:val="Heading1"/>') +
             paragraph("Target") +
-            paragraph("After"),
+            paragraph("After") +
+            paragraph("Tail"),
         ),
       );
+    // Expected route with the probe-confirmed mechanisms (text and cell), then with all of them.
     const cases: [
       Record<string, unknown>,
       Record<string, unknown>,
+      WordInPlaceFallback | "in-place",
       WordInPlaceFallback | "in-place",
     ][] = [
       [
@@ -509,6 +651,7 @@ describe("in-place program equivalence", () => {
           ],
         },
         "in-place",
+        "in-place",
       ],
       [
         { ref: "b2" },
@@ -521,6 +664,7 @@ describe("in-place program equivalence", () => {
             },
           ],
         },
+        "in-place",
         "in-place",
       ],
       [
@@ -535,6 +679,7 @@ describe("in-place program equivalence", () => {
           ],
         },
         "restyle",
+        "in-place",
       ],
       [
         { ref: "b3" },
@@ -548,6 +693,7 @@ describe("in-place program equivalence", () => {
           ],
         },
         "delete",
+        "in-place",
       ],
       [
         { ref: "b3" },
@@ -561,12 +707,50 @@ describe("in-place program equivalence", () => {
           ],
         },
         "insert",
+        "in-place",
+      ],
+      [
+        { ref: "b3" },
+        {
+          body: [
+            {
+              operation: "insert-before",
+              anchor: "b3",
+              blocks: [text("Added before")],
+            },
+          ],
+        },
+        "insert",
+        "in-place",
+      ],
+      [
+        { ref: "b3" },
+        {
+          body: [
+            {
+              operation: "replace",
+              source: ["b3"],
+              blocks: [text("One"), { ...text("Two"), id: "two" }],
+            },
+          ],
+        },
+        "split",
+        "in-place",
+      ],
+      [
+        { refs: ["b4", "b1"] },
+        {
+          body: [{ operation: "move-before", source: ["b4"], anchor: "b1" }],
+        },
+        "moved",
+        "moved",
       ],
       [
         { refs: ["b1", "b4"] },
         {
           body: [{ operation: "move-after", source: ["b1"], anchor: "b4" }],
         },
+        "moved",
         "moved",
       ],
       [
@@ -581,18 +765,25 @@ describe("in-place program equivalence", () => {
           ],
         },
         "split",
+        "in-place",
       ],
     ];
-    for (const [target, edit, expected] of cases) {
+    for (const [target, edit, expected, expectedAll] of cases) {
       const s = fresh();
       const p = await scoped(s, target, edit);
-      const result = route(s, p, compiledOf(s, p));
-      expect(
-        "fallback" in result ? result.fallback : "in-place",
-        JSON.stringify(edit),
-      ).toBe(expected);
-      if ("ops" in result)
-        expect(sameWordInPlaceProgram(p, s, result.ops)).toBe(true);
+      const compiled = compiledOf(s, p);
+      for (const [capabilities, want] of [
+        [caps, expected],
+        [ALL, expectedAll],
+      ] as const) {
+        const result = classifyWordInPlacePlan(p, s, capabilities, compiled);
+        expect(
+          "fallback" in result ? result.fallback : "in-place",
+          JSON.stringify(edit),
+        ).toBe(want);
+        if ("ops" in result)
+          expect(sameWordInPlaceProgram(p, s, result.ops)).toBe(true);
+      }
     }
   });
 });

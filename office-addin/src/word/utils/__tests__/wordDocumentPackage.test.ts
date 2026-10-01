@@ -142,24 +142,34 @@ describe("complete Word document package transport", () => {
       id: "{paragraph}",
       originalSignature: "before",
     };
-    const value = encodeWordDocumentBackup(snapshot, { v: 1, ops: [op] });
+    const regions = [{ start: "{before}", end: null, before: [0] }];
+    const value = encodeWordDocumentBackup(snapshot, {
+      v: 1,
+      ops: [op],
+      regions,
+    });
     const updated = withWordInPlaceBackup(value, {
       v: 1,
       ops: [{ ...op, afterSignature: "after" }],
+      regions: [{ ...regions[0], after: ["{paragraph}"] }],
     });
     expect(decodeWordDocumentBackup(updated).bytes).toEqual(bytes);
     expect(decodeWordInPlaceBackup(updated)).toEqual({
       documentUrl: "file:///fixture.docx",
-      inPlace: { v: 1, ops: [{ ...op, afterSignature: "after" }] },
+      inPlace: {
+        v: 1,
+        ops: [{ ...op, afterSignature: "after" }],
+        regions: [{ ...regions[0], after: ["{paragraph}"] }],
+      },
     });
-    expect(
-      decodeWordInPlaceBackup(
-        encodeWordDocumentBackup(snapshot, {
-          v: 1,
-          ops: [{ ...op, runs: "not runs" as never }],
-        }),
-      ),
-    ).toEqual({ documentUrl: "file:///fixture.docx" });
+    for (const malformed of [
+      { v: 1 as const, ops: [{ ...op, runs: "not runs" as never }], regions },
+      { v: 1 as const, ops: [op], regions: [{ ...regions[0], before: [1] }] },
+      { v: 1 as const, ops: [{ ...op, kind: "insert" as never }], regions },
+    ])
+      expect(
+        decodeWordInPlaceBackup(encodeWordDocumentBackup(snapshot, malformed)),
+      ).toEqual({ documentUrl: "file:///fixture.docx" });
     expect(decodeWordInPlaceBackup(encodeWordDocumentBackup(snapshot))).toEqual(
       { documentUrl: "file:///fixture.docx" },
     );

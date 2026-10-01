@@ -1,5 +1,5 @@
 import { wordPackageCounts } from "./wordFullDocumentComparison";
-import { wordInPlaceTypedIssue } from "./wordInPlacePlan";
+import { wordInPlaceExpected, wordInPlaceTypedIssue } from "./wordInPlacePlan";
 import {
   createNativeContentSignature,
   sameWordPreservedParts,
@@ -8,7 +8,11 @@ import {
 import { createWordXmlComparison } from "./wordXmlComparison";
 
 import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
-import type { WordInPlaceMarks, WordInPlaceOp } from "./wordInPlacePlan";
+import type {
+  WordInPlaceMarks,
+  WordInPlaceOp,
+  WordInPlaceSlot,
+} from "./wordInPlacePlan";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 export const WORD_SCOPE_PREFIX = "word-scope-v1:";
@@ -58,9 +62,16 @@ export function wordFirstRunMarks(paragraphOoxml: string): WordInPlaceMarks {
   return { bold: mark("b"), italic: mark("i"), underline: mark("u") };
 }
 
-/** Post-write state of the touched paragraphs only; edits elsewhere never invalidate it. */
+/** One paragraph inside a touched region after a write: its ID, its signature and the region. */
+export type WordScopeEntry = readonly [
+  id: string,
+  signature: string,
+  region: number,
+];
+
+/** Post-write state of the touched regions only; edits elsewhere never invalidate it. */
 export function encodeWordScopeFingerprint(
-  entries: readonly (readonly [id: string, signature: string])[],
+  entries: readonly WordScopeEntry[],
 ): string {
   return WORD_SCOPE_PREFIX + JSON.stringify(entries);
 }
@@ -71,7 +82,7 @@ export function isWordScopeFingerprint(value: string): boolean {
 
 export function decodeWordScopeFingerprint(
   value: string,
-): Map<string, string> | null {
+): WordScopeEntry[] | null {
   if (!isWordScopeFingerprint(value)) return null;
   try {
     const entries: unknown = JSON.parse(value.slice(WORD_SCOPE_PREFIX.length));
@@ -80,19 +91,22 @@ export function decodeWordScopeFingerprint(
       !entries.every(
         (entry) =>
           Array.isArray(entry) &&
-          entry.length === 2 &&
-          entry.every((part) => typeof part === "string"),
+          entry.length === 3 &&
+          typeof entry[0] === "string" &&
+          typeof entry[1] === "string" &&
+          Number.isSafeInteger(entry[2]) &&
+          (entry[2] as number) >= 0,
       )
     )
       return null;
-    return new Map(entries as [string, string][]);
+    return entries as WordScopeEntry[];
   } catch {
     return null;
   }
 }
 
 /** Where a written block differs, as '/word/document.xml body block N: field'; never content.
- * `confined`: every difference lies in a paragraph the write replaced, so rewriting those
+ * `confined`: every difference lies in a paragraph the write rewrote in place, so rewriting those
  * paragraphs undoes all of it. */
 export type WordInPlaceVerification =
   | { ok: true }
@@ -100,19 +114,37 @@ export type WordInPlaceVerification =
 
 const MAX_LOCATIONS = 8;
 
+export interface WordInPlaceVerifyInput {
+  /** The expected block sequence over the live document the write started from. */
+  slots: readonly WordInPlaceSlot[];
+  /** The live document the write started from; keep slots name its blocks. */
+  base: WordAuthoringSnapshot;
+  /** The captured snapshot the ops were derived from. */
+  snapshot: WordAuthoringSnapshot;
+  /** The dry-run compile, and where each op's block sits in it. */
+  compiled: WordAuthoringSnapshot;
+  compiledIndex: ReadonlyMap<WordInPlaceOp, number>;
+  after: WordAuthoringSnapshot;
+}
+
 /**
- * Block tier: untouched blocks keep their native signature, written paragraphs have exactly the
- * typed state the plan asked for, written table cells equal the compiled table, and nothing outside
- * the body changed beyond list-definition identity.
+ * Block tier: untouched blocks keep their native signature, written and inserted paragraphs have
+ * exactly the typed state the plan asked for, written table cells equal the compiled table, and
+ * nothing outside the body changed beyond list-definition identity.
  */
-export function verifyWordInPlaceOutput(
-  ops: readonly WordInPlaceOp[],
-  baseline: WordAuthoringSnapshot,
-  compiled: WordAuthoringSnapshot,
-  after: WordAuthoringSnapshot,
-): WordInPlaceVerification {
+export function verifyWordInPlaceOutput({
+  slots,
+  base,
+  snapshot,
+  compiled,
+  compiledIndex,
+  after,
+}: WordInPlaceVerifyInput): WordInPlaceVerification {
   const locations: string[] = [];
-  let confined = true;
+  const ops = slots.flatMap((slot) => (slot.kind === "op" ? [slot.op] : []));
+  let confined = ops.every(
+    (op) => op.kind === "cell" || (op.kind === "text" && !op.restyle),
+  );
   const at = (index: number, field: string, written = false) => {
     locations.push(`/word/document.xml body block ${index + 1}: ${field}`);
     if (!written) confined = false;
@@ -123,32 +155,40 @@ export function verifyWordInPlaceOutput(
       locations: ["/word/document.xml: issue"],
       confined: false,
     };
-  if (after.blocks.length !== baseline.blocks.length)
+  if (after.blocks.length !== slots.length)
     return {
       ok: false,
       locations: ["/word/document.xml body: count"],
       confined: false,
     };
-  const before = createNativeContentSignature(baseline.ooxml);
+  const before = createNativeContentSignature(base.ooxml);
   const actual = createNativeContentSignature(after.ooxml);
   const expected = createNativeContentSignature(compiled.ooxml);
-  const byRef = new Map(ops.map((op) => [op.ref, op]));
-  baseline.blocks.forEach((source, i) => {
-    const op = byRef.get(source.ref);
+  const bases = new Map(base.blocks.map((b) => [b.ref, b]));
+  slots.forEach((slot, i) => {
     const written = after.blocks[i];
-    if (!op) {
-      if (before(source.xml) !== actual(written.xml)) at(i, "signature");
-    } else if (op.kind === "cell") {
+    if (slot.kind === "keep") {
+      const source = bases.get(slot.ref);
+      if (!source || before(source.xml) !== actual(written.xml))
+        at(i, "signature");
+      return;
+    }
+    const { op } = slot;
+    if (op.kind === "cell") {
       // The table also holds cells the write never touched.
-      const table = compiled.blocks[i];
+      const table = compiled.blocks[compiledIndex.get(op) ?? -1];
       if (!table || expected(table.xml) !== actual(written.xml))
         at(i, "signature");
-    } else {
-      const issue = wordInPlaceTypedIssue(source, op, written);
-      if (issue) at(i, issue, true);
+      return;
     }
+    const issue = wordInPlaceTypedIssue(
+      wordInPlaceExpected(op, snapshot),
+      written,
+      after.styles,
+    );
+    if (issue) at(i, issue, true);
   });
-  const counts = [baseline.ooxml, after.ooxml].map(wordPackageCounts);
+  const counts = [base.ooxml, after.ooxml].map(wordPackageCounts);
   if (
     counts[0].parts - counts[0].webextensionParts !==
       counts[1].parts - counts[1].webextensionParts ||
@@ -156,7 +196,7 @@ export function verifyWordInPlaceOutput(
   ) {
     locations.push("/: package");
     confined = false;
-  } else if (!sameWordPreservedParts(baseline.ooxml, after.ooxml, "content")) {
+  } else if (!sameWordPreservedParts(base.ooxml, after.ooxml, "content")) {
     locations.push("/: preserved parts");
     confined = false;
   }

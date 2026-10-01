@@ -42,6 +42,11 @@ export interface WordOoxmlHostOptions {
   replaceDropsRunProperties?: boolean;
   /** Paragraph.text of table-cell paragraphs ends with this, as a host may report the end-of-cell mark. */
   cellParagraphTextSuffix?: string;
+  /** Adversarial: insertParagraph copies all of the anchor's paragraph properties, not just its
+   * style and list membership. */
+  insertInheritsAnchorProperties?: boolean;
+  /** Adversarial: attachToList joins a new, content-equal list instance instead of the list's own. */
+  attachToListNewNum?: boolean;
 }
 
 /** Adversarial insertText "Replace" behaviour, switchable mid-test. */
@@ -129,6 +134,99 @@ function setRunMark(run: Element, names: string[], value: string | null): void {
     );
   }
 }
+
+/** CT_PPrBase child order; Word writes paragraph properties in this order. */
+const PARAGRAPH_PROPERTY_ORDER = [
+  "pStyle",
+  "keepNext",
+  "keepLines",
+  "pageBreakBefore",
+  "framePr",
+  "widowControl",
+  "numPr",
+  "suppressLineNumbers",
+  "pBdr",
+  "shd",
+  "tabs",
+  "suppressAutoHyphens",
+  "kinsoku",
+  "wordWrap",
+  "overflowPunct",
+  "topLinePunct",
+  "autoSpaceDE",
+  "autoSpaceDN",
+  "bidi",
+  "adjustRightInd",
+  "snapToGrid",
+  "spacing",
+  "ind",
+  "contextualSpacing",
+  "mirrorIndents",
+  "suppressOverlap",
+  "jc",
+  "textDirection",
+  "textAlignment",
+  "textboxTightWrap",
+  "outlineLvl",
+  "divId",
+  "cnfStyle",
+  "rPr",
+  "sectPr",
+  "pPrChange",
+];
+
+/** Replace (or with `value` null, remove) one paragraph property, keeping schema order. */
+function setParagraphProperty(
+  paragraph: Element,
+  name: string,
+  value: Element | null,
+): void {
+  let props = child(paragraph, "pPr");
+  if (!props) {
+    if (!value) return;
+    props = paragraph.ownerDocument.createElementNS(W, "w:pPr");
+    paragraph.prepend(props);
+  }
+  child(props, name)?.remove();
+  if (value) {
+    const position = PARAGRAPH_PROPERTY_ORDER.indexOf(name);
+    props.insertBefore(
+      value,
+      Array.from(props.children).find(
+        (e) =>
+          e.namespaceURI === W &&
+          PARAGRAPH_PROPERTY_ORDER.indexOf(e.localName) > position,
+      ) ?? null,
+    );
+  }
+  if (!props.children.length && !props.attributes.length) props.remove();
+}
+
+const numIdOf = (paragraph: Element) => {
+  const numPr = child(child(paragraph, "pPr"), "numPr");
+  const id = child(numPr, "numId")?.getAttributeNS(W, "val");
+  return id && id !== "0" ? id : undefined;
+};
+
+/** Paragraph.styleBuiltIn names and the canonical w:name Word gives each style. */
+const BUILT_IN_STYLE_NAMES: Record<string, string> = {
+  Normal: "Normal",
+  Title: "Title",
+  Subtitle: "Subtitle",
+  Quote: "Quote",
+  IntenseQuote: "Intense Quote",
+  NoSpacing: "No Spacing",
+  ListParagraph: "List Paragraph",
+  Caption: "caption",
+  TocHeading: "TOC Heading",
+  Bibliography: "Bibliography",
+  ...Object.fromEntries(
+    Array.from({ length: 9 }, (_, i) => [
+      [`Heading${i + 1}`, `heading ${i + 1}`],
+      [`Toc${i + 1}`, `toc ${i + 1}`],
+    ]).flat(),
+  ),
+};
 
 function newRun(doc: Document, text: string, props?: Element): Element {
   const run = doc.createElementNS(W, "w:r");
@@ -647,7 +745,100 @@ export function installWordOoxmlHost(
       text:
         paragraphText(p) +
         (nesting ? (settings.cellParagraphTextSuffix ?? "") : ""),
+      isListItem: numIdOf(p) !== undefined,
     };
+  };
+  const paragraphStyles = () => {
+    const root = partRoot(live(), "/word/styles.xml");
+    return root
+      ? elements(root, W, "style").filter(
+          (style) => style.getAttributeNS(W, "type") === "paragraph",
+        )
+      : [];
+  };
+  const styleName = (style: Element) =>
+    child(style, "name")?.getAttributeNS(W, "val") ?? "";
+  /** Word omits w:pStyle for the default paragraph style. */
+  const applyStyle = (paragraph: Element, style: Element) => {
+    const styles = paragraphStyles();
+    const fallback = styles.some((s) => s.getAttributeNS(W, "default") === "1")
+      ? undefined
+      : styles.find((s) => styleName(s) === "Normal");
+    if (style.getAttributeNS(W, "default") === "1" || style === fallback) {
+      setParagraphProperty(paragraph, "pStyle", null);
+      return;
+    }
+    const pStyle = paragraph.ownerDocument.createElementNS(W, "w:pStyle");
+    pStyle.setAttributeNS(W, "w:val", style.getAttributeNS(W, "styleId") ?? "");
+    setParagraphProperty(paragraph, "pStyle", pStyle);
+  };
+  /** Word adds a built-in style the first time it is applied. */
+  const builtInStyle = (builtIn: string): Element => {
+    const name = BUILT_IN_STYLE_NAMES[builtIn];
+    if (!name) throw new Error(`Unsupported built-in style ${builtIn}.`);
+    const existing = paragraphStyles().find(
+      (style) => styleName(style).toLowerCase() === name.toLowerCase(),
+    );
+    if (existing) return existing;
+    const root = partRoot(live(), "/word/styles.xml");
+    if (!root) throw new Error("The document has no styles part.");
+    const heading = /^Heading([1-9])$/.exec(builtIn);
+    const style = parse(
+      `<w:style xmlns:w="${W}" w:type="paragraph" w:styleId="${builtIn}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>${
+        heading
+          ? `<w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="40" w:after="0"/><w:outlineLvl w:val="${Number(heading[1]) - 1}"/></w:pPr><w:rPr><w:sz w:val="26"/></w:rPr>`
+          : ""
+      }</w:style>`,
+    ).documentElement;
+    const made = root.ownerDocument.importNode(style, true);
+    root.append(made);
+    return made;
+  };
+  const listProxy = (resolve: () => Element) => {
+    const loaded = new Map<string, unknown>();
+    return {
+      load: () =>
+        enqueue(false, "load", () => {
+          const id = numIdOf(resolve());
+          loaded.set("isNullObject", id === undefined);
+          if (id !== undefined) loaded.set("id", Number(id));
+        }),
+      get isNullObject() {
+        return loadedValue(loaded, "isNullObject");
+      },
+      get id() {
+        return loadedValue(loaded, "id");
+      },
+    };
+  };
+  /** A list instance with the same definition and overrides as `numId`, as Word may create. */
+  const copyNum = (numId: string): string => {
+    const numbering = partRoot(live(), "/word/numbering.xml");
+    const original = numbering
+      ? elements(numbering, W, "num").find(
+          (e) => e.getAttributeNS(W, "numId") === numId,
+        )
+      : undefined;
+    if (!numbering || !original) throw itemNotFound();
+    const copy = original.cloneNode(true) as Element;
+    const next = nextId(
+      elements(numbering, W, "num").map(
+        (e) => e.getAttributeNS(W, "numId") ?? "",
+      ),
+    );
+    copy.setAttributeNS(W, "w:numId", next);
+    numbering.append(copy);
+    return next;
+  };
+  const setNumbering = (paragraph: Element, level: number, numId: string) => {
+    const doc = paragraph.ownerDocument;
+    const numPr = doc.createElementNS(W, "w:numPr");
+    const ilvl = doc.createElementNS(W, "w:ilvl");
+    ilvl.setAttributeNS(W, "w:val", String(level));
+    const id = doc.createElementNS(W, "w:numId");
+    id.setAttributeNS(W, "w:val", numId);
+    numPr.append(ilvl, id);
+    setParagraphProperty(paragraph, "numPr", numPr);
   };
   const paragraphOoxml = (p: Element) => {
     if (paragraphOoxmlFault !== undefined)
@@ -698,6 +889,60 @@ export function installWordOoxmlHost(
       },
       get text() {
         return loadedValue(loaded, "text");
+      },
+      get isListItem() {
+        return loadedValue(loaded, "isListItem");
+      },
+      get listOrNullObject() {
+        return listProxy(target);
+      },
+      get listItem() {
+        return {
+          set level(value: number) {
+            enqueue(true, "listItem.level", () => {
+              const p = target();
+              const numId = numIdOf(p);
+              if (numId === undefined) throw itemNotFound();
+              setNumbering(p, value, numId);
+            });
+          },
+        };
+      },
+      attachToList: (listId: number, level: number) => {
+        enqueue(true, "attachToList", () => {
+          const p = target();
+          if (numIdOf(p) !== undefined)
+            throw Object.assign(
+              new Error("The paragraph is already a list item."),
+              { code: "InvalidArgument" },
+            );
+          setNumbering(
+            p,
+            level,
+            settings.attachToListNewNum
+              ? copyNum(String(listId))
+              : String(listId),
+          );
+        });
+        return listProxy(target);
+      },
+      detachFromList: () =>
+        enqueue(true, "detachFromList", () =>
+          setParagraphProperty(target(), "numPr", null),
+        ),
+      set styleBuiltIn(value: string) {
+        enqueue(true, "styleBuiltIn", () =>
+          applyStyle(target(), builtInStyle(value)),
+        );
+      },
+      set style(value: string) {
+        enqueue(true, "style", () => {
+          const style = paragraphStyles().find(
+            (s) => styleName(s).toLowerCase() === value.toLowerCase(),
+          );
+          if (!style) throw itemNotFound();
+          applyStyle(target(), style);
+        });
       },
       getText: () => result(() => paragraphText(target())),
       getOoxml: () => result(() => paragraphOoxml(target())),
@@ -755,7 +1000,17 @@ export function installWordOoxmlHost(
           const anchor = target();
           made = anchor.ownerDocument.createElementNS(W, "w:p");
           const props = child(anchor, "pPr");
-          if (props) made.append(props.cloneNode(true));
+          if (props) {
+            const copy = props.cloneNode(true) as Element;
+            if (!settings.insertInheritsAnchorProperties)
+              for (const property of Array.from(copy.children))
+                if (
+                  property.namespaceURI !== W ||
+                  !["pStyle", "numPr"].includes(property.localName)
+                )
+                  property.remove();
+            if (copy.children.length) made.append(copy);
+          }
           if (text) made.append(newRun(anchor.ownerDocument, text));
           anchor.parentElement!.insertBefore(
             made,

@@ -172,6 +172,33 @@ describe("Word apply diagnostics", () => {
           details: { route: "import", routeReason: "alignment" },
         }),
       ).toContain("Route: import (alignment)");
+      const scoped = renderWordDiagnosticReport("apply", "interrupted", {
+        stage: "verify",
+        reason: "output-mismatch",
+        details: {
+          route: "in-place",
+          outsideChanges: 2,
+          locations: ["/word/document.xml body block 4: list"],
+        },
+      });
+      expect(scoped).toContain(
+        "Changed elsewhere before apply: 2 blocks (left untouched)",
+      );
+      expect(scoped).toContain("Where: /word/document.xml body block 4: list");
+      expect(
+        renderWordDiagnosticReport("apply", "applied", {
+          stage: "verify",
+          reason: "output-mismatch",
+          details: { route: "import", routeReason: "boundary" },
+        }),
+      ).toContain("Route: import (boundary)");
+      expect(
+        renderWordDiagnosticReport("apply", "stale", {
+          stage: "preflight",
+          reason: "source-changed",
+          details: { outsideChanges: "many" as never },
+        }),
+      ).not.toContain("Changed elsewhere");
     } finally {
       delete window.WORD_FORCE_IMPORT_APPLY;
     }

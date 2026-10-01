@@ -21,9 +21,18 @@ import {
 } from "../wordDocumentPackage";
 import { wordDocumentFingerprint } from "../wordDocumentXml";
 import { wordPackageCounts } from "../wordFullDocumentComparison";
+import {
+  ALL_WORD_IN_PLACE_CAPABILITIES,
+  setWordInPlaceCapabilitiesForTests,
+} from "../wordInPlaceCapabilities";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type { WordDocumentApplyResult } from "../wordApplyDocumentPlan";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+  WordPlanEntry,
+} from "../wordDocumentPlan";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -263,5 +272,108 @@ describe("repeated in-place Apply", { timeout: 60_000 }, () => {
     );
     expect(reverted.status).toBe("reverted");
     expect(wordDocumentFingerprint(host.ooxml())).toBe(beforeLast);
+  });
+});
+
+/** Continue the first list after its last item, delete the item before it, and split the closing
+ * paragraph: one insert, one delete and one split per cycle. */
+function structuralPlan(
+  snapshot: WordAuthoringSnapshot,
+  cycle: number,
+): WordDocumentPlan {
+  const items = snapshot.blocks.filter((b) => b.list === "existing-1");
+  const last = items.at(-1)!;
+  const removed = items.at(-2)!;
+  const closing = snapshot.blocks.at(-1)!;
+  const entries = snapshot.blocks.flatMap((b): WordPlanEntry[] => {
+    if (b.ref === removed.ref) return [];
+    if (b.ref === closing.ref)
+      return [
+        {
+          kind: "replace",
+          source: [b.ref],
+          blocks: [
+            { id: `c${cycle}`, type: "paragraph", text: `Closing ${cycle}.` },
+            { id: `d${cycle}`, type: "paragraph", text: `Detail ${cycle}.` },
+          ],
+        },
+      ];
+    const kept: WordPlanEntry = { kind: "keep", source: [b.ref] };
+    return b.ref === last.ref
+      ? [
+          kept,
+          {
+            kind: "insert",
+            blocks: [
+              {
+                id: `step${cycle}`,
+                type: "list-item",
+                text: `Step ${cycle}.`,
+                list: "existing-1",
+                level: 0,
+                ordered: true,
+                styleRef: "ListParagraph",
+              },
+            ],
+          },
+        ]
+      : [kept];
+  });
+  return {
+    version: 1,
+    snapshot: snapshot.token,
+    readToken: "read-proof",
+    scope: "document",
+    entries,
+    deleted: [{ source: [removed.ref], reason: "Superseded" }],
+  };
+}
+
+describe("repeated structural in-place Apply", { timeout: 60_000 }, () => {
+  afterEach(() => setWordInPlaceCapabilitiesForTests(undefined));
+
+  it("keeps every package count constant over five inserts, deletes and splits", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    const host = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    const results: WordDocumentApplyResult[] = [];
+    for (let cycle = 1; cycle <= 5; cycle++) {
+      const snapshot = await captureRealisticSnapshot(`message-${cycle}`);
+      const result = await applyWordDocumentPlan(
+        JSON.stringify(structuralPlan(snapshot, cycle)),
+        snapshot,
+        `message-${cycle}`,
+      );
+      expect(
+        result.status,
+        renderWordDiagnosticReport("apply", result.status, result.diagnostic),
+      ).toBe("applied");
+      results.push(result);
+      expect(fullShape(host.ooxml())).toEqual(
+        fullShape(realisticWordPackageXml()),
+      );
+    }
+    for (const result of results)
+      expect(result.outcome).toEqual({
+        route: "in-place",
+        tier: "block",
+        adjustments: [],
+        ops: 4,
+      });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(host.ooxml()).toContain("Step 5.");
+    expect(host.ooxml()).toContain("Detail 5.");
+    const last = results.at(-1)!;
+    const reverted = await revertWordDocumentPlan(
+      last.before!,
+      last.afterFingerprint!,
+    );
+    expect(reverted.status).toBe("reverted");
+    expect(host.ooxml()).not.toContain("Step 5.");
+    expect(host.ooxml()).toContain("Step 4.");
+    expect(fullShape(host.ooxml())).toEqual(
+      fullShape(realisticWordPackageXml()),
+    );
   });
 });

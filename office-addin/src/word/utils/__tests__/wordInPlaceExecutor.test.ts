@@ -501,7 +501,7 @@ describe("in-place failure and recovery", { timeout: 30_000 }, () => {
     expect(snapshot.used).toBe(false);
   });
 
-  it("stops without writing when the document changed before the backup", async () => {
+  it("stops without writing when the document changed between the first paragraph read and the backup", async () => {
     const host = install();
     const snapshot = await captureRealisticSnapshot();
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -517,7 +517,11 @@ describe("in-place failure and recovery", { timeout: 30_000 }, () => {
       save,
     );
     expect(result.status).toBe("stale");
-    expect(result.diagnostic?.details?.parts).toEqual(["/word/document.xml"]);
+    expect(result.diagnostic).toMatchObject({
+      stage: "preflight",
+      reason: "source-changed",
+      details: { route: "in-place", paragraphs: expect.any(Object) },
+    });
     expect(save).not.toHaveBeenCalled();
     expect(mutations(host.events)).toEqual([]);
   });
@@ -551,11 +555,13 @@ describe("in-place failure and recovery", { timeout: 30_000 }, () => {
       enabled: false,
       reason: "latched",
     });
-    expect(
-      decodeWordInPlaceBackup(result.before!).inPlace?.ops.map(
-        (op) => op.afterSignature === op.originalSignature,
-      ),
-    ).toEqual([false, true]);
+    const written = Object.fromEntries(
+      decodeWordInPlaceBackup(result.before!).inPlace!.ops.map((op) => [
+        snapshot.blocks.find((b) => b.ref === op.ref)!.text.slice(0, 6),
+        op.afterSignature !== op.originalSignature,
+      ]),
+    );
+    expect(written).toEqual({ Status: false, Closin: true });
     expect(host.ooxml()).toContain("Bye.");
     expect(host.ooxml()).toContain("the pilot is on track.");
 

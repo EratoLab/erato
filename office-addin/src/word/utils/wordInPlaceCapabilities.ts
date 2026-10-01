@@ -67,9 +67,12 @@ function currentPlatform(): WordInPlacePlatform {
     : "unknown";
 }
 
+let override: WordInPlaceCapabilities | undefined;
+
 export function wordInPlaceCapabilities(
   platform: WordInPlacePlatform = currentPlatform(),
 ): WordInPlaceCapabilities {
+  if (override) return { ...override };
   const gates = WORD_IN_PLACE_MECHANISMS[platform];
   return Object.fromEntries(
     WORD_IN_PLACE_MECHANISMS_LIST.map((mechanism) => [
@@ -77,4 +80,16 @@ export function wordInPlaceCapabilities(
       gates[mechanism] === true,
     ]),
   ) as WordInPlaceCapabilities;
+}
+
+/** Every mechanism on, as the native probes would confirm them. */
+export const ALL_WORD_IN_PLACE_CAPABILITIES: WordInPlaceCapabilities =
+  Object.fromEntries(
+    WORD_IN_PLACE_MECHANISMS_LIST.map((mechanism) => [mechanism, true]),
+  ) as WordInPlaceCapabilities;
+
+export function setWordInPlaceCapabilitiesForTests(
+  capabilities: WordInPlaceCapabilities | undefined,
+): void {
+  override = capabilities;
 }

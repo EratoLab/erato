@@ -61,6 +61,8 @@ export interface WordDiagnosticDetails {
   paragraphs?: { predicted: number; live: number };
   /** Changes Word wrote before it stopped, and those it never reached. */
   partial?: { applied: number; untouched: number };
+  /** Blocks changed elsewhere since the capture, which an in-place write leaves untouched. */
+  outsideChanges?: number;
   error?: string;
 }
 
@@ -278,6 +280,11 @@ export function renderWordDiagnosticReport(
     isCount(details.partial.untouched)
       ? [
           `Partly written: ${details.partial.applied} changed, ${details.partial.untouched} untouched`,
+        ]
+      : []),
+    ...(isCount(details?.outsideChanges)
+      ? [
+          `Changed elsewhere before apply: ${details.outsideChanges} blocks (left untouched)`,
         ]
       : []),
     ...(details?.verifyTier &&

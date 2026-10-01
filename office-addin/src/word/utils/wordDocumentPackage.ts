@@ -241,18 +241,34 @@ export function insertWordDocumentFile(
   );
 }
 
-/** An in-place write, recorded in pane memory next to the exact original file so it can be undone
- * paragraph by paragraph without touching later edits elsewhere. */
+/** One change of an in-place write, recorded in pane memory next to the exact original file so it
+ * can be undone without touching later edits elsewhere. */
 export type WordInPlaceBackupOp = WordInPlaceOp & {
-  /** Session-scoped Paragraph.uniqueLocalId of the written paragraph. */
-  id: string;
-  originalSignature: string;
+  /** Session-scoped Paragraph.uniqueLocalId of the written or deleted paragraph, or of the inserted
+   * one once Word created it. */
+  id?: string;
+  /** Paragraph.getOoxml signature before the write; none for an inserted paragraph. */
+  originalSignature?: string;
+  /** Signature after the write; none for a deleted paragraph. */
   afterSignature?: string;
+  /** ID of a paragraph that stays in the list this one leaves, so Restore can rejoin it. */
+  listAnchor?: string;
 };
+/** Touched paragraphs between two untouched ones (null at the start or end of the body). Restore
+ * puts the region back exactly as `before` was, whatever the write left inside it. */
+export interface WordInPlaceRegion {
+  start: string | null;
+  end: string | null;
+  /** Ops whose paragraphs filled the region before the write, in document order. */
+  before: number[];
+  /** IDs of the paragraphs inside the region after the write, in document order, once known. */
+  after?: string[];
+}
 export interface WordInPlaceBackup {
   v: 1;
   ops: WordInPlaceBackupOp[];
-  /** The write did not verify, but every difference lies in the written paragraphs: when later
+  regions: WordInPlaceRegion[];
+  /** The write did not verify, but every difference lies in the rewritten paragraphs: when later
    * edits keep the exact restore from running, undoing those paragraphs is still complete. */
   scopedFallback?: true;
 }
@@ -307,17 +323,88 @@ function parseBackup(value: string): {
 const isString = (v: unknown): v is string => typeof v === "string";
 const isIndex = (v: unknown): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
+const isMarks = (v: unknown): v is Record<string, unknown> =>
+  !!v &&
+  typeof v === "object" &&
+  ["bold", "italic", "underline"].every(
+    (mark) => typeof (v as Record<string, unknown>)[mark] === "boolean",
+  );
 const isRuns = (v: unknown) =>
   Array.isArray(v) &&
-  v.every(
-    (run: Record<string, unknown>) =>
-      !!run &&
-      typeof run === "object" &&
-      isString(run.text) &&
-      ["bold", "italic", "underline"].every(
-        (mark) => typeof run[mark] === "boolean",
-      ),
+  v.every((run: unknown) => isMarks(run) && isString(run.text));
+const isState = (v: unknown) => {
+  if (!v || typeof v !== "object") return false;
+  const state = v as Record<string, unknown>;
+  const style = state.style as Record<string, unknown> | undefined;
+  return (
+    ["paragraph", "heading", "list-item"].includes(String(state.type)) &&
+    (state.level === undefined || isIndex(state.level)) &&
+    [state.styleRef, state.list, state.listRef].every(
+      (value) => value === undefined || isString(value),
+    ) &&
+    (state.ordered === undefined || typeof state.ordered === "boolean") &&
+    !!style &&
+    typeof style === "object" &&
+    (isString(style.builtIn) || isString(style.name))
   );
+};
+const isOptional = (v: unknown) => v === undefined || isString(v);
+
+function parseInPlaceOp(entry: Record<string, unknown>): boolean {
+  if (
+    !entry ||
+    typeof entry !== "object" ||
+    !isString(entry.ref) ||
+    !isIndex(entry.paragraph) ||
+    !isOptional(entry.id) ||
+    !isOptional(entry.originalSignature) ||
+    !isOptional(entry.afterSignature) ||
+    !isOptional(entry.listAnchor)
+  )
+    return false;
+  switch (entry.kind) {
+    case "text":
+      return (
+        isRuns(entry.runs) &&
+        isRuns(entry.original) &&
+        isString(entry.id) &&
+        isString(entry.originalSignature) &&
+        (entry.restyle === undefined ||
+          (!!entry.restyle &&
+            typeof entry.restyle === "object" &&
+            isState((entry.restyle as Record<string, unknown>).from) &&
+            isState((entry.restyle as Record<string, unknown>).to)))
+      );
+    case "cell":
+      return (
+        isString(entry.id) &&
+        isString(entry.originalSignature) &&
+        isIndex(entry.rowIndex) &&
+        isIndex(entry.cellIndex) &&
+        isString(entry.text) &&
+        isString(entry.original)
+      );
+    case "insert":
+      return (
+        ["After", "Before"].includes(String(entry.location)) &&
+        isString(entry.block) &&
+        isRuns(entry.runs) &&
+        isState(entry.state) &&
+        entry.originalSignature === undefined
+      );
+    case "delete":
+      return (
+        ["After", "Before"].includes(String(entry.recreate)) &&
+        isRuns(entry.original) &&
+        isState(entry.state) &&
+        isString(entry.id) &&
+        isString(entry.originalSignature)
+      );
+    default:
+      return false;
+  }
+}
 
 function parseInPlaceBackup(value: unknown): WordInPlaceBackup | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -326,30 +413,26 @@ function parseInPlaceBackup(value: unknown): WordInPlaceBackup | undefined {
     record.v !== 1 ||
     !Array.isArray(record.ops) ||
     !record.ops.length ||
+    !Array.isArray(record.regions) ||
+    !record.regions.length ||
     (record.scopedFallback !== undefined && record.scopedFallback !== true)
   )
     return undefined;
-  const valid = record.ops.every((entry: Record<string, unknown>) => {
-    if (
-      !entry ||
-      typeof entry !== "object" ||
-      !isString(entry.ref) ||
-      !isString(entry.id) ||
-      !isIndex(entry.paragraph) ||
-      !isString(entry.originalSignature) ||
-      (entry.afterSignature !== undefined && !isString(entry.afterSignature))
-    )
-      return false;
-    if (entry.kind === "text")
-      return isRuns(entry.runs) && isRuns(entry.original);
-    return (
-      entry.kind === "cell" &&
-      isIndex(entry.rowIndex) &&
-      isIndex(entry.cellIndex) &&
-      isString(entry.text) &&
-      isString(entry.original)
+  const ops = record.ops as Record<string, unknown>[];
+  const valid =
+    ops.every(parseInPlaceOp) &&
+    (record.regions as Record<string, unknown>[]).every(
+      (region) =>
+        !!region &&
+        typeof region === "object" &&
+        [region.start, region.end].every((id) => id === null || isString(id)) &&
+        Array.isArray(region.before) &&
+        region.before.every(
+          (index: unknown) => isIndex(index) && index < ops.length,
+        ) &&
+        (region.after === undefined ||
+          (Array.isArray(region.after) && region.after.every(isString))),
     );
-  });
   return valid ? (record as unknown as WordInPlaceBackup) : undefined;
 }
 

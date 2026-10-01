@@ -19,6 +19,10 @@ import {
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
 } from "../wordDocumentPackage";
+import {
+  ALL_WORD_IN_PLACE_CAPABILITIES,
+  setWordInPlaceCapabilitiesForTests,
+} from "../wordInPlaceCapabilities";
 import { resetWordInPlaceLatchForTests } from "../wordInPlaceSwitch";
 import { predictWordBodyParagraphs } from "../wordLiveParagraphs";
 
@@ -27,6 +31,10 @@ import type {
   WordDocumentApplyResult,
   WordDocumentRevertResult,
 } from "../wordApplyDocumentPlan";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+} from "../wordDocumentPlan";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 /** The values firstDivergence may print; anything else must be masked. */
@@ -194,6 +202,28 @@ async function unverifiedStatusWrite(host: WordOoxmlHost) {
   return applyWordDocumentPlan(JSON.stringify(plan), snapshot, "message-A");
 }
 
+/** Insert a list item carrying the sentinel right after the status paragraph, which is not in the list. */
+function sentinelListItem(snapshot: WordAuthoringSnapshot): WordDocumentPlan {
+  setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+  const plan = statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`);
+  const at = plan.entries.findIndex((entry) => entry.kind === "replace");
+  plan.entries.splice(at + 1, 0, {
+    kind: "insert",
+    blocks: [
+      {
+        id: "item",
+        type: "list-item",
+        text: `${SENTINEL} item`,
+        list: "existing-1",
+        level: 0,
+        ordered: true,
+        styleRef: "ListParagraph",
+      },
+    ],
+  });
+  return plan;
+}
+
 const inPlaceFailures: [
   string,
   (
@@ -293,6 +323,64 @@ const inPlaceFailures: [
     { status: "interrupted", reason: "host-error" },
   ],
   [
+    "scope check after an edit to the target",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      host.editParagraph(statusIndex(host), `Status: ${SENTINEL} by hand.`);
+      return applyWordDocumentPlan(
+        JSON.stringify(sentinelListItem(snapshot)),
+        snapshot,
+        "message-A",
+      );
+    },
+    { status: "stale", reason: "source-changed" },
+  ],
+  [
+    "structural write that joins a new list instance",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      host.editParagraph(
+        predictWordBodyParagraphs(host.ooxml()).findIndex(
+          (p) => p.text === "Closing paragraph.",
+        ),
+        `${SENTINEL} typed elsewhere.`,
+      );
+      return applyWordDocumentPlan(
+        JSON.stringify(sentinelListItem(snapshot)),
+        snapshot,
+        "message-A",
+      );
+    },
+    { status: "interrupted", reason: "output-mismatch" },
+  ],
+  [
+    "rejected structural batch",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      host.failAtCommand(4, `Word quoted "${SENTINEL}" in this error`);
+      return applyWordDocumentPlan(
+        JSON.stringify(sentinelListItem(snapshot)),
+        snapshot,
+        "message-A",
+      );
+    },
+    { status: "interrupted", reason: "host-error" },
+  ],
+  [
+    "Restore of a structural write over a later edit",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await applyWordDocumentPlan(
+        JSON.stringify(sentinelListItem(snapshot)),
+        snapshot,
+        "message-A",
+      );
+      host.editParagraph(statusIndex(host) + 1, `${SENTINEL} by hand.`);
+      return revertWordDocumentPlan(applied.before!, applied.afterFingerprint!);
+    },
+    { status: "stale", reason: "source-changed" },
+  ],
+  [
     "Restore that does not verify",
     async (host) => {
       const snapshot = await captureRealisticSnapshot();
@@ -309,7 +397,10 @@ const inPlaceFailures: [
 ];
 
 describe("in-place diagnostics privacy", { timeout: 30_000 }, () => {
-  afterEach(() => resetWordInPlaceLatchForTests());
+  afterEach(() => {
+    resetWordInPlaceLatchForTests();
+    setWordInPlaceCapabilitiesForTests(undefined);
+  });
 
   it.each(inPlaceFailures)(
     "keeps document content, paragraph IDs and scope fingerprints out of the %s report and logs",
@@ -318,6 +409,7 @@ describe("in-place diagnostics privacy", { timeout: 30_000 }, () => {
       const host = installWordOoxmlHost(realisticWordPackageXml(), {
         profile: "word-pc-16.0.20326",
         replaceDropsRunProperties: name.includes("unexpected write"),
+        attachToListNewNum: name.includes("new list instance"),
       });
       const result = await fail(host);
       expect(result.status).toBe(expected.status);
