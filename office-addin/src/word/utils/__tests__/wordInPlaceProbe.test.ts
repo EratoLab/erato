@@ -1,10 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  W,
   packageXml,
   paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
-import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  editWordPackage,
+  installWordOoxmlHost,
+} from "../../../test/mocks/word/ooxmlHost";
+import {
+  SENTINEL,
+  realisticWordPackageXml,
+} from "../../../test/mocks/word/realisticWordFixtures";
 import { runWordInPlaceProbe } from "../wordInPlaceProbe";
 
 afterEach(() => {
@@ -122,4 +130,48 @@ describe("in-place native probe", () => {
       expect(result.probes[id]).toEqual({ result: "not-run" });
     expect(JSON.stringify(result)).not.toContain("Probe");
   });
+
+  it("measures tracked writes under the developer's own mode and reads an existing header", async () => {
+    const host = installWordOoxmlHost(scratchWithHeader(), {
+      profile: "word-pc-16.0.20326",
+      trackChanges: true,
+    });
+    host.setTrackingMode("TrackAll");
+    const setter = vi.spyOn(host.document, "changeTrackingMode", "set");
+    const result = await runWordInPlaceProbe({ idleMs: 0 });
+    expect(result.status).toBe("completed");
+    expect(result.trackingMode).toBe("TrackAll");
+    expect(setter).not.toHaveBeenCalled();
+    expect(result.probes.P9).toEqual({
+      revisions: 2,
+      recordsInsertion: true,
+      recordsDeletion: true,
+      currentText: true,
+      originalText: true,
+      textExcludesDeleted: true,
+      insertedParagraphTracked: true,
+      modeUnchanged: true,
+      rejectExact: true,
+      rejectRemovesInserted: true,
+    });
+    expect(result.probes.P10).toMatchObject({ tokensRejoin: true });
+    expect(result.probes.P11).toEqual({
+      predicted: 1,
+      live: 1,
+      aligned: true,
+      createsNoPart: true,
+    });
+    expect(JSON.stringify(result)).not.toContain("Probe");
+    expect(JSON.stringify(result)).not.toContain(SENTINEL);
+  });
 });
+
+/** An empty body with the realistic document's header and footer. */
+function scratchWithHeader(): string {
+  return editWordPackage(realisticWordPackageXml(), (doc) => {
+    const body = doc.getElementsByTagNameNS(W, "body")[0];
+    for (const child of Array.from(body.children))
+      if (child.localName !== "sectPr") child.remove();
+    body.prepend(doc.createElementNS(W, "w:p"));
+  });
+}

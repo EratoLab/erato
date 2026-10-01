@@ -3,10 +3,12 @@ import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
 import { wordPackageCounts } from "./wordFullDocumentComparison";
 import { queueWordInPlaceTextWrite } from "./wordInPlaceExecutor";
 import { wordFirstRunMarks, wordParagraphSignature } from "./wordInPlaceState";
+import { predictWordStoryParagraphs } from "./wordInPlaceStories";
 import {
   predictWordBodyParagraphs,
   wordParagraphAlignmentIssue,
 } from "./wordLiveParagraphs";
+import { extractWordSections, extractWordStories } from "./wordStories";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordInPlaceProbeId } from "./wordInPlaceCapabilities";
@@ -101,7 +103,7 @@ const inPackage = (ooxml: string, text: string) => {
 };
 
 /**
- * Dev-only native validation of the in-place mechanisms (P1-P8 and P10). Runs only in an empty
+ * Dev-only native validation of the in-place mechanisms (P1-P11). Runs only in an empty
  * document the developer opened for it, writes nothing but its own synthetic paragraphs, and never
  * changes the Track Changes mode: with tracking on, it measures the tracked behaviour instead.
  */
@@ -449,8 +451,101 @@ export async function runWordInPlaceProbe(
       };
     });
 
-    for (const id of ["P9", "P11", "P12"] as const)
-      probes[id] = { result: "not-run" };
+    await attempt("P9", async (): Promise<Measured> => {
+      // Measured only where the developer turned tracking on; the probe never sets the mode.
+      if (trackingMode !== "TrackAll" && trackingMode !== "TrackMineOnly")
+        return { result: "not-run" };
+      const target = await paragraph("Probe nine kept words");
+      // The probe's own synthetic paragraph, accepted so only the edit below is pending.
+      target.getTrackedChanges().acceptAll();
+      await context.sync();
+      const original = await signature(target);
+      const ranges = target.getTextRanges([" "], false);
+      ranges.load("items/text");
+      await context.sync();
+      if (ranges.items.length !== 4) return { tokens: ranges.items.length };
+      ranges.items[2].delete();
+      ranges.items[1].insertText("new ", "After");
+      const added = target.insertParagraph("Probe nine added", "After");
+      added.load("uniqueLocalId");
+      await context.sync();
+      const changes = target.getTrackedChanges();
+      changes.load("items/type,items/text");
+      const addedChanges = added.getTrackedChanges();
+      addedChanges.load("items/type");
+      const current = target.getReviewedText("Current");
+      const previous = target.getReviewedText("Original");
+      const text = target.getText();
+      context.document.load("changeTrackingMode");
+      await context.sync();
+      const types = changes.items.map((change) => String(change.type));
+      const measured = {
+        revisions: changes.items.length,
+        recordsInsertion: types.includes("Added"),
+        recordsDeletion: types.includes("Deleted"),
+        currentText: current.value === "Probe nine new words",
+        originalText: previous.value === "Probe nine kept words",
+        textExcludesDeleted: text.value === "Probe nine new words",
+        insertedParagraphTracked: addedChanges.items.length > 0,
+        modeUnchanged:
+          String(context.document.changeTrackingMode) === trackingMode,
+      };
+      changes.rejectAll();
+      addedChanges.rejectAll();
+      await context.sync();
+      const restored = await signature(target);
+      const all = body.paragraphs;
+      all.load("items/uniqueLocalId");
+      await context.sync();
+      return {
+        ...measured,
+        rejectExact: restored.signature === original.signature,
+        rejectRemovesInserted: !all.items.some(
+          (p) => p.uniqueLocalId === added.uniqueLocalId,
+        ),
+      };
+    });
+
+    await attempt("P11", async (): Promise<Measured> => {
+      // Read-only, and only for a header the scratch document already has: getHeader on a
+      // section without one may create it.
+      const file = await captureWordDocumentPackage();
+      const doc = new DOMParser().parseFromString(
+        file.ooxml,
+        "application/xml",
+      );
+      const header = extractWordSections(doc)[0]?.headers.default;
+      const part = extractWordStories(doc).find(
+        (story) => story.id === header && story.type === "header",
+      )?.part;
+      if (!part) return { result: "not-run" };
+      const sections = context.document.sections;
+      sections.load("items");
+      await context.sync();
+      const live = sections.items[0].getHeader("Primary").paragraphs;
+      live.load("items/uniqueLocalId,items/tableNestingLevel,items/text");
+      await context.sync();
+      const after = await captureWordDocumentPackage();
+      const predicted = predictWordStoryParagraphs(file.ooxml, part);
+      const issue = wordParagraphAlignmentIssue(
+        predicted,
+        live.items.map((p) => ({
+          id: p.uniqueLocalId,
+          nesting: p.tableNestingLevel,
+          text: p.text,
+        })),
+      );
+      return {
+        predicted: predicted.length,
+        live: live.items.length,
+        aligned: !issue,
+        createsNoPart:
+          wordPackageCounts(after.ooxml).parts ===
+          wordPackageCounts(file.ooxml).parts,
+      };
+    });
+
+    probes.P12 = { result: "not-run" };
     return { status: "completed", platform, trackingMode, probes };
   });
 }
