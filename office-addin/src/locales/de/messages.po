@@ -2274,6 +2274,7 @@ msgstr "Dokument wird geprüft und wiederhergestellt…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.revertStale"
 msgstr "Das Dokument wurde nach dem Anwenden verändert. Die Wiederherstellung wurde nicht ausgeführt, da sie spätere Änderungen entfernen könnte."
@@ -2880,13 +2881,23 @@ msgstr "Dokumentinhalt wiederherstellen?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTracking"
+msgstr "Das Rückgängigmachen wurde nicht ausgeführt, weil die Änderungsverfolgung aktiv ist. Lehnen Sie diese Änderungen stattdessen in Word ab."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "Wiederherstellung nicht verfügbar: Der Dokumentstand wurde ersetzt, verbraucht oder gehört zu einem anderen Dokument."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertWarning"
-msgstr "Dokumentinhalt auf den Stand direkt vor diesem Stapel zurücksetzen? Dabei können spätere Änderungen am Inhalt verloren gehen."
+#~ msgid "officeAddin.word.review.revertWarning"
+#~ msgstr "Dokumentinhalt auf den Stand direkt vor diesem Stapel zurücksetzen? Dabei können spätere Änderungen am Inhalt verloren gehen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertWarningGuarded"
+msgstr "Dokumentinhalt auf den Stand direkt vor diesem Stapel zurücksetzen? Wurde der Inhalt seitdem geändert, wird nichts wiederhergestellt."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

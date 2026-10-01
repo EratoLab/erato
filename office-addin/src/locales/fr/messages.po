@@ -2274,6 +2274,7 @@ msgstr "Vérification et restauration du document…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.revertStale"
 msgstr "Le document a changé après l’application. Le rétablissement n’a pas été effectué, car il pourrait supprimer des modifications ultérieures."
@@ -2880,13 +2881,23 @@ msgstr "Restaurer le corps du document ?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTracking"
+msgstr "Le rétablissement n’a pas été effectué, car le suivi des modifications est activé. Refusez plutôt ces modifications dans Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "Rétablissement indisponible : l’instantané a été remplacé, utilisé ou appartient à un autre document."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertWarning"
-msgstr "Restaurer le corps du document à son état juste avant ce lot ? Cela peut supprimer des modifications ultérieures."
+#~ msgid "officeAddin.word.review.revertWarning"
+#~ msgstr "Restaurer le corps du document à son état juste avant ce lot ? Cela peut supprimer des modifications ultérieures."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertWarningGuarded"
+msgstr "Restaurer le corps du document à son état juste avant ce lot ? Rien n’est restauré si le corps a changé depuis."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

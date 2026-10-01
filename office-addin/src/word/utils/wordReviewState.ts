@@ -35,6 +35,8 @@ export interface WordReviewState {
   documentPlanOutcome?: WordApplyOutcome;
   /** Kept in the provider so the busy label survives card remounts. */
   applyStage?: WordApplyStage;
+  /** Paragraph edits: Revert refused because the body changed after the batch. */
+  revertStale?: boolean;
 }
 export const EMPTY_WORD_REVIEW: WordReviewState = {
   status: "idle",

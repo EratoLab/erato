@@ -221,6 +221,7 @@ function WordActionCard({
           batchKey,
           identity: live.capture.identity,
           ooxml: run.snapshotOoxml,
+          afterFingerprint: run.afterFingerprint,
         });
       updateReview(batchKey, {
         applyStage: undefined,
@@ -302,20 +303,32 @@ function WordActionCard({
     });
   const canRevert =
     revertSlot !== null &&
+    !!revertSlot.afterFingerprint &&
     revertSlot.messageId === messageId &&
     revertSlot.batchKey === batchKey &&
     revertSlot.identity === documentIdentity;
   const handleRevert = useCallback(async () => {
     if (!canRevert || !revertSlot || !beginOperation()) return;
-    const snapshot = revertSlot.ooxml;
-    setRevertSlot(null);
-    invalidateLocations();
+    const slot = revertSlot;
+    const previous = review.status;
     setRevertConfirmation(false);
-    updateReview(batchKey, { status: "reverting" });
+    updateReview(batchKey, { status: "reverting", revertStale: false });
     try {
-      const ok = await revertWordEdits(snapshot);
+      const result = await revertWordEdits(slot.ooxml, slot.afterFingerprint);
+      // Nothing was written: the slot stays so the batch can still be reverted once it matches.
+      if (result === "stale") {
+        updateReview(batchKey, {
+          status: previous,
+          revertStale: true,
+          tracking: await readWordTrackingMode(),
+          detailsExpanded: true,
+        });
+        return;
+      }
+      setRevertSlot(null);
+      invalidateLocations();
       updateReview(batchKey, {
-        status: ok ? "reverted" : "revert-failed",
+        status: result === "reverted" ? "reverted" : "revert-failed",
         anchors: undefined,
         detailsExpanded: false,
       });
@@ -325,6 +338,7 @@ function WordActionCard({
   }, [
     canRevert,
     revertSlot,
+    review.status,
     beginOperation,
     setRevertSlot,
     invalidateLocations,
@@ -404,46 +418,58 @@ function WordActionCard({
     }
   };
   const message =
-    review.status === "write-failed"
-      ? t({
-          id: "officeAddin.word.review.writeFailed",
-          message:
-            "Word stopped while applying. Some changes may already be in the document. Inspect the document before continuing.",
-        })
-      : review.status === "error"
+    review.revertStale && review.status !== "reverting"
+      ? review.tracking === "on"
         ? t({
-            id: "officeAddin.word.card.failed",
+            id: "officeAddin.word.review.revertTracking",
             message:
-              "Word did not accept the change. Nothing was written to the document.",
+              "Revert was not run because Track Changes is on. Reject these changes in Word instead.",
           })
-        : review.status === "revert-failed"
+        : t({
+            id: "officeAddin.word.authoring.revertStale",
+            message:
+              "The document changed after applying. Revert was not run because it could remove later edits.",
+          })
+      : review.status === "write-failed"
+        ? t({
+            id: "officeAddin.word.review.writeFailed",
+            message:
+              "Word stopped while applying. Some changes may already be in the document. Inspect the document before continuing.",
+          })
+        : review.status === "error"
           ? t({
-              id: "officeAddin.word.review.revertFailed",
+              id: "officeAddin.word.card.failed",
               message:
-                "The body could not be fully restored. Some content may already have been restored. The single-use Revert has been consumed.",
+                "Word did not accept the change. Nothing was written to the document.",
             })
-          : review.status === "reverted"
+          : review.status === "revert-failed"
             ? t({
-                id: "officeAddin.word.review.bodyRestored",
+                id: "officeAddin.word.review.revertFailed",
                 message:
-                  "The document body was restored to just before this batch.",
+                  "The body could not be fully restored. Some content may already have been restored. The single-use Revert has been consumed.",
               })
-            : review.status === "reverting"
+            : review.status === "reverted"
               ? t({
-                  id: "officeAddin.word.review.reverting",
-                  message: "Restoring the document body…",
+                  id: "officeAddin.word.review.bodyRestored",
+                  message:
+                    "The document body was restored to just before this batch.",
                 })
-              : review.status === "denied"
+              : review.status === "reverting"
                 ? t({
-                    id: "officeAddin.word.review.denied",
-                    message: "Proposal declined. Nothing was written.",
+                    id: "officeAddin.word.review.reverting",
+                    message: "Restoring the document body…",
                   })
-                : review.status === "done" && payload.kind === "insert"
+                : review.status === "denied"
                   ? t({
-                      id: "officeAddin.word.card.inserted",
-                      message: "Inserted into the document.",
+                      id: "officeAddin.word.review.denied",
+                      message: "Proposal declined. Nothing was written.",
                     })
-                  : undefined;
+                  : review.status === "done" && payload.kind === "insert"
+                    ? t({
+                        id: "officeAddin.word.card.inserted",
+                        message: "Inserted into the document.",
+                      })
+                    : undefined;
   return (
     <Card
       variant="surface"
@@ -613,9 +639,9 @@ function WordActionCard({
             >
               <strong>
                 {t({
-                  id: "officeAddin.word.review.revertWarning",
+                  id: "officeAddin.word.review.revertWarningGuarded",
                   message:
-                    "Restore the document body to just before this batch? This can remove later changes to the body.",
+                    "Restore the document body to just before this batch? Nothing is restored if the body changed since.",
                 })}
               </strong>
               <div className="word-review__actions">

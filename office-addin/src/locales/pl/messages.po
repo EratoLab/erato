@@ -2274,6 +2274,7 @@ msgstr "Sprawdzanie i przywracanie dokumentu…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.revertStale"
 msgstr "Dokument zmienił się po zastosowaniu nowej wersji. Nie cofnięto zmian, ponieważ mogłoby to usunąć późniejsze edycje."
@@ -2880,13 +2881,23 @@ msgstr "Przywrócić treść dokumentu?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTracking"
+msgstr "Nie cofnięto zmian, ponieważ śledzenie zmian jest włączone. Zamiast tego odrzuć te zmiany w programie Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "Cofnięcie niedostępne: zapis stanu został zastąpiony, użyty lub należy do innego dokumentu."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertWarning"
-msgstr "Przywrócić treść dokumentu do stanu sprzed tej partii zmian? Może to usunąć późniejsze zmiany w treści."
+#~ msgid "officeAddin.word.review.revertWarning"
+#~ msgstr "Przywrócić treść dokumentu do stanu sprzed tej partii zmian? Może to usunąć późniejsze zmiany w treści."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertWarningGuarded"
+msgstr "Przywrócić treść dokumentu do stanu sprzed tej partii zmian? Nic nie zostanie przywrócone, jeśli treść zmieniła się od tego czasu."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

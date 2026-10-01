@@ -2274,6 +2274,7 @@ msgstr "Checking and restoring the document…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.revertStale"
 msgstr "The document changed after applying. Revert was not run because it could remove later edits."
@@ -2880,13 +2881,23 @@ msgstr "Restore the document body?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTracking"
+msgstr "Revert was not run because Track Changes is on. Reject these changes in Word instead."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "Revert is unavailable: the snapshot was replaced, consumed, or belongs to another document."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertWarning"
-msgstr "Restore the document body to just before this batch? This can remove later changes to the body."
+#~ msgid "officeAddin.word.review.revertWarning"
+#~ msgstr "Restore the document body to just before this batch? This can remove later changes to the body."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertWarningGuarded"
+msgstr "Restore the document body to just before this batch? Nothing is restored if the body changed since."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

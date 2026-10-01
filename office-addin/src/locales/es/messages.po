@@ -2274,6 +2274,7 @@ msgstr "Comprobando y restaurando el documento…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
+#: src/word/components/WordHostCardRenderer.tsx
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.revertStale"
 msgstr "El documento cambió después de aplicar la reescritura. No se revirtió porque podría eliminar cambios posteriores."
@@ -2880,13 +2881,23 @@ msgstr "¿Restaurar el contenido del documento?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTracking"
+msgstr "No se revirtió el lote porque el control de cambios está activado. En su lugar, rechace estos cambios en Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "No se puede revertir: la captura fue reemplazada, ya se utilizó o pertenece a otro documento."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertWarning"
-msgstr "¿Restaurar el contenido al estado anterior a este lote? Esto puede eliminar cambios posteriores."
+#~ msgid "officeAddin.word.review.revertWarning"
+#~ msgstr "¿Restaurar el contenido al estado anterior a este lote? Esto puede eliminar cambios posteriores."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertWarningGuarded"
+msgstr "¿Restaurar el contenido al estado anterior a este lote? No se restaura nada si el contenido cambió desde entonces."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

@@ -38,6 +38,8 @@ export interface WordClientActionRun {
   ok: boolean;
   outcomes: WordEditOutcome[];
   snapshotOoxml: string | null;
+  /** Paragraph edits: the body as the batch left it, guarding Revert. */
+  afterFingerprint?: string;
   hostFailed?: boolean;
   documentPlanResult?: WordDocumentApplyResult;
   resultAnchors?: ReadonlyMap<number, WordReviewAnchor>;
@@ -116,6 +118,7 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
           ok: result.outcomes.some((outcome) => outcome.status === "applied"),
           outcomes: result.outcomes,
           snapshotOoxml: result.snapshotOoxml,
+          afterFingerprint: result.afterFingerprint,
           hostFailed: result.hostFailed,
           resultAnchors: result.resultAnchors,
         };
