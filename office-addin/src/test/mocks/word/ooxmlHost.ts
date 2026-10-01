@@ -830,6 +830,37 @@ export function installWordOoxmlHost(
     numbering.append(copy);
     return next;
   };
+  /** A new decimal list, as Paragraph.startNewList creates one. */
+  const newNum = (): string => {
+    const doc = live();
+    let numbering = partRoot(doc, "/word/numbering.xml");
+    if (!numbering) {
+      const part = parse(
+        `<pkg:part xmlns:pkg="${PKG}" pkg:name="/word/numbering.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"><pkg:xmlData><w:numbering xmlns:w="${W}"/></pkg:xmlData></pkg:part>`,
+      ).documentElement;
+      doc.documentElement.append(doc.importNode(part, true));
+      numbering = partRoot(doc, "/word/numbering.xml")!;
+    }
+    const abstractId = nextId(
+      elements(numbering, W, "abstractNum").map(
+        (e) => e.getAttributeNS(W, "abstractNumId") ?? "",
+      ),
+    );
+    const numId = nextId(
+      elements(numbering, W, "num").map(
+        (e) => e.getAttributeNS(W, "numId") ?? "",
+      ),
+    );
+    const fragment = parse(
+      `<w:numbering xmlns:w="${W}"><w:abstractNum w:abstractNumId="${abstractId}"><w:nsid w:val="${nsid()}"/><w:multiLevelType w:val="hybridMultilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/></w:lvl><w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="%2."/><w:lvlJc w:val="left"/></w:lvl></w:abstractNum><w:num w:numId="${numId}"><w:abstractNumId w:val="${abstractId}"/></w:num></w:numbering>`,
+    ).documentElement;
+    const [abstract, num] = Array.from(fragment.children).map((e) =>
+      doc.importNode(e, true),
+    );
+    numbering.insertBefore(abstract, elements(numbering, W, "num")[0] ?? null);
+    numbering.append(num);
+    return numId;
+  };
   const setNumbering = (paragraph: Element, level: number, numId: string) => {
     const doc = paragraph.ownerDocument;
     const numPr = doc.createElementNS(W, "w:numPr");
@@ -930,6 +961,30 @@ export function installWordOoxmlHost(
         enqueue(true, "detachFromList", () =>
           setParagraphProperty(target(), "numPr", null),
         ),
+      startNewList: () => {
+        enqueue(true, "startNewList", () => {
+          const p = target();
+          if (numIdOf(p) !== undefined)
+            throw Object.assign(
+              new Error("The paragraph is already a list item."),
+              { code: "InvalidArgument" },
+            );
+          setNumbering(p, 0, newNum());
+        });
+        return listProxy(target);
+      },
+      set alignment(value: string) {
+        enqueue(true, "alignment", () => {
+          const jc = target().ownerDocument.createElementNS(W, "w:jc");
+          jc.setAttributeNS(
+            W,
+            "w:val",
+            { Left: "left", Centered: "center", Right: "right" }[value] ??
+              "both",
+          );
+          setParagraphProperty(target(), "jc", jc);
+        });
+      },
       set styleBuiltIn(value: string) {
         enqueue(true, "styleBuiltIn", () =>
           applyStyle(target(), builtInStyle(value)),

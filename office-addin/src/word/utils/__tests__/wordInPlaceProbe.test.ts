@@ -85,6 +85,33 @@ describe("in-place native probe", () => {
       inverseExact: true,
     });
     expect(result.probes.P3).toEqual({ stableWhenIdle: true });
+    // What the mock host does; the native run decides which mechanisms ship.
+    expect(result.probes.P5).toMatchObject({
+      afterInheritsStyle: true,
+      afterInheritsDirectFormat: false,
+      insertedHasId: true,
+    });
+    expect(result.probes.P6).toEqual({
+      insertInheritsList: true,
+      attachKeepsNumId: true,
+      listIdIsNumId: true,
+      levelWritesIlvl: true,
+      detachRemovesNumbering: true,
+      detachKeepsStyle: true,
+    });
+    expect(result.probes.P7).toEqual({
+      headingTyped: true,
+      numberingUnchanged: true,
+      stylesAdded: 1,
+      inverseExact: true,
+    });
+    expect(result.probes.P8).toEqual({
+      countDropsByOne: true,
+      neighboursUnchanged: true,
+      recreateExact: true,
+    });
+    for (const id of ["P9", "P11", "P12"] as const)
+      expect(result.probes[id]).toEqual({ result: "not-run" });
     expect(JSON.stringify(result)).not.toContain("Probe");
   });
 });
