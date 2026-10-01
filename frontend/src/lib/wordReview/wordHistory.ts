@@ -1,5 +1,11 @@
 import { parseWordDocumentPlan } from "./wordDocumentPlan";
 import { parseWordEdits } from "./wordEditPlan";
+import {
+  WORD_EDITS_FENCE,
+  WORD_READ_TOOL,
+  WORD_SUBMIT_PLAN_ACTION,
+  WORD_SUBMIT_PLAN_TOOL,
+} from "./wordHistoryNames";
 
 import type {
   WordAuthoringSnapshot,
@@ -13,10 +19,14 @@ import type { WordSectionSource, WordStorySource } from "./wordStories";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
-export const WORD_READ_TOOL = "read_document_blocks";
-export const WORD_SUBMIT_PLAN_TOOL = "submit_document_plan";
-export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";
-export const WORD_EDITS_FENCE = "erato-word-edits";
+export {
+  WORD_ACTION_FACET_IDS,
+  WORD_EDITS_FENCE,
+  WORD_INSERT_FENCE,
+  WORD_READ_TOOL,
+  WORD_SUBMIT_PLAN_ACTION,
+  WORD_SUBMIT_PLAN_TOOL,
+} from "./wordHistoryNames";
 
 /**
  * A snapshot rebuilt from stored read outputs. It reviews what the model read,
@@ -402,8 +412,11 @@ export interface WordHistoryParagraph {
   headingLevel?: number;
 }
 
-export interface WordHistoryEdits {
+export interface WordHistoryEdits extends WordHistoryEditSource {
   edits: WordEdit[];
+}
+
+export interface WordHistoryEditSource {
   /** The `[n]` lines the edits were written against, by ordinal. */
   paragraphs: ReadonlyMap<number, WordHistoryParagraph>;
   paragraphsSent?: number;
@@ -451,6 +464,13 @@ export function wordEditsFromHistory(
     if (edits) break;
   }
   if (!edits) return undefined;
+  return { edits, ...wordEditSourceFromHistory(previousUserMessage) };
+}
+
+/** The paragraphs a Word request showed, which its edits were written against. */
+export function wordEditSourceFromHistory(
+  previousUserMessage: Pick<Message, "action_facet_args"> | undefined,
+): WordHistoryEditSource {
   const args = previousUserMessage?.action_facet_args ?? {};
   const partial = /^Paragraph (\d+) is included only in part/u.exec(
     args.truncation_note ?? "",
@@ -458,7 +478,6 @@ export function wordEditsFromHistory(
   const paragraphsSent = nonNegative(args.paragraphs_sent);
   const paragraphsTotal = nonNegative(args.paragraphs_total);
   return {
-    edits,
     paragraphs: wordParagraphsFromDocumentText(args.document_text),
     ...(paragraphsSent !== undefined ? { paragraphsSent } : {}),
     ...(paragraphsTotal !== undefined ? { paragraphsTotal } : {}),

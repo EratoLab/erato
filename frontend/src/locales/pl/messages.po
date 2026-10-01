@@ -6393,6 +6393,51 @@ msgstr "Nieobsługiwany typ(y) pliku: {filenames}"
 msgid "upload.maxSizeHint"
 msgstr "Maksymalny rozmiar pliku: {maxSizeFormatted}"
 
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.coverage"
+msgstr "Zakres zapytania: akapity 1–{paragraphsSent} z {paragraphsTotal}. Przejrzano tylko dołączony tekst."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsLabel"
+msgstr "Proponowane zmiany akapitów"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsTitle"
+msgstr "{paragraphs, plural, one {Zmień # akapit} few {Zmień # akapity} many {Zmień # akapitów} other {Zmień # akapitu}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertLabel"
+msgstr "Proponowany tekst do wstawienia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertTitle"
+msgstr "Wstaw tekst w miejscu kursora"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.noChanges"
+msgstr "Nie zaproponowano żadnych zmian."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraph"
+msgstr "Akapit {paragraph}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraphRange"
+msgstr "Akapity {paragraph}–{through}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.partial"
+msgstr "Akapit {partialOrdinal} został tylko częściowo dołączony do zapytania."
+
 # ==============================
 # Unstable IDs
 # ==============================

@@ -15,6 +15,7 @@ import {
 } from "./MessageListUtils";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
+import { ConversationMessagesProvider } from "../Message/ConversationMessages";
 
 import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
@@ -892,48 +893,50 @@ export const MessageList = memo<MessageListProps>(
           </div>
         ) : (
           <div className="mx-auto w-full" style={contentWidthStyle}>
-            {shouldUseVirtualization ? (
-              <VirtualizedMessageList
-                messages={messages}
-                visibleData={visibleData}
-                containerSize={containerSize}
-                isNewlyLoaded={isNewlyLoaded}
-                getMessageClassName={getMessageClassName}
-                maxWidth={maxWidth}
-                showTimestamps={showTimestamps}
-                showAvatars={showAvatars}
-                userProfile={userProfile}
-                userDisplayNameOverride={userDisplayNameOverride}
-                controls={controls}
-                messageRenderer={messageRenderer}
-                controlsContext={controlsContext}
-                onMessageAction={onMessageAction}
-                onFilePreview={onFilePreview}
-                onViewFeedback={onViewFeedback}
-                allFilesById={allFilesById}
-                modelSwitches={modelSwitches}
-              />
-            ) : (
-              <StandardMessageList
-                messages={messages}
-                visibleData={visibleData}
-                isNewlyLoaded={isNewlyLoaded}
-                getMessageClassName={getMessageClassName}
-                maxWidth={maxWidth}
-                showTimestamps={showTimestamps}
-                showAvatars={showAvatars}
-                userProfile={userProfile}
-                userDisplayNameOverride={userDisplayNameOverride}
-                controls={controls}
-                messageRenderer={messageRenderer}
-                controlsContext={controlsContext}
-                onMessageAction={onMessageAction}
-                onFilePreview={onFilePreview}
-                onViewFeedback={onViewFeedback}
-                allFilesById={allFilesById}
-                modelSwitches={modelSwitches}
-              />
-            )}
+            <ConversationMessagesProvider messages={messages}>
+              {shouldUseVirtualization ? (
+                <VirtualizedMessageList
+                  messages={messages}
+                  visibleData={visibleData}
+                  containerSize={containerSize}
+                  isNewlyLoaded={isNewlyLoaded}
+                  getMessageClassName={getMessageClassName}
+                  maxWidth={maxWidth}
+                  showTimestamps={showTimestamps}
+                  showAvatars={showAvatars}
+                  userProfile={userProfile}
+                  userDisplayNameOverride={userDisplayNameOverride}
+                  controls={controls}
+                  messageRenderer={messageRenderer}
+                  controlsContext={controlsContext}
+                  onMessageAction={onMessageAction}
+                  onFilePreview={onFilePreview}
+                  onViewFeedback={onViewFeedback}
+                  allFilesById={allFilesById}
+                  modelSwitches={modelSwitches}
+                />
+              ) : (
+                <StandardMessageList
+                  messages={messages}
+                  visibleData={visibleData}
+                  isNewlyLoaded={isNewlyLoaded}
+                  getMessageClassName={getMessageClassName}
+                  maxWidth={maxWidth}
+                  showTimestamps={showTimestamps}
+                  showAvatars={showAvatars}
+                  userProfile={userProfile}
+                  userDisplayNameOverride={userDisplayNameOverride}
+                  controls={controls}
+                  messageRenderer={messageRenderer}
+                  controlsContext={controlsContext}
+                  onMessageAction={onMessageAction}
+                  onFilePreview={onFilePreview}
+                  onViewFeedback={onViewFeedback}
+                  allFilesById={allFilesById}
+                  modelSwitches={modelSwitches}
+                />
+              )}
+            </ConversationMessagesProvider>
           </div>
         )}
       </div>

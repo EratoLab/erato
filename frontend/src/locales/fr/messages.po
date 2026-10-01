@@ -6393,6 +6393,51 @@ msgstr "Type(s) de fichier non pris en charge : {filenames}"
 msgid "upload.maxSizeHint"
 msgstr "Taille de fichier maximale : {maxSizeFormatted}"
 
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.coverage"
+msgstr "Périmètre de la demande : paragraphes 1–{paragraphsSent} sur {paragraphsTotal}. Seul le texte inclus a été examiné."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsLabel"
+msgstr "Modifications de paragraphes proposées"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsTitle"
+msgstr "{paragraphs, plural, one {Modifier # paragraphe} other {Modifier # paragraphes}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertLabel"
+msgstr "Texte proposé à insérer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertTitle"
+msgstr "Insérer le texte au curseur"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.noChanges"
+msgstr "Aucune modification n’a été proposée."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraph"
+msgstr "Paragraphe {paragraph}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraphRange"
+msgstr "Paragraphes {paragraph}–{through}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.partial"
+msgstr "Le paragraphe {partialOrdinal} n’a été inclus qu’en partie dans la demande."
+
 # ==============================
 # Unstable IDs
 # ==============================

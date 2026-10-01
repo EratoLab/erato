@@ -139,7 +139,8 @@ export function WordProposalCard({
   );
 }
 
-function WordProposalReadOnlyFooter({
+/** "From Word" provenance with the way to apply, for a card that cannot write. */
+export function WordProposalReadOnlyFooter({
   text,
   documentName,
 }: {

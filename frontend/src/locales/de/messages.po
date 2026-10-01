@@ -6393,6 +6393,51 @@ msgstr "Nicht unterstützter Dateityp(en): {filenames}"
 msgid "upload.maxSizeHint"
 msgstr "Maximale Dateigröße: {maxSizeFormatted}"
 
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.coverage"
+msgstr "Anfragebereich: Absätze 1–{paragraphsSent} von {paragraphsTotal}. Nur eingeschlossener Text wurde geprüft."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsLabel"
+msgstr "Vorgeschlagene Absatzänderungen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsTitle"
+msgstr "{paragraphs, plural, one {# Absatz ändern} other {# Absätze ändern}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertLabel"
+msgstr "Vorgeschlagener Text zum Einfügen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertTitle"
+msgstr "Text an der Cursorposition einfügen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.noChanges"
+msgstr "Es wurden keine Änderungen vorgeschlagen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraph"
+msgstr "Absatz {paragraph}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraphRange"
+msgstr "Absätze {paragraph}–{through}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.partial"
+msgstr "Absatz {partialOrdinal} war nur teilweise in der Anfrage enthalten."
+
 # ==============================
 # Unstable IDs
 # ==============================

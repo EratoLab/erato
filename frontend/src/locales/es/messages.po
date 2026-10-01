@@ -6393,6 +6393,51 @@ msgstr "Tipo(s) de archivo no compatible(s): {filenames}"
 msgid "upload.maxSizeHint"
 msgstr "Tamaño máximo de archivo: {maxSizeFormatted}"
 
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.coverage"
+msgstr "Intervalo de la solicitud: párrafos 1–{paragraphsSent} de {paragraphsTotal}. Solo se revisó el texto incluido."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsLabel"
+msgstr "Cambios de párrafo propuestos"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsTitle"
+msgstr "{paragraphs, plural, one {Cambiar # párrafo} other {Cambiar # párrafos}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertLabel"
+msgstr "Texto propuesto para insertar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertTitle"
+msgstr "Insertar texto en el cursor"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.noChanges"
+msgstr "No se propusieron cambios."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraph"
+msgstr "Párrafo {paragraph}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraphRange"
+msgstr "Párrafos {paragraph}–{through}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.partial"
+msgstr "El párrafo {partialOrdinal} solo se incluyó parcialmente en la solicitud."
+
 # ==============================
 # Unstable IDs
 # ==============================

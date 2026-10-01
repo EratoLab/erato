@@ -16,12 +16,21 @@ import {
   durationFromTracePartsOrLegacyMessageTimestamps,
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
+import {
+  isWordPlanToolPart,
+  isWordSubmitPlanPart,
+  useWordHistoryMessage,
+} from "@/components/ui/WordReview/useWordHistoryMessage";
 import { CheckIcon, CopyIcon } from "@/components/ui/icons";
 import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
 import { useOptionalTranslation } from "@/hooks/i18n";
+import {
+  WORD_EDITS_FENCE,
+  WORD_INSERT_FENCE,
+} from "@/lib/wordReview/wordHistoryNames";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -40,6 +49,7 @@ import {
 import { approvalStopState } from "./approvalItems";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
+import type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
 import type {
   ContentPart,
@@ -185,6 +195,18 @@ const DEFAULT_HOST_FENCE_RULES: HostFenceRules = {
 
 const EMPTY_LANGUAGES: readonly string[] = [];
 
+/** Word card fences a stored Word answer shows read-only outside the Word host. */
+const WORD_HISTORY_FENCES: ReadonlySet<string> = new Set([
+  WORD_EDITS_FENCE,
+  WORD_INSERT_FENCE,
+]);
+
+const WORD_HISTORY_FENCE_RULES: HostFenceRules = {
+  ...DEFAULT_HOST_FENCE_RULES,
+  isCardLanguage: (language) =>
+    isEratoAppointmentLanguage(language) || WORD_HISTORY_FENCES.has(language),
+};
+
 /**
  * The fence rules for the message being rendered: the defaults unless the
  * host artifact overrides a part. Host card languages only count while a
@@ -192,9 +214,12 @@ const EMPTY_LANGUAGES: readonly string[] = [];
  * render it stays an ordinary code block rather than bare code in a card
  * wrapper.
  */
-function fenceRulesFor(artifact: HostArtifact | null): HostFenceRules {
+function fenceRulesFor(
+  artifact: HostArtifact | null,
+  wordHistory: WordHistoryMessage | null = null,
+): HostFenceRules {
   if (!artifact) {
-    return DEFAULT_HOST_FENCE_RULES;
+    return wordHistory ? WORD_HISTORY_FENCE_RULES : DEFAULT_HOST_FENCE_RULES;
   }
   const hostCardLanguages = new Set(
     componentRegistry.HostCardCodeBlock
@@ -290,6 +315,23 @@ function containsMarkdownFence(text: string): boolean {
 
 const HostArtifactContext = React.createContext<HostArtifact | null>(null);
 
+const WordHistoryContext = React.createContext<WordHistoryMessage | null>(null);
+
+// Loaded on first use: only chats written from Word need the review modules.
+const loadWordHistoryCards = () =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- module path
+  import("@/components/ui/WordReview/WordHistoryCards");
+const WordHistoryPlanCard = React.lazy(() =>
+  loadWordHistoryCards().then((module) => ({
+    default: module.WordHistoryPlanCard,
+  })),
+);
+const WordHistoryFenceCard = React.lazy(() =>
+  loadWordHistoryCards().then((module) => ({
+    default: module.WordHistoryFenceCard,
+  })),
+);
+
 /**
  * The host artifact hint for the message currently being rendered, or null
  * outside a host-facet message. Exposed so registry overrides (e.g. the
@@ -365,7 +407,8 @@ function MarkdownPre({
   ...props
 }: MarkdownPreProps) {
   const artifact = React.useContext(HostArtifactContext);
-  const rules = fenceRulesFor(artifact);
+  const wordHistory = React.useContext(WordHistoryContext);
+  const rules = fenceRulesFor(artifact, wordHistory);
   const { isStreaming } = React.useContext(BlockCodeContext);
   const [copied, setCopied] = React.useState(false);
   const surfaceStyle = useCodeBlockSurfaceStyle();
@@ -463,7 +506,8 @@ function MarkdownCode({
 }: MarkdownCodeProps) {
   const { isBlockCode, isStreaming } = React.useContext(BlockCodeContext);
   const artifact = React.useContext(HostArtifactContext);
-  const rules = fenceRulesFor(artifact);
+  const wordHistory = React.useContext(WordHistoryContext);
+  const rules = fenceRulesFor(artifact, wordHistory);
   const codeContent = String(children).replace(/\n$/, "");
   const match = /language-([\w-]+)/.exec(className ?? "");
   const language = match ? match[1] : "";
@@ -482,6 +526,18 @@ function MarkdownCode({
 
   if (isBlockCode && isEratoAppointmentLanguage(language)) {
     return <EratoAppointmentBlock content={codeContent} />;
+  }
+
+  if (isBlockCode && wordHistory && WORD_HISTORY_FENCES.has(language)) {
+    return (
+      <React.Suspense fallback={null}>
+        <WordHistoryFenceCard
+          language={language}
+          content={codeContent}
+          previousUserMessage={wordHistory.previousUserMessage}
+        />
+      </React.Suspense>
+    );
   }
 
   if (isBlockCode && rules.isHostCardLanguage(language)) {
@@ -705,7 +761,7 @@ const decisionKeys = (part: ContentPart): string[] => {
 };
 
 export const MessageContent = memo(function MessageContent({
-  content,
+  content: messageContent,
   messageId,
   isStreaming = false,
   showRaw = false,
@@ -723,6 +779,17 @@ export const MessageContent = memo(function MessageContent({
   // The deprecated prop is honored as a fallback for one release; every
   // artifact-driven path below reads this single resolved value.
   const hostArtifact = hostArtifactProp ?? outlookArtifact;
+  const wordHistory = useWordHistoryMessage(messageId, hostArtifact);
+  // Outside Word the reads and submissions fold into one read-only plan card.
+  const foldsWordPlan =
+    !!wordHistory && messageContent.some(isWordSubmitPlanPart);
+  const content = React.useMemo(
+    () =>
+      foldsWordPlan
+        ? messageContent.filter((part) => !isWordPlanToolPart(part))
+        : messageContent,
+    [foldsWordPlan, messageContent],
+  );
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
   const { maskReasoningText } = useTraceFeature();
   const toolApprovalStatuses = React.useMemo<
@@ -1253,37 +1320,39 @@ export const MessageContent = memo(function MessageContent({
     return (
       <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
         <HostArtifactContext.Provider value={hostArtifact ?? null}>
-          <Markdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[
-              rehypeRaw,
-              [rehypeSanitize, markdownSanitizeSchema],
-              rehypeKatex,
-            ]}
-            components={components}
-            urlTransform={(url, key, node) => {
-              // Sanitization prefixes IDs to prevent DOM clobbering; keep
-              // generated footnote links pointed at those prefixed IDs.
-              if (
-                key === "href" &&
-                url.startsWith("#") &&
-                (node.properties.dataFootnoteRef !== undefined ||
-                  node.properties.dataFootnoteBackref !== undefined)
-              ) {
-                return `#user-content-${url.slice(1)}`;
-              }
-              // eslint-disable-next-line lingui/no-unlocalized-strings
-              return url.startsWith("erato-file://") ||
-                url.startsWith(ERATO_MENTION_SCHEME)
-                ? url
-                : defaultUrlTransform(url);
-            }}
-            // Handle incomplete markdown patterns gracefully
-            skipHtml={false}
-            unwrapDisallowed={false}
-          >
-            {linkedTextContent}
-          </Markdown>
+          <WordHistoryContext.Provider value={wordHistory}>
+            <Markdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[
+                rehypeRaw,
+                [rehypeSanitize, markdownSanitizeSchema],
+                rehypeKatex,
+              ]}
+              components={components}
+              urlTransform={(url, key, node) => {
+                // Sanitization prefixes IDs to prevent DOM clobbering; keep
+                // generated footnote links pointed at those prefixed IDs.
+                if (
+                  key === "href" &&
+                  url.startsWith("#") &&
+                  (node.properties.dataFootnoteRef !== undefined ||
+                    node.properties.dataFootnoteBackref !== undefined)
+                ) {
+                  return `#user-content-${url.slice(1)}`;
+                }
+                // eslint-disable-next-line lingui/no-unlocalized-strings
+                return url.startsWith("erato-file://") ||
+                  url.startsWith(ERATO_MENTION_SCHEME)
+                  ? url
+                  : defaultUrlTransform(url);
+              }}
+              // Handle incomplete markdown patterns gracefully
+              skipHtml={false}
+              unwrapDisallowed={false}
+            >
+              {linkedTextContent}
+            </Markdown>
+          </WordHistoryContext.Provider>
         </HostArtifactContext.Provider>
       </BlockCodeContext.Provider>
     );
@@ -1403,6 +1472,7 @@ export const MessageContent = memo(function MessageContent({
             cluster.startIndex + cluster.parts.length - 1;
           const hasLaterContent =
             !!hasSubmittedCard ||
+            foldsWordPlan ||
             content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 
           return (
@@ -1524,6 +1594,16 @@ export const MessageContent = memo(function MessageContent({
             content={submittedCard.content}
           />
         </HostArtifactContext.Provider>
+      )}
+      {foldsWordPlan && messageId && (
+        <React.Suspense fallback={null}>
+          <WordHistoryPlanCard
+            messageId={messageId}
+            content={messageContent}
+            documentName={wordHistory.documentName}
+            isStreaming={isStreaming}
+          />
+        </React.Suspense>
       )}
       {messageId && <ClientToolFileApprovals messageId={messageId} />}
     </article>
