@@ -1,10 +1,22 @@
+import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
 import { wordPackageCounts } from "./wordFullDocumentComparison";
 import { wordInPlaceExpected, wordInPlaceTypedIssue } from "./wordInPlacePlan";
+import {
+  verifyWordStoryOutput,
+  wordStoryParagraphElements,
+  wordStoryRoot,
+} from "./wordInPlaceStories";
+import { wordBodyParagraphElements } from "./wordLiveParagraphs";
 import {
   createNativeContentSignature,
   sameWordPreservedParts,
   wordMainBody,
 } from "./wordNativeContent";
+import {
+  acceptWordRevisions,
+  rejectWordRevisions,
+  wordRevisionsOutside,
+} from "./wordRevisionViews";
 import { createWordXmlComparison } from "./wordXmlComparison";
 
 import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
@@ -13,6 +25,7 @@ import type {
   WordInPlaceOp,
   WordInPlaceSlot,
 } from "./wordInPlacePlan";
+import type { WordStoryOp } from "./wordInPlaceStories";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 export const WORD_SCOPE_PREFIX = "word-scope-v1:";
@@ -117,6 +130,8 @@ const MAX_LOCATIONS = 8;
 export interface WordInPlaceVerifyInput {
   /** The expected block sequence over the live document the write started from. */
   slots: readonly WordInPlaceSlot[];
+  /** Header and footer paragraphs the write rewrote; their parts are checked paragraph by paragraph. */
+  stories?: readonly WordStoryOp[];
   /** The live document the write started from; keep slots name its blocks. */
   base: WordAuthoringSnapshot;
   /** The captured snapshot the ops were derived from. */
@@ -129,11 +144,13 @@ export interface WordInPlaceVerifyInput {
 
 /**
  * Block tier: untouched blocks keep their native signature, written and inserted paragraphs have
- * exactly the typed state the plan asked for, written table cells equal the compiled table, and
- * nothing outside the body changed beyond list-definition identity.
+ * exactly the typed state the plan asked for, written table cells equal the compiled table, written
+ * header and footer paragraphs read as planned, and nothing else outside the body changed beyond
+ * list-definition identity.
  */
 export function verifyWordInPlaceOutput({
   slots,
+  stories = [],
   base,
   snapshot,
   compiled,
@@ -189,6 +206,7 @@ export function verifyWordInPlaceOutput({
     if (issue) at(i, issue, true);
   });
   const counts = [base.ooxml, after.ooxml].map(wordPackageCounts);
+  const storyParts = new Set(stories.map((op) => op.story.part));
   if (
     counts[0].parts - counts[0].webextensionParts !==
       counts[1].parts - counts[1].webextensionParts ||
@@ -196,11 +214,113 @@ export function verifyWordInPlaceOutput({
   ) {
     locations.push("/: package");
     confined = false;
-  } else if (!sameWordPreservedParts(base.ooxml, after.ooxml, "content")) {
+  } else if (
+    !sameWordPreservedParts(base.ooxml, after.ooxml, "content", storyParts)
+  ) {
     locations.push("/: preserved parts");
     confined = false;
+  }
+  if (stories.length) {
+    const story = verifyWordStoryOutput(
+      base.ooxml,
+      new DOMParser().parseFromString(after.ooxml, "application/xml"),
+      after.ooxml,
+      stories,
+    );
+    if (story.length) {
+      locations.push(...story);
+      confined = false;
+    }
   }
   return locations.length
     ? { ok: false, locations: locations.slice(0, MAX_LOCATIONS), confined }
     : { ok: true };
+}
+
+export interface WordTrackedVerifyInput
+  extends Omit<WordInPlaceVerifyInput, "after"> {
+  /** The package after the write, its revisions included. */
+  afterOoxml: string;
+  /** body.paragraphs IDs after the write, and those of the paragraphs inside written regions. */
+  ids: readonly string[];
+  touched: ReadonlySet<string>;
+}
+
+/**
+ * Tracked tier: the write's revisions sit only in the written paragraphs; accepting them there gives
+ * exactly what the block tier expects, and rejecting them there gives back the document the write
+ * started from, block for block. Revisions elsewhere are someone else's and stay as they were.
+ */
+export function verifyWordTrackedRevisions(
+  input: WordTrackedVerifyInput,
+): WordInPlaceVerification {
+  const { afterOoxml, ids, touched, base, snapshot } = input;
+  const fail = (locations: string[]): WordInPlaceVerification => ({
+    ok: false,
+    locations: locations.slice(0, MAX_LOCATIONS),
+    confined: false,
+  });
+  const parse = (xml: string) =>
+    new DOMParser().parseFromString(xml, "application/xml");
+  const accepted = parse(afterOoxml);
+  const rejected = parse(afterOoxml);
+  const stories = input.stories ?? [];
+  const scope = (doc: Document) => {
+    const paragraphs = wordBodyParagraphElements(doc);
+    if (paragraphs.length !== ids.length) return undefined;
+    const elements = new Set(paragraphs.filter((_, i) => touched.has(ids[i])));
+    for (const op of stories) {
+      const root = wordStoryRoot(doc, op.story.part);
+      const paragraph = root && wordStoryParagraphElements(root)[op.paragraph];
+      if (!paragraph) return undefined;
+      elements.add(paragraph);
+    }
+    return elements;
+  };
+  const acceptScope = scope(accepted);
+  const rejectScope = scope(rejected);
+  if (!acceptScope || !rejectScope)
+    return fail(["/word/document.xml body: count"]);
+  const locations: string[] = [];
+  if (
+    wordRevisionsOutside(accepted, acceptScope) !==
+    wordRevisionsOutside(parse(base.ooxml), new Set())
+  )
+    locations.push("/word/document.xml: revisions");
+  acceptWordRevisions(accepted, acceptScope);
+  rejectWordRevisions(rejected, rejectScope);
+  const serializer = new XMLSerializer();
+  const view = (doc: Document) =>
+    captureWordAuthoringSnapshot(
+      serializer.serializeToString(doc),
+      snapshot.identity,
+      "Off",
+      true,
+      "verify",
+    );
+  const block = verifyWordInPlaceOutput({ ...input, after: view(accepted) });
+  if (!block.ok) locations.push(...block.locations);
+  const original = view(rejected);
+  const expected = createNativeContentSignature(base.ooxml);
+  const actual = createNativeContentSignature(original.ooxml);
+  if (original.issue || original.blocks.length !== base.blocks.length)
+    locations.push("/word/document.xml body: rejected");
+  else
+    original.blocks.forEach((b, i) => {
+      if (actual(b.xml) !== expected(base.blocks[i].xml))
+        locations.push(`/word/document.xml body block ${i + 1}: rejected`);
+    });
+  const baseDoc = parse(base.ooxml);
+  for (const part of new Set(stories.map((op) => op.story.part))) {
+    const before = wordStoryRoot(baseDoc, part);
+    const after = wordStoryRoot(rejected, part);
+    if (
+      !before ||
+      !after ||
+      expected(serializer.serializeToString(before), part) !==
+        actual(serializer.serializeToString(after), part)
+    )
+      locations.push(`${part}: rejected`);
+  }
+  return locations.length ? fail(locations) : { ok: true };
 }

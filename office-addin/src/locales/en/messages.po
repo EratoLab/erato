@@ -1781,6 +1781,11 @@ msgid "officeAddin.word.authoring.applied"
 msgstr "Document rewrite applied"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.appliedTracked"
+msgstr "Applied as tracked changes under your name."
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts
 msgid "officeAddin.word.authoring.apply"
 msgstr "Apply document rewrite"
@@ -2366,6 +2371,11 @@ msgstr "This document exceeds the current complete-document rewrite limit. No pa
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.tracking"
 msgstr "Document restructuring is unavailable with the current Track Changes state. The add-in has not changed that setting."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.trackingNeedsImport"
+msgstr "This change needs a full-document rewrite, which can't run while Track Changes is on. Turn off Track Changes or ask for a smaller edit."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

@@ -18,6 +18,10 @@ import {
 } from "./wordFullDocumentComparison";
 import { resolveWordImageAsset } from "./wordImageAssetData";
 import {
+  isWordTrackingMode,
+  wordTrackedWritingAvailable,
+} from "./wordInPlaceSwitch";
+import {
   compileWordField,
   compileWordBookmark,
   compileWordContentControl,
@@ -366,7 +370,19 @@ export function captureWordAuthoringSnapshot(
         ).length > MAX_SOURCE_BYTES)
     )
       base.issue = "too-large";
-    if (tracking !== "Off") base.issue = "tracking";
+    base.trackingMode = tracking;
+    // Under Track Changes only the in-place writer can apply a plan, as revisions; it needs the
+    // complete document, and a re-read for verification must never pass while revisions are pending.
+    if (
+      tracking !== "Off" &&
+      !(
+        purpose === "read" &&
+        fullDocument &&
+        isWordTrackingMode(tracking) &&
+        wordTrackedWritingAvailable()
+      )
+    )
+      base.issue = "tracking";
     base.fingerprint = fingerprint;
   } catch {
     base.issue = "unavailable";

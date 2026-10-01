@@ -125,6 +125,8 @@ export interface WordAuthoringSnapshot {
     | "model-budget";
   /** Fixed diagnostic codes, never document text or XML. */
   issueDetails?: string[];
+  /** Word's Track Changes mode at capture; edits then go in as revisions or not at all. */
+  trackingMode?: string;
   preservedStories?: string[];
   /** True only when all DOCX parts were read, including out-of-body stories. */
   fullDocument?: boolean;

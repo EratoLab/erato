@@ -1781,6 +1781,11 @@ msgid "officeAddin.word.authoring.applied"
 msgstr "Zastosowano nową wersję dokumentu"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.appliedTracked"
+msgstr "Zastosowano jako śledzone zmiany pod Twoim nazwiskiem."
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts
 msgid "officeAddin.word.authoring.apply"
 msgstr "Zastosuj nową wersję dokumentu"
@@ -2366,6 +2371,11 @@ msgstr "Ten dokument przekracza obecny limit przepisania całego dokumentu. Zmia
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.tracking"
 msgstr "Zmiana struktury jest niedostępna przy obecnym stanie śledzenia zmian. Dodatek nie zmienił tego ustawienia."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.trackingNeedsImport"
+msgstr "Ta zmiana wymaga przepisania całego dokumentu, czego nie można zrobić przy włączonym śledzeniu zmian. Wyłącz śledzenie zmian lub poproś o mniejszą zmianę."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

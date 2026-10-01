@@ -63,12 +63,26 @@ export function wordDocumentDiagnosticText(
           message:
             "Word could not read the document for this operation. No changes were made.",
         });
+  if (diagnostic.reason === "tracking" && diagnostic.details?.fallbackReasons)
+    return t({
+      id: "officeAddin.word.authoring.trackingNeedsImport",
+      message:
+        "This change needs a full-document rewrite, which can't run while Track Changes is on. Turn off Track Changes or ask for a smaller edit.",
+    });
   if (
     diagnostic.reason === "host-unavailable" ||
     diagnostic.reason === "wrong-request"
   )
     return wordAuthoringIssueText("no-capture");
   return wordAuthoringIssueText(diagnostic.reason);
+}
+
+/** Word attributes tracked changes to the signed-in user; the add-in cannot choose the author. */
+export function wordTrackedApplyText(): string {
+  return t({
+    id: "officeAddin.word.authoring.appliedTracked",
+    message: "Applied as tracked changes under your name.",
+  });
 }
 
 /** Only visible adjustments have text; list bookkeeping is not something a reader can see. */

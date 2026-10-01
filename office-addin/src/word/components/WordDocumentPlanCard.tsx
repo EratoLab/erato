@@ -31,6 +31,7 @@ import {
   wordApplyStageLabel,
   wordAuthoringIssueText,
   wordDocumentDiagnosticText,
+  wordTrackedApplyText,
 } from "../utils/wordAuthoringMessages";
 import { offerableWordClientActionsForFacet } from "../utils/wordClientActions";
 import {
@@ -345,13 +346,17 @@ export function WordDocumentPlanCard({
                   message: "Checking and restoring the document…",
                 })
               : undefined;
-  const adjustmentNote = ["done", "reverted"].includes(review.status)
-    ? (review.documentPlanOutcome?.adjustments ?? [])
-        .filter((code) => WORD_VISIBLE_ADJUSTMENTS.includes(code))
-        .map(wordApplyAdjustmentText)
-        .filter(Boolean)
-        .join(" ")
-    : "";
+  const adjustmentNote = [
+    ...(review.status === "done" && review.documentPlanOutcome?.tracked
+      ? [wordTrackedApplyText()]
+      : []),
+    ...(["done", "reverted"].includes(review.status)
+      ? (review.documentPlanOutcome?.adjustments ?? [])
+          .filter((code) => WORD_VISIBLE_ADJUSTMENTS.includes(code))
+          .map(wordApplyAdjustmentText)
+          .filter(Boolean)
+      : []),
+  ].join(" ");
   const reverting =
     review.status === "revert-failed" ||
     review.documentPlanStatus === "revert-stale";

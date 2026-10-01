@@ -40,9 +40,17 @@ import {
   revertWordPlanInPlace,
   wordInPlaceFallbackScope,
 } from "./wordInPlaceExecutor";
-import { classifyWordInPlacePlan } from "./wordInPlacePlan";
+import {
+  WORD_IN_PLACE_FALLBACKS,
+  classifyWordInPlacePlan,
+  wordInPlaceFallbacks,
+} from "./wordInPlacePlan";
 import { isWordScopeFingerprint } from "./wordInPlaceState";
-import { wordInPlaceAvailability } from "./wordInPlaceSwitch";
+import {
+  isWordTrackingMode,
+  wordInPlaceAvailability,
+  wordTrackedWritingAvailable,
+} from "./wordInPlaceSwitch";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type {
@@ -92,6 +100,9 @@ export interface WordApplyOutcome {
   ops?: number;
   /** Blocks someone changed elsewhere after the capture; an in-place write leaves them as they are. */
   outsideChanges?: number;
+  /** Written as tracked revisions (true), or written directly although the capture was tracked
+   * because Track Changes was off by then (false). */
+  tracked?: boolean;
 }
 export interface WordDocumentApplyResult {
   status: WordDocumentApplyStatus;
@@ -206,6 +217,26 @@ function imported(
   };
 }
 
+/** Track Changes rules the import out: it would replace the document without revisions. */
+function trackingBlocked(
+  routeReason: WordRouteReason | undefined,
+  fallbackReasons: () => WordRouteReason[],
+): WordDocumentApplyResult {
+  const reasons = fallbackReasons();
+  return {
+    status: "blocked",
+    diagnostic: diagnostic("validate", "tracking", undefined, {
+      route: "import",
+      ...(routeReason ? { routeReason } : {}),
+      fallbackReasons: reasons.length
+        ? reasons
+        : routeReason
+          ? [routeReason]
+          : [],
+    }),
+  };
+}
+
 /** Pure routing; a classifier failure must never block the import that worked before. */
 function routeInPlace(
   plan: WordDocumentPlan,
@@ -304,6 +335,25 @@ async function applyPlan(
         }
       }
       routing.reason = routeReason;
+      const fallbackReasons = (): WordRouteReason[] => {
+        if (
+          !routeReason ||
+          !(WORD_IN_PLACE_FALLBACKS as readonly string[]).includes(routeReason)
+        )
+          return routeReason ? [routeReason] : [];
+        try {
+          return wordInPlaceFallbacks(
+            plan,
+            snapshot,
+            wordInPlaceCapabilities(),
+            prepared,
+          );
+        } catch {
+          return [routeReason];
+        }
+      };
+      if (isWordTrackingMode(snapshot.trackingMode))
+        return trackingBlocked(routeReason, fallbackReasons);
       return imported(
         await applyFullDocument(
           plan,
@@ -311,6 +361,7 @@ async function applyPlan(
           compiled,
           onBeforeWrite,
           progress,
+          () => trackingBlocked(routeReason, fallbackReasons),
         ),
         routeReason,
         fallbackDetails,
@@ -506,6 +557,7 @@ async function applyFullDocument(
   compiled: string,
   onBeforeWrite: ((before: string) => void) | undefined,
   progress: WordApplyProgress,
+  blockedByTracking?: () => WordDocumentApplyResult,
 ): Promise<WordDocumentApplyResult> {
   const host = wordWriteHost();
   if (!host || !supportsWordDocumentPackage())
@@ -535,6 +587,15 @@ async function applyFullDocument(
         (snapshot.documentUrl !== undefined &&
           live.documentUrl !== snapshot.documentUrl) ||
         currentWordDocumentUrl() !== live.documentUrl;
+      // Turned on since the capture: where tracked writing exists this plan simply needs it.
+      if (
+        blockedByTracking &&
+        !snapshot.used &&
+        !snapshot.revoked &&
+        context.document.changeTrackingMode !== "Off" &&
+        wordTrackedWritingAvailable()
+      )
+        return blockedByTracking();
       const reason =
         snapshot.used || snapshot.revoked
           ? "expired"

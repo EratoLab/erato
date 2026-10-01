@@ -47,7 +47,8 @@ export function normalizeWordParagraphText(text: string): string {
   return text.replace(/\r\n|\r|\v/g, "\n");
 }
 
-function plainText(paragraph: Element): string | undefined {
+/** Visible text of a paragraph without fields, revisions, hidden runs or objects; else undefined. */
+export function plainText(paragraph: Element): string | undefined {
   let text = "";
   const runs = (parent: Element): boolean =>
     Array.from(parent.children).every((child) => {
@@ -100,6 +101,15 @@ export function wordBlockParagraphs(
         if (isW(ancestor, "txbxContent")) return false;
       return true;
     }),
+  );
+}
+
+/** The body paragraph elements of a parsed package, in body.paragraphs order. */
+export function wordBodyParagraphElements(doc: Document): Element[] {
+  const body = wordMainBody(doc);
+  if (!body) throw new Error("The document has no readable body.");
+  return nativeBodyGroups(body).groups.flatMap((nodes) =>
+    wordBlockParagraphs(nodes, body),
   );
 }
 

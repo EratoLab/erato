@@ -310,9 +310,22 @@ export function sameWordPreservedParts(
   before: string,
   after: string,
   tier: "strict" | "content" = "strict",
+  /** Story parts a caller compares itself, e.g. headers written in place. */
+  exclude: ReadonlySet<string> = new Set(),
 ): boolean {
   const parse = (v: string) =>
     new DOMParser().parseFromString(v, "application/xml");
+  if (exclude.size) {
+    // Section references resolve their stories by content; an excluded story counts as unchanged.
+    const source = parts(parse(before));
+    const target = parse(after);
+    for (const [path, part] of parts(target)) {
+      const original = source.get(path);
+      if (exclude.has(path) && original)
+        part.replaceWith(target.importNode(original, true));
+    }
+    after = new XMLSerializer().serializeToString(target);
+  }
   if (tier === "content")
     [before, after] = [before, after].map((value) => {
       const doc = parse(value);

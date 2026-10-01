@@ -1,4 +1,5 @@
 import { supportsWordDocumentPackage } from "./wordDocumentPackage";
+import { wordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 
 export type WordInPlaceUnavailable =
   | "disabled"
@@ -32,6 +33,17 @@ export function wordInPlaceAvailability(): WordInPlaceAvailability {
   if (!supportsWordDocumentPackage())
     return { enabled: false, reason: "no-package" };
   return { enabled: true };
+}
+
+/** Track Changes on means writing through the object model under the user's own mode, as native
+ * revisions; the import cannot produce them. */
+export function wordTrackedWritingAvailable(): boolean {
+  return wordInPlaceAvailability().enabled && wordInPlaceCapabilities().tracked;
+}
+
+/** The modes Word records revisions in; anything else is treated as unknown. */
+export function isWordTrackingMode(mode: string | undefined): boolean {
+  return mode === "TrackAll" || mode === "TrackMineOnly";
 }
 
 /** Lasts until the pane reloads; earlier in-place writes can still be reverted in place. */

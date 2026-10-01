@@ -1781,6 +1781,11 @@ msgid "officeAddin.word.authoring.applied"
 msgstr "Dokumentüberarbeitung angewendet"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.appliedTracked"
+msgstr "Als nachverfolgte Änderungen unter Ihrem Namen angewendet."
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts
 msgid "officeAddin.word.authoring.apply"
 msgstr "Dokumentüberarbeitung anwenden"
@@ -2366,6 +2371,11 @@ msgstr "Dieses Dokument überschreitet die aktuelle Grenze für die Überarbeitu
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.tracking"
 msgstr "Die Umstrukturierung ist mit dem aktuellen Status der Änderungsverfolgung nicht verfügbar. Das Add-in hat diese Einstellung nicht verändert."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.trackingNeedsImport"
+msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die bei aktiver Änderungsverfolgung nicht ausgeführt werden kann. Deaktivieren Sie die Änderungsverfolgung oder bitten Sie um eine kleinere Änderung."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

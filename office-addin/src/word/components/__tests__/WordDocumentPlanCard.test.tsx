@@ -28,6 +28,10 @@ import {
   WORD_SUBMIT_PLAN_TOOL,
 } from "../../utils/wordDocumentSubmission";
 import { wordDocumentFingerprint } from "../../utils/wordDocumentXml";
+import {
+  ALL_WORD_IN_PLACE_CAPABILITIES,
+  setWordInPlaceCapabilitiesForTests,
+} from "../../utils/wordInPlaceCapabilities";
 import { resetWordInPlaceLatchForTests } from "../../utils/wordInPlaceSwitch";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
@@ -229,6 +233,7 @@ afterEach(() => {
   cleanup();
   delete window.WORD_FORCE_IMPORT_APPLY;
   resetWordInPlaceLatchForTests();
+  setWordInPlaceCapabilitiesForTests(undefined);
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -599,6 +604,64 @@ describe("structural document review", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
+  });
+  it("says the rewrite went in as tracked changes, then rejects them on Revert", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    const word = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+      trackChanges: true,
+    });
+    word.setTrackingMode("TrackAll");
+    const original = wordDocumentFingerprint(word.ooxml());
+    const messageId = String(mock.artifact.messageId);
+    const snapshot = await captureRealisticSnapshot(messageId, "TrackAll");
+    renderRealisticCard(
+      snapshot,
+      JSON.stringify(
+        statusRewritePlan(snapshot, "Status: revised as tracked."),
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply document rewrite" }),
+    );
+    await screen.findByText("Document rewrite applied");
+    expect(screen.getByTestId("word-plan-adjustments")).toHaveTextContent(
+      "Applied as tracked changes under your name.",
+    );
+    expect(word.ooxml()).toContain("<w:ins ");
+    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    await screen.findByText("Document body restored");
+    expect(screen.queryByTestId("word-plan-adjustments")).toBeNull();
+    expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+  it("explains that a full rewrite cannot run while Track Changes is on", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const word = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+      trackChanges: true,
+    });
+    word.setTrackingMode("TrackAll");
+    const messageId = String(mock.artifact.messageId);
+    const snapshot = await captureRealisticSnapshot(messageId, "TrackAll");
+    renderRealisticCard(
+      snapshot,
+      JSON.stringify({
+        ...statusRewritePlan(snapshot, "Status: revised."),
+        sections: [{ id: "final", source: "section-1" }],
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply document rewrite" }),
+    );
+    expect(
+      await screen.findByText(
+        "This change needs a full-document rewrite, which can't run while Track Changes is on. Turn off Track Changes or ask for a smaller edit.",
+      ),
+    ).toBeInTheDocument();
+    expect(word.insert).not.toHaveBeenCalled();
+    expect(word.events.some((e) => e.startsWith("mutation:"))).toBe(false);
   });
   it("keeps the original downloadable when an in-place Revert would overwrite a later edit", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});

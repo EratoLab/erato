@@ -63,6 +63,8 @@ export interface WordDiagnosticDetails {
   partial?: { applied: number; untouched: number };
   /** Blocks changed elsewhere since the capture, which an in-place write leaves untouched. */
   outsideChanges?: number;
+  /** Why a plan needs the full-document import, which Track Changes rules out. */
+  fallbackReasons?: WordRouteReason[];
   error?: string;
 }
 
@@ -263,6 +265,15 @@ export function renderWordDiagnosticReport(
               ? ` (${details.routeReason})`
               : ""
           }`,
+        ]
+      : []),
+    ...(details?.fallbackReasons?.some((code) =>
+      WORD_ROUTE_REASONS.includes(code),
+    )
+      ? [
+          `Needs full rewrite: ${details.fallbackReasons
+            .filter((code) => WORD_ROUTE_REASONS.includes(code))
+            .join(", ")}`,
         ]
       : []),
     ...(isCount(details?.inPlaceOps)

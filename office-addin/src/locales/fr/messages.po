@@ -1781,6 +1781,11 @@ msgid "officeAddin.word.authoring.applied"
 msgstr "Réécriture du document appliquée"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.appliedTracked"
+msgstr "Appliqué sous forme de modifications suivies à votre nom."
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts
 msgid "officeAddin.word.authoring.apply"
 msgstr "Appliquer la réécriture du document"
@@ -2366,6 +2371,11 @@ msgstr "Ce document dépasse la limite actuelle de réécriture d’un document 
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.tracking"
 msgstr "La restructuration n’est pas disponible avec l’état actuel du suivi des modifications. Le complément n’a pas changé ce paramètre."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.trackingNeedsImport"
+msgstr "Cette modification nécessite de réécrire tout le document, ce qui est impossible tant que le suivi des modifications est activé. Désactivez le suivi des modifications ou demandez une modification plus limitée."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

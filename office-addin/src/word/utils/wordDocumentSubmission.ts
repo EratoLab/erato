@@ -11,6 +11,12 @@ import {
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "./wordDocumentXml";
+import { wordInPlaceCapabilities } from "./wordInPlaceCapabilities";
+import { wordInPlaceFallbacks } from "./wordInPlacePlan";
+import {
+  isWordTrackingMode,
+  wordInPlaceAvailability,
+} from "./wordInPlaceSwitch";
 import { wordReadScope } from "./wordReadScope";
 import { expandWordScopedSubmission } from "./wordScopedSubmission";
 import {
@@ -251,6 +257,29 @@ async function prepareWordDocumentSubmission(
           },
         ],
       };
+    if (isWordTrackingMode(snapshot.trackingMode)) {
+      const availability = wordInPlaceAvailability();
+      const reasons = availability.enabled
+        ? wordInPlaceFallbacks(
+            plan,
+            snapshot,
+            wordInPlaceCapabilities(),
+            prepared,
+          )
+        : [availability.reason];
+      if (reasons.length)
+        return {
+          ok: false,
+          error: "Document plan needs a full rewrite under Track Changes.",
+          validationErrors: [
+            {
+              path: "",
+              code: "tracking-needs-import",
+              message: `Track Changes is on, so only in-place text and paragraph edits can be applied; Word records them as tracked changes. This plan needs a full-document rewrite because of: ${reasons.join(", ")}. Resubmit only edits that avoid these reasons, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that Track Changes must be turned off for this change.`,
+            },
+          ],
+        };
+    }
   } catch (error) {
     // Return schema paths and constraints, never document contents, in parser diagnostics.
     const hints: Record<string, string> = {

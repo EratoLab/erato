@@ -8,6 +8,7 @@ import {
 } from "./wordBuiltInStyles";
 import { wordPlanOutput } from "./wordDocumentPlan";
 import { wordBlockParagraphs } from "./wordLiveParagraphs";
+import { createNativeContentSignature } from "./wordNativeContent";
 import { wordTableCellTextEditIssue } from "./wordTableCellText";
 
 import type {
@@ -23,6 +24,7 @@ import type {
   WordSourceBlock,
 } from "./wordDocumentPlan";
 import type { WordInPlaceCapabilities } from "./wordInPlaceCapabilities";
+import type { WordSectionStories } from "./wordStories";
 import type { WordTableCellTextEdit } from "./wordTableCellText";
 
 /** Routing ladder: when several rules fail, the earliest code is reported. */
@@ -77,16 +79,26 @@ export interface WordInPlaceState {
   /** A captured member of `list` that stays in it: the paragraph joins that member's live List. */
   listRef?: string;
 }
+/** An existing header or footer the object model reaches through the one section that uses it. */
+export interface WordInPlaceStoryTarget {
+  kind: "header" | "footer";
+  /** Package part, e.g. /word/header1.xml. */
+  part: string;
+  section: number;
+  type: "Primary" | "FirstPage" | "EvenPages";
+}
 export type WordInPlaceOp =
   | {
       kind: "text";
+      /** Body block, or the story ID when `story` is set. */
       ref: string;
-      /** Index among the paragraphs of the block. */
+      /** Index among the paragraphs of the block or story. */
       paragraph: number;
       runs: WordInPlaceRun[];
       original: WordInPlaceRun[];
       /** Style, heading level or list membership change, set after the text. */
       restyle?: { from: WordInPlaceState; to: WordInPlaceState };
+      story?: WordInPlaceStoryTarget;
     }
   | {
       kind: "cell";
@@ -967,8 +979,166 @@ export function classifyWordInPlacePlan(
   caps: WordInPlaceCapabilities,
   compiled?: WordAuthoringSnapshot,
 ): WordInPlaceClassification {
+  const { ops, failures } = classify(plan, snapshot, caps, compiled);
+  const first = ladder(failures);
+  if (first) return { fallback: first };
+  if (!sameProgram(plan, snapshot, ops, compiled))
+    return { fallback: "program-mismatch" };
+  return { ops };
+}
+
+/** Every routing rule the plan fails, in ladder order; empty when it can be written in place. */
+export function wordInPlaceFallbacks(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  caps: WordInPlaceCapabilities,
+  compiled?: WordAuthoringSnapshot,
+): WordInPlaceFallback[] {
+  const { ops, failures } = classify(plan, snapshot, caps, compiled);
+  if (!failures.size && !sameProgram(plan, snapshot, ops, compiled))
+    failures.add("program-mismatch");
+  return WORD_IN_PLACE_FALLBACKS.filter((code) => failures.has(code));
+}
+
+/** Story ops were matched against the dry-run compile when they were derived. */
+const sameProgram = (
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  ops: readonly WordInPlaceOp[],
+  compiled: WordAuthoringSnapshot | undefined,
+) => {
+  const body = ops.filter((op) => op.kind !== "text" || !op.story);
+  return (
+    sameWordInPlaceProgram(plan, snapshot, body) &&
+    (!compiled || matchesCompiledOutput(snapshot, body, compiled))
+  );
+};
+
+const STORY_HOST_TYPES: Record<
+  keyof WordSectionStories,
+  WordInPlaceStoryTarget["type"]
+> = { default: "Primary", first: "FirstPage", even: "EvenPages" };
+
+/** The single section reference through which the object model reaches a header or footer. A story
+ * the next section inherits, or one several references share, has none. */
+export function wordStoryReference(
+  snapshot: Pick<WordAuthoringSnapshot, "sections">,
+  id: string,
+  kind: "header" | "footer",
+): Pick<WordInPlaceStoryTarget, "section" | "type"> | undefined {
+  const sections = snapshot.sections ?? [];
+  const references = sections.flatMap((section, i) =>
+    Object.entries(kind === "header" ? section.headers : section.footers)
+      .filter(([, story]) => story === id)
+      .map(([type]) => ({ section: i, key: type as keyof WordSectionStories })),
+  );
+  if (references.length !== 1) return undefined;
+  const [{ section, key }] = references;
+  const next = sections[section + 1];
+  if (next && !(kind === "header" ? next.headers : next.footers)[key])
+    return undefined;
+  return { section, type: STORY_HOST_TYPES[key] };
+}
+
+/** Text and run-mark rewrites of existing header/footer paragraphs, paired 1:1 with the dry-run
+ * compile; any other story change needs the import. */
+function storyOps(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  caps: WordInPlaceCapabilities,
+  compiled: WordAuthoringSnapshot | undefined,
+): WordInPlaceOp[] | WordInPlaceFallback {
+  const ops: WordInPlaceOp[] = [];
+  if (!compiled) return "stories";
+  const sourceSignature = createNativeContentSignature(snapshot.ooxml);
+  const outputSignature = createNativeContentSignature(compiled.ooxml);
+  const serializer = new XMLSerializer();
+  const properties = (
+    p: Element,
+    signature: typeof sourceSignature,
+    part: string,
+  ) => {
+    const props = children(p, "pPr")[0];
+    return props ? signature(serializer.serializeToString(props), part) : "";
+  };
+  const paragraphs = (xml: string) => {
+    const root = parse(xml);
+    return children(root).every((c) => isW(c, "p"))
+      ? children(root)
+      : undefined;
+  };
+  for (const change of plan.stories ?? []) {
+    if (
+      change.kind !== "upsert" ||
+      (change.type !== "header" && change.type !== "footer") ||
+      change.anchor ||
+      change.author !== undefined ||
+      change.initials !== undefined
+    )
+      return "stories";
+    const kind = change.type;
+    const source = snapshot.stories?.find(
+      (s) => s.id === change.id && s.type === kind,
+    );
+    const reference = source && wordStoryReference(snapshot, source.id, kind);
+    const output = compiled.stories?.find((s) => s.id === change.id);
+    if (!source || !reference || !output || output.part !== source.part)
+      return "stories";
+    const from = paragraphs(source.xml);
+    const to = paragraphs(output.xml);
+    const blocks = change.blocks ?? [];
+    if (
+      !from ||
+      !to ||
+      from.length !== blocks.length ||
+      to.length !== blocks.length
+    )
+      return "stories";
+    for (const [index, block] of blocks.entries()) {
+      const shape = wordInPlaceSourceRuns(from[index]);
+      if ("fallback" in shape || block.type !== "paragraph") return "stories";
+      const format = paragraphFormat(block);
+      const targetRuns = block.runs ?? [{ text: block.text }];
+      if (
+        (format && Object.keys(format).length) ||
+        targetRuns.some(
+          (run) =>
+            run.underlineStyle ||
+            wordNonMarkRunProperties(run) !== shape.nonMark,
+        ) ||
+        [block, ...targetRuns].some((run) => STRUCTURAL_TEXT.test(run.text)) ||
+        properties(from[index], sourceSignature, source.part) !==
+          properties(to[index], outputSignature, output.part)
+      )
+        return "stories";
+      const runs = wordPlanBlockRuns(block);
+      if (sameWordInPlaceRuns(runs, shape.runs)) continue;
+      if (!block.text || !shape.runs.length) return "stories";
+      ops.push({
+        kind: "text",
+        ref: source.id,
+        paragraph: index,
+        runs,
+        original: shape.runs,
+        story: { kind, part: source.part, ...reference },
+      });
+    }
+  }
+  if (ops.length && !caps.storyText) return "story-text";
+  return ops;
+}
+
+function classify(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  caps: WordInPlaceCapabilities,
+  compiled: WordAuthoringSnapshot | undefined,
+): { ops: WordInPlaceOp[]; failures: Set<WordInPlaceFallback> } {
   const failures = new Set<WordInPlaceFallback>();
-  if (plan.stories?.length) failures.add("stories");
+  const stories = plan.stories?.length
+    ? storyOps(plan, snapshot, caps, compiled)
+    : [];
+  if (typeof stories === "string") failures.add(stories);
   if (plan.sections) failures.add("sections");
   const order = new Map(snapshot.blocks.map((b, i) => [b.ref, i]));
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
@@ -1051,17 +1221,11 @@ export function classifyWordInPlacePlan(
   }
   for (const deletion of plan.deleted)
     for (const ref of deletion.source) add(deleteOp(ref, ctx));
+  if (typeof stories !== "string") stories.forEach(add);
   if (removed.size && joinsNonParagraphs(plan, snapshot, order))
     failures.add("boundary");
   if (ops.length > MAX_WORD_IN_PLACE_OPS) failures.add("too-many-ops");
-  const first = ladder(failures);
-  if (first) return { fallback: first };
-  if (
-    !sameWordInPlaceProgram(plan, snapshot, ops) ||
-    (compiled && !matchesCompiledOutput(snapshot, ops, compiled))
-  )
-    return { fallback: "program-mismatch" };
-  return { ops };
+  return { ops, failures };
 }
 
 export type WordInPlaceSlot =

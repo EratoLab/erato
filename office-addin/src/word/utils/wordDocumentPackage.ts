@@ -13,7 +13,7 @@ import {
 } from "./wordDocumentPackageCodec";
 import { createWordXmlComparison } from "./wordXmlComparison";
 
-import type { WordInPlaceOp } from "./wordInPlacePlan";
+import type { WordInPlaceOp, WordInPlaceStoryTarget } from "./wordInPlacePlan";
 
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const CT = "http://schemas.openxmlformats.org/package/2006/content-types";
@@ -257,6 +257,8 @@ export type WordInPlaceBackupOp = WordInPlaceOp & {
 /** Touched paragraphs between two untouched ones (null at the start or end of the body). Restore
  * puts the region back exactly as `before` was, whatever the write left inside it. */
 export interface WordInPlaceRegion {
+  /** A header or footer paragraph: start and end are null and `before` holds that one op. */
+  story?: WordInPlaceStoryTarget;
   start: string | null;
   end: string | null;
   /** Ops whose paragraphs filled the region before the write, in document order. */
@@ -271,6 +273,11 @@ export interface WordInPlaceBackup {
   /** The write did not verify, but every difference lies in the rewritten paragraphs: when later
    * edits keep the exact restore from running, undoing those paragraphs is still complete. */
   scopedFallback?: true;
+  /** Written as tracked revisions: Restore rejects them instead of rewriting the paragraphs. */
+  tracked?: true;
+  /** Per paragraph ID inside a touched region, its tracked changes as [type, text] after the write.
+   * Restore rejects only while they are exactly these, so it never undoes a reviewer's decision. */
+  revisions?: Record<string, [string, string][]>;
 }
 
 export function encodeWordDocumentBackup(
@@ -350,6 +357,17 @@ const isState = (v: unknown) => {
   );
 };
 const isOptional = (v: unknown) => v === undefined || isString(v);
+const isStory = (v: unknown) => {
+  if (v === undefined) return true;
+  if (!v || typeof v !== "object") return false;
+  const story = v as Record<string, unknown>;
+  return (
+    ["header", "footer"].includes(String(story.kind)) &&
+    isString(story.part) &&
+    isIndex(story.section) &&
+    ["Primary", "FirstPage", "EvenPages"].includes(String(story.type))
+  );
+};
 
 function parseInPlaceOp(entry: Record<string, unknown>): boolean {
   if (
@@ -370,6 +388,8 @@ function parseInPlaceOp(entry: Record<string, unknown>): boolean {
         isRuns(entry.original) &&
         isString(entry.id) &&
         isString(entry.originalSignature) &&
+        isStory(entry.story) &&
+        (entry.story === undefined || entry.restyle === undefined) &&
         (entry.restyle === undefined ||
           (!!entry.restyle &&
             typeof entry.restyle === "object" &&
@@ -415,7 +435,22 @@ function parseInPlaceBackup(value: unknown): WordInPlaceBackup | undefined {
     !record.ops.length ||
     !Array.isArray(record.regions) ||
     !record.regions.length ||
-    (record.scopedFallback !== undefined && record.scopedFallback !== true)
+    (record.scopedFallback !== undefined && record.scopedFallback !== true) ||
+    (record.tracked !== undefined && record.tracked !== true) ||
+    (record.revisions !== undefined &&
+      (!record.revisions ||
+        typeof record.revisions !== "object" ||
+        Array.isArray(record.revisions) ||
+        !Object.values(record.revisions as Record<string, unknown>).every(
+          (list) =>
+            Array.isArray(list) &&
+            list.every(
+              (entry: unknown) =>
+                Array.isArray(entry) &&
+                entry.length === 2 &&
+                entry.every(isString),
+            ),
+        )))
   )
     return undefined;
   const ops = record.ops as Record<string, unknown>[];
@@ -426,6 +461,12 @@ function parseInPlaceBackup(value: unknown): WordInPlaceBackup | undefined {
         !!region &&
         typeof region === "object" &&
         [region.start, region.end].every((id) => id === null || isString(id)) &&
+        isStory(region.story) &&
+        (region.story === undefined ||
+          (region.start === null &&
+            region.end === null &&
+            Array.isArray(region.before) &&
+            region.before.length === 1)) &&
         Array.isArray(region.before) &&
         region.before.every(
           (index: unknown) => isIndex(index) && index < ops.length,
