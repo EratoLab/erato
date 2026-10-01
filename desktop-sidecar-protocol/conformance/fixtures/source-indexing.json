@@ -1,0 +1,31 @@
+{
+  "configuration": {
+    "user_configuration": {
+      "indexing_sources": [
+        {
+          "source_id": "a1111111-b222-4333-8444-c55555555555",
+          "enabled": true,
+          "priority": 0
+        },
+        {
+          "source_id": "b1111111-b222-4333-8444-c55555555555",
+          "enabled": false,
+          "priority": 1,
+          "future_policy": true
+        }
+      ]
+    },
+    "organization_configuration": {}
+  },
+  "coverage": {
+    "knownEligible": 554,
+    "indexedCurrent": 552,
+    "missingFromLocalCacheCurrent": 2,
+    "emptyCurrent": 0,
+    "unindexableCurrent": 0,
+    "stale": 0,
+    "neverProcessed": 0,
+    "pendingDeletions": 0,
+    "unavailableReason": null
+  }
+}

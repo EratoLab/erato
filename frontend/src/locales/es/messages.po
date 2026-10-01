@@ -4908,7 +4908,7 @@ msgstr "Los totales reflejan los documentos encontrados y pueden aumentar durant
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.empty"
-msgstr "No se encontraron buzones locales."
+msgstr "No se encontraron fuentes locales."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4947,6 +4947,16 @@ msgstr "Cargando estadísticas de indexación…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.localSource"
+msgstr "Fuente de datos local"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.missingFromLocalCache"
+msgstr "{missingCount, plural, one {# documento no está disponible en la caché local.} other {# documentos no están disponibles en la caché local.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.moveDown"
 msgstr "Reducir la prioridad de {mailbox}"
 
@@ -4967,6 +4977,11 @@ msgstr "Aún no hay ningún análisis correcto"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.numberedSource"
+msgstr "{name} ({number})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.parallelism"
 msgstr "Procesos de indexación en paralelo"
 
@@ -4978,7 +4993,7 @@ msgstr "Número máximo de documentos procesados al mismo tiempo."
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.progress"
-msgstr "{percentage}% de {total} documentos indexados"
+msgstr "{indexed} de {total} documentos indexados ({percentage} %)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5019,6 +5034,16 @@ msgstr "No se pudieron guardar los ajustes de indexación. Inténtalo de nuevo."
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.source.outlook"
 msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.source.teams"
+msgstr "Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.sourceUpgrade"
+msgstr "Actualiza el sidecar de escritorio para cambiar la indexación de esta fuente."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5087,6 +5112,16 @@ msgstr "En espera"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.teamsCache"
+msgstr "Caché local de Microsoft Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.teamsScope"
+msgstr "El estado y los ajustes de Teams se aplican a cada caché local. Las cuentas que comparten una caché se agrupan."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.terminal"
 msgstr "Algunos documentos están vacíos o no se han podido indexar, por lo que la cobertura es inferior al 100%."
 
@@ -5103,7 +5138,7 @@ msgstr "Número máximo de documentos que pueden comenzar a procesarse por minut
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.title"
-msgstr "Indexación de buzones"
+msgstr "Indexación local"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx

@@ -4908,7 +4908,7 @@ msgstr "Die Gesamtzahlen beziehen sich auf erfasste Dokumente und können währe
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.empty"
-msgstr "Keine lokalen Postfächer gefunden."
+msgstr "Keine lokalen Quellen gefunden."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4947,6 +4947,16 @@ msgstr "Indexierungsstatistiken werden geladen…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.localSource"
+msgstr "Lokale Datenquelle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.missingFromLocalCache"
+msgstr "{missingCount, plural, one {# Dokument ist im lokalen Cache nicht verfügbar.} other {# Dokumente sind im lokalen Cache nicht verfügbar.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.moveDown"
 msgstr "Priorität für {mailbox} verringern"
 
@@ -4967,6 +4977,11 @@ msgstr "Noch kein erfolgreicher Scan"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.numberedSource"
+msgstr "{name} ({number})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.parallelism"
 msgstr "Parallele Indexierungsvorgänge"
 
@@ -4978,7 +4993,7 @@ msgstr "Maximale Anzahl gleichzeitig verarbeiteter Dokumente."
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.progress"
-msgstr "{percentage}% von {total} Dokumenten indexiert"
+msgstr "{indexed} von {total} Dokumenten indexiert ({percentage} %)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5019,6 +5034,16 @@ msgstr "Indexierungseinstellungen konnten nicht gespeichert werden. Bitte erneut
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.source.outlook"
 msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.source.teams"
+msgstr "Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.sourceUpgrade"
+msgstr "Aktualisieren Sie den Desktop-Sidecar, um die Indizierung für diese Quelle zu ändern."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5087,6 +5112,16 @@ msgstr "Wartet"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.teamsCache"
+msgstr "Lokaler Microsoft-Teams-Cache"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.teamsScope"
+msgstr "Status und Einstellungen für Teams gelten für den jeweiligen lokalen Cache. Konten, die einen Cache gemeinsam nutzen, werden zusammengefasst."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.terminal"
 msgstr "Einige Dokumente sind leer oder konnten nicht indexiert werden. Daher liegt die Abdeckung unter 100%."
 
@@ -5103,7 +5138,7 @@ msgstr "Maximale Anzahl von Dokumenten, deren Verarbeitung pro Minute beginnen k
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.title"
-msgstr "Postfachindexierung"
+msgstr "Lokale Indizierung"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx

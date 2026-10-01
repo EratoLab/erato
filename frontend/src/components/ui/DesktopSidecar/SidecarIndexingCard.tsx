@@ -1,21 +1,31 @@
 import { i18n } from "@lingui/core";
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import { useEffect, useId, useState } from "react";
 
 import { useSidecarIndexing } from "@/hooks/useSidecarIndexing";
 import {
-  effectiveMailboxes,
-  indexingMailboxId,
   mailboxIndexingSummary,
-  orderedMailboxes,
+  sourceIndexingSummary,
 } from "@/lib/desktopSidecar/indexingConfiguration";
+import {
+  indexingEntries,
+  indexingEntryPatch,
+} from "@/lib/desktopSidecar/indexingSources";
 import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 
 import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
 import { Input } from "../Input/Input";
 import { EntityRow } from "../Settings/EntityRow";
-import { ArrowUpIcon, ComputerIcon, MailIcon, Trash } from "../icons";
+import {
+  ArrowUpIcon,
+  ChatBubbleIcon,
+  ComputerIcon,
+  MailIcon,
+  Trash,
+} from "../icons";
+
+import type { SidecarConfiguration } from "@erato/desktop-sidecar-protocol";
 
 export function SidecarIndexingCard() {
   const { client, snapshot } = useDesktopSidecar();
@@ -24,7 +34,7 @@ export function SidecarIndexingCard() {
   return (
     <EntityRow
       icon={<ComputerIcon className="size-4" />}
-      name={t({ id: "sidecar.indexing.title", message: "Mailbox indexing" })}
+      name={t({ id: "sidecar.indexing.title", message: "Local indexing" })}
       caption={t({
         id: "sidecar.indexing.caption",
         message: "Local search on this device",
@@ -52,9 +62,9 @@ export function SidecarIndexingControls() {
   } = useSidecarIndexing();
   const [parallelism, setParallelism] = useState<string | null>(null);
   const [throttle, setThrottle] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ReturnType<
-    typeof effectiveMailboxes
-  > | null>(null);
+  const [draft, setDraft] = useState<Partial<SidecarConfiguration> | null>(
+    null,
+  );
   const [now, setNow] = useState(Date.now);
   const parallelismId = useId();
   const parallelismHelpId = useId();
@@ -91,7 +101,7 @@ export function SidecarIndexingControls() {
         })}
       </p>
     );
-  const { status, mailboxes } = data;
+  const { status, mailboxes, sources } = data;
   const configuration = status.configuration;
   if (!configuration)
     return (
@@ -103,39 +113,45 @@ export function SidecarIndexingControls() {
       </p>
     );
   const busy = saving || resetting || status.resetInProgress === true;
-  const persisted = orderedMailboxes(mailboxes, configuration);
-  const overrides = draft ?? effectiveMailboxes(configuration);
-  const ordered = orderedMailboxes(mailboxes, {
+  const persisted = indexingEntries(mailboxes, sources, configuration);
+  const draftConfiguration = {
     ...configuration,
-    user_configuration: {
-      ...configuration.user_configuration,
-      indexing_mailboxes: overrides,
-    },
-  });
+    user_configuration: { ...configuration.user_configuration, ...draft },
+  };
+  const ordered = indexingEntries(mailboxes, sources, draftConfiguration);
   const move = (index: number, direction: number) => {
     const entries = [...ordered];
     [entries[index], entries[index + direction]] = [
       entries[index + direction],
       entries[index],
     ];
-    const visible = new Set(
-      entries.map((entry) => indexingMailboxId(entry.id)),
-    );
-    setDraft([
-      ...overrides.filter(
-        (entry) => !visible.has(indexingMailboxId(entry.mailbox_id)),
+    setDraft({
+      ...draft,
+      ...indexingEntryPatch(
+        draftConfiguration,
+        entries.map((entry, priority) => ({ ...entry, priority })),
       ),
-      ...entries.map((entry, priority) => ({
-        ...overrides.find(
-          (override) =>
-            indexingMailboxId(override.mailbox_id) ===
-            indexingMailboxId(entry.id),
-        ),
-        mailbox_id: indexingMailboxId(entry.id),
-        enabled: entry.enabled,
-        priority,
-      })),
-    ]);
+    });
+  };
+  const entryName = (entry: (typeof ordered)[number]) => {
+    const name =
+      entry.name ??
+      (entry.product === "teams"
+        ? t({
+            id: "sidecar.indexing.teamsCache",
+            message: "Microsoft Teams local cache",
+          })
+        : t({
+            id: "sidecar.indexing.localSource",
+            message: "Local data source",
+          }));
+    return entry.number === undefined
+      ? name
+      : i18n._({
+          id: "sidecar.indexing.numberedSource",
+          message: "{name} ({number})",
+          values: { name, number: i18n.number(entry.number) },
+        });
   };
   const validLimit = (value: string) =>
     /^\d+$/.test(value) &&
@@ -148,7 +164,7 @@ export function SidecarIndexingControls() {
   const persistDraft = async () => {
     try {
       await save({
-        ...(draft === null ? {} : { indexing_mailboxes: draft }),
+        ...draft,
         indexing_parallelism: Number(parallelismValue),
         indexing_documents_per_minute: Number(throttleValue),
       });
@@ -217,18 +233,28 @@ export function SidecarIndexingControls() {
         <p>
           {t({
             id: "sidecar.indexing.empty",
-            message: "No local mailboxes found.",
+            message: "No local sources found.",
           })}
         </p>
       )}
       <ul className="space-y-3">
         {ordered.map((mailbox, index) => {
-          const mailboxId = indexingMailboxId(mailbox.id);
-          const summary = mailboxIndexingSummary(
-            status,
-            mailbox.id,
-            persisted.find((entry) => entry.id === mailbox.id)?.enabled ?? true,
-          );
+          const enabled =
+            persisted.find(
+              (entry) =>
+                entry.id === mailbox.id && entry.scope === mailbox.scope,
+            )?.enabled ?? true;
+          const summary =
+            mailbox.scope === "source"
+              ? sourceIndexingSummary(
+                  status,
+                  mailbox.id,
+                  mailbox.product,
+                  enabled,
+                )
+              : mailboxIndexingSummary(status, mailbox.id, enabled);
+          const name = entryName(mailbox);
+          const missingCount = summary.missingFromLocalCache ?? 0;
           const seconds =
             summary.lastScan === null
               ? null
@@ -247,7 +273,10 @@ export function SidecarIndexingControls() {
                   seconds < 60 ? "second" : seconds < 3600 ? "minute" : "hour",
                 );
           return (
-            <li key={mailbox.id} className="flex items-start gap-2">
+            <li
+              key={`${mailbox.scope}:${mailbox.id}`}
+              className="flex items-start gap-2"
+            >
               <div className="flex flex-col">
                 <Tooltip
                   content={t({
@@ -257,13 +286,18 @@ export function SidecarIndexingControls() {
                 >
                   <Button
                     variant="icon-only"
-                    disabled={busy || index === 0}
+                    disabled={
+                      busy ||
+                      !mailbox.editable ||
+                      index === 0 ||
+                      !ordered[index - 1].editable
+                    }
                     onClick={() => move(index, -1)}
                     aria-label={i18n._({
                       id: "sidecar.indexing.moveUp",
                       message: "Increase priority for {mailbox}",
                       values: {
-                        mailbox: mailbox.emailAddress ?? mailbox.displayName,
+                        mailbox: name,
                       },
                     })}
                     icon={<ArrowUpIcon className="size-4" />}
@@ -277,13 +311,18 @@ export function SidecarIndexingControls() {
                 >
                   <Button
                     variant="icon-only"
-                    disabled={busy || index === ordered.length - 1}
+                    disabled={
+                      busy ||
+                      !mailbox.editable ||
+                      index === ordered.length - 1 ||
+                      !ordered[index + 1].editable
+                    }
                     onClick={() => move(index, 1)}
                     aria-label={i18n._({
                       id: "sidecar.indexing.moveDown",
                       message: "Decrease priority for {mailbox}",
                       values: {
-                        mailbox: mailbox.emailAddress ?? mailbox.displayName,
+                        mailbox: name,
                       },
                     })}
                     icon={<ArrowUpIcon className="size-4 rotate-180" />}
@@ -295,43 +334,48 @@ export function SidecarIndexingControls() {
                   <input
                     type="checkbox"
                     checked={mailbox.enabled}
-                    disabled={busy}
+                    disabled={busy || !mailbox.editable}
                     aria-label={i18n._({
                       id: "sidecar.indexing.enable",
                       message: "Enable indexing for {mailbox}",
                       values: {
-                        mailbox: mailbox.emailAddress ?? mailbox.displayName,
+                        mailbox: name,
                       },
                     })}
                     onChange={(event) =>
-                      setDraft([
-                        ...overrides.filter(
-                          (entry) =>
-                            indexingMailboxId(entry.mailbox_id) !== mailboxId,
-                        ),
-                        {
-                          ...overrides.find(
-                            (entry) =>
-                              indexingMailboxId(entry.mailbox_id) === mailboxId,
-                          ),
-                          mailbox_id: mailboxId,
-                          enabled: event.target.checked,
-                          priority: mailbox.priority,
-                        },
-                      ])
+                      setDraft({
+                        ...draft,
+                        ...indexingEntryPatch(draftConfiguration, [
+                          { ...mailbox, enabled: event.target.checked },
+                        ]),
+                      })
                     }
                   />
-                  <span className="break-all">
-                    {mailbox.emailAddress ?? mailbox.displayName}
-                  </span>
+                  <span className="break-all">{name}</span>
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1">
-                    <MailIcon className="size-3" />
-                    {t({
-                      id: "sidecar.indexing.source.outlook",
-                      message: "Outlook",
-                    })}
+                    {mailbox.product === "teams" ? (
+                      <ChatBubbleIcon className="size-3" />
+                    ) : mailbox.product === "outlook" ? (
+                      <MailIcon className="size-3" />
+                    ) : (
+                      <ComputerIcon className="size-3" />
+                    )}
+                    {mailbox.product === "teams"
+                      ? t({
+                          id: "sidecar.indexing.source.teams",
+                          message: "Teams",
+                        })
+                      : mailbox.product === "outlook"
+                        ? t({
+                            id: "sidecar.indexing.source.outlook",
+                            message: "Outlook",
+                          })
+                        : t({
+                            id: "sidecar.indexing.localSource",
+                            message: "Local data source",
+                          })}
                   </span>
                   <span
                     className={`rounded border border-theme-border px-1.5 py-0.5 ${["scanFailed", "sourceUnavailable", "indexingUnavailable", "partial"].includes(summary.state) ? "text-theme-warning-fg" : "text-theme-fg-secondary"}`}
@@ -340,7 +384,9 @@ export function SidecarIndexingControls() {
                   </span>
                 </div>
                 <p>
-                  {summary.total === null || summary.indexed === null
+                  {summary.total === null ||
+                  summary.indexed === null ||
+                  (summary.total > 0 && summary.percentage === null)
                     ? t({
                         id: "sidecar.indexing.progressUnavailable",
                         message: "Indexing progress unavailable",
@@ -352,13 +398,27 @@ export function SidecarIndexingControls() {
                         })
                       : i18n._({
                           id: "sidecar.indexing.progress",
-                          message: "{percentage}% of {total} documents indexed",
+                          message:
+                            "{indexed} of {total} documents indexed ({percentage}%)",
                           values: {
+                            indexed: i18n.number(summary.indexed),
                             percentage: i18n.number(summary.percentage ?? 0),
                             total: i18n.number(summary.total),
                           },
                         })}
                 </p>
+                {missingCount > 0 && (
+                  <p>
+                    {t({
+                      id: "sidecar.indexing.missingFromLocalCache",
+                      message: plural(missingCount, {
+                        one: "# document is unavailable in the local cache.",
+                        other:
+                          "# documents are unavailable in the local cache.",
+                      }),
+                    })}
+                  </p>
+                )}
                 <p>
                   {relative === null
                     ? t({
@@ -371,6 +431,15 @@ export function SidecarIndexingControls() {
                         values: { time: relative },
                       })}
                 </p>
+                {!mailbox.editable && (
+                  <p>
+                    {t({
+                      id: "sidecar.indexing.sourceUpgrade",
+                      message:
+                        "Update the desktop sidecar to change indexing for this source.",
+                    })}
+                  </p>
+                )}
                 {summary.terminal && (
                   <p
                     className={
@@ -404,6 +473,15 @@ export function SidecarIndexingControls() {
             "Totals reflect discovered documents and may grow while scanning.",
         })}
       </p>
+      {ordered.some((entry) => entry.product === "teams") && (
+        <p className="text-xs text-theme-fg-secondary">
+          {t({
+            id: "sidecar.indexing.teamsScope",
+            message:
+              "Teams status and settings apply to each local cache. Accounts sharing a cache are combined.",
+          })}
+        </p>
+      )}
       <form
         className="space-y-3"
         onSubmit={(event) => {

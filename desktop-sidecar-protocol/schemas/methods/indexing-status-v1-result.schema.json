@@ -842,6 +842,12 @@
               "type": "null"
             }
           ]
+        },
+        "missingFromLocalCacheCurrent": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Current revisions whose body or attachment content is unavailable in the local cache. A separate terminal outcome from empty or unindexable. Older sidecars may omit this counter; null means unknown."
         }
       },
       "required": [
@@ -856,7 +862,7 @@
         "unavailableReason"
       ],
       "additionalProperties": true,
-      "description": "knownEligible is the sum of the five mutually exclusive revision states. stale means an older receipt exists, including an older failed receipt. pendingDeletions is separate. These counts do not imply discovery is complete."
+      "description": "knownEligible is the sum of indexedCurrent, emptyCurrent, unindexableCurrent, missingFromLocalCacheCurrent (when reported), stale and neverProcessed. pendingDeletions is separate. These counts do not imply discovery is complete."
     },
     "DepthBoundary": {
       "type": "object",

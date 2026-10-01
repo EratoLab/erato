@@ -1,8 +1,21 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSidecarIndexing } from "@/hooks/useSidecarIndexing";
 import { expectSidecarConfigurationAccepted } from "@/lib/desktopSidecar/__tests__/configurationTestUtils";
+import {
+  indexingStatusFixture,
+  multiSourceStatusFixture,
+  sourceFixture,
+  sourceId,
+  teamsSourceIds,
+} from "@/lib/desktopSidecar/__tests__/indexingStatusFixture";
 
 import { SidecarIndexingControls } from "./SidecarIndexingCard";
 
@@ -106,7 +119,7 @@ describe("mailbox indexing controls", () => {
     render(<SidecarIndexingControls />);
     const entries = screen.getAllByRole("listitem");
     expect(entries[0]).toHaveTextContent("personal@example.com");
-    expect(entries[0]).toHaveTextContent("46% of 13 documents indexed");
+    expect(entries[0]).toHaveTextContent("6 of 13 documents indexed (46%)");
     expect(
       screen.getByRole("button", {
         name: "Increase priority for personal@example.com",
@@ -315,4 +328,230 @@ it("resets only after confirmation and hides reset on older sidecars", () => {
   expect(
     screen.queryByRole("button", { name: "Reset sidecar indices" }),
   ).not.toBeInTheDocument();
+});
+
+describe("mailbox status rendering", () => {
+  function renderStatus(status = indexingStatusFixture()) {
+    vi.mocked(useSidecarIndexing).mockReturnValue({
+      data: {
+        ...currentData,
+        status: { ...status, configuration: currentData.status.configuration },
+      },
+      isPending: false,
+      error: null,
+      save,
+      saving: false,
+      supported: true,
+      saveError: null,
+    } as unknown as ReturnType<typeof useSidecarIndexing>);
+    render(<SidecarIndexingControls />);
+    const row = screen
+      .getAllByRole("listitem")
+      .find((entry) => entry.textContent?.includes("shared@example.com"));
+    if (!row) throw new Error("Shared mailbox row missing");
+    return within(row);
+  }
+
+  it("shows sparse Mac coverage and missing-cache content without a scan error", () => {
+    const row = renderStatus();
+    expect(row.getByText("Partially indexed")).toBeInTheDocument();
+    expect(
+      row.getByText("552 of 554 documents indexed (99%)"),
+    ).toBeInTheDocument();
+    expect(
+      row.getByText("2 documents are unavailable in the local cache."),
+    ).toBeInTheDocument();
+    expect(row.getByText(/Last successful scan/)).toBeInTheDocument();
+    expect(row.queryByText("Status unavailable")).not.toBeInTheDocument();
+    expect(
+      row.queryByText("Indexing progress unavailable"),
+    ).not.toBeInTheDocument();
+    expect(row.queryByText("Scan failed")).not.toBeInTheDocument();
+    expect(
+      row.queryByText(/empty or could not be indexed/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses singular wording for one locally unavailable document", () => {
+    const status = indexingStatusFixture();
+    Object.assign(status.generations[0].segments[0].coverage, {
+      indexedCurrent: 553,
+      missingFromLocalCacheCurrent: 1,
+    });
+    expect(
+      renderStatus(status).getByText(
+        "1 document is unavailable in the local cache.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows completion for email-only mailboxes when every message is indexed", () => {
+    const status = indexingStatusFixture();
+    Object.assign(status.generations[0].segments[0].coverage, {
+      indexedCurrent: 554,
+      missingFromLocalCacheCurrent: 0,
+    });
+    const row = renderStatus(status);
+    expect(row.getByText("Up-to-date")).toBeInTheDocument();
+    expect(
+      row.getByText("554 of 554 documents indexed (100%)"),
+    ).toBeInTheDocument();
+    expect(row.queryByText(/local cache/)).not.toBeInTheDocument();
+  });
+
+  it("shows an empty completed scan without an unavailable-status warning", () => {
+    const status = indexingStatusFixture();
+    status.generations[0].segments = status.generations[0].segments.filter(
+      (row) => row.mailboxId === null,
+    );
+    status.discovery[0].discoveredDocuments = 0;
+    const row = renderStatus(status);
+    expect(row.getByText("Up-to-date")).toBeInTheDocument();
+    expect(row.getByText("No documents discovered yet")).toBeInTheDocument();
+  });
+
+  it("keeps a real scan failure visible alongside known coverage", () => {
+    const status = indexingStatusFixture();
+    status.discovery[0].state = "failed";
+    status.discovery[0].discoveryComplete = false;
+    status.discovery[0].lastErrorCode = "source_scan_incomplete";
+    const row = renderStatus(status);
+    expect(row.getByText("Scan failed")).toBeInTheDocument();
+    expect(
+      row.getByText("552 of 554 documents indexed (99%)"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not present explicitly unavailable counters as zero or complete", () => {
+    const status = indexingStatusFixture();
+    status.generations[0].segments[0].coverage.knownEligible = null;
+    const row = renderStatus(status);
+    expect(row.getByText("Status unavailable")).toBeInTheDocument();
+    expect(row.getByText("Indexing progress unavailable")).toBeInTheDocument();
+    expect(
+      row.queryByText("No documents discovered yet"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("Teams and Outlook source controls", () => {
+  function renderSources() {
+    const status = multiSourceStatusFixture();
+    status.configuration!.user_configuration.indexing_sources = [
+      { source_id: sourceId, enabled: false, priority: 0 },
+    ];
+    vi.mocked(useSidecarIndexing).mockReturnValue({
+      ...vi.mocked(useSidecarIndexing)(),
+      data: {
+        status,
+        mailboxes: [data.mailboxes[0]],
+        sources: [
+          sourceFixture(sourceId, false),
+          ...teamsSourceIds.map((id) => sourceFixture(id)),
+        ],
+      },
+    } as ReturnType<typeof useSidecarIndexing>);
+    const view = render(<SidecarIndexingControls />);
+    return { status, ...view };
+  }
+
+  it("shows separate status for equally named Teams caches alongside Outlook", () => {
+    const { status, rerender } = renderSources();
+    status.discovery[1].state = "failed";
+    status.discovery[1].discoveryComplete = false;
+    rerender(<SidecarIndexingControls />);
+    const rows = screen.getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent("shared@example.com");
+    expect(rows[0]).toHaveTextContent("Disabled");
+    expect(rows[1]).toHaveTextContent("Microsoft Teams local cache (1)");
+    expect(rows[1]).toHaveTextContent("Scan failed");
+    expect(rows[1]).toHaveTextContent("10 of 10 documents indexed (100%)");
+    expect(rows[2]).toHaveTextContent("Microsoft Teams local cache (2)");
+    expect(rows[2]).toHaveTextContent("Up-to-date");
+    expect(rows[2]).toHaveTextContent("11 of 11 documents indexed (100%)");
+    expect(
+      screen.getByText(/Accounts sharing a cache are combined/),
+    ).toBeInTheDocument();
+  });
+
+  it("toggles only the selected Teams cache and preserves disabled Outlook after polling and save", async () => {
+    const { status, rerender } = renderSources();
+    const checkbox = () =>
+      screen.getByRole("checkbox", {
+        name: "Enable indexing for Microsoft Teams local cache (2)",
+      });
+    fireEvent.click(checkbox());
+    rerender(<SidecarIndexingControls />);
+    expect(checkbox()).not.toBeChecked();
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    );
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0][0]).toMatchObject({
+      indexing_sources: [
+        { source_id: sourceId, enabled: false, priority: 0 },
+        {
+          source_id: teamsSourceIds[1],
+          enabled: false,
+          priority: Number.MAX_SAFE_INTEGER,
+        },
+      ],
+    });
+    expect(save.mock.calls[0][0].indexing_mailboxes).toBeUndefined();
+    await expectSidecarConfigurationAccepted({
+      ...status.configuration!,
+      user_configuration: {
+        ...status.configuration!.user_configuration,
+        ...save.mock.calls[0][0],
+      },
+    });
+  });
+
+  it("reorders Teams and Outlook together without changing their enablement", async () => {
+    renderSources();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Increase priority for Microsoft Teams local cache (1)",
+      }),
+    );
+    expect(screen.getAllByRole("listitem")[0]).toHaveTextContent(
+      "Microsoft Teams local cache (1)",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    );
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0][0].indexing_sources).toEqual([
+      { source_id: teamsSourceIds[0], enabled: true, priority: 0 },
+      { source_id: sourceId, enabled: false, priority: 1 },
+      { source_id: teamsSourceIds[1], enabled: true, priority: 2 },
+    ]);
+  });
+
+  it("shows Teams status without offering ineffective controls on older sidecars", () => {
+    const { status, rerender } = renderSources();
+    delete status.configuration!.user_configuration.indexing_sources;
+    rerender(<SidecarIndexingControls />);
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Enable indexing for Microsoft Teams local cache (1)",
+    });
+    expect(checkbox).toBeDisabled();
+    const row = within(checkbox.closest("li")!);
+    expect(
+      row.getByText("10 of 10 documents indexed (100%)"),
+    ).toBeInTheDocument();
+    expect(
+      row.getByText(
+        "Update the desktop sidecar to change indexing for this source.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Enable indexing for shared@example.com",
+      }),
+    ).toBeEnabled();
+    expect(save).not.toHaveBeenCalled();
+  });
 });

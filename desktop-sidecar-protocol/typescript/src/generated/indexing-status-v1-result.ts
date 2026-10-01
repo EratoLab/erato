@@ -72,6 +72,20 @@ export interface SidecarConfiguration {
    * Global maximum document-processing starts per rolling 60 seconds, shared by all workers, kinds and generations. Retry attempts consume this budget; one extraction shared by generations consumes it once. Deletion-only cleanup does not consume it. Null or absence inherits the other layer; the sidecar default is 40. Zero is invalid and does not pause indexing.
    */
   indexing_documents_per_minute?: number | null;
+  /**
+   * Source indexing overrides keyed by sourceId from sources.list.v1. Lower priorities are processed first, independent of array order. Source IDs must be unique. Null inherits the other layer; an empty array uses source defaults. Disabling stops new discovery and processing while retaining the existing index. This is authoritative when supported; indexing_mailboxes is a legacy projection. Older sidecars may preserve this field without applying it.
+   */
+  indexing_sources?:
+    | {
+        enabled: boolean;
+        /**
+         * Indexing priority; lower numbers are processed first. Array order has no effect.
+         */
+        priority: number;
+        source_id: string;
+        [k: string]: unknown;
+      }[]
+    | null;
   [k: string]: unknown;
 }
 export interface EffectiveIndexingConfiguration {
@@ -203,7 +217,7 @@ export interface Backlog {
   [k: string]: unknown;
 }
 /**
- * knownEligible is the sum of the five mutually exclusive revision states. stale means an older receipt exists, including an older failed receipt. pendingDeletions is separate. These counts do not imply discovery is complete.
+ * knownEligible is the sum of indexedCurrent, emptyCurrent, unindexableCurrent, missingFromLocalCacheCurrent (when reported), stale and neverProcessed. pendingDeletions is separate. These counts do not imply discovery is complete.
  */
 export interface Coverage {
   sampledAt: string;
@@ -215,6 +229,10 @@ export interface Coverage {
   neverProcessed: number | null;
   pendingDeletions: number | null;
   unavailableReason: string | null;
+  /**
+   * Current revisions whose body or attachment content is unavailable in the local cache. A separate terminal outcome from empty or unindexable. Older sidecars may omit this counter; null means unknown.
+   */
+  missingFromLocalCacheCurrent?: number | null;
   [k: string]: unknown;
 }
 /**
