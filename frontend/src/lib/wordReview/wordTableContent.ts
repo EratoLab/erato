@@ -301,8 +301,7 @@ function tableGrid<T>(
       return null;
   }
   return grid.map(
-    (row) =>
-      row.filter((entry, i) => entry && entry.column === i) as PlacedCell<T>[],
+    (row) => row.filter((entry, i) => entry?.column === i) as PlacedCell<T>[],
   );
 }
 
@@ -1157,7 +1156,7 @@ export function readWordTableContent<T>(
       const merge = wordChild(props, "vMerge");
       const continuation = merge && wordAttribute(merge) !== "restart";
       const owner = active.get(column);
-      if (continuation && owner && owner.width === span) {
+      if (continuation && owner?.width === span) {
         owner.cell.rowSpan = (owner.cell.rowSpan ?? 1) + 1;
         continued.add(column);
       } else {

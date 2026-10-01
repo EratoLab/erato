@@ -9,7 +9,7 @@ import {
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
 
-import type { WordDocumentPlan } from "../wordDocumentPlan";
+import type { WordDocumentPlan } from "@erato/frontend/word-review";
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

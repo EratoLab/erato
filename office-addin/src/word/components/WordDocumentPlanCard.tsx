@@ -3,26 +3,31 @@ import {
   Alert,
   useChatContext,
   useHostArtifact,
+  WordProposalCard,
+  WordReviewGenerating,
+  WordUndoLine,
+  wordPlanApplyLabel,
+  wordPlanTitleText,
+  wordUndoLabel,
 } from "@erato/frontend/library";
+import {
+  buildWordPlanReview,
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
-import { useCallback, useId, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
 import {
   isAutomaticWordRun,
   WordApplyButton,
   wordBlockedReasonText,
   WordDiagnosticDetails,
-  WordReviewCard,
   WordReviewConfirm,
-  WordReviewDetailsToggle,
-  WordReviewGenerating,
-  WordUndoLine,
-  wordUndoLabel,
+  WordStatusAlert,
 } from "./WordReviewCardParts";
 import { WordReviewReceipt } from "./WordReviewReceipt";
-import { WordSavedPlanPreview } from "./WordSavedPlanPreview";
-import { wordPlanApplyLabel, wordPlanTitleText } from "./wordPlanLabels";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
@@ -41,13 +46,7 @@ import {
   decodeWordDocumentBackup,
   isWordDocumentBackup,
 } from "../utils/wordDocumentPackage";
-import {
-  normalizeWordDocumentPlan,
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "../utils/wordDocumentPlan";
 import { wordPlanDraftText } from "../utils/wordDocumentXml";
-import { buildWordPlanReview } from "../utils/wordPlanReview";
 import { showWordReviewLocation } from "../utils/wordReviewLocation";
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
@@ -56,7 +55,7 @@ import type {
   WordClientAction,
   WordClientActionEntry,
 } from "../utils/wordClientActions";
-import type { WordDocumentPlan } from "../utils/wordDocumentPlan";
+import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 export function WordDocumentPlanCard({
   entry,
@@ -72,7 +71,6 @@ export function WordDocumentPlanCard({
     wordClientActionDecisionStore,
   );
   const [copyNote, setCopyNote] = useState("");
-  const detailsId = useId();
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
   const generating = !!messageId && messages[messageId]?.status === "sending";
@@ -365,70 +363,60 @@ export function WordDocumentPlanCard({
             })
           : undefined;
   return (
-    <WordReviewCard
+    <WordProposalCard
       cardRef={cardRef}
       label={entry.displayLabel()}
       testId="word-document-plan-card"
-      collapsed={collapsed}
-      detailsId={detailsId}
-      status={review.status}
-      statusMessage={status}
-      receipt={
-        <WordReviewReceipt
-          review={review}
-          kind="plan"
-          title={planTitle}
-          wholeDocument={planReview.scope.wholeFile}
-        />
-      }
-      trailing={
-        <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
-      }
-      footer={
-        <>
-          {(idle || applying) && offered && !confirmCard && (
-            <WordApplyButton
-              applying={applying}
-              applyStage={review.applyStage}
-              disabled={!ready || host.operationInProgress || isConfirmPending}
-              label={applyLabel}
-              onApply={() => void execute()}
-            />
-          )}
-          {confirmCard && (
-            <WordReviewConfirm
-              key={confirmCard.requestId}
-              card={confirmCard}
-              title={t({
-                id: "officeAddin.word.planReview.consent",
-                message: "Apply the changes reviewed above?",
-              })}
-              allowOnceLabel={applyLabel}
-              canApply={ready}
-              operationInProgress={host.operationInProgress}
-              enforcedAskActions={enforcedAskActions}
-              decisions={decisions}
-              setDecisions={setDecisions}
-              facetId={facetId}
-              allowCard={allowCard}
-              denyCard={denyCard}
-              onDenied={() =>
-                host.updateReview(key, { status: "denied", capture })
-              }
-              applying={applying}
-              applyStage={review.applyStage}
-            />
-          )}
-          <div className="word-review__actions">
-            {completed && (
-              <WordReviewDetailsToggle
-                collapsed={collapsed}
-                controls={detailsId}
-                onToggle={() =>
-                  host.updateReview(key, { detailsExpanded: collapsed })
+      plan={plan}
+      snapshot={snapshot}
+      review={planReview}
+      showSavedPlan={!!artifact?.submittedCard}
+      adapter={{
+        locate:
+          idle && gate.allowed && !host.operationInProgress
+            ? (ref) => void locate(ref)
+            : undefined,
+        apply: (
+          <>
+            {(idle || applying) && offered && !confirmCard && (
+              <WordApplyButton
+                applying={applying}
+                applyStage={review.applyStage}
+                disabled={
+                  !ready || host.operationInProgress || isConfirmPending
                 }
+                label={applyLabel}
+                onApply={() => void execute()}
               />
             )}
+            {confirmCard && (
+              <WordReviewConfirm
+                key={confirmCard.requestId}
+                card={confirmCard}
+                title={t({
+                  id: "officeAddin.word.planReview.consent",
+                  message: "Apply the changes reviewed above?",
+                })}
+                allowOnceLabel={applyLabel}
+                canApply={ready}
+                operationInProgress={host.operationInProgress}
+                enforcedAskActions={enforcedAskActions}
+                decisions={decisions}
+                setDecisions={setDecisions}
+                facetId={facetId}
+                allowCard={allowCard}
+                denyCard={denyCard}
+                onDenied={() =>
+                  host.updateReview(key, { status: "denied", capture })
+                }
+                applying={applying}
+                applyStage={review.applyStage}
+              />
+            )}
+          </>
+        ),
+        actions: (
+          <>
             {snapshot && (
               <Button
                 type="button"
@@ -530,7 +518,9 @@ export function WordDocumentPlanCard({
                       })}
                 </Button>
               )}
-          </div>
+          </>
+        ),
+        revert: (
           <WordUndoLine
             canRevert={canRevert}
             label={
@@ -549,38 +539,38 @@ export function WordDocumentPlanCard({
             disabled={host.operationInProgress}
             onUndo={() => void revert()}
           />
-          {copyNote && (
-            <p role="status" className="word-review__hint">
-              {copyNote}
-            </p>
-          )}
-        </>
-      }
-    >
-      {!snapshot && artifact?.submittedCard && (
-        <WordSavedPlanPreview plan={plan} />
-      )}
-      {snapshot && (
-        <WordDocumentPlanReview
-          plan={plan}
-          snapshot={snapshot}
-          review={planReview}
-          onLocate={
-            idle && gate.allowed && !host.operationInProgress
-              ? (ref) => void locate(ref)
-              : undefined
-          }
-        />
-      )}
-      {idle && blockedText && (
-        <Alert
-          type="info"
-          role="status"
-          className="m-3 [overflow-wrap:anywhere]"
-        >
-          {blockedText}
-        </Alert>
-      )}
-    </WordReviewCard>
+        ),
+        status: {
+          collapsed,
+          onToggleDetails: completed
+            ? () => host.updateReview(key, { detailsExpanded: collapsed })
+            : undefined,
+          receipt: (
+            <WordReviewReceipt
+              review={review}
+              kind="plan"
+              title={planTitle}
+              wholeDocument={planReview.scope.wholeFile}
+            />
+          ),
+          alert: status && (
+            <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
+          ),
+          trailing: (
+            <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
+          ),
+          notice: idle && blockedText && (
+            <Alert
+              type="info"
+              role="status"
+              className="m-3 [overflow-wrap:anywhere]"
+            >
+              {blockedText}
+            </Alert>
+          ),
+          note: copyNote,
+        },
+      }}
+    />
   );
 }

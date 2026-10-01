@@ -1,3 +1,9 @@
+import {
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
+
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
 import {
   unlockWordContentControlsForImport,
@@ -14,11 +20,6 @@ import {
   wordDocumentOoxmlToFile,
 } from "./wordDocumentPackage";
 import {
-  normalizeWordDocumentPlan,
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "./wordDocumentPlan";
-import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
@@ -34,7 +35,7 @@ import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanIssue,
-} from "./wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 export type WordDocumentApplyStatus =
   | "applied"

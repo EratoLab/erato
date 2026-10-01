@@ -1,3 +1,12 @@
+import {
+  MAX_SOURCE_BYTES,
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+  wordSourceReadRefs,
+  resolveWordSource,
+  wordSourceDetails,
+  parseWordBlock,
+} from "@erato/frontend/word-review";
 import { describe, expect, it, vi } from "vitest";
 
 import nativeSource from "../../../test/fixtures/word-authoring-state/mixed-source.xml?raw";
@@ -10,22 +19,14 @@ import {
 import { checkWordAuthoringBudget } from "../wordAuthoringBudget";
 import { WORD_AUTHORING_CONTRACT } from "../wordAuthoringContract";
 import { wordReadableSourceBlock } from "../wordAuthoringReadData";
-import {
-  MAX_SOURCE_BYTES,
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-  wordSourceReadRefs,
-} from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
-import { resolveWordSource, wordSourceDetails } from "../wordRichContent";
-import { parseWordBlock } from "../wordRichPlan";
 
-import type { WordAuthoringSnapshot } from "../wordDocumentPlan";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 const estimate = vi.hoisted(() => vi.fn());
 vi.mock("@erato/frontend/library", () => ({

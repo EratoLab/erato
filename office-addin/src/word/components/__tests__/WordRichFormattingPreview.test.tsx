@@ -1,14 +1,15 @@
+import { WordRichBlockPreview } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { readySnapshot } from "../../../test/mocks/word/authoringFixtures";
-import { WordRichBlockPreview } from "../WordRichBlockPreview";
 
-import type { WordPlanBlock } from "../../utils/wordDocumentPlan";
+import type { WordPlanBlock } from "@erato/frontend/word-review";
 
 beforeEach(() => {
-  i18n.load("en", {});
+  i18n.load("en", frontendMessages);
   i18n.activate("en");
 });
 afterEach(cleanup);

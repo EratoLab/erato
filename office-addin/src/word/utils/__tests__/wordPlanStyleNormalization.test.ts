@@ -1,3 +1,8 @@
+import {
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -5,11 +10,6 @@ import {
   readySnapshot,
   sixParagraphXml,
 } from "../../../test/mocks/word/authoringFixtures";
-import {
-  normalizeWordDocumentPlan,
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
   acceptedWordDocumentSubmission,
@@ -18,15 +18,15 @@ import {
 } from "../wordDocumentSubmission";
 
 import type {
-  WordAuthoringSnapshot,
-  WordDocumentPlan,
-  WordPlanBlock,
-} from "../wordDocumentPlan";
-import type { WordPlanDiagnostics } from "../wordPlanDiagnostics";
-import type {
   ClientToolCallContext,
   ContentPart,
 } from "@erato/frontend/library";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+  WordPlanBlock,
+  WordPlanDiagnostics,
+} from "@erato/frontend/word-review";
 
 const context: ClientToolCallContext = {
   toolCallId: "submit-A",

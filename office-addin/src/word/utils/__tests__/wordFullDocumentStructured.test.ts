@@ -1,3 +1,8 @@
+import {
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+  wordSourceReadRefs,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,11 +14,6 @@ import {
   wordDocumentOoxmlToFile,
 } from "../wordDocumentPackage";
 import {
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-  wordSourceReadRefs,
-} from "../wordDocumentPlan";
-import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
@@ -22,7 +22,7 @@ import {
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 function ready(xml: string): WordAuthoringSnapshot {
   const source = captureWordAuthoringSnapshot(xml, "doc-A", "Off", true);

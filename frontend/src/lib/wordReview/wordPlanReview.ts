@@ -958,7 +958,7 @@ export function buildWordPlanReview(
           status: "unchanged",
           locateRef: ref,
           count: 1,
-          paragraphs: !source || source.type !== "native" ? 1 : 0,
+          paragraphs: source?.type !== "native" ? 1 : 0,
           tables: source?.nativeKind === "table" ? 1 : 0,
           objects:
             source?.type === "native" && source.nativeKind !== "table" ? 1 : 0,

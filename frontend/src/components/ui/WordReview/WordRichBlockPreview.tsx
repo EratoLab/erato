@@ -1,36 +1,43 @@
-import { Card } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
-import { nativeKindLabel } from "./WordNativeBlockPreview";
-import { formatCentimeters } from "./wordPlanLabels";
+import { Card } from "@/components/ui/Container/Card";
 import {
   inventoryWordMedia,
   isWordImageSpec,
   readWordImageData,
   wordImageDimensions,
-} from "../utils/wordMediaContent";
+} from "@/lib/wordReview/wordMediaContent";
 import {
   createWordListNumbering,
   wordSourceTable,
-} from "../utils/wordPlanReview";
-import { resolveWordSource, wordSourceDetails } from "../utils/wordRichContent";
+} from "@/lib/wordReview/wordPlanReview";
+import {
+  resolveWordSource,
+  wordSourceDetails,
+} from "@/lib/wordReview/wordRichContent";
+
+import { nativeKindLabel } from "./WordNativeBlockPreview";
+import { formatCentimeters } from "./wordPlanLabels";
 
 import type {
   WordBorder,
   WordParagraphFormatting,
   WordRunFormatting,
-} from "../utils/wordBlockFormatting";
+} from "@/lib/wordReview/wordBlockFormatting";
 import type {
   WordAuthoringSnapshot,
   WordPlanBlock,
-} from "../utils/wordDocumentPlan";
-import type { WordNativeStructureEdit } from "../utils/wordInlineStructures";
-import type { WordDrawingSpec, WordImageSpec } from "../utils/wordMediaContent";
+} from "@/lib/wordReview/wordDocumentPlan";
+import type { WordNativeStructureEdit } from "@/lib/wordReview/wordInlineStructures";
+import type {
+  WordDrawingSpec,
+  WordImageSpec,
+} from "@/lib/wordReview/wordMediaContent";
 import type {
   WordTableBlock,
   WordTableCellFormatting,
-} from "../utils/wordTableContent";
+} from "@/lib/wordReview/wordTableContent";
 import type { CSSProperties } from "react";
 
 import "./wordRichPreview.css";
@@ -45,6 +52,7 @@ type PreviewProps = {
   snapshot: WordAuthoringSnapshot;
   maxTableRows?: number;
 };
+/* eslint-disable lingui/no-unlocalized-strings -- CSS values */
 const color = (value: string | undefined): string | undefined =>
   value && /^#?[a-fA-F0-9]{6}$/.test(value)
     ? `#${value.replace(/^#/, "")}`
@@ -74,6 +82,7 @@ const border = (value: WordBorder | undefined): string | undefined =>
   (value.style === "none"
     ? "none"
     : `${points(value.width ?? 0.5)} ${{ single: "solid", double: "double", dotted: "dotted", dashed: "dashed", thick: "solid" }[value.style]} ${color(value.color) ?? "currentColor"}`);
+/* eslint-enable lingui/no-unlocalized-strings */
 function runStyle(value: WordRunFormatting): CSSProperties {
   return {
     fontFamily: value.fontFamily,
@@ -213,6 +222,7 @@ export function WordTablePreview({
           }}
         >
           <caption>
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty caption falls back too */}
             <strong>{format.caption || nativeKindLabel("table")}</strong>{" "}
             <span className="word-rich-preview__hint">
               {t({
@@ -255,13 +265,12 @@ export function WordTablePreview({
                     >
                       {cell.textEdit ? (
                         <CellTextEdit
-                          before={
-                            cell.textEdit.expectedText ?? retained?.text ?? ""
-                          }
+                          before={cell.textEdit.expectedText}
                           after={cell.textEdit.text}
                         />
                       ) : cell.blocks === undefined ? (
                         <p className="word-rich-preview__text word-rich-preview__retained">
+                          {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty cell gets the label too */}
                           {retained?.text || emptyCellLabel()}
                         </p>
                       ) : cell.blocks.length ? (
@@ -337,6 +346,7 @@ function inlineImage(
       if (!packageDoc) {
         packageDoc = new DOMParser().parseFromString(
           snapshot.ooxml,
+          // eslint-disable-next-line lingui/no-unlocalized-strings -- MIME type
           "application/xml",
         );
         imagePackages.set(snapshot, packageDoc);
@@ -354,6 +364,7 @@ function inlineImage(
     !isWordImageSpec({ data: { mime: data.mime, base64: data.base64 } })
   )
     return undefined;
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- data URL
   return `data:${data.mime};base64,${data.base64}`;
 }
 
@@ -369,11 +380,12 @@ function ImagePreview({
     const source = image.sourceRef
       ? resolveWordSource(snapshot, image.sourceRef)
       : undefined;
-    const original = source
-      ? inventoryWordMedia(source.xml, image.sourceRef!).filter(
-          (item) => item.kind === "image",
-        )[source.index ?? image.sourceIndex ?? 0]
-      : undefined;
+    const original =
+      source && image.sourceRef
+        ? inventoryWordMedia(source.xml, image.sourceRef).filter(
+            (item) => item.kind === "image",
+          )[source.index ?? image.sourceIndex ?? 0]
+        : undefined;
     const asset = snapshot.assets?.find((item) => item.ref === image.assetRef);
     const dimensions = image.data ? wordImageDimensions(image.data) : asset;
     const ratio =
@@ -391,6 +403,7 @@ function ImagePreview({
       heightPt: image.heightPt ?? width / ratio,
     };
   }, [image, snapshot]);
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty text falls back too
   const alt = image.alt || image.title || imageLabel();
   return (
     <Card variant="surface" size="sm" className="word-rich-preview">
@@ -468,6 +481,7 @@ function MediaDimensions({
   );
 }
 function DrawingPreview({ drawing }: { drawing: WordDrawingSpec }) {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty text falls back too
   const label = drawing.alt || drawing.title || nativeKindLabel("drawing");
   const fill = color(drawing.fill) ?? "var(--theme-bg-secondary)";
   const line = color(drawing.line?.color) ?? "var(--theme-fg-secondary)";
@@ -683,7 +697,8 @@ export function WordRichBlockPreview({
     const label =
       block.type === "bookmark"
         ? block.bookmark.name
-        : block.control.title || nativeKindLabel("content-control");
+        : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty title falls back too
+          block.control.title || nativeKindLabel("content-control");
     return (
       <Card variant="surface" size="sm" className="word-rich-preview">
         <span className="word-rich-preview__hint">{label}</span>
@@ -741,13 +756,14 @@ function ControlDetails({
     binding?: "retain" | "remove";
   };
 }) {
+  const { tag } = value;
   return (
     <>
-      {value.tag && (
+      {tag && (
         <span className="word-rich-preview__hint">
           {t({
             id: "officeAddin.word.rich.controlTag",
-            message: `Tag: ${value.tag}`,
+            message: `Tag: ${tag}`,
           })}
         </span>
       )}

@@ -1,6 +1,6 @@
 import { captureWordAuthoringSnapshot } from "../../../word/utils/wordDocumentXml";
 
-import type { WordDocumentPlan } from "../../../word/utils/wordDocumentPlan";
+import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 export const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 export const escapeXml = (text: string) =>

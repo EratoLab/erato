@@ -1,21 +1,22 @@
+import { WordPlanChangeRow } from "@erato/frontend/library";
+import { buildWordPlanReview } from "@erato/frontend/word-review";
 import { i18n } from "@lingui/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import {
   packageXml,
   paragraph,
   readySnapshot,
 } from "../../../test/mocks/word/authoringFixtures";
-import { buildWordPlanReview } from "../../utils/wordPlanReview";
-import { WordPlanChangeRow } from "../WordPlanChangeRow";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanEntry,
-} from "../../utils/wordDocumentPlan";
-import type { WordPlanRow } from "../../utils/wordPlanReview";
+  WordPlanRow,
+} from "@erato/frontend/word-review";
 
 const tableXml = (rows: string[][]) =>
   '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>' +
@@ -63,7 +64,7 @@ const renderRow = (
   );
 
 beforeEach(() => {
-  i18n.load("en", {});
+  i18n.load("en", frontendMessages);
   i18n.activate("en");
 });
 afterEach(cleanup);

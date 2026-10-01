@@ -1,24 +1,25 @@
-import { describe, expect, it } from "vitest";
-
-import { packageXml } from "../../../test/mocks/word/authoringFixtures";
 import {
   parseWordDocumentPlan,
   validateWordDocumentPlan,
   wordSourceReadRefs,
-} from "../wordDocumentPlan";
+  compileWordImage,
+  readWordImageData,
+} from "@erato/frontend/word-review";
+import { describe, expect, it } from "vitest";
+
+import { packageXml } from "../../../test/mocks/word/authoringFixtures";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
-import { compileWordImage, readWordImageData } from "../wordMediaContent";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../wordDocumentPlan";
-import type { WordImageAsset } from "../wordImageAssetData";
+  WordImageAsset,
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";

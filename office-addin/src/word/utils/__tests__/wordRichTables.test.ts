@@ -1,3 +1,7 @@
+import {
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,10 +16,6 @@ import {
   nativeTable,
 } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import {
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "../wordDocumentPlan";
-import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
@@ -24,7 +24,7 @@ import {
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const tableStyle =
   '<w:style w:type="table" w:styleId="PilotTable"><w:name w:val="Pilot table"/><w:tblPr><w:tblBorders><w:bottom w:val="single" w:sz="4"/></w:tblBorders></w:tblPr></w:style>';

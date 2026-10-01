@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { resolveWordWriteGate } from "../wordWriteGate";
 
-import type { WordDocumentCapture } from "../wordDocumentCapture";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const IDENTITY = "https://contoso.sharepoint.com/report.docx";
 

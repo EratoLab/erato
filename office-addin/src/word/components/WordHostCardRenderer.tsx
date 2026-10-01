@@ -5,11 +5,16 @@ import {
   SyntaxHighlightedCode,
   useChatContext,
   useHostArtifact,
+  WordReviewCard,
+  WordReviewDetailsToggle,
+  WordReviewGenerating,
+  WordReviewHeader,
+  WordUndoLine,
+  wordUndoLabel,
 } from "@erato/frontend/library";
+import { editExcerpt, parseWordEdits } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-
-import "./wordReview.css";
 
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
 import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
@@ -17,13 +22,8 @@ import {
   isAutomaticWordRun,
   WordApplyButton,
   wordBlockedReasonText,
-  WordReviewCard,
   WordReviewConfirm,
-  WordReviewDetailsToggle,
-  WordReviewGenerating,
-  WordReviewHeader,
-  WordUndoLine,
-  wordUndoLabel,
+  WordStatusAlert,
 } from "./WordReviewCardParts";
 import { editedParagraphCount, WordReviewPanel } from "./WordReviewPanel";
 import {
@@ -47,7 +47,6 @@ import {
   type WordClientAction,
   type WordClientActionEntry,
 } from "../utils/wordClientActions";
-import { editExcerpt, parseWordEdits } from "../utils/wordEditPlan";
 import {
   originalWordAnchor,
   readWordTrackingMode,
@@ -56,12 +55,12 @@ import {
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
-import type { WordEdit } from "../utils/wordEditPlan";
 import type {
   WordLocationResult,
   WordTrackingMode,
 } from "../utils/wordReviewLocation";
 import type { HostCardCodeBlockProps } from "@erato/frontend/library";
+import type { WordEdit } from "@erato/frontend/word-review";
 
 type WordCardPayload =
   | { kind: "edits"; edits: WordEdit[] }
@@ -454,8 +453,11 @@ function WordActionCard({
       testId={payload.kind === "edits" ? "word-edits-card" : "word-insert-card"}
       collapsed={collapsed}
       detailsId={detailsId}
-      status={review.status}
-      statusMessage={message}
+      status={
+        message && (
+          <WordStatusAlert status={review.status}>{message}</WordStatusAlert>
+        )
+      }
       receipt={
         <WordReviewReceipt
           review={review}

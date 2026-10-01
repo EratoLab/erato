@@ -1,4 +1,4 @@
-import type { WordDocumentCapture } from "./wordDocumentCapture";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export type WordWriteBlockReason =
   /** Pane reloads lose the in-memory capture; text search cannot reconstruct ownership. */

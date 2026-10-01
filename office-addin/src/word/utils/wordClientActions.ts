@@ -1,17 +1,19 @@
+import { parseWordEdits } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 
 import { applyWordDocumentPlan } from "./wordApplyDocumentPlan";
 import { applyWordEdits } from "./wordApplyEdits";
-import { parseWordEdits } from "./wordEditPlan";
 import { insertWordTextAtCursor } from "./wordInsertText";
 import { extractProposedClientAction as extractProposedClientActionFor } from "../../core/clientActions/proposedClientAction";
 
 import type { WordDocumentApplyResult } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
-import type { WordDocumentCapture } from "./wordDocumentCapture";
-import type { WordEditOutcome } from "./wordEditPlan";
 import type { WordReviewAnchor } from "./wordReviewLocation";
 import type { ContentPart } from "@erato/frontend/library";
+import type {
+  WordDocumentCapture,
+  WordEditOutcome,
+} from "@erato/frontend/word-review";
 
 export { CLIENT_ACTION_TOOL_NAME } from "../../core/clientActions/proposedClientAction";
 

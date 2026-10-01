@@ -9,7 +9,16 @@ import {
   SettledInfoPill,
   Select,
   TextComparison,
+  WordReviewHeader,
+  wordShowInWordLabel,
+  wordSizeChip,
 } from "@erato/frontend/library";
+import {
+  editExcerpt,
+  planWordEdits,
+  wordEditCounts,
+  wordEditBatchSize,
+} from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState } from "react";
 
@@ -22,23 +31,18 @@ import {
   wordEditExceptionsText,
   wordRevertedLabel,
 } from "./WordEditReport";
-import { WordReviewHeader, wordShowInWordLabel } from "./WordReviewCardParts";
 import { wordAutomaticText, wordUndoneText } from "./WordReviewReceipt";
-import { wordSizeChip } from "./wordPlanLabels";
-import {
-  editExcerpt,
-  planWordEdits,
-  wordEditCounts,
-} from "../utils/wordEditPlan";
-import { wordEditBatchSize } from "../utils/wordPlanReview";
 
-import type { WordDocumentCapture } from "../utils/wordDocumentCapture";
-import type { WordEdit, WordEditStatus } from "../utils/wordEditPlan";
 import type {
   WordLocationResult,
   WordTrackingMode,
 } from "../utils/wordReviewLocation";
 import type { WordReviewState } from "../utils/wordReviewState";
+import type {
+  WordDocumentCapture,
+  WordEdit,
+  WordEditStatus,
+} from "@erato/frontend/word-review";
 
 const locationChangedText = () =>
   t({

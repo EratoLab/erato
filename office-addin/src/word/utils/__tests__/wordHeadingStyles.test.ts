@@ -1,3 +1,8 @@
+import {
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+  wordSourceReadRefs,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -5,11 +10,6 @@ import {
   paragraph,
   W,
 } from "../../../test/mocks/word/authoringFixtures";
-import {
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-  wordSourceReadRefs,
-} from "../wordDocumentPlan";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,

@@ -1,3 +1,8 @@
+import {
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+  wordPlanOutput,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,11 +11,6 @@ import {
   packageXml,
 } from "../../../test/mocks/word/authoringFixtures";
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
-import {
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-  wordPlanOutput,
-} from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
   captureWordAuthoringSnapshot,
@@ -19,7 +19,7 @@ import {
   sameWordBodyContent,
 } from "../wordDocumentXml";
 
-import type { WordDocumentPlan } from "../wordDocumentPlan";
+import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 function mixedPlan() {
   const source = readySnapshot(mixedAuthoringXml());

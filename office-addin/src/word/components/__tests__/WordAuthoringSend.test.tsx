@@ -19,8 +19,8 @@ import { wordDocumentReadSession } from "../../utils/wordDocumentReadTool";
 import { WordChatInput } from "../WordChatInput";
 
 import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
-import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
 import type { ClientToolExecutor } from "@erato/frontend/library";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const mocks = vi.hoisted(() => ({
   estimate: vi.fn(),

@@ -13,7 +13,7 @@ import type {
   WordParagraphFormatting,
   WordRunFormatting,
 } from "./wordBlockFormatting";
-import type { WordImageAsset, WordImageAssetIssue } from "./wordImageAssets";
+import type { WordImageAsset, WordImageAssetIssue } from "./wordImageAssetData";
 import type {
   WordFieldSpec,
   WordBookmarkSpec,
@@ -927,4 +927,15 @@ export function wordPlanOutput(
           kind: "insert",
         },
       ];
+}
+
+/** Plain text of the planned document; without a snapshot, only the new blocks. */
+export function wordPlanText(
+  plan: WordDocumentPlan,
+  snapshot?: WordAuthoringSnapshot,
+): string {
+  const blocks = snapshot
+    ? wordPlanOutput(plan, snapshot).map((item) => item.block)
+    : plan.entries.flatMap((e) => (e.kind === "keep" ? [] : e.blocks));
+  return blocks.map((b) => b.text).join("\n");
 }

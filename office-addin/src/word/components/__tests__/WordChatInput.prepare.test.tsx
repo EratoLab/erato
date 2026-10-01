@@ -12,7 +12,7 @@ import { WordChatInput } from "../WordChatInput";
 
 import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
-import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const host = vi.hoisted(() => ({
   advertised: [] as string[],

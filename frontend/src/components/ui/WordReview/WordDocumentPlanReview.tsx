@@ -1,11 +1,10 @@
-import {
-  Card,
-  DisclosureChevron,
-  Row,
-  SegmentedControl,
-} from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
 import { useEffect, useId, useRef, useState } from "react";
+
+import { Card } from "@/components/ui/Container/Card";
+import { DisclosureChevron } from "@/components/ui/Controls/DisclosureChevron";
+import { Row } from "@/components/ui/Controls/Row";
+import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 
 import { WordNativeBlockPreview } from "./WordNativeBlockPreview";
 import {
@@ -32,12 +31,12 @@ import type {
   WordPlanBlock,
   WordPlanOutputItem,
   WordSourceBlock,
-} from "../utils/wordDocumentPlan";
+} from "@/lib/wordReview/wordDocumentPlan";
 import type {
   WordPlanGroup,
   WordPlanReview,
   WordPlanRow,
-} from "../utils/wordPlanReview";
+} from "@/lib/wordReview/wordPlanReview";
 
 type RowsProps = {
   rows: WordPlanRow[];
@@ -97,7 +96,7 @@ function WordPlanOutputPreview({
       runs.push({ key: item.key, native: item.block });
       continue;
     }
-    const last = runs[runs.length - 1];
+    const last = runs.at(-1);
     // Retained source paragraphs share the plan block shape the preview reads.
     const block = item.block as WordPlanBlock;
     if (last && "blocks" in last) last.blocks.push(block);
@@ -153,6 +152,7 @@ function WordPlanOutputPreview({
 
 function groupTitle(group: WordPlanGroup): string {
   return (
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty heading falls back too
     group.heading?.text ||
     t({
       id: "officeAddin.word.authoring.opening",
@@ -185,12 +185,13 @@ function SectionGroup({
       : group.summary,
   );
   return (
-    <li className="word-plan-review__group" data-group-key={group.key}>
+    <li data-group-key={group.key}>
       <Card
         variant="expandable"
         size="none"
         expanded={expanded}
         unmountOnCollapse
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
         bodyId={`${id}-body`}
         header={
           <Row
@@ -198,6 +199,7 @@ function SectionGroup({
             as="button"
             className="word-review__row-toggle"
             aria-expanded={expanded}
+            // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
             aria-controls={`${id}-body`}
             onClick={onToggle}
             leading={<DisclosureChevron open={expanded} />}
@@ -250,9 +252,11 @@ export function WordDocumentPlanReview({
     ).find((item) => item.dataset.rowKey === focusKey);
     // A restructured plan draws its text as one preview instead of rows.
     const focusable =
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector
       target?.querySelector<HTMLElement>("button, [tabindex]") ??
       containerRef.current?.querySelector<HTMLElement>("[data-jump-target]");
     focusable?.focus();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- absent in jsdom
     focusable?.scrollIntoView?.({ block: "nearest" });
     setFocusKey(null);
   }, [focusKey]);

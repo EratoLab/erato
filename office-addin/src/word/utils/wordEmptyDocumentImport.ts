@@ -1,4 +1,4 @@
-import { wordMainBody, WORD_NS } from "./wordNativeContent";
+import { wordMainBody, WORD_NS } from "@erato/frontend/word-review";
 
 /** Word may insert a space for an empty file. Remove only this placeholder, preserving user whitespace. */
 export async function finishWordEmptyDocumentImport(

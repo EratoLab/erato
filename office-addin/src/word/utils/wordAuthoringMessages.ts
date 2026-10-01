@@ -2,7 +2,7 @@ import { t } from "@lingui/core/macro";
 
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
-import type { WordPlanIssue } from "./wordDocumentPlan";
+import type { WordPlanIssue } from "@erato/frontend/word-review";
 
 export function wordDocumentDiagnosticText(
   diagnostic: WordDocumentDiagnostic,

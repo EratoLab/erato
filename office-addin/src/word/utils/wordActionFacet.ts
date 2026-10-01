@@ -1,6 +1,6 @@
 import type { WordDocumentArgs } from "./buildWordDocumentArgs";
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
 import type { ActionFacetRequest } from "@erato/frontend/library";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export const WORD_DOCUMENT_REVIEW_FACET_ID = "word_document_review";
 export const WORD_AUTHORING_FACET_ID = "word_document_authoring";

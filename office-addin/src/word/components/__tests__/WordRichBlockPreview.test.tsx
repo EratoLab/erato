@@ -1,17 +1,18 @@
+import { WordRichBlockPreview } from "@erato/frontend/library";
+import { parseWordBlock } from "@erato/frontend/word-review";
 import { i18n } from "@lingui/core";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import {
   packageXml,
   paragraph,
   readySnapshot,
 } from "../../../test/mocks/word/authoringFixtures";
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
-import { parseWordBlock } from "../../utils/wordRichPlan";
-import { WordRichBlockPreview } from "../WordRichBlockPreview";
 
-import type { WordPlanBlock } from "../../utils/wordDocumentPlan";
+import type { WordPlanBlock } from "@erato/frontend/word-review";
 
 const p = (id: string, text: string) => ({ id, type: "paragraph", text });
 const snapshot = () => readySnapshot(packageXml(paragraph("Source text")));
@@ -21,7 +22,7 @@ const preview = (value: unknown, source = snapshot()) => {
   return render(<WordRichBlockPreview block={block!} snapshot={source} />);
 };
 beforeEach(() => {
-  i18n.load("en", {});
+  i18n.load("en", frontendMessages);
   i18n.activate("en");
 });
 afterEach(cleanup);

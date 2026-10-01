@@ -1,13 +1,16 @@
-import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
-import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
 import {
   expandWordTableCellSubmission,
   WordTableCellSubmissionError,
-} from "./wordTableCellSubmission";
+} from "@erato/frontend/word-review";
 
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
-import type { WordTableCellScope } from "./wordTableCellScope";
+import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
+import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
+
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
+import type {
+  WordAuthoringSnapshot,
+  WordTableCellScope,
+} from "@erato/frontend/word-review";
 
 const PAGE_SIZE = 5;
 const CELL_BYTES = 4096;

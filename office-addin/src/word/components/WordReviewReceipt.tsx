@@ -1,7 +1,7 @@
+import { wordEditCounts } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 
 import { wordEditsAppliedText, wordEditExceptionsText } from "./WordEditReport";
-import { wordEditCounts } from "../utils/wordEditPlan";
 
 import type { WordReviewState } from "../utils/wordReviewState";
 

@@ -1,14 +1,14 @@
 import { i18n } from "@lingui/core";
 import { plural, t } from "@lingui/core/macro";
 
-import { editExcerpt } from "../utils/wordEditPlan";
+import { editExcerpt } from "@/lib/wordReview/wordEditPlan";
 import {
   pointsToCentimeters,
   pointsToMillimeters,
   wordLength,
-} from "../utils/wordPlanReview";
+} from "@/lib/wordReview/wordPlanReview";
 
-import type { WordDocumentPlan } from "../utils/wordDocumentPlan";
+import type { WordDocumentPlan } from "@/lib/wordReview/wordDocumentPlan";
 import type {
   WordLayoutProperty,
   WordLayoutValue,
@@ -17,12 +17,12 @@ import type {
   WordPlanReviewSize,
   WordPlanScopePart,
   WordPlanTitle,
-} from "../utils/wordPlanReview";
+} from "@/lib/wordReview/wordPlanReview";
 import type {
   WordPageLayout,
   WordSectionStories,
   WordStoryType,
-} from "../utils/wordStories";
+} from "@/lib/wordReview/wordStories";
 
 const locale = () => i18n.locale || undefined;
 
@@ -225,6 +225,14 @@ export function formatCount(value: number): string {
   return new Intl.NumberFormat(locale()).format(value);
 }
 
+function boundaryItemLabel(value: number): string {
+  const item = formatCount(value);
+  return t({
+    id: "officeAddin.word.layout.boundaryItem",
+    message: `Item ${item}`,
+  });
+}
+
 /** Lengths are formatted by the caller so a before/after pair shares one unit. */
 export function layoutValueLabel(
   property: WordLayoutProperty,
@@ -235,10 +243,7 @@ export function layoutValueLabel(
       return typeof value === "string"
         ? editExcerpt(value)
         : typeof value === "number"
-          ? t({
-              id: "officeAddin.word.layout.boundaryItem",
-              message: `Item ${formatCount(value)}`,
-            })
+          ? boundaryItemLabel(value)
           : t({
               id: "officeAddin.word.layout.boundaryEnd",
               message: "End of the document",

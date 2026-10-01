@@ -9,11 +9,11 @@ import {
   wordPlanTitleText,
 } from "../wordPlanLabels";
 
-import type { WordDocumentPlan } from "../../utils/wordDocumentPlan";
+import type { WordDocumentPlan } from "@/lib/wordReview/wordDocumentPlan";
 import type {
   WordPlanReview,
   WordPlanScopePart,
-} from "../../utils/wordPlanReview";
+} from "@/lib/wordReview/wordPlanReview";
 
 const plan = { entries: [{}] } as unknown as WordDocumentPlan;
 const review = (unchanged: WordPlanScopePart[]) =>

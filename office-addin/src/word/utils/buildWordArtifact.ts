@@ -10,8 +10,8 @@ import {
   WORD_SUBMIT_PLAN_ACTION,
 } from "./wordDocumentSubmission";
 
-import type { WordDocumentCapture } from "./wordDocumentCapture";
 import type { ContentPart, HostArtifact } from "@erato/frontend/library";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export const WORD_CARD_FENCE_LANGUAGES: readonly string[] = [
   WORD_EDITS_FENCE,

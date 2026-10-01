@@ -1,3 +1,5 @@
+import { createWordXmlComparison } from "@erato/frontend/word-review";
+
 import {
   MAX_WORD_DOCX_BYTES,
   encodeWordXml,
@@ -11,7 +13,6 @@ import {
   wordXmlText,
   writeWordPackage,
 } from "./wordDocumentPackageCodec";
-import { createWordXmlComparison } from "./wordXmlComparison";
 
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const CT = "http://schemas.openxmlformats.org/package/2006/content-types";

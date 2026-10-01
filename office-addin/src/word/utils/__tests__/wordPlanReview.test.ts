@@ -1,3 +1,9 @@
+import {
+  buildWordPlanReview,
+  createWordListNumbering,
+  wordEditBatchSize,
+  wordLength,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,20 +13,14 @@ import {
   readySnapshot,
   sixParagraphXml,
 } from "../../../test/mocks/word/authoringFixtures";
-import {
-  buildWordPlanReview,
-  createWordListNumbering,
-  wordEditBatchSize,
-  wordLength,
-} from "../wordPlanReview";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
-} from "../wordDocumentPlan";
-import type { WordPlanRowOf } from "../wordPlanReview";
+  WordPlanRowOf,
+} from "@erato/frontend/word-review";
 
 const heading = (text: string) =>
   `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${text}</w:t></w:r></w:p>`;

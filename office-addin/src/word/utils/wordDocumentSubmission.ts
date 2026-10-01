@@ -1,30 +1,29 @@
-import { WordDraftRepairError } from "./wordDocumentDrafts";
 import {
   MAX_PLAN_BYTES,
   wordSourceReadRefs,
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
-} from "./wordDocumentPlan";
+  wordTableCellScope,
+  expandWordTableCellSubmission,
+  WordTableCellSubmissionError,
+} from "@erato/frontend/word-review";
+
+import { WordDraftRepairError } from "./wordDocumentDrafts";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "./wordDocumentXml";
-import { wordTableCellScope } from "./wordTableCellScope";
-import {
-  expandWordTableCellSubmission,
-  WordTableCellSubmissionError,
-} from "./wordTableCellSubmission";
 
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
-import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
 import type {
   ClientToolExecutor,
   ClientToolCallContext,
   ClientToolExecutionResult,
   ContentPart,
 } from "@erato/frontend/library";
+import type { WordPlanDiagnostics } from "@erato/frontend/word-review";
 
 export const WORD_SUBMIT_PLAN_TOOL = "submit_document_plan";
 export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";

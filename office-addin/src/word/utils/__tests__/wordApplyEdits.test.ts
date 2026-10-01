@@ -7,7 +7,7 @@ import {
 import { applyWordEdits, revertWordEdits } from "../wordApplyEdits";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
-import type { WordDocumentCapture } from "../wordDocumentCapture";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const IDENTITY = "https://contoso.sharepoint.com/report.docx";
 

@@ -1,3 +1,5 @@
+import { WordDocumentPlanReview } from "@erato/frontend/library";
+import { buildWordPlanReview } from "@erato/frontend/word-review";
 import { i18n } from "@lingui/core";
 import {
   cleanup,
@@ -8,15 +10,14 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import { readySnapshot } from "../../../test/mocks/word/authoringFixtures";
-import { buildWordPlanReview } from "../../utils/wordPlanReview";
-import { WordDocumentPlanReview } from "../WordDocumentPlanReview";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../../utils/wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 function scenario() {
   const snapshot = readySnapshot();
@@ -78,7 +79,7 @@ const partsSection = () =>
   screen.getByRole("heading", { name: "Document parts" }).closest("section")!;
 
 beforeEach(() => {
-  i18n.load("en", {});
+  i18n.load("en", frontendMessages);
   i18n.activate("en");
 });
 afterEach(cleanup);

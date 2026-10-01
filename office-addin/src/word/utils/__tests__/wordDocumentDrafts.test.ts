@@ -1,7 +1,7 @@
+import { MAX_PLAN_BYTES } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import { applyWordDraftPatches } from "../wordDocumentDrafts";
-import { MAX_PLAN_BYTES } from "../wordDocumentPlan";
 
 describe("Word draft patch protocol", () => {
   const plan = {

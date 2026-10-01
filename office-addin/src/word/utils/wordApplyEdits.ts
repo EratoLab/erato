@@ -1,15 +1,19 @@
-import { trackWordApply } from "./wordApplyProgress";
 import {
   buildWordEditReport,
   planWordEdits,
   verifyWordEdits,
-} from "./wordEditPlan";
+} from "@erato/frontend/word-review";
+
+import { trackWordApply } from "./wordApplyProgress";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
-import type { WordDocumentCapture } from "./wordDocumentCapture";
-import type { WordEdit, WordEditOutcome } from "./wordEditPlan";
 import type { WordReviewAnchor } from "./wordReviewLocation";
+import type {
+  WordDocumentCapture,
+  WordEdit,
+  WordEditOutcome,
+} from "@erato/frontend/word-review";
 
 export interface WordApplyResult {
   outcomes: WordEditOutcome[];

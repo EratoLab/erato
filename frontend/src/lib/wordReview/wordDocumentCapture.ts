@@ -1,5 +1,5 @@
 import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
-import type { Message } from "@erato/frontend/library";
+import type { Message } from "@/types/chat";
 
 export interface WordCapturedParagraph {
   uniqueLocalId: string;

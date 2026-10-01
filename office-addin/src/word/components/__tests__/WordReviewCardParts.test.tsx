@@ -5,9 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
   WordApplyButton,
-  WordCheckFirst,
   WordDiagnosticDetails,
-  WordUndoLine,
   wordStatusAlertProps,
 } from "../WordReviewCardParts";
 
@@ -68,30 +66,6 @@ describe("WordReviewCardParts", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows the undo line only while the revert slot is available", () => {
-    const onUndo = vi.fn();
-    const view = render(
-      <WordUndoLine
-        canRevert={false}
-        label="Undo"
-        disabled={false}
-        onUndo={onUndo}
-      />,
-      { wrapper: TestTheme },
-    );
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
-    view.rerender(
-      <WordUndoLine canRevert label="Undo" disabled={false} onUndo={onUndo} />,
-    );
-    expect(
-      screen.getByText(
-        "Undo available until another change is applied or the pane is closed.",
-      ),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    expect(onUndo).toHaveBeenCalledTimes(1);
-  });
-
   it("keeps the busy apply button focusable and labelled with the stage", () => {
     const onApply = vi.fn();
     const view = render(
@@ -120,48 +94,6 @@ describe("WordReviewCardParts", () => {
     expect(busy).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(busy);
     expect(onApply).toHaveBeenCalledTimes(1);
-  });
-
-  it("links each Check first risk to its row", () => {
-    const onJump = vi.fn();
-    render(
-      <WordCheckFirst
-        risks={[
-          {
-            kind: "headings-lost",
-            count: 2,
-            rowKey: "keep:b3",
-            items: [{ rowKey: "keep:b3" }, { rowKey: "keep:b7" }],
-          },
-          {
-            kind: "parts-changed",
-            count: 1,
-            rowKey: "story:footer",
-            items: [{ rowKey: "story:footer", storyType: "footer" }],
-          },
-        ]}
-        onJump={onJump}
-      />,
-      { wrapper: TestTheme },
-    );
-    expect(screen.getByText("Check first")).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "2 headings are no longer in the document",
-      }),
-    );
-    expect(onJump).toHaveBeenCalledWith("keep:b3");
-    fireEvent.click(screen.getByRole("button", { name: /Document parts/ }));
-    expect(onJump).toHaveBeenLastCalledWith("story:footer");
-  });
-
-  it("renders nothing for Check first without risks", () => {
-    const { container } = render(
-      <WordCheckFirst risks={[]} onJump={() => {}} />,
-      { wrapper: TestTheme },
-    );
-    expect(container).toBeEmptyDOMElement();
   });
 
   it("announces failures as alerts and everything else politely", () => {

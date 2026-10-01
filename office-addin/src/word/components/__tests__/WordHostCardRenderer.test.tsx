@@ -20,8 +20,8 @@ import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
-import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
 import type * as EratoLibrary from "@erato/frontend/library";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const mockUseHostArtifact = vi.fn();
 const mockUseChatContext = vi.fn();

@@ -1,4 +1,4 @@
-import type { ClientToolValidationIssue } from "@erato/frontend/library";
+import type { ClientToolValidationIssue } from "@/hooks/chat/clientToolExecutors";
 
 /** Parser diagnostics contain paths and constraints, never document contents. */
 export type WordPlanDiagnostics = ClientToolValidationIssue[];

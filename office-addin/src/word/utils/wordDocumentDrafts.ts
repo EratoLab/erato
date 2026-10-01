@@ -1,7 +1,7 @@
-import { MAX_PLAN_BYTES } from "./wordDocumentPlan";
+import { MAX_PLAN_BYTES } from "@erato/frontend/word-review";
 
-import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
+import type { WordPlanDiagnostics } from "@erato/frontend/word-review";
 
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

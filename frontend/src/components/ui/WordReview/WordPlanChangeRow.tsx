@@ -1,20 +1,22 @@
+import { plural, t } from "@lingui/core/macro";
+import { useId, useState } from "react";
+
+import { Button } from "@/components/ui/Controls/Button";
+import { DisclosureChevron } from "@/components/ui/Controls/DisclosureChevron";
+import { Row } from "@/components/ui/Controls/Row";
+import { TextComparison } from "@/components/ui/Message/TextComparison";
+import { SettledInfoPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 import {
-  Button,
   CheckIcon,
-  DisclosureChevron,
   DocumentIcon,
   FileTextIcon,
   ImageIcon,
   MultiplePagesIcon,
   OpenNewWindowIcon,
   PageIcon,
-  Row,
-  SettledInfoPill,
   SpreadsheetIcon,
-  TextComparison,
-} from "@erato/frontend/library";
-import { plural, t } from "@lingui/core/macro";
-import { useId, useState } from "react";
+} from "@/components/ui/icons";
+import { editExcerpt } from "@/lib/wordReview/wordEditPlan";
 
 import { nativeKindLabel } from "./WordNativeBlockPreview";
 import { wordShowInWordLabel } from "./WordReviewCardParts";
@@ -39,16 +41,15 @@ import {
   storyLabel,
   tableCountLabel,
 } from "./wordPlanLabels";
-import { editExcerpt } from "../utils/wordEditPlan";
 
-import type { WordAuthoringSnapshot } from "../utils/wordDocumentPlan";
+import type { WordAuthoringSnapshot } from "@/lib/wordReview/wordDocumentPlan";
 import type {
   WordLayoutChange,
   WordPlanGroupStatus,
   WordPlanRow,
   WordPlanRowOf,
   WordPlanRowStatus,
-} from "../utils/wordPlanReview";
+} from "@/lib/wordReview/wordPlanReview";
 import type { ComponentProps, ReactNode } from "react";
 
 import "./wordReview.css";
@@ -168,6 +169,7 @@ function RowShell({
         as="button"
         className="word-review__row-toggle"
         aria-expanded={open}
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
         aria-controls={`${id}-detail`}
         onClick={() => onOpenChange(!open)}
         leading={icon}
@@ -207,14 +209,15 @@ function blockTypeLabel(row: WordPlanRowOf<"text">): string {
 
 function TextDetail({ row, snapshot }: RowProps<"text">) {
   const after = row.after?.text ?? "";
+  const { beforeLevel, level } = row;
   const levelChange =
-    row.beforeLevel !== undefined &&
-    row.level !== undefined &&
-    row.beforeLevel !== row.level ? (
+    beforeLevel !== undefined &&
+    level !== undefined &&
+    beforeLevel !== level ? (
       <p className="word-review__hint">
         {t({
           id: "officeAddin.word.planRow.levelChange",
-          message: `Heading level ${row.beforeLevel} → ${row.level}`,
+          message: `Heading level ${beforeLevel} → ${level}`,
         })}
       </p>
     ) : null;
@@ -232,9 +235,10 @@ function TextDetail({ row, snapshot }: RowProps<"text">) {
 }
 
 function tableSummary(row: WordPlanRowOf<"table">): string {
+  const { rows, cols } = row;
   const size = t({
     id: "officeAddin.word.planRow.tableSize",
-    message: `${row.rows} × ${row.cols}`,
+    message: `${rows} × ${cols}`,
   });
   const cells = row.changedCells.length;
   const parts = [size];
@@ -516,6 +520,7 @@ export function WordPlanChangeRow({
 
   switch (row.family) {
     case "text": {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty text falls back too
       const text = row.after?.text || row.before || "";
       return (
         <RowShell
@@ -569,7 +574,8 @@ export function WordPlanChangeRow({
           description={
             row.bindings.length
               ? row.bindings.map(bindingLabel).join(" · ")
-              : editExcerpt(row.after || row.before || "")
+              : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty text falls back too
+                editExcerpt(row.after || row.before || "")
           }
           detail={<PartDetail row={row} />}
         />

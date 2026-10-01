@@ -1,15 +1,16 @@
 import {
+  normalizeWordInlineForComparison,
+  normalizeWordMediaForComparison,
+  createWordXmlComparison,
+  wordXmlElements as all,
+} from "@erato/frontend/word-review";
+
+import {
   parseWordXml,
   wordRelationshipOwner,
   wordRelationshipTarget,
 } from "./wordDocumentPackageCodec";
-import { normalizeWordInlineForComparison } from "./wordInlineStructures";
-import { normalizeWordMediaForComparison } from "./wordMediaComparison";
 import { normalizeWordTablesForComparison } from "./wordTableComparison";
-import {
-  createWordXmlComparison,
-  wordXmlElements as all,
-} from "./wordXmlComparison";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

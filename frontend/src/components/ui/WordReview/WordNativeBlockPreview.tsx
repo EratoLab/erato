@@ -1,8 +1,9 @@
-import { Card } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
-import type { WordSourceBlock } from "../utils/wordDocumentPlan";
-import type { WordPlanObjectKind } from "../utils/wordPlanReview";
+import { Card } from "@/components/ui/Container/Card";
+
+import type { WordSourceBlock } from "@/lib/wordReview/wordDocumentPlan";
+import type { WordPlanObjectKind } from "@/lib/wordReview/wordPlanReview";
 
 export function WordNativeBlockPreview({ block }: { block: WordSourceBlock }) {
   return (

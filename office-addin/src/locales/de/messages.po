@@ -1786,13 +1786,13 @@ msgstr "Die Prüfung des Modellkontexts ist fehlgeschlagen. Sende deine Anfrage 
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.clearBody"
-msgstr "Der Dokumentinhalt wird gelöscht. Es bleibt der leere Abschlussabsatz von Word."
+#~ msgid "officeAddin.word.authoring.clearBody"
+#~ msgstr "Der Dokumentinhalt wird gelöscht. Es bleibt der leere Abschlussabsatz von Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.comment"
-msgstr "Kommentar"
+#~ msgid "officeAddin.word.authoring.comment"
+#~ msgstr "Kommentar"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -1801,8 +1801,8 @@ msgstr "Die vorgeschlagene Word-Struktur konnte nicht vorbereitet werden. Es wur
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.continuousSection"
-msgstr "Auf derselben Seite fortsetzen"
+#~ msgid "officeAddin.word.authoring.continuousSection"
+#~ msgstr "Auf derselben Seite fortsetzen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
@@ -1821,8 +1821,8 @@ msgstr "Der Entwurf konnte nicht kopiert werden."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.defaultPages"
-msgstr "Standardseiten"
+#~ msgid "officeAddin.word.authoring.defaultPages"
+#~ msgstr "Standardseiten"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
@@ -1836,23 +1836,23 @@ msgstr "Originaldokument herunterladen"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.emptyPart"
-msgstr "Leer"
+#~ msgid "officeAddin.word.authoring.emptyPart"
+#~ msgstr "Leer"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.endnote"
-msgstr "Endnote"
+#~ msgid "officeAddin.word.authoring.endnote"
+#~ msgstr "Endnote"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.evenPages"
-msgstr "Gerade Seiten"
+#~ msgid "officeAddin.word.authoring.evenPages"
+#~ msgstr "Gerade Seiten"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.evenSection"
-msgstr "Auf der nächsten geraden Seite beginnen"
+#~ msgid "officeAddin.word.authoring.evenSection"
+#~ msgstr "Auf der nächsten geraden Seite beginnen"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -1866,38 +1866,38 @@ msgstr "Die Überarbeitung konnte nicht angewendet werden. Das Dokument wurde ni
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.firstPage"
-msgstr "Erste Seite"
+#~ msgid "officeAddin.word.authoring.firstPage"
+#~ msgstr "Erste Seite"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.footer"
-msgstr "Fußzeile"
+#~ msgid "officeAddin.word.authoring.footer"
+#~ msgstr "Fußzeile"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.footerDistance"
-msgstr "Abstand der Fußzeile zum unteren Rand"
+#~ msgid "officeAddin.word.authoring.footerDistance"
+#~ msgstr "Abstand der Fußzeile zum unteren Rand"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.footnote"
-msgstr "Fußnote"
+#~ msgid "officeAddin.word.authoring.footnote"
+#~ msgstr "Fußnote"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.gutter"
-msgstr "Bundsteg"
+#~ msgid "officeAddin.word.authoring.gutter"
+#~ msgstr "Bundsteg"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.header"
-msgstr "Kopfzeile"
+#~ msgid "officeAddin.word.authoring.header"
+#~ msgstr "Kopfzeile"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.headerDistance"
-msgstr "Abstand der Kopfzeile zum oberen Rand"
+#~ msgid "officeAddin.word.authoring.headerDistance"
+#~ msgstr "Abstand der Kopfzeile zum oberen Rand"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -1921,8 +1921,8 @@ msgstr "Der vorgeschlagene Dokumentplan ist unvollständig oder ungültig. Bitte
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.landscape"
-msgstr "Querformat"
+#~ msgid "officeAddin.word.authoring.landscape"
+#~ msgstr "Querformat"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
@@ -1936,23 +1936,23 @@ msgstr "Ein gesperrtes Inhaltssteuerelement verhindert das Ersetzen des Dokument
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.marginBottom"
-msgstr "Unterer Seitenrand"
+#~ msgid "officeAddin.word.authoring.marginBottom"
+#~ msgstr "Unterer Seitenrand"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.marginLeft"
-msgstr "Linker Seitenrand"
+#~ msgid "officeAddin.word.authoring.marginLeft"
+#~ msgstr "Linker Seitenrand"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.marginRight"
-msgstr "Rechter Seitenrand"
+#~ msgid "officeAddin.word.authoring.marginRight"
+#~ msgstr "Rechter Seitenrand"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.marginTop"
-msgstr "Oberer Seitenrand"
+#~ msgid "officeAddin.word.authoring.marginTop"
+#~ msgstr "Oberer Seitenrand"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -1966,43 +1966,43 @@ msgstr "Die vollständige Überarbeitung passt nicht in den verfügbaren Kontext
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.authoring.nativeAnchored"
-msgstr "Inhalt mit verknüpften Anmerkungen"
+#~ msgid "officeAddin.word.authoring.nativeAnchored"
+#~ msgstr "Inhalt mit verknüpften Anmerkungen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.authoring.nativeControl"
-msgstr "Inhaltssteuerelement"
+#~ msgid "officeAddin.word.authoring.nativeControl"
+#~ msgstr "Inhaltssteuerelement"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.authoring.nativeField"
-msgstr "Dokumentfeld"
+#~ msgid "officeAddin.word.authoring.nativeField"
+#~ msgstr "Dokumentfeld"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.authoring.nativeImage"
-msgstr "Bild oder Zeichnung"
+#~ msgid "officeAddin.word.authoring.nativeImage"
+#~ msgstr "Bild oder Zeichnung"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.authoring.nativeObject"
-msgstr "Nativer Dokumentinhalt"
+#~ msgid "officeAddin.word.authoring.nativeObject"
+#~ msgstr "Nativer Dokumentinhalt"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.authoring.nativeSection"
-msgstr "Abschnittsgrenze"
+#~ msgid "officeAddin.word.authoring.nativeSection"
+#~ msgstr "Abschnittsgrenze"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.authoring.nativeTable"
-msgstr "Tabelle"
+#~ msgid "officeAddin.word.authoring.nativeTable"
+#~ msgstr "Tabelle"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.nextPageSection"
-msgstr "Auf der nächsten Seite beginnen"
+#~ msgid "officeAddin.word.authoring.nextPageSection"
+#~ msgstr "Auf der nächsten Seite beginnen"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2016,13 +2016,13 @@ msgstr "Diese Aktion ist mit den aktuellen Aktionseinstellungen nicht verfügbar
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.oddSection"
-msgstr "Auf der nächsten ungeraden Seite beginnen"
+#~ msgid "officeAddin.word.authoring.oddSection"
+#~ msgstr "Auf der nächsten ungeraden Seite beginnen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.authoring.opening"
-msgstr "Einleitender Inhalt"
+#~ msgid "officeAddin.word.authoring.opening"
+#~ msgstr "Einleitender Inhalt"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2031,8 +2031,8 @@ msgstr "Word hat Änderungen vorgenommen, das Ergebnis konnte jedoch nicht über
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.portrait"
-msgstr "Hochformat"
+#~ msgid "officeAddin.word.authoring.portrait"
+#~ msgstr "Hochformat"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
@@ -2076,13 +2076,13 @@ msgstr "Das Dokument wurde nach dem Anwenden verändert. Die Wiederherstellung w
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.sameFirstPage"
-msgstr "Auf der ersten Seite die reguläre Kopf- und Fußzeile verwenden"
+#~ msgid "officeAddin.word.authoring.sameFirstPage"
+#~ msgstr "Auf der ersten Seite die reguläre Kopf- und Fußzeile verwenden"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.sameOddEvenPages"
-msgstr "Auf geraden und ungeraden Seiten dieselben Kopf- und Fußzeilen verwenden"
+#~ msgid "officeAddin.word.authoring.sameOddEvenPages"
+#~ msgstr "Auf geraden und ungeraden Seiten dieselben Kopf- und Fußzeilen verwenden"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2091,13 +2091,13 @@ msgstr "Dieser Vorschlag ordnet Abschnittsgrenzen neu an, ohne ihr neues Layout 
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.separateFirstPage"
-msgstr "Andere Kopf- und Fußzeile auf der ersten Seite"
+#~ msgid "officeAddin.word.authoring.separateFirstPage"
+#~ msgstr "Andere Kopf- und Fußzeile auf der ersten Seite"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.authoring.separateOddEvenPages"
-msgstr "Unterschiedliche Kopf- und Fußzeilen auf geraden und ungeraden Seiten"
+#~ msgid "officeAddin.word.authoring.separateOddEvenPages"
+#~ msgstr "Unterschiedliche Kopf- und Fußzeilen auf geraden und ungeraden Seiten"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2201,33 +2201,33 @@ msgstr "In das Dokument eingefügt."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.checkFirst.headingsLost"
-msgstr "{n, plural, one {# Überschrift ist nicht mehr im Dokument} other {# Überschriften sind nicht mehr im Dokument}}"
+#~ msgid "officeAddin.word.checkFirst.headingsLost"
+#~ msgstr "{n, plural, one {# Überschrift ist nicht mehr im Dokument} other {# Überschriften sind nicht mehr im Dokument}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.checkFirst.layoutChanged"
-msgstr "{n, plural, one {Seitenlayout ändert sich in # Abschnitt} other {Seitenlayout ändert sich in # Abschnitten}}"
+#~ msgid "officeAddin.word.checkFirst.layoutChanged"
+#~ msgstr "{n, plural, one {Seitenlayout ändert sich in # Abschnitt} other {Seitenlayout ändert sich in # Abschnitten}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.checkFirst.nativesRemoved"
-msgstr "{n, plural, one {# Tabelle, Bild oder Objekt wird entfernt oder nicht übernommen} other {# Tabellen, Bilder oder Objekte werden entfernt oder nicht übernommen}}"
+#~ msgid "officeAddin.word.checkFirst.nativesRemoved"
+#~ msgstr "{n, plural, one {# Tabelle, Bild oder Objekt wird entfernt oder nicht übernommen} other {# Tabellen, Bilder oder Objekte werden entfernt oder nicht übernommen}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.checkFirst.partsChanged"
-msgstr "Auch Dokumentteile ändern sich: {parts}"
+#~ msgid "officeAddin.word.checkFirst.partsChanged"
+#~ msgstr "Auch Dokumentteile ändern sich: {parts}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.checkFirst.sectionsRemoved"
-msgstr "{n, plural, one {# Abschnittsumbruch wird entfernt} other {# Abschnittsumbrüche werden entfernt}}"
+#~ msgid "officeAddin.word.checkFirst.sectionsRemoved"
+#~ msgstr "{n, plural, one {# Abschnittsumbruch wird entfernt} other {# Abschnittsumbrüche werden entfernt}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.checkFirst.title"
-msgstr "Zuerst prüfen"
+#~ msgid "officeAddin.word.checkFirst.title"
+#~ msgstr "Zuerst prüfen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -2278,85 +2278,83 @@ msgstr "Text an der Cursorposition einfügen"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.boundary"
-msgstr "Endet nach"
+#~ msgid "officeAddin.word.layout.boundary"
+#~ msgstr "Endet nach"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.boundaryEnd"
-msgstr "Ende des Dokuments"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: formatCount(value)
-#: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.boundaryItem"
-msgstr "Element {0}"
+#~ msgid "officeAddin.word.layout.boundaryEnd"
+#~ msgstr "Ende des Dokuments"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.break"
-msgstr "Abschnittsbeginn"
+#~ msgid "officeAddin.word.layout.boundaryItem"
+#~ msgstr "Element {0}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.columns"
-msgstr "Spalten"
+#~ msgid "officeAddin.word.layout.break"
+#~ msgstr "Abschnittsbeginn"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.columnSpacing"
-msgstr "Spaltenabstand"
+#~ msgid "officeAddin.word.layout.columns"
+#~ msgstr "Spalten"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.height"
-msgstr "Seitenhöhe"
+#~ msgid "officeAddin.word.layout.columnSpacing"
+#~ msgstr "Spaltenabstand"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.oddEvenPages"
-msgstr "Gerade und ungerade Seiten"
+#~ msgid "officeAddin.word.layout.height"
+#~ msgstr "Seitenhöhe"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.orientation"
-msgstr "Ausrichtung"
+#~ msgid "officeAddin.word.layout.oddEvenPages"
+#~ msgstr "Gerade und ungerade Seiten"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.pageNumberStart"
-msgstr "Erste Seitenzahl"
+#~ msgid "officeAddin.word.layout.orientation"
+#~ msgstr "Ausrichtung"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.layout.width"
-msgstr "Seitenbreite"
+#~ msgid "officeAddin.word.layout.pageNumberStart"
+#~ msgstr "Erste Seitenzahl"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planAction.insert"
-msgstr "Absätze einfügen"
+#~ msgid "officeAddin.word.layout.width"
+#~ msgstr "Seitenbreite"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planAction.many"
-msgstr "Änderungen anwenden"
+#~ msgid "officeAddin.word.planAction.insert"
+#~ msgstr "Absätze einfügen"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planAction.one"
-msgstr "Änderung anwenden"
+#~ msgid "officeAddin.word.planAction.many"
+#~ msgstr "Änderungen anwenden"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planAction.replace"
-msgstr "Dokument ersetzen"
+#~ msgid "officeAddin.word.planAction.one"
+#~ msgstr "Änderung anwenden"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: summary.removed
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planGroup.removedCount"
-msgstr "{0, plural, one {# entfernt} other {# entfernt}}"
+#~ msgid "officeAddin.word.planAction.replace"
+#~ msgstr "Dokument ersetzen"
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+#~ msgid "officeAddin.word.planGroup.removedCount"
+#~ msgstr "{0, plural, one {# entfernt} other {# entfernt}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx
@@ -2375,18 +2373,18 @@ msgstr "Rückgängig gemacht: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.all"
-msgstr "Alle"
+#~ msgid "officeAddin.word.planReview.all"
+#~ msgstr "Alle"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.changes"
-msgstr "Änderungen"
+#~ msgid "officeAddin.word.planReview.changes"
+#~ msgstr "Änderungen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.checkInWord"
-msgstr "Objekte, Seitenumbrüche und das Seitenbild werden hier nicht dargestellt. Prüfe sie nach dem Anwenden in Word."
+#~ msgid "officeAddin.word.planReview.checkInWord"
+#~ msgstr "Objekte, Seitenumbrüche und das Seitenbild werden hier nicht dargestellt. Prüfe sie nach dem Anwenden in Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
@@ -2395,170 +2393,168 @@ msgstr "Die oben geprüften Änderungen anwenden?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.documentParts"
-msgstr "Dokumentteile"
+#~ msgid "officeAddin.word.planReview.documentParts"
+#~ msgstr "Dokumentteile"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.hidePreview"
-msgstr "Vorschau ausblenden"
+#~ msgid "officeAddin.word.planReview.hidePreview"
+#~ msgstr "Vorschau ausblenden"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.moreBlocks"
-msgstr ""
+#~ msgid "officeAddin.word.planReview.moreBlocks"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.moreBlocksShort"
-msgstr "{hidden, plural, one {# weiterer Block wird hier nicht angezeigt.} other {# weitere Blöcke werden hier nicht angezeigt.}}"
+#~ msgid "officeAddin.word.planReview.moreBlocksShort"
+#~ msgstr "{hidden, plural, one {# weiterer Block wird hier nicht angezeigt.} other {# weitere Blöcke werden hier nicht angezeigt.}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.newVersion"
-msgstr "Neue Fassung"
+#~ msgid "officeAddin.word.planReview.newVersion"
+#~ msgstr "Neue Fassung"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.onlyChanged"
-msgstr "Nur geänderte"
+#~ msgid "officeAddin.word.planReview.onlyChanged"
+#~ msgstr "Nur geänderte"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.preview"
-msgstr "Vorschau des Ergebnisses"
+#~ msgid "officeAddin.word.planReview.preview"
+#~ msgstr "Vorschau des Ergebnisses"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.savedDraft"
-msgstr "Gespeicherter Entwurf: Das ursprüngliche Dokument ist in dieser Sitzung nicht verfügbar, daher konnten entfernte Überschriften, Tabellen und Objekte nicht geprüft werden."
+#~ msgid "officeAddin.word.planReview.savedDraft"
+#~ msgstr "Gespeicherter Entwurf: Das ursprüngliche Dokument ist in dieser Sitzung nicht verfügbar, daher konnten entfernte Überschriften, Tabellen und Objekte nicht geprüft werden."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.sectionFilter"
-msgstr "Anzuzeigende Abschnitte"
+#~ msgid "officeAddin.word.planReview.sectionFilter"
+#~ msgstr "Anzuzeigende Abschnitte"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanReview.tsx
-msgid "officeAddin.word.planReview.showPreview"
-msgstr "Ergebnis anzeigen"
+#~ msgid "officeAddin.word.planReview.showPreview"
+#~ msgstr "Ergebnis anzeigen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.beforeUnavailable"
-msgstr "Die bisherigen Werte wurden nicht erfasst; es werden nur die neuen Einstellungen angezeigt."
+#~ msgid "officeAddin.word.planRow.beforeUnavailable"
+#~ msgstr "Die bisherigen Werte wurden nicht erfasst; es werden nur die neuen Einstellungen angezeigt."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planRow.cellsChanged"
-msgstr "{cells, plural, one {# Zelle geändert} other {# Zellen geändert}}"
+#~ msgid "officeAddin.word.planRow.cellsChanged"
+#~ msgstr "{cells, plural, one {# Zelle geändert} other {# Zellen geändert}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.changed"
-msgstr "Geändert"
+#~ msgid "officeAddin.word.planRow.changed"
+#~ msgstr "Geändert"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.changedRows"
-msgstr "Geänderte Tabellenzeilen"
+#~ msgid "officeAddin.word.planRow.changedRows"
+#~ msgstr "Geänderte Tabellenzeilen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.heading"
-msgstr "Überschrift"
+#~ msgid "officeAddin.word.planRow.heading"
+#~ msgstr "Überschrift"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.headingLevel"
-msgstr "Überschrift {level}"
+#~ msgid "officeAddin.word.planRow.headingLevel"
+#~ msgstr "Überschrift {level}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.kept"
-msgstr "Beibehalten"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: row.beforeLevel
-#. placeholder {1}: row.level
-#: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.levelChange"
-msgstr "Überschriftenebene {0} → {1}"
+#~ msgid "officeAddin.word.planRow.kept"
+#~ msgstr "Beibehalten"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.listItem"
-msgstr "Listenelement"
+#~ msgid "officeAddin.word.planRow.levelChange"
+#~ msgstr "Überschriftenebene {0} → {1}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.moreRows"
-msgstr "{0, plural, one {# weitere Zeile in Word} other {# weitere Zeilen in Word}}"
+#~ msgid "officeAddin.word.planRow.listItem"
+#~ msgstr "Listenelement"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.moreRowsRemoved"
-msgstr "{0, plural, one {# weitere Zeile, ebenfalls entfernt} other {# weitere Zeilen, ebenfalls entfernt}}"
+#~ msgid "officeAddin.word.planRow.moreRows"
+#~ msgstr "{0, plural, one {# weitere Zeile in Word} other {# weitere Zeilen in Word}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.new"
-msgstr "Neu"
+#~ msgid "officeAddin.word.planRow.moreRowsRemoved"
+#~ msgstr "{0, plural, one {# weitere Zeile, ebenfalls entfernt} other {# weitere Zeilen, ebenfalls entfernt}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.newSectionSettings"
-msgstr "{count, plural, one {{sectionBreak} · # Einstellung} other {{sectionBreak} · # Einstellungen}}"
+#~ msgid "officeAddin.word.planRow.new"
+#~ msgstr "Neu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordPlanChangeRow.tsx
+#~ msgid "officeAddin.word.planRow.newSectionSettings"
+#~ msgstr "{count, plural, one {{sectionBreak} · # Einstellung} other {{sectionBreak} · # Einstellungen}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planRow.objectCount"
-msgstr "{0, plural, one {# weiteres Element} other {# weitere Elemente}}"
+#~ msgid "officeAddin.word.planRow.objectCount"
+#~ msgstr "{0, plural, one {# weiteres Element} other {# weitere Elemente}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.pageLayout"
-msgstr "Seitenlayout"
+#~ msgid "officeAddin.word.planRow.pageLayout"
+#~ msgstr "Seitenlayout"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.paragraph"
-msgstr "Absatz"
+#~ msgid "officeAddin.word.planRow.paragraph"
+#~ msgstr "Absatz"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planRow.paragraphCount"
-msgstr "{0, plural, one {# Absatz} other {# Absätze}}"
+#~ msgid "officeAddin.word.planRow.paragraphCount"
+#~ msgstr "{0, plural, one {# Absatz} other {# Absätze}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.removed"
-msgstr "Entfernt"
+#~ msgid "officeAddin.word.planRow.removed"
+#~ msgstr "Entfernt"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.rewritten"
-msgstr "Neu geschrieben"
+#~ msgid "officeAddin.word.planRow.rewritten"
+#~ msgstr "Neu geschrieben"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planRow.rowsAdded"
-msgstr "{0, plural, one {# Zeile hinzugefügt} other {# Zeilen hinzugefügt}}"
+#~ msgid "officeAddin.word.planRow.rowsAdded"
+#~ msgstr "{0, plural, one {# Zeile hinzugefügt} other {# Zeilen hinzugefügt}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planRow.rowsRemoved"
-msgstr "{0, plural, one {# Zeile entfernt} other {# Zeilen entfernt}}"
+#~ msgid "officeAddin.word.planRow.rowsRemoved"
+#~ msgstr "{0, plural, one {# Zeile entfernt} other {# Zeilen entfernt}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.sectionBreak"
-msgstr "Abschnittsumbruch"
+#~ msgid "officeAddin.word.planRow.sectionBreak"
+#~ msgstr "Abschnittsumbruch"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.settingsChanged"
-msgstr "{count, plural, one {# Einstellung geändert} other {# Einstellungen geändert}}"
+#~ msgid "officeAddin.word.planRow.settingsChanged"
+#~ msgstr "{count, plural, one {# Einstellung geändert} other {# Einstellungen geändert}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
@@ -2567,200 +2563,193 @@ msgstr "{count, plural, one {# Einstellung geändert} other {# Einstellungen ge�
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planRow.tableCount"
-msgstr "{0, plural, one {# Tabelle} other {# Tabellen}}"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: row.rows
-#. placeholder {1}: row.cols
-#: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.tableSize"
-msgstr "{0} × {1}"
+#~ msgid "officeAddin.word.planRow.tableCount"
+#~ msgstr "{0, plural, one {# Tabelle} other {# Tabellen}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.unchanged"
-msgstr "Unverändert"
+#~ msgid "officeAddin.word.planRow.tableSize"
+#~ msgstr "{0} × {1}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.unchangedRun"
-msgstr "{list} unverändert"
+#~ msgid "officeAddin.word.planRow.unchanged"
+#~ msgstr "Unverändert"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
-msgid "officeAddin.word.planRow.updated"
-msgstr "Aktualisiert"
+#~ msgid "officeAddin.word.planRow.unchangedRun"
+#~ msgstr "{list} unverändert"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordPlanChangeRow.tsx
+#~ msgid "officeAddin.word.planRow.updated"
+#~ msgstr "Aktualisiert"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.comments"
-msgstr "Kommentare"
+#~ msgid "officeAddin.word.planScope.comments"
+#~ msgstr "Kommentare"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.footers"
-msgstr "Fußzeilen"
+#~ msgid "officeAddin.word.planScope.footers"
+#~ msgstr "Fußzeilen"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.headers"
-msgstr "Kopfzeilen"
+#~ msgid "officeAddin.word.planScope.headers"
+#~ msgstr "Kopfzeilen"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.layout"
-msgstr "Seitenlayout"
+#~ msgid "officeAddin.word.planScope.layout"
+#~ msgstr "Seitenlayout"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.notes"
-msgstr "Fuß- und Endnoten"
+#~ msgid "officeAddin.word.planScope.notes"
+#~ msgstr "Fuß- und Endnoten"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.unchanged"
-msgstr "{count, plural, one {{list} bleibt unverändert.} other {{list} bleiben unverändert.}}"
+#~ msgid "officeAddin.word.planScope.unchanged"
+#~ msgstr "{count, plural, one {{list} bleibt unverändert.} other {{list} bleiben unverändert.}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.wholeFile"
-msgstr "Word lädt dafür die gesamte Dokumentdatei neu."
+#~ msgid "officeAddin.word.planScope.wholeFile"
+#~ msgstr "Word lädt dafür die gesamte Dokumentdatei neu."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planSize.addition"
-msgstr "Ergänzung"
+#~ msgid "officeAddin.word.planSize.addition"
+#~ msgstr "Ergänzung"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planSize.large"
-msgstr "Groß"
+#~ msgid "officeAddin.word.planSize.large"
+#~ msgstr "Groß"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planSize.layout"
-msgstr "Layout"
+#~ msgid "officeAddin.word.planSize.layout"
+#~ msgstr "Layout"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planSize.medium"
-msgstr "Mittel"
+#~ msgid "officeAddin.word.planSize.medium"
+#~ msgstr "Mittel"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planSize.restructured"
-msgstr "Umstrukturiert"
+#~ msgid "officeAddin.word.planSize.restructured"
+#~ msgstr "Umstrukturiert"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planSize.small"
-msgstr "Klein"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: title.n
-#: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.blocksAdded"
-msgstr "{0, plural, one {# Element hinzufügen} other {# Elemente hinzufügen}}"
+#~ msgid "officeAddin.word.planSize.small"
+#~ msgstr "Klein"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.blocksChanged"
-msgstr "{n, plural, one {# Element ändern} other {# Elemente ändern}}"
+#~ msgid "officeAddin.word.planTitle.blocksAdded"
+#~ msgstr "{0, plural, one {# Element hinzufügen} other {# Elemente hinzufügen}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.blocksChangedAnd"
-msgstr "{n, plural, one {# Element und {also} ändern} other {# Elemente und {also} ändern}}"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: title.n
-#: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.cells"
-msgstr "{0, plural, one {# Tabellenzelle ändern} other {# Tabellenzellen ändern}}"
+#~ msgid "officeAddin.word.planTitle.blocksChanged"
+#~ msgstr "{n, plural, one {# Element ändern} other {# Elemente ändern}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.comments"
-msgstr "die Kommentare"
+#~ msgid "officeAddin.word.planTitle.blocksChangedAnd"
+#~ msgstr "{n, plural, one {# Element und {also} ändern} other {# Elemente und {also} ändern}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.endnotes"
-msgstr "die Endnoten"
+#~ msgid "officeAddin.word.planTitle.cells"
+#~ msgstr "{0, plural, one {# Tabellenzelle ändern} other {# Tabellenzellen ändern}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.footer"
-msgstr "die Fußzeile"
+#~ msgid "officeAddin.word.planTitle.comments"
+#~ msgstr "die Kommentare"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.footnotes"
-msgstr "die Fußnoten"
+#~ msgid "officeAddin.word.planTitle.endnotes"
+#~ msgstr "die Endnoten"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.header"
-msgstr "die Kopfzeile"
+#~ msgid "officeAddin.word.planTitle.footer"
+#~ msgstr "die Fußzeile"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.layout"
-msgstr "das Seitenlayout"
+#~ msgid "officeAddin.word.planTitle.footnotes"
+#~ msgstr "die Fußnoten"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.layoutOnly"
-msgstr "{also} aktualisieren"
+#~ msgid "officeAddin.word.planTitle.header"
+#~ msgstr "die Kopfzeile"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.none"
-msgstr ""
-
-#. js-lingui-explicit-id
-#. placeholder {0}: title.n
-#: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.paragraphsAdded"
-msgstr "{0, plural, one {# Absatz hinzufügen} other {# Absätze hinzufügen}}"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: title.n
-#: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.paragraphsChanged"
-msgstr "{0, plural, one {# Absatz ändern} other {# Absätze ändern}}"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: title.n
-#: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.removed"
-msgstr "{0, plural, one {# Element entfernen} other {# Elemente entfernen}}"
+#~ msgid "officeAddin.word.planTitle.layout"
+#~ msgstr "das Seitenlayout"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.sections"
-msgstr "{changed} von {total} Abschnitten aktualisieren"
+#~ msgid "officeAddin.word.planTitle.layoutOnly"
+#~ msgstr "{also} aktualisieren"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.sectionsAdded"
-msgstr ""
+#~ msgid "officeAddin.word.planTitle.none"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.sectionsAddedAnd"
-msgstr ""
+#~ msgid "officeAddin.word.planTitle.paragraphsAdded"
+#~ msgstr "{0, plural, one {# Absatz hinzufügen} other {# Absätze hinzufügen}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.sectionsAnd"
-msgstr "{changed} von {total} Abschnitten und {also} aktualisieren"
+#~ msgid "officeAddin.word.planTitle.paragraphsChanged"
+#~ msgstr "{0, plural, one {# Absatz ändern} other {# Absätze ändern}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
-msgid "officeAddin.word.planTitle.summary"
-msgstr "Als neue Fassung umschreiben"
+#~ msgid "officeAddin.word.planTitle.removed"
+#~ msgstr "{0, plural, one {# Element entfernen} other {# Elemente entfernen}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+#~ msgid "officeAddin.word.planTitle.sections"
+#~ msgstr "{changed} von {total} Abschnitten aktualisieren"
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+#~ msgid "officeAddin.word.planTitle.sectionsAdded"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+#~ msgid "officeAddin.word.planTitle.sectionsAddedAnd"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+#~ msgid "officeAddin.word.planTitle.sectionsAnd"
+#~ msgstr "{changed} von {total} Abschnitten und {also} aktualisieren"
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+#~ msgid "officeAddin.word.planTitle.summary"
+#~ msgstr "Als neue Fassung umschreiben"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
@@ -2938,8 +2927,8 @@ msgstr "{failed} fehlgeschlagen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.review.hideDetails"
-msgstr "Details ausblenden"
+#~ msgid "officeAddin.word.review.hideDetails"
+#~ msgstr "Details ausblenden"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
@@ -3095,13 +3084,13 @@ msgstr "Passage in Word markiert. Dies kann die Einfügeposition einer späteren
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.review.showDetails"
-msgstr "Details anzeigen"
+#~ msgid "officeAddin.word.review.showDetails"
+#~ msgstr "Details anzeigen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.review.showInWord"
-msgstr "In Word anzeigen ↗"
+#~ msgid "officeAddin.word.review.showInWord"
+#~ msgstr "In Word anzeigen ↗"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: filtered.length
@@ -3151,13 +3140,13 @@ msgstr "{skipped} übersprungen · {failed} Schreibvorgänge unbestätigt"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.review.undo"
-msgstr "Rückgängig"
+#~ msgid "officeAddin.word.review.undo"
+#~ msgstr "Rückgängig"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.review.undoAvailable"
-msgstr "Rückgängig machen ist möglich, bis eine weitere Änderung angewendet oder der Bereich geschlossen wird."
+#~ msgid "officeAddin.word.review.undoAvailable"
+#~ msgstr "Rückgängig machen ist möglich, bis eine weitere Änderung angewendet oder der Bereich geschlossen wird."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
@@ -3171,114 +3160,113 @@ msgstr "Word wurde beim Anwenden unterbrochen. Einige Änderungen können bereit
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.after"
-msgstr ""
+#~ msgid "officeAddin.word.rich.after"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.before"
-msgstr ""
+#~ msgid "officeAddin.word.rich.before"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.bindingRemoved"
-msgstr "Die Verknüpfung mit Dokumentdaten entfernen."
+#~ msgid "officeAddin.word.rich.bindingRemoved"
+#~ msgstr "Die Verknüpfung mit Dokumentdaten entfernen."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.rich.bookmark"
-msgstr "Textmarke"
+#~ msgid "officeAddin.word.rich.bookmark"
+#~ msgstr "Textmarke"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.bothLocked"
-msgstr "Der Inhalt ist gesperrt; das Steuerelement kann nicht entfernt werden."
+#~ msgid "officeAddin.word.rich.bothLocked"
+#~ msgstr "Der Inhalt ist gesperrt; das Steuerelement kann nicht entfernt werden."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.contentLocked"
-msgstr "Der Inhalt ist gesperrt; das Steuerelement kann entfernt werden."
+#~ msgid "officeAddin.word.rich.contentLocked"
+#~ msgstr "Der Inhalt ist gesperrt; das Steuerelement kann entfernt werden."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.controlLocked"
-msgstr "Der Inhalt kann bearbeitet werden; das Steuerelement kann nicht entfernt werden."
-
-#. js-lingui-explicit-id
-#. placeholder {0}: value.tag
-#: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.controlTag"
-msgstr "Tag: {0}"
+#~ msgid "officeAddin.word.rich.controlLocked"
+#~ msgstr "Der Inhalt kann bearbeitet werden; das Steuerelement kann nicht entfernt werden."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.controlUnlocked"
-msgstr "Der Inhalt kann bearbeitet und das Steuerelement entfernt werden."
+#~ msgid "officeAddin.word.rich.controlTag"
+#~ msgstr "Tag: {0}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordRichBlockPreview.tsx
+#~ msgid "officeAddin.word.rich.controlUnlocked"
+#~ msgstr "Der Inhalt kann bearbeitet und das Steuerelement entfernt werden."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-msgid "officeAddin.word.rich.drawing"
-msgstr "Zeichnung"
+#~ msgid "officeAddin.word.rich.drawing"
+#~ msgstr "Zeichnung"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.emptyCell"
-msgstr "Leere Zelle"
+#~ msgid "officeAddin.word.rich.emptyCell"
+#~ msgstr "Leere Zelle"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.fieldCode"
-msgstr "Feldfunktion: {instruction}"
+#~ msgid "officeAddin.word.rich.fieldCode"
+#~ msgstr "Feldfunktion: {instruction}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.fieldInWord"
-msgstr "Der Wert wird in Word berechnet."
+#~ msgid "officeAddin.word.rich.fieldInWord"
+#~ msgstr "Der Wert wird in Word berechnet."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.image"
-msgstr "Bild"
+#~ msgid "officeAddin.word.rich.image"
+#~ msgstr "Bild"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.imageInWord"
-msgstr "Das Erscheinungsbild des Bildes wird in Word angezeigt."
+#~ msgid "officeAddin.word.rich.imageInWord"
+#~ msgstr "Das Erscheinungsbild des Bildes wird in Word angezeigt."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.mediaSize"
-msgstr "{width} × {height} cm"
+#~ msgid "officeAddin.word.rich.mediaSize"
+#~ msgstr "{width} × {height} cm"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.objectChanges"
-msgstr "Änderungen an vorhandenem Inhalt"
+#~ msgid "officeAddin.word.rich.objectChanges"
+#~ msgstr "Änderungen an vorhandenem Inhalt"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.removeObject"
-msgstr "{label} entfernen"
+#~ msgid "officeAddin.word.rich.removeObject"
+#~ msgstr "{label} entfernen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.tableContents"
-msgstr "Tabelleninhalt"
+#~ msgid "officeAddin.word.rich.tableContents"
+#~ msgstr "Tabelleninhalt"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.tableDimensions"
-msgstr "{rows} Zeilen · {columnCount} Spalten"
+#~ msgid "officeAddin.word.rich.tableDimensions"
+#~ msgstr "{rows} Zeilen · {columnCount} Spalten"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.unwrapObject"
-msgstr "{label} entfernen, Inhalt beibehalten"
+#~ msgid "officeAddin.word.rich.unwrapObject"
+#~ msgstr "{label} entfernen, Inhalt beibehalten"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordRichBlockPreview.tsx
-msgid "officeAddin.word.rich.updateObject"
-msgstr "{label} aktualisieren"
+#~ msgid "officeAddin.word.rich.updateObject"
+#~ msgstr "{label} aktualisieren"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

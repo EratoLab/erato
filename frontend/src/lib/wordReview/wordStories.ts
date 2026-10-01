@@ -303,7 +303,7 @@ export function extractWordStories(doc: Document): WordStorySource[] {
   const output: WordStorySource[] = [];
   for (const part of packageParts(doc)) {
     const root = partRoot(part);
-    if (!root || root.namespaceURI !== W) continue;
+    if (root?.namespaceURI !== W) continue;
     const type: WordStoryType | undefined =
       root.localName === "hdr"
         ? "header"
@@ -1237,7 +1237,7 @@ export function compileWordSections(
           empty.replaceChildren(make(doc, "p"));
         } else {
           const story = stories.get(storyId);
-          if (!story || story.type !== type)
+          if (story?.type !== type)
             throw new Error("A section refers to a missing header or footer.");
           path = story.part;
         }

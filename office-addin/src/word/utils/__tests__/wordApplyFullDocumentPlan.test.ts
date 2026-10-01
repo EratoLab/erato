@@ -1,3 +1,4 @@
+import { wordSourceReadRefs } from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import nativeSource from "../../../test/fixtures/word-authoring-state/rewrite-source.xml?raw";
@@ -12,7 +13,6 @@ import {
   wordDocumentOoxmlToFile,
 } from "../wordDocumentPackage";
 import { wordDocxBase64 } from "../wordDocumentPackageCodec";
-import { wordSourceReadRefs } from "../wordDocumentPlan";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -23,7 +23,7 @@ import {
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const decode = (base64: string) =>

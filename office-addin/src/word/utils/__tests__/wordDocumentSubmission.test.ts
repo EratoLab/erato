@@ -1,3 +1,4 @@
+import { parseWordDocumentPlan } from "@erato/frontend/word-review";
 import { describe, expect, it, vi, afterEach } from "vitest";
 
 import {
@@ -5,7 +6,6 @@ import {
   examplePlan,
 } from "../../../test/mocks/word/authoringFixtures";
 import { buildWordArtifact } from "../buildWordArtifact";
-import { parseWordDocumentPlan } from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
   acceptedWordDocumentSubmission,

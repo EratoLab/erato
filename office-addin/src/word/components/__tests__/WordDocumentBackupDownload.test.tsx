@@ -1,3 +1,4 @@
+import { wordSourceReadRefs } from "@erato/frontend/word-review";
 import { i18n } from "@lingui/core";
 import {
   cleanup,
@@ -8,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
@@ -16,13 +18,14 @@ import {
   encodeWordDocumentBackup,
   wordDocumentOoxmlToFile,
 } from "../../utils/wordDocumentPackage";
-import { wordSourceReadRefs } from "../../utils/wordDocumentPlan";
 import { captureWordAuthoringSnapshot } from "../../utils/wordDocumentXml";
 import { WordDocumentPlanCard } from "../WordDocumentPlanCard";
 
-import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
-import type { WordDocumentPlan } from "../../utils/wordDocumentPlan";
 import type * as EratoLibrary from "@erato/frontend/library";
+import type {
+  WordDocumentCapture,
+  WordDocumentPlan,
+} from "@erato/frontend/word-review";
 
 const host = vi.hoisted(() => ({ messageId: "download-message" }));
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
@@ -123,7 +126,7 @@ function downloadUrls() {
   return { create, revoke };
 }
 beforeEach(() => {
-  i18n.load("en", {});
+  i18n.load("en", frontendMessages);
   i18n.activate("en");
 });
 afterEach(() => {

@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
   examplePlan,
@@ -27,12 +28,12 @@ import {
 import { wordDocumentFingerprint } from "../../utils/wordDocumentXml";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
-import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
+import type * as EratoLibrary from "@erato/frontend/library";
 import type {
+  WordDocumentCapture,
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../../utils/wordDocumentPlan";
-import type * as EratoLibrary from "@erato/frontend/library";
+} from "@erato/frontend/word-review";
 
 const mock = vi.hoisted(() => {
   const artifact: Record<string, unknown> = {};
@@ -241,7 +242,7 @@ function holdWord() {
   return release;
 }
 beforeEach(() => {
-  i18n.load("en", {});
+  i18n.load("en", frontendMessages);
   i18n.activate("en");
   mock.decisions = {};
   mock.setDecisions.mockClear();

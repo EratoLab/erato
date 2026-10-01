@@ -6,7 +6,7 @@ import type {
   wordEditCounts,
   WordEditOutcome,
   WordEditStatus,
-} from "../utils/wordEditPlan";
+} from "@erato/frontend/word-review";
 
 export function statusLabel(status: WordEditStatus): string {
   switch (status) {
