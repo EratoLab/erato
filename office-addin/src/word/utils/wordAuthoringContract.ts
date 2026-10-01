@@ -57,7 +57,7 @@ export const WORD_AUTHORING_CONTRACT = {
     },
   },
   paragraphs:
-    "{id,type:'paragraph',text,runs?,styleRef?,format?}; heading: {id,type:'heading',text,level:1..9,runs?,format?}; list-item: {id,type:'list-item',text,list:'group-id',level:0..8,ordered:boolean,runs?,styleRef?,format?}. Reuse a captured existing-* list name, level and ordered value to continue that exact list. A new group name creates a separate list; its items share ordered. Each paragraph is a distinct block; text has no newline. Runs concatenate exactly to text.",
+    "{id,type:'paragraph',text,runs?,styleRef?,format?}; heading: {id,type:'heading',text,level:1..9,runs?,format?}. A heading's captured styleRef is read-only metadata: never copy it into a heading block. The host chooses its built-in style from level; list-item: {id,type:'list-item',text,list:'group-id',level:0..8,ordered:boolean,runs?,styleRef?,format?}. Reuse a captured existing-* list name, level and ordered value to continue that exact list. A new group name creates a separate list; its items share ordered. Each paragraph is a distinct block; text has no newline. Runs concatenate exactly to text.",
   runFormatting:
     "Each run has text plus optional bold,italic,underline,strike,caps,smallCaps:boolean; underlineStyle:single|double|dotted|dash|wave; fontFamily; fontSize in points; color/shading:6-digit hex; highlight:Word named color; verticalAlign:baseline|superscript|subscript; characterSpacing in points; language:BCP47.",
   paragraphFormatting:
