@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  duplicateWordCustomXml,
+  editWordPackage,
+  installWordOoxmlHost,
+} from "../../../test/mocks/word/ooxmlHost";
 import {
   captureRealisticSnapshot,
   realisticWordPackageXml,
@@ -11,6 +15,10 @@ import {
   applyWordDocumentPlan,
   revertWordDocumentPlan,
 } from "../wordApplyDocumentPlan";
+import {
+  wordDocumentFileToOoxml,
+  wordDocumentOoxmlToFile,
+} from "../wordDocumentPackage";
 import { wordPackageCounts } from "../wordFullDocumentComparison";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
@@ -135,6 +143,47 @@ describe("repeated full-document Apply", { timeout: 60_000 }, () => {
     expect(report).toMatch(/^Package expected: \d+ parts, 3 customXml items/m);
     expect(report).toMatch(/^Package actual: \d+ parts, 6 customXml items/m);
     expect(wordPackageCounts(host.ooxml()).customXmlItems).toBe(6);
+  });
+
+  it("cannot restore away customXml that Word duplicated during an Apply", async () => {
+    const host = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    const snapshot = await captureRealisticSnapshot("message-1");
+    host.transform((bytes) =>
+      wordDocumentOoxmlToFile(
+        editWordPackage(wordDocumentFileToOoxml(bytes), duplicateWordCustomXml),
+      ),
+    );
+    const applied = await applyWordDocumentPlan(
+      JSON.stringify(statusRewritePlan(snapshot, "Status update.")),
+      snapshot,
+      "message-1",
+    );
+    expect(applied.status).toBe("interrupted");
+    expect(applied.diagnostic).toMatchObject({
+      stage: "verify",
+      reason: "package-growth",
+    });
+    host.transform((bytes) => bytes);
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status).toBe("interrupted");
+    expect(reverted.diagnostic).toMatchObject({
+      stage: "restore",
+      reason: "package-growth",
+    });
+    expect(host.importOptions).toHaveLength(2);
+    expect(host.importOptions[1]).toMatchObject({
+      importCustomXmlParts: false,
+      importCustomProperties: false,
+    });
+    expect(shape(host.ooxml())).toMatchObject({
+      customXmlItems: 6,
+      customProperties: 4,
+    });
   });
 
   it("verifies every Word for the web import strictly", async () => {

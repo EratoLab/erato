@@ -12,11 +12,14 @@ const OFFICE_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 /**
- * "word-web" replaces the document wholesale. "word-pc-16.0.20326" merges the
- * imported file into the open document the way Word PC 16.0.20326 was observed to:
- * customXml and custom properties are added again unless the import options
- * exclude them, list definitions get new nsid values plus one unused definition,
- * and saved task-pane records are dropped.
+ * Both profiles keep the open document's customXml and custom properties
+ * (InsertFileOptions, WordApi 1.6): the file's customXml items are added next to
+ * them only when importCustomXmlParts is not false, and the file's properties
+ * overwrite same-named ones only when importCustomProperties is not false.
+ * Otherwise "word-web" takes the imported file wholesale, while
+ * "word-pc-16.0.20326" merges it the way Word PC 16.0.20326 was observed to:
+ * list definitions get new nsid values plus one unused definition, and saved
+ * task-pane records are dropped.
  */
 export type WordOoxmlHostProfile = "word-web" | "word-pc-16.0.20326";
 
@@ -26,7 +29,7 @@ export interface WordOoxmlHostOptions {
   rePointKeptLists?: boolean;
   /** Word PC: spacing-before of the first body paragraph changes whenever paragraph spacing is imported. */
   spacingDrift?: boolean;
-  /** Word PC: duplicate customXml and custom properties whatever the import options say. */
+  /** Import the file's customXml and custom properties whatever the import options say. */
   ignoreImportOptions?: boolean;
   url?: string;
   /** Defaults to every requirement set. */
@@ -164,20 +167,39 @@ export function driftFirstParagraphSpacing(doc: Document, step = 120): void {
   );
 }
 
-export function duplicateWordCustomXml(doc: Document): void {
-  const pkg = doc.documentElement;
-  const items = parts(doc)
-    .map((p) => /^\/customXml\/item(\d+)\.xml$/.exec(partName(p))?.[1])
+const DOCUMENT_RELS = "/word/_rels/document.xml.rels";
+const PACKAGE_RELS = "/_rels/.rels";
+const CUSTOM_PROPERTIES = "/docProps/custom.xml";
+const customXmlIndex = (part: Element) =>
+  /^\/customXml\/item(\d+)\.xml$/.exec(partName(part))?.[1];
+const relationshipsOf = (root: Element | undefined) =>
+  root ? elements(root, REL, "Relationship") : [];
+const hasType = (rel: Element, type: string) =>
+  (rel.getAttribute("Type") ?? "").endsWith(`/${type}`);
+
+function addRelationship(root: Element, rel: Element): void {
+  const ids = new Set(relationshipsOf(root).map((r) => r.getAttribute("Id")));
+  const preferred = rel.getAttribute("Id") || "rIdHost";
+  let id = preferred;
+  for (let n = 1; ids.has(id); n++) id = `${preferred}_${n}`;
+  rel.setAttribute("Id", id);
+  root.append(rel);
+}
+
+/** Adds every customXml item of `from` to `into` under new item numbers. */
+function appendWordCustomXml(into: Document, from: Document): void {
+  const items = parts(from)
+    .map(customXmlIndex)
     .filter((n): n is string => !!n);
-  const relationships = partRoot(doc, "/word/_rels/document.xml.rels");
-  let next = Number(nextId(items));
+  const relationships = partRoot(into, DOCUMENT_RELS);
+  let next = Number(nextId(parts(into).map((p) => customXmlIndex(p) ?? "")));
   for (const index of items) {
-    const copy = (from: string, to: string) => {
-      const source = parts(doc).find((p) => partName(p) === from);
-      if (!source) return undefined;
-      const clone = source.cloneNode(true) as Element;
-      clone.setAttributeNS(PKG, "pkg:name", to);
-      pkg.append(clone);
+    const copy = (source: string, target: string) => {
+      const part = parts(from).find((p) => partName(p) === source);
+      if (!part) return undefined;
+      const clone = into.importNode(part, true);
+      clone.setAttributeNS(PKG, "pkg:name", target);
+      into.documentElement.append(clone);
       return clone;
     };
     const n = next++;
@@ -187,14 +209,82 @@ export function duplicateWordCustomXml(doc: Document): void {
       `/customXml/_rels/item${index}.xml.rels`,
       `/customXml/_rels/item${n}.xml.rels`,
     );
-    for (const rel of rels ? elements(rels, REL, "Relationship") : [])
+    for (const rel of relationshipsOf(rels))
       rel.setAttribute("Target", `itemProps${n}.xml`);
     if (relationships) {
-      const rel = doc.createElementNS(REL, "Relationship");
+      const rel = into.createElementNS(REL, "Relationship");
       rel.setAttribute("Id", `rIdCustomXml${n}`);
       rel.setAttribute("Type", `${OFFICE_REL}/customXml`);
       rel.setAttribute("Target", `../customXml/item${n}.xml`);
-      relationships.append(rel);
+      addRelationship(relationships, rel);
+    }
+  }
+}
+
+export function duplicateWordCustomXml(doc: Document): void {
+  appendWordCustomXml(doc, doc);
+}
+
+/** Replaces `into`'s customXml items with `from`'s, keeping their names. */
+function replaceWordCustomXml(into: Document, from: Document): void {
+  for (const part of parts(into))
+    if (partName(part).startsWith("/customXml/")) part.remove();
+  const relationships = partRoot(into, DOCUMENT_RELS);
+  for (const rel of relationshipsOf(relationships))
+    if (hasType(rel, "customXml")) rel.remove();
+  for (const part of parts(from))
+    if (partName(part).startsWith("/customXml/"))
+      into.documentElement.append(into.importNode(part, true));
+  if (relationships)
+    for (const rel of relationshipsOf(partRoot(from, DOCUMENT_RELS)))
+      if (hasType(rel, "customXml"))
+        addRelationship(relationships, into.importNode(rel, true));
+}
+
+/** Replaces `into`'s custom document properties with `from`'s. */
+function replaceWordCustomProperties(into: Document, from: Document): void {
+  parts(into)
+    .find((p) => partName(p) === CUSTOM_PROPERTIES)
+    ?.remove();
+  const relationships = partRoot(into, PACKAGE_RELS);
+  for (const rel of relationshipsOf(relationships))
+    if (hasType(rel, "custom-properties")) rel.remove();
+  const kept = parts(from).find((p) => partName(p) === CUSTOM_PROPERTIES);
+  if (!kept) return;
+  into.documentElement.append(into.importNode(kept, true));
+  const rel = relationshipsOf(partRoot(from, PACKAGE_RELS)).find((r) =>
+    hasType(r, "custom-properties"),
+  );
+  if (relationships && rel)
+    addRelationship(relationships, into.importNode(rel, true));
+}
+
+/** Imported custom document properties overwrite those with the same name, as InsertFileOptions documents. */
+function importWordCustomProperties(into: Document, from: Document): void {
+  const imported = partRoot(from, CUSTOM_PROPERTIES);
+  if (!imported) return;
+  const root = partRoot(into, CUSTOM_PROPERTIES);
+  if (!root) {
+    replaceWordCustomProperties(into, from);
+    return;
+  }
+  for (const property of Array.from(imported.children)) {
+    const name = property.getAttribute("name");
+    const existing = Array.from(root.children).find(
+      (p) => p.getAttribute("name") === name,
+    );
+    const clone = into.importNode(property, true);
+    if (existing) {
+      clone.setAttribute("pid", existing.getAttribute("pid") ?? "");
+      existing.replaceWith(clone);
+    } else {
+      clone.setAttribute(
+        "pid",
+        nextId(
+          Array.from(root.children).map((p) => p.getAttribute("pid") ?? ""),
+        ),
+      );
+      root.append(clone);
     }
   }
 }
@@ -224,20 +314,26 @@ export function dropWordTaskPanes(doc: Document): void {
 
 function merged(
   imported: Uint8Array,
+  open: Uint8Array,
   options: Word.InsertFileOptions | undefined,
   settings: WordOoxmlHostOptions,
   nsid: () => string,
 ): Uint8Array {
-  if ((settings.profile ?? "word-web") === "word-web") return imported;
-  const ooxml = editWordPackage(wordDocumentFileToOoxml(imported), (doc) => {
-    dropWordTaskPanes(doc);
+  const importedXml = wordDocumentFileToOoxml(imported);
+  const source = parse(importedXml);
+  const target = parse(wordDocumentFileToOoxml(open));
+  const ooxml = editWordPackage(importedXml, (doc) => {
+    replaceWordCustomXml(doc, target);
     if (settings.ignoreImportOptions || options?.importCustomXmlParts !== false)
-      duplicateWordCustomXml(doc);
+      appendWordCustomXml(doc, source);
+    replaceWordCustomProperties(doc, target);
     if (
       settings.ignoreImportOptions ||
       options?.importCustomProperties !== false
     )
-      duplicateWordCustomProperties(doc);
+      importWordCustomProperties(doc, source);
+    if ((settings.profile ?? "word-web") === "word-web") return;
+    dropWordTaskPanes(doc);
     renameWordNsids(doc, nsid);
     if (settings.rePointKeptLists) rePointWordLists(doc);
     addUnreferencedWordNumbering(doc, nsid());
@@ -493,7 +589,7 @@ export function installWordOoxmlHost(
         });
       }
       current = decorateWrite(
-        merged(pending.bytes, pending.options, settings, nsid),
+        merged(pending.bytes, current, pending.options, settings, nsid),
       );
       pending = undefined;
       loadControls();

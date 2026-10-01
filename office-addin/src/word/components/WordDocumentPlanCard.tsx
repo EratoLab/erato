@@ -239,7 +239,11 @@ export function WordDocumentPlanCard({
         slot.ooxml,
         slot.afterFingerprint,
       );
-      if (result.status === "reverted") host.setRevertSlot(null);
+      // Only a strict match equals the backup; after a content-tier restore it stays downloadable.
+      if (result.status === "reverted" && result.outcome?.tier === "strict")
+        host.setRevertSlot(null);
+      else if (result.status === "reverted")
+        host.setRevertSlot({ ...slot, afterFingerprint: undefined });
       else if (result.status === "interrupted")
         host.setRevertSlot({
           ...slot,

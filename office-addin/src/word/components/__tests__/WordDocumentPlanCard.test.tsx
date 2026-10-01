@@ -491,7 +491,7 @@ describe("structural document review", () => {
     await waitFor(() => expect(state.insert).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("alert")).toBeNull();
   });
-  it("discloses Word's own first-paragraph spacing change after a verified import, with Revert as before", async () => {
+  it("discloses Word's own first-paragraph spacing change and keeps the exact original downloadable after a content-tier Revert", async () => {
     const word = installWordOoxmlHost(realisticWordPackageXml(), {
       profile: "word-pc-16.0.20326",
       spacingDrift: true,
@@ -539,6 +539,12 @@ describe("structural document review", () => {
     expect(word.insert).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: "Revert batch" })).toBeNull();
+    expect(screen.getByTestId("word-plan-adjustments")).toHaveTextContent(
+      "Word also changed the spacing before the first paragraph.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Download original document" }),
+    ).toBeInTheDocument();
   });
   it("respects the structural action permission independently of paragraph edits", () => {
     mock.decisions = {
