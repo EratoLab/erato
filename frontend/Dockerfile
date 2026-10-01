@@ -50,6 +50,8 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm licenses list --prod --js
 
 RUN cp pnpm-lock.yaml /tmp/office-addin-pnpm-lock.yaml
 COPY office-addin /app/office-addin
+# The setup page embeds the published helper source and release checksum.
+COPY site/public/setup/teams /app/site/public/setup/teams
 RUN cp /tmp/office-addin-pnpm-lock.yaml pnpm-lock.yaml
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
 

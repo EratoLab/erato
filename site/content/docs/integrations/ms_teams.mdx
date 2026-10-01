@@ -19,102 +19,293 @@ Users are recognized by their Entra object ID, which Erato records whenever they
 
 - Erato signs users in with Microsoft Entra ID.
 - The [Teams app](../configuration#integrationsms_officeteamsenabled) (`integrations.ms_office.teams`) is enabled, so the bot can be shipped in the same app package as the tab.
-- You can create an app registration and an Azure Bot resource in the customer's tenant, and grant admin consent.
+- You can manage the customer's existing Entra app registration, create or manage an Azure Bot resource, and grant admin consent.
 
 ## Setup
 
-Repeat these steps for each environment (for example test and production).
+Start at `/office-addin/setup` → **Teams** for deployment-specific values.
+Use the guided Cloud Shell flow below, or follow the manual instructions if your
+organization manages these settings through another process.
 
-### 1. Bot app registration
+The Teams tab uses the existing Office add-in MSAL registration. The conversational
+bot needs an Azure Bot resource and an OAuth connection to obtain delegated Graph
+tokens. Both can use the customer's existing Entra application registration.
 
-Create a single-tenant app registration for the bot and add a client secret. Its application (client) ID is the bot's app ID.
+Erato stays on its existing infrastructure. Azure routes messages to the public
+Erato endpoint and manages the bot's OAuth connection. An Azure subscription and
+permission to manage the relevant Entra app and Azure resources are required.
+See [Microsoft's Azure setup guide](https://learn.microsoft.com/en-us/microsoftteams/platform/teams-sdk/teams/azure-configuration).
 
-### 2. Azure Bot resource
+These instructions target public Azure and the global Bot Framework token service.
+Regional or sovereign deployments must use their corresponding token service,
+OAuth callback, and manifest domains.
 
-Create an Azure Bot resource that uses this app registration, then:
+### Guided setup with Azure Cloud Shell
 
-- Under **Configuration**, set the messaging endpoint to `https://<erato host>/api/integrations/ms_teams/messages`.
-- Under **Channels**, add **Microsoft Teams**.
+On the deployment's **Teams** setup page:
 
-### 3. OAuth connection
+1. Enter the **Tenant ID** and **Subscription ID** that contain the existing Azure
+   Bot. Both are available on the subscription's Overview page in Azure Portal.
+   The bot and authentication app IDs are filled from this deployment's package.
+2. Review **Permissions and changes to review**. The initial check needs read
+   access to the Bot resource, Entra application and consent records. Applying
+   requires permission to update the selected app, add an app credential, and
+   write the Bot's OAuth connections. Granting tenant admin consent is separate.
+3. Select **Open Azure Cloud Shell**, choose **PowerShell**, and sign in to the
+   selected tenant. First-time Cloud Shell use can require registering the
+   `Microsoft.CloudShell` resource provider. Persistent storage is optional.
+4. Select **Copy command**, paste into Cloud Shell, and press Enter. The command
+   fetches a specific PowerShell release from `erato.chat`, checks its SHA-256
+   checksum, and performs a **read-only check**. No local installation, download,
+   file upload, or private repository access is needed.
+5. Read the results: **PASS** means that Azure setting is present; **MISSING**
+   means a step remains. Access errors and the wrong tenant stop the check.
+   Under **Preview and apply changes**, copy the preview command. It uses
+   PowerShell's `-WhatIf`; no credentials or cloud settings are changed.
+6. Review the preview, then copy the separate apply command when ready. `-Apply`
+   displays the target and proposed changes and asks for confirmation. It adds
+   SSO settings to the existing authentication app and creates a separate OAuth
+   connection with a dedicated credential. It preserves existing settings and
+   refuses to overwrite a connection with conflicting settings.
+7. Follow **Finish setup in Erato and Teams**. Grant any missing tenant consent,
+   use Azure Bot's **Test Connection**, deploy the shown Erato settings, increase
+   the Teams package version and upload the updated package. Test a personal
+   bot chat in Teams desktop and web, then the tab and Office add-ins.
 
-On the Azure Bot resource, add an OAuth connection with the **Azure Active Directory v2** provider (or federated credentials). The bot uses it to get the user's delegated Microsoft Graph token, which replaces the access token oauth2-proxy forwards for web users.
+**View script** shows the exact PowerShell source inside the setup page before
+execution. **View command** exposes every parameter and the expected checksum.
+The command contains public deployment identifiers, never credentials. Every
+check, preview and apply command independently verifies the script before running
+it. If verification fails, nothing executes; reopen the setup page and contact
+Erato support if it persists. Do not remove the checksum check to continue.
 
-Request the Graph scopes your web login uses, plus:
+The helper finds the existing bot within the explicitly selected subscription;
+it does not search other subscriptions or switch tenants. If multiple bot
+resources use the same app ID, add `ResourceGroup` and `BotName` to the displayed
+`$erato` parameter block. This also allows resource-scoped administrators to
+check a bot without enumerating the subscription. **Deployment details and connection names** lets you
+change the current `graph` and proposed `graph-sso` names. The current connection
+name protects the existing rollout path; checks target the proposed SSO connection.
 
-| Scope                                  | Used for                                 |
-| -------------------------------------- | ---------------------------------------- |
-| `User.Read`, `GroupMember.Read.All`    | Identity and group-based policies        |
-| `Files.Read.All`, `Sites.Read.All`     | Files shared in group chats and channels |
-| `Chat.Read`, `ChannelMessage.Read.All` | Surrounding messages attached as context |
+A check verifies Azure/Entra metadata only. It does not verify Erato's deployment,
+ingress routing, installed Teams package, credential validity or end-to-end SSO.
+**Azure setup complete does not mean Teams setup complete.** Keep the current
+connection until the final client tests pass.
 
-Grant admin consent. The connection's name goes into `oauth_connection_name`.
+The dedicated credential has a 365-day lifetime, subject to tenant policy. Record
+its reported key ID and expiry for renewal; secret values are never printed.
+If apply fails after a partial change, the helper identifies the added credential
+when available. Inspect the connection and credential before retrying. Additive
+Entra changes may already be present. Process environments sharing an app
+registration sequentially.
 
-### 4. Silent sign-in (optional)
+For local administration, the same reviewed script runs with PowerShell 7.2+ and
+Azure CLI. Browser-based Cloud Shell is the default path. `-Json` produces a
+sanitized support report. Exit `0` means checks pass, `1` means settings such as
+admin consent remain, and `2` means the operation stopped or failed. An apply
+can complete its writes and still exit `1` because consent remains outstanding.
+The helper never grants consent, creates the messaging bot, deploys Erato or
+installs a Teams package.
 
-Without this step, users confirm sign-in once with a button. To sign them in silently:
+References: [Cloud Shell overview](https://learn.microsoft.com/en-us/azure/cloud-shell/overview),
+[PowerShell preview and confirmation](https://learn.microsoft.com/en-us/powershell/scripting/learn/deep-dives/everything-about-shouldprocess).
 
-1. On the bot app registration, expose the API `api://botid-<bot app id>` with an `access_as_user` scope and pre-authorize the Teams clients.
-2. Set the OAuth connection's **Token Exchange URL** to that URI.
-3. Set `sso_app_id` and `sso_resource` in the Erato configuration. The rendered Teams manifest then points `webApplicationInfo` at the bot. Verify that the Teams tab still signs in afterwards.
+### Manual setup
 
-### 5. Network routing
+### 1. Record the identities and deployment URL
 
-oauth2-proxy strips the `Authorization` header on every route, including routes in `skip_auth_regex`, so the Bot Connector's token would never reach Erato. Route the exact path `/api/integrations/ms_teams/messages` to the backend directly. The backend checks the Bot Connector's signed token itself and only accepts activities from the configured tenant.
+| Name used below | Meaning                                                             |
+| --------------- | ------------------------------------------------------------------- |
+| `TENANT_ID`     | Customer's Entra tenant                                             |
+| `BOT_APP_ID`    | Entra client ID registered as the bot's messaging identity          |
+| `AUTH_APP_ID`   | Entra client ID used by the add-in, OAuth connection and bot SSO    |
+| `TEAMS_APP_ID`  | Package ID in `integrations.ms_office.teams.app_id`; keep it stable |
+| `ERATO_HOST`    | Public Erato hostname, without `https://` or a path                 |
+| `SSO_RESOURCE`  | Exact Application ID URI exposed by `AUTH_APP_ID`                   |
 
-With the Helm chart:
+For a new deployment, `BOT_APP_ID` and `AUTH_APP_ID` can both be the existing
+customer-owned single-tenant add-in registration. A bot authenticates as a server
+and needs a client secret even though browser MSAL does not use one.
+
+For an existing deployment with separate bot registrations, retain `BOT_APP_ID`
+and its working credentials. The OAuth connection can use `AUTH_APP_ID` separately.
+For our combined tab/bot package, keeping `AUTH_APP_ID` equal to the current tab's
+client ID avoids changing its NAA identity. The generated manifest has one
+`webApplicationInfo.id`; `bots[].botId` identifies the messaging bot.
+Microsoft documents [separate bot and authentication registrations](https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/authentication/bot-sso-register-aad#to-configure-authorized-client-application).
+
+### 2. Extend the existing Entra authentication registration
+
+Open **Entra admin center → App registrations → the application with `AUTH_APP_ID`**.
+Keep its existing redirect URIs, scopes, permissions, and credentials.
+
+1. Under **Manifest**, set `api.requestedAccessTokenVersion` to `2`. This concerns
+   access tokens issued for this application's exposed API; review existing API
+   consumers if the registration already exposes one.
+2. Under **Expose an API**, configure the Application ID URI. For a combined
+   bot/tab app, use `api://ERATO_HOST/botid-AUTH_APP_ID`. Record this as
+   `SSO_RESOURCE` without `/access_as_user` at the end.
+3. Add an enabled delegated scope named **`access_as_user`**. Use clear admin/user
+   consent labels such as “Access Erato as the signed-in user”.
+4. Under **Authorized client applications**, add both clients below and select
+   `access_as_user` for each.
+
+| Client                   | Application ID                         |
+| ------------------------ | -------------------------------------- |
+| Teams desktop and mobile | `1fec8e78-bce4-4aaf-ab1b-5451cc387264` |
+| Teams web                | `5e3ce6c0-2b1f-4285-8d4b-75ee78787346` |
+
+5. Under **Authentication → Add a platform → Web**, add
+   `https://token.botframework.com/.auth/web/redirect`. Keep the existing Web
+   callbacks and SPA `brk-multihub://ERATO_HOST` redirect.
+6. Under **API permissions → Microsoft Graph → Delegated permissions**, include
+   the following permissions, together with any additional scopes Erato uses:
+
+   ```text
+   openid profile email offline_access User.Read GroupMember.Read.All
+   Files.Read.All Sites.Read.All Chat.Read ChannelMessage.Read.All
+   ```
+
+7. Have an appropriately privileged tenant administrator **grant admin consent**.
+   Configuring permissions alone does not grant consent. Consent on an old bot
+   registration does not transfer to the shared authentication registration.
+8. Under **Certificates & secrets**, add a dedicated OAuth connection credential.
+   Use its **Value**, not its Secret ID, in step 4. Keep existing credentials.
+
+If staging and production share an authentication registration, retain both
+environment-specific resource URIs in its `identifierUris` array (the Entra
+manifest editor or Graph API can edit this array). Use the same `access_as_user`
+scope and Teams client pre-authorizations. Process the environments sequentially.
+
+References: [Entra SSO configuration](https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/authentication/bot-sso-register-aad),
+[combined bot/tab manifest](https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/authentication/bot-sso-manifest),
+[Application ID URI policy](https://learn.microsoft.com/en-us/entra/identity-platform/identifier-uri-restrictions).
+
+### 3. Create or inspect the Azure Bot resource
+
+Open **Azure Portal → All resources** and find the existing **Azure Bot**.
+If none exists, create an Azure Bot in the customer's subscription/resource group,
+select **Single Tenant → Use existing app registration**, and supply `BOT_APP_ID`
+and `TENANT_ID`. Record the resource name, subscription and resource group.
+
+Under **Configuration**, set the messaging endpoint to:
+
+```text
+https://ERATO_HOST/api/integrations/ms_teams/messages
+```
+
+Under **Channels**, enable **Microsoft Teams**. The bot credential corresponding
+to `BOT_APP_ID` belongs in the Erato deployment's secret storage. This is separate
+from the OAuth credential when `BOT_APP_ID` and `AUTH_APP_ID` differ.
+
+### 4. Configure the OAuth connection
+
+On the Azure Bot resource, open **Configuration → OAuth Connection Settings**.
+For a staged rollout, create a new connection named **`graph-sso`** and keep any
+existing `graph` connection until validation is complete.
+
+| Field              | Value                                                       |
+| ------------------ | ----------------------------------------------------------- |
+| Name               | `graph-sso`                                                 |
+| Service provider   | Azure Active Directory v2                                   |
+| Client ID          | `AUTH_APP_ID`                                               |
+| Client secret      | The dedicated credential value from step 2                  |
+| Tenant ID          | `TENANT_ID`                                                 |
+| Token Exchange URL | `SSO_RESOURCE`, exactly as exposed in Entra                 |
+| Scopes             | The space-separated delegated Graph scopes listed in step 2 |
+
+Save and use **Test Connection**. A successful test verifies interactive OAuth;
+it does not establish that Teams silent SSO works. That requires the package and
+client checks below. See [Microsoft's OAuth connection configuration](https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/authentication/bot-sso-register-aad#configure-oauth-connection).
+
+### 5. Configure the Erato deployment
+
+Merge these settings into the existing bot configuration:
+
+```toml
+[integrations.ms_office.teams.bot]
+enabled = true
+app_id = "BOT_APP_ID"
+tenant_id = "TENANT_ID"
+oauth_connection_name = "graph-sso"
+public_base_url = "https://ERATO_HOST"
+sso_app_id = "AUTH_APP_ID"
+sso_resource = "SSO_RESOURCE"
+# Supply app_password through the deployment's secret storage.
+```
+
+Keep the add-in's `msal_client_id = "AUTH_APP_ID"`. Keep `TEAMS_APP_ID` and the
+existing bot identity stable. Increase the Teams manifest version so the updated
+package is distinguishable from the installed version.
+
+The exact path `/api/integrations/ms_teams/messages` must reach the backend without
+oauth2-proxy stripping its Bot Connector Authorization header. The Erato Helm chart
+supports `msTeamsBot.directRoute`; configure the ingress/network-policy allowance
+for the actual controller. For example:
 
 ```yaml filename="values.yaml"
 msTeamsBot:
   directRoute:
     enabled: true
-    # Required while backend.networkPolicy.enabled is true
     ingressFrom:
       - namespaceSelector:
           matchLabels:
             kubernetes.io/metadata.name: ingress-nginx
 ```
 
-### 6. Erato configuration
+The backend validates this route's authentication.
 
-```toml filename="erato.toml"
-[integrations.ms_office.teams.bot]
-enabled = true
-app_id = "<bot app id>"
-app_password = "<bot client secret>"
-tenant_id = "<tenant id>"
-oauth_connection_name = "graph"
-public_base_url = "https://erato.example.com"
-# Regional bots use their token service, e.g. https://europe.token.botframework.com
-# token_service_url = "https://token.botframework.com"
-# Optional silent sign-in (step 4)
-# sso_app_id = "<bot app id>"
-# sso_resource = "api://botid-<bot app id>"
-```
+Apply the deployment using the environment's normal deployment procedure. The
+Cloud Shell helper does not modify Helm, Kubernetes, or Erato configuration.
 
-All options are listed in the [configuration reference](../configuration#integrationsms_officeteamsbot).
+### 6. Update the Teams package and verify the user experience
 
-### 7. Install the app
+1. Open `https://ERATO_HOST/office-addin/setup`, select **Teams**, and download the
+   package. Inspect `manifest.json` inside the ZIP:
+   - `bots[0].botId` is `BOT_APP_ID`.
+   - `webApplicationInfo.id` is `AUTH_APP_ID`.
+   - `webApplicationInfo.resource` is exactly `SSO_RESOURCE`.
+   - `nestedAppAuthInfo` retains the tab's NAA redirect.
+   - `validDomains` includes exactly `token.botframework.com`.
+2. Upload the package as an **update to the existing app** through the customer's
+   Teams/Microsoft 365 app-management process. Downloading a new manifest does
+   not update the installed app.
+3. Open the Erato web app or Teams tab once with the test user to record their
+   Entra object ID. Then test a fresh personal bot conversation.
+4. Verify that user authentication completes without clicking **Sign in**, subject
+   to the tenant's consent and Conditional Access requirements. Also test the
+   Teams web client, existing tab login, and the other Office add-ins.
+5. Test an @mention and a file operation after the personal-chat check succeeds.
 
-Open `https://<erato host>/office-addin/setup`, choose **Teams** and download the app package. With the bot enabled, the package contains both the tab and the bot, and the page shows the messaging endpoint and token exchange URL for this deployment. Upload the package in the Microsoft 365 admin center under **Integrated apps**.
+Our current handler sends “Please sign in…” even when the OAuth card can trigger
+silent SSO. After a successful exchange it says “You're signed in…” and asks the
+user to resend their question. The persistent **Sign in** button is the useful
+symptom, not the initial text by itself. Channels use a personal conversation
+for authentication; don't expect a channel's shared conversation to perform SSO.
+
+If necessary, roll back the deployment to `oauth_connection_name = "graph"`, remove
+the SSO overrides, and distribute a higher-version package with the prior
+authentication manifest. Keep the original connection and credentials during
+rollout. Additive changes to a shared Entra app also affect the other environments
+using it; remove only additions whose consumers you have checked.
 
 ## Configuration Options
 
-| Option                  | Type    | Default                            | Description                                                                 |
-| ----------------------- | ------- | ---------------------------------- | --------------------------------------------------------------------------- |
-| `enabled`               | boolean | `false`                            | Whether the Teams bot is enabled                                            |
-| `app_id`                | string  |                                    | Bot app registration ID                                                     |
-| `app_password`          | string  |                                    | Bot client secret                                                           |
-| `tenant_id`             | string  |                                    | Entra tenant whose activities are accepted                                  |
-| `oauth_connection_name` | string  |                                    | Azure Bot OAuth connection that yields the user's Graph token               |
-| `token_service_url`     | string  | `"https://token.botframework.com"` | Bot Framework token service                                                 |
-| `sso_app_id`            | string  |                                    | App ID for silent sign-in; set together with `sso_resource`                 |
-| `sso_resource`          | string  |                                    | Token exchange URL for silent sign-in, typically `api://botid-<app_id>`     |
-| `public_base_url`       | string  |                                    | HTTPS origin used for links from Teams back to Erato chats                  |
-| `assistant_id`          | string  |                                    | Assistant that new Teams chats are bound to                                 |
-| `context_message_count` | integer | `20`                               | Preceding group chat or channel messages attached as context (`0` disables) |
-| `streaming`             | boolean | `true`                             | Stream answers in personal chats                                            |
-| `security_groups_only`  | boolean | `true`                             | Resolve only security groups; match the web login's `groups` claim setup    |
+| Option                  | Type    | Default                            | Description                                                                                          |
+| ----------------------- | ------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `enabled`               | boolean | `false`                            | Whether the Teams bot is enabled                                                                     |
+| `app_id`                | string  |                                    | Bot app registration ID                                                                              |
+| `app_password`          | string  |                                    | Bot client secret                                                                                    |
+| `tenant_id`             | string  |                                    | Entra tenant whose activities are accepted                                                           |
+| `oauth_connection_name` | string  |                                    | Azure Bot OAuth connection that yields the user's Graph token                                        |
+| `token_service_url`     | string  | `"https://token.botframework.com"` | Bot Framework token service                                                                          |
+| `sso_app_id`            | string  |                                    | App ID for silent sign-in; set together with `sso_resource`                                          |
+| `sso_resource`          | string  |                                    | Token exchange URL for silent sign-in, for a combined tab/bot app, `api://<host>/botid-<sso_app_id>` |
+| `public_base_url`       | string  |                                    | HTTPS origin used for links from Teams back to Erato chats                                           |
+| `assistant_id`          | string  |                                    | Assistant that new Teams chats are bound to                                                          |
+| `context_message_count` | integer | `20`                               | Preceding group chat or channel messages attached as context (`0` disables)                          |
+| `streaming`             | boolean | `true`                             | Stream answers in personal chats                                                                     |
+| `security_groups_only`  | boolean | `true`                             | Resolve only security groups; match the web login's `groups` claim setup                             |
 
 ## Limitations
 

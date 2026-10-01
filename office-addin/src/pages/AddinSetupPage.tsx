@@ -3,6 +3,18 @@ import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  createTeamsSetupCommand,
+  teamsHelperRelease,
+  teamsHelperSource,
+  validGuid,
+  proposedSsoResource,
+  readTeamsBotSetup,
+  validConnectionName,
+} from "./teamsBotSetup";
+
+import type { TeamsBotSetup } from "./teamsBotSetup";
+
 const INTEGRATED_APPS_URL =
   "https://admin.cloud.microsoft/?#/Settings/IntegratedApps";
 const EXCHANGE_ADDIN_DOCS_URL =
@@ -21,13 +33,6 @@ type ProductOption = {
   id: OfficeProduct;
   label: string;
   selectable: boolean;
-};
-
-/** Bot details read from the rendered Teams manifest; absent when the bot is disabled. */
-type TeamsBotSetup = {
-  botId: string;
-  /** Token exchange URL for silent SSO, set when the manifest's SSO app is the bot. */
-  ssoResource: string | null;
 };
 
 type ExchangeSetupOption = {
@@ -98,22 +103,6 @@ function getManifestUrl(
     getManifestPath(product, exchangeSetup),
     window.location.href,
   ).toString();
-}
-
-function readTeamsBotSetup(manifest: unknown): TeamsBotSetup | null {
-  const document = manifest as {
-    bots?: { botId?: unknown }[];
-    webApplicationInfo?: { id?: unknown; resource?: unknown };
-  } | null;
-  const botId = document?.bots?.[0]?.botId;
-  if (typeof botId !== "string" || !botId) {
-    return null;
-  }
-  const { id, resource } = document?.webApplicationInfo ?? {};
-  return {
-    botId,
-    ssoResource: id === botId && typeof resource === "string" ? resource : null,
-  };
 }
 
 function getSpaRedirectUri(): string {
@@ -597,10 +586,40 @@ function TeamsAppInstructions() {
 }
 
 function TeamsBotInstructions({ bot }: { bot: TeamsBotSetup }) {
-  const messagingEndpoint = new URL(
-    TEAMS_BOT_MESSAGES_PATH,
-    window.location.origin,
-  ).toString();
+  const [showScript, setShowScript] = useState(false);
+  const [tenantId, setTenantId] = useState("");
+  const [subscriptionId, setSubscriptionId] = useState("");
+  const [currentConnection, setCurrentConnection] = useState("graph");
+  const [ssoConnection, setSsoConnection] = useState("graph-sso");
+  const validNames =
+    validConnectionName(currentConnection) &&
+    validConnectionName(ssoConnection);
+  const separateConnection =
+    currentConnection.toLowerCase() !== ssoConnection.toLowerCase();
+  const validIdentity =
+    !!bot.authAppId && validGuid(bot.authAppId) && validGuid(bot.botId);
+  const ready =
+    validIdentity &&
+    validGuid(tenantId) &&
+    validGuid(subscriptionId) &&
+    validNames;
+  const ssoResource = proposedSsoResource(bot, window.location.origin);
+  const config = `# Merge into [integrations.ms_office.teams.bot]
+oauth_connection_name = ${JSON.stringify(ssoConnection)}
+sso_app_id = ${JSON.stringify(bot.authAppId ?? "<authentication app ID>")}
+sso_resource = ${JSON.stringify(ssoResource)}`;
+  const command = (mode: "check" | "preview" | "apply") =>
+    ready && (mode === "check" || separateConnection)
+      ? createTeamsSetupCommand(
+          bot,
+          window.location.origin,
+          tenantId,
+          subscriptionId,
+          currentConnection,
+          ssoConnection,
+          mode,
+        )
+      : "";
 
   return (
     <section className="office-setup-section">
@@ -608,55 +627,454 @@ function TeamsBotInstructions({ bot }: { bot: TeamsBotSetup }) {
         <Trans id="officeAddin.teams.bot.setup.title">Teams bot</Trans>
       </h2>
       <p className="office-setup-copy">
-        <Trans id="officeAddin.teams.bot.setup.copy">
-          The package above already contains the bot. Before users chat with it,
-          configure the Azure Bot resource for app ID <code>{bot.botId}</code>:
+        <Trans id="officeAddin.teams.bot.setup.cloudIntro">
+          Set up single sign-on so people can use the bot with their Microsoft
+          365 account. Run the setup in your browser with Azure Cloud Shell and
+          your own admin account.
         </Trans>
       </p>
+      <p className="office-setup-copy">
+        <Trans id="officeAddin.teams.bot.setup.cloudStatus">
+          Azure settings have not been checked. The first command checks them
+          without making changes.
+        </Trans>
+      </p>
+      {!validIdentity && (
+        <p role="alert">
+          <Trans id="officeAddin.teams.bot.setup.invalidIdentity">
+            This Teams package is missing valid application IDs. Ask your Erato
+            administrator to configure the bot and add-in authentication first.
+          </Trans>
+        </p>
+      )}
       <ol className="office-setup-steps">
         <li>
-          <Trans id="officeAddin.teams.bot.setup.endpointInstruction">
-            Under Configuration, set the messaging endpoint:
-          </Trans>
-          <CopyableCodeField content={messagingEndpoint} />
-        </li>
-        <li>
-          <Trans id="officeAddin.teams.bot.setup.channelInstruction">
-            Under Channels, add Microsoft Teams.
-          </Trans>
-        </li>
-        <li>
-          <Trans id="officeAddin.teams.bot.setup.oauthInstruction">
-            Add an OAuth connection (Azure Active Directory v2) with the
-            Microsoft Graph scopes from the setup guide. Its name must match{" "}
-            <code>oauth_connection_name</code> in the Erato configuration.
-          </Trans>
-        </li>
-        {bot.ssoResource ? (
-          <li>
-            <Trans id="officeAddin.teams.bot.setup.ssoInstruction">
-              For silent sign-in, set the OAuth connection&apos;s token exchange
-              URL:
+          <strong>
+            <Trans id="officeAddin.teams.bot.setup.targetTitle">
+              Choose the Azure tenant and subscription
             </Trans>
-            <CopyableCodeField content={bot.ssoResource} />
-          </li>
-        ) : null}
+          </strong>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.targetHelp">
+              Use the tenant and subscription that contain this deployment’s
+              Azure Bot. Find both IDs on the subscription’s Overview page in
+              Azure Portal.
+            </Trans>
+          </p>
+          <div className="office-setup-targets">
+            <label className="office-setup-field" htmlFor="teams-tenant-id">
+              <Trans id="officeAddin.teams.bot.setup.tenantId">Tenant ID</Trans>
+              <input
+                id="teams-tenant-id"
+                value={tenantId}
+                onChange={(event) => setTenantId(event.target.value.trim())}
+                spellCheck={false}
+                autoComplete="off"
+                aria-invalid={!!tenantId && !validGuid(tenantId)}
+              />
+            </label>
+            <label
+              className="office-setup-field"
+              htmlFor="teams-subscription-id"
+            >
+              <Trans id="officeAddin.teams.bot.setup.subscriptionId">
+                Subscription ID
+              </Trans>
+              <input
+                id="teams-subscription-id"
+                value={subscriptionId}
+                onChange={(event) =>
+                  setSubscriptionId(event.target.value.trim())
+                }
+                spellCheck={false}
+                autoComplete="off"
+                aria-invalid={!!subscriptionId && !validGuid(subscriptionId)}
+              />
+            </label>
+          </div>
+          {((tenantId && !validGuid(tenantId)) ||
+            (subscriptionId && !validGuid(subscriptionId))) && (
+            <p role="alert">
+              <Trans id="officeAddin.teams.bot.setup.invalidTarget">
+                Enter complete IDs in the form
+                xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
+              </Trans>
+            </p>
+          )}
+          <details className="office-setup-helper">
+            <summary>
+              <Trans id="officeAddin.teams.bot.setup.permissionsTitle">
+                Permissions and changes to review
+              </Trans>
+            </summary>
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.permissionsHelp">
+                Checking requires read access to the Azure Bot, Entra app and
+                consent records. Applying requires permission to update that
+                app, add a credential and create a Bot OAuth connection. Tenant
+                admin consent is a separate step.
+              </Trans>
+            </p>
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.changesHelp">
+                Setup extends the existing add-in authentication app with Teams
+                SSO settings and delegated Microsoft Graph permissions. It
+                creates a separate OAuth connection and a dedicated credential
+                valid for up to one year, subject to tenant policy. Existing bot
+                identity, redirects, permissions and credentials are preserved.
+              </Trans>
+            </p>
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.dataPermissions">
+                The delegated permissions cover the signed-in user’s profile,
+                group membership, files, sites, chats and channel messages.
+                Review the exact permissions in the preview before applying.
+              </Trans>
+            </p>
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.requirements">
+                An existing single-tenant Azure Bot must already have its
+                messaging endpoint and Teams channel configured. This helper
+                supports public Azure and the global Bot Framework token
+                service.
+              </Trans>
+            </p>
+          </details>
+          <details className="office-setup-helper">
+            <summary>
+              <Trans id="officeAddin.teams.bot.setup.deploymentDetails">
+                Deployment details and connection names
+              </Trans>
+            </summary>
+            <p>{window.location.origin}</p>
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.botIdentity">
+                Bot messaging app
+              </Trans>
+            </p>
+            <CopyableCodeField content={bot.botId} />
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.authenticationIdentity">
+                Existing authentication app
+              </Trans>
+            </p>
+            <CopyableCodeField content={bot.authAppId ?? ""} />
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.endpointLabel">
+                Messaging endpoint
+              </Trans>
+            </p>
+            <CopyableCodeField
+              content={window.location.origin + TEAMS_BOT_MESSAGES_PATH}
+            />
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.resourceLabel">
+                Application ID URI to configure
+              </Trans>
+            </p>
+            <CopyableCodeField content={ssoResource} />
+            <label
+              className="office-setup-field"
+              htmlFor="teams-current-connection"
+            >
+              <Trans id="officeAddin.teams.bot.setup.currentConnectionName">
+                Current OAuth connection name
+              </Trans>
+              <input
+                id="teams-current-connection"
+                value={currentConnection}
+                onChange={(event) => setCurrentConnection(event.target.value)}
+                maxLength={64}
+                spellCheck={false}
+              />
+            </label>
+            <label
+              className="office-setup-field"
+              htmlFor="teams-sso-connection"
+            >
+              <Trans id="officeAddin.teams.bot.setup.ssoConnectionName">
+                SSO connection name
+              </Trans>
+              <input
+                id="teams-sso-connection"
+                value={ssoConnection}
+                onChange={(event) => setSsoConnection(event.target.value)}
+                maxLength={64}
+                spellCheck={false}
+              />
+            </label>
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.connectionHelp">
+                Check the current name in Azure Bot Configuration. The new
+                connection defaults to graph-sso. Choose a different name if
+                that connection already exists with different settings.
+              </Trans>
+            </p>
+          </details>
+          {!validNames && (
+            <p role="alert">
+              <Trans id="officeAddin.teams.bot.setup.invalidConnections">
+                Use connection names with 1–64 letters, digits, underscores or
+                hyphens.
+              </Trans>
+            </p>
+          )}
+          {validNames && !separateConnection && (
+            <p role="status">
+              <Trans id="officeAddin.teams.bot.setup.currentConnectionCheck">
+                The check can use the current connection. Choose a different
+                name to preview or apply a new SSO setup.
+              </Trans>
+            </p>
+          )}
+        </li>
+        <li>
+          <strong>
+            <Trans id="officeAddin.teams.bot.setup.checkTitle">
+              Open Cloud Shell and check setup
+            </Trans>
+          </strong>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.checkHelp">
+              Choose PowerShell in Cloud Shell and sign in to the tenant above.
+              Copy the command, paste it into Cloud Shell and press Enter. It
+              downloads a fixed version from Erato, verifies its SHA-256
+              checksum and runs a read-only check.
+            </Trans>
+          </p>
+          <div className="office-setup-actions">
+            <a
+              href="https://shell.azure.com/powershell"
+              target="_blank"
+              rel="noreferrer"
+              className="office-setup-button office-setup-button--secondary"
+            >
+              <Trans id="officeAddin.teams.bot.setup.openCloudShell">
+                Open Azure Cloud Shell
+              </Trans>
+            </a>
+            <button
+              type="button"
+              onClick={() => setShowScript(!showScript)}
+              aria-expanded={showScript}
+              aria-controls="teams-helper-source"
+              className="office-setup-button office-setup-button--secondary"
+            >
+              <Trans id="officeAddin.teams.bot.setup.viewScript">
+                View script
+              </Trans>
+            </button>
+          </div>
+          {showScript && (
+            <div id="teams-helper-source">
+              <p>
+                SHA-256:{" "}
+                <code className="office-setup-checksum">
+                  {teamsHelperRelease.sha256}
+                </code>
+              </p>
+              <textarea
+                className="office-setup-command-preview"
+                aria-label={t({
+                  id: "officeAddin.teams.bot.setup.sourceLabel",
+                  message: "PowerShell source",
+                })}
+                readOnly
+                value={teamsHelperSource}
+                rows={16}
+                spellCheck={false}
+              />
+            </div>
+          )}
+          <TeamsSetupCommand
+            primary
+            command={command("check")}
+            label={t({
+              id: "officeAddin.teams.bot.setup.copyCommand",
+              message: "Copy command",
+            })}
+          />
+          <p className="office-setup-copy">
+            <Trans id="officeAddin.teams.bot.setup.helperVersion">
+              PowerShell helper version {teamsHelperRelease.version}. No local
+              installation or file upload is needed.
+            </Trans>
+          </p>
+          {(!validGuid(tenantId) || !validGuid(subscriptionId)) && (
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.enterTarget">
+                Enter valid tenant and subscription IDs above to enable the
+                commands.
+              </Trans>
+            </p>
+          )}
+        </li>
+        <li>
+          <strong>
+            <Trans id="officeAddin.teams.bot.setup.reviewTitle">
+              Review the results and apply when ready
+            </Trans>
+          </strong>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.resultsHelp">
+              PASS means the Azure setting is present. MISSING means setup is
+              still needed. If the check stops because access is denied or the
+              tenant is wrong, resolve that first.
+            </Trans>
+          </p>
+          <details className="office-setup-helper">
+            <summary>
+              <Trans id="officeAddin.teams.bot.setup.previewApplyTitle">
+                Preview and apply changes
+              </Trans>
+            </summary>
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.previewHelp">
+                Preview the exact proposed changes. This command uses -WhatIf
+                and does not change Azure.
+              </Trans>
+            </p>
+            <TeamsSetupCommand
+              command={command("preview")}
+              label={t({
+                id: "officeAddin.teams.bot.setup.copyPreview",
+                message: "Copy preview command",
+              })}
+            />
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.applyHelp">
+                After reviewing the preview, run the apply command. Cloud Shell
+                will show the target and changes and ask for confirmation before
+                making them.
+              </Trans>
+            </p>
+            <TeamsSetupCommand
+              command={command("apply")}
+              label={t({
+                id: "officeAddin.teams.bot.setup.copyApply",
+                message: "Copy apply command",
+              })}
+            />
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.applyResult">
+                The helper reports applied changes and remaining steps. Record
+                the credential expiry for renewal. If it stops after a partial
+                change, inspect the reported state before retrying.
+              </Trans>
+            </p>
+          </details>
+        </li>
+        <li>
+          <strong>
+            <Trans id="officeAddin.teams.bot.setup.finishTitle">
+              Finish setup in Erato and Teams
+            </Trans>
+          </strong>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.finishHelp">
+              Grant any missing tenant admin consent, then use Test Connection
+              in Azure Bot Configuration. Have your Erato administrator apply
+              the settings below, increase the Teams package version and deploy.
+              Download the new Teams package from this page and upload it as an
+              update to the existing app.
+            </Trans>
+          </p>
+          <details className="office-setup-helper">
+            <summary>
+              <Trans id="officeAddin.teams.bot.setup.deploymentSettings">
+                Settings for your Erato administrator
+              </Trans>
+            </summary>
+            <CopyableCodeField content={config} />
+          </details>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.finalCheck">
+              Test a personal bot chat in Teams desktop and web, then the Teams
+              tab and other Office add-ins. Azure checks alone do not verify the
+              installed Teams package or successful sign-in. Tenant consent and
+              Conditional Access can still require interaction.
+            </Trans>
+          </p>
+        </li>
       </ol>
       <p className="office-setup-copy">
-        <Trans id="officeAddin.teams.bot.setup.docsInstruction">
-          Permissions, network routing and all options are described in the{" "}
-          <a
-            href={TEAMS_BOT_DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="office-setup-link"
-          >
-            Teams bot setup guide
-          </a>
-          .
-        </Trans>
+        <a
+          href={TEAMS_BOT_DOCS_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="office-setup-link"
+        >
+          <Trans id="officeAddin.teams.bot.setup.manualGuide">
+            Manual setup and troubleshooting guide
+          </Trans>
+        </a>
       </p>
     </section>
+  );
+}
+
+function TeamsSetupCommand({
+  command,
+  label,
+  primary = false,
+}: {
+  command: string;
+  label: string;
+  primary?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  useEffect(() => {
+    setCopied(false);
+    setCopyFailed(false);
+  }, [command]);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setCopyFailed(false);
+    } catch {
+      setCopyFailed(true);
+    }
+  }
+  return (
+    <div className="office-setup-command">
+      <button
+        type="button"
+        className={`office-setup-button${primary ? "" : " office-setup-button--secondary"}`}
+        disabled={!command}
+        onClick={() => void copy()}
+      >
+        {copied
+          ? t({ id: "officeAddin.setup.copied", message: "Copied!" })
+          : label}
+      </button>
+      {command && (
+        <details className="office-setup-helper" open={copyFailed || undefined}>
+          <summary>
+            <Trans id="officeAddin.teams.bot.setup.viewCommand">
+              View command
+            </Trans>
+          </summary>
+          <textarea
+            className="office-setup-command-preview"
+            readOnly
+            value={command}
+            aria-label={label}
+            rows={12}
+            spellCheck={false}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        </details>
+      )}
+      {copyFailed && (
+        <p role="status">
+          <Trans id="officeAddin.teams.bot.setup.clipboardHelp">
+            Clipboard access is unavailable. Select and copy the command above.
+          </Trans>
+        </p>
+      )}
+    </div>
   );
 }
 
