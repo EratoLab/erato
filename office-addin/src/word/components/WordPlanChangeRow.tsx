@@ -26,12 +26,18 @@ import {
 } from "./WordRichBlockPreview";
 import {
   bindingLabel,
+  cellsChangedLabel,
   emptyPartLabel,
   formatList,
   formatWordLengths,
   layoutPropertyLabel,
   layoutValueLabel,
+  objectCountLabel,
+  paragraphCountLabel,
+  rowsAddedLabel,
+  rowsRemovedLabel,
   storyLabel,
+  tableCountLabel,
 } from "./wordPlanLabels";
 import { editExcerpt } from "../utils/wordEditPlan";
 
@@ -232,36 +238,11 @@ function tableSummary(row: WordPlanRowOf<"table">): string {
   });
   const cells = row.changedCells.length;
   const parts = [size];
-  if (cells)
-    parts.push(
-      t({
-        id: "officeAddin.word.planRow.cellsChanged",
-        message: plural(cells, {
-          one: "# cell changed",
-          other: "# cells changed",
-        }),
-      }),
-    );
+  if (cells) parts.push(cellsChangedLabel(cells));
   if (row.rowsAdded && row.status !== "new")
-    parts.push(
-      t({
-        id: "officeAddin.word.planRow.rowsAdded",
-        message: plural(row.rowsAdded, {
-          one: "# row added",
-          other: "# rows added",
-        }),
-      }),
-    );
+    parts.push(rowsAddedLabel(row.rowsAdded));
   if (row.rowsRemoved && row.status !== "removed")
-    parts.push(
-      t({
-        id: "officeAddin.word.planRow.rowsRemoved",
-        message: plural(row.rowsRemoved, {
-          one: "# row removed",
-          other: "# rows removed",
-        }),
-      }),
-    );
+    parts.push(rowsRemovedLabel(row.rowsRemoved));
   return parts.join(" · ");
 }
 
@@ -321,6 +302,30 @@ function CellDiffTable({
   );
 }
 
+function moreRowsHint(row: WordPlanRowOf<"table">) {
+  const more = row.rows - PLAN_ROW_PREVIEW_ROWS;
+  if (more <= 0) return null;
+  return (
+    <p className="word-review__hint">
+      {row.status === "removed"
+        ? t({
+            id: "officeAddin.word.planRow.moreRowsRemoved",
+            message: plural(more, {
+              one: "# more row, also removed",
+              other: "# more rows, also removed",
+            }),
+          })
+        : t({
+            id: "officeAddin.word.planRow.moreRows",
+            message: plural(more, {
+              one: "# more row in Word",
+              other: "# more rows in Word",
+            }),
+          })}
+    </p>
+  );
+}
+
 function TableDetail({ row, snapshot }: RowProps<"table">) {
   if (row.sameShape)
     return <CellDiffTable row={row} rowIndexes={row.changedRowIndexes} />;
@@ -332,27 +337,20 @@ function TableDetail({ row, snapshot }: RowProps<"table">) {
           snapshot={snapshot}
           maxRows={PLAN_ROW_PREVIEW_ROWS}
         />
-        {row.rows > PLAN_ROW_PREVIEW_ROWS && (
-          <p className="word-review__hint">
-            {t({
-              id: "officeAddin.word.planRow.moreRows",
-              message: plural(row.rows - PLAN_ROW_PREVIEW_ROWS, {
-                one: "# more row in Word",
-                other: "# more rows in Word",
-              }),
-            })}
-          </p>
-        )}
+        {moreRowsHint(row)}
       </>
     );
   return (
-    <CellDiffTable
-      row={row}
-      rowIndexes={Array.from(
-        { length: Math.min(row.cellTexts.length, PLAN_ROW_PREVIEW_ROWS) },
-        (_, i) => i,
-      )}
-    />
+    <>
+      <CellDiffTable
+        row={row}
+        rowIndexes={Array.from(
+          { length: Math.min(row.cellTexts.length, PLAN_ROW_PREVIEW_ROWS) },
+          (_, i) => i,
+        )}
+      />
+      {moreRowsHint(row)}
+    </>
   );
 }
 
@@ -431,27 +429,9 @@ function LayoutDetail({ row }: RowProps<"layout">) {
 
 function unchangedLabel(row: WordPlanRowOf<"unchanged">): string {
   const parts = [
-    row.paragraphs &&
-      t({
-        id: "officeAddin.word.planRow.paragraphCount",
-        message: plural(row.paragraphs, {
-          one: "# paragraph",
-          other: "# paragraphs",
-        }),
-      }),
-    row.tables &&
-      t({
-        id: "officeAddin.word.planRow.tableCount",
-        message: plural(row.tables, { one: "# table", other: "# tables" }),
-      }),
-    row.objects &&
-      t({
-        id: "officeAddin.word.planRow.objectCount",
-        message: plural(row.objects, {
-          one: "# other item",
-          other: "# other items",
-        }),
-      }),
+    row.paragraphs && paragraphCountLabel(row.paragraphs),
+    row.tables && tableCountLabel(row.tables),
+    row.objects && objectCountLabel(row.objects),
   ].filter((part): part is string => !!part);
   const list = formatList(parts);
   return t({
@@ -490,6 +470,8 @@ export interface WordPlanChangeRowProps {
   /** Absent for a saved plan preview: rows then render from plan data only. */
   snapshot?: WordAuthoringSnapshot;
   onLocate?: (ref: string) => void;
+  /** Whether Word can scroll to the row's locateRef; precomputed by the review. */
+  locatable?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   toggleRef?: RowRef;
@@ -500,6 +482,7 @@ export function WordPlanChangeRow({
   row,
   snapshot,
   onLocate,
+  locatable: canLocate = false,
   open: controlledOpen,
   onOpenChange,
   toggleRef,
@@ -511,21 +494,18 @@ export function WordPlanChangeRow({
     onOpenChange?.(next);
   };
   const ref = row.locateRef;
-  const locatable =
-    !!onLocate &&
-    !!ref &&
-    !!snapshot?.blocks.find((b) => b.ref === ref)?.paragraphOrdinal;
-  const locate = locatable ? (
-    <Button
-      type="button"
-      variant="link"
-      className="word-review__locate"
-      icon={<OpenNewWindowIcon className={ICON} />}
-      onClick={() => onLocate(ref)}
-    >
-      {wordShowInWordLabel()}
-    </Button>
-  ) : undefined;
+  const locate =
+    onLocate && ref && canLocate ? (
+      <Button
+        type="button"
+        variant="link"
+        className="word-review__locate"
+        icon={<OpenNewWindowIcon className={ICON} />}
+        onClick={() => onLocate(ref)}
+      >
+        {wordShowInWordLabel()}
+      </Button>
+    ) : undefined;
   const shell = {
     row,
     open,

@@ -1,6 +1,7 @@
 import { i18n } from "@lingui/core";
 import { plural, t } from "@lingui/core/macro";
 
+import { editExcerpt } from "../utils/wordEditPlan";
 import {
   pointsToCentimeters,
   pointsToMillimeters,
@@ -140,6 +141,11 @@ export const marginLabels = () => ({
 export function layoutPropertyLabel(property: WordLayoutProperty): string {
   const margins = marginLabels();
   switch (property) {
+    case "boundary":
+      return t({
+        id: "officeAddin.word.layout.boundary",
+        message: "Ends after",
+      });
     case "orientation":
       return t({
         id: "officeAddin.word.layout.orientation",
@@ -225,6 +231,18 @@ export function layoutValueLabel(
   value: WordLayoutValue,
 ): string {
   switch (property) {
+    case "boundary":
+      return typeof value === "string"
+        ? editExcerpt(value)
+        : typeof value === "number"
+          ? t({
+              id: "officeAddin.word.layout.boundaryItem",
+              message: `Item ${formatCount(value)}`,
+            })
+          : t({
+              id: "officeAddin.word.layout.boundaryEnd",
+              message: "End of the document",
+            });
     case "orientation":
       return orientationLabel(value as WordPageLayout["orientation"]);
     case "break":
@@ -369,7 +387,10 @@ export function wordPlanTitleText(title: WordPlanTitle): string {
           });
     }
     case "layout": {
-      const also = extras(title.parts, title.sections > 0);
+      const also = extras(
+        title.parts,
+        title.sections > 0 || !title.parts.length,
+      );
       return t({
         id: "officeAddin.word.planTitle.layoutOnly",
         message: `Update ${also}`,
@@ -542,64 +563,52 @@ export function wordPlanApplyLabel(review: WordPlanReview): string {
     : t({ id: "officeAddin.word.planAction.many", message: "Apply changes" });
 }
 
+export const tableCountLabel = (n: number) =>
+  t({
+    id: "officeAddin.word.planRow.tableCount",
+    message: plural(n, { one: "# table", other: "# tables" }),
+  });
+export const cellsChangedLabel = (n: number) =>
+  t({
+    id: "officeAddin.word.planRow.cellsChanged",
+    message: plural(n, { one: "# cell changed", other: "# cells changed" }),
+  });
+export const rowsAddedLabel = (n: number) =>
+  t({
+    id: "officeAddin.word.planRow.rowsAdded",
+    message: plural(n, { one: "# row added", other: "# rows added" }),
+  });
+export const rowsRemovedLabel = (n: number) =>
+  t({
+    id: "officeAddin.word.planRow.rowsRemoved",
+    message: plural(n, { one: "# row removed", other: "# rows removed" }),
+  });
+export const paragraphCountLabel = (n: number) =>
+  t({
+    id: "officeAddin.word.planRow.paragraphCount",
+    message: plural(n, { one: "# paragraph", other: "# paragraphs" }),
+  });
+export const objectCountLabel = (n: number) =>
+  t({
+    id: "officeAddin.word.planRow.objectCount",
+    message: plural(n, { one: "# other item", other: "# other items" }),
+  });
+
 export function wordPlanGroupSummaryText(
   summary: WordPlanGroupSummary,
 ): string {
   const parts: string[] = [];
   if (summary.tables) {
-    const table = t({
-      id: "officeAddin.word.planRow.tableCount",
-      message: plural(summary.tables, { one: "# table", other: "# tables" }),
-    });
-    const cells = summary.cells;
+    const table = tableCountLabel(summary.tables);
     const details = [
-      cells &&
-        t({
-          id: "officeAddin.word.planRow.cellsChanged",
-          message: plural(cells, {
-            one: "# cell changed",
-            other: "# cells changed",
-          }),
-        }),
-      summary.rowsAdded &&
-        t({
-          id: "officeAddin.word.planRow.rowsAdded",
-          message: plural(summary.rowsAdded, {
-            one: "# row added",
-            other: "# rows added",
-          }),
-        }),
-      summary.rowsRemoved &&
-        t({
-          id: "officeAddin.word.planRow.rowsRemoved",
-          message: plural(summary.rowsRemoved, {
-            one: "# row removed",
-            other: "# rows removed",
-          }),
-        }),
+      summary.cells && cellsChangedLabel(summary.cells),
+      summary.rowsAdded && rowsAddedLabel(summary.rowsAdded),
+      summary.rowsRemoved && rowsRemovedLabel(summary.rowsRemoved),
     ].filter((part): part is string => !!part);
     parts.push(details.length ? `${table} (${formatList(details)})` : table);
   }
-  if (summary.text)
-    parts.push(
-      t({
-        id: "officeAddin.word.planRow.paragraphCount",
-        message: plural(summary.text, {
-          one: "# paragraph",
-          other: "# paragraphs",
-        }),
-      }),
-    );
-  if (summary.objects)
-    parts.push(
-      t({
-        id: "officeAddin.word.planRow.objectCount",
-        message: plural(summary.objects, {
-          one: "# other item",
-          other: "# other items",
-        }),
-      }),
-    );
+  if (summary.text) parts.push(paragraphCountLabel(summary.text));
+  if (summary.objects) parts.push(objectCountLabel(summary.objects));
   if (summary.removed)
     parts.push(
       t({

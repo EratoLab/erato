@@ -889,22 +889,19 @@ export function wordSourceReadRefs(snapshot: WordAuthoringSnapshot): string[] {
   ];
 }
 
-export function wordPlanOutput(
-  plan: WordDocumentPlan,
-  snapshot: WordAuthoringSnapshot,
-): {
+export interface WordPlanOutputItem {
   key: string;
   block: WordPlanBlock | WordSourceBlock;
   source: string[];
   kind: WordPlanEntry["kind"];
-}[] {
+}
+
+export function wordPlanOutput(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+): WordPlanOutputItem[] {
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
-  const output = plan.entries.flatMap<{
-    key: string;
-    block: WordPlanBlock | WordSourceBlock;
-    source: string[];
-    kind: WordPlanEntry["kind"];
-  }>((e) =>
+  const output = plan.entries.flatMap<WordPlanOutputItem>((e) =>
     e.kind === "keep"
       ? e.source.flatMap((ref) => {
           const b = sources.get(ref);

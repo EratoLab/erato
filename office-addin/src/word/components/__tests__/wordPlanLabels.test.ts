@@ -2,6 +2,8 @@ import { i18n } from "@lingui/core";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  layoutPropertyLabel,
+  layoutValueLabel,
   wordPlanApplyLabel,
   wordPlanScopeText,
   wordPlanTitleText,
@@ -78,5 +80,22 @@ describe("wordPlanTitleText", () => {
 
   it("says when there is nothing to change", () => {
     expect(wordPlanTitleText({ kind: "none" })).toBe("Nothing to change");
+  });
+
+  it("names the page layout when a layout title carries no parts", () => {
+    expect(wordPlanTitleText({ kind: "layout", sections: 0, parts: [] })).toBe(
+      "Update page layout",
+    );
+  });
+});
+
+describe("section boundary values", () => {
+  it("reads a boundary as the paragraph it ends after, a position, or the document end", () => {
+    expect(layoutPropertyLabel("boundary")).toBe("Ends after");
+    expect(layoutValueLabel("boundary", "Pilot in October.")).toBe(
+      "Pilot in October.",
+    );
+    expect(layoutValueLabel("boundary", 4)).toBe("Item 4");
+    expect(layoutValueLabel("boundary", false)).toBe("End of the document");
   });
 });

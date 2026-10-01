@@ -25,12 +25,12 @@ import {
   wordPlanScopeText,
   wordPlanTitleText,
 } from "./wordPlanLabels";
-import { wordPlanOutput } from "../utils/wordDocumentPlan";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
+  WordPlanOutputItem,
   WordSourceBlock,
 } from "../utils/wordDocumentPlan";
 import type {
@@ -43,6 +43,7 @@ type RowsProps = {
   rows: WordPlanRow[];
   snapshot?: WordAuthoringSnapshot;
   onLocate?: (ref: string) => void;
+  locatable: ReadonlySet<string>;
   openRows: ReadonlySet<string>;
   setRowOpen: (key: string, open: boolean) => void;
 };
@@ -51,6 +52,7 @@ function PlanRows({
   rows,
   snapshot,
   onLocate,
+  locatable,
   openRows,
   setRowOpen,
 }: RowsProps) {
@@ -63,6 +65,7 @@ function PlanRows({
           row={row}
           snapshot={snapshot}
           onLocate={onLocate}
+          locatable={!!row.locateRef && locatable.has(row.locateRef)}
           open={openRows.has(row.key)}
           onOpenChange={(open) => setRowOpen(row.key, open)}
         />
@@ -76,15 +79,14 @@ export const PLAN_PREVIEW_MAX_BLOCKS = 40;
 
 /** The document as it will read after applying, without source mapping. */
 function WordPlanOutputPreview({
-  plan,
+  output,
   snapshot,
   checkInWordShown,
 }: {
-  plan: WordDocumentPlan;
+  output: WordPlanOutputItem[];
   snapshot: WordAuthoringSnapshot;
   checkInWordShown: boolean;
 }) {
-  const output = wordPlanOutput(plan, snapshot);
   const hidden = output.length - PLAN_PREVIEW_MAX_BLOCKS;
   const runs: (
     | { key: string; native: WordSourceBlock }
@@ -269,6 +271,7 @@ export function WordDocumentPlanReview({
   const rowsProps = {
     snapshot,
     onLocate,
+    locatable: review.locatable,
     openRows,
     setRowOpen: (key: string, open: boolean) => toggle(setOpenRows, key, open),
   };
@@ -377,7 +380,7 @@ export function WordDocumentPlanReview({
                 })}
               </h4>
               <WordPlanOutputPreview
-                plan={plan}
+                output={review.output ?? []}
                 snapshot={snapshot}
                 checkInWordShown={review.checkInWord}
               />
@@ -397,7 +400,7 @@ export function WordDocumentPlanReview({
               })}
             >
               <WordPlanOutputPreview
-                plan={plan}
+                output={review.output ?? []}
                 snapshot={snapshot}
                 checkInWordShown={review.checkInWord}
               />

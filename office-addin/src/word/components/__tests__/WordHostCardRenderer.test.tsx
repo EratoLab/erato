@@ -590,6 +590,65 @@ describe("WordHostCardRenderer", () => {
       ).toBeInTheDocument();
     });
 
+    it("tells a half-written batch how to recover once its Revert is gone", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const artifact = makeArtifact();
+      mockUseHostArtifact.mockReturnValue(artifact);
+      mockUseChatContext.mockReturnValue({
+        messages: {
+          [artifact.messageId]: { id: artifact.messageId, role: "assistant" },
+        },
+        messageOrder: [artifact.messageId],
+        currentChatId: "chat-1",
+      });
+      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
+      render(
+        <WordWriteProvider
+          documentIdentity={IDENTITY}
+          capturesByAssistantMessageId={
+            new Map([[artifact.messageId, capture()]])
+          }
+        >
+          <WordHostCardRenderer
+            language="erato-word-edits"
+            content={JSON.stringify({
+              edits: [
+                { paragraph: 1, text: "Alpha, revised." },
+                { paragraph: 2, text: "Bravo, revised." },
+              ],
+            })}
+          />
+          <WordHostCardRenderer
+            language="erato-word-edits"
+            content={JSON.stringify({
+              edits: [{ paragraph: 3, text: "Charlie, revised." }],
+            })}
+          />
+        </WordWriteProvider>,
+        { wrapper: TestTheme },
+      );
+      await flush();
+      const [first, second] = screen
+        .getAllByTestId("word-edits-card")
+        .map((card) => within(card));
+
+      word.word.failWriteOn("id-2");
+      fireEvent.click(first.getByRole("button", { name: /^Apply all/ }));
+      await flush();
+      expect(first.getByTestId("word-revert-button")).toBeInTheDocument();
+      expect(first.queryByText(/Revert is unavailable/)).toBeNull();
+      word.word.failWriteOn(null);
+      fireEvent.click(second.getByRole("button", { name: "Apply edit" }));
+      await flush();
+
+      expect(first.queryByTestId("word-revert-button")).toBeNull();
+      expect(
+        first.getByText(
+          "Revert is unavailable for this batch. Use Undo in Word to remove anything that was written.",
+        ),
+      ).toBeInTheDocument();
+    });
+
     it("heads the proposal by size and scope, not by apply progress", async () => {
       renderCard({ artifact: makeArtifact() });
       await flush();

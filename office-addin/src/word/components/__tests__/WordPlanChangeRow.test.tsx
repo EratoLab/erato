@@ -17,13 +17,9 @@ import type {
 } from "../../utils/wordDocumentPlan";
 import type { WordPlanRow } from "../../utils/wordPlanReview";
 
-const TABLE =
+const tableXml = (rows: string[][]) =>
   '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>' +
-  [
-    ["Team", "Hours"],
-    ["East", "18"],
-    ["West", "18"],
-  ]
+  rows
     .map(
       (row) =>
         "<w:tr>" +
@@ -32,6 +28,11 @@ const TABLE =
     )
     .join("") +
   "</w:tbl>";
+const TABLE = tableXml([
+  ["Team", "Hours"],
+  ["East", "18"],
+  ["West", "18"],
+]);
 const plan = (
   snapshot: WordAuthoringSnapshot,
   entries: WordPlanEntry[],
@@ -52,7 +53,12 @@ const renderRow = (
 ) =>
   render(
     <ul>
-      <WordPlanChangeRow row={row} snapshot={snapshot} onLocate={onLocate} />
+      <WordPlanChangeRow
+        row={row}
+        snapshot={snapshot}
+        onLocate={onLocate}
+        locatable={!!onLocate}
+      />
     </ul>,
   );
 
@@ -251,5 +257,60 @@ describe("WordPlanChangeRow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show in Word" }));
     expect(onLocate).toHaveBeenCalledWith(source.ref);
     expect(screen.getAllByRole("tab")).toHaveLength(3);
+  });
+
+  it("counts the rows a removed table hides as removed too", () => {
+    const snapshot = readySnapshot(
+      packageXml(
+        paragraph("Intro") +
+          tableXml(Array.from({ length: 8 }, (_, i) => [`R${i}`, `${i}`])),
+      ),
+    );
+    const review = buildWordPlanReview(
+      plan(snapshot, [{ kind: "keep", source: ["b1"] }], {
+        deleted: [{ source: ["b2"], reason: "Obsolete." }],
+      }),
+      snapshot,
+    );
+    renderRow(review.rows.find((r) => r.key === "deleted:b2")!, snapshot);
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getByText("3 more rows, also removed")).toBeInTheDocument();
+  });
+
+  it("says how many rows a saved plan's table preview leaves for Word", () => {
+    const review = buildWordPlanReview(
+      {
+        version: 1,
+        snapshot: "saved",
+        readToken: "read-proof",
+        scope: "body",
+        entries: [
+          {
+            kind: "insert",
+            blocks: [
+              {
+                id: "t",
+                type: "table",
+                text: "",
+                rows: Array.from({ length: 8 }, (_, r) => ({
+                  cells: [
+                    {
+                      blocks: [
+                        { id: `c${r}`, type: "paragraph", text: `Row ${r}` },
+                      ],
+                    },
+                  ],
+                })),
+              },
+            ],
+          },
+        ],
+        deleted: [],
+      },
+      undefined,
+    );
+    renderRow(review.rows.find((r) => r.key === "output:t")!);
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getByText("3 more rows in Word")).toBeInTheDocument();
   });
 });

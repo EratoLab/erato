@@ -26,7 +26,11 @@ import {
   wordUndoLabel,
 } from "./WordReviewCardParts";
 import { editedParagraphCount, WordReviewPanel } from "./WordReviewPanel";
-import { WordReviewReceipt } from "./WordReviewReceipt";
+import {
+  wordDeniedText,
+  wordInsertedText,
+  WordReviewReceipt,
+} from "./WordReviewReceipt";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
@@ -439,15 +443,9 @@ function WordActionCard({
                 message: "Restoring the document body…",
               })
             : review.status === "denied"
-              ? t({
-                  id: "officeAddin.word.review.denied",
-                  message: "Proposal declined. Nothing was written.",
-                })
+              ? wordDeniedText()
               : review.status === "done" && payload.kind === "insert"
-                ? t({
-                    id: "officeAddin.word.card.inserted",
-                    message: "Inserted into the document.",
-                  })
+                ? wordInsertedText()
                 : undefined;
   return (
     <WordReviewCard
@@ -609,9 +607,18 @@ function WordActionCard({
               )}
             </Card>
           )}
-          {review.outcomes.some(
-            (item) => item.status === "applied" || item.status === "failed",
-          ) &&
+          {review.status === "write-failed" && !canRevert ? (
+            <p className="word-review__hint">
+              {t({
+                id: "officeAddin.word.review.revertMissing",
+                message:
+                  "Revert is unavailable for this batch. Use Undo in Word to remove anything that was written.",
+              })}
+            </p>
+          ) : (
+            review.outcomes.some(
+              (item) => item.status === "applied" || item.status === "failed",
+            ) &&
             review.status === "done" &&
             !collapsed &&
             !canRevert && (
@@ -622,7 +629,8 @@ function WordActionCard({
                     "Revert is unavailable for this batch. Its single-use snapshot was consumed or replaced.",
                 })}
               </p>
-            )}
+            )
+          )}
         </>
       }
     >

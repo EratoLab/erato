@@ -9,6 +9,7 @@ import { readWordTableContent } from "./wordTableContent";
 
 import type {
   WordAuthoringSnapshot,
+  WordPlanOutputItem,
   WordDocumentPlan,
   WordPlanBlock,
   WordSourceBlock,
@@ -70,6 +71,7 @@ export interface WordPlanChangedCell {
   after: string;
 }
 export type WordLayoutProperty =
+  | "boundary"
   | "orientation"
   | "width"
   | "height"
@@ -86,6 +88,7 @@ export type WordLayoutProperty =
   | "pageNumberStart"
   | "differentFirstPage"
   | "differentOddEvenPages";
+/** A boundary is a text excerpt, a 1-based block position, or false for the document end. */
 export type WordLayoutValue = string | number | boolean;
 export interface WordSectionStoryChange {
   type: "header" | "footer";
@@ -251,6 +254,10 @@ export interface WordPlanReview {
   touchedSections: number;
   /** Native, drawing or layout content whose appearance is only checkable in Word. */
   checkInWord: boolean;
+  /** The document after applying; absent without a live capture. */
+  output?: WordPlanOutputItem[];
+  /** Source refs that Word can scroll to. */
+  locatable: ReadonlySet<string>;
 }
 
 /** Word restarts deeper levels of the same list whenever a shallower item follows. */
@@ -317,6 +324,13 @@ export function wordSourceTable(
 
 const TEXT_TYPES = new Set(["paragraph", "heading", "list-item"]);
 const LARGE_NATIVE_KINDS = new Set(["table", "image", "drawing"]);
+/** Output block types that can carry an unreferenced native source of a kind. */
+const NATIVE_CARRIERS: Record<string, string[]> = {
+  table: ["table"],
+  image: ["image", "drawing"],
+  field: ["field"],
+  "content-control": ["content-control"],
+};
 const baseRef = (ref: string) => parseWordNestedRef(ref)?.parent ?? ref;
 const blockText = (block: WordPlanBlock): string =>
   block.text ||
@@ -406,8 +420,11 @@ function tableRow(
         ? undefined
         : originalRows.find((o) => o.sourceIndex === row.sourceIndex)
       : originalRows[r];
-    if (sourceRow) usedRows.add(originalRows.indexOf(sourceRow));
-    else {
+    if (sourceRow) {
+      const at = originalRows.indexOf(sourceRow);
+      usedRows.add(at);
+      if (at !== r) changedRows.add(r);
+    } else {
       rowsAdded++;
       changedRows.add(r);
     }
@@ -529,15 +546,66 @@ function sectionStoryChanges(
 function sectionRows(
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot | undefined,
+  output: WordPlanOutputItem[],
 ): { rows: WordPlanRowOf<"layout">[]; removed: WordPlanRowOf<"layout">[] } {
   if (!plan.sections) return { rows: [], removed: [] };
   const sources = snapshot?.sections;
+  const sourceRefOf = (after: string | undefined) => {
+    if (after === undefined || snapshot?.blocks.some((b) => b.ref === after))
+      return after;
+    const entry = plan.entries.find(
+      (e) => e.kind === "replace" && e.blocks.at(-1)?.id === after,
+    );
+    return entry?.kind === "replace" ? entry.source.at(-1) : after;
+  };
+  const boundaryValue = (
+    blocks: { key: string; block: { text: string } }[],
+    key: string | undefined,
+  ): WordLayoutValue => {
+    if (key === undefined) return false;
+    const at = blocks.findIndex((item) => item.key === key);
+    return blocks[at]?.block.text.trim() || at + 1;
+  };
+  const boundaryChange = (
+    section: WordSectionPlan,
+    source: WordSectionSource,
+  ): WordLayoutChange[] => {
+    const known =
+      source.afterBlock !== undefined || source.afterParagraph === undefined;
+    if (!known || sourceRefOf(section.after) === source.afterBlock) return [];
+    return [
+      {
+        property: "boundary",
+        length: false,
+        before: boundaryValue(
+          (snapshot?.blocks ?? []).map((block) => ({
+            key: block.ref,
+            block,
+          })),
+          source.afterBlock,
+        ),
+        after: boundaryValue(
+          output,
+          section.after === undefined
+            ? undefined
+            : output.find(
+                (item) =>
+                  item.key === `source:${section.after}` ||
+                  item.key === `output:${section.after}`,
+              )?.key,
+        ),
+      },
+    ];
+  };
   const rows = plan.sections.flatMap<WordPlanRowOf<"layout">>((section) => {
     const source: WordSectionSource | undefined = section.source
       ? sources?.find((s) => s.id === section.source)
       : undefined;
     const beforeAvailable = !!source;
-    const changes = layoutChanges(section.layout, source?.layout);
+    const changes = [
+      ...(source ? boundaryChange(section, source) : []),
+      ...layoutChanges(section.layout, source?.layout),
+    ];
     const stories = sectionStoryChanges(plan, snapshot, section, source);
     if (beforeAvailable && !changes.length && !stories.length) return [];
     return [
@@ -582,8 +650,18 @@ function storyRows(
           if (ref === id) found.add(variant as keyof WordSectionStories);
     return (["default", "first", "even"] as const).filter((v) => found.has(v));
   };
-  return (plan.stories ?? []).map((story) => {
+  return (plan.stories ?? []).flatMap<WordPlanRowOf<"part">>((story) => {
     const existing = snapshot?.stories?.find((s) => s.id === story.id);
+    const after =
+      story.kind === "delete"
+        ? undefined
+        : (story.blocks ?? []).map(blockText).join("\n");
+    const echoed =
+      !!existing &&
+      after === existing.text &&
+      !story.anchor &&
+      (story.author === undefined || story.author === existing.author);
+    if (echoed) return [];
     return {
       key: `story:${story.id}`,
       family: "part",
@@ -597,10 +675,7 @@ function storyRows(
       storyId: story.id,
       bindings: bindings(story.id),
       before: existing?.text,
-      after:
-        story.kind === "delete"
-          ? undefined
-          : (story.blocks ?? []).map(blockText).join("\n"),
+      after,
     };
   });
 }
@@ -707,22 +782,40 @@ export function buildWordPlanReview(
   ): WordPlanRow[] => {
     const textSources = sourceBlocks.filter((s) => s.type !== "native");
     const nativeSources = sourceBlocks.filter((s) => s.type === "native");
+    const nativeRefs = new Set(nativeSources.map((s) => s.ref));
     const textBlocks = blocks.filter((b) => TEXT_TYPES.has(b.type));
     const pairByIndex = textSources.length === textBlocks.length;
-    const referenced = new Set<string>();
-    const types = new Set<string>();
-    const visit = (block: WordPlanBlock) => {
-      types.add(block.type);
-      if ("sourceRef" in block && block.sourceRef)
-        referenced.add(baseRef(block.sourceRef));
-      if (block.type === "image" && block.image.sourceRef)
-        referenced.add(baseRef(block.image.sourceRef));
-      if (block.type === "drawing" && block.drawing.sourceRef)
-        referenced.add(baseRef(block.drawing.sourceRef));
-      wordBlockChildEntries(block, "").forEach((c) => visit(c.block));
+    const referencedBy = new Map<string, string>();
+    const spare = new Map<string, number>();
+    const visit = (block: WordPlanBlock, rowKey: string) => {
+      const refs = [
+        "sourceRef" in block ? block.sourceRef : undefined,
+        block.type === "image" ? block.image.sourceRef : undefined,
+        block.type === "drawing" ? block.drawing.sourceRef : undefined,
+      ].flatMap((ref) => (ref ? [baseRef(ref)] : []));
+      for (const ref of refs)
+        if (!referencedBy.has(ref)) referencedBy.set(ref, rowKey);
+      if (!refs.some((ref) => nativeRefs.has(ref)))
+        spare.set(block.type, (spare.get(block.type) ?? 0) + 1);
+      wordBlockChildEntries(block, "").forEach((c) => visit(c.block, rowKey));
     };
-    blocks.forEach(visit);
-    const tableSource = nativeSources.find((s) => s.nativeKind === "table");
+    blocks.forEach((block) => visit(block, `output:${block.id}`));
+    const carried = new Set<string>();
+    const unreferencedTables: WordSourceBlock[] = [];
+    for (const source of nativeSources) {
+      if (referencedBy.has(source.ref)) {
+        carried.add(source.ref);
+        rowKeyByRef.set(source.ref, referencedBy.get(source.ref)!);
+        continue;
+      }
+      const carrier = (NATIVE_CARRIERS[source.nativeKind ?? ""] ?? []).find(
+        (type) => (spare.get(type) ?? 0) > 0,
+      );
+      if (!carrier) continue;
+      spare.set(carrier, spare.get(carrier)! - 1);
+      carried.add(source.ref);
+      if (source.nativeKind === "table") unreferencedTables.push(source);
+    }
     const rows: WordPlanRow[] = [];
     let textIndex = 0;
     for (const block of blocks) {
@@ -740,6 +833,10 @@ export function buildWordPlanReview(
                 level: textSources[0].level,
               }
             : undefined;
+        if (pairByIndex && textSources[textIndex])
+          rowKeyByRef.set(textSources[textIndex].ref, key);
+        else if (!pairByIndex && textIndex === 0)
+          for (const s of textSources) rowKeyByRef.set(s.ref, key);
         textIndex++;
         rows.push({
           key,
@@ -753,10 +850,12 @@ export function buildWordPlanReview(
           after: block,
         });
       } else if (block.type === "table") {
+        const explicit = snapshot && wordSourceTable(snapshot, block.sourceRef);
+        const paired = explicit ? undefined : unreferencedTables.shift();
         const original =
-          (snapshot && wordSourceTable(snapshot, block.sourceRef)) ??
-          (tableSource && snapshot
-            ? wordSourceTable(snapshot, tableSource.ref)
+          explicit ||
+          (paired && snapshot
+            ? wordSourceTable(snapshot, paired.ref)
             : undefined);
         const row = tableRow(
           key,
@@ -766,6 +865,13 @@ export function buildWordPlanReview(
           !!block.sourceRef,
           locateRef,
         );
+        if (
+          original &&
+          row.sameShape &&
+          !row.changedCells.length &&
+          !row.changedRowIndexes.length
+        )
+          row.status = "kept";
         if (!original && block.rows.length >= LARGE_INSERT_TABLE_ROWS)
           largeInsert = true;
         rows.push(row);
@@ -812,16 +918,16 @@ export function buildWordPlanReview(
             : block.type === "drawing"
               ? block.drawing
               : undefined;
-        const carried = !!spec?.sourceRef;
+        const fromSource = !!spec?.sourceRef;
         const onlyReference =
-          carried &&
+          fromSource &&
           Object.keys(spec).every((k) =>
             ["sourceRef", "sourceIndex"].includes(k),
           );
         rows.push({
           key,
           family: "object",
-          status: onlyReference ? "kept" : carried ? "updated" : "new",
+          status: onlyReference ? "kept" : fromSource ? "updated" : "new",
           locateRef,
           objectKind: block.type,
           name: insertedObjectName(block),
@@ -829,24 +935,18 @@ export function buildWordPlanReview(
         });
       }
     }
-    if (!textBlocks.length)
-      for (const source of textSources)
-        rows.push(removedSourceRow(source, `replaced:${source.ref}`));
-    for (const source of nativeSources) {
-      const carried =
-        referenced.has(source.ref) ||
-        (source.nativeKind === "table" && types.has("table")) ||
-        (source.nativeKind === "image" &&
-          (types.has("image") || types.has("drawing"))) ||
-        (source.nativeKind === "field" && types.has("field")) ||
-        (source.nativeKind === "content-control" &&
-          types.has("content-control"));
-      if (!carried)
-        rows.push(removedSourceRow(source, `replaced:${source.ref}`));
-    }
+    const removedRow = (source: WordSourceBlock) => {
+      const row = removedSourceRow(source, `replaced:${source.ref}`);
+      rowKeyByRef.set(source.ref, row.key);
+      rows.push(row);
+    };
+    if (!textBlocks.length) textSources.forEach(removedRow);
+    nativeSources.filter((s) => !carried.has(s.ref)).forEach(removedRow);
     return rows;
   };
 
+  let previousRef: string | undefined;
+  const inPlace: string[] = [];
   for (const entry of plan.entries) {
     if (entry.kind === "keep") {
       for (const ref of entry.source) {
@@ -863,17 +963,13 @@ export function buildWordPlanReview(
           objects:
             source?.type === "native" && source.nativeKind !== "table" ? 1 : 0,
         });
+        previousRef = ref;
+        inPlace.push(ref);
       }
       continue;
     }
-    changedBlocks += entry.blocks.length;
     if (entry.kind === "replace") {
-      hasReplace = true;
-      const spanned = new Set(entry.source.map((ref) => rangeOf.get(ref) ?? 0));
-      spanned.forEach((range) => touched.add(`range:${range}`));
-      if (snapshot && spanned.size >= 2) restructured = true;
       current = groupFor(entry.source[0]);
-      current.replaced = true;
       const rows = outputRows(
         entry.blocks,
         entry.source.flatMap((ref) => sources.get(ref) ?? []),
@@ -882,14 +978,22 @@ export function buildWordPlanReview(
       );
       for (const row of rows) push(current, row);
       for (const ref of entry.source)
-        rowKeyByRef.set(
-          ref,
-          rows.find((r) => r.key === `replaced:${ref}`)?.key ??
-            rows[0]?.key ??
-            "",
-        );
+        if (!rowKeyByRef.has(ref)) rowKeyByRef.set(ref, rows[0]?.key ?? "");
+      previousRef = entry.source[entry.source.length - 1] ?? previousRef;
+      const kept = rows.filter((r) => r.status === "kept").length;
+      if (rows.length && kept === rows.length) {
+        inPlace.push(...entry.source);
+        continue;
+      }
+      changedBlocks += entry.blocks.length - kept;
+      hasReplace = true;
+      current.replaced = true;
+      const spanned = new Set(entry.source.map((ref) => rangeOf.get(ref) ?? 0));
+      spanned.forEach((range) => touched.add(`range:${range}`));
+      if (snapshot && spanned.size >= 2) restructured = true;
       continue;
     }
+    changedBlocks += entry.blocks.length;
     hasInsert = true;
     const anchor = entry.contextRefs?.[0];
     if (anchor !== undefined) current = groupFor(anchor);
@@ -914,7 +1018,7 @@ export function buildWordPlanReview(
     for (const row of outputRows(
       entry.blocks,
       [],
-      anchor ?? current.rows[0]?.locateRef,
+      anchor ?? previousRef,
       false,
     ))
       push(current, row);
@@ -960,11 +1064,13 @@ export function buildWordPlanReview(
     }
     return summary;
   };
+  const differs = (row: WordPlanRow) =>
+    row.family !== "unchanged" && row.status !== "kept";
   const finalGroups = groups
     .filter((g) => g.rows.length)
     .sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1])
     .map<WordPlanGroup>((g) => {
-      const changed = g.rows.filter((r) => r.family !== "unchanged");
+      const changed = g.rows.filter(differs);
       const status: WordPlanGroupStatus = g.isNew
         ? "new"
         : !changed.length
@@ -985,7 +1091,8 @@ export function buildWordPlanReview(
     });
   const rows = finalGroups.flatMap((g) => g.rows);
   const stories = storyRows(plan, snapshot);
-  const sections = sectionRows(plan, snapshot);
+  const output = snapshot && wordPlanOutput(plan, snapshot);
+  const sections = sectionRows(plan, snapshot, output ?? []);
   const partsRows: WordPlanRow[] = [
     ...stories,
     ...sections.rows,
@@ -999,27 +1106,26 @@ export function buildWordPlanReview(
       risks.push({ kind, count: items.length, items, rowKey: items[0].rowKey });
   };
   if (snapshot) {
-    const outputHeadings = wordPlanOutput(plan, snapshot)
-      .filter((o) => o.block.type === "heading")
-      .map((o) => o.block.text.trim());
-    const sourceHeadings = snapshot.blocks.filter((b) => b.type === "heading");
-    const lost = sourceHeadings.length - outputHeadings.length;
-    if (lost > 0) {
-      const remaining = [...outputHeadings];
-      const missing = sourceHeadings.filter((h) => {
-        const at = remaining.indexOf(h.text.trim());
-        if (at < 0) return true;
-        remaining.splice(at, 1);
-        return false;
-      });
-      addRisk(
-        "headings-lost",
-        missing.slice(0, lost).map((h) => ({
+    const carriedHeadings = new Set<string>();
+    for (const entry of plan.entries) {
+      if (entry.kind === "keep")
+        entry.source.forEach((ref) => carriedHeadings.add(ref));
+      if (entry.kind !== "replace") continue;
+      const outputs = entry.blocks.filter((b) => b.type === "heading").length;
+      entry.source
+        .filter((ref) => sources.get(ref)?.type === "heading")
+        .slice(0, outputs)
+        .forEach((ref) => carriedHeadings.add(ref));
+    }
+    addRisk(
+      "headings-lost",
+      snapshot.blocks
+        .filter((b) => b.type === "heading" && !carriedHeadings.has(b.ref))
+        .map((h) => ({
           rowKey: rowKeyByRef.get(h.ref) ?? `keep:${h.ref}`,
           text: h.text,
         })),
-      );
-    }
+    );
     addRisk(
       "natives-removed",
       removedNatives.map(({ row }) => ({
@@ -1048,7 +1154,7 @@ export function buildWordPlanReview(
   }
 
   const bodyChanged = hasReplace || hasInsert || plan.deleted.length > 0;
-  const partsChanged = !!(plan.stories?.length || plan.sections?.length);
+  const partsChanged = partsRows.length > 0;
   const touchedSections = snapshot ? touched.size : 0;
   const variant: WordPlanReviewVariant | undefined = restructured
     ? "restructured"
@@ -1072,9 +1178,9 @@ export function buildWordPlanReview(
         ? "small"
         : "medium";
 
-  const storyTypes = [...new Set((plan.stories ?? []).map((s) => s.type))];
+  const storyTypes = [...new Set(stories.map((s) => s.storyType))];
   const layout = sections.rows.length + sections.removed.length > 0;
-  const changedRows = rows.filter((r) => r.family !== "unchanged");
+  const changedRows = rows.filter(differs);
   const topLevelInserted = plan.entries.flatMap((e) =>
     e.kind === "insert" ? e.blocks : [],
   );
@@ -1088,14 +1194,11 @@ export function buildWordPlanReview(
         r.sameShape &&
         r.changedCells.length > 0,
     );
-  const keptOrder = plan.entries.flatMap((e) =>
-    e.kind === "keep" ? e.source : [],
-  );
   const noChange =
     !bodyChanged &&
     !partsChanged &&
     plan.entries.length > 0 &&
-    (!snapshot || keptOrder.every((ref, i) => snapshot.blocks[i]?.ref === ref));
+    (!snapshot || inPlace.every((ref, i) => snapshot.blocks[i]?.ref === ref));
   const existingGroups = finalGroups.filter((g) => g.status !== "new");
   const title: WordPlanTitle = noChange
     ? { kind: "none" }
@@ -1159,11 +1262,11 @@ export function buildWordPlanReview(
   // Without a capture nothing proves which parts exist, so none are named.
   snapshot?.stories?.forEach((s) => present.add(categoryOf(s.type)));
   snapshot?.preservedStories?.forEach((s) => present.add(categoryOf(s)));
-  (plan.stories ?? []).forEach((s) => present.delete(categoryOf(s.type)));
+  stories.forEach((s) => present.delete(categoryOf(s.storyType)));
   const unchanged = (
     ["headers", "footers", "notes", "comments"] as WordPlanScopePart[]
   ).filter((part) => present.has(part));
-  if (!plan.sections) unchanged.push("layout");
+  if (!layout) unchanged.push("layout");
 
   return {
     size,
@@ -1182,5 +1285,9 @@ export function buildWordPlanReview(
       checkInWord ||
       !!snapshot?.blocks.some((b) => b.type === "native") ||
       partsChanged,
+    output,
+    locatable: new Set(
+      snapshot?.blocks.flatMap((b) => (b.paragraphOrdinal ? [b.ref] : [])),
+    ),
   };
 }

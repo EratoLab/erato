@@ -387,6 +387,17 @@ describe("buildWordPlanReview", () => {
     );
     expect(review.partsRows).toEqual([
       expect.objectContaining({
+        key: "section:n1",
+        changes: [
+          {
+            property: "boundary",
+            length: false,
+            before: false,
+            after: "Two regions.",
+          },
+        ],
+      }),
+      expect.objectContaining({
         key: "section:n2",
         status: "new",
         beforeAvailable: false,
@@ -541,6 +552,262 @@ describe("buildWordPlanReview", () => {
       status: "kept",
       objectKind: "image",
     });
+  });
+});
+
+describe("changes derived from the captured original", () => {
+  const sameLayout = (snapshot: WordAuthoringSnapshot) => ({
+    scope: "document" as const,
+    sections: [
+      {
+        id: "n1",
+        source: "s1",
+        layout: snapshot.sections![0].layout,
+        footers: { default: "f1" },
+      },
+    ],
+    stories: [
+      {
+        kind: "upsert" as const,
+        type: "footer" as const,
+        id: "f1",
+        blocks: [para("footer", "Draft footer")],
+      },
+    ],
+  });
+
+  it("reports a kept body that only repeats the captured layout and footer as nothing to change", () => {
+    const snapshot = withParts(readySnapshot());
+    const review = buildWordPlanReview(
+      plan(snapshot, keepAll(snapshot), sameLayout(snapshot)),
+      snapshot,
+    );
+    expect(review.noChange).toBe(true);
+    expect(review.title).toEqual({ kind: "none" });
+    expect(review.partsRows).toEqual([]);
+    expect(review.risks).toEqual([]);
+    expect(review.scope.unchanged).toEqual(["footers", "layout"]);
+  });
+
+  it("does not let a repeated layout make a small body edit large", () => {
+    const snapshot = withParts(readySnapshot());
+    const review = buildWordPlanReview(
+      plan(
+        snapshot,
+        [
+          { kind: "replace", source: ["b1"], blocks: [para("n1", "Intro")] },
+          ...keepAll(snapshot, ["b1"]),
+        ],
+        sameLayout(snapshot),
+      ),
+      snapshot,
+    );
+    expect(review.size).toBe("small");
+    expect(review.title).toEqual({ kind: "paragraphs-changed", n: 1 });
+  });
+
+  it("treats a replaced heading as carried when its entry outputs a heading at the same position among the entry's headings", () => {
+    const snapshot = chapters(3);
+    const review = buildWordPlanReview(
+      plan(snapshot, [
+        { kind: "keep", source: ["b1", "b2"] },
+        {
+          kind: "replace",
+          source: ["b3"],
+          blocks: [
+            { id: "h2", type: "heading", level: 1, text: "Second chapter" },
+          ],
+        },
+        { kind: "keep", source: ["b4"] },
+        { kind: "replace", source: ["b5"], blocks: [para("p3", "Chapter 3")] },
+        { kind: "keep", source: ["b6"] },
+      ]),
+      snapshot,
+    );
+    expect(review.risks.find((r) => r.kind === "headings-lost")).toEqual({
+      kind: "headings-lost",
+      count: 1,
+      rowKey: "output:p3",
+      items: [{ rowKey: "output:p3", text: "Chapter 3" }],
+    });
+  });
+
+  it("reports a deleted heading as lost even when the plan inserts another heading", () => {
+    const snapshot = chapters(2);
+    const review = buildWordPlanReview(
+      plan(
+        snapshot,
+        [
+          { kind: "keep", source: ["b1", "b2", "b4"] },
+          {
+            kind: "insert",
+            contextRefs: ["b4"],
+            blocks: [{ id: "h", type: "heading", level: 1, text: "Appendix" }],
+          },
+        ],
+        { deleted: [{ source: ["b3"], reason: "Merged." }] },
+      ),
+      snapshot,
+    );
+    expect(review.risks.find((r) => r.kind === "headings-lost")).toEqual({
+      kind: "headings-lost",
+      count: 1,
+      rowKey: "deleted:b3",
+      items: [{ rowKey: "deleted:b3", text: "Chapter 2" }],
+    });
+  });
+
+  it("reports a moved section boundary as a layout change naming the paragraph it ends after", () => {
+    const snapshot = withParts(readySnapshot());
+    snapshot.sections![0].afterBlock = "b2";
+    snapshot.sections!.push({
+      id: "s2",
+      layout: {},
+      headers: {},
+      footers: {},
+      xml: "",
+    });
+    const review = buildWordPlanReview(
+      plan(snapshot, keepAll(snapshot), {
+        scope: "document",
+        sections: [
+          { id: "n1", source: "s1", after: "b4" },
+          { id: "n2", source: "s2" },
+        ],
+      }),
+      snapshot,
+    );
+    expect(review.partsRows).toEqual([
+      expect.objectContaining({
+        key: "section:n1",
+        status: "changed",
+        changes: [
+          {
+            property: "boundary",
+            length: false,
+            before: "Two regions.",
+            after: "Pilot in October.",
+          },
+        ],
+      }),
+    ]);
+    expect(review.risks.map((r) => r.kind)).toEqual(["layout-changed"]);
+    expect(review.noChange).toBe(false);
+    expect(review.variant).toBe("layout");
+  });
+
+  it("keeps a section boundary that follows its paragraph into a replacement", () => {
+    const snapshot = withParts(readySnapshot());
+    snapshot.sections![0].afterBlock = "b2";
+    snapshot.sections!.push({
+      id: "s2",
+      layout: {},
+      headers: {},
+      footers: {},
+      xml: "",
+    });
+    const review = buildWordPlanReview(
+      plan(
+        snapshot,
+        [
+          { kind: "keep", source: ["b1"] },
+          { kind: "replace", source: ["b2"], blocks: [para("n2", "Regions")] },
+          ...keepAll(snapshot, ["b1", "b2"]),
+        ],
+        {
+          scope: "document",
+          sections: [
+            { id: "n1", source: "s1", after: "n2" },
+            { id: "n2", source: "s2" },
+          ],
+        },
+      ),
+      snapshot,
+    );
+    expect(review.partsRows).toEqual([]);
+  });
+
+  it("carries only as many replaced tables as the entry outputs and reports the rest as removed", () => {
+    const snapshot = readySnapshot(
+      packageXml(paragraph("Intro") + TABLE + paragraph("Gap") + TABLE),
+    );
+    const review = buildWordPlanReview(
+      plan(snapshot, [
+        { kind: "keep", source: ["b1"] },
+        {
+          kind: "replace",
+          source: ["b2", "b3", "b4"],
+          blocks: [
+            para("p", "Merged"),
+            {
+              id: "t",
+              type: "table",
+              text: "",
+              rows: [{ cells: [{ blocks: [para("c", "Only")] }] }],
+            },
+          ],
+        },
+      ]),
+      snapshot,
+    );
+    expect(review.risks.find((r) => r.kind === "natives-removed")).toEqual({
+      kind: "natives-removed",
+      count: 1,
+      rowKey: "replaced:b4",
+      items: [{ rowKey: "replaced:b4", objectKind: "table" }],
+    });
+    expect(review.size).toBe("large");
+  });
+
+  it("marks a replaced table without cell, row or column differences as kept and leaves it out of the counts", () => {
+    const snapshot = readySnapshot(
+      packageXml(paragraph("Intro") + TABLE + paragraph("After")),
+    );
+    const table = snapshot.blocks[1];
+    const review = buildWordPlanReview(
+      plan(snapshot, [
+        { kind: "replace", source: ["b1"], blocks: [para("n1", "Opening")] },
+        {
+          kind: "replace",
+          source: [table.ref],
+          blocks: [
+            {
+              id: "same",
+              type: "table",
+              text: "",
+              sourceRef: table.ref,
+              rows: table.content!.rows.map((r) => ({
+                sourceIndex: r.sourceIndex,
+                cells: r.cells.map((c) => ({ sourceIndex: c.sourceIndex })),
+              })),
+            },
+          ],
+        },
+        { kind: "keep", source: ["b3"] },
+      ]),
+      snapshot,
+    );
+    expect(review.rows.find((r) => r.key === "output:same")?.status).toBe(
+      "kept",
+    );
+    expect(review.changedBlocks).toBe(1);
+    expect(review.title).toEqual({ kind: "paragraphs-changed", n: 1 });
+    expect(review.groups[0].summary).toMatchObject({ text: 1, tables: 0 });
+  });
+
+  it("locates an insert without context at the block just before it", () => {
+    const snapshot = readySnapshot();
+    const review = buildWordPlanReview(
+      plan(snapshot, [
+        { kind: "keep", source: ["b1", "b2", "b3"] },
+        { kind: "insert", blocks: [para("n1", "Inserted")] },
+        ...keepAll(snapshot, ["b1", "b2", "b3"]),
+      ]),
+      snapshot,
+    );
+    expect(review.rows.find((r) => r.key === "output:n1")?.locateRef).toBe(
+      "b3",
+    );
   });
 });
 

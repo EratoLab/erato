@@ -23,6 +23,7 @@ import {
   wordRevertedLabel,
 } from "./WordEditReport";
 import { WordReviewHeader, wordShowInWordLabel } from "./WordReviewCardParts";
+import { wordAutomaticText, wordUndoneText } from "./WordReviewReceipt";
 import { wordSizeChip } from "./wordPlanLabels";
 import {
   editExcerpt,
@@ -38,6 +39,13 @@ import type {
   WordTrackingMode,
 } from "../utils/wordReviewLocation";
 import type { WordReviewState } from "../utils/wordReviewState";
+
+const locationChangedText = () =>
+  t({
+    id: "officeAddin.word.review.locationChanged",
+    message:
+      "This passage changed or moved. Its exact location can no longer be verified.",
+  });
 
 export function trackingDescription(mode: WordTrackingMode): string {
   if (mode === "off")
@@ -204,10 +212,7 @@ export function WordReviewPanel({
         chip={wordSizeChip(wordEditBatchSize(total))}
         title={
           reverted
-            ? t({
-                id: "officeAddin.word.planReceipt.undone",
-                message: `Undone: ${title}`,
-              })
+            ? wordUndoneText(title)
             : review.status === "write-failed" ||
                 review.status === "error" ||
                 review.status === "revert-failed"
@@ -226,12 +231,7 @@ export function WordReviewPanel({
           </p>
         )}
         {review.automatic && historical && (
-          <p className="word-review__hint">
-            {t({
-              id: "officeAddin.word.review.automatic",
-              message: "Automatic action under your Always allow setting.",
-            })}
-          </p>
+          <p className="word-review__hint">{wordAutomaticText()}</p>
         )}
         {capture ? (
           (complete < documentTotal || capture.partialOrdinal !== null) && (
@@ -350,13 +350,7 @@ export function WordReviewPanel({
           const reason =
             blockedReason ??
             locationReason(index) ??
-            (invalidLocations.has(index)
-              ? t({
-                  id: "officeAddin.word.review.locationChanged",
-                  message:
-                    "This passage changed or moved. Its exact location can no longer be verified.",
-                })
-              : undefined);
+            (invalidLocations.has(index) ? locationChangedText() : undefined);
           return (
             <li
               key={index}
@@ -448,11 +442,7 @@ export function WordReviewPanel({
                                     message:
                                       "Cursor moved to the cleared paragraph.",
                                   })
-                                : t({
-                                    id: "officeAddin.word.review.locationChanged",
-                                    message:
-                                      "This passage changed or moved. Its exact location can no longer be verified.",
-                                  });
+                                : locationChangedText();
                           setLocationMessages((current) => ({
                             ...current,
                             [index]: message,

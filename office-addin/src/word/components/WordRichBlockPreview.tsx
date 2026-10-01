@@ -2,6 +2,7 @@ import { Card } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
+import { nativeKindLabel } from "./WordNativeBlockPreview";
 import { formatCentimeters } from "./wordPlanLabels";
 import {
   inventoryWordMedia,
@@ -33,6 +34,11 @@ import type {
 import type { CSSProperties } from "react";
 
 import "./wordRichPreview.css";
+
+const emptyCellLabel = () =>
+  t({ id: "officeAddin.word.rich.emptyCell", message: "Empty cell" });
+const imageLabel = () =>
+  t({ id: "officeAddin.word.rich.image", message: "Image" });
 
 type PreviewProps = {
   block: WordPlanBlock;
@@ -207,13 +213,7 @@ export function WordTablePreview({
           }}
         >
           <caption>
-            <strong>
-              {format.caption ||
-                t({
-                  id: "officeAddin.word.authoring.nativeTable",
-                  message: "Table",
-                })}
-            </strong>{" "}
+            <strong>{format.caption || nativeKindLabel("table")}</strong>{" "}
             <span className="word-rich-preview__hint">
               {t({
                 id: "officeAddin.word.rich.tableDimensions",
@@ -262,11 +262,7 @@ export function WordTablePreview({
                         />
                       ) : cell.blocks === undefined ? (
                         <p className="word-rich-preview__text word-rich-preview__retained">
-                          {retained?.text ||
-                            t({
-                              id: "officeAddin.word.rich.emptyCell",
-                              message: "Empty cell",
-                            })}
+                          {retained?.text || emptyCellLabel()}
                         </p>
                       ) : cell.blocks.length ? (
                         <WordRichBlockSequence
@@ -275,10 +271,7 @@ export function WordTablePreview({
                         />
                       ) : (
                         <span className="word-rich-preview__hint">
-                          {t({
-                            id: "officeAddin.word.rich.emptyCell",
-                            message: "Empty cell",
-                          })}
+                          {emptyCellLabel()}
                         </span>
                       )}
                     </Tag>
@@ -323,11 +316,7 @@ export function CellTextEdit({
       )}
       <ins className="word-rich-preview__inserted">
         {before && before !== after && <WordChangeSide side="after" />}
-        {after ||
-          t({
-            id: "officeAddin.word.rich.emptyCell",
-            message: "Empty cell",
-          })}
+        {after || emptyCellLabel()}
       </ins>
     </p>
   );
@@ -402,10 +391,7 @@ function ImagePreview({
       heightPt: image.heightPt ?? width / ratio,
     };
   }, [image, snapshot]);
-  const alt =
-    image.alt ||
-    image.title ||
-    t({ id: "officeAddin.word.rich.image", message: "Image" });
+  const alt = image.alt || image.title || imageLabel();
   return (
     <Card variant="surface" size="sm" className="word-rich-preview">
       <figure
@@ -482,10 +468,7 @@ function MediaDimensions({
   );
 }
 function DrawingPreview({ drawing }: { drawing: WordDrawingSpec }) {
-  const label =
-    drawing.alt ||
-    drawing.title ||
-    t({ id: "officeAddin.word.rich.drawing", message: "Drawing" });
+  const label = drawing.alt || drawing.title || nativeKindLabel("drawing");
   const fill = color(drawing.fill) ?? "var(--theme-bg-secondary)";
   const line = color(drawing.line?.color) ?? "var(--theme-fg-secondary)";
   const stroke = drawing.line?.widthPt ?? 1;
@@ -558,17 +541,11 @@ function DrawingPreview({ drawing }: { drawing: WordDrawingSpec }) {
 
 function editLabel(edit: WordNativeStructureEdit<WordPlanBlock>) {
   const labels = {
-    field: t({
-      id: "officeAddin.word.authoring.nativeField",
-      message: "Document field",
-    }),
-    bookmark: t({ id: "officeAddin.word.rich.bookmark", message: "Bookmark" }),
-    "content-control": t({
-      id: "officeAddin.word.authoring.nativeControl",
-      message: "Content control",
-    }),
-    image: t({ id: "officeAddin.word.rich.image", message: "Image" }),
-    drawing: t({ id: "officeAddin.word.rich.drawing", message: "Drawing" }),
+    field: nativeKindLabel("field"),
+    bookmark: nativeKindLabel("bookmark"),
+    "content-control": nativeKindLabel("content-control"),
+    image: imageLabel(),
+    drawing: nativeKindLabel("drawing"),
   };
   const label = labels[edit.kind];
   return edit.operation === "delete"
@@ -690,10 +667,7 @@ export function WordRichBlockPreview({
     return (
       <Card variant="surface" size="sm" className="word-rich-preview">
         <span className="word-rich-preview__hint">
-          {t({
-            id: "officeAddin.word.authoring.nativeField",
-            message: "Document field",
-          })}
+          {nativeKindLabel("field")}
         </span>
         <p className="word-rich-preview__text">
           {block.field.text ||
@@ -709,11 +683,7 @@ export function WordRichBlockPreview({
     const label =
       block.type === "bookmark"
         ? block.bookmark.name
-        : block.control.title ||
-          t({
-            id: "officeAddin.word.authoring.nativeControl",
-            message: "Content control",
-          });
+        : block.control.title || nativeKindLabel("content-control");
     return (
       <Card variant="surface" size="sm" className="word-rich-preview">
         <span className="word-rich-preview__hint">{label}</span>

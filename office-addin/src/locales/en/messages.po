@@ -1971,13 +1971,11 @@ msgstr "Content with linked annotations"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-#: src/word/components/WordRichBlockPreview.tsx
 msgid "officeAddin.word.authoring.nativeControl"
 msgstr "Content control"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-#: src/word/components/WordRichBlockPreview.tsx
 msgid "officeAddin.word.authoring.nativeField"
 msgstr "Document field"
 
@@ -1998,7 +1996,6 @@ msgstr "Section boundary"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-#: src/word/components/WordRichBlockPreview.tsx
 msgid "officeAddin.word.authoring.nativeTable"
 msgstr "Table"
 
@@ -2178,7 +2175,6 @@ msgid "officeAddin.word.card.failed"
 msgstr "Word did not accept the change. Nothing was written to the document."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordHostCardRenderer.tsx
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.card.inserted"
 msgstr "Inserted into the document."
@@ -2282,6 +2278,22 @@ msgstr "Insert the text at the cursor"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
+msgid "officeAddin.word.layout.boundary"
+msgstr "Ends after"
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
+msgid "officeAddin.word.layout.boundaryEnd"
+msgstr "End of the document"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: formatCount(value)
+#: src/word/components/wordPlanLabels.ts
+msgid "officeAddin.word.layout.boundaryItem"
+msgstr "Item {0}"
+
+#. js-lingui-explicit-id
+#: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.layout.break"
 msgstr "Section start"
 
@@ -2357,7 +2369,6 @@ msgid "officeAddin.word.planReceipt.restoredDocument"
 msgstr "Restored the document"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordReviewPanel.tsx
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.planReceipt.undone"
 msgstr "Undone: {title}"
@@ -2438,7 +2449,6 @@ msgid "officeAddin.word.planRow.beforeUnavailable"
 msgstr "Previous values were not captured; only the new settings are shown."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordPlanChangeRow.tsx
 #: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.cellsChanged"
 msgstr "{cells, plural, one {# cell changed} other {# cells changed}}"
@@ -2481,10 +2491,14 @@ msgid "officeAddin.word.planRow.listItem"
 msgstr "List item"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: row.rows - PLAN_ROW_PREVIEW_ROWS
 #: src/word/components/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.moreRows"
 msgstr "{0, plural, one {# more row in Word} other {# more rows in Word}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.moreRowsRemoved"
+msgstr "{more, plural, one {# more row, also removed} other {# more rows, also removed}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordPlanChangeRow.tsx
@@ -2497,9 +2511,6 @@ msgid "officeAddin.word.planRow.newSectionSettings"
 msgstr "{count, plural, one {{sectionBreak} · # setting} other {{sectionBreak} · # settings}}"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: row.objects
-#. placeholder {0}: summary.objects
-#: src/word/components/WordPlanChangeRow.tsx
 #: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.objectCount"
 msgstr "{0, plural, one {# other item} other {# other items}}"
@@ -2515,9 +2526,6 @@ msgid "officeAddin.word.planRow.paragraph"
 msgstr "Paragraph"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: row.paragraphs
-#. placeholder {0}: summary.text
-#: src/word/components/WordPlanChangeRow.tsx
 #: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.paragraphCount"
 msgstr "{0, plural, one {# paragraph} other {# paragraphs}}"
@@ -2533,17 +2541,11 @@ msgid "officeAddin.word.planRow.rewritten"
 msgstr "Rewritten"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: row.rowsAdded
-#. placeholder {0}: summary.rowsAdded
-#: src/word/components/WordPlanChangeRow.tsx
 #: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.rowsAdded"
 msgstr "{0, plural, one {# row added} other {# rows added}}"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: row.rowsRemoved
-#. placeholder {0}: summary.rowsRemoved
-#: src/word/components/WordPlanChangeRow.tsx
 #: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.rowsRemoved"
 msgstr "{0, plural, one {# row removed} other {# rows removed}}"
@@ -2564,9 +2566,6 @@ msgstr "{count, plural, one {# setting changed} other {# settings changed}}"
 #~ msgstr "Show in Word"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: row.tables
-#. placeholder {0}: summary.tables
-#: src/word/components/WordPlanChangeRow.tsx
 #: src/word/components/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.tableCount"
 msgstr "{0, plural, one {# table} other {# tables}}"
@@ -2852,7 +2851,6 @@ msgid "officeAddin.word.review.applyOne"
 msgstr "Apply edit"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordReviewPanel.tsx
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.review.automatic"
 msgstr "Automatic action under your Always allow setting."
@@ -2909,7 +2907,6 @@ msgid "officeAddin.word.review.coverageWindow"
 msgstr "Request window: paragraphs 1–{0}. Only included text was reviewed."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordHostCardRenderer.tsx
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.review.denied"
 msgstr "Proposal declined. Nothing was written."
@@ -3073,6 +3070,11 @@ msgstr "Restoring the document body…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertMissing"
+msgstr "Revert is unavailable for this batch. Use Undo in Word to remove anything that was written."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertTitle"
 msgstr "Restore the document body?"
 
@@ -3184,7 +3186,6 @@ msgstr "Remove the link to document data."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-#: src/word/components/WordRichBlockPreview.tsx
 msgid "officeAddin.word.rich.bookmark"
 msgstr "Bookmark"
 
@@ -3216,7 +3217,6 @@ msgstr "Content can be edited; the control can be removed."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordNativeBlockPreview.tsx
-#: src/word/components/WordRichBlockPreview.tsx
 msgid "officeAddin.word.rich.drawing"
 msgstr "Drawing"
 
