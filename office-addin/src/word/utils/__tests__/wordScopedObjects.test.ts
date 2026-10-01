@@ -5,6 +5,7 @@ import {
   paragraph,
   readySnapshot,
 } from "../../../test/mocks/word/authoringFixtures";
+import { WORD_AUTHORING_CONTRACT } from "../wordAuthoringContract";
 import {
   parseWordDocumentPlan,
   validateWordDocumentPlan,
@@ -320,6 +321,24 @@ describe("scoped object editing", () => {
         (read as { result: { contract: unknown } }).result.contract,
       ).toHaveProperty(group);
     }
+  });
+  it("tells the model under Track Changes that passages with pending revisions stay as they are", async () => {
+    const s = setup();
+    const plain = await s.read({ text: "Target" });
+    expect(
+      (plain as { result: { contract: unknown } }).result.contract,
+    ).not.toHaveProperty("trackedChanges");
+    const tracked = setup();
+    tracked.snapshot.trackingMode = "TrackAll";
+    const read = await tracked.read({ text: "Target" });
+    const contract = (read as { result: { contract: Record<string, unknown> } })
+      .result.contract;
+    expect(contract.trackedChanges).toBe(
+      WORD_AUTHORING_CONTRACT.trackedChanges,
+    );
+    expect(contract.trackedChanges).toContain(
+      "cannot be edited until the user accepts or rejects those changes in Word",
+    );
   });
   it("can replace a paragraph with a new table using explicitly requested guidance", async () => {
     const s = setup();

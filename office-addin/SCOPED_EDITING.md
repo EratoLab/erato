@@ -60,8 +60,8 @@ The UI presents selected changes first, with the complete document preview in
 a disclosure. Existing permission checks, stale-document rejection, backups,
 revert guards, compilation, Word application and post-write verification remain.
 The separate paragraph-review route remains for compatibility, including its
-different handling of Word's tracking setting. Structured application still
-requires Track Changes to be off; native revision suggestions are separate work.
+different handling of Word's tracking setting. How Apply writes, verifies and
+undoes a plan, including under Track Changes, is described in "Applying a plan".
 
 Discovery, scopes and sparse materialization use only the immutable snapshot and
 host-independent editing types. They neither call Office.js nor require a server.
@@ -100,3 +100,114 @@ bounded. A caller can reread the same refs with different guidance. Includes do
 not grant source access or change the host's supported operations or validators.
 Complete reads retain the full authoring contract. Model-budget estimates remain
 conservative; no validation budget or complete-read gate has been relaxed.
+
+## Applying a plan
+
+Every scoped edit still becomes a complete keep/replace/insert plan. Apply first
+compiles it and requires the strict dry-run check, exactly as before. It then
+routes the whole plan one way; it never mixes routes in one Apply:
+
+- **In place**: the plan's changes are written through the Word object model on
+  the live paragraphs. Nothing else in the document is touched.
+- **Import**: the complete .docx is replaced with `insertFileFromBase64`. This is
+  the fallback for anything the in-place writer cannot do or undo exactly.
+- **Body**: a capture without the complete package replaces the body as before.
+
+The card shows the expected route before Apply ("Edits N passages in place" or
+"Replaces the whole document because …"). Apply decides again with the live
+host state, and the result reports the route that actually ran.
+
+### Routing
+
+`routeWordDocumentPlan` (`wordInPlaceRoute.ts`) is pure and shared by the
+preview and Apply. In-place writing needs WordApi 1.6, package support, no kill
+switch, no Compatibility mode and no session latch; otherwise the reason is
+`disabled`, `setting`, `latched`, `host-sets` or `no-package`. The classifier
+then admits only changes with an exact object-model inverse; the first failing
+rule sends the plan to the import with a fixed code:
+
+| Group      | Codes                                                                                          | Preview says it changes…              |
+| ---------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Sections   | `sections`                                                                                     | sections or page layout               |
+| Stories    | `stories`, `story-text`                                                                        | headers, footers, notes or comments   |
+| Moves      | `moved`                                                                                        | moves content                         |
+| Objects    | `native-target`, `rich-block`                                                                  | tables, images or other objects       |
+| Formatting | `format`, `run-format`, `inherited-format`, `restyle`                                          | formatting or styles                  |
+| Lists      | `list`, `new-list`                                                                             | lists                                 |
+| Paragraphs | `insert`, `delete`, `split`                                                                    | adds, removes or splits paragraphs    |
+| Setting    | `setting`                                                                                      | compatibility mode is on              |
+| Other      | `source-shape`, `empty-text`, `boundary`, `not-invertible`, `too-many-ops`, `program-mismatch` | this change can't be written in place |
+
+`alignment` and `host-error` come from the live read just before writing, while
+nothing has been saved or written; the plan then takes the import. Once the
+backup is saved there is no fallback and no retry.
+
+Each mechanism is switched on per platform in `WORD_IN_PLACE_MECHANISMS`
+(`wordInPlaceCapabilities.ts`) only after its native probe passed there. Today
+only `text` and `cell` are on; `insert`, `delete`, `split`, `restyle`, `list`,
+`span`, `tracked`, `trackedStructure` and `storyText` name the probe that will
+enable them. `window.eratoWordInPlaceProbe()` runs the probes in development
+builds, on an empty scratch document only.
+
+### Verification tiers
+
+- `strict`: the only check for the dry run and for submission, and always tried
+  first. It accepts serialization noise only.
+- `content`: import writes and restores, after strict failed. It also accepts
+  list identity (`nsid`, renumbered list instances) and the first paragraph's
+  spacing-before when the plan kept that paragraph.
+- `block`: in-place writes. Untouched blocks must keep their signature, and
+  written paragraphs must have exactly the planned text, marks, style and list.
+
+Adjustment codes form a closed list: `numbering-identity` and
+`list-instance-renumbered` are bookkeeping only, while
+`first-paragraph-spacing` is visible and disclosed on the card. Growth in
+customXml items or custom document properties is always `package-growth`, a
+failure. Diagnostics carry only routes, codes, counts and part paths, never
+document text, paragraph IDs or Office error messages.
+
+The card states the outcome: **Verified** (strict or block),
+**Applied with Word adjustments** (content, with a content-free "Copy details"
+report), **Unverified** ("N passages don't match the proposal", with Locate per
+written passage that did not verify) and **Failed**, either with nothing written
+or partly written ("Word stopped after k of n changes").
+
+### Undo
+
+An exact .docx backup is taken before every write and stays downloadable. Revert
+follows the mechanism. "Undo these changes" rewrites only the touched
+paragraphs and "Reject these tracked changes" rejects only this write's
+revisions; both refuse, writing nothing, once a touched paragraph changed, keep
+later edits elsewhere, and count only when every paragraph is signature-exact
+again. "Restore original document" restores the backup by import and refuses
+once anything in the document changed. Paragraph-edit batches
+(`word.apply_edits`) record the body fingerprint after writing and are reverted
+only while the body still matches and Track Changes is off.
+
+### Track Changes
+
+The add-in reads Word's tracking mode and never changes it. With tracked writing
+enabled, a plan that can be written in place goes in as tracked changes under
+the signed-in user's name. A plan that needs the import is blocked: the card
+says so before Apply, and submission tells the model which codes need a full
+rewrite.
+Passages that already hold pending tracked changes are read as native
+anchored-content: they stay as they are until the user accepts or rejects those
+changes in Word, and the read contract says so while tracking is on.
+
+### Switches
+
+- **Kill switch**: `window.WORD_FORCE_IMPORT_APPLY = true`, injected by the
+  backend or set from `VITE_WORD_FORCE_IMPORT_APPLY=true` at build time. Every
+  plan takes the import, and tracked captures are refused as before.
+- **Compatibility mode**: a per-device setting (localStorage
+  `erato.word.forceImportApply`) with the same effect; unreadable storage means
+  off.
+- **Latch**: an in-place write that did not verify or was interrupted sends the
+  rest of the session to the import, until the pane reloads.
+
+Earlier in-place writes can still be undone in place while any of these is on.
+The copyable report's host line shows `In-place: on` or the reason it is off.
+Release builds keep the kill switch on until the native probes P1–P4 pass on
+Word PC and Word for the web; each further mechanism is enabled only after its
+own probe passes on that platform.

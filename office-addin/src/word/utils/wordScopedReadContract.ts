@@ -3,6 +3,7 @@ import {
   WORD_SECTION_PROPERTIES,
 } from "./wordAuthoringContract";
 import { wordImageAssetMetadata } from "./wordImageAssetData";
+import { isWordTrackingMode } from "./wordInPlaceSwitch";
 
 import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
 import type { WordScopeTarget } from "./wordReadScope";
@@ -100,6 +101,9 @@ export function wordScopedReadContract(
         ? { structures: full.structures }
         : {}),
       ...(groups.has("stories") ? { stories: full.stories } : {}),
+      ...(isWordTrackingMode(snapshot.trackingMode)
+        ? { trackedChanges: full.trackedChanges }
+        : {}),
       // The scoped section vocabulary differs from the full-plan section list.
       ...(groups.has("sections")
         ? { sectionLayout: WORD_SECTION_PROPERTIES }
