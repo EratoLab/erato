@@ -265,6 +265,24 @@ body {
   margin-top: 0.35rem;
 }
 
+.office-setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.office-setup-field input {
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  max-width: 24rem;
+}
+
+.office-setup-helper summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
 .office-setup-actions {
   display: flex;
   flex-wrap: wrap;
@@ -323,6 +341,7 @@ body {
 }
 
 .office-setup-code-value {
+  white-space: pre-wrap;
   margin-bottom: 10px;
   color: #0f172a;
   font-family:

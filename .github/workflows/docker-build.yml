@@ -265,6 +265,10 @@ jobs:
         if: success() || failure()
         run: pnpm run test
 
+      - name: "Teams setup helper safety tests (offline)"
+        if: success() || failure()
+        run: python3 -m unittest discover -s office-addin/scripts/teams-bot/tests -v
+
       # Validates the manifest as the backend serves it (placeholders rendered,
       # launch-event blocks absent and present) against Microsoft's schema
       # service. The raw template cannot be validated: its tokens fail first.

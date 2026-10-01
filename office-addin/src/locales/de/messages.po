@@ -1275,19 +1275,88 @@ msgstr "Zur Startansicht wechseln"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.channelInstruction"
-msgstr "Füge unter Kanäle Microsoft Teams hinzu."
-
-#. js-lingui-explicit-id
-#. placeholder {0}: bot.botId
-#: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.copy"
-msgstr "Das Paket oben enthält den Bot bereits. Bevor Benutzer mit ihm chatten, konfiguriere die Azure-Bot-Ressource für die App-ID <0>{0}</0>:"
+msgid "officeAddin.teams.bot.setup.applyHelper"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.docsInstruction"
-msgstr "Berechtigungen, Netzwerk-Routing und alle Optionen beschreibt die <0>Einrichtungsanleitung für den Teams-Bot</0>."
+msgid "officeAddin.teams.bot.setup.authApp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.authAppMissing"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.authExplanation"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.azureResource"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.azureTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.channelInstruction"
+#~ msgstr "Füge unter Kanäle Microsoft Teams hinzu."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.connectionDetails"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.connectionNameInvalid"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.consent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.copy"
+#~ msgstr "Das Paket oben enthält den Bot bereits. Bevor Benutzer mit ihm chatten, konfiguriere die Azure-Bot-Ressource für die App-ID <0>{0}</0>:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.currentConnectionHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.currentConnectionName"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.deployInstructions"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.deployTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.docsInstruction"
+#~ msgstr "Berechtigungen, Netzwerk-Routing und alle Optionen beschreibt die <0>Einrichtungsanleitung für den Teams-Bot</0>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.downloadHelper"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1296,18 +1365,83 @@ msgstr "Setze unter Konfiguration den Messaging-Endpunkt:"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.oauthInstruction"
-msgstr "Lege eine OAuth-Verbindung (Azure Active Directory v2) mit den Microsoft-Graph-Berechtigungen aus der Einrichtungsanleitung an. Ihr Name muss <0>oauth_connection_name</0> in der Erato-Konfiguration entsprechen."
+msgid "officeAddin.teams.bot.setup.entraTitle"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.ssoInstruction"
-msgstr "Für die automatische Anmeldung setze die Token-Exchange-URL der OAuth-Verbindung:"
+msgid "officeAddin.teams.bot.setup.exposeApi"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.guideLink"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.helperIntro"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.helperLimits"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.helperTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.oauthInstruction"
+#~ msgstr "Lege eine OAuth-Verbindung (Azure Active Directory v2) mit den Microsoft-Graph-Berechtigungen aus der Einrichtungsanleitung an. Ihr Name muss <0>oauth_connection_name</0> in der Erato-Konfiguration entsprechen."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.openCloudShell"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.packageOnly"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.planHelper"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.resourceProposed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.ssoConnectionName"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.ssoInstruction"
+#~ msgstr "Für die automatische Anmeldung setze die Token-Exchange-URL der OAuth-Verbindung:"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.title"
 msgstr "Teams-Bot"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.uploadHelper"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.verifyInstructions"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx

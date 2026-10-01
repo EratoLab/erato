@@ -232,7 +232,7 @@ describe("AddinSetupRoute Teams bot section", () => {
     await selectTeams();
 
     expect(screen.getByRole("heading", { name: "Teams bot" })).toBeVisible();
-    expect(screen.getByText(botId)).toBeVisible();
+    expect(screen.getAllByText(botId)[0]).toBeVisible();
     expect(
       screen.getByText(
         `${window.location.origin}/api/integrations/ms_teams/messages`,
@@ -244,7 +244,7 @@ describe("AddinSetupRoute Teams bot section", () => {
     ).toHaveAttribute("href", "https://erato.chat/docs/integrations/ms_teams");
   });
 
-  it("omits the token exchange URL when silent SSO is not configured", async () => {
+  it("proposes a combined URI while explaining that Azure has not been checked", async () => {
     stubTeamsManifest({
       bots: [{ botId }],
       webApplicationInfo: { id: "tab", resource: "api://tab" },
@@ -253,5 +253,19 @@ describe("AddinSetupRoute Teams bot section", () => {
 
     expect(screen.getByRole("heading", { name: "Teams bot" })).toBeVisible();
     expect(screen.queryByText("api://tab")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(`api://${window.location.host}/botid-tab`),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /Azure settings and the package installed in Teams have not been checked/,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: "Open Azure Cloud Shell",
+        hidden: true,
+      }),
+    ).toHaveAttribute("href", "https://shell.azure.com/");
   });
 });

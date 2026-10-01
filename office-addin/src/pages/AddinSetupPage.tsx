@@ -3,6 +3,15 @@ import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  createTeamsSetupScript,
+  proposedSsoResource,
+  readTeamsBotSetup,
+  validConnectionName,
+} from "./teamsBotSetup";
+
+import type { TeamsBotSetup } from "./teamsBotSetup";
+
 const INTEGRATED_APPS_URL =
   "https://admin.cloud.microsoft/?#/Settings/IntegratedApps";
 const EXCHANGE_ADDIN_DOCS_URL =
@@ -21,13 +30,6 @@ type ProductOption = {
   id: OfficeProduct;
   label: string;
   selectable: boolean;
-};
-
-/** Bot details read from the rendered Teams manifest; absent when the bot is disabled. */
-type TeamsBotSetup = {
-  botId: string;
-  /** Token exchange URL for silent SSO, set when the manifest's SSO app is the bot. */
-  ssoResource: string | null;
 };
 
 type ExchangeSetupOption = {
@@ -98,22 +100,6 @@ function getManifestUrl(
     getManifestPath(product, exchangeSetup),
     window.location.href,
   ).toString();
-}
-
-function readTeamsBotSetup(manifest: unknown): TeamsBotSetup | null {
-  const document = manifest as {
-    bots?: { botId?: unknown }[];
-    webApplicationInfo?: { id?: unknown; resource?: unknown };
-  } | null;
-  const botId = document?.bots?.[0]?.botId;
-  if (typeof botId !== "string" || !botId) {
-    return null;
-  }
-  const { id, resource } = document?.webApplicationInfo ?? {};
-  return {
-    botId,
-    ssoResource: id === botId && typeof resource === "string" ? resource : null,
-  };
 }
 
 function getSpaRedirectUri(): string {
@@ -597,10 +583,38 @@ function TeamsAppInstructions() {
 }
 
 function TeamsBotInstructions({ bot }: { bot: TeamsBotSetup }) {
+  const [currentConnection, setCurrentConnection] = useState("graph");
+  const [ssoConnection, setSsoConnection] = useState("graph-sso");
   const messagingEndpoint = new URL(
     TEAMS_BOT_MESSAGES_PATH,
     window.location.origin,
   ).toString();
+  const ssoResource = proposedSsoResource(bot, window.location.origin);
+  const validNames =
+    validConnectionName(currentConnection) &&
+    validConnectionName(ssoConnection);
+  const canDownload = !!bot.authAppId && validNames;
+  const config = `# Merge into [integrations.ms_office.teams.bot]
+oauth_connection_name = ${JSON.stringify(ssoConnection)}
+sso_app_id = ${JSON.stringify(bot.authAppId ?? "<authentication app ID>")}
+sso_resource = ${JSON.stringify(ssoResource)}`;
+
+  function downloadHelper() {
+    const script = createTeamsSetupScript(
+      bot,
+      window.location.origin,
+      currentConnection,
+      ssoConnection,
+    );
+    const url = window.URL.createObjectURL(
+      new Blob([script], { type: "text/x-shellscript;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "erato-teams-setup.sh";
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
 
   return (
     <section className="office-setup-section">
@@ -608,54 +622,259 @@ function TeamsBotInstructions({ bot }: { bot: TeamsBotSetup }) {
         <Trans id="officeAddin.teams.bot.setup.title">Teams bot</Trans>
       </h2>
       <p className="office-setup-copy">
-        <Trans id="officeAddin.teams.bot.setup.copy">
-          The package above already contains the bot. Before users chat with it,
-          configure the Azure Bot resource for app ID <code>{bot.botId}</code>:
+        <Trans id="officeAddin.teams.bot.setup.authExplanation">
+          The Teams tab signs in through MSAL. Bot chat uses an Azure Bot OAuth
+          connection. Reuse the tab’s Entra registration for OAuth and silent
+          sign-in, and keep the bot’s existing messaging identity.
+        </Trans>
+      </p>
+      <p className="office-setup-copy">
+        <Trans id="officeAddin.teams.bot.setup.packageOnly">
+          These values come from this deployment’s Teams package. Azure settings
+          and the package installed in Teams have not been checked.
         </Trans>
       </p>
       <ol className="office-setup-steps">
         <li>
-          <Trans id="officeAddin.teams.bot.setup.endpointInstruction">
-            Under Configuration, set the messaging endpoint:
-          </Trans>
-          <CopyableCodeField content={messagingEndpoint} />
-        </li>
-        <li>
-          <Trans id="officeAddin.teams.bot.setup.channelInstruction">
-            Under Channels, add Microsoft Teams.
-          </Trans>
-        </li>
-        <li>
-          <Trans id="officeAddin.teams.bot.setup.oauthInstruction">
-            Add an OAuth connection (Azure Active Directory v2) with the
-            Microsoft Graph scopes from the setup guide. Its name must match{" "}
-            <code>oauth_connection_name</code> in the Erato configuration.
-          </Trans>
-        </li>
-        {bot.ssoResource ? (
-          <li>
-            <Trans id="officeAddin.teams.bot.setup.ssoInstruction">
-              For silent sign-in, set the OAuth connection&apos;s token exchange
-              URL:
+          <strong>
+            <Trans id="officeAddin.teams.bot.setup.entraTitle">
+              Entra: enable Teams sign-in
             </Trans>
-            <CopyableCodeField content={bot.ssoResource} />
-          </li>
-        ) : null}
+          </strong>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.authApp">
+              In{" "}
+              <a
+                href="https://entra.microsoft.com/"
+                target="_blank"
+                rel="noreferrer"
+                className="office-setup-link"
+              >
+                Entra admin center
+              </a>
+              , open App registrations and find the authentication app:
+            </Trans>
+          </p>
+          {bot.authAppId ? (
+            <CopyableCodeField content={bot.authAppId} />
+          ) : (
+            <p role="alert">
+              <Trans id="officeAddin.teams.bot.setup.authAppMissing">
+                The Teams manifest is missing its authentication app ID.
+                Configure the add-in’s MSAL client ID first.
+              </Trans>
+            </p>
+          )}
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.exposeApi">
+              Use v2 access tokens, expose an access_as_user scope, and
+              authorize the Teams desktop/mobile and web clients. For this
+              deployment, use this Application ID URI:
+            </Trans>
+          </p>
+          <CopyableCodeField content={ssoResource} />
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.resourceProposed">
+              This is the URI to configure; displaying it here does not mean SSO
+              is enabled. Keep existing redirects, permissions and credentials.
+            </Trans>
+          </p>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.consent">
+              Add the Bot Framework Web redirect and required delegated Graph
+              permissions from the guide, then grant tenant admin consent.
+            </Trans>
+          </p>
+        </li>
+        <li>
+          <strong>
+            <Trans id="officeAddin.teams.bot.setup.azureTitle">
+              Azure Bot: configure the connection
+            </Trans>
+          </strong>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.azureResource">
+              In{" "}
+              <a
+                href="https://portal.azure.com/"
+                target="_blank"
+                rel="noreferrer"
+                className="office-setup-link"
+              >
+                Azure Portal
+              </a>
+              , find the Azure Bot with this Microsoft App ID:
+            </Trans>
+          </p>
+          <CopyableCodeField content={bot.botId} />
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.endpointInstruction">
+              Under Configuration, set the messaging endpoint:
+            </Trans>
+          </p>
+          <CopyableCodeField content={messagingEndpoint} />
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.connectionDetails">
+              Enable the Microsoft Teams channel. Add a separate Azure Active
+              Directory v2 OAuth connection using the authentication app above,
+              a dedicated client secret, your tenant ID and the guide’s Graph
+              scopes. Set its Token Exchange URL to the Application ID URI
+              above, then use Test Connection.
+            </Trans>
+          </p>
+          <label className="office-setup-field" htmlFor="teams-sso-connection">
+            <Trans id="officeAddin.teams.bot.setup.ssoConnectionName">
+              New SSO connection name
+            </Trans>
+
+            <input
+              id="teams-sso-connection"
+              value={ssoConnection}
+              onChange={(event) => setSsoConnection(event.target.value)}
+              maxLength={64}
+              spellCheck={false}
+            />
+          </label>
+        </li>
+        <li>
+          <strong>
+            <Trans id="officeAddin.teams.bot.setup.deployTitle">
+              Erato: deploy and update the Teams app
+            </Trans>
+          </strong>
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.deployInstructions">
+              Merge these settings into the deployment, keep its bot app ID and
+              secret, and increase the Teams package version. After deployment,
+              download the updated package from this page and upload it as an
+              update to the existing app.
+            </Trans>
+          </p>
+          <CopyableCodeField content={config} />
+          <p>
+            <Trans id="officeAddin.teams.bot.setup.verifyInstructions">
+              Verify bot sign-in in Teams desktop and web, then check the Teams
+              tab and other Office add-ins. Tenant consent and Conditional
+              Access can still require interaction.
+            </Trans>
+          </p>
+        </li>
       </ol>
       <p className="office-setup-copy">
-        <Trans id="officeAddin.teams.bot.setup.docsInstruction">
-          Permissions, network routing and all options are described in the{" "}
+        <a
+          href={TEAMS_BOT_DOCS_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="office-setup-link"
+        >
+          <Trans id="officeAddin.teams.bot.setup.guideLink">
+            Teams bot setup guide
+          </Trans>
+        </a>
+      </p>
+      <details className="office-setup-helper">
+        <summary>
+          <Trans id="officeAddin.teams.bot.setup.helperTitle">
+            Optional: check and configure with Azure Cloud Shell
+          </Trans>
+        </summary>
+        <p className="office-setup-copy">
+          <Trans id="officeAddin.teams.bot.setup.helperIntro">
+            Run the helper in your browser using your Azure admin account. No
+            local tools or repository access are needed. The download includes
+            this deployment’s public IDs and a snapshot of its manifest;
+            download it again after deployment changes.
+          </Trans>
+        </p>
+        <label
+          className="office-setup-field"
+          htmlFor="teams-current-connection"
+        >
+          <Trans id="officeAddin.teams.bot.setup.currentConnectionName">
+            Current OAuth connection name
+          </Trans>
+
+          <input
+            id="teams-current-connection"
+            value={currentConnection}
+            onChange={(event) => setCurrentConnection(event.target.value)}
+            maxLength={64}
+            spellCheck={false}
+          />
+        </label>
+        <p className="office-setup-copy">
+          <Trans id="officeAddin.teams.bot.setup.currentConnectionHelp">
+            Check this name in Azure Bot Configuration or Erato’s
+            oauth_connection_name setting. The package does not contain it. The
+            helper audits this connection and uses the separate new connection
+            name above for SSO setup.
+          </Trans>
+        </p>
+        {!validNames ? (
+          <p role="alert">
+            <Trans id="officeAddin.teams.bot.setup.connectionNameInvalid">
+              Use 1–64 letters, digits, underscores or hyphens for connection
+              names.
+            </Trans>
+          </p>
+        ) : null}
+        <div className="office-setup-actions">
+          <button
+            type="button"
+            className="office-setup-button office-setup-button--secondary"
+            disabled={!canDownload}
+            onClick={downloadHelper}
+          >
+            <Trans id="officeAddin.teams.bot.setup.downloadHelper">
+              Download Cloud Shell helper
+            </Trans>
+          </button>
           <a
-            href={TEAMS_BOT_DOCS_URL}
+            href="https://shell.azure.com/"
             target="_blank"
             rel="noreferrer"
-            className="office-setup-link"
+            className="office-setup-button office-setup-button--secondary"
           >
-            Teams bot setup guide
+            <Trans id="officeAddin.teams.bot.setup.openCloudShell">
+              Open Azure Cloud Shell
+            </Trans>
           </a>
-          .
-        </Trans>
-      </p>
+        </div>
+        <ol className="office-setup-steps">
+          <li>
+            <Trans id="officeAddin.teams.bot.setup.uploadHelper">
+              Choose Bash in Cloud Shell. Select the bot’s tenant and
+              subscription, then use Manage files → Upload to upload
+              erato-teams-setup.sh. Run the read-only check:
+            </Trans>
+            <CopyableCodeField content="bash ~/erato-teams-setup.sh" />
+          </li>
+          <li>
+            <Trans id="officeAddin.teams.bot.setup.planHelper">
+              Preview the Entra additions and new OAuth connection. Missing SSO
+              settings are expected before setup:
+            </Trans>
+            <CopyableCodeField content="bash ~/erato-teams-setup.sh --plan-sso" />
+          </li>
+          <li>
+            <Trans id="officeAddin.teams.bot.setup.applyHelper">
+              After reviewing the plan, this explicit command changes Entra and
+              Azure. It adds SSO settings and creates a dedicated credential and
+              OAuth connection:
+            </Trans>
+            <CopyableCodeField content="bash ~/erato-teams-setup.sh --apply-sso" />
+          </li>
+        </ol>
+        <p className="office-setup-copy">
+          <Trans id="officeAddin.teams.bot.setup.helperLimits">
+            The helper requires an existing single-tenant Azure Bot with its
+            endpoint and Teams channel configured. It supports public Azure and
+            the global Bot Framework token service. Finish admin consent, Erato
+            deployment and the Teams app update above separately. Record the
+            credential expiry for rotation.
+          </Trans>
+        </p>
+      </details>
     </section>
   );
 }
