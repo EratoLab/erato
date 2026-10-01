@@ -1,8 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -112,51 +110,4 @@ describe("Teams setup delivery", () => {
       ),
     ).toThrow("connection names");
   });
-
-  // Two real PowerShell startups exceed the default 5s on shared CI runners.
-  it("PowerShell parses commands safely, passes deployment data literally, and refuses tampered downloads", () => {
-    const directory = mkdtempSync(join(tmpdir(), "erato-teams-delivery-"));
-    try {
-      const maliciousResource = `api://customer's/$(throw 'injected')/botid-${authAppId}`;
-      const input = createTeamsSetupCommand(
-        { ...bot, manifestResource: maliciousResource },
-        origin,
-        tenant,
-        subscription,
-        "graph",
-        "graph-sso",
-      );
-      const fakeHelper =
-        "param($TenantId,$SubscriptionId,$BaseUrl,$BotAppId,$AuthAppId,$SsoResource,$CurrentConnection,$ConnectionName)\n$PSBoundParameters | ConvertTo-Json\n";
-      writeFileSync(join(directory, "fixture.ps1"), fakeHelper);
-      const harness = (hash: string) =>
-        `function Join-Path { param($Path,$ChildPath); [IO.Path]::Combine((Get-Location).Path,$ChildPath) }\nfunction Invoke-WebRequest { param($Uri,$OutFile); Copy-Item './fixture.ps1' $OutFile }\nfunction Get-FileHash { param($Path,$Algorithm); @{Hash='${hash}'} }\n${input}`;
-      writeFileSync(
-        join(directory, "test.ps1"),
-        harness(teamsHelperRelease.sha256),
-      );
-      const result = execFileSync(
-        "pwsh",
-        ["-NoLogo", "-NoProfile", "-File", join(directory, "test.ps1")],
-        { cwd: directory, encoding: "utf8", timeout: 10_000 },
-      );
-      expect(JSON.parse(result)).toMatchObject({
-        TenantId: tenant,
-        SubscriptionId: subscription,
-        BotAppId: botId,
-        AuthAppId: authAppId,
-        SsoResource: maliciousResource,
-      });
-      writeFileSync(join(directory, "test.ps1"), harness("incorrect"));
-      expect(() =>
-        execFileSync(
-          "pwsh",
-          ["-NoLogo", "-NoProfile", "-File", join(directory, "test.ps1")],
-          { cwd: directory, stdio: "pipe", timeout: 10_000 },
-        ),
-      ).toThrow("Script verification failed");
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  }, 30_000);
 });

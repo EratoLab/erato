@@ -28,6 +28,7 @@
     "office:validate:rendered": "node scripts/validate-rendered-manifest.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:teams-setup": "vitest run --config vitest.teams-setup.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
