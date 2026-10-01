@@ -1,9 +1,51 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "./Button";
 
 describe("Button", () => {
+  describe("press feedback timers", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => {
+      cleanup();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    });
+
+    it("keeps press feedback active until 200 ms after the latest click", () => {
+      const onClick = vi.fn();
+      render(<Button onClick={onClick}>Toggle</Button>);
+      const button = screen.getByRole("button", { name: "Toggle" });
+
+      fireEvent.click(button);
+      act(() => vi.advanceTimersByTime(100));
+      fireEvent.click(button);
+      act(() => vi.advanceTimersByTime(100));
+      expect(button).toHaveAttribute("data-pressed", "true");
+      expect(onClick).toHaveBeenCalledTimes(2);
+
+      act(() => vi.advanceTimersByTime(100));
+      expect(button).toHaveAttribute("data-pressed", "false");
+    });
+
+    it("clears all press feedback timers on unmount after rapid clicks", () => {
+      const { unmount } = render(<Button>Toggle</Button>);
+      const button = screen.getByRole("button", { name: "Toggle" });
+
+      fireEvent.click(button);
+      fireEvent.click(button);
+      unmount();
+
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  });
+
   it("uses theme action classes for the primary variant", () => {
     render(<Button variant="primary">Primary Action</Button>);
 
