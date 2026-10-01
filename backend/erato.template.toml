@@ -211,6 +211,7 @@ chat_provider_ids = ["test-token-limit"]
 # enabled = true
 # app_id = "c88180bf-f50d-42dc-8b5e-c27280b6035e"
 # [integrations.ms_office.teams.manifest]
+# version = "1.0.1"  # Increase for app-package updates; defaults to the Erato release version.
 # developer_name = "Erato"
 # website_url = "https://erato.app"
 # privacy_url = "https://erato.app/privacy"
