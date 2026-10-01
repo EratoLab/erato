@@ -235,12 +235,37 @@ pub fn convert_mcp_tools_to_genai_tools(
             // Convert Arc<JsonObject> to serde_json::Value
             let mut input_schema_value: serde_json::Value =
                 serde_json::Value::Object(tool.input_schema.as_ref().clone());
+            let input_capabilities =
+                discover_file_mime_capabilities(&input_schema_value, FileMimeDirection::Accepted);
+            append_input_mime_descriptions(&mut input_schema_value, &input_capabilities);
+            let mut description = tool.description.map(|d| d.to_string());
+            let output_capabilities = tool
+                .output_schema
+                .as_ref()
+                .map(|schema| {
+                    discover_file_mime_capabilities(
+                        &serde_json::Value::Object(schema.as_ref().clone()),
+                        FileMimeDirection::Produced,
+                    )
+                })
+                .unwrap_or_default();
+            let summary = format_file_capability_summary(&input_capabilities, &output_capabilities);
+            if !summary.is_empty() {
+                let description = description.get_or_insert_with(String::new);
+                if !description.contains("File capabilities:") {
+                    if !description.is_empty() {
+                        description.push_str("\n\n");
+                    }
+                    description.push_str("File capabilities: ");
+                    description.push_str(&summary);
+                }
+            }
             remove_schema_declaration(&mut input_schema_value);
             sanitize_tool_schema_extensions(&mut input_schema_value);
 
             GenaiTool {
                 name: GenaiToolName::Custom(tool.name.to_string()),
-                description: tool.description.map(|d| d.to_string()),
+                description,
                 schema: Some(input_schema_value),
                 strict: if omit_tool_strict { None } else { Some(false) },
                 config: None,
@@ -264,6 +289,276 @@ fn remove_schema_declaration(value: &mut serde_json::Value) {
         }
         _ => {}
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FileMimeDirection {
+    Accepted,
+    Produced,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FileMimeCapability {
+    path: String,
+    mime_types: Vec<String>,
+}
+
+fn discover_file_mime_capabilities(
+    schema: &serde_json::Value,
+    direction: FileMimeDirection,
+) -> Vec<FileMimeCapability> {
+    let mut capabilities = Vec::new();
+    let mut path = Vec::new();
+    let mut visited_refs = HashSet::new();
+    collect_file_mime_capabilities(
+        schema,
+        schema,
+        direction,
+        &mut path,
+        &mut visited_refs,
+        &mut capabilities,
+    );
+    capabilities
+}
+
+fn collect_file_mime_capabilities(
+    root: &serde_json::Value,
+    schema: &serde_json::Value,
+    direction: FileMimeDirection,
+    path: &mut Vec<String>,
+    visited_refs: &mut HashSet<String>,
+    out: &mut Vec<FileMimeCapability>,
+) {
+    if !schema.is_object() {
+        return;
+    }
+    let is_file = [
+        "chat.erato/file_content_field",
+        "x-chat.erato/file_content_field",
+    ]
+    .iter()
+    .any(|key| schema.get(*key).and_then(serde_json::Value::as_bool) == Some(true));
+    if is_file {
+        let annotation = match direction {
+            FileMimeDirection::Accepted => "chat.erato/accepted_mime_types",
+            FileMimeDirection::Produced => "chat.erato/produced_mime_types",
+        };
+        let alias = format!("x-{annotation}");
+        let primary = schema.get(annotation);
+        let alias_value = schema.get(&alias);
+        let declared = primary.or(alias_value);
+        let mut values = declared
+            .and_then(serde_json::Value::as_array)
+            .filter(|items| !items.is_empty() && items.iter().all(|item| item.as_str().is_some()))
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if primary.is_some() && alias_value.is_some() && primary != alias_value {
+            values.clear();
+        }
+        if primary.is_none()
+            && alias_value.is_none()
+            && let Some(media_type) = schema
+                .get("contentMediaType")
+                .and_then(serde_json::Value::as_str)
+            && is_exact_mime_type(media_type)
+        {
+            values.push(media_type.to_ascii_lowercase());
+        }
+        values = values
+            .into_iter()
+            .map(|value| value.to_ascii_lowercase())
+            .collect();
+        if values.iter().any(|value| !is_supported_mime_pattern(value)) {
+            values.clear();
+        }
+        if let Some(media_type) = schema
+            .get("contentMediaType")
+            .and_then(serde_json::Value::as_str)
+            && declared.is_some()
+            && (!is_exact_mime_type(media_type)
+                || values.as_slice() != [media_type.to_ascii_lowercase()])
+        {
+            values.clear();
+        }
+        let mut unique_values = Vec::with_capacity(values.len());
+        for value in values {
+            if !unique_values.contains(&value) {
+                unique_values.push(value);
+            }
+        }
+        let values = unique_values;
+        if !values.is_empty() {
+            out.push(FileMimeCapability {
+                path: if path.is_empty() {
+                    "file".to_string()
+                } else {
+                    path.join(".")
+                },
+                mime_types: values,
+            });
+        }
+        return;
+    }
+    if let Some(reference) = schema.get("$ref").and_then(serde_json::Value::as_str)
+        && visited_refs.insert(reference.to_string())
+    {
+        if let Some(resolved) = reference
+            .strip_prefix("#")
+            .and_then(|pointer| root.pointer(pointer))
+        {
+            collect_file_mime_capabilities(root, resolved, direction, path, visited_refs, out);
+        }
+        visited_refs.remove(reference);
+    }
+    for keyword in ["oneOf", "anyOf", "allOf"] {
+        if let Some(branches) = schema.get(keyword).and_then(serde_json::Value::as_array) {
+            for (index, branch) in branches.iter().enumerate() {
+                path.push(format!("{keyword}[{index}]"));
+                collect_file_mime_capabilities(root, branch, direction, path, visited_refs, out);
+                path.pop();
+            }
+        }
+    }
+    if let Some(properties) = schema
+        .get("properties")
+        .and_then(serde_json::Value::as_object)
+    {
+        for (name, child) in properties {
+            path.push(name.clone());
+            collect_file_mime_capabilities(root, child, direction, path, visited_refs, out);
+            path.pop();
+        }
+    }
+    if let Some(items) = schema.get("items") {
+        path.push("[]".to_string());
+        collect_file_mime_capabilities(root, items, direction, path, visited_refs, out);
+        path.pop();
+    }
+}
+
+fn is_supported_mime_pattern(value: &str) -> bool {
+    let Some((major, minor)) = value.split_once('/') else {
+        return false;
+    };
+    let is_token = |part: &str| {
+        !part.is_empty()
+            && part
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$&^_.+-".contains(&byte))
+    };
+    ((is_token(major) || major == "*") && minor == "*") || (is_token(major) && is_token(minor))
+}
+
+fn is_exact_mime_type(value: &str) -> bool {
+    is_supported_mime_pattern(value) && !value.split('/').any(|part| part == "*")
+}
+
+fn render_mime_list(values: &[String]) -> String {
+    let mut unique = Vec::new();
+    for value in values {
+        if !unique.contains(value) {
+            unique.push(value.clone());
+        }
+    }
+    let mut rendered = unique
+        .iter()
+        .take(10)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if unique.len() > 10 {
+        let omitted = unique.len() - 10;
+        rendered.push_str(&format!(
+            ", and {omitted} further MIME type{}",
+            if omitted == 1 { "" } else { "s" }
+        ));
+    }
+    rendered
+}
+
+fn append_input_mime_descriptions(
+    schema: &mut serde_json::Value,
+    capabilities: &[FileMimeCapability],
+) {
+    for capability in capabilities {
+        if capability.path.contains("[]") || capability.path == "file" {
+            continue;
+        }
+        let parts = capability.path.split('.').collect::<Vec<_>>();
+        if let Some(cursor) = schema_at_capability_path_mut(schema, &parts) {
+            let branch_context = parts
+                .iter()
+                .filter(|part| part.contains('['))
+                .map(|part| part.replace('[', " branch ").replace(']', ""))
+                .collect::<Vec<_>>();
+            let field_label = if branch_context.is_empty() {
+                "Accepted file MIME types".to_string()
+            } else {
+                format!("Accepted file MIME types in {}", branch_context.join(" / "))
+            };
+            let helper = format!(
+                "{field_label}: {}.",
+                render_mime_list(&capability.mime_types)
+            );
+            let existing = cursor
+                .get("description")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            if !existing.contains(&format!("{field_label}:")) {
+                cursor["description"] = serde_json::Value::String(if existing.is_empty() {
+                    helper
+                } else {
+                    format!("{existing} {helper}")
+                });
+            }
+        }
+    }
+}
+
+fn schema_at_capability_path_mut<'a>(
+    schema: &'a mut serde_json::Value,
+    parts: &[&str],
+) -> Option<&'a mut serde_json::Value> {
+    let Some((first, rest)) = parts.split_first() else {
+        return Some(schema);
+    };
+    let child = if let Some((keyword, index)) = first.split_once('[') {
+        let index = index.strip_suffix(']')?.parse::<usize>().ok()?;
+        schema.get_mut(keyword)?.as_array_mut()?.get_mut(index)?
+    } else {
+        schema.get_mut("properties")?.get_mut(*first)?
+    };
+    schema_at_capability_path_mut(child, rest)
+}
+
+fn format_file_capability_summary(
+    inputs: &[FileMimeCapability],
+    outputs: &[FileMimeCapability],
+) -> String {
+    inputs
+        .iter()
+        .map(|cap| {
+            format!(
+                "input {} accepts {}",
+                cap.path,
+                render_mime_list(&cap.mime_types)
+            )
+        })
+        .chain(outputs.iter().map(|cap| {
+            format!(
+                "output {} can produce {}",
+                cap.path,
+                render_mime_list(&cap.mime_types)
+            )
+        }))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn sanitize_tool_schema_extensions(value: &mut serde_json::Value) {
@@ -310,11 +605,21 @@ fn sanitize_tool_schema_extensions(value: &mut serde_json::Value) {
                 }
             }
 
+            if file_content_field {
+                // The model sees an Erato file URI at this field, not the
+                // encoded bytes whose media type this keyword describes.
+                map.remove("contentMediaType");
+            }
+
             map.remove("chat.erato/file_content_field");
             map.remove("chat.erato/file_name_field");
             map.remove("contentEncoding");
             map.remove("x-chat.erato/file_content_field");
             map.remove("x-chat.erato/file_name_field");
+            map.remove("chat.erato/accepted_mime_types");
+            map.remove("x-chat.erato/accepted_mime_types");
+            map.remove("chat.erato/produced_mime_types");
+            map.remove("x-chat.erato/produced_mime_types");
             map.remove("$schema");
             for child in map.values_mut() {
                 sanitize_tool_schema_extensions(child);
@@ -558,10 +863,13 @@ async fn convert_mcp_tool_call_file_fields(
 #[cfg(test)]
 mod tests {
     use super::{
-        FileContentPathPart, collect_file_content_paths, expand_value_paths, json_pointer_escape,
-        parse_erato_file_upload_uri, remove_schema_declaration, sanitize_tool_schema_extensions,
+        FileContentPathPart, FileMimeDirection, append_input_mime_descriptions,
+        collect_file_content_paths, discover_file_mime_capabilities, expand_value_paths,
+        format_file_capability_summary, json_pointer_escape, parse_erato_file_upload_uri,
+        remove_schema_declaration, render_mime_list, sanitize_tool_schema_extensions,
     };
     use serde_json::json;
+    use std::sync::Arc;
 
     #[test]
     fn remove_schema_declaration_removes_all_occurrences() {
@@ -596,6 +904,7 @@ mod tests {
                     "type": "string",
                     "chat.erato/file_content_field": true,
                     "contentEncoding": "base64",
+                    "contentMediaType": "application/octet-stream",
                     "x-chat.erato/file_content_field": true,
                     "properties": {
                         "inner": {
@@ -609,6 +918,10 @@ mod tests {
                     "type": "string",
                     "chat.erato/file_name_field": true,
                     "x-chat.erato/file_name_field": true
+                },
+                "ordinary_encoded_string": {
+                    "type": "string",
+                    "contentMediaType": "image/png"
                 }
             }
         });
@@ -620,10 +933,15 @@ mod tests {
         let nested = value["properties"]["value"].as_object().unwrap();
         assert!(nested.get("chat.erato/file_content_field").is_none());
         assert!(nested.get("contentEncoding").is_none());
+        assert!(nested.get("contentMediaType").is_none());
         assert!(nested.get("x-chat.erato/file_content_field").is_none());
         let file_name = value["properties"]["file_name"].as_object().unwrap();
         assert!(file_name.get("chat.erato/file_name_field").is_none());
         assert!(file_name.get("x-chat.erato/file_name_field").is_none());
+        assert_eq!(
+            value["properties"]["ordinary_encoded_string"]["contentMediaType"],
+            "image/png"
+        );
         assert_eq!(
             nested.get("description").and_then(|value| value.as_str()),
             Some("Expected value: erato-file://<file_upload_id> URI referencing an uploaded file.")
@@ -634,6 +952,103 @@ mod tests {
         assert_eq!(
             inner.get("description").and_then(|value| value.as_str()),
             Some("Expected value: erato-file://<file_upload_id> URI referencing an uploaded file.")
+        );
+    }
+
+    #[test]
+    fn discovers_input_and_output_types_with_fallbacks_and_refs() {
+        let input = json!({
+            "type": "object",
+            "$defs": {"upload": {"type": "string", "chat.erato/file_content_field": true,
+                "chat.erato/accepted_mime_types": ["text/plain", "text/markdown"]}},
+            "properties": {"source": {"$ref": "#/$defs/upload"}}
+        });
+        let output = json!({
+            "type": "object",
+            "properties": {"result": {"type": "string", "chat.erato/file_content_field": true,
+                "contentMediaType": "application/pdf"}}
+        });
+        let accepted = discover_file_mime_capabilities(&input, FileMimeDirection::Accepted);
+        let produced = discover_file_mime_capabilities(&output, FileMimeDirection::Produced);
+        assert_eq!(accepted[0].mime_types, ["text/plain", "text/markdown"]);
+        assert_eq!(accepted[0].path, "source");
+        assert_eq!(produced[0].mime_types, ["application/pdf"]);
+        assert_eq!(produced[0].path, "result");
+    }
+
+    #[test]
+    fn invalid_or_conflicting_declarations_remain_unknown() {
+        let schema = json!({"type":"object","properties": {
+            "empty":{"type":"string","chat.erato/file_content_field":true,"chat.erato/accepted_mime_types":[]},
+            "invalid":{"type":"string","chat.erato/file_content_field":true,"chat.erato/accepted_mime_types":["bad"]},
+            "conflict":{"type":"string","chat.erato/file_content_field":true,
+                "chat.erato/accepted_mime_types":["text/plain"],"x-chat.erato/accepted_mime_types":["image/png"]},
+            "mismatch":{"type":"string","chat.erato/file_content_field":true,
+                "contentMediaType":"application/pdf","chat.erato/accepted_mime_types":["text/plain"]}
+        }});
+        assert!(discover_file_mime_capabilities(&schema, FileMimeDirection::Accepted).is_empty());
+    }
+
+    #[test]
+    fn mime_listing_is_deduplicated_and_bounded_with_exact_remainder() {
+        let values = (0..20)
+            .map(|i| format!("application/x-{i}"))
+            .collect::<Vec<_>>();
+        assert_eq!(render_mime_list(&values[..10]), values[..10].join(", "));
+        assert!(render_mime_list(&values[..11]).ends_with("and 1 further MIME type"));
+        assert!(render_mime_list(&values).ends_with("and 10 further MIME types"));
+        let repeated = vec![values[0].clone(), values[0].clone()];
+        assert_eq!(render_mime_list(&repeated), values[0]);
+    }
+
+    #[test]
+    fn mime_guidance_is_added_to_input_schema_and_tool_summary() {
+        let mut input = json!({"type":"object","properties":{"source":{"type":"string",
+            "description":"Source file","contentEncoding":"base64","chat.erato/file_content_field":true,
+            "chat.erato/accepted_mime_types":["text/plain"]}}});
+        let output = json!({"type":"object","properties":{"data":{"type":"string",
+            "chat.erato/file_content_field":true,"chat.erato/produced_mime_types":["application/pdf"]}}});
+        let accepted = discover_file_mime_capabilities(&input, FileMimeDirection::Accepted);
+        let produced = discover_file_mime_capabilities(&output, FileMimeDirection::Produced);
+        append_input_mime_descriptions(&mut input, &accepted);
+        assert_eq!(
+            input["properties"]["source"]["description"],
+            "Source file Accepted file MIME types: text/plain."
+        );
+        assert!(
+            format_file_capability_summary(&accepted, &produced)
+                .contains("output data can produce application/pdf")
+        );
+
+        let input_obj = input.as_object().unwrap().clone();
+        let output_obj = output.as_object().unwrap().clone();
+        let mcp_tool = rmcp::model::Tool::new("convert_document", "Convert document", input_obj)
+            .with_raw_output_schema(Arc::new(output_obj));
+        let converted = super::convert_mcp_tools_to_genai_tools(
+            vec![super::ManagedTool {
+                server_id: "docs".to_string(),
+                tool: mcp_tool,
+            }],
+            false,
+        );
+        assert!(
+            converted[0]
+                .description
+                .as_deref()
+                .unwrap()
+                .contains("output data can produce application/pdf")
+        );
+        assert!(
+            converted[0].schema.as_ref().unwrap()["properties"]["source"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("Expected value: erato-file://")
+        );
+        assert!(
+            converted[0].schema.as_ref().unwrap()["properties"]["source"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("Accepted file MIME types: text/plain")
         );
     }
 
