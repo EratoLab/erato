@@ -733,6 +733,7 @@
   "file_storage_providers.<provider-id>.max_upload_size_kb": {},
   "file_storage_providers.<provider-id>.provider_kind": {},
   "file_type_detection.mode": {},
+  "file_uploads.upload_allowed_if_supports.[]": {},
   "frontend.additional_environment": {},
   "frontend.allow_any_frame_ancestor": {},
   "frontend.chat_input_empty_state_layout": {},

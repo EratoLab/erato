@@ -9650,6 +9650,9 @@ pub struct FileContentsForGeneration {
 pub enum FileContent {
     /// Parsed text content (ready to use)
     Text(String),
+    /// File is stored and can be passed to compatible tools, but has no text
+    /// representation available from the configured file processor.
+    ReferenceOnly,
     /// Raw image bytes with MIME type (encode to base64 on-demand)
     Image {
         raw_bytes: Vec<u8>,
@@ -9661,7 +9664,7 @@ impl FileContentsForGeneration {
     /// Helper to encode image to base64 if this is an image file
     pub fn as_base64_image(&self) -> Option<ContentPartImage> {
         match &self.content {
-            FileContent::Text(_) => None,
+            FileContent::Text(_) | FileContent::ReferenceOnly => None,
             FileContent::Image {
                 raw_bytes,
                 mime_type,
@@ -9731,6 +9734,10 @@ async fn get_assistant_files_for_generation(
 
             let text = match file_contents.content {
                 FileContent::Text(text) => text,
+                FileContent::ReferenceOnly => format!(
+                    "File name: {}\nFile ID: erato_file_id:{}\nThe file is attached as bytes. Erato could not extract text from it. A file accepting tool may access it as erato-file://{}.",
+                    filename, file_id, file_id
+                ),
                 FileContent::Image { .. } => {
                     return Err(eyre::eyre!(
                         "Assistant file {} was expected to be text but resolved as image",

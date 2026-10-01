@@ -130,6 +130,11 @@ pub(crate) async fn resolve_client_tool_files(
                     FileContent::Image { .. } => {
                         entry["unavailableReason"] = "Image bytes are available as a file, but this tool returns text only. Attach the image to a message for image understanding.".into();
                     }
+                    FileContent::ReferenceOnly => {
+                        entry["fileReference"] = format!("erato-file://{id}").into();
+                        entry["contentNotice"] =
+                            "Erato did not extract text from this file.".into();
+                    }
                 },
                 Err(_) => {
                     entry["unavailableReason"] = "File contents could not be extracted.".into()
@@ -206,6 +211,12 @@ pub(crate) fn format_successful_file_content(filename: &str, file_id: Uuid, text
     content.push_str("\n---");
 
     content
+}
+
+pub(crate) fn format_reference_only_file(filename: &str, file_id: Uuid) -> String {
+    format!(
+        "File:\nfile name: {filename}\nfile_id: erato_file_id:{file_id}\nFile bytes are attached. Erato could not extract text. A tool that accepts file references may access the bytes using erato-file://{file_id}."
+    )
 }
 
 /// Resolve TextFilePointer and ImageFilePointer content parts in generation input messages by extracting file contents JIT.
@@ -463,6 +474,9 @@ async fn resolve_file_pointer(
                                 format_file_error_message(&file.filename, file_upload_id, false);
                             ContentPart::Text(ContentPartText { text: content })
                         }
+                        (FileContent::ReferenceOnly, _) => ContentPart::Text(ContentPartText {
+                            text: format_reference_only_file(&file.filename, file_upload_id),
+                        }),
                     },
                     Err(err) => {
                         if is_missing_permissions_error(&err) {
