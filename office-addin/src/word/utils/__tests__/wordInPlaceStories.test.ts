@@ -14,6 +14,7 @@ import {
   applyWordDocumentPlan,
   revertWordDocumentPlan,
 } from "../wordApplyDocumentPlan";
+import { trackWordApply } from "../wordApplyProgress";
 import { decodeWordInPlaceBackup } from "../wordDocumentPackage";
 import {
   captureWordAuthoringSnapshot,
@@ -23,6 +24,7 @@ import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   setWordInPlaceCapabilitiesForTests,
 } from "../wordInPlaceCapabilities";
+import { applyWordPlanInPlace } from "../wordInPlaceExecutor";
 import { classifyWordInPlacePlan } from "../wordInPlacePlan";
 import { resetWordInPlaceLatchForTests } from "../wordInPlaceSwitch";
 import { createWordXmlComparison } from "../wordXmlComparison";
@@ -141,6 +143,13 @@ const twoLineHeader = () =>
     header.append(line);
   });
 const keptLine = { text: SECOND_LINE };
+const EARLIER = "Earlier Reviewer";
+/** The header run with an earlier reviewer's pending removal of bold. */
+const pendingFormatHeader = () =>
+  realisticWordPackageXml().replace(
+    `<w:r><w:t xml:space="preserve">${HEADER}</w:t>`,
+    `<w:r><w:rPr><w:rPrChange w:id="90" w:author="${EARLIER}" w:date="2026-09-01T00:00:00Z"><w:rPr><w:b/></w:rPr></w:rPrChange></w:rPr><w:t xml:space="preserve">${HEADER}</w:t>`,
+  );
 
 afterEach(() => {
   resetWordInPlaceLatchForTests();
@@ -328,6 +337,73 @@ describe("header and footer text in place", { timeout: 60_000 }, () => {
     expect(reverted.status, report(reverted, "revert")).toBe("reverted");
     expect(host.insert).not.toHaveBeenCalled();
     expect(partSignatures(host.ooxml())).toEqual(original);
+  });
+
+  it("blocks a tracked header write over another reviewer's formatting revision", async () => {
+    const host = install({ trackChanges: true }, pendingFormatHeader());
+    host.setTrackingMode("TrackAll");
+    const original = headerXml(host.ooxml());
+    const snapshot = await captureRealisticSnapshot("message-A", "TrackAll");
+    const plan = storyPlan(snapshot, [header({ text: `${HEADER}, revised` })]);
+    expect(
+      classifyWordInPlacePlan(
+        plan,
+        snapshot,
+        ALL_WORD_IN_PLACE_CAPABILITIES,
+        compiledOf(plan, snapshot),
+      ),
+    ).toEqual({ fallback: "stories" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.events.length = 0;
+    const applied = await apply(plan, snapshot);
+    expect(applied.status).toBe("blocked");
+    expect(applied.diagnostic).toMatchObject({
+      reason: "tracking",
+      details: { fallbackReasons: ["stories"] },
+    });
+    expect(host.events.filter((e) => e.startsWith("mutation:"))).toEqual([]);
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(headerXml(host.ooxml())).toBe(original);
+    expect(original).toContain(`w:author="${EARLIER}"`);
+    expect(snapshot.used).toBe(false);
+  });
+
+  it("refuses a tracked write to a target that already holds revisions, even when admitted", async () => {
+    const host = install({ trackChanges: true }, pendingFormatHeader());
+    host.setTrackingMode("TrackAll");
+    const original = headerXml(host.ooxml());
+    const snapshot = await captureRealisticSnapshot("message-A", "TrackAll");
+    const plan = storyPlan(snapshot, [header({ text: `${HEADER}, revised` })]);
+    const plain = { bold: false, italic: false, underline: false };
+    host.events.length = 0;
+    // Mis-admitted on purpose: the classifier sends this to the import.
+    const result = await applyWordPlanInPlace({
+      snapshot,
+      compiled: compiledOf(plan, snapshot),
+      ops: [
+        {
+          kind: "text",
+          ref: "header1",
+          paragraph: 0,
+          runs: [{ text: `${HEADER}, revised`, ...plain }],
+          original: [{ text: HEADER, ...plain }],
+          story: {
+            kind: "header",
+            part: "/word/header1.xml",
+            section: 0,
+            type: "Primary",
+          },
+        },
+      ],
+      progress: trackWordApply("plan"),
+      observePackage: async () => undefined,
+    });
+    expect(result).toEqual({
+      fallback: "tracking",
+      details: { fallbackReasons: ["native-target"] },
+    });
+    expect(host.events.filter((e) => e.startsWith("mutation:"))).toEqual([]);
+    expect(headerXml(host.ooxml())).toBe(original);
   });
 
   it("refuses a header that changed since the capture", async () => {

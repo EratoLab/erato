@@ -9,6 +9,7 @@ import {
 import { wordPlanOutput } from "./wordDocumentPlan";
 import { wordBlockParagraphs } from "./wordLiveParagraphs";
 import { createNativeContentSignature } from "./wordNativeContent";
+import { WORD_REVISION_ELEMENTS } from "./wordRevisionViews";
 import { wordTableCellTextEditIssue } from "./wordTableCellText";
 
 import type {
@@ -1113,7 +1114,14 @@ function storyOps(
         return "stories";
       const runs = wordPlanBlockRuns(block);
       if (sameWordInPlaceRuns(runs, shape.runs)) continue;
-      if (!block.text || !shape.runs.length) return "stories";
+      if (
+        !block.text ||
+        !shape.runs.length ||
+        WORD_REVISION_ELEMENTS.some(
+          (name) => from[index].getElementsByTagNameNS(W, name).length > 0,
+        )
+      )
+        return "stories";
       ops.push({
         kind: "text",
         ref: source.id,

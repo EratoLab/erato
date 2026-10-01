@@ -47,6 +47,7 @@ import {
   preservedWordStories,
   sameWordPreservedParts,
 } from "./wordNativeContent";
+import { WORD_REVISION_ELEMENTS } from "./wordRevisionViews";
 import { wordSourceDetails, resolveWordSource } from "./wordRichContent";
 import {
   extractWordSections,
@@ -203,23 +204,7 @@ export function captureWordAuthoringSnapshot(
         "commentReference",
         "footnoteReference",
         "endnoteReference",
-        // Any pending revision, formatting ones included: rewriting the block would accept or
-        // reject someone else's change, and a tracked write could not be rejected apart from it.
-        "ins",
-        "del",
-        "moveFrom",
-        "moveTo",
-        "pPrChange",
-        "rPrChange",
-        "numberingChange",
-        "tblPrChange",
-        "tblPrExChange",
-        "tblGridChange",
-        "trPrChange",
-        "tcPrChange",
-        "cellIns",
-        "cellDel",
-        "cellMerge",
+        ...WORD_REVISION_ELEMENTS,
       ]);
       const specialRun = nodes.some((n) =>
         all(n, "r").some((r) =>

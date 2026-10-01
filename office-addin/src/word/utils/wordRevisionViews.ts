@@ -21,6 +21,25 @@ const PROPERTY_CHANGES = new Set([
   "tblGridChange",
   "numberingChange",
 ]);
+/** Every element that records a pending revision. Rewriting content that holds one would accept or
+ * reject someone else's change, and a tracked write could not be rejected apart from it. */
+export const WORD_REVISION_ELEMENTS = [
+  "ins",
+  "del",
+  "moveFrom",
+  "moveTo",
+  "pPrChange",
+  "rPrChange",
+  "numberingChange",
+  "tblPrChange",
+  "tblPrExChange",
+  "tblGridChange",
+  "trPrChange",
+  "tcPrChange",
+  "cellIns",
+  "cellDel",
+  "cellMerge",
+] as const;
 /** CT_ParaRPr and CT_RPr keep revision markers ahead of the properties. */
 const MARKERS = new Set([...INSERTED, ...DELETED]);
 

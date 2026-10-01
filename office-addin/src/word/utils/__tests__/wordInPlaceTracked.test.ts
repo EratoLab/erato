@@ -14,14 +14,19 @@ import {
   applyWordDocumentPlan,
   revertWordDocumentPlan,
 } from "../wordApplyDocumentPlan";
+import { trackWordApply } from "../wordApplyProgress";
 import { decodeWordInPlaceBackup } from "../wordDocumentPackage";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
-import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
+import {
+  captureWordAuthoringSnapshot,
+  compileWordDocumentPlan,
+} from "../wordDocumentXml";
 import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   setWordInPlaceCapabilitiesForTests,
 } from "../wordInPlaceCapabilities";
+import { applyWordPlanInPlace } from "../wordInPlaceExecutor";
 import { resetWordInPlaceLatchForTests } from "../wordInPlaceSwitch";
 import { wordBodyParagraphElements } from "../wordLiveParagraphs";
 import { createNativeContentSignature } from "../wordNativeContent";
@@ -1129,6 +1134,45 @@ describe("Track Changes gates", { timeout: 60_000 }, () => {
     });
     expect(mutations(host.events)).toEqual([]);
     expect(snapshot.used).toBe(false);
+  });
+
+  it("refuses a tracked write to a paragraph that already holds revisions, even when admitted", async () => {
+    const host = install();
+    const snapshot = await capture();
+    const before = host.ooxml();
+    const plain = { bold: false, italic: false, underline: false };
+    const plan = planOf(snapshot, {
+      replace: { [CLOSING]: [paragraph("c", "Closing paragraph, revised.")] },
+    });
+    host.events.length = 0;
+    // Mis-admitted on purpose: the earlier reviewer's insertion makes this block native.
+    const result = await applyWordPlanInPlace({
+      snapshot,
+      compiled: captureWordAuthoringSnapshot(
+        compileWordDocumentPlan(plan, snapshot),
+        snapshot.identity,
+        "Off",
+        true,
+        "verify",
+      ),
+      ops: [
+        {
+          kind: "text",
+          ref: refOf(snapshot, CLOSING),
+          paragraph: 0,
+          runs: [{ text: "Closing paragraph, revised.", ...plain }],
+          original: [{ text: `${CLOSING} Added earlier.`, ...plain }],
+        },
+      ],
+      progress: trackWordApply("plan"),
+      observePackage: async () => undefined,
+    });
+    expect(result).toEqual({
+      fallback: "tracking",
+      details: { fallbackReasons: ["native-target"] },
+    });
+    expect(mutations(host.events)).toEqual([]);
+    expect(host.ooxml()).toBe(before);
   });
 
   it("keeps the earlier capture issue when tracked writing is unavailable", async () => {

@@ -631,6 +631,19 @@ export async function applyWordPlanInPlace(
             return changes;
           })
         : [];
+      // Restore rejects every change in a written paragraph, so it must hold only this write's.
+      const targetChanges = trackedWrite
+        ? [
+            ...ops.flatMap((op, i) =>
+              op.kind === "insert" ? [] : [proxies[positions[i]]],
+            ),
+            ...storyOps.map(storyProxy),
+          ].map((paragraph) => {
+            const changes = paragraph.getTrackedChanges();
+            changes.load("items/type");
+            return changes;
+          })
+        : [];
       const joined = new Map(
         ops.flatMap((op) => {
           const ref =
@@ -704,6 +717,11 @@ export async function applyWordPlanInPlace(
         ]);
       if ([...joined.values()].some((list) => list.isNullObject))
         return fallback(liveB.length, ["/word/document.xml body: list"]);
+      if (targetChanges.some((changes) => changes.items.length))
+        return {
+          fallback: "tracking",
+          details: { fallbackReasons: ["native-target"] },
+        };
       if (boundaryChanges.some((changes) => changes.items.length))
         return {
           fallback: "tracking",
