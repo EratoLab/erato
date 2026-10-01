@@ -243,9 +243,27 @@ empty array uses defaults. Disabling prevents new discovery and processing,
 including queued work, without deleting searchable data. In-flight work may
 finish. Priority changes apply to subsequent work without restarting.
 
+Source-aware implementations additionally report `indexing_sources`, a nullable
+array of `{source_id, enabled, priority}` using IDs from `sources.list.v1`.
+The same whole-array inheritance and priority rules apply. These source policies
+are authoritative; `indexing_mailboxes` is a compatibility projection for older
+clients. Source edits MUST preserve unrelated and temporarily disconnected source
+policies. A legacy mailbox edit applies to all sources belonging to that mailbox
+and MUST preserve source-only policies such as Teams. Unknown source IDs are
+preserved but do not schedule work until discovered. Unlisted sources use the
+implementation's source defaults. Clients MUST NOT infer support for source
+controls from `sources.list.v1` alone: older servers may list sources but merely
+preserve unknown configuration fields. Reporting `indexing_sources` in status
+configuration indicates support for applying these controls.
+
+Teams source identities currently represent local IndexedDB caches. Multiple
+caches are distinct sources even if their display names match. Multiple logins
+within a single cache share its source policy and statistics; clients MUST NOT
+present cache-scoped statistics as independently measured login statistics.
+
 Updated status responses include `configuration` containing both persisted
 layers so clients can preserve unrelated properties when editing. Clients must
-not overwrite saved settings on connection. If both mailbox arrays are null or
+not overwrite saved settings on connection. If both mailbox and source arrays are null or
 absent, clients should match the signed-in user's email case-insensitively to a
 discovered mailbox and send a configure request assigning it priority `0`.
 Explicit arrays, including empty arrays, must not be initialized again.
@@ -507,7 +525,12 @@ includes terminal failures and is not ETA to make every document searchable.
 ### Coverage, depth and health
 
 Coverage partitions knownEligible into indexedCurrent, emptyCurrent,
-unindexableCurrent, stale and neverProcessed; each document occurs in one state.
+unindexableCurrent, missingFromLocalCacheCurrent (when reported), stale and
+neverProcessed; each document occurs in one state. The optional missing-cache
+counter identifies current revisions whose local content is unavailable. These
+are terminal outcomes, distinct from empty documents and extraction failures.
+Older servers may omit the counter; explicit null still means unknown. Clients
+MUST NOT claim full searchable coverage for missing-cache documents.
 An older failed receipt is stale if its revision no longer matches. Pending
 deletions are separate. Failed documents never increase searchable coverage.
 

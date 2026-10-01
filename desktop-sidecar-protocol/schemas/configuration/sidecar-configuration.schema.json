@@ -11,8 +11,13 @@
       "items": {
         "type": "object",
         "properties": {
-          "mailbox_id": { "type": "string", "format": "uuid" },
-          "enabled": { "type": "boolean" },
+          "mailbox_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
           "priority": {
             "description": "Indexing priority; lower numbers are processed first. Array order has no effect.",
             "type": "integer",
@@ -39,6 +44,30 @@
       "minimum": 1,
       "maximum": 9007199254740991,
       "description": "Global maximum document-processing starts per rolling 60 seconds, shared by all workers, kinds and generations. Retry attempts consume this budget; one extraction shared by generations consumes it once. Deletion-only cleanup does not consume it. Null or absence inherits the other layer; the sidecar default is 40. Zero is invalid and does not pause indexing."
+    },
+    "indexing_sources": {
+      "description": "Source indexing overrides keyed by sourceId from sources.list.v1. Lower priorities are processed first, independent of array order. Source IDs must be unique. Null inherits the other layer; an empty array uses source defaults. Disabling stops new discovery and processing while retaining the existing index. This is authoritative when supported; indexing_mailboxes is a legacy projection. Older sidecars may preserve this field without applying it.",
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "priority": {
+            "description": "Indexing priority; lower numbers are processed first. Array order has no effect.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["source_id", "enabled", "priority"],
+        "additionalProperties": true
+      }
     }
   },
   "additionalProperties": true

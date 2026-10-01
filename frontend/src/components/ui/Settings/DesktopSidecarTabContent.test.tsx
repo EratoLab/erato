@@ -75,6 +75,7 @@ it("retains the directory command for a legacy sidecar", () => {
   fireEvent.click(
     screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
   );
+  fireEvent.click(screen.getByRole("button", { name: "Connection" }));
   fireEvent.click(screen.getByRole("button", { name: "Open data directory" }));
   expect(sidecar.invoke).toHaveBeenCalledWith(
     "sidecar.open_data_directory.v1",
@@ -117,3 +118,30 @@ it.each([
     }
   },
 );
+
+it("introduces the sidecar and distinguishes permission settings from connection actions", () => {
+  sidecar.state = "ready";
+  render(<DesktopSidecarRow />);
+  const toggle = screen.getByRole("button", {
+    name: /Desktop Sidecar.*Connected · this device/,
+  });
+  fireEvent.click(toggle);
+  expect(
+    screen.getByText(
+      "Connect the assistant to emails, files and Teams messages available on this device.",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Tool permissions" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/Permission changes are saved automatically/),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Retry connection" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Connection" }));
+  expect(
+    screen.getByRole("button", { name: "Retry connection" }),
+  ).toBeVisible();
+});
