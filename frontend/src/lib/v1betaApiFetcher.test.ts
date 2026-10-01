@@ -3,7 +3,140 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setAuthRecoveryHandler } from "@/auth/authRecovery";
 import { setIdToken } from "@/auth/tokenStore";
 
+import {
+  ClientOperationCoordinator,
+  clientOperationApi,
+} from "./clientOperations/coordinator";
+import { localTaskApi } from "./desktopSidecar/localTaskCoordinator";
 import { v1betaApiFetch } from "./generated/v1betaApi/v1betaApiFetcher";
+
+describe("v1betaApiFetch optional query parameters", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function mockFetch(body: unknown = {}) {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => body,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it.each([
+    ["operations", clientOperationApi.list, "/api/v1beta/me/client-operations"],
+    [
+      "receipts",
+      localTaskApi.receipts,
+      "/api/v1beta/me/local-delegation/exports",
+    ],
+  ] as const)(
+    "omits the first-page cursor for %s and preserves later cursors",
+    async (_name, list, endpoint) => {
+      const fetchMock = mockFetch({ jobs: [], operations: [] });
+      const signal = new AbortController().signal;
+      const cursor = "550e8400-e29b-41d4-a716-446655440000";
+
+      await list(undefined, signal);
+      await list(cursor, signal);
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        endpoint,
+        expect.objectContaining({ signal }),
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        `${endpoint}?after=${cursor}`,
+        expect.objectContaining({ signal }),
+      );
+    },
+  );
+
+  it.each([undefined, {}, { after: undefined }])(
+    "has no trailing question mark for %j",
+    async (queryParams) => {
+      const fetchMock = mockFetch();
+      await v1betaApiFetch({ url: "/probe", method: "get", queryParams });
+      expect(fetchMock.mock.calls[0][0]).toBe("/probe");
+    },
+  );
+
+  it("preserves defined values and encoding without mutating query parameters", async () => {
+    const fetchMock = mockFetch();
+    const queryParams = Object.freeze({
+      after: undefined,
+      limit: 0,
+      active: false,
+      empty: "",
+      q: "a b&c+ü",
+      literal: "undefined",
+      nullable: null,
+    });
+    await v1betaApiFetch({ url: "/probe", method: "get", queryParams });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/probe?limit=0&active=false&empty=&q=a+b%26c%2B%C3%BC&literal=undefined&nullable=null",
+    );
+    expect(Object.hasOwn(queryParams, "after")).toBe(true);
+  });
+
+  it("starts every coordinator sweep without a cursor and follows server pagination", async () => {
+    const cursor = "550e8400-e29b-41d4-a716-446655440000";
+    const page = { account_id: "account", enabled: true, operations: [] };
+    const fetchMock = mockFetch();
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => (url.includes("?") ? page : { ...page, after: cursor }),
+    }));
+    const coordinator = new ClientOperationCoordinator(
+      "account",
+      clientOperationApi,
+      [],
+      vi.fn(),
+    );
+    try {
+      await coordinator.reconcile();
+      await coordinator.reconcile();
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        "/api/v1beta/me/client-operations",
+        `/api/v1beta/me/client-operations?after=${cursor}`,
+        "/api/v1beta/me/client-operations",
+        `/api/v1beta/me/client-operations?after=${cursor}`,
+      ]);
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
+  it("receives cloud disablement through the real adapter and stops polling", async () => {
+    const fetchMock = mockFetch({
+      account_id: "account",
+      enabled: false,
+      operations: [],
+    });
+    const coordinator = new ClientOperationCoordinator(
+      "account",
+      clientOperationApi,
+      [],
+      vi.fn(),
+    );
+    try {
+      await coordinator.reconcile();
+      await coordinator.reconcile();
+      expect(coordinator.enabled).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        "/api/v1beta/me/client-operations",
+      );
+    } finally {
+      coordinator.dispose();
+    }
+  });
+});
 
 describe("v1betaApiFetch auth injection", () => {
   afterEach(() => {

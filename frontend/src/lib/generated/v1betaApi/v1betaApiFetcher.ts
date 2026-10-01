@@ -124,10 +124,14 @@ export async function v1betaApiFetch<
 
 const resolveUrl = (
   url: string,
-  queryParams: Record<string, string> = {},
+  queryParams: Record<string, unknown> = {},
   pathParams: Record<string, string> = {},
 ) => {
-  let query = new URLSearchParams(queryParams).toString();
+  let query = new URLSearchParams(
+    Object.entries(queryParams)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [key, String(value)]),
+  ).toString();
   if (query) query = `?${query}`;
   return (
     url.replace(/\{\w*\}/g, (key) => pathParams[key.slice(1, -1)] ?? "") + query
