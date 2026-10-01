@@ -28,6 +28,7 @@ import {
   WORD_SUBMIT_PLAN_TOOL,
 } from "../../utils/wordDocumentSubmission";
 import { wordDocumentFingerprint } from "../../utils/wordDocumentXml";
+import { resetWordInPlaceLatchForTests } from "../../utils/wordInPlaceSwitch";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
 import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
@@ -184,6 +185,32 @@ function holdWord() {
   });
   return release;
 }
+function renderRealisticCard(
+  snapshot: ReturnType<typeof readySnapshot>,
+  content: string,
+) {
+  const messageId = String(mock.artifact.messageId);
+  const capture: WordDocumentCapture = {
+    identity: "doc-A",
+    authoring: snapshot,
+    ordinalMap: new Map(),
+    paragraphsSent: snapshot.blocks.length,
+    renderedOrdinals: new Set(),
+    partialOrdinal: null,
+  };
+  return render(
+    <WordWriteProvider
+      documentIdentity="doc-A"
+      capturesByAssistantMessageId={new Map([[messageId, capture]])}
+    >
+      <WordHostCardRenderer
+        language="erato-word-document-plan"
+        content={content}
+      />
+    </WordWriteProvider>,
+    { wrapper: TestTheme },
+  );
+}
 beforeEach(() => {
   i18n.load("en", {});
   i18n.activate("en");
@@ -200,6 +227,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  delete window.WORD_FORCE_IMPORT_APPLY;
+  resetWordInPlaceLatchForTests();
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -492,6 +521,7 @@ describe("structural document review", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
   it("discloses Word's own first-paragraph spacing change and keeps the exact original downloadable after a content-tier Revert", async () => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
     const word = installWordOoxmlHost(realisticWordPackageXml(), {
       profile: "word-pc-16.0.20326",
       spacingDrift: true,
@@ -545,6 +575,98 @@ describe("structural document review", () => {
     expect(
       screen.getByRole("button", { name: "Download original document" }),
     ).toBeInTheDocument();
+  });
+  it("applies an eligible rewrite in place, then undoes exactly that paragraph", async () => {
+    const word = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    const original = wordDocumentFingerprint(word.ooxml());
+    const messageId = String(mock.artifact.messageId);
+    const snapshot = await captureRealisticSnapshot(messageId);
+    renderRealisticCard(
+      snapshot,
+      JSON.stringify(statusRewritePlan(snapshot, "Status: revised in place.")),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply document rewrite" }),
+    );
+    await screen.findByText("Document rewrite applied");
+    expect(word.insert).not.toHaveBeenCalled();
+    expect(word.ooxml()).toContain("Status: revised in place.");
+    expect(screen.queryByTestId("word-plan-adjustments")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    await screen.findByText("Document body restored");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+  it("keeps the original downloadable when an in-place Revert would overwrite a later edit", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const word = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    const messageId = String(mock.artifact.messageId);
+    const snapshot = await captureRealisticSnapshot(messageId);
+    renderRealisticCard(
+      snapshot,
+      JSON.stringify(statusRewritePlan(snapshot, "Status: revised in place.")),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply document rewrite" }),
+    );
+    await screen.findByText("Document rewrite applied");
+    word.editParagraph(1, "Status: the user's own words.");
+    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    await screen.findByText(/Revert was not run/);
+    expect(word.ooxml()).toContain("Status: the user's own words.");
+    expect(
+      screen.getByRole("button", { name: "Download original document" }),
+    ).toBeInTheDocument();
+  });
+  it("offers the saved original and an in-place restore after Word stopped partway", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const word = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    const original = wordDocumentFingerprint(word.ooxml());
+    const messageId = String(mock.artifact.messageId);
+    const snapshot = await captureRealisticSnapshot(messageId);
+    const plan = statusRewritePlan(snapshot, "Status: two changes.");
+    const closing = snapshot.blocks.findIndex(
+      (b) => b.text === "Closing paragraph.",
+    );
+    plan.entries = snapshot.blocks.map((b, i) =>
+      i === 1 || i === closing
+        ? {
+            kind: "replace",
+            source: [b.ref],
+            blocks: [
+              {
+                id: `n${i}`,
+                type: "paragraph",
+                text: i === 1 ? "Status: two changes." : "Goodbye.",
+              },
+            ],
+          }
+        : { kind: "keep", source: [b.ref] },
+    );
+    renderRealisticCard(snapshot, JSON.stringify(plan));
+    word.failAtCommand(2);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply document rewrite" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("partially changed"),
+    );
+    expect(
+      screen.getByRole("button", { name: "Download original document" }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore original document" }),
+    );
+    await screen.findByText("Document body restored");
+    expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
+    expect(word.insert).not.toHaveBeenCalled();
   });
   it("respects the structural action permission independently of paragraph edits", () => {
     mock.decisions = {

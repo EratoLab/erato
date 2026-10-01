@@ -7,6 +7,8 @@ import {
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+const MC = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
 const REL = "http://schemas.openxmlformats.org/package/2006/relationships";
 const OFFICE_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -34,9 +36,125 @@ export interface WordOoxmlHostOptions {
   url?: string;
   /** Defaults to every requirement set. */
   isSetSupported?: (name: string, version?: string) => boolean;
+  /** body.paragraphs also lists text-box paragraphs, unlike the package prediction. */
+  includeTextBoxParagraphs?: boolean;
+  /** Adversarial: insertText "Replace" drops the first run's properties. */
+  replaceDropsRunProperties?: boolean;
 }
 
-type When = "now" | "after-capture" | "after-import";
+type When =
+  | "now"
+  | "after-capture"
+  | "after-import"
+  /** Right after that many further context.sync() calls have completed. */
+  | { afterSync: number };
+
+/** CT_RPr child order; Word writes run properties in this order. */
+const RUN_PROPERTY_ORDER = [
+  "rStyle",
+  "rFonts",
+  "b",
+  "bCs",
+  "i",
+  "iCs",
+  "caps",
+  "smallCaps",
+  "strike",
+  "dstrike",
+  "outline",
+  "shadow",
+  "emboss",
+  "imprint",
+  "noProof",
+  "snapToGrid",
+  "vanish",
+  "webHidden",
+  "color",
+  "spacing",
+  "w",
+  "kern",
+  "position",
+  "sz",
+  "szCs",
+  "highlight",
+  "u",
+  "effect",
+  "bdr",
+  "shd",
+  "fitText",
+  "vertAlign",
+  "rtl",
+  "cs",
+  "em",
+  "lang",
+  "eastAsianLayout",
+  "specVanish",
+  "oMath",
+];
+
+function setRunMark(run: Element, names: string[], value: string | null): void {
+  const doc = run.ownerDocument;
+  let props = child(run, "rPr");
+  for (const name of names) child(props, name)?.remove();
+  if (value === null) {
+    if (props && !props.children.length && !props.attributes.length)
+      props.remove();
+    return;
+  }
+  if (!props) {
+    props = doc.createElementNS(W, "w:rPr");
+    run.prepend(props);
+  }
+  for (const name of names) {
+    const element = doc.createElementNS(W, `w:${name}`);
+    if (value) element.setAttributeNS(W, "w:val", value);
+    const position = RUN_PROPERTY_ORDER.indexOf(name);
+    props.insertBefore(
+      element,
+      Array.from(props.children).find(
+        (e) =>
+          e.namespaceURI === W &&
+          RUN_PROPERTY_ORDER.indexOf(e.localName) > position,
+      ) ?? null,
+    );
+  }
+}
+
+function newRun(doc: Document, text: string, props?: Element): Element {
+  const run = doc.createElementNS(W, "w:r");
+  if (props) run.append(props.cloneNode(true));
+  const pieces = text.split("\t");
+  pieces.forEach((piece, i) => {
+    if (i) run.append(doc.createElementNS(W, "w:tab"));
+    if (!piece && pieces.length > 1) return;
+    const t = doc.createElementNS(W, "w:t");
+    t.setAttributeNS(XML_NS, "xml:space", "preserve");
+    t.textContent = piece;
+    run.append(t);
+  });
+  return run;
+}
+
+/** Text as Paragraph.text reports it: soft breaks as \v, deleted and field-code text left out. */
+function paragraphText(paragraph: Element): string {
+  let text = "";
+  const visit = (e: Element) => {
+    if (e.namespaceURI === W) {
+      if (
+        ["del", "moveFrom", "instrText", "delText", "pPr", "rPr"].includes(
+          e.localName,
+        )
+      )
+        return;
+      if (e.localName === "t") text += e.textContent ?? "";
+      else if (e.localName === "tab") text += "\t";
+      else if (e.localName === "br" || e.localName === "cr") text += "\v";
+    }
+    Array.from(e.children).forEach(visit);
+  };
+  visit(paragraph);
+  return text;
+}
 
 const parse = (xml: string) =>
   new DOMParser().parseFromString(xml, "application/xml");
@@ -358,6 +476,326 @@ export function installWordOoxmlHost(
   let pending:
     | { bytes: Uint8Array; options: Word.InsertFileOptions | undefined }
     | undefined;
+  // Paragraph object model over the same package; IDs survive edits but not imports, as in Word.
+  let liveDoc: Document | undefined;
+  let carriedIds: string[] | undefined;
+  const paragraphIds = new WeakMap<Element, string>();
+  let paragraphSeed = 0;
+  const newParagraphId = () =>
+    `{${(0x5e170000 + ++paragraphSeed).toString(16).toUpperCase()}-0A1B-4C2D-8E3F-${String(paragraphSeed).padStart(12, "0")}}`;
+  const mainBody = (doc: Document) =>
+    partRoot(doc, "/word/document.xml")
+      ? elements(partRoot(doc, "/word/document.xml")!, W, "body")[0]
+      : undefined;
+  const bodyParagraphs = (doc: Document) => {
+    const body = mainBody(doc);
+    if (!body) return [];
+    return elements(body, W, "p").filter((p) => {
+      for (let a = p.parentElement; a && a !== body; a = a.parentElement) {
+        if (a.namespaceURI === MC && a.localName === "Fallback") return false;
+        if (
+          !settings.includeTextBoxParagraphs &&
+          a.namespaceURI === W &&
+          a.localName === "txbxContent"
+        )
+          return false;
+      }
+      return true;
+    });
+  };
+  const live = (): Document => {
+    if (liveDoc) return liveDoc;
+    const doc = parse(wordDocumentFileToOoxml(current));
+    const paragraphs = bodyParagraphs(doc);
+    const carried =
+      carriedIds?.length === paragraphs.length ? carriedIds : undefined;
+    paragraphs.forEach((p, i) =>
+      paragraphIds.set(p, carried?.[i] ?? newParagraphId()),
+    );
+    carriedIds = undefined;
+    liveDoc = doc;
+    return doc;
+  };
+  const replaceCurrent = (bytes: Uint8Array, keepIds: boolean) => {
+    carriedIds =
+      keepIds && liveDoc
+        ? bodyParagraphs(liveDoc).map((p) => paragraphIds.get(p) ?? "")
+        : undefined;
+    liveDoc = undefined;
+    current = bytes;
+  };
+  const idOf = (p: Element) => {
+    let id = paragraphIds.get(p);
+    if (!id) paragraphIds.set(p, (id = newParagraphId()));
+    return id;
+  };
+  type Command = { write: boolean; name: string; run: () => void };
+  const queue: Command[] = [];
+  let failAt: number | undefined;
+  let failMessage = "Word rejected the change.";
+  let writesSeen = 0;
+  let omDirty = false;
+  const afterSyncs: { remaining: number; apply: () => void }[] = [];
+  const itemNotFound = () =>
+    Object.assign(new Error("The requested resource doesn't exist."), {
+      code: "ItemNotFound",
+    });
+  const alive = (element: Element) => {
+    if (element.ownerDocument !== liveDoc || !liveDoc.contains(element))
+      throw itemNotFound();
+    return element;
+  };
+  const enqueue = (write: boolean, name: string, run: () => void) =>
+    queue.push({ write, name, run });
+  const result = <T>(compute: () => T) => {
+    const holder = { value: undefined as unknown as T };
+    enqueue(false, "read", () => {
+      holder.value = compute();
+    });
+    return holder;
+  };
+  const loadedValue = (
+    loaded: Map<string, unknown>,
+    property: string,
+  ): unknown => {
+    if (!loaded.has(property))
+      throw Object.assign(
+        new Error(`The property '${property}' is not available.`),
+        { code: "PropertyNotLoaded" },
+      );
+    return loaded.get(property);
+  };
+  const runsOf = (p: Element) => elements(p, W, "r");
+  const rangeProxy = (runs: () => Element[]) => {
+    const mark = (names: string[], value: string | null) => () =>
+      runs().forEach((run) => setRunMark(alive(run), names, value));
+    return {
+      font: {
+        set bold(value: boolean) {
+          enqueue(true, "font.bold", mark(["b", "bCs"], value ? "" : null));
+        },
+        set italic(value: boolean) {
+          enqueue(true, "font.italic", mark(["i", "iCs"], value ? "" : null));
+        },
+        set underline(value: string) {
+          enqueue(
+            true,
+            "font.underline",
+            mark(["u"], value === "None" ? null : value.toLowerCase()),
+          );
+        },
+      },
+    };
+  };
+  const cellProxy = (resolve: () => Element) => {
+    const loaded = new Map<string, unknown>();
+    return {
+      load: (properties: string) =>
+        enqueue(false, "load", () => {
+          let cell: Element | undefined;
+          for (let a = resolve().parentElement; a; a = a.parentElement)
+            if (a.namespaceURI === W && a.localName === "tc") {
+              cell = a;
+              break;
+            }
+          const row = cell?.parentElement;
+          const siblings = (e: Element | null | undefined, name: string) =>
+            Array.from(e?.parentElement?.children ?? []).filter(
+              (c) => c.namespaceURI === W && c.localName === name,
+            );
+          const values: Record<string, unknown> = {
+            isNullObject: !cell,
+            rowIndex: row ? siblings(row, "tr").indexOf(row) : undefined,
+            cellIndex: cell ? siblings(cell, "tc").indexOf(cell) : undefined,
+          };
+          loaded.set("isNullObject", values.isNullObject);
+          for (const name of properties.split(","))
+            if (name.trim() !== "isNullObject" && !values.isNullObject)
+              loaded.set(name.trim(), values[name.trim()]);
+        }),
+      get isNullObject() {
+        return loadedValue(loaded, "isNullObject");
+      },
+      get rowIndex() {
+        return loadedValue(loaded, "rowIndex");
+      },
+      get cellIndex() {
+        return loadedValue(loaded, "cellIndex");
+      },
+    };
+  };
+  const paragraphValues = (p: Element): Record<string, unknown> => {
+    let nesting = 0;
+    for (let a = p.parentElement; a; a = a.parentElement)
+      if (a.namespaceURI === W && a.localName === "tbl") nesting++;
+    return {
+      uniqueLocalId: idOf(p),
+      tableNestingLevel: nesting,
+      text: paragraphText(p),
+    };
+  };
+  const paragraphOoxml = (p: Element) => {
+    const doc = live();
+    const packagePart = (name: string, contentType: string, root?: Element) =>
+      root
+        ? `<pkg:part pkg:name="${name}" pkg:contentType="${contentType}"><pkg:xmlData>${new XMLSerializer().serializeToString(root)}</pkg:xmlData></pkg:part>`
+        : "";
+    const wrapper = parse(`<w:document xmlns:w="${W}"><w:body/></w:document>`);
+    const body = elements(wrapper, W, "body")[0];
+    body.append(wrapper.importNode(p, true));
+    body.append(wrapper.createElementNS(W, "w:sectPr"));
+    return `<pkg:package xmlns:pkg="${PKG}">${packagePart(
+      "/word/document.xml",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+      wrapper.documentElement,
+    )}${packagePart(
+      "/word/styles.xml",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
+      partRoot(doc, "/word/styles.xml"),
+    )}${packagePart(
+      "/word/numbering.xml",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml",
+      partRoot(doc, "/word/numbering.xml"),
+    )}</pkg:package>`;
+  };
+  const paragraphProxy = (
+    resolve: () => Element,
+    loaded = new Map<string, unknown>(),
+  ): Word.Paragraph => {
+    const target = () => alive(resolve());
+    const proxy = {
+      load: (properties: string) =>
+        enqueue(false, "load", () => {
+          const values = paragraphValues(target());
+          for (const name of properties.split(","))
+            loaded.set(name.trim(), values[name.trim()]);
+        }),
+      get uniqueLocalId() {
+        return loadedValue(loaded, "uniqueLocalId");
+      },
+      get tableNestingLevel() {
+        return loadedValue(loaded, "tableNestingLevel");
+      },
+      get text() {
+        return loadedValue(loaded, "text");
+      },
+      getText: () => result(() => paragraphText(target())),
+      getOoxml: () => result(() => paragraphOoxml(target())),
+      get parentTableCellOrNullObject() {
+        return cellProxy(target);
+      },
+      insertText: (text: string, location: string) => {
+        let inserted: Element[] = [];
+        enqueue(true, "insertText", () => {
+          const p = target();
+          const runs = runsOf(p);
+          const first = child(runs[0], "rPr");
+          const last = child(runs.at(-1), "rPr");
+          if (location === "Replace") {
+            for (const node of Array.from(p.childNodes))
+              if (
+                !(
+                  node instanceof Element &&
+                  node.namespaceURI === W &&
+                  node.localName === "pPr"
+                )
+              )
+                node.remove();
+            const run = newRun(
+              p.ownerDocument,
+              text,
+              settings.replaceDropsRunProperties ? undefined : first,
+            );
+            p.append(run);
+            inserted = [run];
+          } else if (location === "End") {
+            const run = newRun(p.ownerDocument, text, last);
+            p.append(run);
+            inserted = [run];
+          } else if (location === "Start") {
+            const run = newRun(p.ownerDocument, text, first);
+            p.insertBefore(run, child(p, "pPr")?.nextSibling ?? p.firstChild);
+            inserted = [run];
+          } else throw new Error(`Unsupported insert location ${location}.`);
+        });
+        return rangeProxy(() => inserted);
+      },
+      insertParagraph: (text: string, location: string) => {
+        let made: Element | undefined;
+        enqueue(true, "insertParagraph", () => {
+          const anchor = target();
+          made = anchor.ownerDocument.createElementNS(W, "w:p");
+          const props = child(anchor, "pPr");
+          if (props) made.append(props.cloneNode(true));
+          if (text) made.append(newRun(anchor.ownerDocument, text));
+          anchor.parentElement!.insertBefore(
+            made,
+            location === "Before" ? anchor : anchor.nextSibling,
+          );
+        });
+        return paragraphProxy(() => {
+          if (!made) throw itemNotFound();
+          return made;
+        });
+      },
+      delete: () => enqueue(true, "delete", () => target().remove()),
+    };
+    return proxy as unknown as Word.Paragraph;
+  };
+  const paragraphCollection = () => {
+    let items: Word.Paragraph[] | undefined;
+    return {
+      load: (properties: string) =>
+        enqueue(false, "load", () => {
+          const names = properties
+            .split(",")
+            .map((name) => name.trim().replace(/^items\//, ""));
+          items = bodyParagraphs(live()).map((p) => {
+            const values = paragraphValues(p);
+            return paragraphProxy(
+              () => p,
+              new Map(names.map((name) => [name, values[name]])),
+            );
+          });
+        }),
+      get items() {
+        if (!items)
+          throw Object.assign(new Error("The collection is not loaded."), {
+            code: "PropertyNotLoaded",
+          });
+        return items;
+      },
+    };
+  };
+  const runQueue = () => {
+    if (!queue.length) return;
+    const doc = live();
+    try {
+      while (queue.length) {
+        const command = queue.shift()!;
+        if (command.write) {
+          writesSeen++;
+          if (failAt !== undefined && writesSeen === failAt) {
+            failAt = undefined;
+            throw Object.assign(new Error(failMessage), {
+              code: "GeneralException",
+              debugInfo: { errorLocation: `Paragraph.${command.name}` },
+            });
+          }
+          events.push(`mutation:${command.name}`);
+          omDirty = true;
+        }
+        command.run();
+      }
+    } finally {
+      queue.length = 0;
+      if (omDirty && liveDoc === doc) {
+        omDirty = false;
+        current = wordDocumentOoxmlToFile(serialize(doc));
+        loadControls();
+      }
+    }
+  };
   let faultAfterWrite: string | undefined;
   let faultBeforeWrite = false;
   let faultLockId: number | undefined;
@@ -445,7 +883,7 @@ export function installWordOoxmlHost(
         props.append(lock);
       }
     }
-    current = wordDocumentOoxmlToFile(serialize(doc));
+    replaceCurrent(wordDocumentOoxmlToFile(serialize(doc)), true);
   };
   const controlProxy = (id: number | undefined): Word.ContentControl => {
     const proxy = {
@@ -477,7 +915,7 @@ export function installWordOoxmlHost(
     return proxy as unknown as Word.ContentControl;
   };
   const set = (bytes: Uint8Array) => {
-    current = new Uint8Array(bytes);
+    replaceCurrent(new Uint8Array(bytes), true);
     loadControls();
   };
   const editNow = (edit: (ooxml: string) => string) =>
@@ -538,6 +976,12 @@ export function installWordOoxmlHost(
     },
     load: vi.fn(),
     insertFileFromBase64: insert,
+    getParagraphByUniqueLocalId: (id: string) =>
+      paragraphProxy(() => {
+        const found = bodyParagraphs(live()).find((p) => idOf(p) === id);
+        if (!found) throw itemNotFound();
+        return found;
+      }),
     contentControls: {
       get items() {
         return [...controls.keys()].map(controlProxy);
@@ -548,12 +992,63 @@ export function installWordOoxmlHost(
     body: {
       insertOoxml: bodyInsert,
       getOoxml: () => ({ value: wordDocumentFileToOoxml(current) }),
+      get paragraphs() {
+        return paragraphCollection();
+      },
+      load: (properties: string) =>
+        enqueue(false, "load", () => {
+          if (properties.split(",").some((p) => p.trim() === "text"))
+            bodyText = bodyParagraphs(live()).map(paragraphText).join("\r");
+        }),
+      get text() {
+        if (bodyText === undefined)
+          throw Object.assign(
+            new Error("The property 'text' is not available."),
+            {
+              code: "PropertyNotLoaded",
+            },
+          );
+        return bodyText;
+      },
+      insertParagraph: (text: string, location: string) => {
+        let made: Element | undefined;
+        enqueue(true, "insertParagraph", () => {
+          const doc = live();
+          const body = mainBody(doc)!;
+          made = doc.createElementNS(W, "w:p");
+          if (text) made.append(newRun(doc, text));
+          const section = Array.from(body.children).find(
+            (e) => e.namespaceURI === W && e.localName === "sectPr",
+          );
+          body.insertBefore(
+            made,
+            location === "Start" ? body.firstChild : (section ?? null),
+          );
+        });
+        return paragraphProxy(() => {
+          if (!made) throw itemNotFound();
+          return made;
+        });
+      },
     },
+  };
+  let bodyText: string | undefined;
+  const afterSync = () => {
+    for (const entry of [...afterSyncs])
+      if (--entry.remaining <= 0) {
+        afterSyncs.splice(afterSyncs.indexOf(entry), 1);
+        entry.apply();
+      }
   };
   const context = {
     document,
     sync: vi.fn(async () => {
       events.push("sync");
+      try {
+        runQueue();
+      } finally {
+        afterSync();
+      }
       let changedLocks = false;
       while (pendingLocks.length) {
         const write = pendingLocks.shift()!;
@@ -588,8 +1083,11 @@ export function installWordOoxmlHost(
           debugInfo: { errorLocation: "Document.insertFileFromBase64" },
         });
       }
-      current = decorateWrite(
-        merged(pending.bytes, current, pending.options, settings, nsid),
+      replaceCurrent(
+        decorateWrite(
+          merged(pending.bytes, current, pending.options, settings, nsid),
+        ),
+        false,
       );
       pending = undefined;
       loadControls();
@@ -625,6 +1123,8 @@ export function installWordOoxmlHost(
   });
   const at = (when: When, apply: () => void) => {
     if (when === "now") apply();
+    else if (typeof when === "object")
+      afterSyncs.push({ remaining: when.afterSync, apply });
     else (when === "after-capture" ? afterCapture : afterImport).push(apply);
   };
   return {
@@ -668,6 +1168,31 @@ export function installWordOoxmlHost(
     /** A user edit to the open document, applied now or right after the next capture/import. */
     userEdit: (edit: (ooxml: string) => string, when: When = "now") =>
       at(when, () => editNow(edit)),
+    /** A user retyping body paragraph `index` (body.paragraphs order); its ID stays the same. */
+    editParagraph: (index: number, text: string, when: When = "now") =>
+      at(when, () => {
+        const doc = live();
+        const paragraph = bodyParagraphs(doc)[index];
+        const props = child(runsOf(paragraph)[0], "rPr");
+        for (const node of Array.from(paragraph.childNodes))
+          if (
+            !(
+              node instanceof Element &&
+              node.namespaceURI === W &&
+              node.localName === "pPr"
+            )
+          )
+            node.remove();
+        paragraph.append(newRun(doc, text, props));
+        current = wordDocumentOoxmlToFile(serialize(doc));
+        loadControls();
+      }),
+    /** The n-th object-model change from now (1-based) is rejected; earlier ones stay written. */
+    failAtCommand: (n: number, message = "Word rejected the change.") => {
+      failAt = writesSeen + n;
+      failMessage = message;
+    },
+    paragraphIds: () => bodyParagraphs(live()).map(idOf),
     resume: () => {
       faultAfterWrite = undefined;
       faultBeforeWrite = false;
@@ -675,6 +1200,7 @@ export function installWordOoxmlHost(
       changeUrlOnFailure = undefined;
       cannotRead = false;
       failingReads.clear();
+      failAt = undefined;
     },
     transform: (value: (bytes: Uint8Array) => Uint8Array) => {
       decorateWrite = value;

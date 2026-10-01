@@ -4,13 +4,30 @@ import {
   wordFullDocumentDifferences,
   wordPackageCounts,
 } from "./wordFullDocumentComparison";
+import { WORD_IN_PLACE_FALLBACKS } from "./wordInPlacePlan";
+import { wordInPlaceAvailability } from "./wordInPlaceSwitch";
 import { createWordXmlComparison } from "./wordXmlComparison";
 
-import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
+import type {
+  WordApplyOutcome,
+  WordDocumentDiagnostic,
+} from "./wordApplyDocumentPlan";
 import type {
   WordApplyAdjustment,
   WordVerifyTier,
 } from "./wordFullDocumentComparison";
+
+export const WORD_APPLY_ROUTES = ["import", "body", "in-place"] as const;
+/** Closed list: why a plan did not run in place. */
+export const WORD_ROUTE_REASONS = [
+  "disabled",
+  "latched",
+  "host-sets",
+  "no-package",
+  "alignment",
+  ...WORD_IN_PLACE_FALLBACKS,
+] as const;
+export type WordRouteReason = (typeof WORD_ROUTE_REASONS)[number];
 
 /** Package shape only: part, customXml and numbering counts reveal duplicated imports without any content. */
 export interface WordPackageStats {
@@ -34,9 +51,51 @@ export interface WordDiagnosticDetails {
   /** WordPlanIssue code of the re-read document, e.g. "unsupported". */
   snapshotIssue?: string;
   /** Most lenient verification tier that was tried. */
-  verifyTier?: WordVerifyTier;
+  verifyTier?: WordVerifyTier | "block";
   adjustments?: WordApplyAdjustment[];
+  route?: WordApplyOutcome["route"];
+  routeReason?: WordRouteReason;
+  inPlaceOps?: number;
+  /** Body paragraph counts: predicted from the captured package and reported by Word. */
+  paragraphs?: { predicted: number; live: number };
+  /** Changes Word wrote before it stopped, and those it never reached. */
+  partial?: { applied: number; untouched: number };
   error?: string;
+}
+
+/** Only error codes/API locations, part paths and counts, never statements, document text or raw debugInfo. */
+export function wordDocumentDiagnostic(
+  stage: WordDocumentDiagnostic["stage"],
+  reason: WordDocumentDiagnostic["reason"],
+  error?: unknown,
+  details: WordDiagnosticDetails = {},
+): WordDocumentDiagnostic {
+  const merged: WordDiagnosticDetails = {
+    ...(error === undefined ? {} : { error: wordErrorText(error) }),
+    ...details,
+  };
+  const record =
+    typeof error === "object" && error !== null
+      ? (error as Record<string, unknown>)
+      : {};
+  const info =
+    typeof record.debugInfo === "object" && record.debugInfo !== null
+      ? (record.debugInfo as Record<string, unknown>)
+      : {};
+  const code = record.code;
+  const location = info.errorLocation;
+  return {
+    stage,
+    reason,
+    ...(typeof code === "string" && /^[A-Za-z][A-Za-z0-9.]{0,79}$/.test(code)
+      ? { officeCode: code }
+      : {}),
+    ...(typeof location === "string" &&
+    /^[A-Za-z][A-Za-z0-9_.()[\]-]{0,159}$/.test(location)
+      ? { officeLocation: location }
+      : {}),
+    ...(Object.keys(merged).length ? { details: merged } : {}),
+  };
 }
 
 const MAX_PARTS = 12;
@@ -142,13 +201,18 @@ function hostLine(): string {
     const value = office?.requirements?.isSetSupported?.("WordApi", version);
     return value === undefined ? "?" : value ? "yes" : "no";
   };
+  const inPlace = wordInPlaceAvailability();
   return [
     `${String(d?.host ?? "?")} ${String(d?.platform ?? "?")} ${d?.version ?? "?"}`,
     `WordApi 1.6: ${supported("1.6")}`,
     `WordApi 1.7: ${supported("1.7")}`,
     `saved document: ${office?.document?.url ? "yes" : "no"}`,
+    `In-place: ${inPlace.enabled ? "on" : `off (${inPlace.reason})`}`,
   ].join(" · ");
 }
+
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
 function packageLine(p: WordPackageStats): string {
   const count = (value: number | undefined, unit: string) =>
@@ -188,8 +252,35 @@ export function renderWordDiagnosticReport(
     ...(details?.snapshotIssue
       ? [`Re-read document issue: ${details.snapshotIssue}`]
       : []),
+    ...(details?.route && WORD_APPLY_ROUTES.includes(details.route)
+      ? [
+          `Route: ${details.route}${
+            details.routeReason &&
+            WORD_ROUTE_REASONS.includes(details.routeReason)
+              ? ` (${details.routeReason})`
+              : ""
+          }`,
+        ]
+      : []),
+    ...(isCount(details?.inPlaceOps)
+      ? [`In-place changes: ${details.inPlaceOps}`]
+      : []),
+    ...(details?.paragraphs &&
+    isCount(details.paragraphs.predicted) &&
+    isCount(details.paragraphs.live)
+      ? [
+          `Paragraphs: ${details.paragraphs.predicted} expected, ${details.paragraphs.live} in Word`,
+        ]
+      : []),
+    ...(details?.partial &&
+    isCount(details.partial.applied) &&
+    isCount(details.partial.untouched)
+      ? [
+          `Partly written: ${details.partial.applied} changed, ${details.partial.untouched} untouched`,
+        ]
+      : []),
     ...(details?.verifyTier &&
-    ["strict", "content"].includes(details.verifyTier)
+    ["strict", "content", "block"].includes(details.verifyTier)
       ? [`Verify tier: ${details.verifyTier}`]
       : []),
     ...(details?.adjustments?.some((code) =>

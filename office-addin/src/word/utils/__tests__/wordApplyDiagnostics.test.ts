@@ -135,4 +135,45 @@ describe("Word apply diagnostics", () => {
       "Host: Word PC 16.0.20326 · WordApi 1.6: yes · WordApi 1.7: no",
     );
   });
+
+  it("reports the route, why the import ran, paragraph counts and a partial write without free text", () => {
+    vi.stubGlobal("Office", {
+      context: {
+        diagnostics: { host: "Word", platform: "PC", version: "16.0.20326" },
+        requirements: { isSetSupported: () => true },
+        document: { url: "file:///report.docx", getFileAsync: () => {} },
+      },
+    });
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    try {
+      const report = renderWordDiagnosticReport("apply", "interrupted", {
+        stage: "write",
+        reason: "host-error",
+        details: {
+          route: "in-place",
+          routeReason: "<private>" as never,
+          inPlaceOps: 3,
+          paragraphs: { predicted: 16, live: 17 },
+          partial: { applied: 2, untouched: 1 },
+          verifyTier: "block",
+        },
+      });
+      expect(report).toContain("Route: in-place\n");
+      expect(report).not.toContain("<private>");
+      expect(report).toContain("In-place changes: 3");
+      expect(report).toContain("Paragraphs: 16 expected, 17 in Word");
+      expect(report).toContain("Partly written: 2 changed, 1 untouched");
+      expect(report).toContain("Verify tier: block");
+      expect(report).toMatch(/· In-place: off \(disabled\)$/);
+      expect(
+        renderWordDiagnosticReport("apply", "interrupted", {
+          stage: "verify",
+          reason: "output-mismatch",
+          details: { route: "import", routeReason: "alignment" },
+        }),
+      ).toContain("Route: import (alignment)");
+    } finally {
+      delete window.WORD_FORCE_IMPORT_APPLY;
+    }
+  });
 });

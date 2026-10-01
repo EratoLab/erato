@@ -3,7 +3,7 @@ import {
   packageStats,
   strictDifferingParts,
   verifyDifferingParts,
-  wordErrorText,
+  wordDocumentDiagnostic as diagnostic,
 } from "./wordApplyDiagnostics";
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
 import {
@@ -34,9 +34,20 @@ import {
   wordDocumentFingerprint,
 } from "./wordDocumentXml";
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
+import { wordInPlaceCapabilities } from "./wordInPlaceCapabilities";
+import {
+  applyWordPlanInPlace,
+  revertWordPlanInPlace,
+} from "./wordInPlaceExecutor";
+import { classifyWordInPlacePlan } from "./wordInPlacePlan";
+import { isWordScopeFingerprint } from "./wordInPlaceState";
+import { wordInPlaceAvailability } from "./wordInPlaceSwitch";
 import { wordWriteHost } from "./wordWriteHost";
 
-import type { WordDiagnosticDetails } from "./wordApplyDiagnostics";
+import type {
+  WordDiagnosticDetails,
+  WordRouteReason,
+} from "./wordApplyDiagnostics";
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
 import type { WordContentControlLocks } from "./wordContentControlWrite";
 import type {
@@ -70,11 +81,14 @@ export interface WordDocumentDiagnostic {
   officeLocation?: string;
   details?: WordDiagnosticDetails;
 }
-/** How a verified write went in: which writer ran and how leniently its result was compared. */
+/** How a verified write went in: which writer ran and how leniently its result was compared.
+ * In place, "block" means untouched blocks kept their content and written ones match the plan. */
 export interface WordApplyOutcome {
-  route: "import" | "body";
-  tier: WordVerifyTier;
+  route: "import" | "body" | "in-place";
+  tier: WordVerifyTier | "block";
   adjustments: WordApplyAdjustment[];
+  /** Object-model changes, for in-place writes. */
+  ops?: number;
 }
 export interface WordDocumentApplyResult {
   status: WordDocumentApplyStatus;
@@ -91,43 +105,8 @@ export interface WordDocumentRevertResult {
   outcome?: WordApplyOutcome;
 }
 
-/** Only error codes/API locations, part paths and counts, never statements, document text or raw debugInfo. */
-function diagnostic(
-  stage: WordDocumentDiagnostic["stage"],
-  reason: WordDocumentDiagnostic["reason"],
-  error?: unknown,
-  details: WordDiagnosticDetails = {},
-): WordDocumentDiagnostic {
-  const merged: WordDiagnosticDetails = {
-    ...(error === undefined ? {} : { error: wordErrorText(error) }),
-    ...details,
-  };
-  const record =
-    typeof error === "object" && error !== null
-      ? (error as Record<string, unknown>)
-      : {};
-  const info =
-    typeof record.debugInfo === "object" && record.debugInfo !== null
-      ? (record.debugInfo as Record<string, unknown>)
-      : {};
-  const code = record.code;
-  const location = info.errorLocation;
-  return {
-    stage,
-    reason,
-    ...(typeof code === "string" && /^[A-Za-z][A-Za-z0-9.]{0,79}$/.test(code)
-      ? { officeCode: code }
-      : {}),
-    ...(typeof location === "string" &&
-    /^[A-Za-z][A-Za-z0-9_.()[\]-]{0,159}$/.test(location)
-      ? { officeLocation: location }
-      : {}),
-    ...(Object.keys(merged).length ? { details: merged } : {}),
-  };
-}
-
 function outcome(
-  route: WordApplyOutcome["route"],
+  route: "import" | "body",
   verification: Extract<WordWriteVerification, { ok: true }>,
 ): WordApplyOutcome {
   return {
@@ -178,6 +157,7 @@ export async function applyWordDocumentPlan(
   onStage?: (stage: WordApplyStage) => void,
 ): Promise<WordDocumentApplyResult> {
   const progress = trackWordApply("plan", onStage);
+  const routing: { reason?: WordRouteReason } = {};
   let result: WordDocumentApplyResult | undefined;
   try {
     result = await applyPlan(
@@ -186,12 +166,58 @@ export async function applyWordDocumentPlan(
       messageId,
       onBeforeWrite,
       progress,
+      routing,
     );
     return result;
   } finally {
-    progress.finish(result?.status ?? "error");
+    const details = result?.diagnostic?.details;
+    progress.finish(result?.status ?? "error", {
+      route: result?.outcome?.route ?? details?.route,
+      routeReason: routing.reason,
+      ops: result?.outcome?.ops ?? details?.inPlaceOps,
+      tier: result?.outcome?.tier ?? details?.verifyTier,
+    });
     if (result?.diagnostic)
       logWordDiagnostic("apply", result.status, result.diagnostic);
+  }
+}
+
+/** The route reason rides on the diagnostic so the copyable report says why the import ran. */
+function imported(
+  result: WordDocumentApplyResult,
+  routeReason: WordRouteReason | undefined,
+  extra: WordDiagnosticDetails,
+): WordDocumentApplyResult {
+  if (!result.diagnostic) return result;
+  return {
+    ...result,
+    diagnostic: {
+      ...result.diagnostic,
+      details: {
+        route: "import",
+        ...(routeReason ? { routeReason } : {}),
+        ...extra,
+        ...result.diagnostic.details,
+      },
+    },
+  };
+}
+
+/** Pure routing; a classifier failure must never block the import that worked before. */
+function routeInPlace(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  prepared: WordAuthoringSnapshot,
+): ReturnType<typeof classifyWordInPlacePlan> {
+  try {
+    return classifyWordInPlacePlan(
+      plan,
+      snapshot,
+      wordInPlaceCapabilities(),
+      prepared,
+    );
+  } catch {
+    return { fallback: "program-mismatch" };
   }
 }
 
@@ -201,6 +227,7 @@ async function applyPlan(
   messageId: string | undefined,
   onBeforeWrite: ((before: string) => void) | undefined,
   progress: WordApplyProgress,
+  routing: { reason?: WordRouteReason },
 ): Promise<WordDocumentApplyResult> {
   progress.stage("checking");
   // Parsing, compiling and verifying below are synchronous; let the busy button paint first.
@@ -239,14 +266,53 @@ async function applyPlan(
         status: "blocked",
         diagnostic: diagnostic("compile", "compile-failed"),
       };
-    if (snapshot.fullDocument)
-      return await applyFullDocument(
-        plan,
-        snapshot,
-        compiled,
-        onBeforeWrite,
-        progress,
+    if (snapshot.fullDocument) {
+      // All or nothing per plan: in place only when every change has an exact object-model inverse.
+      let routeReason: WordRouteReason | undefined;
+      let fallbackDetails: WordDiagnosticDetails = {};
+      const availability = wordInPlaceAvailability();
+      if (!availability.enabled) routeReason = availability.reason;
+      else {
+        const route = routeInPlace(plan, snapshot, prepared);
+        if ("fallback" in route) routeReason = route.fallback;
+        else if (!route.ops.length) {
+          snapshot.used = true;
+          return {
+            status: "applied",
+            outcome: {
+              route: "in-place",
+              tier: "block",
+              adjustments: [],
+              ops: 0,
+            },
+          };
+        } else {
+          const result = await applyWordPlanInPlace({
+            snapshot,
+            compiled: prepared,
+            ops: route.ops,
+            onBeforeWrite,
+            progress,
+            observePackage: (url) => observeAfterFailure(true, url),
+          });
+          if (!("fallback" in result)) return result;
+          routeReason = result.fallback;
+          fallbackDetails = result.details;
+        }
+      }
+      routing.reason = routeReason;
+      return imported(
+        await applyFullDocument(
+          plan,
+          snapshot,
+          compiled,
+          onBeforeWrite,
+          progress,
+        ),
+        routeReason,
+        fallbackDetails,
       );
+    }
     stage = "preflight";
     progress.stage("backup");
     return await host.run(async (context) => {
@@ -347,7 +413,9 @@ async function revertPlan(
   expectedAfter: string,
 ): Promise<WordDocumentRevertResult> {
   if (isWordDocumentBackup(before))
-    return revertFullDocument(before, expectedAfter);
+    return isWordScopeFingerprint(expectedAfter)
+      ? revertWordPlanInPlace(before, expectedAfter)
+      : revertFullDocument(before, expectedAfter);
   const host = wordWriteHost();
   if (!host)
     return {

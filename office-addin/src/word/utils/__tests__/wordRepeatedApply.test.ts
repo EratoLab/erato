@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   duplicateWordCustomXml,
@@ -19,6 +19,7 @@ import {
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
 } from "../wordDocumentPackage";
+import { wordDocumentFingerprint } from "../wordDocumentXml";
 import { wordPackageCounts } from "../wordFullDocumentComparison";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
@@ -33,6 +34,18 @@ const shape = (ooxml: string) => {
     parts: counts.parts - counts.webextensionParts,
     customXmlItems: counts.customXmlItems,
     customProperties: counts.customProperties,
+  };
+};
+/** In place nothing but the touched paragraphs may change: not even Word's own records or numbering. */
+const fullShape = (ooxml: string) => {
+  const counts = wordPackageCounts(ooxml);
+  return {
+    parts: counts.parts,
+    customXmlItems: counts.customXmlItems,
+    customProperties: counts.customProperties,
+    abstractNums: counts.abstractNums,
+    nums: counts.nums,
+    webextensionParts: counts.webextensionParts,
   };
 };
 
@@ -57,6 +70,13 @@ async function applyCycles(options: WordOoxmlHostOptions, cycles: number) {
 
 // Each cycle captures, compiles, imports and verifies a complete DOCX twice over.
 describe("repeated full-document Apply", { timeout: 60_000 }, () => {
+  // The status rewrite is in-place eligible; these cases exercise the import fallback.
+  beforeEach(() => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+  });
+  afterEach(() => {
+    delete window.WORD_FORCE_IMPORT_APPLY;
+  });
   it("verifies every Word PC import at the content tier without growing the package, then reverts", async () => {
     const { host, shapes, results } = await applyCycles(
       {
@@ -196,5 +216,52 @@ describe("repeated full-document Apply", { timeout: 60_000 }, () => {
         adjustments: [],
       });
     expect(new Set(shapes.map((s) => JSON.stringify(s))).size).toBe(1);
+  });
+});
+
+describe("repeated in-place Apply", { timeout: 60_000 }, () => {
+  it("keeps every package count constant on Word PC and reverts the last write exactly", async () => {
+    const { host, results } = await applyCycles(
+      {
+        profile: "word-pc-16.0.20326",
+        rePointKeptLists: true,
+        spacingDrift: true,
+      },
+      5,
+    );
+    expect(results.map((r) => r.status)).toEqual(Array(5).fill("applied"));
+    for (const result of results)
+      expect(result.outcome).toEqual({
+        route: "in-place",
+        tier: "block",
+        adjustments: [],
+        ops: 1,
+      });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(fullShape(host.ooxml())).toEqual(
+      fullShape(realisticWordPackageXml()),
+    );
+    expect(fullShape(host.ooxml())).toMatchObject({
+      customXmlItems: 3,
+      webextensionParts: 3,
+    });
+    const beforeLast = wordDocumentFingerprint(
+      editWordPackage(host.ooxml(), (doc) => {
+        const text = Array.from(
+          doc.getElementsByTagNameNS(
+            "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            "t",
+          ),
+        ).find((t) => t.textContent === "Status update 5.")!;
+        text.textContent = "Status update 4.";
+      }),
+    );
+    const last = results.at(-1)!;
+    const reverted = await revertWordDocumentPlan(
+      last.before!,
+      last.afterFingerprint!,
+    );
+    expect(reverted.status).toBe("reverted");
+    expect(wordDocumentFingerprint(host.ooxml())).toBe(beforeLast);
   });
 });

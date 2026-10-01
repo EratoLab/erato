@@ -13,6 +13,8 @@ import {
 } from "./wordDocumentPackageCodec";
 import { createWordXmlComparison } from "./wordXmlComparison";
 
+import type { WordInPlaceOp } from "./wordInPlacePlan";
+
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const CT = "http://schemas.openxmlformats.org/package/2006/content-types";
 const BACKUP_PREFIX = "erato-word-document-backup-v1:";
@@ -239,26 +241,50 @@ export function insertWordDocumentFile(
   );
 }
 
+/** An in-place write, recorded in pane memory next to the exact original file so it can be undone
+ * paragraph by paragraph without touching later edits elsewhere. */
+export type WordInPlaceBackupOp = WordInPlaceOp & {
+  /** Session-scoped Paragraph.uniqueLocalId of the written paragraph. */
+  id: string;
+  originalSignature: string;
+  afterSignature?: string;
+};
+export interface WordInPlaceBackup {
+  v: 1;
+  ops: WordInPlaceBackupOp[];
+}
+
 export function encodeWordDocumentBackup(
   snapshot: WordDocumentPackageSnapshot,
+  inPlace?: WordInPlaceBackup,
 ): string {
   return (
     BACKUP_PREFIX +
     JSON.stringify({
       documentUrl: snapshot.documentUrl,
       base64: wordDocxBase64(snapshot.bytes),
+      ...(inPlace ? { inPlace } : {}),
     })
   );
+}
+
+/** Same exact original with the in-place record replaced; the original bytes are never re-encoded. */
+export function withWordInPlaceBackup(
+  backup: string,
+  inPlace: WordInPlaceBackup,
+): string {
+  const data = parseBackup(backup);
+  return BACKUP_PREFIX + JSON.stringify({ ...data, inPlace });
 }
 
 export function isWordDocumentBackup(value: string): boolean {
   return value.startsWith(BACKUP_PREFIX);
 }
 
-export function decodeWordDocumentBackup(value: string): {
+function parseBackup(value: string): {
   documentUrl: string;
-  bytes: Uint8Array;
-  ooxml: string;
+  base64: string;
+  inPlace?: unknown;
 } {
   if (!isWordDocumentBackup(value))
     throw new Error("Invalid complete-document backup.");
@@ -272,6 +298,69 @@ export function decodeWordDocumentBackup(value: string): {
     typeof data.base64 !== "string"
   )
     throw new Error("Invalid complete-document backup.");
+  return data as { documentUrl: string; base64: string; inPlace?: unknown };
+}
+
+const isString = (v: unknown): v is string => typeof v === "string";
+const isIndex = (v: unknown): v is number =>
+  typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+const isRuns = (v: unknown) =>
+  Array.isArray(v) &&
+  v.every(
+    (run: Record<string, unknown>) =>
+      !!run &&
+      typeof run === "object" &&
+      isString(run.text) &&
+      ["bold", "italic", "underline"].every(
+        (mark) => typeof run[mark] === "boolean",
+      ),
+  );
+
+function parseInPlaceBackup(value: unknown): WordInPlaceBackup | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.v !== 1 || !Array.isArray(record.ops) || !record.ops.length)
+    return undefined;
+  const valid = record.ops.every((entry: Record<string, unknown>) => {
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      !isString(entry.ref) ||
+      !isString(entry.id) ||
+      !isIndex(entry.paragraph) ||
+      !isString(entry.originalSignature) ||
+      (entry.afterSignature !== undefined && !isString(entry.afterSignature))
+    )
+      return false;
+    if (entry.kind === "text")
+      return isRuns(entry.runs) && isRuns(entry.original);
+    return (
+      entry.kind === "cell" &&
+      isIndex(entry.rowIndex) &&
+      isIndex(entry.cellIndex) &&
+      isString(entry.text) &&
+      isString(entry.original)
+    );
+  });
+  return valid ? (record as unknown as WordInPlaceBackup) : undefined;
+}
+
+/** The in-place record without decoding the original file. */
+export function decodeWordInPlaceBackup(value: string): {
+  documentUrl: string;
+  inPlace?: WordInPlaceBackup;
+} {
+  const data = parseBackup(value);
+  const inPlace = parseInPlaceBackup(data.inPlace);
+  return { documentUrl: data.documentUrl, ...(inPlace ? { inPlace } : {}) };
+}
+
+export function decodeWordDocumentBackup(value: string): {
+  documentUrl: string;
+  bytes: Uint8Array;
+  ooxml: string;
+} {
+  const data = parseBackup(value);
   const bytes = decodeWordBase64(data.base64);
   return {
     documentUrl: data.documentUrl,

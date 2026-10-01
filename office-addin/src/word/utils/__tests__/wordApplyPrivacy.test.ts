@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   editWordPackage,
@@ -11,13 +11,22 @@ import {
   statusRewritePlan,
 } from "../../../test/mocks/word/realisticWordFixtures";
 import { renderWordDiagnosticReport } from "../wordApplyDiagnostics";
-import { applyWordDocumentPlan } from "../wordApplyDocumentPlan";
+import {
+  applyWordDocumentPlan,
+  revertWordDocumentPlan,
+} from "../wordApplyDocumentPlan";
 import {
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
 } from "../wordDocumentPackage";
+import { resetWordInPlaceLatchForTests } from "../wordInPlaceSwitch";
+import { predictWordBodyParagraphs } from "../wordLiveParagraphs";
 
 import type { WordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import type {
+  WordDocumentApplyResult,
+  WordDocumentRevertResult,
+} from "../wordApplyDocumentPlan";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 /** The values firstDivergence may print; anything else must be masked. */
@@ -98,6 +107,13 @@ const failures: [
 ];
 
 describe("apply diagnostics privacy", { timeout: 30_000 }, () => {
+  // Import failure paths; the in-place ones are covered below.
+  beforeEach(() => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+  });
+  afterEach(() => {
+    delete window.WORD_FORCE_IMPORT_APPLY;
+  });
   it.each(failures)(
     "keeps document content out of the %s report and logs",
     async (_name, fault, expected) => {
@@ -153,4 +169,127 @@ describe("apply diagnostics privacy", { timeout: 30_000 }, () => {
       /^Where: \/word\/comments\.xml: .*attributes differ \(w:author … → …\)/m,
     );
   });
+});
+
+/** The status paragraph carries the sentinel; a fresh capture sees it after every step. */
+const statusIndex = (host: WordOoxmlHost) =>
+  predictWordBodyParagraphs(host.ooxml()).findIndex((p) =>
+    p.text?.startsWith("Status"),
+  );
+const inPlaceFailures: [
+  string,
+  (
+    host: WordOoxmlHost,
+  ) => Promise<WordDocumentApplyResult | WordDocumentRevertResult>,
+  { status: string; reason: string },
+][] = [
+  [
+    "stale paragraph read",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      host.editParagraph(
+        statusIndex(host),
+        `Status: ${SENTINEL} typed meanwhile.`,
+        "after-capture",
+      );
+      return applyWordDocumentPlan(
+        JSON.stringify(statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`)),
+        snapshot,
+        "message-A",
+      );
+    },
+    { status: "stale", reason: "source-changed" },
+  ],
+  [
+    "rejected batch",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      host.failAtCommand(1, `Word quoted "${SENTINEL}" in this error`);
+      return applyWordDocumentPlan(
+        JSON.stringify(statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`)),
+        snapshot,
+        "message-A",
+      );
+    },
+    { status: "interrupted", reason: "host-error" },
+  ],
+  [
+    "unexpected write",
+    async (host) => {
+      host.userEdit((xml) =>
+        xml.replace(
+          `<w:r><w:t xml:space="preserve">Status:`,
+          `<w:r><w:rPr><w:lang w:val="en-GB"/></w:rPr><w:t xml:space="preserve">Status:`,
+        ),
+      );
+      const snapshot = await captureRealisticSnapshot();
+      const plan = statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`);
+      const entry = plan.entries[1];
+      if (entry.kind !== "replace") throw new Error("Expected a rewrite.");
+      entry.blocks[0].runs = [
+        { text: `Status: ${SENTINEL} v2.`, language: "en-GB" },
+      ];
+      return applyWordDocumentPlan(JSON.stringify(plan), snapshot, "message-A");
+    },
+    { status: "interrupted", reason: "output-mismatch" },
+  ],
+  [
+    "revert over a later edit",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await applyWordDocumentPlan(
+        JSON.stringify(statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`)),
+        snapshot,
+        "message-A",
+      );
+      host.editParagraph(statusIndex(host), `Status: ${SENTINEL} by hand.`);
+      return revertWordDocumentPlan(applied.before!, applied.afterFingerprint!);
+    },
+    { status: "stale", reason: "source-changed" },
+  ],
+  [
+    "rejected revert",
+    async (host) => {
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await applyWordDocumentPlan(
+        JSON.stringify(statusRewritePlan(snapshot, `Status: ${SENTINEL} v2.`)),
+        snapshot,
+        "message-A",
+      );
+      host.failAtCommand(1, `Word quoted "${SENTINEL}" while reverting`);
+      return revertWordDocumentPlan(applied.before!, applied.afterFingerprint!);
+    },
+    { status: "interrupted", reason: "host-error" },
+  ],
+];
+
+describe("in-place diagnostics privacy", { timeout: 30_000 }, () => {
+  afterEach(() => resetWordInPlaceLatchForTests());
+
+  it.each(inPlaceFailures)(
+    "keeps document content, paragraph IDs and scope fingerprints out of the %s report and logs",
+    async (name, fail, expected) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const host = installWordOoxmlHost(realisticWordPackageXml(), {
+        profile: "word-pc-16.0.20326",
+        replaceDropsRunProperties: name === "unexpected write",
+      });
+      const result = await fail(host);
+      expect(result.status).toBe(expected.status);
+      expect(result.diagnostic?.reason).toBe(expected.reason);
+      expect(result.diagnostic?.details?.route).toBe("in-place");
+      const report = renderWordDiagnosticReport(
+        "apply",
+        result.status,
+        result.diagnostic,
+      );
+      const forbidden = [SENTINEL, "word-scope-v1:", ...host.paragraphIds()];
+      expect(warn).toHaveBeenCalled();
+      const logged = warn.mock.calls
+        .flat()
+        .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)));
+      for (const text of [report, JSON.stringify(result.diagnostic), ...logged])
+        for (const secret of forbidden) expect(text).not.toContain(secret);
+    },
+  );
 });
