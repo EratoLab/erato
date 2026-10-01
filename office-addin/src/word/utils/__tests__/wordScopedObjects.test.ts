@@ -386,6 +386,173 @@ describe("scoped object editing", () => {
       result: { status: "ready" },
     });
   });
+  it("batches move/delete source and destination discovery into one authorized read", async () => {
+    const s = setup();
+    const read = await s.read({
+      queries: [{ text: "Target" }, { text: "Before" }, { text: "After" }],
+    });
+    expect(read).toMatchObject({
+      result: {
+        status: "ready",
+        queries: [
+          { index: 0, refs: ["b2"] },
+          { index: 1, refs: ["b1"] },
+          { index: 2, refs: ["b3"] },
+        ],
+      },
+    });
+    expect(s.snapshot.readScopes?.size).toBe(1);
+    const result = await createWordDocumentSubmissionExecutor(s.session)(
+      {
+        snapshot: s.snapshot.token,
+        readToken: (read as { result: { readToken: string } }).result.readToken,
+        scoped_edit: {
+          body: [
+            { operation: "move-after", source: ["b2"], anchor: "b3" },
+            {
+              operation: "delete",
+              source: ["b1"],
+              reason: "Requested deletion",
+            },
+          ],
+        },
+      },
+      { ...context, toolCallId: "batch-move" },
+    );
+    const { after } = assertAccepted(result, s.snapshot);
+    expect(after.blocks.map((b) => b.text)).toEqual(["After", "Target"]);
+    expect(after.blocks.map((b) => b.xml)).toEqual([
+      s.snapshot.blocks[2].xml,
+      s.snapshot.blocks[1].xml,
+    ]);
+  });
+  it("grants no partial scope for ambiguous, missing or invalid batched selectors", async () => {
+    for (const query of [
+      { kind: "paragraph" },
+      { text: "missing" },
+      { refs: ["foreign-ref"] },
+      { queries: [{ ref: "b2" }] },
+    ]) {
+      const s = setup();
+      const result = await s.read({ queries: [{ ref: "b1" }, query] });
+      expect(JSON.stringify(result)).not.toContain('"readToken"');
+      expect(s.snapshot.readScopes?.size).toBe(0);
+      expect(s.snapshot.read.size).toBe(0);
+    }
+    const s = setup();
+    const ambiguous = await s.read({
+      queries: [{ ref: "b1" }, { kind: "paragraph" }],
+    });
+    expect(ambiguous).toMatchObject({
+      result: {
+        status: "ambiguous",
+        queries: [{ refs: ["b1"] }, { status: "ambiguous", totalMatches: 3 }],
+      },
+    });
+    expect(
+      await s.read({ queries: [{ ref: "b1" }, { ref: "b2" }] }),
+    ).toMatchObject({ result: { status: "ready" } });
+  });
+  it("bounds cumulative batch targets, bytes and candidate snippets", async () => {
+    const s = setup(
+      readySnapshot(
+        packageXml(
+          Array.from({ length: 20 }, (_, i) =>
+            paragraph(`Target ${i} ` + "x".repeat(1500)),
+          ).join(""),
+        ),
+      ),
+    );
+    const tooMany = await s.read({
+      queries: [{ ref: "b1", throughRef: "b16" }, { ref: "b17" }],
+    });
+    expect(tooMany).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "target-limit" }],
+    });
+    expect(
+      await s.read({ queries: [{ ref: "b1", throughRef: "b16" }] }),
+    ).toMatchObject({ result: { status: "unsupported" } });
+    const ambiguous = await s.read({
+      queries: Array.from({ length: 16 }, () => ({ text: "Target" })),
+    });
+    expect(ambiguous).toMatchObject({ result: { status: "ambiguous" } });
+    expect(
+      new TextEncoder().encode(JSON.stringify(ambiguous)).length,
+    ).toBeLessThan(24 * 1024);
+    const queries = (
+      ambiguous as { result: { queries: { candidates: unknown[] }[] } }
+    ).result.queries;
+    expect(queries.reduce((n, q) => n + q.candidates.length, 0)).toBe(5);
+    expect(s.snapshot.readScopes?.size).toBe(0);
+    for (const queries of [[], Array(17).fill({ ref: "b1" }), "invalid"])
+      expect((await s.read({ queries })).ok).toBe(false);
+  });
+  it("deduplicates overlapping explicit batch reads without authorizing neighbors", async () => {
+    const s = setup();
+    const read = await s.read({
+      queries: [{ ref: "b1", throughRef: "b2" }, { ref: "b2" }],
+    });
+    expect(read).toMatchObject({
+      result: { status: "ready", targets: [{ ref: "b1" }, { ref: "b2" }] },
+    });
+    const result = await createWordDocumentSubmissionExecutor(s.session)(
+      {
+        snapshot: s.snapshot.token,
+        readToken: (read as { result: { readToken: string } }).result.readToken,
+        scoped_edit: {
+          body: [{ operation: "move-after", source: ["b2"], anchor: "b3" }],
+        },
+      },
+      { ...context, toolCallId: "outside-batch" },
+    );
+    expect(result.ok).toBe(false);
+  });
+  it("binds batches to document, snapshot, fingerprint and request", async () => {
+    for (const extra of [
+      { snapshot: "old" },
+      { documentIdentity: "another-document" },
+    ]) {
+      const s = setup();
+      expect((await s.read({ queries: [{ ref: "b2" }] }, extra)).ok).toBe(
+        false,
+      );
+      expect(s.snapshot.readScopes?.size).toBe(0);
+    }
+    for (const changed of [
+      "fingerprint",
+      "identity",
+      "request",
+      "revoked",
+    ] as const) {
+      const s = setup();
+      const read = await s.read({ queries: [{ ref: "b1" }, { ref: "b2" }] });
+      if (changed === "revoked") s.snapshot.revoked = true;
+      else if (changed !== "request") s.snapshot[changed] += "changed";
+      const result = await createWordDocumentSubmissionExecutor(s.session)(
+        {
+          snapshot: s.snapshot.token,
+          readToken: (read as { result: { readToken: string } }).result
+            .readToken,
+          scoped_edit: {
+            body: [
+              {
+                operation: "delete",
+                source: ["b2"],
+                reason: "Requested deletion",
+              },
+            ],
+          },
+        },
+        {
+          ...context,
+          toolCallId: "stale-batch",
+          ...(changed === "request" ? { messageId: "another-request" } : {}),
+        },
+      );
+      expect(result.ok).toBe(false);
+    }
+  });
   it("replaces one paragraph without reading or changing its neighbors", async () => {
     const s = setup();
     const result = await s.edit(

@@ -13,8 +13,8 @@ instructions, action permissions and configured tools keep their existing paths.
 Target searches use `kind`, `text` and adjacent-body `nearbyText`. Multiple
 matches return at most five candidates and no authorization. Select exact `ref`
 or `refs`, or `ref`/`throughRef` for a contiguous body passage. A ready read
-contains at most 16 selected targets and 24 KiB of target/dependency context;
-fixed protocol metadata is additional. Oversized targets grant no scope and
+contains at most 16 selected targets and 24 KiB for the complete result,
+including identifying context, guidance and metadata. Oversized targets grant no scope and
 require a narrower selection or complete reading. Repeated unsuccessful searches
 are identified without inventing candidates. Source text is untrusted data.
 
@@ -66,3 +66,37 @@ requires Track Changes to be off; native revision suggestions are separate work.
 Discovery, scopes and sparse materialization use only the immutable snapshot and
 host-independent editing types. They neither call Office.js nor require a server.
 The current Office.js adapter continues to apply the materialized plan.
+
+## Choosing an efficient read
+
+| Task                                           | Read path                  | Why                                                                                                            |
+| ---------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| One supported plain-text cell update           | `table_cell`               | Reads one cell and accepts a concise submission.                                                               |
+| One identified passage or object               | `target`                   | Reads the complete preservation boundary and retains the rest internally.                                      |
+| Several sources, destinations or dependencies  | `target: {queries: [...]}` | Resolves all selectors into one scope without separate discovery and rereading.                                |
+| New structure or different style               | Target read plus `include` | Requests the required vocabulary and metadata based on intended output, even when the source has another kind. |
+| Broad rewrite or whole-document coverage claim | Complete sequential reads  | Establishes coverage for everything the model must consider.                                                   |
+
+These choices follow task scope, not a document-length threshold. Ambiguity is a
+reason to disambiguate or clarify, never a reason to authorize a guessed target.
+A bounded selection can still be too large; narrow it or use complete reading.
+
+Batches contain 1–16 selectors, each using the existing search/ref/range syntax.
+Every selector must uniquely resolve or explicitly select refs/a range. Results
+identify refs by query index. An ambiguous or missing selector prevents **all**
+authorization in that batch, including unique matches. At most five candidate
+snippets are returned across a batch; unresolved selectors can be paged alone,
+then all dependencies selected together. Overlapping reads are deduplicated;
+they do not permit overlapping writes. The limits apply to the combined result,
+not separately per selector. A ready batch issues exactly one capability.
+
+Scoped reads automatically return guidance for selected and nested object kinds.
+Optional `include` groups are `text`, `formatting`, `table`, `media`, `structures`,
+`stories` and `sections`. For example, replacing a paragraph with a table requests
+`include:["table"]`; inserting an attachment requests `include:["media"]`.
+Only referenced styles are returned by default; `formatting` requests the style
+catalogue and `media` requests captured attachment metadata. All metadata remains
+bounded. A caller can reread the same refs with different guidance. Includes do
+not grant source access or change the host's supported operations or validators.
+Complete reads retain the full authoring contract. Model-budget estimates remain
+conservative; no validation budget or complete-read gate has been relaxed.

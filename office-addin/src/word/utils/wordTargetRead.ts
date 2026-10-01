@@ -143,38 +143,25 @@ export function wordTargetInventory(
   return targets;
 }
 
-export function readWordTargets(
-  snapshot: WordAuthoringSnapshot,
-  input: Record<string, unknown>,
+function targetReadFailure(
+  code: string,
+  message: string,
 ): ClientToolExecutionResult {
-  const fail = (code: string, message: string): ClientToolExecutionResult => ({
+  return {
     ok: false,
     error: message,
     validationErrors: [{ path: "/target", code, message }],
-  });
-  if (snapshot.revoked || snapshot.used || snapshot.issue)
-    return fail("snapshot-unavailable", "Use an active, available capture.");
+  };
+}
+
+/** Discovery is pure with respect to write capabilities. A batch grants one scope
+ * only after every selector and the combined response have been validated. */
+function selectTargets(
+  snapshot: WordAuthoringSnapshot,
+  query: unknown,
+  candidateLimit: number,
+) {
   if (
-    input.snapshot !== snapshot.token ||
-    input.documentIdentity !== snapshot.identity
-  )
-    return fail(
-      "snapshot-mismatch",
-      "Use this request's exact snapshot and documentIdentity.",
-    );
-  const query = input.target;
-  if (
-    Object.keys(input).some(
-      (k) => !["snapshot", "documentIdentity", "target", "include"].includes(k),
-    ) ||
-    (input.include !== undefined &&
-      (!Array.isArray(input.include) ||
-        input.include.length > WORD_SCOPED_GUIDANCE.length ||
-        input.include.some(
-          (group) =>
-            !WORD_SCOPED_GUIDANCE.includes(group as WordScopedGuidance),
-        ) ||
-        new Set(input.include).size !== input.include.length)) ||
     !object(query) ||
     Object.keys(query).some(
       (k) =>
@@ -210,10 +197,12 @@ export function readWordTargets(
     !["kind", "text", "ref", "refs"].some((k) => query[k] !== undefined) ||
     (query.throughRef !== undefined && !query.ref)
   )
-    return fail(
-      "target-arguments",
-      "Search by kind/text/nearbyText, select exact ref(s), or read a body range with ref and throughRef. offset pages search candidates.",
-    );
+    return {
+      error: targetReadFailure(
+        "target-arguments",
+        "Search by kind/text/nearbyText, select exact ref(s), or read a body range with ref and throughRef. offset pages search candidates.",
+      ),
+    };
   const inventory = wordTargetInventory(snapshot);
   let matches = inventory.filter((t) => {
     const position = snapshot.blocks.findIndex((b) => b.ref === t.bodyRef);
@@ -233,10 +222,12 @@ export function readWordTargets(
   });
   let explicit = Array.isArray(query.refs);
   if (explicit && matches.length !== (query.refs as string[]).length)
-    return fail(
-      "target-reference",
-      "At least one selected reference is absent from this snapshot.",
-    );
+    return {
+      error: targetReadFailure(
+        "target-reference",
+        "At least one selected reference is absent from this snapshot.",
+      ),
+    };
   if (query.throughRef !== undefined) {
     const start =
       matches.length === 1 && !matches[0].objectTarget
@@ -244,10 +235,12 @@ export function readWordTargets(
         : -1;
     const end = snapshot.blocks.findIndex((b) => b.ref === query.throughRef);
     if (start < 0 || end < start || end - start >= MAX_WORD_SCOPE_TARGETS)
-      return fail(
-        "target-range",
-        "Select an ordered body range of at most 16 blocks.",
-      );
+      return {
+        error: targetReadFailure(
+          "target-range",
+          "Select an ordered body range of at most 16 blocks.",
+        ),
+      };
     const refs = new Set(
       snapshot.blocks.slice(start, end + 1).map((b) => b.ref),
     );
@@ -258,16 +251,18 @@ export function readWordTargets(
   }
   const offset = query.offset ?? 0;
   if (offset && offset >= matches.length)
-    return fail(
-      "target-offset",
-      "offset must refer to an existing candidate page.",
-    );
+    return {
+      error: targetReadFailure(
+        "target-offset",
+        "offset must refer to an existing candidate page.",
+      ),
+    };
   const base = {
     snapshot: snapshot.token,
     documentIdentity: snapshot.identity,
     scope: "objects",
     totalMatches: matches.length,
-    candidates: matches.slice(offset, offset + 5).map((t) => {
+    candidates: matches.slice(offset, offset + candidateLimit).map((t) => {
       const i = snapshot.blocks.findIndex((b) => b.ref === t.bodyRef);
       return {
         ref: t.ref,
@@ -277,11 +272,104 @@ export function readWordTargets(
         after: snippet(i < 0 ? "" : (snapshot.blocks[i + 1]?.text ?? "")),
       };
     }),
-    nextOffset: offset + 5 < matches.length ? offset + 5 : null,
+    nextOffset:
+      offset + candidateLimit < matches.length ? offset + candidateLimit : null,
   };
-  if (!matches.length || (!explicit && matches.length !== 1)) {
+  const ready = matches.length > 0 && (explicit || matches.length === 1);
+  return { matches, base, ready };
+}
+
+export function readWordTargets(
+  snapshot: WordAuthoringSnapshot,
+  input: Record<string, unknown>,
+): ClientToolExecutionResult {
+  const fail = targetReadFailure;
+  if (snapshot.revoked || snapshot.used || snapshot.issue)
+    return fail("snapshot-unavailable", "Use an active, available capture.");
+  if (
+    input.snapshot !== snapshot.token ||
+    input.documentIdentity !== snapshot.identity
+  )
+    return fail(
+      "snapshot-mismatch",
+      "Use this request's exact snapshot and documentIdentity.",
+    );
+  if (
+    Object.keys(input).some(
+      (k) => !["snapshot", "documentIdentity", "target", "include"].includes(k),
+    ) ||
+    (input.include !== undefined &&
+      (!Array.isArray(input.include) ||
+        input.include.length > WORD_SCOPED_GUIDANCE.length ||
+        input.include.some(
+          (group) =>
+            !WORD_SCOPED_GUIDANCE.includes(group as WordScopedGuidance),
+        ) ||
+        new Set(input.include).size !== input.include.length))
+  )
+    return fail(
+      "target-arguments",
+      "Use snapshot, documentIdentity, target and optional include guidance groups.",
+    );
+  const batch = object(input.target) && "queries" in input.target;
+  if (
+    batch &&
+    (Object.keys(input.target as object).length !== 1 ||
+      !Array.isArray((input.target as Record<string, unknown>).queries) ||
+      !(input.target as { queries: unknown[] }).queries.length ||
+      (input.target as { queries: unknown[] }).queries.length >
+        MAX_WORD_SCOPE_TARGETS)
+  )
+    return fail(
+      "target-arguments",
+      "target.queries must contain 1 to 16 selectors, without other target properties.",
+    );
+  const queries = batch
+    ? (input.target as { queries: unknown[] }).queries
+    : [input.target];
+  if (encoder.encode(JSON.stringify(input)).length > MAX_WORD_SCOPE_BYTES)
+    return fail("target-arguments", "Target arguments exceed 24 KiB.");
+  const selections = [];
+  // At most five candidate snippets across the entire batch. Unique results
+  // still report their refs; unresolved selectors can be paged independently.
+  let remainingCandidates = 5;
+  for (const query of queries) {
+    const selection = selectTargets(snapshot, query, remainingCandidates);
+    if (selection.error) return selection.error;
+    if (!batch || !selection.ready)
+      remainingCandidates -= selection.base.candidates.length;
+    selections.push(selection);
+  }
+  const matches = [
+    ...new Map(
+      selections.flatMap((s) => s.matches).map((t) => [t.ref, t]),
+    ).values(),
+  ];
+  const base = batch
+    ? {
+        snapshot: snapshot.token,
+        documentIdentity: snapshot.identity,
+        scope: "objects",
+        queries: selections.map((s, index) => ({
+          index,
+          status: s.ready
+            ? "ready"
+            : s.matches.length
+              ? "ambiguous"
+              : "not-found",
+          totalMatches: s.matches.length,
+          ...(s.ready
+            ? { refs: s.matches.map((t) => t.ref) }
+            : {
+                candidates: s.base.candidates,
+                nextOffset: s.base.nextOffset,
+              }),
+        })),
+      }
+    : selections[0].base;
+  if (selections.some((s) => !s.ready)) {
     const counts = attempts.get(snapshot) ?? new Map<string, number>();
-    const key = JSON.stringify(query);
+    const key = JSON.stringify(input.target);
     const count = (counts.get(key) ?? 0) + 1;
     if (counts.size < 64 || counts.has(key)) counts.set(key, count);
     attempts.set(snapshot, counts);
@@ -289,13 +377,20 @@ export function readWordTargets(
       ok: true,
       result: {
         ...base,
-        status: matches.length ? "ambiguous" : "not-found",
+        status: selections.some((s) => !s.ready && s.matches.length)
+          ? "ambiguous"
+          : "not-found",
         repeatedQuery: count > 1,
         recovery:
-          "No write authorized. Select a returned reference, change the search constraint, or ask for clarification; repeating the same query cannot reveal a new target.",
+          "No write authorized, including unique matches in this batch. Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Then read all needed refs/queries together. Repeating the same query cannot reveal a new target.",
       },
     };
   }
+  if (matches.length > MAX_WORD_SCOPE_TARGETS)
+    return fail(
+      "target-limit",
+      "A combined scope may contain at most 16 distinct targets.",
+    );
   // Scope includes exact target data plus bounded identifying neighbors. Neighbors
   // and references mentioned in properties are context, never implicit write grants.
   const context = {
