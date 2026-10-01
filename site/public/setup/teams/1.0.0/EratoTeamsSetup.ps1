@@ -317,6 +317,23 @@ function Invoke-EratoSetup {
             $appUrl = "https://graph.microsoft.com/v1.0/applications/$($fresh.App.id)"
             $report.mode = 'Apply'
             try {
+                # Graph validates pre-authorizations against scopes already saved
+                # on the app, not scopes introduced in the same PATCH. Expose the
+                # scope first, retaining existing pre-authorized clients, then
+                # re-read and merge the remaining settings with its persisted ID.
+                $enabledScope = @($fresh.App.api.oauth2PermissionScopes | Where-Object { $_.value -ceq 'access_as_user' -and $_.isEnabled })
+                if (-not $enabledScope.Count) {
+                    $scopeApi = $freshPlan.applicationPatch.api | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable
+                    $scopeApi.preAuthorizedApplications = @($fresh.App.api.preAuthorizedApplications | Where-Object { $null -ne $_ })
+                    Invoke-EratoApi -Url $appUrl -Method PATCH -Body @{ api = $scopeApi } | Out-Null
+                    $report.changes += 'Enabled the access_as_user scope and v2 API tokens.'
+                    if (-not $Json) { Write-Host 'APPLIED  Exposed API scope.' }
+                    $fresh = Get-EratoAudit $Settings
+                    if (@($fresh.App.api.oauth2PermissionScopes | Where-Object { $_.value -ceq 'access_as_user' -and $_.isEnabled }).Count -ne 1) {
+                        throw 'The saved API scope is not visible yet. Rerun the check before retrying Apply; no OAuth credential has been created.'
+                    }
+                    $freshPlan = New-EratoSsoPlan $fresh $Settings
+                }
                 if ($freshPlan.applicationPatch.Count) {
                     Invoke-EratoApi -Url $appUrl -Method PATCH -Body $freshPlan.applicationPatch | Out-Null
                     $report.changes += 'Added missing Entra SSO settings and delegated Graph permissions.'

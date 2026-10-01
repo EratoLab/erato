@@ -26,7 +26,7 @@ function Reset-Fixture {
     $script:bot = @{ id = "/subscriptions/$($base.SubscriptionId)/resourceGroups/customer/providers/Microsoft.BotService/botServices/customer-bot"; name = 'customer-bot'; location = 'global'
         properties = @{ msaAppId = $base.BotAppId; msaAppTenantId = $base.TenantId; msaAppType = 'SingleTenant'; endpoint = "$($base.BaseUrl)/api/integrations/ms_teams/messages"; enabledChannels = @('msteams') } }
     $script:connection = $null; $script:wrongTenant = $false; $script:denyConsent = $false; $script:failConnection = $false
-    $script:duplicateBot = $false; $script:nextLink = $null; $script:scopePage = 0
+    $script:duplicateBot = $false; $script:nextLink = $null; $script:scopePage = 0; $script:failPreauthorization = $false
 }
 
 function Invoke-EratoAz {
@@ -44,7 +44,18 @@ function Invoke-EratoAz {
             Assert-True ($mode -eq '700') 'Request directory must be private'
         }
         $script:writes.Add(@{ method = $method; url = $url; body = $body; file = $bodyFile.Substring(1) })
-        if ($method -eq 'PATCH') { foreach ($key in $body.Keys) { $script:app[$key] = $body[$key] }; return @{} }
+        if ($method -eq 'PATCH') {
+            # Live Graph rejects a pre-authorization that references a scope
+            # introduced in this same request: the scope must already exist.
+            foreach ($client in $body.api.preAuthorizedApplications) {
+                foreach ($id in $client.delegatedPermissionIds) {
+                    Assert-True ($id -in $script:app.api.oauth2PermissionScopes.id) 'Graph rejected a pre-authorization for a scope not yet saved'
+                }
+                if ($script:failPreauthorization -and $client.appId -in $script:TeamsClients) { throw 'Azure request failed (RequestFailed).' }
+            }
+            foreach ($key in $body.Keys) { $script:app[$key] = $body[$key] }
+            return @{}
+        }
         if ($url.EndsWith('/addPassword')) { return @{ keyId = 'credential-key-id'; secretText = 'DO-NOT-PRINT-THIS-SECRET' } }
         if ($method -eq 'PUT') {
             if ($script:failConnection) { throw 'Azure request failed (RequestFailed). Raw responses withheld.' }
@@ -152,12 +163,25 @@ Test-Case 'existing disabled access_as_user is enabled without replacing its ID'
 }
 Test-Case 'Apply creates a separate credential, verifies writes and is idempotent' {
     $report = Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json
-    Assert-True ($writes.Count -eq 3 -and $report.mode -eq 'Apply') 'Expected app patch, credential, connection'
+    Assert-True ($writes.Count -eq 4 -and $report.mode -eq 'Apply') 'Expected scope patch, app patch, credential, connection'
+    $persistedScope = $writes[0].body.api.oauth2PermissionScopes | Where-Object value -eq 'access_as_user'
+    Assert-True ($persistedScope.id -in $writes[1].body.api.preAuthorizedApplications.delegatedPermissionIds) 'Pre-authorization did not use the persisted scope ID'
+    Assert-True ('old-client' -in $writes[0].body.api.preAuthorizedApplications.appId) 'Scope creation lost an existing client'
     Assert-True ($report.credential.keyId -eq 'credential-key-id') 'Credential metadata missing'
     Assert-True (($report | ConvertTo-Json -Depth 50) -notmatch 'DO-NOT-PRINT') 'Secret leaked into report'
     foreach ($write in $writes) { Assert-True (-not (Test-Path $write.file)) 'Temporary body left on disk' }
     $again = Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json
-    Assert-True ($writes.Count -eq 3 -and $again.note -match 'No Azure changes needed') 'Second run rotated credential or rewrote app'
+    Assert-True ($writes.Count -eq 4 -and $again.note -match 'No Azure changes needed') 'Second run rotated credential or rewrote app'
+}
+Test-Case 'pre-authorization failure preserves the saved scope and resumes without a duplicate' {
+    $script:failPreauthorization = $true
+    Assert-Throws { Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json } 'Completed: Enabled the access_as_user scope'
+    Assert-True (-not @($writes | Where-Object method -eq 'POST').Count) 'Created a credential before pre-authorization succeeded'
+    $scopeId = ($app.api.oauth2PermissionScopes | Where-Object value -eq 'access_as_user').id
+    $script:failPreauthorization = $false
+    $report = Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json
+    Assert-True (($app.api.oauth2PermissionScopes | Where-Object value -eq 'access_as_user').id -eq $scopeId) 'Retry replaced the saved scope'
+    Assert-True ($report.exitCode -eq 0) 'Retry did not complete'
 }
 Test-Case 'failed OAuth creation reports partial state without exposing credentials' {
     $script:failConnection = $true
