@@ -1,6 +1,6 @@
 {
   "base_sha": "3d40f674f1829f6cb8be535bdc10678602cfac43",
-  "head_sha": "75b5e7631b14050fddb82d13eb7bd6b51f5a20cb",
+  "head_sha": "444f10c0c9010f94fe88b8d03c9d60940cee04de",
   "prs": {
     "780": {
       "subject": "Merge pull request #780 from EratoLab/feature/ermain-410-create-seperate-migrator-docker-image",
@@ -2604,6 +2604,12 @@
       "subject": "Merge pull request #1273 from EratoLab/feature/ermain-883-gemini-tool-call-id-reuse-overwrites-prior-python-calls-in",
       "commits": [
         "75b5e7631b14050fddb82d13eb7bd6b51f5a20cb"
+      ]
+    },
+    "1277": {
+      "subject": "Fix Teams bot package upload validation (#1277)",
+      "commits": [
+        "444f10c0c9010f94fe88b8d03c9d60940cee04de"
       ]
     }
   },
