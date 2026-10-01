@@ -113,6 +113,7 @@ describe("Teams setup delivery", () => {
     ).toThrow("connection names");
   });
 
+  // Two real PowerShell startups exceed the default 5s on shared CI runners.
   it("PowerShell parses commands safely, passes deployment data literally, and refuses tampered downloads", () => {
     const directory = mkdtempSync(join(tmpdir(), "erato-teams-delivery-"));
     try {
@@ -137,7 +138,7 @@ describe("Teams setup delivery", () => {
       const result = execFileSync(
         "pwsh",
         ["-NoLogo", "-NoProfile", "-File", join(directory, "test.ps1")],
-        { cwd: directory, encoding: "utf8" },
+        { cwd: directory, encoding: "utf8", timeout: 10_000 },
       );
       expect(JSON.parse(result)).toMatchObject({
         TenantId: tenant,
@@ -151,11 +152,11 @@ describe("Teams setup delivery", () => {
         execFileSync(
           "pwsh",
           ["-NoLogo", "-NoProfile", "-File", join(directory, "test.ps1")],
-          { cwd: directory, stdio: "pipe" },
+          { cwd: directory, stdio: "pipe", timeout: 10_000 },
         ),
-      ).toThrow();
+      ).toThrow("Script verification failed");
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });
