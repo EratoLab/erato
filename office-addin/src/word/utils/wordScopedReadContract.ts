@@ -84,6 +84,8 @@ export function wordScopedReadContract(
       },
       ...(groups.has("text")
         ? {
+            formattingContext:
+              "Target content already includes its supported captured formatting; omitted typed formatting fields do not mean an incomplete read. Reuse the supplied formatting and list identity without a style-catalogue lookup for simple retention or list continuation. Paragraph, heading and list-item blocks do not accept sourceRef; ownership is supplied by the body operation's source/anchor.",
             paragraphs: full.paragraphs,
             runFormatting: full.runFormatting,
             paragraphFormatting: full.paragraphFormatting,
