@@ -29,7 +29,8 @@ use crate::server::api::v1beta::file_resolution::{
 };
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming_file_extraction::{
-    parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
+    mcp_tool_processing_error_output, parse_content_filter_error_from_mcp_tool_result,
+    post_process_mcp_tool_result,
 };
 use crate::services::background_tasks::{
     BackgroundTaskManager, ClientStreamGuard, StreamingEvent, StreamingTask, Takeover,
@@ -7271,10 +7272,10 @@ async fn stream_generate_chat_completion<
                         Ok(result) => result,
                         Err(err) => {
                             let tool_error = format!("Failed to process MCP tool output: {err}");
-                            let output_value = json!({
-                                "status": "error",
-                                "error": tool_error,
-                            });
+                            let output_value =
+                                mcp_tool_processing_error_output(&tool_call_result, &tool_error);
+                            let tool_response_content = serde_json::to_string(&output_value)
+                                .unwrap_or_else(|_| tool_error.clone());
                             persist_otel_tool_call(
                                 tracing_client.as_ref(),
                                 &unfinished_tool_call,
@@ -7345,7 +7346,7 @@ async fn stream_generate_chat_completion<
                                 batch_position,
                                 genai::chat::ToolResponse {
                                     call_id: unfinished_tool_call.call_id.clone(),
-                                    content: tool_error,
+                                    content: tool_response_content,
                                 },
                             ));
                             continue;
