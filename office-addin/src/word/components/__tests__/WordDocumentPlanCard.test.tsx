@@ -1,3 +1,4 @@
+import { ConversationMessagesProvider } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import {
   cleanup,
@@ -7,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
@@ -35,6 +37,7 @@ import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
 } from "@erato/frontend/word-review";
+import type { ReactNode } from "react";
 
 const mock = vi.hoisted(() => {
   const artifact: Record<string, unknown> = {};
@@ -99,6 +102,26 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
     </div>
   ),
 }));
+/** The chat the message list exposes to message renderers, as the mocked context holds it. */
+function Conversation({ children }: { children: ReactNode }) {
+  const id = String(mock.artifact.messageId);
+  const [messages] = useState(() => ({
+    [id]: {
+      id,
+      status: mock.messageStatus,
+      role: "assistant",
+      content: mock.content,
+      createdAt: "2026-10-01T00:00:00Z",
+    } as EratoLibrary.Message,
+  }));
+  return (
+    <TestTheme>
+      <ConversationMessagesProvider messages={messages}>
+        {children}
+      </ConversationMessagesProvider>
+    </TestTheme>
+  );
+}
 function setup(
   ooxml?: string,
   buildPlan: (snapshot: WordAuthoringSnapshot) => WordDocumentPlan = (
@@ -160,7 +183,7 @@ function setup(
           content={JSON.stringify(plan)}
         />
       </WordWriteProvider>,
-      { wrapper: TestTheme },
+      { wrapper: Conversation },
     );
   return {
     snapshot,
@@ -342,7 +365,7 @@ describe("structural document review", () => {
           content={JSON.stringify(state.plan)}
         />
       </WordWriteProvider>,
-      { wrapper: TestTheme },
+      { wrapper: Conversation },
     );
     expect(
       screen.getByRole("heading", { name: "Change 5 items" }),
@@ -388,7 +411,7 @@ describe("structural document review", () => {
           content={JSON.stringify(state.plan)}
         />
       </WordWriteProvider>,
-      { wrapper: TestTheme },
+      { wrapper: Conversation },
     );
     expect(screen.getByText("Check first")).toBeVisible();
     expect(
@@ -494,7 +517,7 @@ describe("structural document review", () => {
           />
         ))}
       </WordWriteProvider>,
-      { wrapper: TestTheme },
+      { wrapper: Conversation },
     );
     const release = holdWord();
     const [first, second] = screen.getAllByRole("button", {
@@ -696,7 +719,7 @@ describe("structural document review", () => {
           content="{not a plan"
         />
       </WordWriteProvider>,
-      { wrapper: TestTheme },
+      { wrapper: Conversation },
     );
     expect(
       screen.getByText(

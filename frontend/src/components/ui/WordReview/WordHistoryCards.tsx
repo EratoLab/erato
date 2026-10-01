@@ -4,39 +4,44 @@ import { useId, useMemo, useRef, useState } from "react";
 import { CountBadge } from "@/components/ui/Controls/CountBadge";
 import { DisclosureChevron } from "@/components/ui/Controls/DisclosureChevron";
 import { Row } from "@/components/ui/Controls/Row";
-import { useConversationMessages } from "@/components/ui/Message/ConversationMessages";
 import { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlightedCode";
 import { TextComparison } from "@/components/ui/Message/TextComparison";
-import { editExcerpt, parseWordEdits } from "@/lib/wordReview/wordEditPlan";
+import { parseWordDocumentPlan } from "@/lib/wordReview/wordDocumentPlan";
 import {
-  acceptedWordPlanFromHistory,
+  editedParagraphCount,
+  editExcerpt,
+  parseWordEdits,
+} from "@/lib/wordReview/wordEditPlan";
+import {
+  isRejectedWordSubmission,
+  wordEditOriginal,
   wordEditSourceFromHistory,
-  wordMessageLineage,
-  wordSnapshotFromHistory,
+  wordEditWindow,
+  wordHistoryProposal,
+  wordHistoryProposalKey,
 } from "@/lib/wordReview/wordHistory";
-import { WORD_EDITS_FENCE } from "@/lib/wordReview/wordHistoryNames";
+import {
+  WORD_EDITS_FENCE,
+  WORD_PLAN_FENCE,
+} from "@/lib/wordReview/wordHistoryNames";
 
 import {
   WordProposalCard,
   WordProposalReadOnlyFooter,
 } from "./WordProposalCard";
 import { WordReviewCard, WordReviewHeader } from "./WordReviewCardParts";
+import { useWordMessageLineage } from "./useWordHistoryMessage";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { WordEdit } from "@/lib/wordReview/wordEditPlan";
 import type { WordHistoryEditSource } from "@/lib/wordReview/wordHistory";
 import type { Message } from "@/types/chat";
 
-type HistoryMessage = Pick<Message, "content">;
-
-/** Keeps the previous lineage while its messages are unchanged, so the snapshot is not rebuilt per render. */
-function useStableLineage(lineage: HistoryMessage[]): HistoryMessage[] {
-  const previous = useRef(lineage);
-  const same =
-    previous.current.length === lineage.length &&
-    previous.current.every((m, i) => m.content === lineage[i].content);
-  if (!same) previous.current = lineage;
-  return previous.current;
+/** Recomputes only when `key` changes, however often the inputs are rebuilt. */
+function useKeyed<T>(key: string, compute: () => T): T {
+  const cache = useRef<{ key: string; value: T } | null>(null);
+  if (cache.current?.key !== key) cache.current = { key, value: compute() };
+  return cache.current.value;
 }
 
 /**
@@ -55,44 +60,35 @@ export function WordHistoryPlanCard({
   /** While the answer streams, a missing acceptance may still arrive. */
   isStreaming?: boolean;
 }) {
-  const messages = useConversationMessages();
-  const accepted = useMemo(
-    () => acceptedWordPlanFromHistory(content),
-    [content],
+  const stored = useWordMessageLineage(messageId);
+  const lineage =
+    stored.length > 0 && stored[stored.length - 1].content === content
+      ? stored
+      : [...stored.slice(0, -1), { content }];
+  const proposal = useKeyed(wordHistoryProposalKey(lineage, content), () =>
+    wordHistoryProposal(lineage, content),
   );
-  const found = wordMessageLineage(messages, messageId);
-  const lineage = useStableLineage(
-    found.length > 0 && found[found.length - 1].content === content
-      ? found
-      : [...found.slice(0, -1), { content }],
-  );
-  const snapshot = useMemo(
-    () =>
-      accepted
-        ? wordSnapshotFromHistory(lineage, accepted.plan.snapshot)
-        : undefined,
-    [accepted, lineage],
-  );
-  if (!accepted && isStreaming) return null;
-  if (!accepted)
+  if (proposal)
     return (
-      <p
-        className="my-2 text-sm text-theme-fg-muted"
-        data-testid="word-history-no-changes"
-      >
-        {t({
-          id: "wordReview.history.noChanges",
-          message: "No changes were proposed.",
-        })}
-      </p>
+      <WordProposalCard
+        plan={proposal.plan}
+        snapshot={proposal.snapshot}
+        documentName={documentName ?? proposal.documentName}
+        testId="word-history-plan"
+      />
     );
+  if (isStreaming || !content.some(isRejectedWordSubmission)) return null;
   return (
-    <WordProposalCard
-      plan={accepted.plan}
-      snapshot={snapshot}
-      documentName={documentName}
-      testId="word-history-plan"
-    />
+    <p
+      className="my-2 text-sm text-theme-fg-muted"
+      data-testid="word-history-not-accepted"
+    >
+      {t({
+        id: "wordReview.history.notAccepted",
+        message:
+          "A change was proposed but did not pass validation, so there is nothing to apply.",
+      })}
+    </p>
   );
 }
 
@@ -108,19 +104,6 @@ function paragraphLabel({ paragraph, through }: WordEdit): string {
       });
 }
 
-function originalText(
-  edit: WordEdit,
-  source: WordHistoryEditSource,
-): string | null {
-  const lines: string[] = [];
-  for (let n = edit.paragraph; n <= (edit.through ?? edit.paragraph); n++) {
-    const paragraph = source.paragraphs.get(n);
-    if (!paragraph || n === source.partialOrdinal) return null;
-    lines.push(paragraph.text);
-  }
-  return lines.join("\n");
-}
-
 function WordHistoryEditsCard({
   edits,
   source,
@@ -131,14 +114,7 @@ function WordHistoryEditsCard({
   const id = useId();
   const detailsId = useId();
   const [open, setOpen] = useState<number | null>(0);
-  const paragraphs = new Set(
-    edits.flatMap((edit) =>
-      Array.from(
-        { length: (edit.through ?? edit.paragraph) - edit.paragraph + 1 },
-        (_, i) => edit.paragraph + i,
-      ),
-    ),
-  ).size;
+  const paragraphs = editedParagraphCount(edits, wordEditWindow(source));
   const { paragraphsSent, paragraphsTotal, partialOrdinal } = source;
   return (
     <WordReviewCard
@@ -187,7 +163,7 @@ function WordHistoryEditsCard({
       <ol className="word-review__list" data-testid="word-history-edits-list">
         {edits.map((edit, index) => {
           const expanded = open === index;
-          const original = originalText(edit, source);
+          const original = wordEditOriginal(edit, source);
           // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
           const rowId = `${id}-edit-${index}`;
           return (
@@ -278,6 +254,11 @@ export function WordHistoryFenceCard({
   content: string;
   previousUserMessage: Pick<Message, "action_facet_args"> | undefined;
 }) {
+  const plan = useMemo(
+    () =>
+      language === WORD_PLAN_FENCE ? parseWordDocumentPlan(content) : null,
+    [language, content],
+  );
   const source = useMemo(
     () => wordEditSourceFromHistory(previousUserMessage),
     [previousUserMessage],
@@ -287,7 +268,19 @@ export function WordHistoryFenceCard({
     [language, content],
   );
   if (edits) return <WordHistoryEditsCard edits={edits} source={source} />;
-  if (language !== WORD_EDITS_FENCE && content.trim())
+  if (plan)
+    return (
+      <WordProposalCard
+        plan={plan}
+        documentName={source.documentName}
+        testId="word-history-plan"
+      />
+    );
+  if (
+    language !== WORD_EDITS_FENCE &&
+    language !== WORD_PLAN_FENCE &&
+    content.trim()
+  )
     return (
       <WordHistoryInsertCard
         text={content}

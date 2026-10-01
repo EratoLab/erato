@@ -12,7 +12,11 @@ import {
   WordUndoLine,
   wordUndoLabel,
 } from "@erato/frontend/library";
-import { editExcerpt, parseWordEdits } from "@erato/frontend/word-review";
+import {
+  editedParagraphCount,
+  editExcerpt,
+  parseWordEdits,
+} from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
@@ -25,7 +29,7 @@ import {
   WordReviewConfirm,
   WordStatusAlert,
 } from "./WordReviewCardParts";
-import { editedParagraphCount, WordReviewPanel } from "./WordReviewPanel";
+import { WordReviewPanel } from "./WordReviewPanel";
 import {
   wordDeniedText,
   wordInsertedText,
@@ -464,7 +468,9 @@ function WordActionCard({
           kind={payload.kind}
           title={
             payload.kind === "edits"
-              ? wordEditsTitleText(editedParagraphCount(payload.edits))
+              ? wordEditsTitleText(
+                  editedParagraphCount(payload.edits, capture?.paragraphsSent),
+                )
               : undefined
           }
         />

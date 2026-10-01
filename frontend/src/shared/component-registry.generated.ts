@@ -307,7 +307,7 @@ export { CollapsibleCodeBlock } from "@/components/ui/Message/CollapsibleCodeBlo
 export type { CollapsibleCodeBlockProps } from "@/components/ui/Message/CollapsibleCodeBlock";
 export { ConversationMessagesProvider } from "@/components/ui/Message/ConversationMessages";
 export { useConversationMessage } from "@/components/ui/Message/ConversationMessages";
-export { useConversationMessages } from "@/components/ui/Message/ConversationMessages";
+export { useConversationSelector } from "@/components/ui/Message/ConversationMessages";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { DelegatedTaskApprovalCard } from "@/components/ui/Message/DelegatedTaskApprovalCard";
 export { DefaultEratoAppointmentCodeBlock } from "@/components/ui/Message/EratoAppointmentBlock";
@@ -395,5 +395,7 @@ export { WelcomeScreenUpper } from "@/components/ui/WelcomeScreen";
 export type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
 export { isWordPlanToolPart } from "@/components/ui/WordReview/useWordHistoryMessage";
 export { isWordSubmitPlanPart } from "@/components/ui/WordReview/useWordHistoryMessage";
+export { setWordLiveCards } from "@/components/ui/WordReview/useWordHistoryMessage";
 export { useWordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
+export { useWordMessageLineage } from "@/components/ui/WordReview/useWordHistoryMessage";
 export type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";

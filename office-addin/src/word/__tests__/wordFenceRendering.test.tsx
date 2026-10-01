@@ -3,6 +3,7 @@ import {
   ConversationMessagesProvider,
   FeatureConfigProvider,
   MessageContent,
+  setWordLiveCards,
   ThemeProvider,
 } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
@@ -92,6 +93,7 @@ describe("the Word fences through the shipped host-card slot", () => {
   });
   afterEach(() => {
     componentRegistry.HostCardCodeBlock = null;
+    setWordLiveCards(false);
     vi.unstubAllGlobals();
     cleanup();
   });
@@ -190,6 +192,7 @@ describe("Word chats inside the Word host", () => {
   });
   afterEach(() => {
     componentRegistry.HostCardCodeBlock = null;
+    setWordLiveCards(false);
     vi.unstubAllGlobals();
     cleanup();
   });
@@ -249,7 +252,7 @@ describe("Word chats inside the Word host", () => {
       container.querySelector('[data-testid="word-edits-card"]'),
     ).not.toBeNull();
     expect(screen.queryByTestId("word-history-edits")).toBeNull();
-    expect(screen.queryByTestId("word-history-no-changes")).toBeNull();
+    expect(screen.queryByTestId("word-history-not-accepted")).toBeNull();
   });
 
   it("shows no read-only history card for an unstamped message", () => {
@@ -258,7 +261,7 @@ describe("Word chats inside the Word host", () => {
     const { container } = renderConversation(undefined);
 
     expect(screen.queryByTestId("word-history-edits")).toBeNull();
-    expect(screen.queryByTestId("word-history-no-changes")).toBeNull();
+    expect(screen.queryByTestId("word-history-not-accepted")).toBeNull();
     expect(
       container.querySelectorAll("pre.message-content-code-block"),
     ).toHaveLength(1);
@@ -271,9 +274,20 @@ describe("Word chats inside the Word host", () => {
     const { container } = renderConversation(undefined);
 
     expect(await screen.findByTestId("word-history-edits")).toBeTruthy();
-    expect(await screen.findByTestId("word-history-no-changes")).toBeTruthy();
+    expect(await screen.findByTestId("word-history-not-accepted")).toBeTruthy();
     expect(
       container.querySelector('[data-tool-name="submit_document_plan"]'),
-    ).toBeNull();
+    ).not.toBeNull();
+  });
+
+  it("shows the read-only cards in a host whose card renderer is not Word's", async () => {
+    componentRegistry.HostCardCodeBlock = function OtherHostCard() {
+      return <div data-testid="other" />;
+    };
+
+    renderConversation(undefined);
+
+    expect(await screen.findByTestId("word-history-edits")).toBeTruthy();
+    expect(screen.queryByTestId("other")).toBeNull();
   });
 });

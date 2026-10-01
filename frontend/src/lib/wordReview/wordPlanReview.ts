@@ -286,6 +286,43 @@ export function createWordListNumbering(): (block: {
   };
 }
 
+/**
+ * Plain text of the planned document, as Copy text offers it: tables as
+ * tab-separated rows, list items after their markers. Without a snapshot, only
+ * the new blocks.
+ */
+export function wordPlanText(
+  plan: WordDocumentPlan,
+  snapshot?: WordAuthoringSnapshot,
+): string {
+  const blocks = snapshot
+    ? wordPlanOutput(plan, snapshot).map((item) => item.block)
+    : plan.entries.flatMap((e) => (e.kind === "keep" ? [] : e.blocks));
+  const ordinalOf = createWordListNumbering();
+  return blocks
+    .map((block) => {
+      const ordinal = ordinalOf(block);
+      const text =
+        block.type === "table"
+          ? tableRow(
+              "",
+              "new",
+              block,
+              snapshot && wordSourceTable(snapshot, block.sourceRef),
+              true,
+            )
+              .cellTexts.map((cells) => cells.join("\t"))
+              .join("\n")
+          : "ref" in block
+            ? block.text
+            : blockText(block);
+      if (ordinal === undefined) return text;
+      const marker = block.ordered ? `${ordinal}.` : "•";
+      return `${"  ".repeat(block.level ?? 0)}${marker} ${text}`;
+    })
+    .join("\n");
+}
+
 export const pointsToCentimeters = (pt: number) => (pt * 2.54) / 72;
 export const pointsToMillimeters = (pt: number) => (pt * 25.4) / 72;
 /** Lengths under one centimetre read better in millimetres. */

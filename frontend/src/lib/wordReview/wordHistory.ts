@@ -1,11 +1,9 @@
-import { parseWordDocumentPlan } from "./wordDocumentPlan";
-import { parseWordEdits } from "./wordEditPlan";
 import {
-  WORD_EDITS_FENCE,
-  WORD_READ_TOOL,
-  WORD_SUBMIT_PLAN_ACTION,
-  WORD_SUBMIT_PLAN_TOOL,
-} from "./wordHistoryNames";
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+} from "./wordDocumentPlan";
+import { WORD_READ_TOOL, WORD_SUBMIT_PLAN_TOOL } from "./wordHistoryNames";
+import { isAcceptedWordSubmission } from "./wordHistoryParts";
 
 import type {
   WordAuthoringSnapshot,
@@ -23,10 +21,17 @@ export {
   WORD_ACTION_FACET_IDS,
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
+  WORD_PLAN_FENCE,
   WORD_READ_TOOL,
   WORD_SUBMIT_PLAN_ACTION,
   WORD_SUBMIT_PLAN_TOOL,
 } from "./wordHistoryNames";
+
+export {
+  isAcceptedWordSubmission,
+  isRejectedWordSubmission,
+  wordMessageLineage,
+} from "./wordHistoryParts";
 
 /**
  * A snapshot rebuilt from stored read outputs. It reviews what the model read,
@@ -45,25 +50,8 @@ const object = (value: unknown): value is Record<string, unknown> =>
 const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
-type HistoryMessage = Pick<Message, "content">;
-
-/** The message and the ones before it on its branch, oldest first. */
-export function wordMessageLineage(
-  messages: Readonly<Record<string, Message | undefined>>,
-  messageId: string | undefined,
-): Message[] {
-  const lineage: Message[] = [];
-  const seen = new Set<string>();
-  let id = messageId;
-  while (id && !seen.has(id)) {
-    seen.add(id);
-    const message = messages[id];
-    if (!message) break;
-    lineage.unshift(message);
-    id = message.previous_message_id;
-  }
-  return lineage;
-}
+type HistoryMessage = Pick<Message, "content"> &
+  Partial<Pick<Message, "action_facet_args">>;
 
 interface ReadPage {
   cursor: string | null;
@@ -359,31 +347,7 @@ export interface WordHistoryPlan {
 export function acceptedWordPlanFromHistory(
   content: readonly ContentPart[] | undefined,
 ): WordHistoryPlan | undefined {
-  const accepted = (content ?? []).filter((part) => {
-    if (
-      part.content_type !== "tool_use" ||
-      part.tool_name !== WORD_SUBMIT_PLAN_TOOL ||
-      part.status !== "success" ||
-      typeof part.tool_call_id !== "string" ||
-      !part.tool_call_id
-    )
-      return false;
-    const output = part.output;
-    if (
-      !object(output) ||
-      output.status !== "success" ||
-      !object(output.submission) ||
-      output.submission.status !== "accepted" ||
-      !object(output.result) ||
-      !object(part.input)
-    )
-      return false;
-    return (
-      output.result.draft_id === part.tool_call_id &&
-      output.result.snapshot === part.input.snapshot &&
-      output.result.action === WORD_SUBMIT_PLAN_ACTION
-    );
-  });
+  const accepted = (content ?? []).filter(isAcceptedWordSubmission);
   if (accepted.length !== 1) return undefined;
   const part = accepted[0];
   if (part.content_type !== "tool_use" || !part.tool_call_id) return undefined;
@@ -412,10 +376,6 @@ export interface WordHistoryParagraph {
   headingLevel?: number;
 }
 
-export interface WordHistoryEdits extends WordHistoryEditSource {
-  edits: WordEdit[];
-}
-
 export interface WordHistoryEditSource {
   /** The `[n]` lines the edits were written against, by ordinal. */
   paragraphs: ReadonlyMap<number, WordHistoryParagraph>;
@@ -427,10 +387,6 @@ export interface WordHistoryEditSource {
 }
 
 const PARAGRAPH_LINE = /^\[(\d+)(?:\|H([1-9]))?\] (.*)$/u;
-const FENCE = new RegExp(
-  "```" + WORD_EDITS_FENCE + "[^\\S\\n]*\\n([\\s\\S]*?)\\n?```",
-  "gu",
-);
 
 /** Parses the numbered `document_text` lines a Word request sent. */
 export function wordParagraphsFromDocumentText(
@@ -453,20 +409,6 @@ const nonNegative = (value: string | undefined) => {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 };
 
-/** The first valid edits fence of an answer, with the paragraphs its request showed. */
-export function wordEditsFromHistory(
-  assistantText: string,
-  previousUserMessage: Pick<Message, "action_facet_args"> | undefined,
-): WordHistoryEdits | undefined {
-  let edits: WordEdit[] | null = null;
-  for (const match of assistantText.matchAll(FENCE)) {
-    edits = parseWordEdits(match[1]);
-    if (edits) break;
-  }
-  if (!edits) return undefined;
-  return { edits, ...wordEditSourceFromHistory(previousUserMessage) };
-}
-
 /** The paragraphs a Word request showed, which its edits were written against. */
 export function wordEditSourceFromHistory(
   previousUserMessage: Pick<Message, "action_facet_args"> | undefined,
@@ -484,4 +426,109 @@ export function wordEditSourceFromHistory(
     partialOrdinal: partial ? Number(partial[1]) : null,
     ...(args.document_name ? { documentName: args.document_name } : {}),
   };
+}
+
+/**
+ * The paragraphs the request covered: up to `paragraphs_sent`, or the last
+ * ordinal it showed when the count is missing.
+ */
+export function wordEditWindow(source: WordHistoryEditSource): number {
+  return source.paragraphsSent ?? Math.max(0, ...source.paragraphs.keys());
+}
+
+/**
+ * The text an edit replaces, as its request showed it. The request omits
+ * blank paragraphs, so an ordinal missing between two shown endpoints is a
+ * blank line, as the add-in resolves it. Null when an endpoint was not shown,
+ * the span leaves the window, or it covers the partly sent paragraph.
+ */
+export function wordEditOriginal(
+  edit: WordEdit,
+  source: WordHistoryEditSource,
+): string | null {
+  const through = edit.through ?? edit.paragraph;
+  const { partialOrdinal } = source;
+  if (
+    through > wordEditWindow(source) ||
+    !source.paragraphs.has(edit.paragraph) ||
+    !source.paragraphs.has(through) ||
+    (partialOrdinal !== null &&
+      edit.paragraph <= partialOrdinal &&
+      partialOrdinal <= through)
+  )
+    return null;
+  const lines: string[] = [];
+  for (let n = edit.paragraph; n <= through; n++)
+    lines.push(source.paragraphs.get(n)?.text ?? "");
+  return lines.join("\n");
+}
+
+export interface WordHistoryProposal {
+  /** Normalised against the rebuilt snapshot, as the add-in reviews it. */
+  plan: WordDocumentPlan;
+  snapshot?: WordHistorySnapshot;
+  documentName?: string;
+}
+
+/**
+ * The plan a Word chat proposed and the document it was written against, as
+ * stored history shows them. `submitted` is either the plan message's content,
+ * whose accepted submission counts, or a plan fence's JSON.
+ */
+export function wordHistoryProposal(
+  lineage: readonly HistoryMessage[],
+  submitted: readonly ContentPart[] | string,
+): WordHistoryProposal | undefined {
+  const plan =
+    typeof submitted === "string"
+      ? parseWordDocumentPlan(submitted)
+      : acceptedWordPlanFromHistory(submitted)?.plan;
+  if (!plan) return undefined;
+  const snapshot = wordSnapshotFromHistory(lineage, plan.snapshot);
+  const documentName = lineage.findLast(
+    (message) => message.action_facet_args?.document_name,
+  )?.action_facet_args?.document_name;
+  return {
+    plan: normalizeWordDocumentPlan(plan, snapshot),
+    ...(snapshot ? { snapshot } : {}),
+    ...(documentName ? { documentName } : {}),
+  };
+}
+
+const toolIdentity = (part: ContentPart): string =>
+  part.content_type === "tool_use"
+    ? [
+        part.tool_call_id,
+        part.status,
+        object(part.output) ? part.output.status : "",
+        object(part.output) && object(part.output.submission)
+          ? part.output.submission.status
+          : "",
+      ].join(":")
+    : "";
+
+/**
+ * Changes only when a read or submission that {@link wordHistoryProposal}
+ * consumes starts or settles, so streamed text does not rebuild the proposal.
+ */
+export function wordHistoryProposalKey(
+  lineage: readonly HistoryMessage[],
+  content: readonly ContentPart[],
+): string {
+  const parts = (
+    tool: string,
+    messageContent: readonly ContentPart[] | undefined,
+  ) =>
+    (messageContent ?? [])
+      .filter(
+        (part) => part.content_type === "tool_use" && part.tool_name === tool,
+      )
+      .map(toolIdentity)
+      .join(",");
+  return [
+    parts(WORD_SUBMIT_PLAN_TOOL, content),
+    ...lineage.map((message) =>
+      parts(WORD_READ_TOOL, message.content as ContentPart[] | undefined),
+    ),
+  ].join("|");
 }

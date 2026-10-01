@@ -14,6 +14,7 @@ import {
   wordSizeChip,
 } from "@erato/frontend/library";
 import {
+  editedParagraphCount,
   editExcerpt,
   planWordEdits,
   wordEditCounts,
@@ -122,15 +123,6 @@ function statusTone(
   );
 }
 
-/** Paragraphs an edit batch touches, counting each ordinal once. */
-export function editedParagraphCount(edits: readonly WordEdit[]): number {
-  const ordinals = new Set<number>();
-  for (const edit of edits)
-    for (let p = edit.paragraph; p <= (edit.through ?? edit.paragraph); p++)
-      ordinals.add(p);
-  return ordinals.size;
-}
-
 export function WordReviewPanel({
   edits,
   capture,
@@ -197,7 +189,9 @@ export function WordReviewPanel({
     });
   const complete = capture?.renderedOrdinals.size ?? 0;
   const documentTotal = capture?.ordinalMap.size ?? 0;
-  const title = wordEditsTitleText(editedParagraphCount(edits));
+  const title = wordEditsTitleText(
+    editedParagraphCount(edits, capture?.paragraphsSent),
+  );
   const totals =
     review.status === "write-failed"
       ? t({

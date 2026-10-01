@@ -30,7 +30,9 @@ import { useOptionalTranslation } from "@/hooks/i18n";
 import {
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
+  WORD_PLAN_FENCE,
 } from "@/lib/wordReview/wordHistoryNames";
+import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -199,6 +201,7 @@ const EMPTY_LANGUAGES: readonly string[] = [];
 const WORD_HISTORY_FENCES: ReadonlySet<string> = new Set([
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
+  WORD_PLAN_FENCE,
 ]);
 
 const WORD_HISTORY_FENCE_RULES: HostFenceRules = {
@@ -315,7 +318,14 @@ function containsMarkdownFence(text: string): boolean {
 
 const HostArtifactContext = React.createContext<HostArtifact | null>(null);
 
-const WordHistoryContext = React.createContext<WordHistoryMessage | null>(null);
+interface WordHistoryRendering extends WordHistoryMessage {
+  /** The message's accepted submission already shows the plan as a card. */
+  planAccepted: boolean;
+}
+
+const WordHistoryContext = React.createContext<WordHistoryRendering | null>(
+  null,
+);
 
 // Loaded on first use: only chats written from Word need the review modules.
 const loadWordHistoryCards = () =>
@@ -529,6 +539,8 @@ function MarkdownCode({
   }
 
   if (isBlockCode && wordHistory && WORD_HISTORY_FENCES.has(language)) {
+    // An echoed plan beside the accepted submission's card would show it twice.
+    if (language === WORD_PLAN_FENCE && wordHistory.planAccepted) return null;
     return (
       <React.Suspense fallback={null}>
         <WordHistoryFenceCard
@@ -780,9 +792,16 @@ export const MessageContent = memo(function MessageContent({
   // artifact-driven path below reads this single resolved value.
   const hostArtifact = hostArtifactProp ?? outlookArtifact;
   const wordHistory = useWordHistoryMessage(messageId, hostArtifact);
-  // Outside Word the reads and submissions fold into one read-only plan card.
-  const foldsWordPlan =
+  // Outside Word the reads and submissions of an accepted plan fold into one
+  // read-only card; rejected attempts stay in the trace.
+  const showsWordPlan =
     !!wordHistory && messageContent.some(isWordSubmitPlanPart);
+  const foldsWordPlan =
+    showsWordPlan && messageContent.some(isAcceptedWordSubmission);
+  const wordHistoryRendering = React.useMemo(
+    () => wordHistory && { ...wordHistory, planAccepted: foldsWordPlan },
+    [wordHistory, foldsWordPlan],
+  );
   const content = React.useMemo(
     () =>
       foldsWordPlan
@@ -1320,7 +1339,7 @@ export const MessageContent = memo(function MessageContent({
     return (
       <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
         <HostArtifactContext.Provider value={hostArtifact ?? null}>
-          <WordHistoryContext.Provider value={wordHistory}>
+          <WordHistoryContext.Provider value={wordHistoryRendering}>
             <Markdown
               remarkPlugins={[remarkGfm, remarkMath]}
               rehypePlugins={[
@@ -1595,7 +1614,7 @@ export const MessageContent = memo(function MessageContent({
           />
         </HostArtifactContext.Provider>
       )}
-      {foldsWordPlan && messageId && (
+      {showsWordPlan && messageId && (
         <React.Suspense fallback={null}>
           <WordHistoryPlanCard
             messageId={messageId}

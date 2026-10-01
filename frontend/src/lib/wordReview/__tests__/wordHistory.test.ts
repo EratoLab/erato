@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import { normalizeWordDocumentPlan } from "../wordDocumentPlan";
+import { editedParagraphCount, parseWordEdits } from "../wordEditPlan";
 import {
   acceptedWordPlanFromHistory,
   isWordHistorySnapshot,
-  wordEditsFromHistory,
+  wordEditOriginal,
+  wordEditSourceFromHistory,
+  wordHistoryProposal,
+  wordHistoryProposalKey,
   wordMessageLineage,
   wordParagraphsFromDocumentText,
   wordSnapshotFromHistory,
@@ -16,6 +21,7 @@ import multiPage from "./fixtures/history-multi-page.json";
 import noAccepted from "./fixtures/history-no-accepted.json";
 import retryAccepted from "./fixtures/history-retry-accepted.json";
 
+import type { WordDocumentPlan } from "../wordDocumentPlan";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
@@ -375,25 +381,31 @@ describe("Word read fragments", () => {
   });
 });
 
+const fenceEdits = (message: Message) => {
+  const text = message.content
+    .map((part) => (part.content_type === "text" ? part.text : ""))
+    .join("");
+  const body = /```erato-word-edits\n([\s\S]*?)\n```/u.exec(text)?.[1];
+  return body === undefined ? null : parseWordEdits(body);
+};
+
 describe("Word paragraph edits restored from chat history", () => {
   it("pairs the edits with the numbered paragraphs the request sent", () => {
     const [user, assistant] = messagesOf(edits);
-    const text = assistant.content
-      .map((part) => (part.content_type === "text" ? part.text : ""))
-      .join("");
-    const restored = wordEditsFromHistory(text, user)!;
-    expect(restored.edits).toHaveLength(1);
-    expect(restored.edits[0]).toMatchObject({ paragraph: 1, through: 9 });
-    expect(restored.paragraphs.size).toBe(9);
-    expect(restored.paragraphs.get(1)?.text).toBe(
+    const restored = fenceEdits(assistant)!;
+    const source = wordEditSourceFromHistory(user);
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toMatchObject({ paragraph: 1, through: 9 });
+    expect(source.paragraphs.size).toBe(9);
+    expect(source.paragraphs.get(1)?.text).toBe(
       "To help, please tell me what you want to do:",
     );
-    expect(restored).toMatchObject({
+    expect(source).toMatchObject({
       paragraphsSent: 10,
       paragraphsTotal: 10,
       partialOrdinal: null,
     });
-    expect(restored.documentName).toBeUndefined();
+    expect(source.documentName).toBeUndefined();
   });
 
   it("reads headings and a partly sent paragraph, and ignores prose mentions", () => {
@@ -405,22 +417,114 @@ describe("Word paragraph edits restored from chat history", () => {
         [2, { text: "Body [x]" }],
       ]),
     );
-    const answer =
-      "I will use erato-word-edits now.\n```erato-word-edits\nnot json\n```\n" +
-      '```erato-word-edits\n{"edits":[{"paragraph":2,"text":"New"}]}\n```';
-    const restored = wordEditsFromHistory(answer, {
+    expect(
+      wordEditSourceFromHistory({
+        action_facet_args: {
+          document_name: "Plan.docx",
+          document_text: "[2] Old",
+          truncation_note:
+            "Paragraph 2 is included only in part, because it alone exceeds the send limit.",
+        },
+      }),
+    ).toMatchObject({ partialOrdinal: 2, documentName: "Plan.docx" });
+  });
+
+  it("keeps blank paragraphs inside a span as blank lines", () => {
+    const source = wordEditSourceFromHistory({
       action_facet_args: {
-        document_name: "Plan.docx",
-        document_text: "[2] Old",
+        document_text: "[1] Intro\n[3] Body\n[5] Close",
+        paragraphs_sent: "6",
+      },
+    });
+    expect(
+      wordEditOriginal({ paragraph: 1, through: 5, text: "" }, source),
+    ).toBe("Intro\n\nBody\n\nClose");
+    expect(wordEditOriginal({ paragraph: 2, text: "" }, source)).toBeNull();
+    expect(
+      wordEditOriginal({ paragraph: 3, through: 7, text: "" }, source),
+    ).toBeNull();
+  });
+
+  it("finds no original for a span over the partly sent paragraph", () => {
+    const source = wordEditSourceFromHistory({
+      action_facet_args: {
+        document_text: "[1] Intro\n[2] Long",
+        paragraphs_sent: "2",
         truncation_note:
           "Paragraph 2 is included only in part, because it alone exceeds the send limit.",
       },
     });
-    expect(restored).toMatchObject({
-      edits: [{ paragraph: 2, text: "New" }],
-      partialOrdinal: 2,
-      documentName: "Plan.docx",
-    });
-    expect(wordEditsFromHistory("No fence", undefined)).toBeUndefined();
+    expect(
+      wordEditOriginal({ paragraph: 1, through: 2, text: "" }, source),
+    ).toBeNull();
+    expect(wordEditOriginal({ paragraph: 1, text: "" }, source)).toBe("Intro");
+  });
+
+  it("counts an absurd span without enumerating it, within the sent window", () => {
+    const span = parseWordEdits(
+      '{"edits":[{"paragraph":1,"through":4000000000,"text":"x"},{"paragraph":3,"through":8,"text":"y"}]}',
+    )!;
+    expect(editedParagraphCount(span)).toBe(4000000000);
+    expect(editedParagraphCount(span, 10)).toBe(10);
+    expect(
+      editedParagraphCount([
+        { paragraph: 2, through: 3, text: "" },
+        { paragraph: 5, text: "" },
+        { paragraph: 3, through: 4, text: "" },
+      ]),
+    ).toBe(4);
+    expect(
+      parseWordEdits('{"edits":[{"paragraph":1,"through":1e300,"text":"x"}]}'),
+    ).toBeNull();
+  });
+});
+
+describe("the Word history proposal", () => {
+  it("normalises the accepted plan against the rebuilt snapshot", () => {
+    const messages = messagesOf(retryAccepted);
+    messages[0].action_facet_args = {
+      ...messages[0].action_facet_args,
+      document_name: "Quarterly.docx",
+    };
+    const assistant = messages[messages.length - 1];
+    const submitted = toolUses(assistant).find(
+      (part) =>
+        (part.output as unknown as { submission?: { status?: string } })
+          .submission?.status === "accepted",
+    )!.input as unknown as WordDocumentPlan;
+    const heading = (plan: WordDocumentPlan) =>
+      plan.entries
+        .flatMap((entry) => (entry.kind === "keep" ? [] : entry.blocks))
+        .find((block) => block.id === "h-goal");
+    heading(submitted)!.styleRef = "Heading1";
+    const proposal = wordHistoryProposal(messages, assistant.content)!;
+    const accepted = acceptedWordPlanFromHistory(assistant.content)!;
+    expect(proposal.snapshot).toBeDefined();
+    expect(heading(accepted.plan)?.styleRef).toBe("Heading1");
+    expect(heading(proposal.plan)?.styleRef).toBeUndefined();
+    expect(proposal.plan).toEqual(
+      normalizeWordDocumentPlan(accepted.plan, proposal.snapshot),
+    );
+    expect(proposal.documentName).toBe("Quarterly.docx");
+    expect(wordHistoryProposal(messages, accepted.content)).toEqual(proposal);
+  });
+
+  it("keys the proposal on its tool calls, not on streamed text", () => {
+    const messages = messagesOf(retryAccepted);
+    const assistant = messages[messages.length - 1];
+    const key = wordHistoryProposalKey(messages, assistant.content);
+    const streamed = [
+      ...assistant.content,
+      { content_type: "text", text: "More text" } as ContentPart,
+    ];
+    expect(wordHistoryProposalKey(messages, streamed)).toBe(key);
+    const reads = messages.map((message) => ({
+      ...message,
+      content: message.content.filter(
+        (part) =>
+          part.content_type !== "tool_use" || part.tool_name !== WORD_READ_TOOL,
+      ),
+    }));
+    expect(wordHistoryProposalKey(reads, assistant.content)).not.toBe(key);
   });
 });

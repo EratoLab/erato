@@ -32,7 +32,7 @@ export function parseWordEdits(content: string): WordEdit[] | null {
     const entry = raw as Record<string, unknown>;
     const paragraph = entry.paragraph;
     const text = entry.text;
-    if (!Number.isInteger(paragraph) || (paragraph as number) < 1) {
+    if (!Number.isSafeInteger(paragraph) || (paragraph as number) < 1) {
       return null;
     }
     if (typeof text !== "string") {
@@ -40,7 +40,7 @@ export function parseWordEdits(content: string): WordEdit[] | null {
     }
     const through = entry.through;
     if (through !== undefined) {
-      if (!Number.isInteger(through) || (through as number) < 1) {
+      if (!Number.isSafeInteger(through) || (through as number) < 1) {
         return null;
       }
       if ((through as number) < (paragraph as number)) {
@@ -54,6 +54,35 @@ export function parseWordEdits(content: string): WordEdit[] | null {
     });
   }
   return edits;
+}
+
+/**
+ * Paragraphs an edit batch touches, counting each ordinal once and none past
+ * `limit`. Spans come from the model, so they are measured, never enumerated.
+ */
+export function editedParagraphCount(
+  edits: readonly WordEdit[],
+  limit = Number.MAX_SAFE_INTEGER,
+): number {
+  const spans = edits
+    .map(
+      (edit) =>
+        [
+          edit.paragraph,
+          Math.min(edit.through ?? edit.paragraph, limit),
+        ] as const,
+    )
+    .filter(([from, to]) => from <= to)
+    .sort((a, b) => a[0] - b[0]);
+  let count = 0;
+  let covered = 0;
+  for (const [from, to] of spans) {
+    const start = Math.max(from, covered + 1);
+    if (to < start) continue;
+    count += to - start + 1;
+    covered = to;
+  }
+  return count;
 }
 
 export type WordEditRejection =

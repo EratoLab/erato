@@ -3,6 +3,7 @@ import {
   Alert,
   useChatContext,
   useHostArtifact,
+  useWordMessageLineage,
   WordProposalCard,
   WordReviewGenerating,
   WordUndoLine,
@@ -15,8 +16,7 @@ import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
-  wordMessageLineage,
-  wordSnapshotFromHistory,
+  wordHistoryProposal,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
@@ -88,23 +88,22 @@ export function WordDocumentPlanCard({
   const snapshot = capture?.authoring;
   const parsed = useMemo(() => parseWordDocumentPlan(content), [content]);
   const liveMatches = !!parsed && parsed.snapshot === snapshot?.token;
-  const message = messageId ? messages[messageId] : undefined;
+  const lineage = useWordMessageLineage(messageId);
   // Without the live capture, review against what the model read; it never applies.
   const history = useMemo(
     () =>
       parsed && !liveMatches
-        ? wordSnapshotFromHistory(
-            wordMessageLineage(messages, message?.id),
-            parsed.snapshot,
-          )
+        ? wordHistoryProposal(lineage, content)
         : undefined,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild only when this message's content changes
-    [parsed, liveMatches, message],
+    [parsed, liveMatches, lineage, content],
   );
-  const shown = liveMatches ? snapshot : (history ?? snapshot);
+  const shown = liveMatches ? snapshot : (history?.snapshot ?? snapshot);
   const plan = useMemo(
-    () => parsed && normalizeWordDocumentPlan(parsed, shown),
-    [parsed, shown],
+    () =>
+      history?.snapshot
+        ? history.plan
+        : parsed && normalizeWordDocumentPlan(parsed, shown),
+    [history, parsed, shown],
   );
   const planReview = useMemo(
     () => plan && buildWordPlanReview(plan, shown),

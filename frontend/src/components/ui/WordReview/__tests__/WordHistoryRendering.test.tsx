@@ -2,16 +2,21 @@ import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { ConversationMessagesProvider } from "@/components/ui/Message/ConversationMessages";
 import { MessageContent } from "@/components/ui/Message/MessageContent";
+import {
+  setWordLiveCards,
+  useWordMessageLineage,
+} from "@/components/ui/WordReview/useWordHistoryMessage";
 import { componentRegistry } from "@/config/componentRegistry";
 import earlierMessage from "@/lib/wordReview/__tests__/fixtures/history-earlier-message.json";
 import edits from "@/lib/wordReview/__tests__/fixtures/history-edits.json";
 import noAccepted from "@/lib/wordReview/__tests__/fixtures/history-no-accepted.json";
 import retryAccepted from "@/lib/wordReview/__tests__/fixtures/history-retry-accepted.json";
+import * as wordHistory from "@/lib/wordReview/wordHistory";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
@@ -19,6 +24,15 @@ import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { HostArtifact, Message } from "@/types/chat";
 import type { Messages } from "@lingui/core";
+
+vi.mock("@/lib/wordReview/wordHistory", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/wordReview/wordHistory")>();
+  return {
+    ...actual,
+    wordHistoryProposal: vi.fn(actual.wordHistoryProposal),
+  };
+});
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
@@ -28,37 +42,48 @@ beforeAll(() => {
 const registry = { ...componentRegistry };
 afterEach(() => {
   Object.assign(componentRegistry, registry);
+  setWordLiveCards(false);
 });
 
 const messagesOf = (fixture: { messages: unknown[] }) =>
   globalThis.structuredClone(fixture.messages) as Message[];
 
-function renderChat(
+const queryClient = new QueryClient();
+
+function chatTree(
   messages: Message[],
-  options: { messageId?: string; hostArtifact?: HostArtifact } = {},
+  options: {
+    messageId?: string;
+    hostArtifact?: HostArtifact;
+    isStreaming?: boolean;
+  } = {},
 ) {
   const byId = Object.fromEntries(messages.map((m) => [m.id, m]));
   const message = options.messageId
     ? byId[options.messageId]
     : messages[messages.length - 1];
-  return render(
+  return (
     <I18nProvider i18n={i18n}>
       <StaticFeatureConfigProvider>
         <ThemeProvider enableCustomTheme={false}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={queryClient}>
             <ConversationMessagesProvider messages={byId}>
               <MessageContent
                 content={message.content}
                 messageId={message.id}
                 hostArtifact={options.hostArtifact}
+                isStreaming={options.isStreaming}
               />
             </ConversationMessagesProvider>
           </QueryClientProvider>
         </ThemeProvider>
       </StaticFeatureConfigProvider>
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
+
+const renderChat = (...args: Parameters<typeof chatTree>) =>
+  render(chatTree(...args));
 
 const toolNames = () =>
   screen
@@ -116,13 +141,25 @@ const otherTool: ContentPart = {
   output: { results: [] },
 } as unknown as ContentPart;
 
-async function expectNothingProposed() {
-  const note = await screen.findByTestId("word-history-no-changes");
-  expect(note).toHaveTextContent("No changes were proposed.");
+async function expectRejectedAttempts() {
+  const note = await screen.findByTestId("word-history-not-accepted");
+  expect(note).toHaveTextContent(
+    "A change was proposed but did not pass validation, so there is nothing to apply.",
+  );
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByTestId("word-history-plan")).toBeNull();
-  expect(toolNames()).toEqual([]);
+  expect(toolNames()).toContain("submit_document_plan");
 }
+
+const planFence = (plan: unknown) =>
+  text(
+    `Done.\n\n\`\`\`erato-word-document-plan\n${JSON.stringify(plan)}\n\`\`\``,
+  );
+
+const acceptedPlanOf = (messages: Message[]) =>
+  wordHistory.acceptedWordPlanFromHistory(
+    messages[messages.length - 1].content,
+  )!.plan;
 
 describe("Word chats shown outside Word", () => {
   it("folds the reads and attempts of an accepted plan into one read-only card with the full review", async () => {
@@ -164,14 +201,72 @@ describe("Word chats shown outside Word", () => {
     expect(within(card).getByText(/^Saved draft/)).toBeVisible();
   });
 
-  it("says calmly that nothing was proposed when no attempt was accepted", async () => {
+  it("keeps rejected attempts in the trace and says calmly that nothing can be applied", async () => {
     renderChat(messagesOf(noAccepted));
-    await expectNothingProposed();
+    await expectRejectedAttempts();
   });
 
-  it("says nothing was proposed by a later answer whose retry was not accepted", async () => {
+  it("keeps a later answer's rejected retry in the trace", async () => {
     renderChat(messagesOf(earlierMessage));
-    await expectNothingProposed();
+    await expectRejectedAttempts();
+  });
+
+  it("says nothing about attempts while the answer still streams", () => {
+    renderChat(messagesOf(noAccepted), { isStreaming: true });
+    expect(screen.queryByTestId("word-history-not-accepted")).toBeNull();
+    expect(toolNames()).toContain("submit_document_plan");
+  });
+
+  it("hides an echoed plan fence beside the accepted submission's card", async () => {
+    const messages = messagesOf(retryAccepted);
+    const assistant = messages[messages.length - 1];
+    assistant.content = [
+      ...assistant.content,
+      planFence(acceptedPlanOf(messages)),
+    ];
+    renderChat(messages);
+
+    expect(await screen.findAllByTestId("word-history-plan")).toHaveLength(1);
+    expect(screen.queryByText(/"readToken"/)).toBeNull();
+  });
+
+  it("shows an echoed plan without an accepted submission as the plan-only card", async () => {
+    const plan = acceptedPlanOf(messagesOf(retryAccepted));
+    renderChat(wordConversation([planFence(plan)]));
+
+    const card = await screen.findByTestId("word-history-plan");
+    expect(within(card).getByText(/^Saved draft/)).toBeVisible();
+    expect(within(card).getByText("From Word · Report.docx")).toBeVisible();
+    expect(screen.queryByText(/"readToken"/)).toBeNull();
+  });
+
+  it("keeps an echoed plan that does not parse as code", async () => {
+    renderChat(wordConversation([planFence({ version: 1 })]));
+
+    expect(await screen.findByText(/"version"/)).toBeInTheDocument();
+    expect(screen.queryByTestId("word-history-plan")).toBeNull();
+  });
+
+  it("does not rebuild the proposal for text streamed after the accepted plan", async () => {
+    const messages = messagesOf(retryAccepted);
+    const view = renderChat(messages, { isStreaming: true });
+    await screen.findByTestId("word-history-plan");
+    const built = vi.mocked(wordHistory.wordHistoryProposal).mock.calls.length;
+
+    const assistant = messages[messages.length - 1];
+    for (const token of ["Here", " is", " the plan."]) {
+      assistant.content = [...assistant.content, text(token)];
+      view.rerender(
+        chatTree([...messages.slice(0, -1), { ...assistant }], {
+          isStreaming: true,
+        }),
+      );
+    }
+
+    expect(screen.getByText(/the plan\./)).toBeInTheDocument();
+    expect(vi.mocked(wordHistory.wordHistoryProposal).mock.calls).toHaveLength(
+      built,
+    );
   });
 
   it("shows paragraph edits before and after, against the request's paragraphs", async () => {
@@ -293,11 +388,66 @@ describe("Word chats in the Word host", () => {
     expect(screen.queryByTestId("word-history-edits")).toBeNull();
   });
 
-  it("does not fold or card unstamped Word messages while a host card renderer is registered", () => {
+  it("does not fold or card unstamped Word messages once Word declares its live cards", () => {
     componentRegistry.HostCardCodeBlock = stub;
+    setWordLiveCards(true);
     renderChat(messagesOf(retryAccepted));
 
     expect(screen.queryByTestId("word-history-plan")).toBeNull();
     expect(toolNames()).toContain("submit_document_plan");
+  });
+
+  it("still shows read-only Word cards in a host with a card renderer of its own", async () => {
+    componentRegistry.HostCardCodeBlock = stub;
+    renderChat(messagesOf(retryAccepted));
+
+    expect(await screen.findByTestId("word-history-plan")).toBeVisible();
+    expect(toolNames()).toEqual([]);
+  });
+});
+
+describe("the Word lineage selector", () => {
+  it("re-renders only when a message of its own branch changes", () => {
+    let renders = 0;
+    function Reader() {
+      renders++;
+      return <span>{useWordMessageLineage("b").length}</span>;
+    }
+    const reader = <Reader />;
+    const message = (id: string, previous?: string, body = "") =>
+      ({
+        id,
+        role: "assistant",
+        previous_message_id: previous,
+        createdAt: "2026-10-01T00:00:00Z",
+        content: [text(body)],
+      }) as Message;
+    const a = message("a");
+    const b = message("b", "a");
+    const view = render(
+      <ConversationMessagesProvider messages={{ a, b, c: message("c") }}>
+        {reader}
+      </ConversationMessagesProvider>,
+    );
+    expect(view.container).toHaveTextContent("2");
+    const settled = renders;
+
+    view.rerender(
+      <ConversationMessagesProvider
+        messages={{ a, b, c: message("c", undefined, "token") }}
+      >
+        {reader}
+      </ConversationMessagesProvider>,
+    );
+    expect(renders).toBe(settled);
+
+    view.rerender(
+      <ConversationMessagesProvider
+        messages={{ a: message("a", undefined, "edited"), b, c: message("c") }}
+      >
+        {reader}
+      </ConversationMessagesProvider>,
+    );
+    expect(renders).toBe(settled + 1);
   });
 });

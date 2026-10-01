@@ -6420,8 +6420,13 @@ msgstr "Insertar texto en el cursor"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordHistoryCards.tsx
-msgid "wordReview.history.noChanges"
-msgstr "No se propusieron cambios."
+#~ msgid "wordReview.history.noChanges"
+#~ msgstr "No se propusieron cambios."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.notAccepted"
+msgstr "Se propuso un cambio, pero no superó la validación, así que no hay nada que aplicar."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordHistoryCards.tsx

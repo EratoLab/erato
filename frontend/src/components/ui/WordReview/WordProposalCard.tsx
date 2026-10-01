@@ -2,8 +2,10 @@ import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
-import { wordPlanText } from "@/lib/wordReview/wordDocumentPlan";
-import { buildWordPlanReview } from "@/lib/wordReview/wordPlanReview";
+import {
+  buildWordPlanReview,
+  wordPlanText,
+} from "@/lib/wordReview/wordPlanReview";
 
 import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
 import { WordReviewCard, WordReviewDetailsToggle } from "./WordReviewCardParts";

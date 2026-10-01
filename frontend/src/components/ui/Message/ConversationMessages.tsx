@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -72,8 +73,28 @@ export function useConversationMessage(
   );
 }
 
-/** Every message of the conversation; re-renders whenever any changes. */
-export function useConversationMessages(): MessagesById {
+/**
+ * A value derived from the conversation; re-renders only when `isEqual` says
+ * the derived value changed, so tokens streamed into other messages pass by.
+ */
+export function useConversationSelector<T>(
+  select: (messages: MessagesById) => T,
+  isEqual: (previous: T, next: T) => boolean,
+): T {
   const store = useContext(ConversationMessagesContext);
-  return useSyncExternalStore(store.subscribe, store.get);
+  const last = useRef<{
+    messages: MessagesById;
+    select: (messages: MessagesById) => T;
+    value: T;
+  } | null>(null);
+  return useSyncExternalStore(store.subscribe, () => {
+    const messages = store.get();
+    const cached = last.current;
+    if (cached?.messages === messages && cached.select === select)
+      return cached.value;
+    const next = select(messages);
+    const value = cached && isEqual(cached.value, next) ? cached.value : next;
+    last.current = { messages, select, value };
+    return value;
+  });
 }

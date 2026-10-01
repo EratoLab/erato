@@ -1,12 +1,15 @@
 import { useMemo } from "react";
 
-import { useConversationMessage } from "@/components/ui/Message/ConversationMessages";
-import { componentRegistry } from "@/config/componentRegistry";
+import {
+  useConversationMessage,
+  useConversationSelector,
+} from "@/components/ui/Message/ConversationMessages";
 import {
   WORD_ACTION_FACET_IDS,
   WORD_READ_TOOL,
   WORD_SUBMIT_PLAN_TOOL,
 } from "@/lib/wordReview/wordHistoryNames";
+import { wordMessageLineage } from "@/lib/wordReview/wordHistoryParts";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { HostArtifact, Message } from "@/types/chat";
@@ -17,10 +20,20 @@ export interface WordHistoryMessage {
   documentName?: string;
 }
 
+let wordLiveCards = false;
+
+/**
+ * Declares that this host renders Word answers with live cards of its own
+ * (the Word add-in). Every other host shows them read-only.
+ */
+export function setWordLiveCards(enabled: boolean): void {
+  wordLiveCards = enabled;
+}
+
 /**
  * The Word request an assistant message answered, when the message is shown
- * outside the Word host. A host that renders card fences itself (the Word
- * add-in) owns these messages, stamped or not, so it sees none.
+ * outside the Word host. The Word add-in owns these messages, stamped or not,
+ * so it sees none.
  */
 export function useWordHistoryMessage(
   messageId: string | undefined,
@@ -30,7 +43,7 @@ export function useWordHistoryMessage(
   const previous = useConversationMessage(message?.previous_message_id);
   const request =
     !hostArtifact &&
-    !componentRegistry.HostCardCodeBlock &&
+    !wordLiveCards &&
     message?.role === "assistant" &&
     previous?.action_facet_id &&
     WORD_ACTION_FACET_IDS.has(previous.action_facet_id)
@@ -53,3 +66,19 @@ export const isWordPlanToolPart = (part: ContentPart): boolean =>
 
 export const isWordSubmitPlanPart = (part: ContentPart): boolean =>
   part.content_type === "tool_use" && part.tool_name === WORD_SUBMIT_PLAN_TOOL;
+
+const sameMessages = (a: readonly Message[], b: readonly Message[]) =>
+  a.length === b.length && a.every((message, i) => message === b[i]);
+
+/**
+ * A message and the ones before it on its branch, oldest first. Re-renders
+ * only when one of those messages changes, not on tokens streamed elsewhere.
+ */
+export function useWordMessageLineage(
+  messageId: string | undefined,
+): readonly Message[] {
+  return useConversationSelector(
+    (messages) => wordMessageLineage(messages, messageId),
+    sameMessages,
+  );
+}

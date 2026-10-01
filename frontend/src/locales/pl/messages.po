@@ -6420,8 +6420,13 @@ msgstr "Wstaw tekst w miejscu kursora"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordHistoryCards.tsx
-msgid "wordReview.history.noChanges"
-msgstr "Nie zaproponowano żadnych zmian."
+#~ msgid "wordReview.history.noChanges"
+#~ msgstr "Nie zaproponowano żadnych zmian."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.notAccepted"
+msgstr "Zaproponowano zmianę, ale nie przeszła weryfikacji, więc nie ma nic do zastosowania."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordHistoryCards.tsx
