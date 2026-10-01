@@ -2940,6 +2940,11 @@ msgstr "Revert was not run because Track Changes is on. Reject these changes in 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTrackingOff"
+msgstr "Revert was not run because Track Changes is on. Turn off Track Changes, then revert the batch again."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "Revert is unavailable: the snapshot was replaced, consumed, or belongs to another document."
 
@@ -3185,6 +3190,11 @@ msgstr "Replaces the whole document because compatibility mode is on."
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.route.import.stories"
 msgstr "Replaces the whole document because it changes headers, footers, notes or comments."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.unavailable"
+msgstr "Replaces the whole document (in-place editing is off)."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

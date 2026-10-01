@@ -312,15 +312,14 @@ function WordActionCard({
     const slot = revertSlot;
     const previous = review.status;
     setRevertConfirmation(false);
-    updateReview(batchKey, { status: "reverting", revertStale: false });
+    updateReview(batchKey, { status: "reverting", revertStale: undefined });
     try {
       const result = await revertWordEdits(slot.ooxml, slot.afterFingerprint);
       // Nothing was written: the slot stays so the batch can still be reverted once it matches.
-      if (result === "stale") {
+      if (result === "stale" || result === "tracking") {
         updateReview(batchKey, {
           status: previous,
-          revertStale: true,
-          tracking: await readWordTrackingMode(),
+          revertStale: result === "tracking" ? "tracking" : "changed",
           detailsExpanded: true,
         });
         return;
@@ -419,17 +418,23 @@ function WordActionCard({
   };
   const message =
     review.revertStale && review.status !== "reverting"
-      ? review.tracking === "on"
+      ? review.revertStale === "changed"
         ? t({
-            id: "officeAddin.word.review.revertTracking",
-            message:
-              "Revert was not run because Track Changes is on. Reject these changes in Word instead.",
-          })
-        : t({
             id: "officeAddin.word.authoring.revertStale",
             message:
               "The document changed after applying. Revert was not run because it could remove later edits.",
           })
+        : review.tracking === "on"
+          ? t({
+              id: "officeAddin.word.review.revertTracking",
+              message:
+                "Revert was not run because Track Changes is on. Reject these changes in Word instead.",
+            })
+          : t({
+              id: "officeAddin.word.review.revertTrackingOff",
+              message:
+                "Revert was not run because Track Changes is on. Turn off Track Changes, then revert the batch again.",
+            })
       : review.status === "write-failed"
         ? t({
             id: "officeAddin.word.review.writeFailed",

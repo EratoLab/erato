@@ -1280,16 +1280,14 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
   return host.run(async (context) => {
     const paragraphs = context.document.body.paragraphs;
     paragraphs.load("items/uniqueLocalId");
-    // Untracked, the exact package restore covers headers and footers; tracked, it cannot run, so
-    // their paragraphs are read back like the body's.
-    const stories = record.tracked
-      ? record.regions.flatMap((region, index) => {
-          const op = record.ops[region.before[0]];
-          return region.story && op?.id
-            ? [{ index, story: region.story, id: op.id }]
-            : [];
-        })
-      : [];
+    // Story paragraphs are read back to count what Word wrote. Only a tracked record keeps them:
+    // untracked, the exact package restore covers headers and footers.
+    const stories = record.regions.flatMap((region, index) => {
+      const op = record.ops[region.before[0]];
+      return region.story && op?.id
+        ? [{ index, story: region.story, id: op.id }]
+        : [];
+    });
     const sections = context.document.sections;
     if (stories.length) sections.load("items");
     await context.sync();
@@ -1303,12 +1301,11 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
     const located = locateRegions(record.regions, ids);
     if ("missing" in located)
       throw new Error("A written region can no longer be found.");
-    const storyParagraphs = stories.map(({ id }, k) => {
-      const paragraph = storyLists[k].items.find((p) => p.uniqueLocalId === id);
-      if (!paragraph)
-        throw new Error("A written story paragraph can no longer be found.");
-      return paragraph;
-    });
+    const storyParagraphs = stories.map(({ id }, k) =>
+      storyLists[k].items.find((p) => p.uniqueLocalId === id),
+    );
+    if (record.tracked && storyParagraphs.some((paragraph) => !paragraph))
+      throw new Error("A written story paragraph can no longer be found.");
     const reads = located.map((r) =>
       r.interior.map((_, k) => paragraphs.items[r.start + 1 + k].getOoxml()),
     );
@@ -1324,10 +1321,14 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
           ),
         )
       : undefined;
-    const storyReads = storyParagraphs.map((paragraph) => ({
-      ooxml: paragraph.getOoxml(),
-      changes: trackedChanges(paragraph),
-    }));
+    const storyReads = storyParagraphs.map((paragraph) =>
+      paragraph
+        ? {
+            ooxml: paragraph.getOoxml(),
+            changes: record.tracked ? trackedChanges(paragraph) : undefined,
+          }
+        : undefined,
+    );
     await context.sync();
     const signatures = new Map<string, string>();
     const revisions: Record<string, [string, string][]> = {};
@@ -1341,10 +1342,16 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
         if (changes) revisions[id] = revisionsOf(changes[i][k]);
       }),
     );
+    const storySignatures = new Map<string, string>();
     stories.forEach(({ id }, k) => {
-      signatures.set(id, wordParagraphSignature(storyReads[k].ooxml.value));
-      revisions[id] = revisionsOf(storyReads[k].changes);
+      const read = storyReads[k];
+      if (!read) return;
+      storySignatures.set(id, wordParagraphSignature(read.ooxml.value));
+      if (read.changes) revisions[id] = revisionsOf(read.changes);
     });
+    if (record.tracked)
+      for (const [id, signature] of storySignatures)
+        signatures.set(id, signature);
     const ops = record.ops.map((op) =>
       op.id && signatures.has(op.id)
         ? { ...op, afterSignature: signatures.get(op.id) }
@@ -1352,22 +1359,30 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
     );
     const interiors = new Map<number, string[]>([
       ...located.map((r) => [r.index, r.interior] as [number, string[]]),
-      ...stories.map(({ index, id }) => [index, [id]] as [number, string[]]),
+      ...(record.tracked ? stories : []).map(
+        ({ index, id }) => [index, [id]] as [number, string[]],
+      ),
     ]);
     const regions = record.regions.map((region, index) =>
       interiors.has(index)
         ? { ...region, after: interiors.get(index) }
         : region,
     );
-    const untouched = located.filter(
-      (r) =>
-        r.interior.length === r.region.before.length &&
-        r.region.before.every(
-          (i, k) =>
-            record.ops[i].id === r.interior[k] &&
-            signatures.get(r.interior[k]) === record.ops[i].originalSignature,
-        ),
-    ).length;
+    // Word runs a rejected batch's commands up to the rejection, so a region can be half written:
+    // count per op. A paragraph that differs from its original or is gone was written; inserted
+    // paragraphs have no ID in the record and are counted from the new IDs inside the regions.
+    const known = new Set(record.ops.flatMap((op) => (op.id ? [op.id] : [])));
+    const added = located
+      .flatMap((r) => r.interior)
+      .filter((id) => !known.has(id)).length;
+    const written =
+      record.ops.filter(
+        (op) =>
+          op.kind !== "insert" &&
+          (signatures.get(op.id!) ?? storySignatures.get(op.id!)) !==
+            op.originalSignature,
+      ).length +
+      Math.min(added, record.ops.filter((op) => op.kind === "insert").length);
     return {
       record: {
         ...record,
@@ -1378,7 +1393,7 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
       afterFingerprint: regions.some((region) => region.story && !region.after)
         ? undefined
         : scopeOf(regions, signatures),
-      partial: { applied: located.length - untouched, untouched },
+      partial: { applied: written, untouched: record.ops.length - written },
     };
   });
 }

@@ -2940,6 +2940,11 @@ msgstr "Nie cofnięto zmian, ponieważ śledzenie zmian jest włączone. Zamiast
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTrackingOff"
+msgstr "Nie cofnięto zmian, ponieważ śledzenie zmian jest włączone. Wyłącz śledzenie zmian, a następnie ponownie cofnij partię zmian."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "Cofnięcie niedostępne: zapis stanu został zastąpiony, użyty lub należy do innego dokumentu."
 
@@ -3185,6 +3190,11 @@ msgstr "Zastępuje cały dokument, ponieważ tryb zgodności jest włączony."
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.route.import.stories"
 msgstr "Zastępuje cały dokument, ponieważ zmienia nagłówki, stopki, przypisy lub komentarze."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.unavailable"
+msgstr "Zastępuje cały dokument (edycja bezpośrednio w dokumencie jest wyłączona)."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

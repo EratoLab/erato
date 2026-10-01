@@ -385,7 +385,7 @@ describe("revertWordEdits", () => {
     word.word.setTrackingMode("TrackAll");
     await expect(
       revertWordEdits(result.snapshotOoxml!, result.afterFingerprint),
-    ).resolves.toBe("stale");
+    ).resolves.toBe("tracking");
     word.word.setTrackingMode("Off");
     await expect(
       revertWordEdits(result.snapshotOoxml!, undefined),

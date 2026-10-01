@@ -136,8 +136,11 @@ describe("route wording", () => {
       delete: "paragraphs",
       split: "paragraphs",
       setting: "setting",
-      disabled: "other",
-      latched: "other",
+      disabled: "unavailable",
+      latched: "unavailable",
+      "host-sets": "unavailable",
+      "no-package": "unavailable",
+      "host-error": "unavailable",
       "source-shape": "other",
       "program-mismatch": "other",
     });

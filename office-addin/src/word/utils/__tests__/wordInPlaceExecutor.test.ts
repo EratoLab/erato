@@ -575,6 +575,36 @@ describe("in-place failure and recovery", { timeout: 30_000 }, () => {
     expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
   });
 
+  it("counts a region Word left half written per change", async () => {
+    const host = install();
+    const original = wordDocumentFingerprint(host.ooxml());
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const snapshot = await captureRealisticSnapshot();
+    // Adjacent list items form one region, written last to first: the second write is rejected.
+    host.failAtCommand(2);
+    const result = await apply(
+      rewrite(snapshot, [
+        ["Confirm the regions", { text: "Confirm every region." }],
+        [SCHEDULE, { text: "Schedule the pilot for October." }],
+      ]),
+      snapshot,
+    );
+    expect(result.status).toBe("interrupted");
+    expect(result.diagnostic?.details?.partial).toEqual({
+      applied: 1,
+      untouched: 1,
+    });
+    expect(host.ooxml()).toContain("Schedule the pilot for October.");
+    expect(host.ooxml()).toContain("Confirm the regions.");
+
+    const reverted = await revertWordDocumentPlan(
+      result.before!,
+      result.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+  });
+
   it("reverts around a later edit to another paragraph and keeps that edit", async () => {
     const host = install();
     const snapshot = await captureRealisticSnapshot();

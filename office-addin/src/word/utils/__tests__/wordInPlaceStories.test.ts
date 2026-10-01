@@ -229,6 +229,49 @@ describe("header and footer text in place", { timeout: 60_000 }, () => {
     expect(partSignatures(host.ooxml())).toEqual(original);
   });
 
+  it("counts a footer change Word never reached after the body change", async () => {
+    const host = install();
+    const snapshot = await captureRealisticSnapshot();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const status = snapshot.blocks.find((b) => b.text.startsWith("Status"))!;
+    const plan: WordDocumentPlan = {
+      ...storyPlan(snapshot, [
+        {
+          kind: "upsert",
+          type: "footer",
+          id: "footer1",
+          blocks: [{ id: "f", type: "paragraph", text: "Internal only" }],
+        },
+      ]),
+      entries: snapshot.blocks.map((b) =>
+        b === status
+          ? {
+              kind: "replace",
+              source: [b.ref],
+              blocks: [{ id: "s", type: "paragraph", text: "Status: green." }],
+            }
+          : { kind: "keep", source: [b.ref] },
+      ),
+    };
+    // The body is queued before headers and footers: the footer write is rejected.
+    host.failAtCommand(2);
+    const applied = await apply(plan, snapshot);
+    expect(applied.status).toBe("interrupted");
+    expect(applied.diagnostic?.details?.partial).toEqual({
+      applied: 1,
+      untouched: 1,
+    });
+    expect(host.ooxml()).toContain("Status: green.");
+    expect(host.ooxml()).not.toContain("Internal only");
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(reverted.outcome?.route).toBe("import");
+    expect(host.ooxml()).not.toContain("Status: green.");
+  });
+
   it("writes header changes as tracked revisions and rejects them on Restore", async () => {
     const host = install({ trackChanges: true });
     host.setTrackingMode("TrackAll");

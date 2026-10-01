@@ -2940,6 +2940,11 @@ msgstr "Das Rückgängigmachen wurde nicht ausgeführt, weil die Änderungsverfo
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTrackingOff"
+msgstr "Das Rückgängigmachen wurde nicht ausgeführt, weil die Änderungsverfolgung aktiv ist. Schalten Sie die Änderungsverfolgung aus und machen Sie den Stapel dann erneut rückgängig."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "Wiederherstellung nicht verfügbar: Der Dokumentstand wurde ersetzt, verbraucht oder gehört zu einem anderen Dokument."
 
@@ -3185,6 +3190,11 @@ msgstr "Ersetzt das gesamte Dokument, weil der Kompatibilitätsmodus aktiviert i
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.route.import.stories"
 msgstr "Ersetzt das gesamte Dokument, weil sich Kopfzeilen, Fußzeilen, Fußnoten oder Kommentare ändern."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.unavailable"
+msgstr "Ersetzt das gesamte Dokument (direktes Bearbeiten im Dokument ist ausgeschaltet)."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

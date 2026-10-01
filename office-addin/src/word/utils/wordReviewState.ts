@@ -35,8 +35,9 @@ export interface WordReviewState {
   documentPlanOutcome?: WordApplyOutcome;
   /** Kept in the provider so the busy label survives card remounts. */
   applyStage?: WordApplyStage;
-  /** Paragraph edits: Revert refused because the body changed after the batch. */
-  revertStale?: boolean;
+  /** Paragraph edits: why the last Revert was refused. `tracking` stays the mode at Apply, which
+   * decides whether Word holds revisions of this batch to reject. */
+  revertStale?: "tracking" | "changed";
 }
 export const EMPTY_WORD_REVIEW: WordReviewState = {
   status: "idle",

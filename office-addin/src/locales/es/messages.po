@@ -2940,6 +2940,11 @@ msgstr "No se revirtió el lote porque el control de cambios está activado. En 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTrackingOff"
+msgstr "No se revirtió el lote porque el control de cambios está activado. Desactive el control de cambios y vuelva a revertir el lote."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "No se puede revertir: la captura fue reemplazada, ya se utilizó o pertenece a otro documento."
 
@@ -3185,6 +3190,11 @@ msgstr "Reemplaza todo el documento porque el modo de compatibilidad está activ
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.route.import.stories"
 msgstr "Reemplaza todo el documento porque cambia encabezados, pies de página, notas o comentarios."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.unavailable"
+msgstr "Reemplaza todo el documento (la edición directa en el documento está desactivada)."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

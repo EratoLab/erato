@@ -446,7 +446,7 @@ export function WordDocumentPlanCard({
       : applyStopped &&
           outcomeState === "partly-written" &&
           partial &&
-          partial.applied + partial.untouched > 0
+          partial.untouched > 0
         ? wordPartlyWrittenText(
             partial.applied,
             partial.applied + partial.untouched,

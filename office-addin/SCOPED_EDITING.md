@@ -126,17 +126,18 @@ switch, no Compatibility mode and no session latch; otherwise the reason is
 then admits only changes with an exact object-model inverse; the first failing
 rule sends the plan to the import with a fixed code:
 
-| Group      | Codes                                                                                          | Preview says it changes…              |
-| ---------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Sections   | `sections`                                                                                     | sections or page layout               |
-| Stories    | `stories`, `story-text`                                                                        | headers, footers, notes or comments   |
-| Moves      | `moved`                                                                                        | moves content                         |
-| Objects    | `native-target`, `rich-block`                                                                  | tables, images or other objects       |
-| Formatting | `format`, `run-format`, `inherited-format`, `restyle`                                          | formatting or styles                  |
-| Lists      | `list`, `new-list`                                                                             | lists                                 |
-| Paragraphs | `insert`, `delete`, `split`                                                                    | adds, removes or splits paragraphs    |
-| Setting    | `setting`                                                                                      | compatibility mode is on              |
-| Other      | `source-shape`, `empty-text`, `boundary`, `not-invertible`, `too-many-ops`, `program-mismatch` | this change can't be written in place |
+| Group       | Codes                                                                                          | Preview says it changes…              |
+| ----------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Sections    | `sections`                                                                                     | sections or page layout               |
+| Stories     | `stories`, `story-text`                                                                        | headers, footers, notes or comments   |
+| Moves       | `moved`                                                                                        | moves content                         |
+| Objects     | `native-target`, `rich-block`                                                                  | tables, images or other objects       |
+| Formatting  | `format`, `run-format`, `inherited-format`, `restyle`                                          | formatting or styles                  |
+| Lists       | `list`, `new-list`                                                                             | lists                                 |
+| Paragraphs  | `insert`, `delete`, `split`                                                                    | adds, removes or splits paragraphs    |
+| Setting     | `setting`                                                                                      | compatibility mode is on              |
+| Unavailable | `disabled`, `latched`, `host-sets`, `no-package`, `host-error`                                 | none; in-place editing is off         |
+| Other       | `source-shape`, `empty-text`, `boundary`, `not-invertible`, `too-many-ops`, `program-mismatch` | this change can't be written in place |
 
 `alignment` and `host-error` come from the live read just before writing, while
 nothing has been saved or written; the plan then takes the import. Once the
@@ -170,7 +171,10 @@ The card states the outcome: **Verified** (strict or block),
 **Applied with Word adjustments** (content, with a content-free "Copy details"
 report), **Unverified** ("N passages don't match the proposal", with Locate per
 written passage that did not verify) and **Failed**, either with nothing written
-or partly written ("Word stopped after k of n changes").
+or partly written ("Word stopped after k of n changes"). Word runs a rejected
+batch's commands up to the rejection, so k and n count changes (ops, headers and
+footers included), not regions; when every change was written before Word
+stopped, the card shows the general interrupted text instead.
 
 ### Undo
 
@@ -182,7 +186,9 @@ later edits elsewhere, and count only when every paragraph is signature-exact
 again. "Restore original document" restores the backup by import and refuses
 once anything in the document changed. Paragraph-edit batches
 (`word.apply_edits`) record the body fingerprint after writing and are reverted
-only while the body still matches and Track Changes is off.
+only while the body still matches and Track Changes is off. When tracking blocks
+the Revert, the card advises from the mode at Apply: reject the changes in Word
+for a tracked batch, otherwise turn off Track Changes and revert again.
 
 ### Track Changes
 

@@ -269,11 +269,15 @@ function writeReplacement(
     .insertText(text, "Replace");
 }
 
-export type WordEditsRevertStatus = "reverted" | "stale" | "failed";
+export type WordEditsRevertStatus =
+  | "reverted"
+  | "stale"
+  | "tracking"
+  | "failed";
 
 /** Restore the whole body because inserted newlines invalidate the original paragraph positions.
- * Refused while Track Changes is on (the restore would land as revisions) or once the body differs
- * from what the batch left, which would overwrite later edits. */
+ * Refused while Track Changes is on ("tracking": the restore would land as revisions) or once the
+ * body differs from what the batch left ("stale"), which would overwrite later edits. */
 export async function revertWordEdits(
   snapshotOoxml: string,
   expectedAfter: string | undefined,
@@ -286,11 +290,8 @@ export async function revertWordEdits(
       context.document.load("changeTrackingMode");
       const live = context.document.body.getOoxml();
       await context.sync();
-      if (
-        context.document.changeTrackingMode !== "Off" ||
-        wordBodyFingerprint(live.value) !== expectedAfter
-      )
-        return "stale";
+      if (context.document.changeTrackingMode !== "Off") return "tracking";
+      if (wordBodyFingerprint(live.value) !== expectedAfter) return "stale";
       context.document.body.insertOoxml(snapshotOoxml, "Replace");
       await context.sync();
       return "reverted";

@@ -61,6 +61,8 @@ export type WordRouteGroup =
   | "lists"
   | "paragraphs"
   | "setting"
+  /** The host or session rules out in-place writing, whatever the change. */
+  | "unavailable"
   | "other";
 
 const ROUTE_GROUPS: Partial<Record<WordRouteReason, WordRouteGroup>> = {
@@ -80,6 +82,11 @@ const ROUTE_GROUPS: Partial<Record<WordRouteReason, WordRouteGroup>> = {
   delete: "paragraphs",
   split: "paragraphs",
   setting: "setting",
+  disabled: "unavailable",
+  latched: "unavailable",
+  "host-sets": "unavailable",
+  "no-package": "unavailable",
+  "host-error": "unavailable",
 };
 
 export function wordRouteGroup(reason: WordRouteReason): WordRouteGroup {

@@ -2940,6 +2940,11 @@ msgstr "Le rétablissement n’a pas été effectué, car le suivi des modificat
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+msgid "officeAddin.word.review.revertTrackingOff"
+msgstr "Le rétablissement n’a pas été effectué, car le suivi des modifications est activé. Désactivez le suivi des modifications, puis rétablissez à nouveau l’état avant le lot."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordHostCardRenderer.tsx
 msgid "officeAddin.word.review.revertUnavailable"
 msgstr "Rétablissement indisponible : l’instantané a été remplacé, utilisé ou appartient à un autre document."
 
@@ -3185,6 +3190,11 @@ msgstr "Remplace tout le document, car le mode de compatibilité est activé."
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.route.import.stories"
 msgstr "Remplace tout le document, car des en-têtes, pieds de page, notes ou commentaires changent."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.route.import.unavailable"
+msgstr "Remplace tout le document (la modification directe dans le document est désactivée)."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

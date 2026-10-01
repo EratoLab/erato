@@ -168,6 +168,11 @@ function wordImportRouteText(group: WordRouteGroup): string {
         message:
           "Replaces the whole document because compatibility mode is on.",
       });
+    case "unavailable":
+      return t({
+        id: "officeAddin.word.route.import.unavailable",
+        message: "Replaces the whole document (in-place editing is off).",
+      });
     default:
       return t({
         id: "officeAddin.word.route.import.other",

@@ -1036,7 +1036,7 @@ describe("structural writes Word stops midway", { timeout: 30_000 }, () => {
     const result = await apply(plan, snapshot);
     expect(result.status).toBe("interrupted");
     expect(result.diagnostic?.details?.partial).toEqual({
-      applied: 1,
+      applied: 3,
       untouched: 1,
     });
     expect(host.ooxml()).toContain("Who owns the ");

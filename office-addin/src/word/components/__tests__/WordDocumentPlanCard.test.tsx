@@ -1015,9 +1015,24 @@ describe("route preview", () => {
     expect(word.insert).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to a general reason when in-place writing is switched off", async () => {
+  it("does not blame the change when in-place writing is switched off", async () => {
     window.WORD_FORCE_IMPORT_APPLY = true;
     await mountRealistic((s) => statusRewritePlan(s, "Status: revised."));
+    expect(routeText()).toBe(
+      "Replaces the whole document (in-place editing is off).",
+    );
+  });
+
+  it("keeps the general reason for a change the classifier cannot write in place", async () => {
+    await mountRealistic((s) =>
+      replaceBlock(s, "Status", (ref) => [
+        {
+          kind: "replace",
+          source: [ref],
+          blocks: [{ id: "e", type: "paragraph", text: "" }],
+        },
+      ]),
+    );
     expect(routeText()).toBe(
       "Replaces the whole document because this change can't be written in place.",
     );
@@ -1173,6 +1188,69 @@ describe("apply outcomes", () => {
         word.events.filter((e) => e.startsWith("select:paragraphs:")),
       ).toHaveLength(1),
     );
+  });
+
+  it("partly written: counts changes, not regions, when Word stops inside one region", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const rewrites: Record<string, string> = {
+      "Confirm the regions.": "Confirm every region.",
+      "Schedule the pilot.": "Schedule the pilot for October.",
+    };
+    const { word } = await mountRealistic((s) => ({
+      version: 1,
+      snapshot: s.token,
+      readToken: "read-proof",
+      scope: "document",
+      deleted: [],
+      entries: s.blocks.map(
+        (b): WordPlanEntry =>
+          rewrites[b.text]
+            ? {
+                kind: "replace",
+                source: [b.ref],
+                blocks: [
+                  {
+                    id: b.ref,
+                    type: "list-item",
+                    text: rewrites[b.text],
+                    list: b.list,
+                    ordered: b.ordered,
+                    level: b.level,
+                    styleRef: b.styleRef,
+                  },
+                ],
+              }
+            : { kind: "keep", source: [b.ref] },
+      ),
+    }));
+    expect(routeText()).toBe("Edits 2 passages in place.");
+    word.failAtCommand(2);
+    apply();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Word stopped after 1 of 2 changes. Your original is saved.",
+    );
+  });
+
+  it("does not claim a partial write when Word wrote every change before stopping", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic((s) =>
+      replaceBlock(s, "Status", (ref) => [
+        { kind: "keep", source: [ref] },
+        {
+          kind: "insert",
+          blocks: [{ id: "h", type: "heading", level: 2, text: "Next steps" }],
+        },
+      ]),
+    );
+    // insertParagraph, insertText, then the heading style Word rejects.
+    word.failAtCommand(3);
+    apply();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Word could not complete the operation. The document may be partially changed.",
+    );
+    expect(alert).not.toHaveTextContent(/Word stopped after/);
   });
 
   it("not written: a changed target stops before writing, with nothing to restore", async () => {
