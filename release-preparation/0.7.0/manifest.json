@@ -1,6 +1,6 @@
 {
   "base_sha": "3d40f674f1829f6cb8be535bdc10678602cfac43",
-  "head_sha": "e59d81a7e82f98fbc9408abbde11c4f751cfce25",
+  "head_sha": "27bff75f6fe94172c20bae236a95772692966a4b",
   "prs": {
     "780": {
       "subject": "Merge pull request #780 from EratoLab/feature/ermain-410-create-seperate-migrator-docker-image",
@@ -2580,6 +2580,18 @@
       "subject": "Merge pull request #1271 from EratoLab/feature/erdscar-3-extend-sourceslistv1-with-display-names-and-effective",
       "commits": [
         "e59d81a7e82f98fbc9408abbde11c4f751cfce25"
+      ]
+    },
+    "1272": {
+      "subject": "Merge pull request #1272 from EratoLab/feature/ermain-884-trace-sections-separated-by-file-pointers-repeat-the-full",
+      "commits": [
+        "22cab0287b689b87e0e33970ffae049373f7cec6"
+      ]
+    },
+    "1274": {
+      "subject": "Fix undefined client-operation cursors and button timer cleanup (#1274)",
+      "commits": [
+        "27bff75f6fe94172c20bae236a95772692966a4b"
       ]
     }
   },
