@@ -227,7 +227,29 @@ export function WordChatInput({
           return withoutDocument();
         }
         // Finalize paging limits before exposing whole-document availability.
-        wordDocumentReadSession.activate(build?.authoring);
+        const authoringSnapshot = build?.authoring;
+        wordDocumentReadSession.activate(
+          authoringSnapshot,
+          undefined,
+          authoringSnapshot
+            ? async () => {
+                const budget = await checkWordAuthoringBudget(
+                  authoringSnapshot,
+                  {
+                    message,
+                    chatId,
+                    assistantId: chatInputProps.assistantId,
+                    modelId:
+                      modelId ??
+                      chatInputProps.controlledSelectedModel?.chat_provider_id,
+                    fileIds: inputFileIds,
+                    mode: "complete",
+                  },
+                );
+                return budget.ok ? undefined : budget.issue;
+              }
+            : undefined,
+        );
         setAuthoringNotice({
           authoringIssue: build?.authoring?.issue,
           authoringDetails: build?.authoring?.issueDetails,

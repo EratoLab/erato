@@ -483,6 +483,7 @@ describe("rich authoring read contract integration", () => {
       await checkWordAuthoringBudget(snapshot, {
         message: "Rewrite",
         chatId: null,
+        mode: "complete",
       }),
     ).toEqual({ ok: true });
     const request = estimate.mock.calls.at(-1)![0].body.user_message as string;

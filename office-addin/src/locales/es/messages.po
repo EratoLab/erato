@@ -3047,6 +3047,72 @@ msgid "officeAddin.word.rich.updateObject"
 msgstr "Actualizar: {label}"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.scoped.applyScope"
+msgstr "Aplica los cambios revisados. Si el documento ha cambiado, no se aplica ningún cambio."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.cell"
+msgstr "Celda de tabla"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.scoped.consent"
+msgstr "¿Aplicar estos cambios?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.scoped.consentScope"
+msgstr "Aplicar los cambios seleccionados revisados arriba."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.scoped.details"
+msgstr "Vista previa del documento completo"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: i + 1
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.locate"
+msgstr "Localizar el pasaje {0}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.move"
+msgstr "Mover el contenido seleccionado al destino revisado."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.original"
+msgstr "Pasaje original"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.preservation"
+msgstr "Se conserva el resto del contenido del documento. Comprueba el aspecto final en Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.proposed"
+msgstr "Cambios propuestos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.removal"
+msgstr "Quitar el contenido seleccionado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.removePart"
+msgstr "Quitar esta parte del documento y sus vínculos."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordScopedPlanReview.tsx
+msgid "officeAddin.word.scoped.review"
+msgstr "Revisar los cambios seleccionados"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.preparingDocument"
 msgstr ""

@@ -197,7 +197,11 @@ describe("WordChatInput prepared send", () => {
     expect(prepared?.hostContextIdentity).toBe(IDENTITY);
     expect(build.authoring?.assets).toEqual([{ id: "asset-1" }]);
     expect(host.budget).toHaveBeenCalledTimes(1);
-    expect(host.session.activate).toHaveBeenCalledWith(build.authoring);
+    expect(host.session.activate).toHaveBeenCalledWith(
+      build.authoring,
+      undefined,
+      expect.any(Function),
+    );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
   });
 

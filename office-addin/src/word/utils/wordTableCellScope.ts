@@ -1,4 +1,5 @@
 import { parseWordDocumentPlan } from "./wordDocumentPlan";
+import { canonicalWordPlan, wordReadScope } from "./wordReadScope";
 import { expandWordTableCellSubmission } from "./wordTableCellSubmission";
 
 import type {
@@ -8,6 +9,7 @@ import type {
 
 /** Host-owned capability. It is never deserialized from model arguments. */
 export interface WordTableCellScope {
+  kind: "table-cell";
   snapshot: string;
   identity: string;
   fingerprint: string;
@@ -21,17 +23,8 @@ export function wordTableCellScope(
   snapshot: WordAuthoringSnapshot,
   token: unknown,
 ): WordTableCellScope | undefined {
-  const scope =
-    typeof token === "string" ? snapshot.cellReads?.get(token) : undefined;
-  return scope &&
-    scope.snapshot === snapshot.token &&
-    scope.identity === snapshot.identity &&
-    scope.fingerprint === snapshot.fingerprint &&
-    !snapshot.revoked &&
-    !snapshot.used &&
-    !snapshot.issue
-    ? scope
-    : undefined;
+  const scope = wordReadScope(snapshot, token);
+  return scope?.kind === "table-cell" ? scope : undefined;
 }
 
 /** Review and Apply revalidate the entire materialized plan, including every keep.
@@ -66,16 +59,9 @@ export function wordPlanMatchesCellScope(
       },
       snapshot,
     );
-    const stable = (value: unknown) =>
-      JSON.stringify(value, (_key, item: unknown) =>
-        item && typeof item === "object" && !Array.isArray(item)
-          ? Object.fromEntries(
-              Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
-            )
-          : item,
-      );
     return (
-      stable(plan) === stable(parseWordDocumentPlan(JSON.stringify(expected)))
+      canonicalWordPlan(plan) ===
+      canonicalWordPlan(parseWordDocumentPlan(JSON.stringify(expected)))
     );
   } catch {
     return false;
