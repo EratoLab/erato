@@ -52,6 +52,12 @@ export interface WordOoxmlHostOptions {
   /** Localized Word: Paragraph.style finds built-in styles only by their localized UI names, which
    * the package does not carry, so only custom style names resolve. */
   localizedStyleNames?: boolean;
+  /** The "tracked" profile: while changeTrackingMode is not Off, object-model writes become tracked
+   * revisions by a synthetic author, as Word records them for the signed-in user. */
+  trackChanges?: boolean;
+  /** Adversarial: Paragraph.getTextRanges trims the spaces it splits on, so its ranges no longer
+   * rejoin to the paragraph text. */
+  textRangesTrimSpacing?: boolean;
 }
 
 /** Adversarial insertText "Replace" behaviour, switchable mid-test. */
@@ -110,6 +116,7 @@ const RUN_PROPERTY_ORDER = [
   "eastAsianLayout",
   "specVanish",
   "oMath",
+  "rPrChange",
 ];
 
 function setRunMark(run: Element, names: string[], value: string | null): void {
@@ -292,6 +299,245 @@ const partRoot = (doc: Document, name: string): Element | undefined => {
 };
 const nextId = (values: string[]) =>
   String(Math.max(0, ...values.map((v) => Number(v) || 0)) + 1);
+
+const REVISION_AUTHOR = "Mock Reviewer";
+const REVISION_DATE = "2026-10-01T00:00:00Z";
+const isWElement = (node: Node | null | undefined, name: string) =>
+  !!node &&
+  node.nodeType === 1 &&
+  (node as Element).namespaceURI === W &&
+  (node as Element).localName === name;
+
+function revisionElement(
+  doc: Document,
+  name: "ins" | "del" | "pPrChange" | "rPrChange",
+  id: number,
+): Element {
+  const e = doc.createElementNS(W, `w:${name}`);
+  e.setAttributeNS(W, "w:id", String(id));
+  e.setAttributeNS(W, "w:author", REVISION_AUTHOR);
+  e.setAttributeNS(W, "w:date", REVISION_DATE);
+  return e;
+}
+
+/** A revision on the paragraph mark itself: the paragraph was inserted or deleted. */
+function paragraphMark(paragraph: Element): "ins" | "del" | undefined {
+  const props = child(child(paragraph, "pPr"), "rPr");
+  return child(props, "ins") ? "ins" : child(props, "del") ? "del" : undefined;
+}
+
+function setParagraphMark(paragraph: Element, marker: Element): void {
+  const existing = child(child(paragraph, "pPr"), "rPr");
+  if (existing) {
+    existing.prepend(marker);
+    return;
+  }
+  const props = paragraph.ownerDocument.createElementNS(W, "w:rPr");
+  props.append(marker);
+  setParagraphProperty(paragraph, "rPr", props);
+}
+
+function dropParagraphMark(paragraph: Element): void {
+  const pPr = child(paragraph, "pPr");
+  const props = child(pPr, "rPr");
+  child(props, "ins")?.remove();
+  child(props, "del")?.remove();
+  if (props && !props.children.length) props.remove();
+  if (pPr && !pPr.children.length && !pPr.attributes.length) pPr.remove();
+}
+
+/** Runs whose text a reader of the current version sees. */
+const visibleRuns = (paragraph: Element) =>
+  elements(paragraph, W, "r").filter(
+    (run) => !isWElement(run.parentElement, "del"),
+  );
+const insertedRun = (run: Element) => isWElement(run.parentElement, "ins");
+
+function renameElement(e: Element, local: string): void {
+  const made = e.ownerDocument.createElementNS(W, `w:${local}`);
+  for (const a of Array.from(e.attributes))
+    made.setAttributeNS(a.namespaceURI, a.name, a.value);
+  made.append(...Array.from(e.childNodes));
+  e.replaceWith(made);
+}
+
+/** Tracked deletion: runs inserted earlier in the same revision simply go away. */
+function deleteTrackedRuns(runs: readonly Element[], id: () => number): void {
+  const made = new Set<Element>();
+  for (const run of runs) {
+    const parent = run.parentElement;
+    if (isWElement(parent, "ins")) {
+      run.remove();
+      if (parent && !parent.children.length) parent.remove();
+      continue;
+    }
+    if (isWElement(parent, "del")) continue;
+    for (const t of elements(run, W, "t")) renameElement(t, "delText");
+    const previous = run.previousElementSibling;
+    if (previous && made.has(previous)) previous.append(run);
+    else {
+      const wrapper = revisionElement(run.ownerDocument, "del", id());
+      run.before(wrapper);
+      wrapper.append(run);
+      made.add(wrapper);
+    }
+  }
+}
+
+/** The paragraph a mark revision joins: the next one, which keeps its own properties. */
+function mergeIntoFollowing(paragraph: Element): void {
+  let next = paragraph.nextElementSibling;
+  while (
+    next &&
+    !isWElement(next, "p") &&
+    ["bookmarkStart", "bookmarkEnd", "proofErr"].includes(next.localName)
+  )
+    next = next.nextElementSibling;
+  if (!next || !isWElement(next, "p")) {
+    dropParagraphMark(paragraph);
+    return;
+  }
+  const props = child(next, "pPr");
+  const before = props ? props.nextSibling : next.firstChild;
+  for (const node of Array.from(paragraph.childNodes))
+    if (!isWElement(node, "pPr")) next.insertBefore(node, before);
+  paragraph.remove();
+}
+
+/** Reject every revision in one paragraph, as TrackedChangeCollection.rejectAll does. */
+function rejectParagraphRevisions(paragraph: Element): void {
+  for (const change of elements(paragraph, W, "rPrChange")) {
+    const props = change.parentElement!;
+    const old = child(change, "rPr");
+    props.replaceChildren(...Array.from(old?.children ?? []));
+    if (!props.children.length) props.remove();
+  }
+  const pPr = child(paragraph, "pPr");
+  const pChange = child(pPr, "pPrChange");
+  if (pPr && pChange) {
+    const kept = [child(pPr, "rPr"), child(pPr, "sectPr")].filter(
+      (e): e is Element => !!e,
+    );
+    pPr.replaceChildren(
+      ...Array.from(child(pChange, "pPr")?.children ?? []),
+      ...kept,
+    );
+    if (!pPr.children.length) pPr.remove();
+  }
+  for (const e of elements(paragraph, W, "ins"))
+    if (!isWElement(e.parentElement, "rPr")) e.remove();
+  for (const e of elements(paragraph, W, "del"))
+    if (!isWElement(e.parentElement, "rPr")) {
+      for (const text of elements(e, W, "delText")) renameElement(text, "t");
+      e.replaceWith(...Array.from(e.childNodes));
+    }
+  const mark = paragraphMark(paragraph);
+  if (mark === "del") dropParagraphMark(paragraph);
+  else if (mark === "ins") mergeIntoFollowing(paragraph);
+}
+
+/** Accept every revision in one paragraph, as TrackedChangeCollection.acceptAll does. */
+function acceptParagraphRevisions(paragraph: Element): void {
+  for (const change of [
+    ...elements(paragraph, W, "rPrChange"),
+    ...elements(paragraph, W, "pPrChange"),
+  ]) {
+    const parent = change.parentElement!;
+    change.remove();
+    if (!parent.children.length && isWElement(parent, "rPr")) parent.remove();
+  }
+  for (const e of elements(paragraph, W, "del"))
+    if (!isWElement(e.parentElement, "rPr")) e.remove();
+  for (const e of elements(paragraph, W, "ins"))
+    if (!isWElement(e.parentElement, "rPr"))
+      e.replaceWith(...Array.from(e.childNodes));
+  const mark = paragraphMark(paragraph);
+  if (mark === "ins") dropParagraphMark(paragraph);
+  else if (mark === "del") mergeIntoFollowing(paragraph);
+}
+
+/** TrackedChange type and text for each revision in one paragraph, in document order. */
+function paragraphRevisions(
+  paragraph: Element,
+): { type: string; text: string }[] {
+  const text = (e: Element, name: string) =>
+    elements(e, W, name)
+      .map((t) => t.textContent ?? "")
+      .join("");
+  const mark = paragraphMark(paragraph);
+  return [
+    ...(mark ? [{ type: mark === "ins" ? "Added" : "Deleted", text: "" }] : []),
+    ...(child(child(paragraph, "pPr"), "pPrChange")
+      ? [{ type: "Formatted", text: "" }]
+      : []),
+    ...elements(paragraph, W, "*").flatMap((e) =>
+      isWElement(e.parentElement, "rPr") &&
+      isWElement(e.parentElement?.parentElement, "pPr")
+        ? []
+        : e.localName === "ins"
+          ? [{ type: "Added", text: text(e, "t") }]
+          : e.localName === "del"
+            ? [{ type: "Deleted", text: text(e, "delText") }]
+            : e.localName === "rPrChange"
+              ? [
+                  {
+                    type: "Formatted",
+                    text: text(e.parentElement!.parentElement!, "t"),
+                  },
+                ]
+              : [],
+    ),
+  ];
+}
+
+/** Paragraph.getReviewedText("Original"): deleted text back, inserted text left out. */
+function originalParagraphText(paragraph: Element): string {
+  let text = "";
+  const visit = (e: Element) => {
+    if (e.namespaceURI === W) {
+      if (["ins", "instrText", "pPr", "rPr"].includes(e.localName)) return;
+      if (e.localName === "t" || e.localName === "delText")
+        text += e.textContent ?? "";
+      else if (e.localName === "tab") text += "\t";
+      else if (e.localName === "br" || e.localName === "cr") text += "\v";
+    }
+    Array.from(e.children).forEach(visit);
+  };
+  visit(paragraph);
+  return text;
+}
+
+/** A plain run (properties and one text element) split so each piece ends at an ending mark. */
+function splitRunAtMarks(run: Element, marks: readonly string[]): void {
+  const parts = Array.from(run.children);
+  const t = parts.find((e) => isWElement(e, "t"));
+  if (
+    !t ||
+    parts.some((e) => !isWElement(e, "rPr") && !isWElement(e, "t")) ||
+    parts.filter((e) => isWElement(e, "t")).length !== 1
+  )
+    return;
+  const value = t.textContent ?? "";
+  const pieces: string[] = [];
+  let current = "";
+  for (const char of value) {
+    current += char;
+    if (marks.includes(char)) {
+      pieces.push(current);
+      current = "";
+    }
+  }
+  if (current) pieces.push(current);
+  if (pieces.length < 2) return;
+  for (const piece of pieces) {
+    const copy = run.cloneNode(true) as Element;
+    const text = elements(copy, W, "t")[0];
+    text.textContent = piece;
+    text.setAttributeNS(XML_NS, "xml:space", "preserve");
+    run.before(copy);
+  }
+  run.remove();
+}
 
 /** Edit a flat-OPC package string as a DOM; returns the serialized result. */
 export function editWordPackage(
@@ -595,9 +841,29 @@ export function installWordOoxmlHost(
     | undefined;
   // Paragraph object model over the same package; IDs survive edits but not imports, as in Word.
   let liveDoc: Document | undefined;
-  let carriedIds: string[] | undefined;
+  let carriedIds: Map<string, string[]> | undefined;
   const paragraphIds = new WeakMap<Element, string>();
   let paragraphSeed = 0;
+  let revisionSeed = 0;
+  const nextRevision = () => ++revisionSeed;
+  const tracked = () => !!settings.trackChanges && trackingMode !== "Off";
+  /** Changing an existing paragraph's properties under Track Changes keeps the old ones in w:pPrChange. */
+  const recordParagraphChange = (paragraph: Element) => {
+    if (!tracked() || paragraphMark(paragraph) === "ins") return;
+    const props = child(paragraph, "pPr");
+    if (child(props, "pPrChange")) return;
+    const old = paragraph.ownerDocument.createElementNS(W, "w:pPr");
+    for (const e of Array.from(props?.children ?? []))
+      if (!["rPr", "sectPr", "pPrChange"].includes(e.localName))
+        old.append(e.cloneNode(true));
+    const change = revisionElement(
+      paragraph.ownerDocument,
+      "pPrChange",
+      nextRevision(),
+    );
+    change.append(old);
+    setParagraphProperty(paragraph, "pPrChange", change);
+  };
   const newParagraphId = () =>
     `{${(0x5e170000 + ++paragraphSeed).toString(16).toUpperCase()}-0A1B-4C2D-8E3F-${String(paragraphSeed).padStart(12, "0")}}`;
   const mainBody = (doc: Document) =>
@@ -620,24 +886,52 @@ export function installWordOoxmlHost(
       return true;
     });
   };
+  /** Paragraphs of every header and footer part, as Body.paragraphs of that story lists them. */
+  const storyParagraphs = (root: Element) =>
+    elements(root, W, "p").filter((p) => {
+      for (let a = p.parentElement; a && a !== root; a = a.parentElement)
+        if (
+          (a.namespaceURI === MC && a.localName === "Fallback") ||
+          (a.namespaceURI === W && a.localName === "txbxContent")
+        )
+          return false;
+      return true;
+    });
+  const paragraphGroups = (doc: Document) =>
+    new Map<string, Element[]>([
+      ["body", bodyParagraphs(doc)],
+      ...parts(doc).flatMap((part): [string, Element[]][] => {
+        const root = partRoot(doc, partName(part));
+        return root && (isWElement(root, "hdr") || isWElement(root, "ftr"))
+          ? [[partName(part), storyParagraphs(root)]]
+          : [];
+      }),
+    ]);
   const live = (): Document => {
     if (liveDoc) return liveDoc;
     const doc = parse(wordDocumentFileToOoxml(current));
-    const paragraphs = bodyParagraphs(doc);
-    const carried =
-      carriedIds?.length === paragraphs.length ? carriedIds : undefined;
-    paragraphs.forEach((p, i) =>
-      paragraphIds.set(p, carried?.[i] ?? newParagraphId()),
-    );
+    for (const [name, paragraphs] of paragraphGroups(doc)) {
+      const carried = carriedIds?.get(name);
+      const kept = carried?.length === paragraphs.length ? carried : undefined;
+      paragraphs.forEach((p, i) =>
+        paragraphIds.set(p, kept?.[i] ?? newParagraphId()),
+      );
+    }
     carriedIds = undefined;
     liveDoc = doc;
     return doc;
   };
   const replaceCurrent = (bytes: Uint8Array, keepIds: boolean) => {
-    carriedIds =
-      keepIds && liveDoc
-        ? bodyParagraphs(liveDoc).map((p) => paragraphIds.get(p) ?? "")
-        : undefined;
+    carriedIds = !keepIds
+      ? undefined
+      : liveDoc
+        ? new Map(
+            [...paragraphGroups(liveDoc)].map(([name, list]) => [
+              name,
+              list.map((p) => paragraphIds.get(p) ?? ""),
+            ]),
+          )
+        : carriedIds;
     liveDoc = undefined;
     current = bytes;
   };
@@ -686,10 +980,99 @@ export function installWordOoxmlHost(
     return loaded.get(property);
   };
   const runsOf = (p: Element) => elements(p, W, "r");
-  const rangeProxy = (runs: () => Element[]) => {
+  /** Formatting existing text under Track Changes keeps its old properties in w:rPrChange. */
+  const recordRunChange = (run: Element) => {
+    if (!tracked() || insertedRun(run)) return;
+    let props = child(run, "rPr");
+    if (child(props, "rPrChange")) return;
+    const old = run.ownerDocument.createElementNS(W, "w:rPr");
+    for (const e of Array.from(props?.children ?? []))
+      old.append(e.cloneNode(true));
+    if (!props) {
+      props = run.ownerDocument.createElementNS(W, "w:rPr");
+      run.prepend(props);
+    }
+    const change = revisionElement(
+      run.ownerDocument,
+      "rPrChange",
+      nextRevision(),
+    );
+    change.append(old);
+    props.append(change);
+  };
+  const RANGE_RUNS = Symbol("runs");
+  const runParagraph = (run: Element) => {
+    let p: Element | null = run;
+    while (p && !isWElement(p, "p")) p = p.parentElement;
+    if (!p) throw itemNotFound();
+    return p;
+  };
+  /** Text inserted next to a run copies its properties; under Track Changes it is an insertion. */
+  const placeRun = (
+    anchor: Element,
+    text: string,
+    location: "Before" | "After",
+  ): Element => {
+    const run = newRun(anchor.ownerDocument, text, child(anchor, "rPr"));
+    child(child(run, "rPr"), "rPrChange")?.remove();
+    const node = tracked()
+      ? revisionElement(anchor.ownerDocument, "ins", nextRevision())
+      : run;
+    if (node !== run) node.append(run);
+    const container =
+      isWElement(anchor.parentElement, "ins") ||
+      isWElement(anchor.parentElement, "del")
+        ? anchor.parentElement!
+        : anchor;
+    if (location === "Before") container.before(node);
+    else container.after(node);
+    return run;
+  };
+  const rangeProxy = (runs: () => Element[], text?: string) => {
     const mark = (names: string[], value: string | null) => () =>
-      runs().forEach((run) => setRunMark(alive(run), names, value));
-    return {
+      runs().forEach((run) => {
+        recordRunChange(alive(run));
+        setRunMark(run, names, value);
+      });
+    const range = {
+      [RANGE_RUNS]: runs,
+      load: () => enqueue(false, "load", () => {}),
+      get text() {
+        if (text === undefined)
+          throw Object.assign(
+            new Error("The property 'text' is not available."),
+            { code: "PropertyNotLoaded" },
+          );
+        return text;
+      },
+      insertText: (value: string, location: string) => {
+        let inserted: Element[] = [];
+        enqueue(true, "insertText", () => {
+          const list = runs().map(alive);
+          if (location !== "Before" && location !== "After")
+            throw new Error(`Unsupported insert location ${location}.`);
+          const anchor = location === "Before" ? list[0] : list.at(-1);
+          if (!anchor) throw itemNotFound();
+          inserted = [placeRun(anchor, value, location)];
+        });
+        return rangeProxy(() => inserted);
+      },
+      delete: () =>
+        enqueue(true, "delete", () => {
+          const list = runs().map(alive);
+          if (tracked()) deleteTrackedRuns(list, nextRevision);
+          else list.forEach((run) => run.remove());
+        }),
+      expandTo: (other: { [RANGE_RUNS]: () => Element[] }) =>
+        rangeProxy(() => {
+          const first = runs()[0];
+          const last = other[RANGE_RUNS]().at(-1);
+          if (!first || !last) throw itemNotFound();
+          const all = runsOf(runParagraph(first));
+          const [a, b] = [all.indexOf(first), all.indexOf(last)];
+          if (a < 0 || b < a) throw itemNotFound();
+          return all.slice(a, b + 1);
+        }),
       font: {
         set bold(value: boolean) {
           enqueue(true, "font.bold", mark(["b", "bCs"], value ? "" : null));
@@ -706,6 +1089,7 @@ export function installWordOoxmlHost(
         },
       },
     };
+    return range;
   };
   const cellProxy = (resolve: () => Element) => {
     const loaded = new Map<string, unknown>();
@@ -769,6 +1153,7 @@ export function installWordOoxmlHost(
     child(style, "name")?.getAttributeNS(W, "val") ?? "";
   /** Word omits w:pStyle for the default paragraph style. */
   const applyStyle = (paragraph: Element, style: Element) => {
+    recordParagraphChange(paragraph);
     const styles = paragraphStyles();
     const fallback = styles.some((s) => s.getAttributeNS(W, "default") === "1")
       ? undefined
@@ -871,6 +1256,7 @@ export function installWordOoxmlHost(
     return numId;
   };
   const setNumbering = (paragraph: Element, level: number, numId: string) => {
+    recordParagraphChange(paragraph);
     const doc = paragraph.ownerDocument;
     const numPr = doc.createElementNS(W, "w:numPr");
     const ilvl = doc.createElementNS(W, "w:ilvl");
@@ -997,9 +1383,10 @@ export function installWordOoxmlHost(
         return listProxy(target);
       },
       detachFromList: () =>
-        enqueue(true, "detachFromList", () =>
-          setParagraphProperty(target(), "numPr", null),
-        ),
+        enqueue(true, "detachFromList", () => {
+          recordParagraphChange(target());
+          setParagraphProperty(target(), "numPr", null);
+        }),
       startNewList: () => {
         enqueue(true, "startNewList", () => {
           const p = target();
@@ -1014,6 +1401,7 @@ export function installWordOoxmlHost(
       },
       set alignment(value: string) {
         enqueue(true, "alignment", () => {
+          recordParagraphChange(target());
           const jc = target().ownerDocument.createElementNS(W, "w:jc");
           jc.setAttributeNS(
             W,
@@ -1044,6 +1432,74 @@ export function installWordOoxmlHost(
         });
       },
       getText: () => result(() => paragraphText(target())),
+      getReviewedText: (version?: string) =>
+        result(() =>
+          version === "Original"
+            ? originalParagraphText(target())
+            : paragraphText(target()),
+        ),
+      getTrackedChanges: () => {
+        let items: { type: string; text: string }[] | undefined;
+        return {
+          load: () =>
+            enqueue(false, "load", () => {
+              items = paragraphRevisions(target());
+            }),
+          get items() {
+            if (!items)
+              throw Object.assign(new Error("The collection is not loaded."), {
+                code: "PropertyNotLoaded",
+              });
+            return items;
+          },
+          rejectAll: () =>
+            enqueue(true, "rejectAll", () =>
+              rejectParagraphRevisions(target()),
+            ),
+          acceptAll: () =>
+            enqueue(true, "acceptAll", () =>
+              acceptParagraphRevisions(target()),
+            ),
+        };
+      },
+      getTextRanges: (marks: string[], trimSpacing = false) => {
+        let items: ReturnType<typeof rangeProxy>[] | undefined;
+        return {
+          load: () =>
+            enqueue(false, "load", () => {
+              const p = target();
+              for (const run of visibleRuns(p)) splitRunAtMarks(run, marks);
+              const tokens: { runs: Element[]; text: string }[] = [];
+              let current: { runs: Element[]; text: string } | undefined;
+              for (const run of visibleRuns(p)) {
+                const text = paragraphText(run);
+                current ??= { runs: [], text: "" };
+                current.runs.push(run);
+                current.text += text;
+                if (marks.some((m) => text.endsWith(m))) {
+                  tokens.push(current);
+                  current = undefined;
+                }
+              }
+              if (current) tokens.push(current);
+              const trim =
+                trimSpacing || settings.textRangesTrimSpacing === true;
+              items = tokens.map((token) =>
+                rangeProxy(
+                  () => token.runs,
+                  trim ? token.text.trim() : token.text,
+                ),
+              );
+            }),
+          get items() {
+            if (!items)
+              throw Object.assign(new Error("The collection is not loaded."), {
+                code: "PropertyNotLoaded",
+              });
+            return items;
+          },
+        };
+      },
       getOoxml: () => result(() => paragraphOoxml(target())),
       get parentTableCellOrNullObject() {
         return cellProxy(target);
@@ -1052,6 +1508,43 @@ export function installWordOoxmlHost(
         let inserted: Element[] = [];
         enqueue(true, "insertText", () => {
           const p = target();
+          if (tracked()) {
+            const visible = visibleRuns(p);
+            const props = (run: Element | undefined) => {
+              const copy = child(run, "rPr")?.cloneNode(true) as
+                | Element
+                | undefined;
+              child(copy, "rPrChange")?.remove();
+              return copy;
+            };
+            const run = newRun(
+              p.ownerDocument,
+              text,
+              location === "End"
+                ? props(visible.at(-1))
+                : replaceFault === "drops-rpr" && location === "Replace"
+                  ? undefined
+                  : props(visible[0]),
+            );
+            const wrapper = revisionElement(
+              p.ownerDocument,
+              "ins",
+              nextRevision(),
+            );
+            wrapper.append(run);
+            if (location === "Replace") {
+              deleteTrackedRuns(visible, nextRevision);
+              p.append(wrapper);
+            } else if (location === "End") p.append(wrapper);
+            else if (location === "Start")
+              p.insertBefore(
+                wrapper,
+                child(p, "pPr")?.nextSibling ?? p.firstChild,
+              );
+            else throw new Error(`Unsupported insert location ${location}.`);
+            inserted = [run];
+            return;
+          }
           const runs = runsOf(p);
           const first = child(runs[0], "rPr");
           const last = child(runs.at(-1), "rPr");
@@ -1098,7 +1591,23 @@ export function installWordOoxmlHost(
         enqueue(true, "insertParagraph", () => {
           const anchor = target();
           made = newParagraph(anchor.ownerDocument, anchor);
-          if (text) made.append(newRun(anchor.ownerDocument, text));
+          if (tracked())
+            setParagraphMark(
+              made,
+              revisionElement(anchor.ownerDocument, "ins", nextRevision()),
+            );
+          if (text) {
+            const run = newRun(anchor.ownerDocument, text);
+            if (tracked()) {
+              const wrapper = revisionElement(
+                anchor.ownerDocument,
+                "ins",
+                nextRevision(),
+              );
+              wrapper.append(run);
+              made.append(wrapper);
+            } else made.append(run);
+          }
           anchor.parentElement!.insertBefore(
             made,
             location === "Before" ? anchor : anchor.nextSibling,
@@ -1112,6 +1621,19 @@ export function installWordOoxmlHost(
       delete: () =>
         enqueue(true, "delete", () => {
           const p = target();
+          if (tracked()) {
+            if (paragraphMark(p) === "ins") {
+              p.remove();
+              return;
+            }
+            deleteTrackedRuns(visibleRuns(p), nextRevision);
+            if (p !== finalParagraph(p.ownerDocument))
+              setParagraphMark(
+                p,
+                revisionElement(p.ownerDocument, "del", nextRevision()),
+              );
+            return;
+          }
           // Word keeps the document's final paragraph mark: deleting that paragraph only empties it.
           if (p === finalParagraph(p.ownerDocument))
             for (const node of Array.from(p.childNodes)) {
@@ -1129,7 +1651,9 @@ export function installWordOoxmlHost(
     };
     return proxy as unknown as Word.Paragraph;
   };
-  const paragraphCollection = () => {
+  const paragraphCollection = (
+    list: () => Element[] = () => bodyParagraphs(live()),
+  ) => {
     let items: Word.Paragraph[] | undefined;
     return {
       load: (properties: string) =>
@@ -1137,13 +1661,73 @@ export function installWordOoxmlHost(
           const names = properties
             .split(",")
             .map((name) => name.trim().replace(/^items\//, ""));
-          items = bodyParagraphs(live()).map((p) => {
+          items = list().map((p) => {
             const values = paragraphValues(p);
             return paragraphProxy(
               () => p,
               new Map(names.map((name) => [name, values[name]])),
             );
           });
+        }),
+      get items() {
+        if (!items)
+          throw Object.assign(new Error("The collection is not loaded."), {
+            code: "PropertyNotLoaded",
+          });
+        return items;
+      },
+    };
+  };
+  const HEADER_FOOTER_TYPES: Record<string, string> = {
+    Primary: "default",
+    FirstPage: "first",
+    EvenPages: "even",
+  };
+  /** The header or footer part a section itself references; this mock never creates one. */
+  const sectionStory = (
+    index: number,
+    kind: "header" | "footer",
+    type: string,
+  ): Element => {
+    const doc = live();
+    const section = elements(mainBody(doc)!, W, "sectPr")[index];
+    const reference = Array.from(section?.children ?? []).find(
+      (e) =>
+        isWElement(e, `${kind}Reference`) &&
+        e.getAttributeNS(W, "type") === HEADER_FOOTER_TYPES[type],
+    );
+    const id = reference?.getAttributeNS(OFFICE_REL, "id");
+    const target = relationshipsOf(partRoot(doc, DOCUMENT_RELS))
+      .find((rel) => rel.getAttribute("Id") === id)
+      ?.getAttribute("Target");
+    const root =
+      target &&
+      partRoot(doc, target.startsWith("/") ? target : `/word/${target}`);
+    if (!root) throw itemNotFound();
+    return root;
+  };
+  const sectionCollection = () => {
+    let items: Word.Section[] | undefined;
+    const story = (index: number, kind: "header" | "footer", type: string) =>
+      ({
+        get paragraphs() {
+          return paragraphCollection(() =>
+            storyParagraphs(sectionStory(index, kind, type)),
+          );
+        },
+      }) as unknown as Word.Body;
+    return {
+      load: () =>
+        enqueue(false, "load", () => {
+          const count = elements(mainBody(live())!, W, "sectPr").length;
+          items = Array.from(
+            { length: count },
+            (_, index) =>
+              ({
+                getHeader: (type: string) => story(index, "header", type),
+                getFooter: (type: string) => story(index, "footer", type),
+              }) as unknown as Word.Section,
+          );
         }),
       get items() {
         if (!items)
@@ -1412,6 +1996,8 @@ export function installWordOoxmlHost(
                 : undefined
               : finalParagraph(doc),
           );
+          if (tracked())
+            setParagraphMark(made, revisionElement(doc, "ins", nextRevision()));
           if (text) made.append(newRun(doc, text));
           const section = Array.from(body.children).find(
             (e) => e.namespaceURI === W && e.localName === "sectPr",
@@ -1523,7 +2109,10 @@ export function installWordOoxmlHost(
       const body = Object.create(document.body, {
         paragraphs: { get: () => paragraphs },
       });
-      const runDocument = Object.create(document, { body: { value: body } });
+      const runDocument = Object.create(document, {
+        body: { value: body },
+        sections: { get: () => sectionCollection() },
+      });
       return callback(
         Object.create(context, {
           document: { value: runDocument },
@@ -1594,6 +2183,20 @@ export function installWordOoxmlHost(
           )
             node.remove();
         paragraph.append(newRun(doc, text, props));
+        current = wordDocumentOoxmlToFile(serialize(doc));
+        loadControls();
+      }),
+    /** A user accepting (or rejecting) every tracked change in body paragraph `index`. */
+    reviewParagraph: (
+      index: number,
+      decision: "accept" | "reject",
+      when: When = "now",
+    ) =>
+      at(when, () => {
+        const doc = live();
+        const paragraph = bodyParagraphs(doc)[index];
+        if (decision === "accept") acceptParagraphRevisions(paragraph);
+        else rejectParagraphRevisions(paragraph);
         current = wordDocumentOoxmlToFile(serialize(doc));
         loadControls();
       }),

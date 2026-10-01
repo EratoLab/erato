@@ -199,8 +199,9 @@ export function realisticWordPackageXml(): string {
 export function realisticSnapshot(
   ooxml: string,
   messageId = "message-A",
+  tracking = "Off",
 ): WordAuthoringSnapshot {
-  const snapshot = captureWordAuthoringSnapshot(ooxml, "doc-A", "Off", true);
+  const snapshot = captureWordAuthoringSnapshot(ooxml, "doc-A", tracking, true);
   snapshot.read = new Set(wordSourceReadRefs(snapshot));
   snapshot.readToken = "read-proof";
   snapshot.ownerMessageId = messageId;
@@ -210,9 +211,10 @@ export function realisticSnapshot(
 /** Capture the open document from the installed host. */
 export async function captureRealisticSnapshot(
   messageId = "message-A",
+  tracking = "Off",
 ): Promise<WordAuthoringSnapshot> {
   const file = await captureWordDocumentPackage();
-  const snapshot = realisticSnapshot(file.ooxml, messageId);
+  const snapshot = realisticSnapshot(file.ooxml, messageId, tracking);
   snapshot.documentUrl = file.documentUrl;
   return snapshot;
 }
