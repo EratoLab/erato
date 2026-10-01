@@ -13,6 +13,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { TaskResultCard } from "@/components/ui/Message/TaskResultCard";
 import {
   Trace,
+  durationFromTraceParts,
   durationFromTracePartsOrLegacyMessageTimestamps,
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
@@ -1365,6 +1366,10 @@ export const MessageContent = memo(function MessageContent({
       ),
     [content, createdAt, updatedAt],
   );
+  const traceClusterCount = React.useMemo(
+    () => clusters.filter((cluster) => cluster.kind === "trace").length,
+    [clusters],
+  );
 
   // If showing raw, just show text-like content without rendering markdown.
   // When reasoning text is masked, omit reasoning parts from raw display too.
@@ -1412,7 +1417,10 @@ export const MessageContent = memo(function MessageContent({
               isStreaming={!!isStreaming}
               hasLaterContent={hasLaterContent}
               renderMarkdown={renderMarkdown}
-              durationMs={traceDurationMs}
+              durationMs={
+                durationFromTraceParts(cluster.parts) ??
+                (traceClusterCount === 1 ? traceDurationMs : null)
+              }
               hasError={hasError}
               toolApprovalStatuses={toolApprovalStatuses}
             />
