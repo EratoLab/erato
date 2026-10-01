@@ -3910,8 +3910,13 @@ msgstr "Archiviert alle Chats in deinem Konto."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
-msgid "preferences.dialog.desktopSidecar.connected.description"
-msgstr ""
+#~ msgid "preferences.dialog.desktopSidecar.connected.description"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.connection"
+msgstr "Verbindung"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
@@ -3945,6 +3950,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.introduction"
+msgstr "Verbinden Sie den Assistenten mit E-Mails, Dateien und Teams-Nachrichten, die auf diesem Gerät verfügbar sind."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.launch"
 msgstr ""
 
@@ -3957,6 +3967,16 @@ msgstr "Datenverzeichnis öffnen"
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.openDataDirectory.error"
 msgstr "Das Sidecar-Datenverzeichnis konnte nicht geöffnet werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permissions.description"
+msgstr "Legen Sie fest, wann der Assistent Inhalte von diesem Gerät verwenden darf. Änderungen an Berechtigungen werden automatisch gespeichert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permissions.title"
+msgstr "Tool-Berechtigungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
@@ -3986,7 +4006,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/SidecarToolDecisions.tsx
 msgid "preferences.dialog.desktopSidecar.tools.heading"
-msgstr "Werkzeuge, die der Assistent auf diesem Gerät verwenden darf"
+msgstr "Verfügbare Tools"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/SidecarToolDecisions.tsx
@@ -4886,9 +4906,14 @@ msgid "sidecar.indexing.caption"
 msgstr "Lokale Suche auf diesem Gerät"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.decreasePriority"
 msgstr "Priorität verringern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.description"
+msgstr "Wählen Sie aus, was für die lokale Suche indexiert wird. Änderungen werden beim Speichern übernommen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4911,17 +4936,22 @@ msgid "sidecar.indexing.empty"
 msgstr "Keine lokalen Quellen gefunden."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.emptyDocuments"
 msgstr "Leere Dokumente enthalten keinen durchsuchbaren Text. Daher liegt die Abdeckung unter 100%."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.enable"
 msgstr "Indexierung für {mailbox} aktivieren"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.enabledSources"
+msgstr "{enabled} aktiviert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.increasePriority"
 msgstr "Priorität erhöhen"
 
@@ -4931,7 +4961,7 @@ msgstr "Priorität erhöhen"
 #~ msgstr "Die Gesamtzahlen beziehen sich auf erfasste Elemente. Ein Strich bedeutet, dass noch keine Statistiken verfügbar sind."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.lastScan"
 msgstr "Letzter erfolgreicher Scan {time}"
 
@@ -4946,37 +4976,37 @@ msgid "sidecar.indexing.loading"
 msgstr "Indexierungsstatistiken werden geladen…"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.localSource"
 msgstr "Lokale Datenquelle"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.missingFromLocalCache"
 msgstr "{missingCount, plural, one {# Dokument ist im lokalen Cache nicht verfügbar.} other {# Dokumente sind im lokalen Cache nicht verfügbar.}}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.moveDown"
 msgstr "Priorität für {mailbox} verringern"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.moveUp"
 msgstr "Priorität für {mailbox} erhöhen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.noDocuments"
 msgstr "Noch keine Dokumente gefunden"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.noScan"
 msgstr "Noch kein erfolgreicher Scan"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.numberedSource"
 msgstr "{name} ({number})"
 
@@ -4991,32 +5021,42 @@ msgid "sidecar.indexing.parallelismHelp"
 msgstr "Maximale Anzahl gleichzeitig verarbeiteter Dokumente."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.priority"
+msgstr "Indexierungspriorität"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.progress"
 msgstr "{indexed} von {total} Dokumenten indexiert ({percentage} %)"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.progressUnavailable"
 msgstr "Indexierungsfortschritt nicht verfügbar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
 msgid "sidecar.indexing.reset"
 msgstr "Sidecar-Indizes zurücksetzen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
 msgid "sidecar.indexing.resetConfirm"
 msgstr "Alle lokalen Suchindizes löschen? Original-E-Mails, Anhänge und Einstellungen bleiben erhalten. Die Indexierung bleibt angehalten, bis sie fortgesetzt oder der Sidecar neu gestartet wird."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
 msgid "sidecar.indexing.resetError"
 msgstr "Der Abschluss des Zurücksetzens konnte nicht bestätigt werden. Prüfen Sie den Status oder versuchen Sie es erneut."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+msgid "sidecar.indexing.resetHelp"
+msgstr "Das Zurücksetzen löscht den lokalen Suchindex und stoppt die Indizierung. Ihre ursprünglichen Inhalte und Einstellungen bleiben erhalten."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
 msgid "sidecar.indexing.resetSuccess"
 msgstr "Lokale Suchindizes gelöscht. Die Indexierung ist angehalten."
 
@@ -5031,19 +5071,44 @@ msgid "sidecar.indexing.saveError"
 msgstr "Indexierungseinstellungen konnten nicht gespeichert werden. Bitte erneut versuchen."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.source.outlook"
 msgstr "Outlook"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.source.teams"
 msgstr "Teams"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.sourceDetails"
+msgstr "Details zu {source}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.sources"
+msgstr "Quellen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.sourcesHelp"
+msgstr "Aktivieren Sie Quellen für die Indizierung. Klappen Sie eine Quelle auf, um den Fortschritt zu sehen und ihre Priorität zu ändern."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.sourceUpgrade"
 msgstr "Aktualisieren Sie den Desktop-Sidecar, um die Indizierung für diese Quelle zu ändern."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.speed"
+msgstr "Indexierungsgeschwindigkeit"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.speedHelp"
+msgstr "Legen Sie fest, wie viele Aufgaben der Sidecar gleichzeitig verarbeitet."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5051,67 +5116,67 @@ msgstr "Aktualisieren Sie den Desktop-Sidecar, um die Indizierung für diese Que
 #~ msgstr "Handlungsbedarf"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.complete"
 msgstr "Indexierung abgeschlossen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.current"
 msgstr "Aktuell"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.disabled"
 msgstr "Deaktiviert"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.indexing"
 msgstr "Wird indexiert"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.indexingUnavailable"
 msgstr "Indexierung nicht verfügbar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.partial"
 msgstr "Teilweise indexiert"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.scanFailed"
 msgstr "Scan fehlgeschlagen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.scanning"
 msgstr "Wird gescannt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.sourceUnavailable"
 msgstr "Quelle nicht verfügbar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.stopped"
 msgstr "Angehalten"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.unavailable"
 msgstr "Status nicht verfügbar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.waiting"
 msgstr "Wartet"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.teamsCache"
 msgstr "Lokaler Microsoft-Teams-Cache"
 
@@ -5121,7 +5186,7 @@ msgid "sidecar.indexing.teamsScope"
 msgstr "Status und Einstellungen für Teams gelten für den jeweiligen lokalen Cache. Konten, die einen Cache gemeinsam nutzen, werden zusammengefasst."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.terminal"
 msgstr "Einige Dokumente sind leer oder konnten nicht indexiert werden. Daher liegt die Abdeckung unter 100%."
 
@@ -5149,6 +5214,16 @@ msgstr "Ungespeicherte Änderungen"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.upgrade"
 msgstr "Aktualisieren Sie den Desktop Sidecar, um die Indexierung zu konfigurieren."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+msgid "sidecar.maintenance.description"
+msgstr "Verwalten Sie die Verbindung und die lokalen Suchdaten."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+msgid "sidecar.maintenance.title"
+msgstr "Wartung"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx

@@ -85,6 +85,17 @@ const data = {
 };
 let currentData: typeof data;
 
+function renderControls() {
+  const view = render(<SidecarIndexingControls />);
+  fireEvent.click(screen.getByRole("button", { name: /^Sources/ }));
+  for (const button of screen.getAllByRole("button", { name: /^Details for / }))
+    fireEvent.click(button);
+  fireEvent.click(screen.getByRole("button", { name: "Indexing speed" }));
+  const maintenance = screen.queryByRole("button", { name: "Maintenance" });
+  if (maintenance) fireEvent.click(maintenance);
+  return view;
+}
+
 async function expectValidSavedConfiguration() {
   expect(save).toHaveBeenCalledTimes(1);
   await waitFor(() =>
@@ -116,7 +127,7 @@ beforeEach(() => {
 
 describe("mailbox indexing controls", () => {
   it("shows ordered mailboxes with combined progress", () => {
-    render(<SidecarIndexingControls />);
+    renderControls();
     const entries = screen.getAllByRole("listitem");
     expect(entries[0]).toHaveTextContent("personal@example.com");
     expect(entries[0]).toHaveTextContent("6 of 13 documents indexed (46%)");
@@ -132,7 +143,7 @@ describe("mailbox indexing controls", () => {
     ).not.toBeChecked();
   });
   it("writes explicit priorities when moving mailboxes and preserves enablement", async () => {
-    render(<SidecarIndexingControls />);
+    renderControls();
     fireEvent.click(
       screen.getByRole("button", {
         name: "Increase priority for shared@example.com",
@@ -153,7 +164,7 @@ describe("mailbox indexing controls", () => {
     await expectValidSavedConfiguration();
   });
   it("toggles one mailbox without dropping other overrides", async () => {
-    render(<SidecarIndexingControls />);
+    renderControls();
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: "Enable indexing for personal@example.com",
@@ -175,7 +186,7 @@ describe("mailbox indexing controls", () => {
   });
   it("writes a valid UUID when toggling a mailbox without an override", async () => {
     currentData.status.configuration.user_configuration.indexing_mailboxes = [];
-    render(<SidecarIndexingControls />);
+    renderControls();
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: "Enable indexing for personal@example.com",
@@ -209,7 +220,7 @@ describe("mailbox indexing controls", () => {
       currentData.status.configuration.user_configuration.indexing_mailboxes;
     Object.assign(entries[0], { future_setting: "preserved" });
     entries.push(disconnected);
-    render(<SidecarIndexingControls />);
+    renderControls();
     fireEvent.click(
       screen.getByRole("button", {
         name: "Increase priority for shared@example.com",
@@ -236,7 +247,7 @@ describe("mailbox indexing controls", () => {
     await expectValidSavedConfiguration();
   });
   it("validates and saves global limits", async () => {
-    render(<SidecarIndexingControls />);
+    renderControls();
     fireEvent.change(
       screen.getByRole("spinbutton", { name: "Indexing parallelism" }),
       { target: { value: "0" } },
@@ -264,7 +275,7 @@ describe("mailbox indexing controls", () => {
 });
 
 it("retains drafts across polls and failed saves, then clears them after success", async () => {
-  const { rerender } = render(<SidecarIndexingControls />);
+  const { rerender } = renderControls();
   const checkbox = () =>
     screen.getByRole("checkbox", {
       name: "Enable indexing for personal@example.com",
@@ -313,7 +324,7 @@ it("resets only after confirmation and hides reset on older sidecars", () => {
     reset,
     resetSupported: true,
   });
-  const { rerender } = render(<SidecarIndexingControls />);
+  const { rerender } = renderControls();
   fireEvent.click(
     screen.getByRole("button", { name: "Reset sidecar indices" }),
   );
@@ -344,7 +355,7 @@ describe("mailbox status rendering", () => {
       supported: true,
       saveError: null,
     } as unknown as ReturnType<typeof useSidecarIndexing>);
-    render(<SidecarIndexingControls />);
+    renderControls();
     const row = screen
       .getAllByRole("listitem")
       .find((entry) => entry.textContent?.includes("shared@example.com"));
@@ -451,7 +462,7 @@ describe("Teams and Outlook source controls", () => {
         ],
       },
     } as ReturnType<typeof useSidecarIndexing>);
-    const view = render(<SidecarIndexingControls />);
+    const view = renderControls();
     return { status, ...view };
   }
 
@@ -553,5 +564,101 @@ describe("Teams and Outlook source controls", () => {
       }),
     ).toBeEnabled();
     expect(save).not.toHaveBeenCalled();
+  });
+});
+
+describe("indexing information and actions", () => {
+  it("starts with compact source and speed summaries, without hidden tab stops", () => {
+    render(<SidecarIndexingControls />);
+    expect(screen.getByRole("button", { name: "Sources 2" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByText("1 enabled")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Sources 2" }));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.getByText("Disabled")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Indexing progress unavailable"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Increase priority for/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Details for personal@example.com" }),
+    );
+    expect(
+      screen.getByText("6 of 13 documents indexed (46%)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Increase priority for personal@example.com",
+      }),
+    ).toBeDisabled();
+  });
+
+  it("keeps source selection separate from disclosure and retains drafts while sections are closed", async () => {
+    render(<SidecarIndexingControls />);
+    const sources = () => screen.getByRole("button", { name: "Sources 2" });
+    fireEvent.click(sources());
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Enable indexing for personal@example.com",
+      }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Details for personal@example.com" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(sources());
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    const speed = () => screen.getByRole("button", { name: "Indexing speed" });
+    fireEvent.click(speed());
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Documents per minute" }),
+      { target: { value: "80" } },
+    );
+    fireEvent.click(speed());
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    );
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0][0]).toMatchObject({
+      indexing_documents_per_minute: 80,
+      indexing_mailboxes: expect.arrayContaining([
+        { mailbox_id: personalUuid, enabled: true, priority: 0 },
+      ]),
+    });
+  });
+
+  it("keeps connection recovery reachable when statistics fail to load", () => {
+    vi.mocked(useSidecarIndexing).mockReturnValue({
+      ...vi.mocked(useSidecarIndexing)(),
+      data: undefined,
+      error: new Error("offline"),
+      resetSupported: true,
+    } as ReturnType<typeof useSidecarIndexing>);
+    render(
+      <SidecarIndexingControls
+        connectionActions={<button>Retry connection</button>}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not load indexing statistics",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Maintenance" }));
+    expect(
+      screen.getByRole("button", { name: "Retry connection" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Reset sidecar indices" }),
+    ).not.toBeInTheDocument();
   });
 });

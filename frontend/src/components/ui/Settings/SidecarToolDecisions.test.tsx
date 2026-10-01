@@ -52,6 +52,7 @@ function setup(supported: string[]) {
       <SidecarToolDecisions client={client} />
     </QueryClientProvider>,
   );
+  fireEvent.click(screen.getByRole("button", { name: /^Available tools/ }));
   return { invalidate };
 }
 

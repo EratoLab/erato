@@ -1,5 +1,6 @@
+import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import {
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT,
@@ -11,6 +12,7 @@ import {
 
 import { ClientToolFileApprovalSetting } from "./ClientToolFileApprovalSetting";
 import { EntityRow } from "./EntityRow";
+import { SettingsDisclosure } from "./SettingsDisclosure";
 import { SidecarToolDecisions } from "./SidecarToolDecisions";
 import { Button } from "../Controls/Button";
 import { SidecarIndexingControls } from "../DesktopSidecar/SidecarIndexingCard";
@@ -52,8 +54,7 @@ function DesktopSidecarEntityRow({
   defaultExpanded: boolean;
 }) {
   const { client, snapshot } = useDesktopSidecar();
-  const [openingDataDirectory, setOpeningDataDirectory] = useState(false);
-  const [openDataDirectoryError, setOpenDataDirectoryError] = useState(false);
+  const permissionsId = useId();
   const connected = snapshot.state === "ready";
   const connecting = snapshot.state === "discovering";
 
@@ -83,39 +84,92 @@ function DesktopSidecarEntityRow({
         message: "Desktop Sidecar",
       })}
       status={{ tone: connected ? "success" : "warning", label: statusLabel }}
-      caption={t({
+      caption={i18n._({
         id: "preferences.dialog.serversTools.scope.thisDevice",
         message: "{status} · this device",
         values: { status: statusLabel },
       })}
       data-testid="servers-tools-sidecar-row"
     >
-      <p className="text-sm text-theme-fg-secondary">
-        {connected && snapshot.serverInfo
-          ? t({
-              id: "preferences.dialog.desktopSidecar.connected.description",
-              message: "{name} {version} is ready to use.",
-              values: {
-                name: snapshot.serverInfo.name,
-                version: snapshot.serverInfo.version,
-              },
-            })
-          : t({
+      <div className="space-y-6">
+        <p className="text-sm text-theme-fg-secondary">
+          {t({
+            id: "preferences.dialog.desktopSidecar.introduction",
+            message:
+              "Connect the assistant to emails, files and Teams messages available on this device.",
+          })}
+        </p>
+        {!connected && (
+          <p className="text-sm text-theme-fg-secondary">
+            {t({
               id: "preferences.dialog.desktopSidecar.unavailable.description",
               message: "Start the desktop sidecar, then try connecting again.",
             })}
-      </p>
-      {snapshot.localDelegation ? (
-        <p className="text-sm text-theme-fg-secondary">{t`Evidence sharing requires review in the desktop app for each package.`}</p>
-      ) : (
-        <ClientToolFileApprovalSetting />
-      )}
-      {connected && !snapshot.localDelegation && client ? (
-        <SidecarToolDecisions client={client} />
-      ) : null}
-      {connected &&
+          </p>
+        )}
+        <section aria-labelledby={permissionsId} className="space-y-4">
+          <div className="space-y-1">
+            <h3
+              id={permissionsId}
+              className="text-sm font-medium text-theme-fg-primary"
+            >
+              {t({
+                id: "preferences.dialog.desktopSidecar.permissions.title",
+                message: "Tool permissions",
+              })}
+            </h3>
+            {!snapshot.localDelegation && (
+              <p className="text-xs text-theme-fg-secondary">
+                {t({
+                  id: "preferences.dialog.desktopSidecar.permissions.description",
+                  message:
+                    "Choose when the assistant may use content from this device. Permission changes are saved automatically.",
+                })}
+              </p>
+            )}
+          </div>
+          {snapshot.localDelegation ? (
+            <p className="text-sm text-theme-fg-secondary">{t`Evidence sharing requires review in the desktop app for each package.`}</p>
+          ) : (
+            <ClientToolFileApprovalSetting />
+          )}
+          {connected && !snapshot.localDelegation && client && (
+            <SidecarToolDecisions client={client} />
+          )}
+        </section>
+        {connected &&
         !snapshot.localDelegation &&
-        client?.supports("indexing.status.v1") && <SidecarIndexingControls />}
+        client?.supports("indexing.status.v1") ? (
+          <SidecarIndexingControls
+            connectionActions={<SidecarConnectionActions onRetry={onRetry} />}
+          />
+        ) : (
+          <div className="border-t border-theme-border pt-4">
+            <SettingsDisclosure
+              headingLevel={3}
+              title={t({
+                id: "preferences.dialog.desktopSidecar.connection",
+                message: "Connection",
+              })}
+              defaultExpanded={!connected}
+            >
+              <SidecarConnectionActions onRetry={onRetry} />
+            </SettingsDisclosure>
+          </div>
+        )}
+      </div>
+    </EntityRow>
+  );
+}
+
+function SidecarConnectionActions({ onRetry }: { onRetry: () => void }) {
+  const { client, snapshot } = useDesktopSidecar();
+  const connected = snapshot.state === "ready";
+  const connecting = snapshot.state === "discovering";
+  const [openingDataDirectory, setOpeningDataDirectory] = useState(false);
+  const [openDataDirectoryError, setOpenDataDirectoryError] = useState(false);
+  return (
+    <div className="space-y-3">
       {openDataDirectoryError ? (
         <p role="alert" className="text-sm text-theme-error-fg">
           {t({
@@ -180,6 +234,6 @@ function DesktopSidecarEntityRow({
           </Button>
         ) : null}
       </div>
-    </EntityRow>
+    </div>
   );
 }
