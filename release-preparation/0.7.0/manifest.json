@@ -3922,6 +3922,9 @@
     ],
     "1273": [
       "75b5e7631b14050fddb82d13eb7bd6b51f5a20cb"
+    ],
+    "1277": [
+      "444f10c0c9010f94fe88b8d03c9d60940cee04de"
     ]
   },
   "titles": {
@@ -4358,6 +4361,7 @@
     "1272": "Calculate timing of trace cluster per cluster",
     "1274": "Fix undefined client-operation cursors and button timer cleanup",
     "1275": "Allow deployment-specific Teams app package versions",
-    "1273": "Namespace tool calling ID to prevent overlap in e.g. Gemini"
+    "1273": "Namespace tool calling ID to prevent overlap in e.g. Gemini",
+    "1277": "Fix Teams bot package upload validation"
   }
 }
