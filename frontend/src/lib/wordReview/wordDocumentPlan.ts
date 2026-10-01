@@ -140,6 +140,8 @@ export interface WordAuthoringSnapshot {
   /** Targeted reads never populate full-document coverage or its token. */
   cellReads?: Map<string, WordTableCellScope>;
   ownerMessageId?: string;
+  /** Rebuilt from stored chat history: reviewable, never writable. */
+  source?: "history";
 }
 export const MAX_PLAN_BYTES = 256 * 1024;
 export const MAX_DOCUMENT_BLOCKS = 2000;

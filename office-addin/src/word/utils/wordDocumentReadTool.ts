@@ -5,6 +5,8 @@ import {
   wordSourceReadRefs,
   wordImageAssetMetadata,
   wordSourceDetails,
+  isWordHistorySnapshot,
+  WORD_READ_TOOL,
 } from "@erato/frontend/word-review";
 
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
@@ -22,7 +24,7 @@ import type {
   WordPlanRun,
 } from "@erato/frontend/word-review";
 
-export const WORD_READ_TOOL = "read_document_blocks";
+export { WORD_READ_TOOL };
 const PAGE_BYTES = 20 * 1024;
 const MAX_PAGES = 12;
 interface Fragment {
@@ -95,7 +97,7 @@ export class WordDocumentReadSession {
     request?: WordDocumentReadRequest,
   ): void {
     this.clear();
-    if (!snapshot) return;
+    if (!snapshot || isWordHistorySnapshot(snapshot)) return;
     snapshot.revoked = false;
     snapshot.read.clear();
     snapshot.cellReads = new Map();

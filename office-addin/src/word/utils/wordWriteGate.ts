@@ -1,3 +1,5 @@
+import { isWordHistorySnapshot } from "@erato/frontend/word-review";
+
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export type WordWriteBlockReason =
@@ -15,7 +17,7 @@ export function resolveWordWriteGate(args: {
   expectedIdentity: string | undefined;
   currentIdentity: string | null;
 }): WordWriteGate {
-  if (!args.capture) {
+  if (!args.capture || isWordHistorySnapshot(args.capture.authoring)) {
     return { allowed: false, reason: "no-capture" };
   }
   if (

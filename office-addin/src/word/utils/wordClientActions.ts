@@ -1,4 +1,4 @@
-import { parseWordEdits } from "@erato/frontend/word-review";
+import { parseWordEdits, WORD_EDITS_FENCE } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 
 import { applyWordDocumentPlan } from "./wordApplyDocumentPlan";
@@ -16,9 +16,9 @@ import type {
 } from "@erato/frontend/word-review";
 
 export { CLIENT_ACTION_TOOL_NAME } from "../../core/clientActions/proposedClientAction";
+export { WORD_EDITS_FENCE };
 
 /** Fence tags are case-sensitive and must match the renderer registration. */
-export const WORD_EDITS_FENCE = "erato-word-edits";
 export const WORD_PLAN_FENCE = "erato-word-document-plan";
 export const WORD_INSERT_FENCE = "erato-word-insert";
 

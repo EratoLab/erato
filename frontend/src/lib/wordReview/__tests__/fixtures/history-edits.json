@@ -1,0 +1,46 @@
+{
+  "source": "message 01a0b4d4 and its user message",
+  "messages": [
+    {
+      "id": "01a0b4d4-5a0f-7035-8c2b-133c031fc971",
+      "role": "user",
+      "content": [],
+      "action_facet_id": "word_document_authoring",
+      "action_facet_args": {
+        "document_name": "",
+        "document_text": "[1] To help, please tell me what you want to do:\n[2] Option A (instructions): I’ll give step-by-step directions in Microsoft Word.\n[3] Option B (I edit it): Upload the .docx file here (or paste the text) and tell me where the paragraph should go (e.g., “after the second heading” or “at the top”).\n[4] If you want to insert it yourself, follow these steps in Word:\n[5] 1) Open the document in Microsoft Word.\n[6] 2) Click where you want the paragraph to go.\n[7] 3) Paste the paragraph (Ctrl+V / Cmd+V).\n[8] 4) Optional: Home → Styles to match formatting (e.g., Normal or Heading).\n[9] 5) Save the file (Ctrl+S / Cmd+S).",
+        "heading_outline": "",
+        "paragraphs_sent": "10",
+        "truncation_note": "",
+        "authoring_status": "unsupported",
+        "paragraphs_total": "10",
+        "document_identity": "pane-session:c0650828-e844-45f9-89be-929a2e8dae7a",
+        "document_snapshot": "c649d6f5-ace7-42d8-9267-5c91cb7d6893"
+      }
+    },
+    {
+      "id": "01a0b4d4-5b16-743f-ae6d-8ab2a109d66a",
+      "role": "assistant",
+      "previous_message_id": "01a0b4d4-5a0f-7035-8c2b-133c031fc971",
+      "content": [
+        {
+          "input": {
+            "action": "word.apply_edits"
+          },
+          "output": {
+            "action": "word.apply_edits",
+            "status": "proposed"
+          },
+          "status": "success",
+          "tool_name": "propose_client_action",
+          "content_type": "tool_use",
+          "tool_call_id": "call_5FZ9JQesw1Af8QU4RQGdvrjA"
+        },
+        {
+          "text": "```erato-word-edits\n{\"edits\":[{\"paragraph\":1,\"through\":9,\"text\":\"To help you, tell me what you’d like to do:\\n\\nOption A (instructions): I’ll provide step-by-step directions for how to do it in Microsoft Word.\\n\\nOption B (I edit it): Upload the .docx file here (or paste the text) and tell me exactly where the paragraph should go (for example, “after the second heading” or “at the top”).\\n\\nIf you’d rather insert it yourself, follow these steps in Word:\\n\\n1) Open the document in Microsoft Word.\\n2) Click where you want the paragraph to appear.\\n3) Paste the paragraph (Ctrl+V / Cmd+V).\\n4) Optional: Apply a matching style (Home → Styles, for example Normal or Heading).\\n5) Save the file (Ctrl+S / Cmd+S).\"}]}\n```",
+          "content_type": "text"
+        }
+      ]
+    }
+  ]
+}

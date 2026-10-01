@@ -1,4 +1,5 @@
 import {
+  acceptedWordPlanFromHistory,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
 } from "@erato/frontend/word-review";
@@ -11,10 +12,7 @@ import {
   W,
 } from "../../../test/mocks/word/authoringFixtures";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
-import {
-  acceptedWordDocumentSubmission,
-  createWordDocumentSubmissionExecutor,
-} from "../wordDocumentSubmission";
+import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -156,13 +154,13 @@ describe("concise Word table-cell submissions", () => {
     ) as ContentPart[];
     session.clear();
     expect(
-      parseWordDocumentPlan(acceptedWordDocumentSubmission(parts)!.content),
+      parseWordDocumentPlan(acceptedWordPlanFromHistory(parts)!.content),
     ).toEqual(plan);
     const outputResult = (
       parts[0] as unknown as { output: { result: Record<string, unknown> } }
     ).output.result;
     delete outputResult.plan;
-    expect(acceptedWordDocumentSubmission(parts)).toBeUndefined();
+    expect(acceptedWordPlanFromHistory(parts)).toBeUndefined();
   });
 
   it("preserves uniform formatting when Word splits text across runs", async () => {

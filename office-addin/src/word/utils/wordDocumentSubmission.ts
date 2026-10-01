@@ -7,6 +7,8 @@ import {
   wordTableCellScope,
   expandWordTableCellSubmission,
   WordTableCellSubmissionError,
+  WORD_SUBMIT_PLAN_ACTION,
+  WORD_SUBMIT_PLAN_TOOL,
 } from "@erato/frontend/word-review";
 
 import { WordDraftRepairError } from "./wordDocumentDrafts";
@@ -21,12 +23,10 @@ import type {
   ClientToolExecutor,
   ClientToolCallContext,
   ClientToolExecutionResult,
-  ContentPart,
 } from "@erato/frontend/library";
 import type { WordPlanDiagnostics } from "@erato/frontend/word-review";
 
-export const WORD_SUBMIT_PLAN_TOOL = "submit_document_plan";
-export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";
+export { WORD_SUBMIT_PLAN_ACTION, WORD_SUBMIT_PLAN_TOOL };
 
 export function createWordDocumentSubmissionExecutor(
   session: WordDocumentReadSession,
@@ -287,52 +287,3 @@ async function prepareWordDocumentSubmission(
 
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-export function acceptedWordDocumentSubmission(
-  content: ContentPart[] | undefined,
-): { toolCallId: string; content: string } | undefined {
-  const accepted = (content ?? []).filter((part) => {
-    if (
-      part.content_type !== "tool_use" ||
-      part.tool_name !== WORD_SUBMIT_PLAN_TOOL ||
-      part.status !== "success" ||
-      typeof part.tool_call_id !== "string" ||
-      !part.tool_call_id
-    )
-      return false;
-    const output = part.output;
-    if (
-      !object(output) ||
-      output.status !== "success" ||
-      !object(output.submission) ||
-      output.submission.status !== "accepted" ||
-      !object(output.result) ||
-      !object(part.input)
-    )
-      return false;
-    return (
-      output.result.draft_id === part.tool_call_id &&
-      output.result.snapshot === part.input.snapshot &&
-      output.result.action === WORD_SUBMIT_PLAN_ACTION
-    );
-  });
-  if (accepted.length !== 1) return undefined;
-  const part = accepted[0];
-  if (part.content_type !== "tool_use" || !part.tool_call_id) return undefined;
-  const output = part.output;
-  if (!object(output) || !object(output.result)) return undefined;
-  const plan =
-    object(part.input) &&
-    ("draft_id" in part.input || "table_cell" in part.input)
-      ? output.result.plan
-      : part.input;
-  if (
-    !object(plan) ||
-    plan.snapshot !== output.result.snapshot ||
-    (object(part.input) && plan.readToken !== part.input.readToken)
-  )
-    return undefined;
-  const contentJson = JSON.stringify(plan);
-  if (!parseWordDocumentPlan(contentJson)) return undefined;
-  return { toolCallId: part.tool_call_id, content: contentJson };
-}

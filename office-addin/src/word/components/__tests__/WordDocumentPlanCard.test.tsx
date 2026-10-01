@@ -18,6 +18,7 @@ import {
   readySnapshot,
   wordSerializationNoise,
 } from "../../../test/mocks/word/authoringFixtures";
+import { storedWordReads } from "../../../test/mocks/word/historyReads";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { buildWordArtifact } from "../../utils/buildWordArtifact";
 import { WordDocumentReadSession } from "../../utils/wordDocumentReadTool";
@@ -42,6 +43,7 @@ const mock = vi.hoisted(() => {
     decisions: {},
     setDecisions: vi.fn(),
     messageStatus: "completed",
+    content: [] as unknown[],
   };
 });
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
@@ -50,8 +52,10 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
   useChatContext: () => ({
     messages: {
       [String(mock.artifact.messageId)]: {
+        id: String(mock.artifact.messageId),
         status: mock.messageStatus,
         role: "assistant",
+        content: mock.content,
       },
     },
     messageOrder: [String(mock.artifact.messageId)],
@@ -247,6 +251,7 @@ beforeEach(() => {
   mock.decisions = {};
   mock.setDecisions.mockClear();
   mock.messageStatus = "completed";
+  mock.content = [];
   mock.artifact = {
     facetId: "word_document_authoring",
     messageId: globalThis.crypto.randomUUID(),
@@ -352,6 +357,67 @@ describe("structural document review", () => {
     expect(screen.queryByText(/Headers, footers/)).toBeNull();
     expect(screen.queryByText(/reused ·|source blocks/)).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
+  });
+
+  it("reviews a reloaded plan in full against the read stored in the chat, without enabling Apply", async () => {
+    const state = setup(CHAPTERS, (snapshot) =>
+      bodyPlan(
+        snapshot,
+        [{ kind: "keep", source: ["b1", "b2", "b3", "b4", "b7", "b8"] }],
+        [{ source: ["b5", "b6"], reason: "Plan moved elsewhere." }],
+      ),
+    );
+    mock.content = await storedWordReads(
+      globalThis.structuredClone(state.snapshot),
+      String(mock.artifact.messageId),
+    );
+    mock.artifact.submittedCard = {
+      toolCallId: "saved",
+      language: "erato-word-document-plan",
+      content: JSON.stringify(state.plan),
+    };
+    mock.artifact.isFreshCompletion = false;
+    delete mock.artifact.itemIdentity;
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map()}
+      >
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content={JSON.stringify(state.plan)}
+        />
+      </WordWriteProvider>,
+      { wrapper: TestTheme },
+    );
+    expect(screen.getByText("Check first")).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "1 heading is no longer in the document",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/original document is not available in this session/),
+    ).toBeNull();
+    const apply = screen.getByRole("button", { name: "Apply changes" });
+    expect(apply).toBeDisabled();
+    fireEvent.click(apply);
+    expect(state.insert).not.toHaveBeenCalled();
+  });
+
+  it("applies through the live capture even when the chat also holds the read", async () => {
+    const state = setup();
+    const stale = globalThis.structuredClone(state.snapshot);
+    stale.blocks[2].text = "Stale history";
+    mock.content = await storedWordReads(
+      stale,
+      String(mock.artifact.messageId),
+    );
+    state.mount();
+    expect(screen.queryByText(/Stale history/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await waitFor(() => expect(screen.getByText(APPLIED)).toBeInTheDocument());
+    expect(state.insert).toHaveBeenCalledTimes(1);
   });
 
   it("applies one coherent plan then collapses, reopens and guards later edits", async () => {

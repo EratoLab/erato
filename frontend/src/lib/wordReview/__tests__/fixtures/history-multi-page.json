@@ -1,0 +1,739 @@
+{
+  "source": "message 01a0e899 read pages; tables other than b9 and b62 removed, long paragraph text cut to 80 characters, block counts adjusted",
+  "messages": [
+    {
+      "id": "01a0e899-a5d6-7f05-b6fc-c58eec348946",
+      "role": "user",
+      "content": [],
+      "action_facet_id": "word_document_authoring",
+      "action_facet_args": {
+        "document_name": "To help.docx",
+        "heading_outline": "",
+        "paragraphs_sent": "179",
+        "truncation_note": "",
+        "authoring_status": "available",
+        "paragraphs_total": "179",
+        "document_identity": "Z:\\Documents\\To help.docx",
+        "document_snapshot": "4a2a2450-07d2-42c8-89d7-f8275a08d04d"
+      }
+    },
+    {
+      "id": "01a0e899-a77e-75f6-bd3c-8cb4b0ac8cc0",
+      "role": "assistant",
+      "previous_message_id": "01a0e899-a5d6-7f05-b6fc-c58eec348946",
+      "content": [
+        {
+          "input": {
+            "cursor": null,
+            "snapshot": "dd8afc3e-2c5e-4e97-90d6-d977a2320eea"
+          },
+          "output": {
+            "result": {
+              "scope": "document",
+              "assets": [],
+              "blocks": [
+                {
+                  "ref": "b1",
+                  "part": 1,
+                  "text": "Test Document — Detailed Report for Functional and Layout Testing",
+                  "type": "heading",
+                  "level": 1,
+                  "parts": 1,
+                  "styleRef": "Heading1",
+                  "protected": false
+                },
+                {
+                  "ref": "b2",
+                  "part": 1,
+                  "text": "Executive Summary",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b3",
+                  "part": 1,
+                  "text": "This report provides a structured set of multi-topic content designed to exercis",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b4",
+                  "part": 1,
+                  "text": "Each section expands a theme into three substantive paragraphs and includes a co",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b5",
+                  "part": 1,
+                  "text": "Overview",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b6",
+                  "part": 1,
+                  "text": "The document is organized into a set of independent sections that can be tested ",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b7",
+                  "part": 1,
+                  "text": "From a testing perspective, the structure supports multiple workflows. Reviewers",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b8",
+                  "part": 1,
+                  "text": "The tables in each section are designed to provide deterministic anchors for aut",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b9",
+                  "part": 1,
+                  "text": "Section\tPrimary focus (examples)\nNature & Environment\tUrban bees, water sources, weather notes, plant care\nTechnology & Data\tJSON snippet, log line patterns, defect description, basic definitions\nLanguage & Patterns\tMixed-language sentence, special characters, synonyms, repetition tokens\nLayout & Pagination\tLong paragraph wrapping, short paragraphs, pseudo-numbered steps",
+                  "type": "native",
+                  "parts": 3,
+                  "protected": false,
+                  "nativeKind": "table"
+                },
+                {
+                  "ref": "b9",
+                  "part": 2,
+                  "text": "",
+                  "type": "native",
+                  "parts": 3,
+                  "protected": false,
+                  "structureJson": "{\"content\":{\"columns\":[150,300],\"format\":{\"layout\":\"fixed\",\"width\":450,\"firstRow\":true,\"lastRow\":false,\"firstColumn\":true,\"lastColumn\":false,\"bandedRows\":true,\"bandedColumns\":false},\"rows\":[{\"sourceIndex\":0,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Section\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Primary focus (examples)\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":1,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Nature & Environment\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Urban bees, water sources, weather notes, plant care\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":2,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Technology & Data\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"JSON snippet, log line patterns, defect description, basic definitions\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":3,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Language & Patterns\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Mixed-language sentence, special characters, synonyms, repetition tokens\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":4,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Layout & Pagination\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Long paragraph wrapping, short paragraphs, pseudo-numbered steps\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]}],\"sourcePatchSupported\":true},\"objects\":[{\"ref\":\"b9_table_1\",\"kind\":\"table\",\"selector\":\"table-1\",\"table\":{\"columns\":[150,300],\"format\":{\"layout\":\"fixed\",\"width\":450,\"firstRow\":true,\"lastRow\":false,\"firstColumn\":true,\"lastColumn\":false,\"bandedRows\":true,\"bandedColumns\":false},\"rows\":[{\"sourceIndex\":0,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Section\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Primary focus (examples)\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":1,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Nature & Environment\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Urban bees, water source",
+                  "structurePart": 1,
+                  "structureParts": 2
+                },
+                {
+                  "ref": "b9",
+                  "part": 3,
+                  "text": "",
+                  "type": "native",
+                  "parts": 3,
+                  "protected": false,
+                  "structureJson": "s, weather notes, plant care\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":2,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Technology & Data\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"JSON snippet, log line patterns, defect description, basic definitions\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":3,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Language & Patterns\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Mixed-language sentence, special characters, synonyms, repetition tokens\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":4,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Layout & Pagination\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Long paragraph wrapping, short paragraphs, pseudo-numbered steps\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]}],\"sourcePatchSupported\":true}}]}",
+                  "structurePart": 2,
+                  "structureParts": 2
+                },
+                {
+                  "ref": "b10",
+                  "part": 1,
+                  "text": "Purpose and Test Coverage",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b11",
+                  "part": 1,
+                  "text": "The primary purpose of this document is to provide stable, repeatable content fo",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b12",
+                  "part": 1,
+                  "text": "Coverage includes: heading-based navigation; search for words that repeat in mul",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b13",
+                  "part": 1,
+                  "text": "Because the sections are independent, test teams can reorder, delete, or duplica",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b15",
+                  "part": 1,
+                  "text": "Nature & Environment",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b16",
+                  "part": 1,
+                  "text": "This section uses an urban nature vignette—city bees—to create realistic descrip",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b17",
+                  "part": 1,
+                  "text": "The content also contrasts small, safe water stations with a single large contai",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b18",
+                  "part": 1,
+                  "text": "A compact measurement note is included to introduce numeric formats and units in",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b20",
+                  "part": 1,
+                  "text": "Everyday Micro-Scenes",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b21",
+                  "part": 1,
+                  "text": "Everyday dialogue is a compact way to stress-test quotation marks, dashes, and n",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b22",
+                  "part": 1,
+                  "text": "A brief story about reviving a bicycle after a long pause introduces a mini narr",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b23",
+                  "part": 1,
+                  "text": "The thought experiment about a city operating without traffic lights for a week ",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                }
+              ],
+              "styles": [
+                {
+                  "id": "Normal",
+                  "name": "Normal",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading1",
+                  "name": "heading 1",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading2",
+                  "name": "heading 2",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading3",
+                  "name": "heading 3",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading4",
+                  "name": "heading 4",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading5",
+                  "name": "heading 5",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading6",
+                  "name": "heading 6",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading7",
+                  "name": "heading 7",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading8",
+                  "name": "heading 8",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading9",
+                  "name": "heading 9",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "TableNormal",
+                  "name": "Normal Table",
+                  "type": "table"
+                },
+                {
+                  "id": "Title",
+                  "name": "Title",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Subtitle",
+                  "name": "Subtitle",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Quote",
+                  "name": "Quote",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "ListParagraph",
+                  "name": "List Paragraph",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "IntenseQuote",
+                  "name": "Intense Quote",
+                  "type": "paragraph"
+                }
+              ],
+              "complete": false,
+              "snapshot": "4a2a2450-07d2-42c8-89d7-f8275a08d04d",
+              "blocksRead": 21,
+              "nextCursor": "aefbdc1e-6f62-4415-9d5b-044f69e38237",
+              "blocksTotal": 54,
+              "fullDocument": true,
+              "imageAssetIssues": [],
+              "preservedStories": [],
+              "snapshotRecovery": {
+                "restarted": true,
+                "requestedSnapshot": "dd8afc3e-2c5e-4e97-90d6-d977a2320eea"
+              }
+            },
+            "status": "success"
+          },
+          "status": "success",
+          "tool_name": "read_document_blocks",
+          "content_type": "tool_use",
+          "tool_call_id": "call_w2B2KBBCOMt7RtUAjEV5vQmu"
+        },
+        {
+          "input": {
+            "cursor": "aefbdc1e-6f62-4415-9d5b-044f69e38237",
+            "snapshot": "4a2a2450-07d2-42c8-89d7-f8275a08d04d"
+          },
+          "output": {
+            "result": {
+              "scope": "document",
+              "blocks": [
+                {
+                  "ref": "b25",
+                  "part": 1,
+                  "text": "Food & Beverages",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b26",
+                  "part": 1,
+                  "text": "The coffee paragraph is designed to generate predictable misunderstandings (“str",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b27",
+                  "part": 1,
+                  "text": "A recipe sketch introduces numbers, units, and short imperative sentences. It is",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b28",
+                  "part": 1,
+                  "text": "The cooking note contrasts salt and acidity as flavor adjusters. It provides com",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b30",
+                  "part": 1,
+                  "text": "Technology & Data",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b31",
+                  "part": 1,
+                  "text": "This section introduces a realistic software-testing context without requiring a",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b32",
+                  "part": 1,
+                  "text": "A compact, timestamped log line sequence provides a predictable pattern for rege",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b33",
+                  "part": 1,
+                  "text": "Finally, a minimal defect description and a set of short definitions (latency, t",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b35",
+                  "part": 1,
+                  "text": "Placeholders & Contact-Like Data",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b36",
+                  "part": 1,
+                  "text": "Placeholder strings are included to exercise automatic detection of links and co",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b37",
+                  "part": 1,
+                  "text": "A URL-like example with a query string introduces common separators such as “?”,",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b38",
+                  "part": 1,
+                  "text": "Email- and phone-like patterns add coverage for special characters (“+” in the l",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b40",
+                  "part": 1,
+                  "text": "Language, Symbols & Repetition Patterns",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b41",
+                  "part": 1,
+                  "text": "Mixed-language sentences (for example, combining English day names with German c",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b42",
+                  "part": 1,
+                  "text": "Special characters and punctuation—umlauts, ß, em dashes, typographic quotes, el",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b43",
+                  "part": 1,
+                  "text": "Repetition and whitespace variation provide deterministic anchors for search rob",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                }
+              ],
+              "complete": false,
+              "snapshot": "4a2a2450-07d2-42c8-89d7-f8275a08d04d",
+              "blocksRead": 37,
+              "nextCursor": "6df5c40f-b306-4077-ba65-d3c6addf1425",
+              "blocksTotal": 54
+            },
+            "status": "success"
+          },
+          "status": "success",
+          "tool_name": "read_document_blocks",
+          "content_type": "tool_use",
+          "tool_call_id": "call_1SuOD61S0ksRIVtAXzjbpqTs"
+        },
+        {
+          "input": {
+            "cursor": "6df5c40f-b306-4077-ba65-d3c6addf1425",
+            "snapshot": "4a2a2450-07d2-42c8-89d7-f8275a08d04d"
+          },
+          "output": {
+            "result": {
+              "scope": "document",
+              "blocks": [
+                {
+                  "ref": "b45",
+                  "part": 1,
+                  "text": "Science & Knowledge",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b46",
+                  "part": 1,
+                  "text": "A short mathematics block introduces multiplication, division, and decimal notat",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b47",
+                  "part": 1,
+                  "text": "The spaceflight paragraph names orbital terms such as apogee and perigee and ref",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b48",
+                  "part": 1,
+                  "text": "The music paragraph distinguishes tempo (BPM) from meter (time signatures like 3",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b50",
+                  "part": 1,
+                  "text": "Layout & Pagination Tests",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b51",
+                  "part": 1,
+                  "text": "Layout behavior is easiest to evaluate with text that stresses line wrapping. Th",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b52",
+                  "part": 1,
+                  "text": "Short paragraphs are included immediately afterward to make spacing and paragrap",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b53",
+                  "part": 1,
+                  "text": "A pseudo-numbered sequence written as plain text (not a true list) provides a co",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b55",
+                  "part": 1,
+                  "text": "Quotes & Closing Notes",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b56",
+                  "part": 1,
+                  "text": "A short, invented quote is a useful test artifact because it typically contains ",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b57",
+                  "part": 1,
+                  "text": "The quote’s core message—include edge cases when testing—also serves as a meta-r",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b58",
+                  "part": 1,
+                  "text": "The closing notes emphasize that the document is meant to be versatile and exten",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b60",
+                  "part": 1,
+                  "text": "Glossary",
+                  "type": "heading",
+                  "level": 2,
+                  "parts": 1,
+                  "styleRef": "Heading2",
+                  "protected": false
+                },
+                {
+                  "ref": "b61",
+                  "part": 1,
+                  "text": "The glossary provides short, stable definitions for recurring terms used through",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                }
+              ],
+              "complete": false,
+              "snapshot": "4a2a2450-07d2-42c8-89d7-f8275a08d04d",
+              "blocksRead": 51,
+              "nextCursor": "ac08a3ec-3f8d-40f2-a9e3-4d1769256d90",
+              "blocksTotal": 54
+            },
+            "status": "success"
+          },
+          "status": "success",
+          "tool_name": "read_document_blocks",
+          "content_type": "tool_use",
+          "tool_call_id": "call_kBJJVN3cEeTWdL7dQJ4QVcJy"
+        },
+        {
+          "input": {
+            "cursor": "ac08a3ec-3f8d-40f2-a9e3-4d1769256d90",
+            "snapshot": "4a2a2450-07d2-42c8-89d7-f8275a08d04d"
+          },
+          "output": {
+            "result": {
+              "scope": "document",
+              "blocks": [
+                {
+                  "ref": "b62",
+                  "part": 1,
+                  "text": "Term\tDefinition (plain text)\nLatency\tThe delay between a request and the first meaningful response.\nThroughput\tThe amount of work completed per unit of time (e.g., requests per second).\nAvailability\tThe fraction of time a system is functioning and accessible as intended.\nJSON\tA text-based data format using braces, brackets, keys, and values; strict syntax matters.\nAPI\tAn interface that allows software components to communicate via defined requests and responses.\nBPM\tBeats per minute; a common unit for musical tempo.\nTime signature (e.g., 3/4)\tA notation that groups beats into repeating patterns, independent of tempo.\nHohmann transfer\tA fuel-efficient orbital maneuver concept that changes between two circular orbits.",
+                  "type": "native",
+                  "parts": 4,
+                  "protected": false,
+                  "nativeKind": "table"
+                },
+                {
+                  "ref": "b62",
+                  "part": 2,
+                  "text": "",
+                  "type": "native",
+                  "parts": 4,
+                  "protected": false,
+                  "structureJson": "{\"content\":{\"columns\":[160,290],\"format\":{\"layout\":\"fixed\",\"width\":450,\"firstRow\":true,\"lastRow\":false,\"firstColumn\":true,\"lastColumn\":false,\"bandedRows\":true,\"bandedColumns\":false},\"rows\":[{\"sourceIndex\":0,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Term\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Definition (plain text)\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":1,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Latency\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"The delay between a request and the first meaningful response.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":2,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Throughput\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"The amount of work completed per unit of time (e.g., requests per second).\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":3,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Availability\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"The fraction of time a system is functioning and accessible as intended.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":4,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"JSON\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"A text-based data format using braces, brackets, keys, and values; strict syntax matters.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":5,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"API\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"An interface that allows software components to communicate via defined requests and responses.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":6,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"BPM\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Beats per minute; a common unit for musical tempo.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":7,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Time signature (e.g., 3/4)\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"A notation that group",
+                  "structurePart": 1,
+                  "structureParts": 3
+                },
+                {
+                  "ref": "b62",
+                  "part": 3,
+                  "text": "",
+                  "type": "native",
+                  "parts": 4,
+                  "protected": false,
+                  "structureJson": "s beats into repeating patterns, independent of tempo.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":8,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Hohmann transfer\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"A fuel-efficient orbital maneuver concept that changes between two circular orbits.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]}],\"sourcePatchSupported\":true},\"objects\":[{\"ref\":\"b62_table_1\",\"kind\":\"table\",\"selector\":\"table-1\",\"table\":{\"columns\":[160,290],\"format\":{\"layout\":\"fixed\",\"width\":450,\"firstRow\":true,\"lastRow\":false,\"firstColumn\":true,\"lastColumn\":false,\"bandedRows\":true,\"bandedColumns\":false},\"rows\":[{\"sourceIndex\":0,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Term\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Definition (plain text)\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":1,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Latency\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"The delay between a request and the first meaningful response.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":2,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Throughput\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"The amount of work completed per unit of time (e.g., requests per second).\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":3,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Availability\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"The fraction of time a system is functioning and accessible as intended.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":4,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"JSON\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"A text-based data format using braces, brackets, keys, and values; strict syntax matters.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":5,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"API\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"An interface that allows software components to communicate via defined re",
+                  "structurePart": 2,
+                  "structureParts": 3
+                },
+                {
+                  "ref": "b62",
+                  "part": 4,
+                  "text": "",
+                  "type": "native",
+                  "parts": 4,
+                  "protected": false,
+                  "structureJson": "quests and responses.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":6,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"BPM\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"Beats per minute; a common unit for musical tempo.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":7,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Time signature (e.g., 3/4)\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"A notation that groups beats into repeating patterns, independent of tempo.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":8,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Hohmann transfer\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"A fuel-efficient orbital maneuver concept that changes between two circular orbits.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]}],\"sourcePatchSupported\":true}}]}",
+                  "structurePart": 3,
+                  "structureParts": 3
+                },
+                {
+                  "ref": "b63",
+                  "part": 1,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "document_sections",
+                  "part": 1,
+                  "text": "",
+                  "type": "sections",
+                  "parts": 2,
+                  "protected": false
+                },
+                {
+                  "ref": "document_sections",
+                  "part": 2,
+                  "text": "",
+                  "type": "sections",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"sections\":[{\"id\":\"section-1\",\"layout\":{\"width\":595.3,\"height\":841.9,\"orientation\":\"portrait\",\"margins\":{\"top\":72,\"right\":72,\"bottom\":72,\"left\":72,\"header\":35.4,\"footer\":35.4,\"gutter\":0},\"columns\":1,\"columnSpacing\":35.4,\"differentFirstPage\":false},\"headers\":{},\"footers\":{}}]}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                }
+              ],
+              "complete": true,
+              "snapshot": "4a2a2450-07d2-42c8-89d7-f8275a08d04d",
+              "readToken": "ca9c9ce1-3988-420c-a771-b9a0f5bc2549",
+              "blocksRead": 54,
+              "nextCursor": null,
+              "blocksTotal": 54
+            },
+            "status": "success"
+          },
+          "status": "success",
+          "tool_name": "read_document_blocks",
+          "content_type": "tool_use",
+          "tool_call_id": "call_UPud98xwfkISLA2GP70GlboW"
+        }
+      ]
+    }
+  ]
+}

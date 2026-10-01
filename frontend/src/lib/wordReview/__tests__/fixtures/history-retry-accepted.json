@@ -1,0 +1,751 @@
+{
+  "source": "messages 01a0ca93 (assistant) and its user message",
+  "messages": [
+    {
+      "id": "01a0ca93-571a-7409-9eb6-db1e5a094020",
+      "role": "user",
+      "content": [],
+      "action_facet_id": "word_document_authoring",
+      "action_facet_args": {
+        "document_name": "",
+        "heading_outline": "",
+        "paragraphs_sent": "10",
+        "truncation_note": "",
+        "authoring_status": "available",
+        "paragraphs_total": "10",
+        "document_identity": "pane-session:1b4397d9-df52-49e4-9358-7a19b2caa876",
+        "document_snapshot": "ccf7b419-b821-4a8c-8b55-c96298c6b968"
+      }
+    },
+    {
+      "id": "01a0ca93-5cde-77d8-a22d-1b9d018cd098",
+      "role": "assistant",
+      "previous_message_id": "01a0ca93-571a-7409-9eb6-db1e5a094020",
+      "content": [
+        {
+          "input": {
+            "cursor": null,
+            "snapshot": "ccf7b419-b821-4a8c-8b55-c96298c6b968"
+          },
+          "output": {
+            "result": {
+              "scope": "document",
+              "assets": [],
+              "blocks": [
+                {
+                  "ref": "b1",
+                  "part": 1,
+                  "text": "To help, please tell me what you want to do:",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b2",
+                  "list": "existing-1",
+                  "part": 1,
+                  "text": "Option A (instructions): I’ll give step-by-step directions in Microsoft Word.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": true,
+                  "protected": false
+                },
+                {
+                  "ref": "b3",
+                  "list": "existing-1",
+                  "part": 1,
+                  "text": "Option B (I edit it): Upload the .docx file here (or paste the text) and tell me where the paragraph should go (e.g., “after the second heading” or “at the top”).",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": true,
+                  "protected": false
+                },
+                {
+                  "ref": "b4",
+                  "part": 1,
+                  "text": "If you want to insert it yourself, follow these steps in Word:",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b5",
+                  "list": "existing-2",
+                  "part": 1,
+                  "text": "1) Open the document in Microsoft Word.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b6",
+                  "list": "existing-2",
+                  "part": 1,
+                  "text": "2) Click where you want the paragraph to go.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b7",
+                  "list": "existing-2",
+                  "part": 1,
+                  "text": "3) Paste the paragraph (Ctrl+V / Cmd+V).",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b8",
+                  "list": "existing-2",
+                  "part": 1,
+                  "text": "4) Optional: Home → Styles to match formatting (e.g., Normal or Heading).",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b9",
+                  "list": "existing-2",
+                  "part": 1,
+                  "text": "5) Save the file (Ctrl+S / Cmd+S).",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b10",
+                  "part": 1,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "document_sections",
+                  "part": 1,
+                  "text": "",
+                  "type": "sections",
+                  "parts": 2,
+                  "protected": false
+                },
+                {
+                  "ref": "document_sections",
+                  "part": 2,
+                  "text": "",
+                  "type": "sections",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"sections\":[{\"id\":\"section-1\",\"layout\":{\"width\":595.3,\"height\":841.9,\"orientation\":\"portrait\",\"margins\":{\"top\":72,\"right\":72,\"bottom\":72,\"left\":72,\"header\":35.4,\"footer\":35.4,\"gutter\":0},\"columns\":1,\"columnSpacing\":35.4,\"differentFirstPage\":false},\"headers\":{},\"footers\":{}}]}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                }
+              ],
+              "styles": [
+                {
+                  "id": "Normal",
+                  "name": "Normal",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading1",
+                  "name": "heading 1",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading2",
+                  "name": "heading 2",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading3",
+                  "name": "heading 3",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading4",
+                  "name": "heading 4",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading5",
+                  "name": "heading 5",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading6",
+                  "name": "heading 6",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading7",
+                  "name": "heading 7",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading8",
+                  "name": "heading 8",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading9",
+                  "name": "heading 9",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "TableNormal",
+                  "name": "Normal Table",
+                  "type": "table"
+                },
+                {
+                  "id": "Title",
+                  "name": "Title",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Subtitle",
+                  "name": "Subtitle",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Quote",
+                  "name": "Quote",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "ListParagraph",
+                  "name": "List Paragraph",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "IntenseQuote",
+                  "name": "Intense Quote",
+                  "type": "paragraph"
+                }
+              ],
+              "complete": true,
+              "snapshot": "ccf7b419-b821-4a8c-8b55-c96298c6b968",
+              "readToken": "e6334527-1e43-4116-b1e5-7e31a6a88076",
+              "blocksRead": 11,
+              "nextCursor": null,
+              "blocksTotal": 11,
+              "fullDocument": true,
+              "imageAssetIssues": [],
+              "preservedStories": []
+            },
+            "status": "success"
+          },
+          "status": "success",
+          "tool_name": "read_document_blocks",
+          "content_type": "tool_use",
+          "tool_call_id": "call_Y701wislZnvvBWnrCalqnapw"
+        },
+        {
+          "input": {
+            "scope": "body",
+            "deleted": [],
+            "entries": [
+              {
+                "kind": "replace",
+                "blocks": [
+                  {
+                    "id": "n-title",
+                    "text": "Dokument überarbeiten – Kurzanleitung",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 12
+                    },
+                    "styleRef": "Title"
+                  },
+                  {
+                    "id": "n-subtitle",
+                    "text": "Zwei Wege: Anleitung zur Selbstbearbeitung oder komplette Überarbeitung",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 18
+                    },
+                    "styleRef": "Subtitle"
+                  }
+                ],
+                "source": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5",
+                  "b6",
+                  "b7",
+                  "b8",
+                  "b9",
+                  "b10"
+                ]
+              }
+            ],
+            "version": 1,
+            "snapshot": "ccf7b419-b821-4a8c-8b55-c96298c6b968",
+            "readToken": "e6334527-1e43-4116-b1e5-7e31a6a88076"
+          },
+          "output": {
+            "error": "Submission validation failed",
+            "status": "error",
+            "submission": {
+              "status": "retry",
+              "attempts_remaining": 2
+            },
+            "validation_errors": [
+              {
+                "code": "table-shape",
+                "path": "/entries/0/blocks/19",
+                "message": "Invalid table fields, columns or rows; use the table contract and limits."
+              }
+            ]
+          },
+          "status": "error",
+          "tool_name": "submit_document_plan",
+          "content_type": "tool_use",
+          "tool_call_id": "call_rTWb5RSzb5yczNFvg7dU4xe3"
+        },
+        {
+          "input": {
+            "scope": "body",
+            "deleted": [],
+            "entries": [
+              {
+                "kind": "replace",
+                "blocks": [
+                  {
+                    "id": "n-title",
+                    "text": "Dokument überarbeiten – Kurzanleitung",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 12
+                    },
+                    "styleRef": "Title"
+                  },
+                  {
+                    "id": "n-subtitle",
+                    "text": "Zwei Wege: Anleitung zur Selbstbearbeitung oder komplette Überarbeitung",
+                    "type": "paragraph",
+                    "format": {
+                      "alignment": "center",
+                      "spacingAfter": 18
+                    },
+                    "styleRef": "Subtitle"
+                  },
+                  {
+                    "id": "h-goal",
+                    "text": "1. Ziel",
+                    "type": "heading",
+                    "level": 1
+                  },
+                  {
+                    "id": "p-goal",
+                    "text": "Dieses Dokument beschreibt, wie Du Inhalte in Microsoft Word sauber einfügst und wie Du alle nötigen Informationen bereitstellst, wenn ich das Dokument für Dich umschreiben soll.",
+                    "type": "paragraph"
+                  },
+                  {
+                    "id": "h-approach",
+                    "text": "2. Vorgehensweisen",
+                    "type": "heading",
+                    "level": 1
+                  },
+                  {
+                    "id": "h-opt-a",
+                    "text": "Option A: Schritt-für-Schritt in Word",
+                    "type": "heading",
+                    "level": 2
+                  },
+                  {
+                    "id": "a-1",
+                    "list": "list-steps-a",
+                    "text": "Dokument in Microsoft Word öffnen.",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": true
+                  },
+                  {
+                    "id": "a-2",
+                    "list": "list-steps-a",
+                    "text": "Cursor an die Stelle setzen, an der der neue Absatz stehen soll.",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": true
+                  },
+                  {
+                    "id": "a-3",
+                    "list": "list-steps-a",
+                    "text": "Text einfügen (Strg+V / Cmd+V).",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": true
+                  },
+                  {
+                    "id": "a-4",
+                    "list": "list-steps-a",
+                    "text": "Formatierung angleichen: Start → Formatvorlagen (z. B. „Normal“ oder „Überschrift 1/2“).",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": true
+                  },
+                  {
+                    "id": "a-5",
+                    "list": "list-steps-a",
+                    "text": "Datei speichern (Strg+S / Cmd+S).",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": true
+                  },
+                  {
+                    "id": "h-opt-b",
+                    "text": "Option B: Überarbeitung durch Luxi",
+                    "type": "heading",
+                    "level": 2
+                  },
+                  {
+                    "id": "p-opt-b",
+                    "text": "Wenn ich das Dokument vollständig umschreiben soll, brauche ich kurz folgende Angaben (damit Struktur, Tonalität und Umfang passen):",
+                    "type": "paragraph"
+                  },
+                  {
+                    "id": "b-1",
+                    "list": "list-input-b",
+                    "text": "Zielgruppe (z. B. intern, Kund:innen, Management).",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": false
+                  },
+                  {
+                    "id": "b-2",
+                    "list": "list-input-b",
+                    "text": "Zweck des Dokuments (z. B. Anleitung, Konzept, Bericht).",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": false
+                  },
+                  {
+                    "id": "b-3",
+                    "list": "list-input-b",
+                    "text": "Gewünschter Stil (z. B. knapp-sachlich, ausführlich, technisch).",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": false
+                  },
+                  {
+                    "id": "b-4",
+                    "list": "list-input-b",
+                    "text": "Pflichtinhalte oder Formulierungen, die unverändert bleiben müssen.",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": false
+                  },
+                  {
+                    "id": "h-check",
+                    "text": "3. Checkliste",
+                    "type": "heading",
+                    "level": 1
+                  },
+                  {
+                    "id": "p-check",
+                    "text": "Nutze diese Checkliste, um die Qualität und Konsistenz schnell zu prüfen:",
+                    "type": "paragraph"
+                  },
+                  {
+                    "id": "t-check",
+                    "rows": [
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-h1",
+                                "runs": [
+                                  {
+                                    "bold": true,
+                                    "text": "Element"
+                                  }
+                                ],
+                                "text": "Element",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-h2",
+                                "runs": [
+                                  {
+                                    "bold": true,
+                                    "text": "Was prüfen"
+                                  }
+                                ],
+                                "text": "Was prüfen",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-h3",
+                                "runs": [
+                                  {
+                                    "bold": true,
+                                    "text": "Erledigt"
+                                  }
+                                ],
+                                "text": "Erledigt",
+                                "type": "paragraph"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r1c1",
+                                "text": "Titel & Zweck",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r1c2",
+                                "text": "Ist klar, worum es geht und was erreicht werden soll?",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r1c3",
+                                "text": "☐",
+                                "type": "paragraph"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r2c1",
+                                "text": "Struktur",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r2c2",
+                                "text": "Sind Überschriften logisch, Abschnitte nicht zu lang, Reihenfolge nachvollziehbar?",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r2c3",
+                                "text": "☐",
+                                "type": "paragraph"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r3c1",
+                                "text": "Sprache",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r3c2",
+                                "text": "Kurze Sätze, einheitliche Begriffe, aktive Formulierungen, keine Dopplungen.",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r3c3",
+                                "text": "☐",
+                                "type": "paragraph"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r4c1",
+                                "text": "Formatierung",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r4c2",
+                                "text": "Korrekte Formatvorlagen, konsistente Listen, saubere Abstände, keine „händischen“ Leerzeilen.",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r4c3",
+                                "text": "☐",
+                                "type": "paragraph"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r5c1",
+                                "text": "Finale Prüfung",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r5c2",
+                                "text": "Rechtschreibung, Links/Verweise, Druck-/PDF-Check (Seitenumbrüche, Tabellenbreite).",
+                                "type": "paragraph"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "t-r5c3",
+                                "text": "☐",
+                                "type": "paragraph"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    "type": "table",
+                    "format": {
+                      "layout": "fixed",
+                      "firstRow": true,
+                      "styleRef": "TableNormal",
+                      "alignment": "left",
+                      "bandedRows": true
+                    },
+                    "columns": [170, 220, 60]
+                  },
+                  {
+                    "id": "h-next",
+                    "text": "4. Nächste Schritte",
+                    "type": "heading",
+                    "level": 1
+                  },
+                  {
+                    "id": "p-next",
+                    "text": "Wähle jetzt den passenden Weg:",
+                    "type": "paragraph"
+                  },
+                  {
+                    "id": "n-1",
+                    "list": "list-next",
+                    "text": "Wenn Du selbst einfügst: Folge Option A und nutze die Checkliste.",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": false
+                  },
+                  {
+                    "id": "n-2",
+                    "list": "list-next",
+                    "text": "Wenn ich umschreiben soll: Ergänze die Angaben aus Option B, dann erstelle ich eine saubere, konsistente Neufassung mit einheitlicher Formatierung.",
+                    "type": "list-item",
+                    "level": 0,
+                    "ordered": false
+                  }
+                ],
+                "source": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5",
+                  "b6",
+                  "b7",
+                  "b8",
+                  "b9",
+                  "b10"
+                ]
+              }
+            ],
+            "version": 1,
+            "snapshot": "ccf7b419-b821-4a8c-8b55-c96298c6b968",
+            "readToken": "e6334527-1e43-4116-b1e5-7e31a6a88076"
+          },
+          "output": {
+            "result": {
+              "action": "word.apply_document_plan",
+              "draft_id": "call_yrgjxBq30vALskQtoIZ9vqwA",
+              "snapshot": "ccf7b419-b821-4a8c-8b55-c96298c6b968"
+            },
+            "status": "success",
+            "submission": {
+              "status": "accepted",
+              "attempts_remaining": 0
+            }
+          },
+          "status": "success",
+          "tool_name": "submit_document_plan",
+          "content_type": "tool_use",
+          "tool_call_id": "call_yrgjxBq30vALskQtoIZ9vqwA"
+        }
+      ]
+    }
+  ]
+}

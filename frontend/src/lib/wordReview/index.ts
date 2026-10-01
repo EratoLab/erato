@@ -4,6 +4,7 @@ export * from "./wordBuiltInStyles";
 export * from "./wordDocumentCapture";
 export * from "./wordDocumentPlan";
 export * from "./wordEditPlan";
+export * from "./wordHistory";
 export * from "./wordImageAssetData";
 export * from "./wordInlineStructures";
 export * from "./wordMediaComparison";

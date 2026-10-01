@@ -15,6 +15,8 @@ import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
+  wordMessageLineage,
+  wordSnapshotFromHistory,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
@@ -84,13 +86,29 @@ export function WordDocumentPlanCard({
       ? host.capturesByAssistantMessageId.get(messageId)
       : undefined) ?? review.capture;
   const snapshot = capture?.authoring;
-  const plan = useMemo(() => {
-    const parsed = parseWordDocumentPlan(content);
-    return parsed && normalizeWordDocumentPlan(parsed, snapshot);
-  }, [content, snapshot]);
+  const parsed = useMemo(() => parseWordDocumentPlan(content), [content]);
+  const liveMatches = !!parsed && parsed.snapshot === snapshot?.token;
+  const message = messageId ? messages[messageId] : undefined;
+  // Without the live capture, review against what the model read; it never applies.
+  const history = useMemo(
+    () =>
+      parsed && !liveMatches
+        ? wordSnapshotFromHistory(
+            wordMessageLineage(messages, message?.id),
+            parsed.snapshot,
+          )
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild only when this message's content changes
+    [parsed, liveMatches, message],
+  );
+  const shown = liveMatches ? snapshot : (history ?? snapshot);
+  const plan = useMemo(
+    () => parsed && normalizeWordDocumentPlan(parsed, shown),
+    [parsed, shown],
+  );
   const planReview = useMemo(
-    () => plan && buildWordPlanReview(plan, snapshot),
-    [plan, snapshot],
+    () => plan && buildWordPlanReview(plan, shown),
+    [plan, shown],
   );
   const gate = resolveWordWriteGate({
     capture,
@@ -368,12 +386,15 @@ export function WordDocumentPlanCard({
       label={entry.displayLabel()}
       testId="word-document-plan-card"
       plan={plan}
-      snapshot={snapshot}
+      snapshot={shown}
       review={planReview}
       showSavedPlan={!!artifact?.submittedCard}
       adapter={{
         locate:
-          idle && gate.allowed && !host.operationInProgress
+          shown === snapshot &&
+          idle &&
+          gate.allowed &&
+          !host.operationInProgress
             ? (ref) => void locate(ref)
             : undefined,
         apply: (

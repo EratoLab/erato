@@ -1,4 +1,5 @@
 import {
+  acceptedWordPlanFromHistory,
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
@@ -12,7 +13,6 @@ import {
 } from "../../../test/mocks/word/authoringFixtures";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
-  acceptedWordDocumentSubmission,
   createWordDocumentSubmissionExecutor,
   WORD_SUBMIT_PLAN_TOOL,
 } from "../wordDocumentSubmission";
@@ -265,7 +265,7 @@ describe("structured submission of restated styles", () => {
         result: (result as { result: unknown }).result,
       },
     } as unknown as ContentPart;
-    const restored = acceptedWordDocumentSubmission([part]);
+    const restored = acceptedWordPlanFromHistory([part]);
     expect(restored?.content).toBe(JSON.stringify(plan));
     const reparsed = parseWordDocumentPlan(restored!.content)!;
     expect(

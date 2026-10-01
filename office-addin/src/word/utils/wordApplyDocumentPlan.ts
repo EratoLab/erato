@@ -1,4 +1,5 @@
 import {
+  isWordHistorySnapshot,
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
@@ -161,7 +162,7 @@ async function applyPlan(
     ? "host-unavailable"
     : !plan
       ? "invalid"
-      : !snapshot
+      : !snapshot || isWordHistorySnapshot(snapshot)
         ? "no-capture"
         : !messageId || snapshot.ownerMessageId !== messageId
           ? "wrong-request"
