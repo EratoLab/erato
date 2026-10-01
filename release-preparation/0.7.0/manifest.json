@@ -1,6 +1,6 @@
 {
   "base_sha": "3d40f674f1829f6cb8be535bdc10678602cfac43",
-  "head_sha": "27bff75f6fe94172c20bae236a95772692966a4b",
+  "head_sha": "75b5e7631b14050fddb82d13eb7bd6b51f5a20cb",
   "prs": {
     "780": {
       "subject": "Merge pull request #780 from EratoLab/feature/ermain-410-create-seperate-migrator-docker-image",
@@ -2593,6 +2593,18 @@
       "commits": [
         "27bff75f6fe94172c20bae236a95772692966a4b"
       ]
+    },
+    "1275": {
+      "subject": "Allow deployment-specific Teams app package versions (#1275)",
+      "commits": [
+        "ace4011ecf09d08cc3991a4543640729d9af7f10"
+      ]
+    },
+    "1273": {
+      "subject": "Merge pull request #1273 from EratoLab/feature/ermain-883-gemini-tool-call-id-reuse-overwrites-prior-python-calls-in",
+      "commits": [
+        "75b5e7631b14050fddb82d13eb7bd6b51f5a20cb"
+      ]
     }
   },
   "unmatched_commits": [
@@ -3877,6 +3889,33 @@
     ],
     "1265": [
       "4c48c4fa821a42c294393b884730f5e5123bf486"
+    ],
+    "1269": [
+      "e1c809051e7a60a10abbee6850b37aec27dcba04"
+    ],
+    "1266": [
+      "48d49b2abbc6642ad5ec12a8a82cfb1217041016"
+    ],
+    "1268": [
+      "907db45e2acba3671a92a1713014c04dfde831f6"
+    ],
+    "1270": [
+      "215f91364f6443166ef46da71fa205d8a2966d03"
+    ],
+    "1271": [
+      "e59d81a7e82f98fbc9408abbde11c4f751cfce25"
+    ],
+    "1272": [
+      "22cab0287b689b87e0e33970ffae049373f7cec6"
+    ],
+    "1274": [
+      "27bff75f6fe94172c20bae236a95772692966a4b"
+    ],
+    "1275": [
+      "ace4011ecf09d08cc3991a4543640729d9af7f10"
+    ],
+    "1273": [
+      "75b5e7631b14050fddb82d13eb7bd6b51f5a20cb"
     ]
   },
   "titles": {
@@ -4304,6 +4343,15 @@
     "1260": "Record where chats were created and filter the chat list by source",
     "1257": "Precise Word plan diagnostics and normalize misplaced built-in styles",
     "1258": "Show Word apply progress on the Apply button and read documents less often",
-    "1265": "Repair rejected Word plans with small patches"
+    "1265": "Repair rejected Word plans with small patches",
+    "1269": "Refresh apt index before installing sqitch in backend lint",
+    "1266": "Enforce schema openness to ensure evolvability of sidecar protocol",
+    "1268": "Per-tool Ask/Never decisions for client tools, enforced in the backend like MCP",
+    "1270": "Edit Word table cells with bounded document reads",
+    "1271": "Extend fields for sources.list",
+    "1272": "Calculate timing of trace cluster per cluster",
+    "1274": "Fix undefined client-operation cursors and button timer cleanup",
+    "1275": "Allow deployment-specific Teams app package versions",
+    "1273": "Namespace tool calling ID to prevent overlap in e.g. Gemini"
   }
 }
