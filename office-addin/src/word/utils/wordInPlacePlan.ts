@@ -402,8 +402,31 @@ function paragraphProperties(source: WordSourceBlock): {
   };
 }
 
+const customStyles = new WeakMap<WordAuthoringSnapshot, Set<string>>();
+
+/** Style IDs marked w:customStyle: created by a user or template rather than built into Word. */
+function customStyleIds(snapshot: WordAuthoringSnapshot): Set<string> {
+  const cached = customStyles.get(snapshot);
+  if (cached) return cached;
+  const doc = new DOMParser().parseFromString(
+    snapshot.ooxml,
+    "application/xml",
+  );
+  const ids = new Set(
+    Array.from(doc.getElementsByTagNameNS(W, "style"))
+      .filter((style) =>
+        ["1", "true", "on"].includes(
+          style.getAttributeNS(W, "customStyle") ?? "",
+        ),
+      )
+      .map((style) => style.getAttributeNS(W, "styleId") ?? ""),
+  );
+  customStyles.set(snapshot, ids);
+  return ids;
+}
+
 function styleTarget(
-  snapshot: Pick<WordAuthoringSnapshot, "styles">,
+  snapshot: WordAuthoringSnapshot,
   styleRef: string | undefined,
 ): WordInPlaceStyle | undefined {
   if (!styleRef) return { builtIn: "Normal" };
@@ -413,8 +436,11 @@ function styleTarget(
   if (!style) return styleRef === "Normal" ? { builtIn: "Normal" } : undefined;
   const builtIn = wordBuiltInParagraphStyle(style.id, style.name);
   if (builtIn) return { builtIn };
-  // Paragraph.style takes the display name; a comma there reads as a list of aliases.
-  return style.name && !style.name.includes(",")
+  // Paragraph.style takes a custom style's name; a built-in one goes by its localized name there,
+  // which the package does not carry. A comma in the name reads as a list of aliases.
+  return style.name &&
+    !style.name.includes(",") &&
+    customStyleIds(snapshot).has(style.id)
     ? { name: style.name }
     : undefined;
 }
@@ -458,7 +484,7 @@ function blockTyped(
 
 function withStyle(
   typed: Typed,
-  snapshot: Pick<WordAuthoringSnapshot, "styles">,
+  snapshot: WordAuthoringSnapshot,
 ): WordInPlaceState | undefined {
   const style =
     typed.type === "heading" && typed.styleRef === undefined
@@ -753,6 +779,10 @@ function anchorFor(
   ] as const) {
     const source = ref ? ctx.sources.get(ref) : undefined;
     if (!source || !TYPED.has(source.type)) continue;
+    // Undoing a paragraph added after the final one would delete the final paragraph, which Word
+    // keeps (see deleteOp).
+    if (location === "After" && ctx.snapshot.blocks.at(-1)?.ref === source.ref)
+      return "boundary";
     return paragraphProperties(source).clean
       ? { ref: source.ref, location }
       : "inherited-format";

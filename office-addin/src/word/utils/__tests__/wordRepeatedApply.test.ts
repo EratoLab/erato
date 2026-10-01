@@ -284,16 +284,17 @@ function structuralPlan(
   const items = snapshot.blocks.filter((b) => b.list === "existing-1");
   const last = items.at(-1)!;
   const removed = items.at(-2)!;
-  const closing = snapshot.blocks.at(-1)!;
+  // Not the final paragraph: undoing a split there would have to delete it.
+  const split = snapshot.blocks[snapshot.blocks.indexOf(items[0]) - 1];
   const entries = snapshot.blocks.flatMap((b): WordPlanEntry[] => {
     if (b.ref === removed.ref) return [];
-    if (b.ref === closing.ref)
+    if (b.ref === split.ref)
       return [
         {
           kind: "replace",
           source: [b.ref],
           blocks: [
-            { id: `c${cycle}`, type: "paragraph", text: `Closing ${cycle}.` },
+            { id: `c${cycle}`, type: "paragraph", text: `Status ${cycle}.` },
             { id: `d${cycle}`, type: "paragraph", text: `Detail ${cycle}.` },
           ],
         },

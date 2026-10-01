@@ -92,23 +92,31 @@ describe("in-place native probe", () => {
       insertedHasId: true,
     });
     expect(result.probes.P6).toEqual({
+      startsClean: true,
       insertInheritsList: true,
       attachKeepsNumId: true,
       listIdIsNumId: true,
       levelWritesIlvl: true,
       detachRemovesNumbering: true,
       detachKeepsStyle: true,
+      attachThenStyleKeepsList: true,
+      attachThenStyleSetsStyle: true,
     });
     expect(result.probes.P7).toEqual({
+      startsClean: true,
       headingTyped: true,
       numberingUnchanged: true,
       stylesAdded: 1,
       inverseExact: true,
     });
+    // The mock keeps the final paragraph mark as Word does: the tail is emptied, not removed.
     expect(result.probes.P8).toEqual({
+      startsClean: true,
       countDropsByOne: true,
       neighboursUnchanged: true,
       recreateExact: true,
+      finalDeleteDropsCount: false,
+      finalDeleteKeepsPrevious: false,
     });
     for (const id of ["P9", "P11", "P12"] as const)
       expect(result.probes[id]).toEqual({ result: "not-run" });

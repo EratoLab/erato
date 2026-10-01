@@ -12,6 +12,9 @@ export interface WordScopeRequest {
   touched: Iterable<string>;
   /** Paragraph styles and list instances the write applies, each reported on a captured block. */
   definitions: Iterable<{ ref: string; style?: string; numId?: string }>;
+  /** The write adds a paragraph ahead of every surviving captured block (start) or after all of them
+   * (end): nothing may have been added at that end of the body since the capture. */
+  edges?: { start?: boolean; end?: boolean };
 }
 
 export type WordScopeRebase =
@@ -69,6 +72,25 @@ function changedBlocks(a: readonly string[], b: readonly string[]): number {
 const location = (index: number, issue: string) =>
   `/word/document.xml body block ${index + 1}: ${issue}`;
 
+function indexOf(values: readonly string[]): Map<string, number[]> {
+  const positions = new Map<string, number[]>();
+  values.forEach((value, j) =>
+    positions.set(value, [...(positions.get(value) ?? []), j]),
+  );
+  return positions;
+}
+
+/** Where `run` starts in `values`, each position a full match. */
+function occurrences(
+  values: readonly string[],
+  positions: ReadonlyMap<string, number[]>,
+  run: readonly string[],
+): number[] {
+  return (positions.get(run[0]) ?? []).filter((j) =>
+    run.every((value, k) => values[j + k] === value),
+  );
+}
+
 /** Paragraph styles (with what they are based on) and list instances, comparable across packages
  * regardless of list-definition identity. */
 function definitionReader(ooxml: string) {
@@ -114,9 +136,9 @@ function definitionReader(ooxml: string) {
 
 /**
  * Scope-local stale check for in-place writes. Every run of touched blocks, with the blocks on either
- * side, must still appear exactly once in the live document and in the captured order; the styles and
- * list instances the write applies must be unchanged. Everything else may have changed and is left
- * as it is.
+ * side, must appear exactly once in the captured document, and still exactly once in the live one and
+ * in the captured order; the styles and list instances the write applies must be unchanged. Everything
+ * else may have changed and is left as it is.
  */
 export function rebaseWordSnapshot(
   snapshot: WordAuthoringSnapshot,
@@ -148,13 +170,14 @@ export function rebaseWordSnapshot(
     for (const i of [index - 1, index, index + 1])
       if (i >= 0 && i < snapshot.blocks.length) scope.add(i);
   }
+  const final = snapshot.blocks.length - 1;
+  if (request.edges?.start) scope.add(0);
+  if (request.edges?.end) scope.add(final);
   const captured = blockSignatures(snapshot);
   const signature = createNativeContentSignature(current.ooxml);
   const actual = current.blocks.map((block) => signature(block.xml));
-  const positions = new Map<string, number[]>();
-  actual.forEach((value, j) =>
-    positions.set(value, [...(positions.get(value) ?? []), j]),
-  );
+  const positions = indexOf(actual);
+  const capturedPositions = indexOf(captured);
   const windows: [number, number][] = [];
   for (const i of [...scope].sort((a, b) => a - b)) {
     const last = windows.at(-1);
@@ -168,16 +191,18 @@ export function rebaseWordSnapshot(
   let liveNext = 0;
   for (const [start, end] of windows) {
     const length = end - start + 1;
-    const matches = (positions.get(captured[start]) ?? []).filter((j) => {
-      for (let k = 0; k < length; k++)
-        if (actual[j + k] !== captured[start + k]) return false;
-      return true;
-    });
+    const run = captured.slice(start, end + 1);
+    const matches = occurrences(actual, positions, run);
+    // A run the captured document already held twice cannot be told apart from its copy once one
+    // of them was edited: the remaining one would match uniquely and take the write.
+    if (
+      matches.length > 1 ||
+      occurrences(captured, capturedPositions, run).length > 1
+    ) {
+      locations.push(location(start, "ambiguous"));
+      continue;
+    }
     if (matches.length !== 1) {
-      if (matches.length > 1) {
-        locations.push(location(start, "ambiguous"));
-        continue;
-      }
       // Report the first block of the run that no longer lines up.
       let best = 0;
       let at = -1;
@@ -200,6 +225,13 @@ export function rebaseWordSnapshot(
     const [j] = matches;
     if (j < liveNext) {
       locations.push(location(start, "changed"));
+      continue;
+    }
+    const addedBefore = request.edges?.start && start === 0 && j !== 0;
+    const addedAfter =
+      request.edges?.end && end === final && j + length !== actual.length;
+    if (addedBefore || addedAfter) {
+      locations.push(location(addedBefore ? 0 : final, "changed"));
       continue;
     }
     outsideChanges += changedBlocks(

@@ -54,7 +54,18 @@ const rebase = (
   ooxml: string,
   touched: string[],
   definitions: { ref: string; style?: string; numId?: string }[] = [],
-) => rebaseWordSnapshot(snapshot, live(ooxml), { touched, definitions });
+  edges?: { start?: boolean; end?: boolean },
+) => rebaseWordSnapshot(snapshot, live(ooxml), { touched, definitions, edges });
+const FORM = [
+  "Name:",
+  "Signature",
+  "Date:",
+  "Middle",
+  "Name:",
+  "Signature",
+  "Date:",
+  "Tail",
+];
 
 describe("scope-local stale check", () => {
   const texts = ["Intro", "Context", "Target", "Neighbour", "Middle", "Tail"];
@@ -167,6 +178,52 @@ describe("scope-local stale check", () => {
       ok: false,
       locations: ["/word/document.xml body block 2: ambiguous"],
     });
+  });
+
+  it("refuses a run the captured document held twice once one copy was edited", () => {
+    const snapshot = capture(body(FORM));
+    const edited = [...FORM];
+    edited[1] = "Signed meanwhile";
+    expect(rebase(snapshot, body(edited), ["b2"])).toEqual({
+      ok: false,
+      locations: ["/word/document.xml body block 1: ambiguous"],
+    });
+    edited[1] = "Signature";
+    edited[7] = "Tail edited";
+    expect(rebase(snapshot, body(edited), ["b2"])).toEqual({
+      ok: false,
+      locations: ["/word/document.xml body block 1: ambiguous"],
+    });
+  });
+
+  it("ties a write at either end of the body to that end", () => {
+    const snapshot = capture(body(texts));
+    const added = body(["Added first", ...texts, "Added last"]);
+    expect(rebase(snapshot, added, ["b1"])).toMatchObject({
+      ok: true,
+      outsideChanges: 2,
+    });
+    expect(rebase(snapshot, added, ["b6"])).toMatchObject({
+      ok: true,
+      outsideChanges: 2,
+    });
+    expect(rebase(snapshot, added, ["b1"], [], { start: true })).toEqual({
+      ok: false,
+      locations: ["/word/document.xml body block 1: changed"],
+    });
+    expect(rebase(snapshot, added, ["b6"], [], { end: true })).toEqual({
+      ok: false,
+      locations: ["/word/document.xml body block 6: changed"],
+    });
+    expect(
+      rebase(
+        snapshot,
+        body([...texts.slice(0, 4), "Edited", "Tail"]),
+        ["b2"],
+        [],
+        { start: true },
+      ),
+    ).toMatchObject({ ok: true, outsideChanges: 1 });
   });
 
   it("refuses runs that changed order", () => {
@@ -426,6 +483,112 @@ describe("in-place writes around later edits", { timeout: 30_000 }, () => {
       "/word/document.xml body block 2: ambiguous",
     ]);
     expect(host.events.filter((e) => e.startsWith("mutation:"))).toEqual([]);
+  });
+
+  it("stops before writing to a run the captured document held twice when its copy is left", async () => {
+    const host = installWordOoxmlHost(body(FORM));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const snapshot = await captureRealisticSnapshot();
+    host.editParagraph(1, "Signed meanwhile");
+    const refs = snapshot.blocks.map((b) => b.ref);
+    const result = await apply(
+      {
+        version: 1,
+        snapshot: snapshot.token,
+        readToken: "read-proof",
+        scope: "document",
+        deleted: [],
+        entries: [
+          { kind: "keep", source: ["b1"] },
+          {
+            kind: "replace",
+            source: ["b2"],
+            blocks: [{ id: "s", type: "paragraph", text: "Signed by AI" }],
+          },
+          { kind: "keep", source: refs.slice(2) },
+        ],
+      },
+      snapshot,
+    );
+    expect(result.status).toBe("stale");
+    expect(result.diagnostic?.details).toMatchObject({
+      route: "in-place",
+      locations: ["/word/document.xml body block 1: ambiguous"],
+    });
+    expect(host.events.filter((e) => e.startsWith("mutation:"))).toEqual([]);
+    expect(texts(host.ooxml())).toEqual(
+      FORM.map((text, i) => (i === 1 ? "Signed meanwhile" : text)),
+    );
+  });
+
+  describe("an insert at the start of the body", () => {
+    const addAtStart = (xml: string) =>
+      editWordPackage(xml, (doc) => {
+        const bodyElement = doc.getElementsByTagNameNS(W, "body")[0];
+        const added = new DOMParser().parseFromString(
+          `<w:p xmlns:w="${W}"><w:r><w:t>User added at start.</w:t></w:r></w:p>`,
+          "application/xml",
+        ).documentElement;
+        bodyElement.insertBefore(
+          doc.importNode(added, true),
+          bodyElement.firstChild,
+        );
+      });
+    const insertFirst = (
+      snapshot: WordAuthoringSnapshot,
+    ): WordDocumentPlan => ({
+      version: 1,
+      snapshot: snapshot.token,
+      readToken: "read-proof",
+      scope: "document",
+      deleted: [],
+      entries: [
+        {
+          kind: "insert",
+          blocks: [{ id: "n", type: "paragraph", text: "Very first." }],
+        },
+        { kind: "keep", source: snapshot.blocks.map((b) => b.ref) },
+      ],
+    });
+
+    it("stops before writing when a paragraph was added there", async () => {
+      setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+      const host = installWordOoxmlHost(realisticWordPackageXml(), {
+        profile: "word-pc-16.0.20326",
+      });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const snapshot = await captureRealisticSnapshot();
+      host.userEdit(addAtStart);
+      const result = await apply(insertFirst(snapshot), snapshot);
+      expect(result.status).toBe("stale");
+      expect(result.diagnostic?.details).toMatchObject({
+        route: "in-place",
+        locations: ["/word/document.xml body block 1: changed"],
+      });
+      expect(host.events.filter((e) => e.startsWith("mutation:"))).toEqual([]);
+    });
+
+    it("writes in place around an edit further down", async () => {
+      setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+      const host = installWordOoxmlHost(realisticWordPackageXml(), {
+        profile: "word-pc-16.0.20326",
+      });
+      const snapshot = await captureRealisticSnapshot();
+      host.editParagraph(
+        paragraphIndex(host.ooxml(), CLOSING),
+        "The user kept working here.",
+      );
+      const applied = await apply(insertFirst(snapshot), snapshot);
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome).toMatchObject({
+        route: "in-place",
+        outsideChanges: 1,
+      });
+      expect(texts(host.ooxml()).slice(0, 2)).toEqual([
+        "Very first.",
+        snapshot.blocks[0].text,
+      ]);
+    });
   });
 
   it("stops before writing when a block was added next to the target", async () => {

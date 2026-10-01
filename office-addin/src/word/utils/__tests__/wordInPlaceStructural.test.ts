@@ -5,6 +5,7 @@ import {
   installWordOoxmlHost,
 } from "../../../test/mocks/word/ooxmlHost";
 import {
+  SENTINEL,
   captureRealisticSnapshot,
   realisticWordPackageXml,
 } from "../../../test/mocks/word/realisticWordFixtures";
@@ -26,7 +27,10 @@ import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   setWordInPlaceCapabilitiesForTests,
 } from "../wordInPlaceCapabilities";
-import { applyWordPlanInPlace } from "../wordInPlaceExecutor";
+import {
+  applyWordPlanInPlace,
+  wordInPlaceFallbackScope,
+} from "../wordInPlaceExecutor";
 import {
   classifyWordInPlacePlan,
   sameWordInPlaceProgram,
@@ -56,6 +60,8 @@ const REVIEW = "Review at month end.";
 const QUESTIONS = "Open questions follow.";
 const BUDGET = "Budget owner";
 const SUPPORT = "Support model";
+const CONFIRM = "Confirm the regions.";
+const CLOSING = "Closing paragraph.";
 
 /** The realistic SharePoint-style document plus one custom paragraph style. */
 function fixture(edit: (doc: Document) => void = () => {}): string {
@@ -86,6 +92,8 @@ const paragraph = (
 ) => ({ id, type: "paragraph", text, ...extra }) as WordPlanBlock;
 
 interface Change {
+  /** Inserted before the first block. */
+  start?: WordPlanBlock[];
   replace?: Record<string, WordPlanBlock[]>;
   /** Merged into the previous replaced block: sources consumed by a replace entry. */
   merge?: Record<string, string[]>;
@@ -110,7 +118,9 @@ function planOf(
   );
   const deleted = new Set((change.delete ?? []).map(ref));
   const consumed = new Set([...merged.values()].flat());
-  const entries: WordPlanEntry[] = [];
+  const entries: WordPlanEntry[] = change.start
+    ? [{ kind: "insert", blocks: change.start }]
+    : [];
   for (const block of snapshot.blocks) {
     if (consumed.has(block.ref) || deleted.has(block.ref)) continue;
     const blocks = replaced.get(block.ref);
@@ -175,6 +185,17 @@ const cases: [string, (s: WordAuthoringSnapshot) => Change][] = [
     }),
   ],
   ["deletes a list item", () => ({ delete: [SCHEDULE] })],
+  [
+    "inserts a paragraph before the first block",
+    () => ({ start: [paragraph("first", "A new opening line.")] }),
+  ],
+  // Re-created next to a paragraph whose style and list membership differ from its own.
+  ["deletes the first item of a list", () => ({ delete: [CONFIRM] })],
+  [
+    "deletes a paragraph that follows a list item",
+    () => ({ delete: [QUESTIONS] }),
+  ],
+  ["deletes the opening heading", () => ({ delete: [SENTINEL] })],
   [
     "splits one paragraph into three",
     () => ({
@@ -450,6 +471,12 @@ describe(
         enabled: false,
         reason: "latched",
       });
+      // Restore must not rewrite through the mechanism that just misbehaved.
+      const before = "before" in result ? result.before! : "";
+      expect(decodeWordInPlaceBackup(before).inPlace?.scopedFallback).toBe(
+        undefined,
+      );
+      expect(wordInPlaceFallbackScope(before)).toBeUndefined();
     });
 
     it("fails verification when attaching to a list starts a new list instance", async () => {
@@ -486,6 +513,178 @@ describe(
         enabled: false,
         reason: "latched",
       });
+      expect(
+        decodeWordInPlaceBackup(result.before!).inPlace?.scopedFallback,
+      ).toBe(undefined);
+      expect(wordInPlaceFallbackScope(result.before!)).toBeUndefined();
+    });
+
+    it.each([
+      [
+        "an insert after the final paragraph",
+        { after: { [CLOSING]: [paragraph("p", "A closing remark.")] } },
+      ],
+      [
+        "a split of the final paragraph",
+        {
+          replace: {
+            [CLOSING]: [
+              paragraph("a", CLOSING),
+              paragraph("b", "A closing remark."),
+            ],
+          },
+        },
+      ],
+    ])(
+      "routes %s to the import, since undoing it would delete the final paragraph",
+      async (_name, change: Change) => {
+        const host = install();
+        const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+        const snapshot = await captureRealisticSnapshot();
+        const plan = planOf(snapshot, change);
+        expect(
+          classifyWordInPlacePlan(
+            plan,
+            snapshot,
+            ALL_WORD_IN_PLACE_CAPABILITIES,
+          ),
+        ).toEqual({ fallback: "boundary" });
+        const result = await apply(plan, snapshot);
+        expect(result.status, report(result)).toBe("applied");
+        expect(result.outcome?.route).toBe("import");
+        expect(mutations(host.events)).toEqual([]);
+        expect(debug).toHaveBeenLastCalledWith(
+          "[erato] Word apply timings (ms)",
+          expect.objectContaining({ routeReason: "boundary" }),
+        );
+      },
+    );
+
+    it("cannot undo a mis-admitted insert after the final paragraph, as Word keeps that paragraph", async () => {
+      install();
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const snapshot = await captureRealisticSnapshot();
+      const plan = planOf(snapshot, {
+        after: { [CLOSING]: [paragraph("p", "A closing remark.")] },
+      });
+      const applied = await applyWordPlanInPlace({
+        snapshot,
+        compiled: captureWordAuthoringSnapshot(
+          compileWordDocumentPlan(plan, snapshot),
+          snapshot.identity,
+          "Off",
+          true,
+          "verify",
+        ),
+        ops: [
+          {
+            kind: "insert",
+            ref: refOf(snapshot, CLOSING),
+            paragraph: 0,
+            location: "After",
+            block: "p",
+            runs: [
+              {
+                text: "A closing remark.",
+                bold: false,
+                italic: false,
+                underline: false,
+              },
+            ],
+            state: { type: "paragraph", style: { builtIn: "Normal" } },
+          },
+        ],
+        progress: trackWordApply("plan"),
+        observePackage: async () => undefined,
+      });
+      expect("status" in applied && applied.status).toBe("applied");
+      const result = applied as WordDocumentApplyResult;
+      const reverted = await revertWordDocumentPlan(
+        result.before!,
+        result.afterFingerprint!,
+      );
+      expect(reverted.status).toBe("interrupted");
+      expect(reverted.diagnostic?.details?.locations).toContain(
+        "/word/document.xml body: count",
+      );
+    });
+
+    it("verifies a heading Word adds under its localized style ID", async () => {
+      const host = install({ builtInStyleIds: { Heading2: "berschrift2" } });
+      const original = host.ooxml();
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await apply(
+        planOf(
+          snapshot,
+          changeOf("inserts a heading after an anchor", snapshot),
+        ),
+        snapshot,
+      );
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome).toMatchObject({
+        route: "in-place",
+        tier: "block",
+      });
+      expect(host.ooxml()).toContain('<w:pStyle w:val="berschrift2"/>');
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(bodySignatures(host.ooxml())).toEqual(bodySignatures(original));
+    });
+
+    it("applies a custom style by its name on a localized Word", async () => {
+      const host = install({ localizedStyleNames: true });
+      const original = host.ooxml();
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await apply(
+        planOf(
+          snapshot,
+          changeOf("restyles a paragraph with a custom style", snapshot),
+        ),
+        snapshot,
+      );
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome?.route).toBe("in-place");
+      expect(mutations(host.events)).toContain("mutation:style");
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(bodySignatures(host.ooxml())).toEqual(bodySignatures(original));
+    });
+
+    it("routes a built-in style without a portable name to the import", async () => {
+      const xml = fixture((doc) => {
+        const listBullet = new DOMParser().parseFromString(
+          `<w:style xmlns:w="${W}" w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/><w:basedOn w:val="Normal"/></w:style>`,
+          "application/xml",
+        ).documentElement;
+        doc
+          .getElementsByTagNameNS(W, "styles")[0]
+          .append(doc.importNode(listBullet, true));
+      });
+      const host = install({ localizedStyleNames: true }, xml);
+      const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+      const snapshot = await captureRealisticSnapshot();
+      const plan = planOf(snapshot, {
+        replace: {
+          [QUESTIONS]: [paragraph("b", QUESTIONS, { styleRef: "ListBullet" })],
+        },
+      });
+      expect(
+        classifyWordInPlacePlan(plan, snapshot, ALL_WORD_IN_PLACE_CAPABILITIES),
+      ).toEqual({ fallback: "restyle" });
+      const result = await apply(plan, snapshot);
+      expect(result.status, report(result)).toBe("applied");
+      expect(result.outcome?.route).toBe("import");
+      expect(mutations(host.events)).toEqual([]);
+      expect(debug).toHaveBeenLastCalledWith(
+        "[erato] Word apply timings (ms)",
+        expect.objectContaining({ routeReason: "restyle" }),
+      );
     });
 
     it("joins an existing list when the new item follows a paragraph that is not in it", async () => {

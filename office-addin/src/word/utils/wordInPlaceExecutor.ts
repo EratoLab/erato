@@ -45,6 +45,7 @@ import type {
   WordInPlaceMarks,
   WordInPlaceOp,
   WordInPlaceRun,
+  WordInPlaceSlot,
   WordInPlaceState,
 } from "./wordInPlacePlan";
 import type { WordScopeEntry } from "./wordInPlaceState";
@@ -186,6 +187,7 @@ const MAX_LOCATIONS = 8;
 function scopeRequest(
   ops: readonly WordInPlaceOp[],
   snapshot: WordAuthoringSnapshot,
+  slots: readonly WordInPlaceSlot[],
 ): WordScopeRequest {
   const touched = new Set<string>();
   const definitions: { ref: string; style?: string; numId?: string }[] = [];
@@ -214,7 +216,13 @@ function scopeRequest(
       }
     }
   }
-  return { touched, definitions };
+  const inserted = (slot: WordInPlaceSlot | undefined) =>
+    slot?.kind === "op" && slot.op.kind === "insert";
+  return {
+    touched,
+    definitions,
+    edges: { start: inserted(slots[0]), end: inserted(slots.at(-1)) },
+  };
 }
 
 interface Point {
@@ -324,7 +332,7 @@ export async function applyWordPlanInPlace(
     snapshotSlots.forEach((slot, i) => {
       if (slot.kind === "op") compiledIndex.set(slot.op, i);
     });
-    const request = scopeRequest(ops, snapshot);
+    const request = scopeRequest(ops, snapshot, snapshotSlots);
     progress.stage("backup");
     return await host.run(async (context) => {
       context.document.load("changeTrackingMode");

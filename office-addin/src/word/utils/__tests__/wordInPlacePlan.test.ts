@@ -553,6 +553,125 @@ describe("in-place classification", () => {
       ).toBe(code);
   });
 
+  it("admits a structural edit only when the mechanism that undoes it is enabled too", () => {
+    const styles = (body: string) => {
+      const s = captureWordAuthoringSnapshot(
+        packageXml(body).replace(
+          "</w:styles>",
+          '<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/></w:style></w:styles>',
+        ),
+        "doc",
+        "Off",
+        true,
+      );
+      s.readToken = "read-proof";
+      s.read = new Set(s.blocks.map((b) => b.ref));
+      return s;
+    };
+    const item = (value: string) =>
+      p(
+        run(value),
+        '<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>',
+      );
+    const s = styles(
+      paragraph("Before") +
+        paragraph("Target") +
+        item("One") +
+        item("Two") +
+        paragraph("Tail"),
+    );
+    const refs = s.blocks.map((b) => b.ref);
+    const keep = (ref: string): WordPlanEntry => ({
+      kind: "keep",
+      source: [ref],
+    });
+    const inserted: WordDocumentPlan = {
+      ...plan(s, {}),
+      entries: [
+        keep("b1"),
+        keep("b2"),
+        { kind: "insert", blocks: [text("Inserted")] },
+        ...refs.slice(2).map(keep),
+      ],
+    };
+    const without = (ref: string): WordDocumentPlan => ({
+      ...plan(s, {}),
+      entries: refs.filter((r) => r !== ref).map(keep),
+      deleted: [{ source: [ref], reason: "Requested" }],
+    });
+    const routed = (
+      p: WordDocumentPlan,
+      change: Partial<typeof ALL>,
+    ): WordInPlaceFallback | "in-place" => {
+      const result = classifyWordInPlacePlan(p, s, { ...ALL, ...change });
+      return "fallback" in result ? result.fallback : "in-place";
+    };
+    expect(routed(inserted, {})).toBe("in-place");
+    expect(routed(inserted, { delete: false })).toBe("not-invertible");
+    expect(routed(inserted, { restyle: false })).toBe("restyle");
+    expect(routed(without("b2"), {})).toBe("in-place");
+    expect(routed(without("b2"), { insert: false })).toBe("not-invertible");
+    expect(routed(without("b2"), { restyle: false })).toBe("not-invertible");
+    expect(routed(without("b3"), {})).toBe("in-place");
+    expect(routed(without("b3"), { list: false })).toBe("not-invertible");
+  });
+
+  it("anchors nothing after the final paragraph, which Word keeps", () => {
+    const s = readySnapshot(packageXml(paragraph("First") + paragraph("Last")));
+    const after = (ref: string): WordDocumentPlan => ({
+      ...plan(s, {}),
+      entries: s.blocks.flatMap((b): WordPlanEntry[] => [
+        { kind: "keep", source: [b.ref] },
+        ...(b.ref === ref
+          ? [{ kind: "insert" as const, blocks: [text("Added")] }]
+          : []),
+      ]),
+    });
+    const classify = (p: WordDocumentPlan) => {
+      const result = classifyWordInPlacePlan(p, s, ALL);
+      return "fallback" in result ? result.fallback : result.ops;
+    };
+    expect(classify(after("b1"))).toEqual([
+      expect.objectContaining({ kind: "insert", ref: "b1", location: "After" }),
+    ]);
+    expect(classify(after("b2"))).toBe("boundary");
+    expect(
+      classify(
+        plan(s, { b2: [text("Last"), { ...text("Added"), id: "added" }] }),
+      ),
+    ).toBe("boundary");
+  });
+
+  it("sets a style by name only when it is a custom style", () => {
+    const s = captureWordAuthoringSnapshot(
+      packageXml(
+        paragraph("Before") + paragraph("Target") + paragraph("Tail"),
+      ).replace(
+        "</w:styles>",
+        '<w:style w:type="paragraph" w:styleId="Header"><w:name w:val="header"/></w:style><w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/></w:style><w:style w:type="paragraph" w:customStyle="1" w:styleId="Callout"><w:name w:val="Callout Text"/></w:style></w:styles>',
+      ),
+      "doc",
+      "Off",
+      true,
+    );
+    s.readToken = "read-proof";
+    s.read = new Set(s.blocks.map((b) => b.ref));
+    const restyled = (styleRef: string) => {
+      const result = classifyWordInPlacePlan(
+        plan(s, { b2: text("Target", { styleRef }) }),
+        s,
+        ALL,
+      );
+      if ("fallback" in result) return result.fallback;
+      const [op] = result.ops as Extract<WordInPlaceOp, { kind: "text" }>[];
+      return op.restyle?.to.style;
+    };
+    expect(restyled("Header")).toEqual({ builtIn: "Header" });
+    expect(restyled("Callout")).toEqual({ name: "Callout Text" });
+    // A built-in style Paragraph.styleBuiltIn cannot name goes by a localized name the package lacks.
+    expect(restyled("ListBullet")).toBe("restyle");
+  });
+
   it("routes a disabled mechanism to the import", () => {
     const s = snapshot();
     expect(

@@ -26,6 +26,10 @@ const BUILT_IN_PARAGRAPH_STYLES: Record<string, WordBuiltInParagraphStyle> = {
   caption: "Caption",
   "toc heading": "TocHeading",
   bibliography: "Bibliography",
+  header: "Header",
+  footer: "Footer",
+  "footnote text": "FootnoteText",
+  "endnote text": "EndnoteText",
 };
 
 /** The locale-independent Paragraph.styleBuiltIn name of a paragraph style, if Word has one. */

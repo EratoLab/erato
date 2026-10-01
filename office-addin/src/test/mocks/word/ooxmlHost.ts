@@ -47,6 +47,11 @@ export interface WordOoxmlHostOptions {
   insertInheritsAnchorProperties?: boolean;
   /** Adversarial: attachToList joins a new, content-equal list instance instead of the list's own. */
   attachToListNewNum?: boolean;
+  /** Localized Word: the style ID it gives a built-in style it adds, e.g. { Heading2: "berschrift2" }. */
+  builtInStyleIds?: Record<string, string>;
+  /** Localized Word: Paragraph.style finds built-in styles only by their localized UI names, which
+   * the package does not carry, so only custom style names resolve. */
+  localizedStyleNames?: boolean;
 }
 
 /** Adversarial insertText "Replace" behaviour, switchable mid-test. */
@@ -220,6 +225,10 @@ const BUILT_IN_STYLE_NAMES: Record<string, string> = {
   Caption: "caption",
   TocHeading: "TOC Heading",
   Bibliography: "Bibliography",
+  Header: "header",
+  Footer: "footer",
+  FootnoteText: "footnote text",
+  EndnoteText: "endnote text",
   ...Object.fromEntries(
     Array.from({ length: 9 }, (_, i) => [
       [`Heading${i + 1}`, `heading ${i + 1}`],
@@ -784,7 +793,7 @@ export function installWordOoxmlHost(
     if (!root) throw new Error("The document has no styles part.");
     const heading = /^Heading([1-9])$/.exec(builtIn);
     const style = parse(
-      `<w:style xmlns:w="${W}" w:type="paragraph" w:styleId="${builtIn}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>${
+      `<w:style xmlns:w="${W}" w:type="paragraph" w:styleId="${settings.builtInStyleIds?.[builtIn] ?? builtIn}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>${
         heading
           ? `<w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="40" w:after="0"/><w:outlineLvl w:val="${Number(heading[1]) - 1}"/></w:pPr><w:rPr><w:sz w:val="26"/></w:rPr>`
           : ""
@@ -900,6 +909,36 @@ export function installWordOoxmlHost(
       partRoot(doc, "/word/numbering.xml"),
     )}</pkg:package>`;
   };
+  /** A paragraph as Word inserts it next to `anchor`: with the anchor's style and list membership. */
+  const newParagraph = (
+    doc: Document,
+    anchor: Element | undefined,
+  ): Element => {
+    const made = doc.createElementNS(W, "w:p");
+    const props = child(anchor, "pPr");
+    if (props) {
+      const copy = props.cloneNode(true) as Element;
+      if (!settings.insertInheritsAnchorProperties)
+        for (const property of Array.from(copy.children))
+          if (
+            property.namespaceURI !== W ||
+            !["pStyle", "numPr"].includes(property.localName)
+          )
+            property.remove();
+      if (copy.children.length) made.append(copy);
+    }
+    return made;
+  };
+  const isParagraph = (e: Element | null | undefined): e is Element =>
+    !!e && e.namespaceURI === W && e.localName === "p";
+  /** The body's last paragraph, which holds the document's final paragraph mark. */
+  const finalParagraph = (doc: Document) => {
+    const content = Array.from(mainBody(doc)?.children ?? []).filter(
+      (e) => !(e.namespaceURI === W && e.localName === "sectPr"),
+    );
+    const last = content.at(-1);
+    return isParagraph(last) ? last : undefined;
+  };
   const paragraphProxy = (
     resolve: () => Element,
     loaded = new Map<string, unknown>(),
@@ -993,7 +1032,12 @@ export function installWordOoxmlHost(
       set style(value: string) {
         enqueue(true, "style", () => {
           const style = paragraphStyles().find(
-            (s) => styleName(s).toLowerCase() === value.toLowerCase(),
+            (s) =>
+              styleName(s).toLowerCase() === value.toLowerCase() &&
+              (!settings.localizedStyleNames ||
+                ["1", "true", "on"].includes(
+                  s.getAttributeNS(W, "customStyle") ?? "",
+                )),
           );
           if (!style) throw itemNotFound();
           applyStyle(target(), style);
@@ -1053,19 +1097,7 @@ export function installWordOoxmlHost(
         let made: Element | undefined;
         enqueue(true, "insertParagraph", () => {
           const anchor = target();
-          made = anchor.ownerDocument.createElementNS(W, "w:p");
-          const props = child(anchor, "pPr");
-          if (props) {
-            const copy = props.cloneNode(true) as Element;
-            if (!settings.insertInheritsAnchorProperties)
-              for (const property of Array.from(copy.children))
-                if (
-                  property.namespaceURI !== W ||
-                  !["pStyle", "numPr"].includes(property.localName)
-                )
-                  property.remove();
-            if (copy.children.length) made.append(copy);
-          }
+          made = newParagraph(anchor.ownerDocument, anchor);
           if (text) made.append(newRun(anchor.ownerDocument, text));
           anchor.parentElement!.insertBefore(
             made,
@@ -1077,7 +1109,23 @@ export function installWordOoxmlHost(
           return made;
         });
       },
-      delete: () => enqueue(true, "delete", () => target().remove()),
+      delete: () =>
+        enqueue(true, "delete", () => {
+          const p = target();
+          // Word keeps the document's final paragraph mark: deleting that paragraph only empties it.
+          if (p === finalParagraph(p.ownerDocument))
+            for (const node of Array.from(p.childNodes)) {
+              if (
+                !(
+                  node instanceof Element &&
+                  node.namespaceURI === W &&
+                  node.localName === "pPr"
+                )
+              )
+                node.remove();
+            }
+          else p.remove();
+        }),
     };
     return proxy as unknown as Word.Paragraph;
   };
@@ -1354,7 +1402,16 @@ export function installWordOoxmlHost(
         enqueue(true, "insertParagraph", () => {
           const doc = live();
           const body = mainBody(doc)!;
-          made = doc.createElementNS(W, "w:p");
+          const first = Array.from(body.children)[0];
+          // Like pressing Enter at that end of the body: the new paragraph continues its neighbour.
+          made = newParagraph(
+            doc,
+            location === "Start"
+              ? isParagraph(first)
+                ? first
+                : undefined
+              : finalParagraph(doc),
+          );
           if (text) made.append(newRun(doc, text));
           const section = Array.from(body.children).find(
             (e) => e.namespaceURI === W && e.localName === "sectPr",

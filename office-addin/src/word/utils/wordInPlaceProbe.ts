@@ -13,6 +13,7 @@ import type { WordInPlaceProbeId } from "./wordInPlaceCapabilities";
 
 /** Booleans, counts and fixed codes only: the report is pasted into issues and must carry no content. */
 export type WordInPlaceProbeValue = boolean | number | WordInPlaceProbeCode;
+type Measured = Record<string, WordInPlaceProbeValue>;
 export type WordInPlaceProbeCode =
   | "not-run"
   | "error"
@@ -69,6 +70,35 @@ const styleCount = (ooxml: string) =>
   new DOMParser()
     .parseFromString(ooxml, "application/xml")
     .getElementsByTagNameNS(W, "style").length;
+/** No style, list or alignment: what a probe's paragraphs must start from for its result to mean anything. */
+const plainStart = (ooxml: string) =>
+  !pStyle(ooxml) &&
+  !numbering(ooxml).numId &&
+  !properties(ooxml)?.getElementsByTagNameNS(W, "jc").length;
+/** The paragraph with this text in a whole-document capture, whose numIds are the document's own;
+ * Paragraph.getOoxml returns a package of its own that may number lists afresh. */
+const inPackage = (ooxml: string, text: string) => {
+  const doc = new DOMParser().parseFromString(ooxml, "application/xml");
+  const found = Array.from(doc.getElementsByTagNameNS(W, "p")).find(
+    (p) =>
+      Array.from(p.getElementsByTagNameNS(W, "t"))
+        .map((t) => t.textContent ?? "")
+        .join("") === text,
+  );
+  return {
+    xml: serialized(found),
+    styleId: (name: string) =>
+      Array.from(doc.getElementsByTagNameNS(W, "style"))
+        .find(
+          (style) =>
+            style
+              .getElementsByTagNameNS(W, "name")[0]
+              ?.getAttributeNS(W, "val")
+              ?.toLowerCase() === name,
+        )
+        ?.getAttributeNS(W, "styleId") ?? "",
+  };
+};
 
 /**
  * Dev-only native validation of the in-place mechanisms (P1-P8 and P10). Runs only in an empty
@@ -112,10 +142,11 @@ export async function runWordInPlaceProbe(
         trackingMode,
         probes: {},
       };
+    const pristine = existing.items[0];
     const probes: WordInPlaceProbeReport["probes"] = {};
     const attempt = async (
       id: WordInPlaceProbeId,
-      run: () => Promise<Record<string, WordInPlaceProbeValue>>,
+      run: () => Promise<Measured>,
     ) => {
       try {
         probes[id] = await run();
@@ -123,8 +154,10 @@ export async function runWordInPlaceProbe(
         probes[id] = { result: "error" };
       }
     };
+    // Inserted before the untouched paragraph of the empty document, which a new paragraph takes its
+    // style and list from, instead of at the end, after whatever the previous probe left there.
     const paragraph = async (text: string) => {
-      const made = body.insertParagraph(text, "End");
+      const made = pristine.insertParagraph(text, "Before");
       made.load("uniqueLocalId");
       await context.sync();
       return made;
@@ -241,42 +274,64 @@ export async function runWordInPlaceProbe(
       };
     });
 
-    await attempt("P6", async () => {
+    await attempt("P6", async (): Promise<Measured> => {
+      // Created before the list exists, so none of them can have joined it.
+      const plain = await paragraph("Probe six plain");
+      const styled = await paragraph("Probe six styled");
       const first = await paragraph("Probe six first");
+      const start = await signatures([plain, styled, first]);
+      if (!start.every(({ ooxml }) => plainStart(ooxml)))
+        return { startsClean: false };
       const list = first.startNewList();
       list.load("id");
       await context.sync();
       const second = first.insertParagraph("Probe six second", "After");
-      const plain = await paragraph("Probe six plain");
-      plain.attachToList(list.id, 0);
       const secondList = second.listOrNullObject;
       secondList.load("id");
       second.load("isListItem");
+      plain.attachToList(list.id, 0);
+      // The executor's order within one batch: list membership, then the style.
+      styled.attachToList(list.id, 0);
+      styled.styleBuiltIn = "ListParagraph";
       await context.sync();
-      const [one, two, three] = await signatures([first, second, plain]);
-      second.listItem.level = 1;
+      const attached = (await captureWordDocumentPackage()).ooxml;
+      if (second.isListItem) second.listItem.level = 1;
       plain.detachFromList();
       await context.sync();
-      const [leveled, detached] = await signatures([second, plain]);
+      const detached = (await captureWordDocumentPackage()).ooxml;
+      const at = (ooxml: string, text: string) => inPackage(ooxml, text).xml;
+      const listNumId = numbering(at(attached, "Probe six first")).numId;
       return {
+        startsClean: true,
         insertInheritsList:
           second.isListItem &&
           !secondList.isNullObject &&
           secondList.id === list.id,
         attachKeepsNumId:
-          numbering(three.ooxml).numId === numbering(one.ooxml).numId,
-        listIdIsNumId: String(list.id) === numbering(one.ooxml).numId,
+          !!listNumId &&
+          numbering(at(attached, "Probe six plain")).numId === listNumId,
+        listIdIsNumId: String(list.id) === listNumId,
         levelWritesIlvl:
-          numbering(two.ooxml).ilvl === "0" &&
-          numbering(leveled.ooxml).ilvl === "1",
-        detachRemovesNumbering: !numbering(detached.ooxml).numId,
-        detachKeepsStyle: pStyle(detached.ooxml) === pStyle(three.ooxml),
+          numbering(at(attached, "Probe six second")).ilvl === "0" &&
+          numbering(at(detached, "Probe six second")).ilvl === "1",
+        detachRemovesNumbering: !numbering(at(detached, "Probe six plain"))
+          .numId,
+        detachKeepsStyle:
+          pStyle(at(detached, "Probe six plain")) ===
+          pStyle(at(attached, "Probe six plain")),
+        attachThenStyleKeepsList:
+          !!listNumId &&
+          numbering(at(attached, "Probe six styled")).numId === listNumId,
+        attachThenStyleSetsStyle:
+          pStyle(at(attached, "Probe six styled")) ===
+          inPackage(attached, "Probe six styled").styleId("list paragraph"),
       };
     });
 
-    await attempt("P7", async () => {
+    await attempt("P7", async (): Promise<Measured> => {
       const target = await paragraph("Probe seven");
       const original = await signature(target);
+      if (!plainStart(original.ooxml)) return { startsClean: false };
       const before = await captureWordDocumentPackage();
       target.styleBuiltIn = "Heading2";
       await context.sync();
@@ -293,6 +348,7 @@ export async function runWordInPlaceProbe(
       const restored = await signature(target);
       const [a, b] = [before.ooxml, after.ooxml].map(wordPackageCounts);
       return {
+        startsClean: true,
         headingTyped: typed?.type === "heading" && typed.level === 2,
         numberingUnchanged:
           a.nums === b.nums && a.abstractNums === b.abstractNums,
@@ -301,21 +357,23 @@ export async function runWordInPlaceProbe(
       };
     });
 
-    await attempt("P8", async () => {
+    await attempt("P8", async (): Promise<Measured> => {
       const one = await paragraph("Probe eight one");
       const two = await paragraph("Probe eight two");
       const three = await paragraph("Probe eight three");
       const [first, removed, last] = await signatures([one, two, three]);
+      if (![first, removed, last].every(({ ooxml }) => plainStart(ooxml)))
+        return { startsClean: false };
       const counted = async () => {
         const all = body.paragraphs;
         all.load("items/uniqueLocalId");
         await context.sync();
-        return all.items.length;
+        return all.items;
       };
-      const count = await counted();
+      const count = (await counted()).length;
       two.delete();
       await context.sync();
-      const afterDelete = await counted();
+      const afterDelete = (await counted()).length;
       const [firstAfter, lastAfter] = await signatures([one, three]);
       const made = one.insertParagraph("", "After");
       queueWordInPlaceTextWrite(
@@ -326,12 +384,29 @@ export async function runWordInPlaceProbe(
       made.styleBuiltIn = "Normal";
       await context.sync();
       const recreated = await signature(made);
+      // What undoing a paragraph added at the very end would face: deleting the final paragraph.
+      // The style tells the final paragraph mark apart from the untouched one before it.
+      const tail = body.insertParagraph("Probe eight tail", "End");
+      tail.styleBuiltIn = "Quote";
+      await context.sync();
+      const withTail = (await counted()).length;
+      const previous = await signature(pristine);
+      tail.delete();
+      await context.sync();
+      const remaining = await counted();
+      const final = remaining.at(-1)!;
+      const finalAfter = await signature(final);
       return {
+        startsClean: true,
         countDropsByOne: afterDelete === count - 1,
         neighboursUnchanged:
           firstAfter.signature === first.signature &&
           lastAfter.signature === last.signature,
         recreateExact: recreated.signature === removed.signature,
+        finalDeleteDropsCount: remaining.length === withTail - 1,
+        finalDeleteKeepsPrevious:
+          final.uniqueLocalId === pristine.uniqueLocalId &&
+          finalAfter.signature === previous.signature,
       };
     });
 
@@ -352,7 +427,7 @@ export async function runWordInPlaceProbe(
         ["Probe one a", "Probe one b"],
         ["Probe one c", "Probe one d"],
       ]);
-      await paragraph("Probe one after");
+      body.insertParagraph("Probe one after", "End");
       const live = body.paragraphs;
       live.load("items/uniqueLocalId,items/tableNestingLevel,items/text");
       await context.sync();
