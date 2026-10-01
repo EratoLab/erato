@@ -267,6 +267,23 @@ async fn get_file_cached_naive<'a>(
     let is_image = is_image_file(filename);
     span.record("file_type", if is_image { "image" } else { "text" });
 
+    let capabilities = crate::models::file_capability::get_file_capabilities(true, true);
+    let capability =
+        crate::models::file_capability::find_file_capability_by_filename(&capabilities, filename);
+    if !is_image && capability.operations.is_empty() {
+        tracing::debug!(
+            file_id = %file_id,
+            filename,
+            detection_mode = "naive",
+            "Keeping unsupported file as a reference for file tools"
+        );
+        return Ok(FileContentsForGeneration {
+            id: *file_id,
+            filename: filename.to_string(),
+            content: FileContent::ReferenceOnly,
+        });
+    }
+
     if is_image {
         tracing::debug!(
             file_id = %file_id,
@@ -464,7 +481,33 @@ pub fn get_file_cached<'a>(
                 sharepoint_ctx,
                 Some(&detected_file_type.mime_type),
             )
-            .await?;
+            .await;
+            let text = match text {
+                Ok(text) => text,
+                Err(error) => {
+                    let capabilities =
+                        crate::models::file_capability::get_file_capabilities(true, true);
+                    let capability =
+                        crate::models::file_capability::find_file_capability_by_filename(
+                            &capabilities,
+                            filename,
+                        );
+                    if capability.operations.is_empty() {
+                        tracing::debug!(
+                            file_id = %file_id,
+                            filename,
+                            error = %error,
+                            "Content detector found an unextractable file; retaining it as a tool reference"
+                        );
+                        return Ok(FileContentsForGeneration {
+                            id: *file_id,
+                            filename: filename.to_string(),
+                            content: FileContent::ReferenceOnly,
+                        });
+                    }
+                    return Err(error);
+                }
+            };
             tracing::debug!(
                 file_id = %file_id,
                 filename = %filename,
@@ -640,6 +683,10 @@ pub fn process_single_file_cached<'a>(
                     } => {
                         span.record("file_type", "image");
                         format!("image ({} bytes, {})", raw_bytes.len(), mime_type)
+                    }
+                    FileContent::ReferenceOnly => {
+                        span.record("file_type", "reference_only");
+                        "reference-only file".to_string()
                     }
                 };
 

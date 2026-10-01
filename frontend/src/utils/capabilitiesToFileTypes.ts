@@ -32,11 +32,21 @@ export function hasSupportedOperations(capability: FileCapability): boolean {
 export function capabilitiesToFileTypes(
   capabilities: FileCapability[],
 ): FileType[] {
+  // The backend marks the wildcard capability uploadable when the deployment
+  // allows arbitrary file types. An empty accept list means accept all.
+  if (
+    capabilities.some(
+      (capability) => capability.id === "other" && capability.upload_allowed,
+    )
+  ) {
+    return [];
+  }
+
   const fileTypes = new Set<FileType>();
 
   for (const capability of capabilities) {
     // Skip capabilities with no operations (unsupported files)
-    if (!hasSupportedOperations(capability)) {
+    if (!(capability.upload_allowed ?? hasSupportedOperations(capability))) {
       continue;
     }
 

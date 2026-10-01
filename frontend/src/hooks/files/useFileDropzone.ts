@@ -336,11 +336,17 @@ export function useFileDropzone({
           );
         }
 
+        if (result.rejected_files && result.rejected_files.length > 0) {
+          setError(new UnsupportedFileTypeError(result.rejected_files));
+        }
+
         if (result.files.length > 0) {
           const sized = withLocalSizes(result.files, filesToUpload);
           addFiles(sized);
           onFilesUploaded?.(sized);
           uploadedItems = sized; // Store the result
+        } else if (result.rejected_files && result.rejected_files.length > 0) {
+          uploadedItems = [];
         }
       } catch (err) {
         logger.error("Error uploading files (outer catch):", err);

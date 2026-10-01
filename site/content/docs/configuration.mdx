@@ -1852,6 +1852,39 @@ The equivalent environment variable is `FILE_TYPE_DETECTION__MODE`.
 mode = "magika"
 ```
 
+### `file_uploads`
+
+{/* erato_toml_config_key: file_uploads */}
+
+Controls which files users may upload or link, based on the operations Erato can perform on each file type. This policy applies to local uploads and external file links.
+
+#### `file_uploads.upload_allowed_if_supports`
+
+{/* erato_toml_config_key: file_uploads.upload_allowed_if_supports */}
+{/* erato_toml_config_key: file_uploads.upload_allowed_if_supports.[] */}
+
+**Default:** `["supported_operations"]`
+
+An array of operation selectors. A file is allowed when at least one selector matches one of its available operations:
+
+- `"extract_text"` allows files with text extraction support.
+- `"analyze_image"` allows images when image analysis is available to the user.
+- `"supported_operations"` expands to all operations currently supported by Erato. This is the default and preserves the standard document, image and audio upload behavior.
+- `"any"` allows every file type, including files with no Erato processing operation. If present, it allows all types regardless of the other entries.
+
+An empty array disables new uploads. It does not delete files already attached to chats or assistants.
+
+```toml
+[file_uploads]
+upload_allowed_if_supports = ["supported_operations"]
+
+# Allow all files, including formats Erato cannot read itself:
+# upload_allowed_if_supports = ["any"]
+
+# Only allow files Erato can extract text from:
+# upload_allowed_if_supports = ["extract_text"]
+```
+
 ### `file_processor`
 
 {/* erato_toml_config_key: file_processor */}

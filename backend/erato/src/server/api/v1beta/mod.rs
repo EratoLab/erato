@@ -36,7 +36,8 @@ use crate::models::chat::{
     update_chat_is_pinned, update_chat_mcp_write_tools_enabled, update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
-    FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
+    FileCapability, FileOperation, apply_upload_policy, find_file_capability_by_filename,
+    get_file_capabilities,
 };
 use crate::models::file_upload::{AudioTranscriptionMetadata, proxied_preview_url_for_file};
 use crate::models::message::{
@@ -1928,6 +1929,9 @@ pub struct FileReference {
 pub struct FileUploadResponse {
     /// The list of uploaded files with their IDs and filenames
     files: Vec<FileUploadItem>,
+    /// Filenames skipped by the configured operation policy.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    rejected_files: Vec<String>,
 }
 
 fn initial_audio_transcription_for_file(
@@ -2056,10 +2060,16 @@ pub async fn upload_file(
             });
 
     // Get all file capabilities for this user
-    let all_capabilities =
+    let mut all_capabilities =
         get_file_capabilities(supports_image_understanding, supports_audio_input);
+    apply_upload_policy(
+        &mut all_capabilities,
+        &app_state.config.file_uploads.upload_allowed_if_supports,
+    );
 
     let mut uploaded_files = Vec::new();
+    let mut rejected_files = Vec::new();
+    let mut encountered_file_fields = 0;
     let mut outlook_provenance = None;
 
     // Process the multipart form
@@ -2093,7 +2103,7 @@ pub async fn upload_file(
             );
             continue;
         }
-        if uploaded_files.len() >= max_files {
+        if encountered_file_fields >= max_files {
             tracing::warn!(
                 "User {} attempted to upload more than {} files in one request",
                 me_user.id,
@@ -2101,12 +2111,24 @@ pub async fn upload_file(
             );
             return Err(StatusCode::PAYLOAD_TOO_LARGE);
         }
+        encountered_file_fields += 1;
 
         // Read the field's contents
         let filename = field
             .file_name()
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unnamed_file".to_string());
+        let file_capability = find_file_capability_by_filename(&all_capabilities, &filename);
+        if !file_capability.upload_allowed {
+            tracing::info!(
+                user_id = %me_user.id,
+                filename,
+                "Rejected file upload by configured operation policy"
+            );
+            rejected_files.push(filename);
+            drain_multipart_field(&mut field).await?;
+            continue;
+        }
         let content_type = effective_upload_content_type(&filename, field.content_type());
 
         // Generate a random UUID for the file
@@ -2193,7 +2215,6 @@ pub async fn upload_file(
         );
 
         // Evaluate the file capability for this file
-        let file_capability = find_file_capability_by_filename(&all_capabilities, &filename);
         let audio_transcription = initial_audio_transcription_for_file(
             &app_state,
             supports_audio_input,
@@ -2229,13 +2250,14 @@ pub async fn upload_file(
     }
 
     // If no files were uploaded, return an error
-    if uploaded_files.is_empty() {
+    if uploaded_files.is_empty() && rejected_files.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
     // Return the list of uploaded files
     Ok(Json(FileUploadResponse {
         files: uploaded_files,
+        rejected_files,
     }))
 }
 
@@ -2325,6 +2347,7 @@ async fn drain_multipart_field(
         (status = BAD_REQUEST, description = "Invalid request or unsupported source"),
         (status = UNAUTHORIZED, description = "No access token available for external provider"),
         (status = NOT_FOUND, description = "File not found or integration not enabled"),
+        (status = UNSUPPORTED_MEDIA_TYPE, description = "The file is not permitted by the configured upload-operation policy"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error"),
     )
 )]
@@ -2369,8 +2392,12 @@ async fn link_sharepoint_file_impl(
             });
 
     // Get all file capabilities for this user
-    let all_capabilities =
+    let mut all_capabilities =
         get_file_capabilities(supports_image_understanding, supports_audio_input);
+    apply_upload_policy(
+        &mut all_capabilities,
+        &app_state.config.file_uploads.upload_allowed_if_supports,
+    );
 
     // Check if SharePoint integration is enabled
     if !app_state.config.integrations.sharepoint.enabled {
@@ -2435,6 +2462,16 @@ async fn link_sharepoint_file_impl(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    let file_capability = find_file_capability_by_filename(&all_capabilities, &filename);
+    if !file_capability.upload_allowed {
+        tracing::info!(
+            user_id = %me_user.id,
+            filename,
+            "Rejected SharePoint link by configured operation policy"
+        );
+        return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+
     // Extract the SharePoint download URL from the MS Graph API response
     let download_url = item_json
         .get("@microsoft.graph.downloadUrl")
@@ -2469,7 +2506,6 @@ async fn link_sharepoint_file_impl(
     );
 
     // Evaluate the file capability for this file
-    let file_capability = find_file_capability_by_filename(&all_capabilities, &filename);
     let audio_transcription =
         initial_audio_transcription_for_file(app_state, supports_audio_input, &file_capability);
 
@@ -2499,6 +2535,7 @@ async fn link_sharepoint_file_impl(
             file_capability,
             audio_transcription,
         }],
+        rejected_files: Vec::new(),
     }))
 }
 
@@ -4627,7 +4664,12 @@ pub async fn file_capabilities(
         };
 
     // Get file capabilities based on image support
-    let capabilities = get_file_capabilities(supports_image_understanding, supports_audio_input);
+    let mut capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
+    apply_upload_policy(
+        &mut capabilities,
+        &app_state.config.file_uploads.upload_allowed_if_supports,
+    );
 
     Ok(Json(capabilities))
 }

@@ -637,6 +637,12 @@ pub struct AppConfig {
     #[serde(default)]
     pub file_type_detection: FileTypeDetectionConfig,
 
+    // File operations that make a file eligible for upload. `supported_operations`
+    // expands to every operation currently supported by the server; `any` permits
+    // files with no supported operation.
+    #[serde(default)]
+    pub file_uploads: FileUploadsConfig,
+
     // File processor configuration for controlling which file parsing library to use.
     #[serde(default)]
     pub file_processor: FileProcessorConfig,
@@ -998,6 +1004,10 @@ impl AppConfig {
             .set_default("environment", "development")?
             .set_default("http_host", "127.0.0.1")?
             .set_default("http_port", "3130")?
+            .set_default(
+                "file_uploads.upload_allowed_if_supports",
+                vec!["supported_operations"],
+            )?
             .set_default("frontend.web_frontend_bundle_path", "./public")?
             .set_default("cleanup_enabled", false)?
             .set_default("cleanup_archived_max_age_days", 30)?
@@ -5034,6 +5044,40 @@ pub struct FileTypeDetectionConfig {
     /// `magika` initializes a Magika session and uses its content-based result.
     #[serde(default)]
     pub mode: FileTypeDetectionMode,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct FileUploadsConfig {
+    /// File operations that permit an upload. Entries use OR semantics.
+    ///
+    /// `supported_operations` permits all currently supported file operations,
+    /// and `any` permits every file type, including files with no operations.
+    /// An empty list disables new file uploads.
+    #[serde(default = "default_upload_allowed_if_supports")]
+    pub upload_allowed_if_supports: Vec<FileUploadOperationSelector>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum FileUploadOperationSelector {
+    ExtractText,
+    AnalyzeImage,
+    SupportedOperations,
+    Any,
+}
+
+fn default_upload_allowed_if_supports() -> Vec<FileUploadOperationSelector> {
+    vec![FileUploadOperationSelector::SupportedOperations]
+}
+
+impl Default for FileUploadsConfig {
+    fn default() -> Self {
+        Self {
+            upload_allowed_if_supports: default_upload_allowed_if_supports(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]

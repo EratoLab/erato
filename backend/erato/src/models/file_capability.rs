@@ -17,6 +17,10 @@ pub struct FileCapability {
 
     /// Operations that can be performed on matching files
     pub operations: Vec<FileOperation>,
+
+    /// Whether this file type may be uploaded under the active deployment policy.
+    #[serde(default)]
+    pub upload_allowed: bool,
 }
 
 /// Operations that can be performed on files
@@ -38,11 +42,13 @@ impl FileCapability {
         mime_types: Vec<String>,
         operations: Vec<FileOperation>,
     ) -> Self {
+        let upload_allowed = !operations.is_empty();
         Self {
             id: id.into(),
             extensions,
             mime_types,
             operations,
+            upload_allowed,
         }
     }
 
@@ -88,6 +94,39 @@ impl FileCapability {
         }
 
         false
+    }
+}
+
+impl FileOperation {
+    pub fn config_name(&self) -> &'static str {
+        match self {
+            Self::ExtractText => "extract_text",
+            Self::AnalyzeImage => "analyze_image",
+        }
+    }
+}
+
+/// Apply the configured upload policy to capabilities while retaining the
+/// operations themselves as processing capabilities.
+pub fn apply_upload_policy(
+    capabilities: &mut [FileCapability],
+    selectors: &[crate::config::FileUploadOperationSelector],
+) {
+    use crate::config::FileUploadOperationSelector;
+
+    for capability in capabilities {
+        capability.upload_allowed = selectors.iter().any(|selector| match selector {
+            FileUploadOperationSelector::Any => true,
+            FileUploadOperationSelector::SupportedOperations => !capability.operations.is_empty(),
+            FileUploadOperationSelector::ExtractText => capability
+                .operations
+                .iter()
+                .any(|operation| operation.config_name() == "extract_text"),
+            FileUploadOperationSelector::AnalyzeImage => capability
+                .operations
+                .iter()
+                .any(|operation| operation.config_name() == "analyze_image"),
+        });
     }
 }
 

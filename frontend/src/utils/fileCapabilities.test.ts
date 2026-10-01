@@ -125,9 +125,9 @@ describe("fileCapabilities", () => {
       expect(capability?.id).toBe("other");
     });
 
-    it("should return null for filename without extension", () => {
+    it("should find wildcard capability for filename without extension", () => {
       const capability = findCapabilityByExtension("README", mockCapabilities);
-      expect(capability).toBe(null);
+      expect(capability?.id).toBe("other");
     });
 
     it("should prefer exact match over wildcard", () => {

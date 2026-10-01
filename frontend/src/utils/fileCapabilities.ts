@@ -27,13 +27,15 @@ export function findCapabilityByExtension(
   capabilities: FileCapability[],
 ): FileCapability | null {
   const extension = getFileExtension(filename);
-  if (!extension) return null;
-
-  // Find capability that matches this extension
-  // Priority: exact match, then wildcard '*'
-  for (const capability of capabilities) {
-    if (capability.extensions.includes(extension)) {
-      return capability;
+  if (extension) {
+    // Find capability that matches this extension
+    // Priority: exact match, then wildcard '*'
+    for (const capability of capabilities) {
+      if (
+        capability.extensions.some((entry) => entry.toLowerCase() === extension)
+      ) {
+        return capability;
+      }
     }
   }
 
@@ -61,8 +63,12 @@ export function validateFiles(
   for (const file of files) {
     const capability = findCapabilityByExtension(file.name, capabilities);
 
-    // If no capability found OR capability has no operations, file is invalid
-    if (!capability || !hasSupportedOperations(capability)) {
+    // Upload eligibility is configured independently from the operations
+    // available after the file has been uploaded.
+    if (
+      !capability ||
+      !(capability.upload_allowed ?? hasSupportedOperations(capability))
+    ) {
       invalid.push(file);
     } else {
       valid.push(file);

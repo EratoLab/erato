@@ -2388,6 +2388,9 @@
           "404": {
             "description": "File not found or integration not enabled"
           },
+          "415": {
+            "description": "The file is not permitted by the configured upload-operation policy"
+          },
           "500": {
             "description": "Server error"
           }
@@ -8085,6 +8088,10 @@
               "$ref": "#/components/schemas/FileOperation"
             },
             "description": "Operations that can be performed on matching files"
+          },
+          "upload_allowed": {
+            "type": "boolean",
+            "description": "Whether this file type may be uploaded under the active deployment policy."
           }
         }
       },
@@ -8179,6 +8186,13 @@
               "$ref": "#/components/schemas/FileUploadItem"
             },
             "description": "The list of uploaded files with their IDs and filenames"
+          },
+          "rejected_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filenames skipped by the configured operation policy."
           }
         }
       },
