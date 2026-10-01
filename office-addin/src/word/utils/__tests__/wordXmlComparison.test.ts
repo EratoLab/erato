@@ -8,6 +8,10 @@ import {
   sameWordBodyContent,
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
+import {
+  wordFullDocumentDifferences,
+  wordFullDocumentDifferingParts,
+} from "../wordFullDocumentComparison";
 
 import type { WordDocumentPlan } from "../wordDocumentPlan";
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -451,5 +455,84 @@ describe("stable structured Word state and retained content", () => {
       before.fingerprint,
     );
     expect(verifyWordPlanOutput(plan, before, after)).toBe(true);
+  });
+
+  it("ignores Word's saved task-pane records, which Word drops on its own", () => {
+    const withPane = parse(beforeXml);
+    const rels = first(part(withPane, "/_rels/.rels"), REL, "Relationships");
+    const rel = withPane.createElementNS(REL, "Relationship");
+    rel.setAttribute("Id", "rIdPane");
+    rel.setAttribute(
+      "Type",
+      "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes",
+    );
+    rel.setAttribute("Target", "word/webextensions/taskpanes.xml");
+    rels.append(rel);
+    const pane = withPane.createElementNS(PKG, "pkg:part");
+    pane.setAttributeNS(PKG, "pkg:name", "/word/webextensions/taskpanes.xml");
+    pane.setAttributeNS(PKG, "pkg:contentType", "application/xml");
+    const data = withPane.createElementNS(PKG, "pkg:xmlData");
+    data.append(withPane.createElementNS("urn:pane", "p:taskpanes"));
+    pane.append(data);
+    withPane.documentElement.append(pane);
+    const packaged = serialize(withPane);
+
+    expect(wordDocumentFingerprint(packaged)).toBe(
+      wordDocumentFingerprint(beforeXml),
+    );
+    expect(wordFullDocumentDifferingParts(packaged, beforeXml)).toEqual([]);
+
+    const edited = parse(beforeXml);
+    first(main(edited), W, "t").textContent = "Changed";
+    expect(wordDocumentFingerprint(serialize(edited))).not.toBe(
+      wordDocumentFingerprint(packaged),
+    );
+  });
+
+  it("locates where a part first diverges without exposing text or values", () => {
+    const text = parse(beforeXml);
+    first(main(text), W, "t").textContent = "Secret replacement";
+    const textDiff = wordFullDocumentDifferences(
+      beforeXml,
+      serialize(text),
+      true,
+    );
+    expect(textDiff.parts).toContain("/word/document.xml");
+    expect(textDiff.locations).toEqual([
+      expect.stringMatching(
+        /^\/word\/document\.xml: w:document\/w:body\[1\]\/.*text differs$/,
+      ),
+    ]);
+    expect(JSON.stringify(textDiff)).not.toContain("Secret");
+
+    const style = parse(beforeXml);
+    const jc = style.createElementNS(W, "w:jc");
+    jc.setAttributeNS(W, "w:val", "secret-alignment");
+    const paragraph = first(main(style), W, "p");
+    let props = all(paragraph, W, "pPr")[0];
+    if (!props) {
+      props = style.createElementNS(W, "w:pPr");
+      paragraph.prepend(props);
+    }
+    props.append(jc);
+    const styleDiff = wordFullDocumentDifferences(
+      beforeXml,
+      serialize(style),
+      true,
+    );
+    expect(styleDiff.locations[0]).toMatch(/w:p\[\d+\]/);
+    expect(JSON.stringify(styleDiff)).not.toContain("secret-alignment");
+
+    const spaced = parse(serialize(style));
+    const spacing = spaced.createElementNS(W, "w:spacing");
+    spacing.setAttributeNS(W, "w:before", "240");
+    const spacedProps = all(first(main(spaced), W, "p"), W, "pPr")[0];
+    spacedProps.append(spacing);
+    const beforeSpacing = serialize(spaced);
+    spacing.setAttributeNS(W, "w:before", "0");
+    expect(
+      wordFullDocumentDifferences(beforeSpacing, serialize(spaced), true)
+        .locations[0],
+    ).toMatch(/w:spacing\[\d+\] attributes differ \(w:before 240 → 0\)$/);
   });
 });

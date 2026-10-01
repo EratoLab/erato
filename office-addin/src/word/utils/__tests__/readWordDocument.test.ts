@@ -119,16 +119,27 @@ describe("readWordDocument", () => {
   it("resolves to a failure when the full package cannot be captured", async () => {
     vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
     vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(
-      new Error("getFileAsync failed"),
+      new Error("The expanded document is too large."),
     );
 
-    await expect(readWordDocument(true)).resolves.toEqual({ ok: false });
+    await expect(readWordDocument(true)).resolves.toEqual({
+      ok: false,
+      error:
+        "full-document capture: Error: The expanded document is too large.",
+    });
   });
 
   it("resolves to a failure when the run rejects", async () => {
-    word.word.run.mockRejectedValueOnce(new Error("GeneralException"));
+    word.word.run.mockRejectedValueOnce(
+      Object.assign(new Error("private document text"), {
+        code: "GeneralException",
+      }),
+    );
 
-    await expect(readWordDocument()).resolves.toEqual({ ok: false });
+    await expect(readWordDocument()).resolves.toEqual({
+      ok: false,
+      error: "paragraph read: Error",
+    });
   });
 
   it("resolves to a failure when the host exposes no Word namespace", async () => {

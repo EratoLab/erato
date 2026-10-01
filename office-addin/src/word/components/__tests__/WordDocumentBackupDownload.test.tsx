@@ -27,6 +27,7 @@ import type * as EratoLibrary from "@erato/frontend/library";
 const host = vi.hoisted(() => ({ messageId: "download-message" }));
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<typeof EratoLibrary>()),
+  CopyErrorButton: () => null,
   useHostArtifact: () => ({
     facetId: "word_document_authoring",
     messageId: host.messageId,

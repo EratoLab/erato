@@ -101,6 +101,10 @@ describe("complete Word document package transport", () => {
       "Replace",
       WORD_DOCUMENT_IMPORT_OPTIONS,
     );
+    expect(WORD_DOCUMENT_IMPORT_OPTIONS).toMatchObject({
+      importCustomProperties: false,
+      importCustomXmlParts: false,
+    });
   });
 
   it("keeps the exact original DOCX bytes in the string recovery envelope", () => {

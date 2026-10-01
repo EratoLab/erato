@@ -330,6 +330,7 @@ describe("coherent structural execution", () => {
       reason: "host-error",
       officeCode: "GeneralException",
       officeLocation: "Body.insertOoxml",
+      details: { error: "Error" },
     });
     expect(JSON.stringify(result)).not.toContain("private document text");
     expect(s.used).toBe(true);
@@ -390,7 +391,17 @@ describe("coherent structural execution", () => {
     expect(result.diagnostic).toEqual({
       stage: "verify",
       reason: "output-mismatch",
+      details: {
+        parts: ["/word/document.xml"],
+        packages: [
+          { label: "expected", parts: 3, customXmlItems: 0 },
+          { label: "actual", parts: 3, customXmlItems: 0 },
+        ],
+      },
     });
+    expect(JSON.stringify(result.diagnostic)).not.toContain(
+      "Different heading",
+    );
     expect(result.before).toBe(s.ooxml);
     expect(result.afterFingerprint).toBeTruthy();
     expect(

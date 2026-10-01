@@ -756,6 +756,52 @@ describe("complete-document writer", { timeout: 15_000 }, () => {
     expect(host.bodyInsert).not.toHaveBeenCalled();
   });
 
+  it("names the parts and package counts when Word adds customXml during import", async () => {
+    const { host, source, plan } = await sourceAndPlan();
+    host.transform((value) => {
+      const doc = new DOMParser().parseFromString(
+        wordDocumentFileToOoxml(value),
+        "application/xml",
+      );
+      const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+      const part = doc.createElementNS(PKG, "pkg:part");
+      part.setAttributeNS(PKG, "pkg:name", "/customXml/item1.xml");
+      part.setAttributeNS(PKG, "pkg:contentType", "application/xml");
+      const data = doc.createElementNS(PKG, "pkg:xmlData");
+      data.append(doc.createElementNS("urn:test", "t:secret-metadata"));
+      part.append(data);
+      doc.documentElement.append(part);
+      return wordDocumentOoxmlToFile(
+        new XMLSerializer().serializeToString(doc),
+      );
+    });
+    const result = await applyWordDocumentPlan(plan, source, "message-A");
+    expect(result.status).toBe("interrupted");
+    const details = result.diagnostic?.details;
+    expect(details?.parts).toEqual(["/customXml/item1.xml"]);
+    const items = Object.fromEntries(
+      details!.packages!.map((p) => [p.label, p.customXmlItems]),
+    );
+    expect(items).toEqual({ live: 0, expected: 0, actual: 1 });
+    expect(JSON.stringify(result.diagnostic)).not.toContain("secret-metadata");
+  });
+
+  it("names the changed part when the document changed before Apply", async () => {
+    const { bytes, host, source, plan } = await sourceAndPlan();
+    host.set(
+      wordDocumentOoxmlToFile(
+        changeStory(wordDocumentFileToOoxml(bytes), "hdr", "Private header"),
+      ),
+    );
+    const result = await applyWordDocumentPlan(plan, source, "message-A");
+    expect(result.status).toBe("stale");
+    expect(result.diagnostic?.details?.parts).toEqual([
+      expect.stringMatching(/^\/word\/header\d*\.xml$/),
+    ]);
+    expect(JSON.stringify(result.diagnostic)).not.toContain("Private header");
+    expect(host.insert).not.toHaveBeenCalled();
+  });
+
   it("accepts native revision-session metadata normalization without losing recovery", async () => {
     const { bytes, host, source, plan } = await sourceAndPlan();
     host.transform((value) =>

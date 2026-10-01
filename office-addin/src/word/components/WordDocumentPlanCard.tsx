@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Alert,
+  CopyErrorButton,
   SpinnerIcon,
   useChatContext,
   useHostArtifact,
@@ -22,6 +23,7 @@ import {
   isActionDenied,
   wordClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
+import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
 import { revertWordDocumentPlan } from "../utils/wordApplyDocumentPlan";
 import {
   wordApplyStageLabel,
@@ -57,7 +59,7 @@ export function WordDocumentPlanCard({
   content: string;
 }) {
   const artifact = useHostArtifact();
-  const { messages } = useChatContext();
+  const { messages, currentChatId } = useChatContext();
   const host = useWordWrite();
   const [decisions, setDecisions] = useClientActionDecisions(
     wordClientActionDecisionStore,
@@ -330,6 +332,18 @@ export function WordDocumentPlanCard({
                   message: "Checking and restoring the document…",
                 })
               : undefined;
+  const reverting =
+    review.status === "revert-failed" ||
+    review.documentPlanStatus === "revert-stale";
+  const errorReport =
+    review.documentPlanDiagnostic ||
+    ["error", "write-failed", "revert-failed"].includes(review.status)
+      ? renderWordDiagnosticReport(
+          reverting ? "revert" : "apply",
+          review.documentPlanStatus ?? review.status,
+          review.documentPlanDiagnostic,
+        )
+      : undefined;
   if (generating)
     return (
       <Card variant="surface" size="sm">
@@ -663,6 +677,14 @@ export function WordDocumentPlanCard({
               .join(" · ")}
           </p>
         )}
+      {!collapsed && status && errorReport && (
+        <div className="m-3 mt-0">
+          <CopyErrorButton
+            error={errorReport}
+            reportOptions={{ chatId: currentChatId }}
+          />
+        </div>
+      )}
     </Card>
   );
 }

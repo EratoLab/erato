@@ -44,8 +44,10 @@ export const WORD_DOCUMENT_IMPORT_OPTIONS: Word.InsertFileOptions = {
   importParagraphSpacing: true,
   importPageColor: true,
   importDifferentOddEvenPages: true,
-  importCustomProperties: true,
-  importCustomXmlParts: true,
+  // Word merges rather than replaces these into the same document, duplicating every customXml
+  // item per write until the package exceeds the part limit. Plans never change them.
+  importCustomProperties: false,
+  importCustomXmlParts: false,
 };
 
 /** Office's documented maximum and default; one slice covers every supported DOCX. */

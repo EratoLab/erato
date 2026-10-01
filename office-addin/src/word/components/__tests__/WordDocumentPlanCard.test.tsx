@@ -33,6 +33,7 @@ const mock = vi.hoisted(() => {
 });
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<typeof EratoLibrary>()),
+  CopyErrorButton: () => null,
   useHostArtifact: () => mock.artifact,
   useChatContext: () => ({
     messages: {

@@ -1,3 +1,10 @@
+import {
+  logWordDiagnostic,
+  packageStats,
+  strictDifferingParts,
+  verifyDifferingParts,
+  wordErrorText,
+} from "./wordApplyDiagnostics";
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
 import {
   unlockWordContentControlsForImport,
@@ -28,6 +35,7 @@ import {
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
 import { wordWriteHost } from "./wordWriteHost";
 
+import type { WordDiagnosticDetails } from "./wordApplyDiagnostics";
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
 import type { WordContentControlLocks } from "./wordContentControlWrite";
 import type {
@@ -53,6 +61,7 @@ export interface WordDocumentDiagnostic {
     | "host-error";
   officeCode?: string;
   officeLocation?: string;
+  details?: WordDiagnosticDetails;
 }
 export interface WordDocumentApplyResult {
   status: WordDocumentApplyStatus;
@@ -67,12 +76,17 @@ export interface WordDocumentRevertResult {
   diagnostic?: WordDocumentDiagnostic;
 }
 
-/** Only error codes/API locations, never statements, document text or raw debugInfo. */
+/** Only error codes/API locations, part paths and counts, never statements, document text or raw debugInfo. */
 function diagnostic(
   stage: WordDocumentDiagnostic["stage"],
   reason: WordDocumentDiagnostic["reason"],
   error?: unknown,
+  details: WordDiagnosticDetails = {},
 ): WordDocumentDiagnostic {
+  const merged: WordDiagnosticDetails = {
+    ...(error === undefined ? {} : { error: wordErrorText(error) }),
+    ...details,
+  };
   const record =
     typeof error === "object" && error !== null
       ? (error as Record<string, unknown>)
@@ -93,6 +107,7 @@ function diagnostic(
     /^[A-Za-z][A-Za-z0-9_.()[\]-]{0,159}$/.test(location)
       ? { officeLocation: location }
       : {}),
+    ...(Object.keys(merged).length ? { details: merged } : {}),
   };
 }
 
@@ -140,6 +155,8 @@ export async function applyWordDocumentPlan(
     return result;
   } finally {
     progress.finish(result?.status ?? "error");
+    if (result?.diagnostic)
+      logWordDiagnostic("apply", result.status, result.diagnostic);
   }
 }
 
@@ -210,7 +227,17 @@ async function applyPlan(
               ? "source-changed"
               : null;
       if (reason)
-        return { status: "stale", diagnostic: diagnostic("preflight", reason) };
+        return {
+          status: "stale",
+          diagnostic: diagnostic(
+            "preflight",
+            reason,
+            undefined,
+            reason === "source-changed"
+              ? strictDifferingParts(snapshot.ooxml, live.value)
+              : {},
+          ),
+        };
       before = live.value;
       onBeforeWrite?.(before);
       snapshot.used = true;
@@ -237,7 +264,14 @@ async function applyPlan(
           status: "interrupted",
           before,
           afterFingerprint,
-          diagnostic: diagnostic("verify", "output-mismatch"),
+          diagnostic: diagnostic("verify", "output-mismatch", undefined, {
+            ...strictDifferingParts(compiled, after.value),
+            ...(verified.issue ? { snapshotIssue: verified.issue } : {}),
+            ...packageStats([
+              ["expected", compiled],
+              ["actual", after.value],
+            ]),
+          }),
         };
       return { status: "applied", before, afterFingerprint };
     });
@@ -257,6 +291,16 @@ async function applyPlan(
 }
 
 export async function revertWordDocumentPlan(
+  before: string,
+  expectedAfter: string,
+): Promise<WordDocumentRevertResult> {
+  const result = await revertPlan(before, expectedAfter);
+  if (result.diagnostic)
+    logWordDiagnostic("revert", result.status, result.diagnostic);
+  return result;
+}
+
+async function revertPlan(
   before: string,
   expectedAfter: string,
 ): Promise<WordDocumentRevertResult> {
@@ -310,7 +354,12 @@ export async function revertWordDocumentPlan(
         return {
           status: "interrupted",
           afterFingerprint,
-          diagnostic: diagnostic("restore", "output-mismatch"),
+          diagnostic: diagnostic(
+            "restore",
+            "output-mismatch",
+            undefined,
+            strictDifferingParts(before, after.value),
+          ),
         };
       return { status: "reverted", afterFingerprint };
     });
@@ -342,6 +391,7 @@ async function applyFullDocument(
   let documentUrl: string | undefined;
   let locks: WordContentControlLocks = [];
   let imported = false;
+  let liveOoxml: string | undefined;
   try {
     const bytes = wordDocumentOoxmlToFile(compiled);
     stage = "preflight";
@@ -349,21 +399,43 @@ async function applyFullDocument(
     return await host.run(async (context) => {
       const live = await captureWordDocumentPackage();
       documentUrl = live.documentUrl;
+      liveOoxml = live.ooxml;
       context.document.load("changeTrackingMode");
       await context.sync();
+      const contentChanged = live.fingerprint !== snapshot.fingerprint;
+      const urlChanged =
+        (snapshot.documentUrl !== undefined &&
+          live.documentUrl !== snapshot.documentUrl) ||
+        currentWordDocumentUrl() !== live.documentUrl;
       const reason =
         snapshot.used || snapshot.revoked
           ? "expired"
           : context.document.changeTrackingMode !== "Off"
             ? "tracking"
-            : live.fingerprint !== snapshot.fingerprint ||
-                (snapshot.documentUrl !== undefined &&
-                  live.documentUrl !== snapshot.documentUrl) ||
-                currentWordDocumentUrl() !== live.documentUrl
+            : contentChanged || urlChanged
               ? "source-changed"
               : null;
       if (reason)
-        return { status: "stale", diagnostic: diagnostic("preflight", reason) };
+        return {
+          status: "stale",
+          diagnostic: diagnostic(
+            "preflight",
+            reason,
+            undefined,
+            reason === "source-changed"
+              ? {
+                  ...(contentChanged
+                    ? strictDifferingParts(snapshot.ooxml, live.ooxml)
+                    : {}),
+                  ...(urlChanged ? { urlChanged } : {}),
+                  ...packageStats([
+                    ["source", snapshot.ooxml],
+                    ["live", live.ooxml],
+                  ]),
+                }
+              : {},
+          ),
+        };
       before = encodeWordDocumentBackup(live);
       onBeforeWrite?.(before);
       snapshot.used = true;
@@ -396,7 +468,9 @@ async function applyFullDocument(
         return {
           status: "interrupted",
           before,
-          diagnostic: diagnostic("verify", "output-mismatch"),
+          diagnostic: diagnostic("verify", "output-mismatch", undefined, {
+            urlChanged: true,
+          }),
         };
       context.document.load("changeTrackingMode");
       await context.sync();
@@ -414,7 +488,15 @@ async function applyFullDocument(
           status: "interrupted",
           before,
           afterFingerprint,
-          diagnostic: diagnostic("verify", "output-mismatch"),
+          diagnostic: diagnostic("verify", "output-mismatch", undefined, {
+            ...verifyDifferingParts(compiled, after.ooxml),
+            ...(actual.issue ? { snapshotIssue: actual.issue } : {}),
+            ...packageStats([
+              ["live", live.ooxml],
+              ["expected", compiled],
+              ["actual", after.ooxml],
+            ]),
+          }),
         };
       return { status: "applied", before, afterFingerprint };
     });
@@ -435,6 +517,10 @@ async function applyFullDocument(
         stage,
         stage === "compile" ? "compile-failed" : "host-error",
         error,
+        packageStats([
+          ["live", liveOoxml],
+          ["expected", compiled],
+        ]),
       ),
     };
   }
@@ -462,16 +548,34 @@ async function revertFullDocument(
       const live = await captureWordDocumentPackage();
       context.document.load("changeTrackingMode");
       await context.sync();
+      const contentChanged = live.fingerprint !== expectedAfter;
+      const urlChanged =
+        live.documentUrl !== original.documentUrl ||
+        currentWordDocumentUrl() !== live.documentUrl;
       const reason =
         context.document.changeTrackingMode !== "Off"
           ? "tracking"
-          : live.fingerprint !== expectedAfter ||
-              live.documentUrl !== original.documentUrl ||
-              currentWordDocumentUrl() !== live.documentUrl
+          : contentChanged || urlChanged
             ? "source-changed"
             : null;
       if (reason)
-        return { status: "stale", diagnostic: diagnostic("preflight", reason) };
+        return {
+          status: "stale",
+          diagnostic: diagnostic(
+            "preflight",
+            reason,
+            undefined,
+            reason === "source-changed"
+              ? {
+                  ...(urlChanged ? { urlChanged } : {}),
+                  ...packageStats([
+                    ["source", original.ooxml],
+                    ["live", live.ooxml],
+                  ]),
+                }
+              : {},
+          ),
+        };
       stage = "restore";
       await unlockWordContentControlsForImport(context, {
         onLocksCaptured: (value) => {
@@ -498,7 +602,9 @@ async function revertFullDocument(
       )
         return {
           status: "interrupted",
-          diagnostic: diagnostic("restore", "output-mismatch"),
+          diagnostic: diagnostic("restore", "output-mismatch", undefined, {
+            urlChanged: true,
+          }),
         };
       context.document.load("changeTrackingMode");
       await context.sync();
@@ -521,7 +627,13 @@ async function revertFullDocument(
         return {
           status: "interrupted",
           afterFingerprint,
-          diagnostic: diagnostic("restore", "output-mismatch"),
+          diagnostic: diagnostic("restore", "output-mismatch", undefined, {
+            ...verifyDifferingParts(original.ooxml, after.ooxml),
+            ...packageStats([
+              ["expected", original.ooxml],
+              ["actual", after.ooxml],
+            ]),
+          }),
         };
       return { status: "reverted", afterFingerprint };
     });

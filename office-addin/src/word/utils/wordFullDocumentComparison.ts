@@ -8,6 +8,8 @@ import { normalizeWordMediaForComparison } from "./wordMediaComparison";
 import { normalizeWordTablesForComparison } from "./wordTableComparison";
 import {
   createWordXmlComparison,
+  isWordHostStatePart,
+  isWordHostStateRelationship,
   wordXmlElements as all,
 } from "./wordXmlComparison";
 
@@ -1175,7 +1177,12 @@ function packageSignatures(v: PackageView): Map<string, string> {
   const result = new Map<string, string>();
   for (const [path, part] of v.parts) {
     const root = v.roots.get(path);
-    if (isHeader(root) || isMedia(part) || (root && emptyOptionalPart(root)))
+    if (
+      isWordHostStatePart(path) ||
+      isHeader(root) ||
+      isMedia(part) ||
+      (root && emptyOptionalPart(root))
+    )
       continue;
     if (root?.namespaceURI === REL && root.localName === "Relationships") {
       const ownerName = wordRelationshipOwner(path.replace(/^\//, ""));
@@ -1194,6 +1201,7 @@ function packageSignatures(v: PackageView): Map<string, string> {
         const target = `/${wordRelationshipTarget(ownerName, rel.getAttribute("Target") ?? "")}`;
         const targetRoot = v.roots.get(target);
         if (refs.has(rel.getAttribute("Id") ?? "")) return false; // checked at the referring element, including its type/target bytes
+        if (isWordHostStateRelationship(rel)) return false;
         if (
           ["header", "footer", "image", "hyperlink"].some(
             (t) => type === `${R}/${t}`,
@@ -1232,37 +1240,143 @@ export function wordFullDocumentComparisonIssue(
   actualXml: string,
 ): string | undefined {
   try {
-    const expected = view(expectedXml),
-      actual = view(actualXml);
-    for (const v of [expected, actual]) {
-      normalizeWordMediaForComparison(v.doc);
-      normalizeWordInlineForComparison(v.doc);
-      normalizeAnchorIds(v);
-      normalizeMarkerDefaults(v);
-      normalizeInheritedFormatting(v);
-      normalizeWordTablesForComparison(v.doc);
-      normalizeShapeIdBookkeeping(v);
-    }
-    normalizeNewCommentMetadata(expected, actual);
-    normalizeAddedCommentMarkers(expected, actual);
-    normalizeAddedFonts(expected, actual);
-    normalizeUnusedLinkedCharacterStyles(expected, actual);
-    normalizeAddedStyles(expected, actual);
-    normalizeAddedNumbering(expected, actual);
-    normalizeAddedNoteSeparators(expected, actual);
-    normalizeCompatibility(expected);
-    normalizeCompatibility(actual);
-    normalizeDefinitionOrder(expected);
-    normalizeDefinitionOrder(actual);
-    const a = packageSignatures(expected),
-      b = packageSignatures(actual);
-    for (const path of new Set([...a.keys(), ...b.keys()]))
-      if (a.get(path) !== b.get(path))
-        return `Document content differs in ${path}`;
-    return undefined;
+    const path = wordFullDocumentDifferingParts(expectedXml, actualXml)[0];
+    return path === undefined
+      ? undefined
+      : `Document content differs in ${path}`;
   } catch {
     return "Document comparison could not validate the package";
   }
+}
+
+/** Part paths that differ after verify normalizations; throws when a package is unreadable. */
+export function wordFullDocumentDifferingParts(
+  expectedXml: string,
+  actualXml: string,
+): string[] {
+  return wordFullDocumentDifferences(expectedXml, actualXml).parts;
+}
+
+/** With `locate`, also names where each differing content part first diverges (structure only, no text or values). */
+export function wordFullDocumentDifferences(
+  expectedXml: string,
+  actualXml: string,
+  locate = false,
+): { parts: string[]; locations: string[] } {
+  const expected = view(expectedXml),
+    actual = view(actualXml);
+  for (const v of [expected, actual]) {
+    normalizeWordMediaForComparison(v.doc);
+    normalizeWordInlineForComparison(v.doc);
+    normalizeAnchorIds(v);
+    normalizeMarkerDefaults(v);
+    normalizeInheritedFormatting(v);
+    normalizeWordTablesForComparison(v.doc);
+    normalizeShapeIdBookkeeping(v);
+  }
+  normalizeNewCommentMetadata(expected, actual);
+  normalizeAddedCommentMarkers(expected, actual);
+  normalizeAddedFonts(expected, actual);
+  normalizeUnusedLinkedCharacterStyles(expected, actual);
+  normalizeAddedStyles(expected, actual);
+  normalizeAddedNumbering(expected, actual);
+  normalizeAddedNoteSeparators(expected, actual);
+  normalizeCompatibility(expected);
+  normalizeCompatibility(actual);
+  normalizeDefinitionOrder(expected);
+  normalizeDefinitionOrder(actual);
+  const a = packageSignatures(expected),
+    b = packageSignatures(actual);
+  const parts = [...new Set([...a.keys(), ...b.keys()])].filter(
+    (path) => a.get(path) !== b.get(path),
+  );
+  if (!locate) return { parts, locations: [] };
+  const ca = createWordXmlComparison(expected.doc),
+    cb = createWordXmlComparison(actual.doc);
+  const locations = parts
+    .filter((path) => !path.endsWith(".rels"))
+    .slice(0, 3)
+    .flatMap((path) => {
+      const x = expected.roots.get(path),
+        y = actual.roots.get(path);
+      return x && y
+        ? [`${path}: ${firstDivergence(x, y, path, ca, cb)}`]
+        : [`${path}: ${x ? "missing after write" : "added by Word"}`];
+    });
+  return { parts, locations };
+}
+
+const QNAME = /^[A-Za-z0-9_.:-]{1,64}$/;
+/** Numbers, hex IDs and OOXML enums are formatting, not document text; anything else stays hidden. */
+const SAFE_VALUE =
+  /^(-?\d{1,9}|[0-9A-Fa-f]{8}|auto|exact|atLeast|true|false|on|off|0|1)$/;
+const shown = (value: string | null) =>
+  value === null ? "none" : SAFE_VALUE.test(value) ? value : "…";
+const childKinds = (list: Element[]) => {
+  const counts = new Map<string, number>();
+  for (const e of list) counts.set(qname(e), (counts.get(qname(e)) ?? 0) + 1);
+  return [...counts].map(([name, n]) => `${n} ${name}`).join(", ");
+};
+const qname = (e: Element) => (QNAME.test(e.nodeName) ? e.nodeName : "?");
+
+/** Descend along the first child whose normalized signature differs. */
+function firstDivergence(
+  a: Element,
+  b: Element,
+  owner: string,
+  ca: ReturnType<typeof createWordXmlComparison>,
+  cb: ReturnType<typeof createWordXmlComparison>,
+): string {
+  const path = [qname(a)];
+  let hint = "";
+  const result = (text: string) => text + hint;
+  for (let depth = 0; depth < 40; depth++) {
+    const xs = children(a).filter((e) => ca.signature(e, owner)),
+      ys = children(b).filter((e) => cb.signature(e, owner));
+    let i = 0;
+    while (
+      i < xs.length &&
+      i < ys.length &&
+      ca.signature(xs[i], owner) === cb.signature(ys[i], owner)
+    )
+      i++;
+    const where = path.join("/");
+    if (!hint && xs.length !== ys.length)
+      hint = `; ${where} has ${xs.length} children expected (${childKinds(xs)}), ${ys.length} actual (${childKinds(ys)})`;
+    if (i === xs.length && i === ys.length) {
+      const names = new Set(
+        [...Array.from(a.attributes), ...Array.from(b.attributes)]
+          .filter(
+            (attr) =>
+              attr.namespaceURI !== "http://www.w3.org/2000/xmlns/" &&
+              a.getAttributeNS(attr.namespaceURI, attr.localName) !==
+                b.getAttributeNS(attr.namespaceURI, attr.localName),
+          )
+          .map((attr) =>
+            QNAME.test(attr.name)
+              ? `${attr.name} ${shown(a.getAttributeNS(attr.namespaceURI, attr.localName))} → ${shown(b.getAttributeNS(attr.namespaceURI, attr.localName))}`
+              : "?",
+          ),
+      );
+      return result(
+        names.size
+          ? `${where} attributes differ (${[...names].join(", ")})`
+          : `${where} text differs`,
+      );
+    }
+    if (i === xs.length || i === ys.length)
+      return result(
+        `${where} child count differs from #${i + 1} (${xs.length} expected, ${ys.length} actual)`,
+      );
+    if (qname(xs[i]) !== qname(ys[i]))
+      return result(
+        `${where} child #${i + 1} is ${qname(ys[i])}, expected ${qname(xs[i])}`,
+      );
+    path.push(`${qname(xs[i])}[${i + 1}]`);
+    a = xs[i];
+    b = ys[i];
+  }
+  return result(`${path.join("/")} (deeply nested)`);
 }
 export function sameWordFullDocumentContent(
   expectedXml: string,

@@ -102,8 +102,22 @@ function drawingIdentity(element: Element, attribute: Attr): boolean {
   );
 }
 
+/** Word rewrites or drops its saved task-pane records on its own; they are never document content. */
+export function isWordHostStatePart(path: string): boolean {
+  return /^\/word\/webextensions\//.test(path);
+}
+
+export function isWordHostStateRelationship(rel: Element): boolean {
+  return (
+    (rel.getAttribute("Type") ?? "").endsWith("/webextensiontaskpanes") ||
+    /(^|\/)webextensions\//.test(rel.getAttribute("Target") ?? "")
+  );
+}
+
 export interface WordXmlComparison {
   fingerprint: () => string;
+  /** Per-part strict signatures of a package; empty for a bare body fragment. */
+  partFingerprints: () => Map<string, string>;
   signature: (node: Node, owner?: string) => string;
 }
 
@@ -296,6 +310,9 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
     const ns = element.namespaceURI,
       local = element.localName;
     return (
+      (ns === REL &&
+        local === "Relationship" &&
+        isWordHostStateRelationship(element)) ||
       (ns === W && ["proofErr", "lastRenderedPageBreak"].includes(local)) ||
       (ns === W &&
         local === "rsid" &&
@@ -466,27 +483,30 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
     partCache.set(path, result);
     return result;
   }
+  const partFingerprints = () =>
+    new Map(
+      [...parts]
+        .filter(([path]) => !isWordHostStatePart(path))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([path, part]) => {
+          const root = roots.get(path);
+          const binary = wordXmlElements(part, PKG, "binaryData")[0];
+          return [
+            path,
+            JSON.stringify([path, part.getAttributeNS(PKG, "contentType")]) +
+              (root
+                ? canonical(root, path, false)
+                : (binary?.textContent ?? "").replace(/\s/g, "")),
+          ];
+        }),
+    );
   return {
     fingerprint: () =>
       WORD_FINGERPRINT_PREFIX +
       (!parts.size
         ? canonical(doc.documentElement, "/word/document.xml", false)
-        : [...parts]
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([path, part]) => {
-              const root = roots.get(path);
-              const binary = wordXmlElements(part, PKG, "binaryData")[0];
-              return (
-                JSON.stringify([
-                  path,
-                  part.getAttributeNS(PKG, "contentType"),
-                ]) +
-                (root
-                  ? canonical(root, path, false)
-                  : (binary?.textContent ?? "").replace(/\s/g, ""))
-              );
-            })
-            .join("\n")),
+        : [...partFingerprints().values()].join("\n")),
+    partFingerprints,
     signature: (node, owner = "/word/document.xml") =>
       canonical(node, owner, true),
   };
