@@ -1,14 +1,26 @@
 import { parseWordXml } from "./wordDocumentPackageCodec";
-import { wordFullDocumentDifferences } from "./wordFullDocumentComparison";
+import {
+  WORD_APPLY_ADJUSTMENTS,
+  wordFullDocumentDifferences,
+  wordPackageCounts,
+} from "./wordFullDocumentComparison";
 import { createWordXmlComparison } from "./wordXmlComparison";
 
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
+import type {
+  WordApplyAdjustment,
+  WordVerifyTier,
+} from "./wordFullDocumentComparison";
 
-/** Package shape only: part and customXml counts can reveal duplicated imports without any content. */
+/** Package shape only: part, customXml and numbering counts reveal duplicated imports without any content. */
 export interface WordPackageStats {
   label: "source" | "live" | "expected" | "actual";
   parts: number;
   customXmlItems: number;
+  customProperties?: number;
+  abstractNums?: number;
+  nums?: number;
+  webextensionParts?: number;
 }
 
 /** Everything here must stay free of document text: part paths, counts and our own error messages only. */
@@ -21,6 +33,9 @@ export interface WordDiagnosticDetails {
   urlChanged?: boolean;
   /** WordPlanIssue code of the re-read document, e.g. "unsupported". */
   snapshotIssue?: string;
+  /** Most lenient verification tier that was tried. */
+  verifyTier?: WordVerifyTier;
+  adjustments?: WordApplyAdjustment[];
   error?: string;
 }
 
@@ -32,11 +47,15 @@ export function wordPackageStats(
   ooxml: string | undefined,
 ): WordPackageStats | undefined {
   if (!ooxml) return undefined;
+  const counts = wordPackageCounts(ooxml);
   return {
     label,
-    parts: ooxml.match(/<pkg:part\b/g)?.length ?? 0,
-    customXmlItems:
-      ooxml.match(/pkg:name="\/customXml\/item\d+\.xml"/g)?.length ?? 0,
+    parts: counts.parts,
+    customXmlItems: counts.customXmlItems,
+    customProperties: counts.customProperties,
+    abstractNums: counts.abstractNums,
+    nums: counts.nums,
+    webextensionParts: counts.webextensionParts,
   };
 }
 
@@ -119,12 +138,29 @@ export function wordErrorText(error: unknown): string {
 function hostLine(): string {
   const office = globalThis.Office?.context;
   const d = office?.diagnostics;
-  const api17 = office?.requirements?.isSetSupported?.("WordApi", "1.7");
+  const supported = (version: string) => {
+    const value = office?.requirements?.isSetSupported?.("WordApi", version);
+    return value === undefined ? "?" : value ? "yes" : "no";
+  };
   return [
     `${String(d?.host ?? "?")} ${String(d?.platform ?? "?")} ${d?.version ?? "?"}`,
-    `WordApi 1.7: ${api17 === undefined ? "?" : api17 ? "yes" : "no"}`,
+    `WordApi 1.6: ${supported("1.6")}`,
+    `WordApi 1.7: ${supported("1.7")}`,
     `saved document: ${office?.document?.url ? "yes" : "no"}`,
   ].join(" · ");
+}
+
+function packageLine(p: WordPackageStats): string {
+  const count = (value: number | undefined, unit: string) =>
+    Number.isSafeInteger(value) ? [`${value} ${unit}`] : [];
+  return `Package ${p.label}: ${[
+    ...count(p.parts, "parts"),
+    ...count(p.customXmlItems, "customXml items"),
+    ...count(p.customProperties, "custom properties"),
+    ...count(p.abstractNums, "abstractNum"),
+    ...count(p.nums, "num"),
+    ...count(p.webextensionParts, "task pane parts"),
+  ].join(", ")}`;
 }
 
 export function renderWordDiagnosticReport(
@@ -152,16 +188,26 @@ export function renderWordDiagnosticReport(
     ...(details?.snapshotIssue
       ? [`Re-read document issue: ${details.snapshotIssue}`]
       : []),
+    ...(details?.verifyTier &&
+    ["strict", "content"].includes(details.verifyTier)
+      ? [`Verify tier: ${details.verifyTier}`]
+      : []),
+    ...(details?.adjustments?.some((code) =>
+      WORD_APPLY_ADJUSTMENTS.includes(code),
+    )
+      ? [
+          `Adjustments: ${details.adjustments
+            .filter((code) => WORD_APPLY_ADJUSTMENTS.includes(code))
+            .join(", ")}`,
+        ]
+      : []),
     ...(details?.parts?.length
       ? [
           `Differing parts: ${details.parts.join(", ")}${details.partsOmitted ? ` (+${details.partsOmitted} more)` : ""}`,
         ]
       : []),
     ...(details?.locations ?? []).map((where) => `Where: ${where}`),
-    ...(details?.packages ?? []).map(
-      (p) =>
-        `Package ${p.label}: ${p.parts} parts, ${p.customXmlItems} customXml items`,
-    ),
+    ...(details?.packages ?? []).map(packageLine),
     `Host: ${hostLine()}`,
   ];
   return lines.join("\n");

@@ -27,6 +27,7 @@ import {
 import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
 import { revertWordDocumentPlan } from "../utils/wordApplyDocumentPlan";
 import {
+  wordApplyAdjustmentText,
   wordApplyStageLabel,
   wordAuthoringIssueText,
   wordDocumentDiagnosticText,
@@ -42,6 +43,7 @@ import {
   validateWordDocumentPlan,
 } from "../utils/wordDocumentPlan";
 import { wordPlanDraftText } from "../utils/wordDocumentXml";
+import { WORD_VISIBLE_ADJUSTMENTS } from "../utils/wordFullDocumentComparison";
 import { showWordReviewLocation } from "../utils/wordReviewLocation";
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
@@ -122,6 +124,7 @@ export function WordDocumentPlanCard({
       applyStage: "checking",
       capture,
       documentPlanDiagnostic: undefined,
+      documentPlanOutcome: undefined,
     });
     try {
       const run = await entry.execute({
@@ -163,6 +166,7 @@ export function WordDocumentPlanCard({
             : "error",
         documentPlanStatus: result?.status,
         documentPlanDiagnostic: result?.diagnostic,
+        documentPlanOutcome: result?.outcome,
         detailsExpanded: false,
         automatic:
           artifact?.clientActionPresentation === "auto_prompt" &&
@@ -253,6 +257,9 @@ export function WordDocumentPlanCard({
             ? "revert-stale"
             : review.documentPlanStatus,
         documentPlanDiagnostic: result.diagnostic,
+        ...(result.status === "reverted"
+          ? { documentPlanOutcome: result.outcome }
+          : {}),
         detailsExpanded: result.status !== "reverted",
       });
     } catch {
@@ -334,6 +341,13 @@ export function WordDocumentPlanCard({
                   message: "Checking and restoring the document…",
                 })
               : undefined;
+  const adjustmentNote = ["done", "reverted"].includes(review.status)
+    ? (review.documentPlanOutcome?.adjustments ?? [])
+        .filter((code) => WORD_VISIBLE_ADJUSTMENTS.includes(code))
+        .map(wordApplyAdjustmentText)
+        .filter(Boolean)
+        .join(" ")
+    : "";
   const reverting =
     review.status === "revert-failed" ||
     review.documentPlanStatus === "revert-stale";
@@ -683,6 +697,14 @@ export function WordDocumentPlanCard({
             </Alert>
           )}
       </div>
+      {adjustmentNote && (
+        <p
+          className="word-review__hint m-3"
+          data-testid="word-plan-adjustments"
+        >
+          {adjustmentNote}
+        </p>
+      )}
       {status && !collapsed && (
         <Alert
           type={

@@ -10,6 +10,7 @@ import {
   createWordXmlComparison,
   isWordHostStatePart,
   isWordHostStateRelationship,
+  removeWordNumberingIdentity,
   wordXmlElements as all,
 } from "./wordXmlComparison";
 
@@ -31,6 +32,62 @@ const direct = (root: Element | undefined, local: string) =>
 const attr = (e: Element | undefined, name = "val") =>
   e?.getAttributeNS(W, name) ?? "";
 const children = (e: Element | undefined) => Array.from(e?.children ?? []);
+
+export type WordVerifyTier = "strict" | "content";
+/** Closed list: each code names one normalization the content tier may apply after strict failed. */
+export const WORD_APPLY_ADJUSTMENTS = [
+  "numbering-identity",
+  "list-instance-renumbered",
+  "first-paragraph-spacing",
+] as const;
+export type WordApplyAdjustment = (typeof WORD_APPLY_ADJUSTMENTS)[number];
+/** Adjustments a reader can see in the document; the others are list bookkeeping only. */
+export const WORD_VISIBLE_ADJUSTMENTS: readonly WordApplyAdjustment[] = [
+  "first-paragraph-spacing",
+];
+
+export interface WordPackageCounts {
+  parts: number;
+  customXmlItems: number;
+  customProperties: number;
+  abstractNums: number;
+  nums: number;
+  webextensionParts: number;
+}
+
+/** Shape only, read from the serialized package without parsing it. */
+export function wordPackageCounts(ooxml: string): WordPackageCounts {
+  const part = (name: string) => {
+    const start = ooxml.indexOf(`pkg:name="${name}"`);
+    if (start < 0) return "";
+    const end = ooxml.indexOf("</pkg:part>", start);
+    return ooxml.slice(start, end < 0 ? undefined : end);
+  };
+  const count = (text: string, pattern: RegExp) =>
+    text.match(pattern)?.length ?? 0;
+  const numbering = part("/word/numbering.xml");
+  return {
+    parts: count(ooxml, /<pkg:part\b/g),
+    customXmlItems: count(ooxml, /pkg:name="\/customXml\/item\d+\.xml"/g),
+    customProperties: count(
+      part("/docProps/custom.xml"),
+      /<(?:[\w.-]+:)?property[\s/>]/g,
+    ),
+    abstractNums: count(numbering, /<(?:[\w.-]+:)?abstractNum[\s/>]/g),
+    nums: count(numbering, /<(?:[\w.-]+:)?num[\s/>]/g),
+    webextensionParts: count(ooxml, /pkg:name="\/word\/webextensions\//g),
+  };
+}
+
+/** Word merges rather than replaces these on import; any growth is duplication, never plan output. */
+export function wordPackageGrew(before: string, after: string): boolean {
+  const a = wordPackageCounts(before),
+    b = wordPackageCounts(after);
+  return (
+    b.customXmlItems > a.customXmlItems ||
+    b.customProperties > a.customProperties
+  );
+}
 
 interface PackageView {
   doc: Document;
@@ -822,6 +879,165 @@ function removeOptionalPart(v: PackageView, path: string, type: string): void {
   }
 }
 
+/** Only definitions in WordprocessingML itself may be treated as bookkeeping; extensions stay exact. */
+const plainNum = (num: Element) =>
+  [num, ...all(num, "*", "*")].every(
+    (e) =>
+      e.namespaceURI === W &&
+      Array.from(e.attributes).every(
+        (a) =>
+          a.namespaceURI === W ||
+          a.namespaceURI === XMLNS ||
+          (e === num && a.namespaceURI === CID && a.localName === "durableId"),
+      ),
+  );
+const plainAbstractNum = (definition: Element) =>
+  [definition, ...all(definition, "*", "*")].every(
+    (e) =>
+      e.namespaceURI === W &&
+      Array.from(e.attributes).every(
+        (a) =>
+          a.namespaceURI === W ||
+          a.namespaceURI === XMLNS ||
+          (e === definition &&
+            a.namespaceURI === W15 &&
+            a.localName === "restartNumberingAfterBreak"),
+      ),
+  );
+/** Outside w:numId only Word's own extension vocabularies could name a list instance;
+ * numeric VML, drawing and math ids are object ids. */
+const WORD_EXTENSIONS = "http://schemas.microsoft.com/office/word/";
+
+/** Content tier: a list instance is identified by the paragraphs that share it, not by its numId.
+ * Referenced instances get labels by first use (styles, then the body, then the other parts) and
+ * unreferenced plain definitions are dropped, so merged or split lists still differ. */
+function relabelListInstances(v: PackageView): {
+  labels: Map<string, string>;
+  removed: string[];
+} {
+  const path = "/word/numbering.xml",
+    root = v.roots.get(path);
+  if (!root) return { labels: new Map(), removed: [] };
+  const nums = definitions(root, "num", "numId");
+  const first = ["/word/styles.xml", "/word/document.xml"];
+  const owners = [
+    ...first,
+    ...[...v.roots.keys()]
+      .filter((owner) => owner !== path && !first.includes(owner))
+      .sort(),
+  ];
+  const labels = new Map<string, string>();
+  const references: Element[] = [];
+  // An unknown extension might name a list by id; such an instance is never dropped.
+  const pinned = new Set<string>();
+  for (const owner of owners) {
+    const part = v.roots.get(owner);
+    if (!part) continue;
+    for (const reference of all(part, W, "numId")) {
+      const id = attr(reference);
+      if (!nums.has(id)) continue;
+      if (!labels.has(id)) labels.set(id, `list-${labels.size + 1}`);
+      references.push(reference);
+    }
+    if (part.namespaceURI !== W) continue;
+    for (const element of [part, ...all(part, "*", "*")])
+      for (const a of Array.from(element.attributes))
+        if (a.namespaceURI?.startsWith(WORD_EXTENSIONS) && nums.has(a.value))
+          pinned.add(a.value);
+  }
+  for (const reference of references)
+    reference.setAttributeNS(W, "w:val", labels.get(attr(reference))!);
+  const removed: string[] = [];
+  for (const [id, num] of nums) {
+    const label = labels.get(id);
+    if (label) num.setAttributeNS(W, "w:numId", label);
+    else if (!pinned.has(id) && plainNum(num)) {
+      num.remove();
+      removed.push(`num:${id}`);
+    }
+  }
+  const used = new Set(
+    children(root)
+      .filter((e) => e.namespaceURI === W && e.localName === "num")
+      .map((e) => attr(direct(e, "abstractNumId"))),
+  );
+  for (const [id, definition] of definitions(
+    root,
+    "abstractNum",
+    "abstractNumId",
+  ))
+    if (!used.has(id) && plainAbstractNum(definition)) {
+      definition.remove();
+      removed.push(`abstractNum:${id}`);
+    }
+  return {
+    labels: new Map([...labels].map(([id, label]) => [label, id])),
+    removed,
+  };
+}
+
+/** Content tier: Word can rewrite spacing-before of the first body paragraph on import.
+ * Only that attribute of that paragraph is set aside; the caller discloses it. */
+function normalizeFirstParagraphSpacing(
+  expected: PackageView,
+  actual: PackageView,
+): boolean {
+  const spacing = (v: PackageView) =>
+    direct(direct(all(v.body, W, "p")[0], "pPr"), "spacing");
+  const a = spacing(expected),
+    b = spacing(actual);
+  if (attr(a, "before") === attr(b, "before")) return false;
+  for (const element of [a, b]) {
+    if (!element) continue;
+    element.removeAttributeNS(W, "before");
+    if (
+      !element.children.length &&
+      Array.from(element.attributes).every((x) => x.namespaceURI === XMLNS)
+    )
+      element.remove();
+  }
+  return true;
+}
+
+function normalizeContentTier(
+  expected: PackageView,
+  actual: PackageView,
+  allowFirstParagraphSpacing: boolean,
+): WordApplyAdjustment[] {
+  const adjustments = new Set<WordApplyAdjustment>();
+  const before = relabelListInstances(expected),
+    after = relabelListInstances(actual);
+  const labels = new Set([...before.labels.keys(), ...after.labels.keys()]);
+  if ([...labels].some((l) => before.labels.get(l) !== after.labels.get(l)))
+    adjustments.add("list-instance-renumbered");
+  // Unused definitions on both sides are not a change, and an instance left behind by renumbering
+  // belongs to that adjustment; any other unused definition is identity bookkeeping.
+  const stray = (
+    removed: string[],
+    other: { labels: Map<string, string>; removed: string[] },
+  ) => {
+    const referenced = new Set(other.labels.values());
+    return removed.some(
+      (entry) =>
+        !other.removed.includes(entry) &&
+        !(entry.startsWith("num:") && referenced.has(entry.slice(4))),
+    );
+  };
+  if (stray(before.removed, after) || stray(after.removed, before))
+    adjustments.add("numbering-identity");
+  if (
+    removeWordNumberingIdentity(expected.doc).join() !==
+    removeWordNumberingIdentity(actual.doc).join()
+  )
+    adjustments.add("numbering-identity");
+  if (
+    allowFirstParagraphSpacing &&
+    normalizeFirstParagraphSpacing(expected, actual)
+  )
+    adjustments.add("first-paragraph-spacing");
+  return WORD_APPLY_ADJUSTMENTS.filter((code) => adjustments.has(code));
+}
+
 /** numId identifies a list instance, not just its definition; distinct instances must not collapse. */
 function normalizeAddedNumbering(
   expected: PackageView,
@@ -882,22 +1098,7 @@ function normalizeAddedNumbering(
           before,
         ]);
     }
-    if (
-      !requiredNums.has(id) &&
-      [num, ...all(num, "*", "*")].every(
-        (e) =>
-          e.namespaceURI === W &&
-          Array.from(e.attributes).every(
-            (a) =>
-              a.namespaceURI === W ||
-              a.namespaceURI === XMLNS ||
-              (e === num &&
-                a.namespaceURI === CID &&
-                a.localName === "durableId"),
-          ),
-      )
-    )
-      num.remove();
+    if (!requiredNums.has(id) && plainNum(num)) num.remove();
   }
   for (const [definition, originals] of matchedAbstracts) {
     for (const name of ["nsid", "tmpl"]) {
@@ -943,18 +1144,7 @@ function normalizeAddedNumbering(
     if (remaining > 0) originalSignatures.set(signature, remaining - 1);
     else if (
       !requiredAbstracts.has(attr(definition, "abstractNumId")) &&
-      [definition, ...all(definition, "*", "*")].every(
-        (e) =>
-          e.namespaceURI === W &&
-          Array.from(e.attributes).every(
-            (a) =>
-              a.namespaceURI === W ||
-              a.namespaceURI === XMLNS ||
-              (e === definition &&
-                a.namespaceURI === W15 &&
-                a.localName === "restartNumberingAfterBreak"),
-          ),
-      )
+      plainAbstractNum(definition)
     )
       definition.remove();
   }
@@ -1257,12 +1447,20 @@ export function wordFullDocumentDifferingParts(
   return wordFullDocumentDifferences(expectedXml, actualXml).parts;
 }
 
-/** With `locate`, also names where each differing content part first diverges (structure only, no text or values). */
+/** With `locate`, also names where each differing content part first diverges (structure only, no text or values).
+ * The content tier adds the normalizations named by WORD_APPLY_ADJUSTMENTS; it is only for write and
+ * restore verification after strict comparison failed. */
 export function wordFullDocumentDifferences(
   expectedXml: string,
   actualXml: string,
   locate = false,
-): { parts: string[]; locations: string[] } {
+  tier: WordVerifyTier = "strict",
+  allowFirstParagraphSpacing = false,
+): {
+  parts: string[];
+  locations: string[];
+  adjustments: WordApplyAdjustment[];
+} {
   const expected = view(expectedXml),
     actual = view(actualXml);
   for (const v of [expected, actual]) {
@@ -1281,6 +1479,10 @@ export function wordFullDocumentDifferences(
   normalizeAddedStyles(expected, actual);
   normalizeAddedNumbering(expected, actual);
   normalizeAddedNoteSeparators(expected, actual);
+  const adjustments =
+    tier === "content"
+      ? normalizeContentTier(expected, actual, allowFirstParagraphSpacing)
+      : [];
   normalizeCompatibility(expected);
   normalizeCompatibility(actual);
   normalizeDefinitionOrder(expected);
@@ -1290,7 +1492,7 @@ export function wordFullDocumentDifferences(
   const parts = [...new Set([...a.keys(), ...b.keys()])].filter(
     (path) => a.get(path) !== b.get(path),
   );
-  if (!locate) return { parts, locations: [] };
+  if (!locate) return { parts, locations: [], adjustments };
   const ca = createWordXmlComparison(expected.doc),
     cb = createWordXmlComparison(actual.doc);
   const locations = parts
@@ -1303,7 +1505,7 @@ export function wordFullDocumentDifferences(
         ? [`${path}: ${firstDivergence(x, y, path, ca, cb)}`]
         : [`${path}: ${x ? "missing after write" : "added by Word"}`];
     });
-  return { parts, locations };
+  return { parts, locations, adjustments };
 }
 
 const QNAME = /^[A-Za-z0-9_.:-]{1,64}$/;

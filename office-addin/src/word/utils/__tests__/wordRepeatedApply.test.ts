@@ -1,0 +1,151 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+  statusRewritePlan,
+} from "../../../test/mocks/word/realisticWordFixtures";
+import { renderWordDiagnosticReport } from "../wordApplyDiagnostics";
+import {
+  applyWordDocumentPlan,
+  revertWordDocumentPlan,
+} from "../wordApplyDocumentPlan";
+import { wordPackageCounts } from "../wordFullDocumentComparison";
+
+import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
+import type { WordDocumentApplyResult } from "../wordApplyDocumentPlan";
+
+afterEach(() => vi.unstubAllGlobals());
+
+/** Shape that must not change: parts other than Word's own task-pane records, customXml, custom properties. */
+const shape = (ooxml: string) => {
+  const counts = wordPackageCounts(ooxml);
+  return {
+    parts: counts.parts - counts.webextensionParts,
+    customXmlItems: counts.customXmlItems,
+    customProperties: counts.customProperties,
+  };
+};
+
+async function applyCycles(options: WordOoxmlHostOptions, cycles: number) {
+  const host = installWordOoxmlHost(realisticWordPackageXml(), options);
+  const shapes = [shape(host.ooxml())];
+  const results: WordDocumentApplyResult[] = [];
+  for (let cycle = 1; cycle <= cycles; cycle++) {
+    const snapshot = await captureRealisticSnapshot(`message-${cycle}`);
+    expect(snapshot.issue).toBeUndefined();
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(statusRewritePlan(snapshot, `Status update ${cycle}.`)),
+      snapshot,
+      `message-${cycle}`,
+    );
+    results.push(result);
+    if (result.status !== "applied") break;
+    shapes.push(shape(host.ooxml()));
+  }
+  return { host, shapes, results };
+}
+
+// Each cycle captures, compiles, imports and verifies a complete DOCX twice over.
+describe("repeated full-document Apply", { timeout: 60_000 }, () => {
+  it("verifies every Word PC import at the content tier without growing the package, then reverts", async () => {
+    const { host, shapes, results } = await applyCycles(
+      {
+        profile: "word-pc-16.0.20326",
+        rePointKeptLists: true,
+        spacingDrift: true,
+      },
+      5,
+    );
+    for (const result of results) {
+      expect(
+        result.status,
+        renderWordDiagnosticReport("apply", result.status, result.diagnostic),
+      ).toBe("applied");
+      expect(result.outcome).toEqual({
+        route: "import",
+        tier: "content",
+        adjustments: [
+          "numbering-identity",
+          "list-instance-renumbered",
+          "first-paragraph-spacing",
+        ],
+      });
+    }
+    expect(results).toHaveLength(5);
+    expect(host.importOptions).toHaveLength(5);
+    for (const options of host.importOptions)
+      expect(options).toMatchObject({
+        importCustomXmlParts: false,
+        importCustomProperties: false,
+      });
+    expect(new Set(shapes.map((s) => JSON.stringify(s))).size).toBe(1);
+    expect(shapes[0]).toMatchObject({ customXmlItems: 3, customProperties: 4 });
+    expect(wordPackageCounts(host.ooxml()).webextensionParts).toBe(0);
+    expect(host.ooxml()).toContain("Status update 5.");
+
+    const last = results.at(-1)!;
+    const reverted = await revertWordDocumentPlan(
+      last.before!,
+      last.afterFingerprint!,
+    );
+    expect(
+      reverted.status,
+      renderWordDiagnosticReport(
+        "revert",
+        reverted.status,
+        reverted.diagnostic,
+      ),
+    ).toBe("reverted");
+    expect(reverted.outcome).toMatchObject({
+      route: "import",
+      tier: "content",
+    });
+    expect(host.ooxml()).toContain("Status update 4.");
+    expect(shape(host.ooxml())).toEqual(shapes[0]);
+  });
+
+  it("stops with a package-growth report when Word duplicates customXml despite the import options", async () => {
+    const { host, results } = await applyCycles(
+      { profile: "word-pc-16.0.20326", ignoreImportOptions: true },
+      1,
+    );
+    const [result] = results;
+    expect(result.status).toBe("interrupted");
+    expect(result.diagnostic).toMatchObject({
+      stage: "verify",
+      reason: "package-growth",
+    });
+    expect(result.before).toBeTruthy();
+    const items = Object.fromEntries(
+      result.diagnostic!.details!.packages!.map((p) => [
+        p.label,
+        p.customXmlItems,
+      ]),
+    );
+    expect(items).toEqual({ live: 3, expected: 3, actual: 6 });
+    const report = renderWordDiagnosticReport(
+      "apply",
+      result.status,
+      result.diagnostic,
+    );
+    expect(report).toContain("Reason: package-growth");
+    expect(report).toMatch(/^Package live: \d+ parts, 3 customXml items/m);
+    expect(report).toMatch(/^Package expected: \d+ parts, 3 customXml items/m);
+    expect(report).toMatch(/^Package actual: \d+ parts, 6 customXml items/m);
+    expect(wordPackageCounts(host.ooxml()).customXmlItems).toBe(6);
+  });
+
+  it("verifies every Word for the web import strictly", async () => {
+    const { shapes, results } = await applyCycles({ profile: "word-web" }, 5);
+    expect(results.map((r) => r.status)).toEqual(Array(5).fill("applied"));
+    for (const result of results)
+      expect(result.outcome).toEqual({
+        route: "import",
+        tier: "strict",
+        adjustments: [],
+      });
+    expect(new Set(shapes.map((s) => JSON.stringify(s))).size).toBe(1);
+  });
+});

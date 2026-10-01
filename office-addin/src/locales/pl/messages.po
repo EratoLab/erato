@@ -1760,6 +1760,11 @@ msgid "officeAddin.word.apply.stage.writing"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.adjustment.firstParagraphSpacing"
+msgstr "Program Word zmienił również odstęp przed pierwszym akapitem."
+
+#. js-lingui-explicit-id
 #. placeholder {0}: headings.length
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.afterOutline"
@@ -2163,6 +2168,11 @@ msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Program Word zapisał zmiany, ale nie udało się zweryfikować wyniku. Oryginał został zapisany do odzyskania."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.packageGrowth"
+msgstr "Program Word dodał zduplikowane dane dokumentu podczas zapisywania. Oryginał został zapisany do odzyskania."
+
+#. js-lingui-explicit-id
 #. placeholder {0}: layout.width
 #. placeholder {1}: layout.height
 #: src/word/components/WordSectionPlanPreview.tsx
@@ -2236,6 +2246,11 @@ msgstr "Przywróć oryginalną treść dokumentu"
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.restoreDocument"
 msgstr "Przywróć oryginalny dokument"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restorePackageGrowth"
+msgstr "Program Word dodał zduplikowane dane dokumentu podczas przywracania. Zapisany oryginał nadal jest dostępny do odzyskania."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

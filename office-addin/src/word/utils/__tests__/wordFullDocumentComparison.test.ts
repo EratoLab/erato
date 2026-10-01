@@ -18,9 +18,13 @@ import expectedReusedRestore from "../../../test/fixtures/word-rich-native/nativ
 import observedReusedRestore from "../../../test/fixtures/word-rich-native/native-edit-reused-restore-observed.xml?raw";
 import expectedStories from "../../../test/fixtures/word-rich-native/stories-expected.xml?raw";
 import observedStories from "../../../test/fixtures/word-rich-native/stories-observed.xml?raw";
+import { realisticWordPackageXml } from "../../../test/mocks/word/realisticWordFixtures";
 import {
   sameWordFullDocumentContent,
   wordFullDocumentComparisonIssue,
+  wordFullDocumentDifferences,
+  wordPackageCounts,
+  wordPackageGrew,
 } from "../wordFullDocumentComparison";
 import { createWordXmlComparison } from "../wordXmlComparison";
 
@@ -591,5 +595,71 @@ describe("native full-document comparison", () => {
         ),
       ),
     ).toBe(false);
+  });
+});
+
+describe("content-tier full-document comparison", () => {
+  const source = realisticWordPackageXml();
+  const renamed = (xml: string) =>
+    change(xml, (d) =>
+      all(d, W, "nsid").forEach((e, i) =>
+        e.setAttributeNS(W, "w:val", `ABCD${String(i).padStart(4, "0")}`),
+      ),
+    );
+
+  it("adds its normalizations only when asked and names them", () => {
+    const strict = wordFullDocumentDifferences(source, renamed(source));
+    // The numbering relationship is compared by its target's content, so it differs too.
+    expect(strict.parts).toEqual([
+      "/word/_rels/document.xml.rels",
+      "/word/numbering.xml",
+    ]);
+    expect(strict.adjustments).toEqual([]);
+    expect(
+      wordFullDocumentDifferences(source, renamed(source), false, "content"),
+    ).toEqual({
+      parts: [],
+      locations: [],
+      adjustments: ["numbering-identity"],
+    });
+  });
+
+  it("keeps a renamed definition with changed content different", () => {
+    const changed = change(renamed(source), (d) =>
+      all(d, W, "lvlText")[0].setAttributeNS(W, "w:val", "%1:"),
+    );
+    expect(
+      wordFullDocumentDifferences(source, changed, false, "content").parts,
+    ).toEqual(["/word/_rels/document.xml.rels", "/word/numbering.xml"]);
+  });
+
+  it("counts package shape and flags only customXml or custom-property growth", () => {
+    const item = (n: number) =>
+      `<pkg:part pkg:name="/customXml/item${n}.xml" pkg:contentType="application/xml"><pkg:xmlData><x/></pkg:xmlData></pkg:part>`;
+    const custom = (n: number) =>
+      `<pkg:part pkg:name="/docProps/custom.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"><pkg:xmlData><Properties xmlns="urn:p">${'<property pid="2"/>'.repeat(n)}</Properties></pkg:xmlData></pkg:part>`;
+    const pkg = (...parts: string[]) =>
+      `<pkg:package xmlns:pkg="${PKG}">${parts.join("")}</pkg:package>`;
+    expect(wordPackageCounts(pkg(item(1), custom(2)))).toEqual({
+      parts: 2,
+      customXmlItems: 1,
+      customProperties: 2,
+      abstractNums: 0,
+      nums: 0,
+      webextensionParts: 0,
+    });
+    expect(
+      wordPackageGrew(pkg(item(1), custom(2)), pkg(item(1), custom(2))),
+    ).toBe(false);
+    expect(
+      wordPackageGrew(
+        pkg(item(1), custom(2)),
+        pkg(item(1), item(2), custom(2)),
+      ),
+    ).toBe(true);
+    expect(
+      wordPackageGrew(pkg(item(1), custom(2)), pkg(item(1), custom(3))),
+    ).toBe(true);
+    expect(wordPackageGrew(pkg(item(1), item(2)), pkg(item(1)))).toBe(false);
   });
 });

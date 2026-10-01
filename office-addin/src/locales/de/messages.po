@@ -1760,6 +1760,11 @@ msgid "officeAddin.word.apply.stage.writing"
 msgstr "Wird angewendet…"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.adjustment.firstParagraphSpacing"
+msgstr "Word hat außerdem den Abstand vor dem ersten Absatz geändert."
+
+#. js-lingui-explicit-id
 #. placeholder {0}: headings.length
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.afterOutline"
@@ -2163,6 +2168,11 @@ msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Word hat Änderungen vorgenommen, das Ergebnis konnte jedoch nicht überprüft werden. Das Original ist zur Wiederherstellung gespeichert."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.packageGrowth"
+msgstr "Word hat beim Schreiben doppelte Dokumentdaten hinzugefügt. Das Original ist zur Wiederherstellung gespeichert."
+
+#. js-lingui-explicit-id
 #. placeholder {0}: layout.width
 #. placeholder {1}: layout.height
 #: src/word/components/WordSectionPlanPreview.tsx
@@ -2236,6 +2246,11 @@ msgstr "Ursprünglichen Dokumenttext wiederherstellen"
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.restoreDocument"
 msgstr "Originaldokument wiederherstellen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restorePackageGrowth"
+msgstr "Word hat beim Wiederherstellen doppelte Dokumentdaten hinzugefügt. Das gespeicherte Original steht weiterhin zur Wiederherstellung bereit."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

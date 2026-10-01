@@ -378,6 +378,14 @@ describe("coherent structural execution", () => {
     expect(host.insert).toHaveBeenCalledTimes(2);
   });
   it("retains recovery and a state guard when Word writes a result that differs from the plan", async () => {
+    const bodyPackageCounts = {
+      parts: 3,
+      customXmlItems: 0,
+      customProperties: 0,
+      abstractNums: 0,
+      nums: 0,
+      webextensionParts: 0,
+    };
     const s = readySnapshot();
     const host = word(s.ooxml, (xml) =>
       xml.replace("Recommendation", "Different heading"),
@@ -393,9 +401,10 @@ describe("coherent structural execution", () => {
       reason: "output-mismatch",
       details: {
         parts: ["/word/document.xml"],
+        verifyTier: "content",
         packages: [
-          { label: "expected", parts: 3, customXmlItems: 0 },
-          { label: "actual", parts: 3, customXmlItems: 0 },
+          { label: "expected", ...bodyPackageCounts },
+          { label: "actual", ...bodyPackageCounts },
         ],
       },
     });

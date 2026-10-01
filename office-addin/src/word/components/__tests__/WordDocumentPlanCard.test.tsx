@@ -14,6 +14,12 @@ import {
   readySnapshot,
   wordSerializationNoise,
 } from "../../../test/mocks/word/authoringFixtures";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+  statusRewritePlan,
+} from "../../../test/mocks/word/realisticWordFixtures";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { buildWordArtifact } from "../../utils/buildWordArtifact";
 import { WordDocumentReadSession } from "../../utils/wordDocumentReadTool";
@@ -484,6 +490,55 @@ describe("structural document review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
     await waitFor(() => expect(state.insert).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+  it("discloses Word's own first-paragraph spacing change after a verified import, with Revert as before", async () => {
+    const word = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+      spacingDrift: true,
+    });
+    const messageId = String(mock.artifact.messageId);
+    const snapshot = await captureRealisticSnapshot(messageId);
+    const capture: WordDocumentCapture = {
+      identity: "doc-A",
+      authoring: snapshot,
+      ordinalMap: new Map(),
+      paragraphsSent: snapshot.blocks.length,
+      renderedOrdinals: new Set(),
+      partialOrdinal: null,
+    };
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map([[messageId, capture]])}
+      >
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content={JSON.stringify(
+            statusRewritePlan(snapshot, "Status: revised."),
+          )}
+        />
+      </WordWriteProvider>,
+      { wrapper: TestTheme },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply document rewrite" }),
+    );
+    await screen.findByText("Document rewrite applied");
+    const note = screen.getByTestId("word-plan-adjustments");
+    expect(note).toBeVisible();
+    expect(note).toHaveTextContent(
+      "Word also changed the spacing before the first paragraph.",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(word.insert).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: "Download original document" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Revert batch" }));
+    await screen.findByText("Document body restored");
+    expect(word.insert).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Revert batch" })).toBeNull();
   });
   it("respects the structural action permission independently of paragraph edits", () => {
     mock.decisions = {

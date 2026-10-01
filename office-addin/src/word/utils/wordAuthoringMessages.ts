@@ -3,6 +3,7 @@ import { t } from "@lingui/core/macro";
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
 import type { WordPlanIssue } from "./wordDocumentPlan";
+import type { WordApplyAdjustment } from "./wordFullDocumentComparison";
 
 export function wordDocumentDiagnosticText(
   diagnostic: WordDocumentDiagnostic,
@@ -32,6 +33,18 @@ export function wordDocumentDiagnosticText(
           message:
             "Word wrote changes, but the result could not be verified. Your original is saved for recovery.",
         });
+  if (diagnostic.reason === "package-growth")
+    return restoring
+      ? t({
+          id: "officeAddin.word.authoring.restorePackageGrowth",
+          message:
+            "Word added duplicate document data while restoring. Your saved original is still available for recovery.",
+        })
+      : t({
+          id: "officeAddin.word.authoring.packageGrowth",
+          message:
+            "Word added duplicate document data while writing. Your original is saved for recovery.",
+        });
   if (diagnostic.reason === "compile-failed")
     return t({
       id: "officeAddin.word.authoring.compileFailed",
@@ -56,6 +69,21 @@ export function wordDocumentDiagnosticText(
   )
     return wordAuthoringIssueText("no-capture");
   return wordAuthoringIssueText(diagnostic.reason);
+}
+
+/** Only visible adjustments have text; list bookkeeping is not something a reader can see. */
+export function wordApplyAdjustmentText(
+  adjustment: WordApplyAdjustment,
+): string | undefined {
+  switch (adjustment) {
+    case "first-paragraph-spacing":
+      return t({
+        id: "officeAddin.word.authoring.adjustment.firstParagraphSpacing",
+        message: "Word also changed the spacing before the first paragraph.",
+      });
+    default:
+      return undefined;
+  }
 }
 
 export function wordAuthoringIssueText(

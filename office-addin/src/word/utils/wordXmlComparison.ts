@@ -114,6 +114,33 @@ export function isWordHostStateRelationship(rel: Element): boolean {
   );
 }
 
+/** Word reassigns list definition nsid/tmpl values on import; they identify a definition, they do not
+ * format it. Returns the removed values so callers can tell whether they differed. */
+export function removeWordNumberingIdentity(
+  root: Document | Element,
+): string[] {
+  const removed: string[] = [];
+  for (const definition of wordXmlElements(root, W, "abstractNum"))
+    for (const child of Array.from(definition.children)) {
+      const value = child.getAttributeNS(W, "val") ?? "";
+      if (
+        child.namespaceURI === W &&
+        ["nsid", "tmpl"].includes(child.localName) &&
+        !child.children.length &&
+        Array.from(child.attributes).every(
+          (a) =>
+            a.namespaceURI === XMLNS ||
+            (a.namespaceURI === W && a.localName === "val"),
+        ) &&
+        /^[0-9a-f]{8}$/i.test(value)
+      ) {
+        removed.push(`${child.localName}:${value.toUpperCase()}`);
+        child.remove();
+      }
+    }
+  return removed.sort();
+}
+
 export interface WordXmlComparison {
   fingerprint: () => string;
   /** Per-part strict signatures of a package; empty for a bare body fragment. */

@@ -1760,6 +1760,11 @@ msgid "officeAddin.word.apply.stage.writing"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.adjustment.firstParagraphSpacing"
+msgstr "Word a également modifié l’espacement avant le premier paragraphe."
+
+#. js-lingui-explicit-id
 #. placeholder {0}: headings.length
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.afterOutline"
@@ -2163,6 +2168,11 @@ msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Word a effectué des modifications, mais le résultat n’a pas pu être vérifié. L’original est enregistré pour la récupération."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.packageGrowth"
+msgstr "Word a ajouté des données de document en double lors de l’écriture. L’original est enregistré pour la récupération."
+
+#. js-lingui-explicit-id
 #. placeholder {0}: layout.width
 #. placeholder {1}: layout.height
 #: src/word/components/WordSectionPlanPreview.tsx
@@ -2236,6 +2246,11 @@ msgstr "Restaurer le corps d’origine"
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.restoreDocument"
 msgstr "Restaurer le document d’origine"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restorePackageGrowth"
+msgstr "Word a ajouté des données de document en double lors de la restauration. L’original enregistré reste disponible pour la récupération."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

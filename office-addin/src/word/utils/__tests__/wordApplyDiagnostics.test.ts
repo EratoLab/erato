@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   renderWordDiagnosticReport,
@@ -19,6 +19,8 @@ const pkg = (parts: [string, string][]) =>
 const body = (text: string) =>
   `<w:document xmlns:w="${W}"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`;
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe("Word apply diagnostics", () => {
   it("counts package and customXml parts", () => {
     const xml = pkg([
@@ -31,6 +33,10 @@ describe("Word apply diagnostics", () => {
       label: "actual",
       parts: 4,
       customXmlItems: 2,
+      customProperties: 0,
+      abstractNums: 0,
+      nums: 0,
+      webextensionParts: 0,
     });
   });
 
@@ -82,5 +88,51 @@ describe("Word apply diagnostics", () => {
       "Package actual: 3472 parts, 1152 customXml items",
     );
     expect(report).toMatch(/^Host: /m);
+  });
+
+  it("reports the verify tier, known adjustment codes, numbering counts and requirement sets", () => {
+    vi.stubGlobal("Office", {
+      context: {
+        diagnostics: { host: "Word", platform: "PC", version: "16.0.20326" },
+        requirements: {
+          isSetSupported: (_name: string, version: string) => version !== "1.7",
+        },
+      },
+    });
+    const report = renderWordDiagnosticReport("apply", "interrupted", {
+      stage: "verify",
+      reason: "package-growth",
+      details: {
+        verifyTier: "content",
+        adjustments: [
+          "numbering-identity",
+          "<private>" as never,
+          "first-paragraph-spacing",
+        ],
+        packages: [
+          {
+            label: "actual",
+            parts: 40,
+            customXmlItems: 6,
+            customProperties: 8,
+            abstractNums: 3,
+            nums: 7,
+            webextensionParts: 0,
+          },
+        ],
+      },
+    });
+    expect(report).toContain("Reason: package-growth");
+    expect(report).toContain("Verify tier: content");
+    expect(report).toContain(
+      "Adjustments: numbering-identity, first-paragraph-spacing",
+    );
+    expect(report).not.toContain("<private>");
+    expect(report).toContain(
+      "Package actual: 40 parts, 6 customXml items, 8 custom properties, 3 abstractNum, 7 num, 0 task pane parts",
+    );
+    expect(report).toContain(
+      "Host: Word PC 16.0.20326 · WordApi 1.6: yes · WordApi 1.7: no",
+    );
   });
 });

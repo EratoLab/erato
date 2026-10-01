@@ -1,4 +1,5 @@
 import type {
+  WordApplyOutcome,
   WordDocumentApplyStatus,
   WordDocumentDiagnostic,
 } from "./wordApplyDocumentPlan";
@@ -30,6 +31,8 @@ export interface WordReviewState {
   detailsExpanded?: boolean;
   documentPlanStatus?: WordDocumentApplyStatus | "revert-stale";
   documentPlanDiagnostic?: WordDocumentDiagnostic;
+  /** Outcome of the last verified Apply or Revert of this plan. */
+  documentPlanOutcome?: WordApplyOutcome;
   /** Kept in the provider so the busy label survives card remounts. */
   applyStage?: WordApplyStage;
 }

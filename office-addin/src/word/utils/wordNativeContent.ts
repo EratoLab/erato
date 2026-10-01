@@ -2,7 +2,10 @@ import {
   effectiveWordMediaChildren,
   isWordMediaElementActive,
 } from "./wordMediaComparison";
-import { createWordXmlComparison } from "./wordXmlComparison";
+import {
+  createWordXmlComparison,
+  removeWordNumberingIdentity,
+} from "./wordXmlComparison";
 
 export const WORD_NS =
   "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -301,10 +304,21 @@ export function preservedWordStories(doc: Document): string[] {
   );
 }
 
-/** Check even unreferenced stories; the compiler may extend styles and numbering separately. */
-export function sameWordPreservedParts(before: string, after: string): boolean {
+/** Check even unreferenced stories; the compiler may extend styles and numbering separately.
+ * The content tier only ignores list definition nsid/tmpl; every other part stays exact. */
+export function sameWordPreservedParts(
+  before: string,
+  after: string,
+  tier: "strict" | "content" = "strict",
+): boolean {
   const parse = (v: string) =>
     new DOMParser().parseFromString(v, "application/xml");
+  if (tier === "content")
+    [before, after] = [before, after].map((value) => {
+      const doc = parse(value);
+      removeWordNumberingIdentity(doc);
+      return new XMLSerializer().serializeToString(doc);
+    });
   const a = parse(before),
     b = parse(after);
   const beforeSignature = createNativeContentSignature(before);

@@ -29,8 +29,9 @@ import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
+  verifyWordPlanWrite,
+  verifyWordRestore,
   wordDocumentFingerprint,
-  sameWordBodyContent,
 } from "./wordDocumentXml";
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
 import { wordWriteHost } from "./wordWriteHost";
@@ -43,6 +44,11 @@ import type {
   WordDocumentPlan,
   WordPlanIssue,
 } from "./wordDocumentPlan";
+import type { WordWriteVerification } from "./wordDocumentXml";
+import type {
+  WordApplyAdjustment,
+  WordVerifyTier,
+} from "./wordFullDocumentComparison";
 
 export type WordDocumentApplyStatus =
   | "applied"
@@ -58,10 +64,17 @@ export interface WordDocumentDiagnostic {
     | "source-changed"
     | "compile-failed"
     | "output-mismatch"
+    | "package-growth"
     | "host-error";
   officeCode?: string;
   officeLocation?: string;
   details?: WordDiagnosticDetails;
+}
+/** How a verified write went in: which writer ran and how leniently its result was compared. */
+export interface WordApplyOutcome {
+  route: "import" | "body";
+  tier: WordVerifyTier;
+  adjustments: WordApplyAdjustment[];
 }
 export interface WordDocumentApplyResult {
   status: WordDocumentApplyStatus;
@@ -69,11 +82,13 @@ export interface WordDocumentApplyResult {
   /** Observed post-state, including an unverified/partially written result. */
   afterFingerprint?: string;
   diagnostic?: WordDocumentDiagnostic;
+  outcome?: WordApplyOutcome;
 }
 export interface WordDocumentRevertResult {
   status: "reverted" | "stale" | "interrupted";
   afterFingerprint?: string;
   diagnostic?: WordDocumentDiagnostic;
+  outcome?: WordApplyOutcome;
 }
 
 /** Only error codes/API locations, part paths and counts, never statements, document text or raw debugInfo. */
@@ -109,6 +124,26 @@ function diagnostic(
       : {}),
     ...(Object.keys(merged).length ? { details: merged } : {}),
   };
+}
+
+function outcome(
+  route: WordApplyOutcome["route"],
+  verification: Extract<WordWriteVerification, { ok: true }>,
+): WordApplyOutcome {
+  return {
+    route,
+    tier: verification.tier,
+    adjustments: verification.adjustments,
+  };
+}
+
+/** A content mismatch means the lenient tier failed too; growth is decided before any comparison. */
+function failedTier(
+  verification: Extract<WordWriteVerification, { ok: false }>,
+): Pick<WordDiagnosticDetails, "verifyTier"> {
+  return verification.reason === "output-mismatch"
+    ? { verifyTier: "content" }
+    : {};
 }
 
 /** Read a fresh context after a rejected batch; never retry the mutation. */
@@ -259,21 +294,28 @@ async function applyPlan(
         "verify",
       );
       const afterFingerprint = verified.fingerprint || undefined;
-      if (!verifyWordPlanOutput(plan, snapshot, verified))
+      const verification = verifyWordPlanWrite(plan, snapshot, verified);
+      if (!verification.ok)
         return {
           status: "interrupted",
           before,
           afterFingerprint,
-          diagnostic: diagnostic("verify", "output-mismatch", undefined, {
+          diagnostic: diagnostic("verify", verification.reason, undefined, {
             ...strictDifferingParts(compiled, after.value),
             ...(verified.issue ? { snapshotIssue: verified.issue } : {}),
+            ...failedTier(verification),
             ...packageStats([
               ["expected", compiled],
               ["actual", after.value],
             ]),
           }),
         };
-      return { status: "applied", before, afterFingerprint };
+      return {
+        status: "applied",
+        before,
+        afterFingerprint,
+        outcome: outcome("body", verification),
+      };
     });
   } catch (error) {
     return {
@@ -350,18 +392,25 @@ async function revertPlan(
         "verify",
       );
       const afterFingerprint = restored.fingerprint || undefined;
-      if (!sameWordBodyContent(original, restored))
+      const verification = verifyWordRestore(original, restored);
+      if (!verification.ok)
         return {
           status: "interrupted",
           afterFingerprint,
-          diagnostic: diagnostic(
-            "restore",
-            "output-mismatch",
-            undefined,
-            strictDifferingParts(before, after.value),
-          ),
+          diagnostic: diagnostic("restore", verification.reason, undefined, {
+            ...strictDifferingParts(before, after.value),
+            ...failedTier(verification),
+            ...packageStats([
+              ["expected", before],
+              ["actual", after.value],
+            ]),
+          }),
         };
-      return { status: "reverted", afterFingerprint };
+      return {
+        status: "reverted",
+        afterFingerprint,
+        outcome: outcome("body", verification),
+      };
     });
   } catch (error) {
     return {
@@ -483,14 +532,16 @@ async function applyFullDocument(
       );
       // The snapshot fingerprints the same package; the lazy package fingerprint is only a fallback.
       const afterFingerprint = actual.fingerprint || after.fingerprint;
-      if (!verifyWordPlanOutput(plan, snapshot, actual))
+      const verification = verifyWordPlanWrite(plan, snapshot, actual);
+      if (!verification.ok)
         return {
           status: "interrupted",
           before,
           afterFingerprint,
-          diagnostic: diagnostic("verify", "output-mismatch", undefined, {
+          diagnostic: diagnostic("verify", verification.reason, undefined, {
             ...verifyDifferingParts(compiled, after.ooxml),
             ...(actual.issue ? { snapshotIssue: actual.issue } : {}),
+            ...failedTier(verification),
             ...packageStats([
               ["live", live.ooxml],
               ["expected", compiled],
@@ -498,7 +549,12 @@ async function applyFullDocument(
             ]),
           }),
         };
-      return { status: "applied", before, afterFingerprint };
+      return {
+        status: "applied",
+        before,
+        afterFingerprint,
+        outcome: outcome("import", verification),
+      };
     });
   } catch (error) {
     if (!imported && locks.length)
@@ -623,19 +679,26 @@ async function revertFullDocument(
         "verify",
       );
       const afterFingerprint = restored.fingerprint || after.fingerprint;
-      if (!sameWordBodyContent(expected, restored))
+      const verification = verifyWordRestore(expected, restored);
+      if (!verification.ok)
         return {
           status: "interrupted",
           afterFingerprint,
-          diagnostic: diagnostic("restore", "output-mismatch", undefined, {
+          diagnostic: diagnostic("restore", verification.reason, undefined, {
             ...verifyDifferingParts(original.ooxml, after.ooxml),
+            ...failedTier(verification),
             ...packageStats([
+              ["live", live.ooxml],
               ["expected", original.ooxml],
               ["actual", after.ooxml],
             ]),
           }),
         };
-      return { status: "reverted", afterFingerprint };
+      return {
+        status: "reverted",
+        afterFingerprint,
+        outcome: outcome("import", verification),
+      };
     });
   } catch (error) {
     if (!imported && locks.length)

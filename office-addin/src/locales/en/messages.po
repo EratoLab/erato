@@ -1760,6 +1760,11 @@ msgid "officeAddin.word.apply.stage.writing"
 msgstr "Applying…"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.adjustment.firstParagraphSpacing"
+msgstr "Word also changed the spacing before the first paragraph."
+
+#. js-lingui-explicit-id
 #. placeholder {0}: headings.length
 #: src/word/components/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.authoring.afterOutline"
@@ -2163,6 +2168,11 @@ msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Word wrote changes, but the result could not be verified. Your original is saved for recovery."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.packageGrowth"
+msgstr "Word added duplicate document data while writing. Your original is saved for recovery."
+
+#. js-lingui-explicit-id
 #. placeholder {0}: layout.width
 #. placeholder {1}: layout.height
 #: src/word/components/WordSectionPlanPreview.tsx
@@ -2236,6 +2246,11 @@ msgstr "Restore original body"
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.restoreDocument"
 msgstr "Restore original document"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restorePackageGrowth"
+msgstr "Word added duplicate document data while restoring. Your saved original is still available for recovery."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
