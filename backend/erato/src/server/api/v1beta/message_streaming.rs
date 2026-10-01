@@ -138,6 +138,48 @@ fn generation_tool_call_id(assistant_message_id: Uuid, turn: usize, call_id: &st
     format!("{assistant_message_id}:{turn}:{call_id}")
 }
 
+fn provider_tool_call_id(tool_call_id: &str) -> String {
+    let mut parts = tool_call_id.splitn(3, ':');
+    let Some(message_id) = parts.next() else {
+        return tool_call_id.to_string();
+    };
+    let Some(turn) = parts.next() else {
+        return tool_call_id.to_string();
+    };
+    let Some(provider_call_id) = parts.next() else {
+        return tool_call_id.to_string();
+    };
+
+    if Uuid::parse_str(message_id).is_ok() && turn.parse::<usize>().is_ok() {
+        provider_call_id.to_string()
+    } else {
+        tool_call_id.to_string()
+    }
+}
+
+fn restore_provider_tool_call_ids(chat_request: &mut ChatRequest) {
+    for message in &mut chat_request.messages {
+        let parts: Vec<GenAiContentPart> = message
+            .content
+            .clone()
+            .into_parts()
+            .into_iter()
+            .map(|part| match part {
+                GenAiContentPart::ToolCall(mut call) => {
+                    call.call_id = provider_tool_call_id(&call.call_id);
+                    GenAiContentPart::ToolCall(call)
+                }
+                GenAiContentPart::ToolResponse(mut response) => {
+                    response.call_id = provider_tool_call_id(&response.call_id);
+                    GenAiContentPart::ToolResponse(response)
+                }
+                other => other,
+            })
+            .collect();
+        message.content = MessageContent::from_parts(parts);
+    }
+}
+
 fn namespace_stream_tool_call_ids(
     event: ChatStreamEvent,
     assistant_message_id: Uuid,
@@ -8082,14 +8124,15 @@ async fn stream_generate_chat_completion<
             0 => None,
             secs => Some(Duration::from_secs(secs)),
         };
-        let connect = crate::latency::stage(
-            "provider.connect",
+        let connect = crate::latency::stage("provider.connect", {
+            let mut provider_chat_request = current_turn_chat_request.clone();
+            restore_provider_tool_call_ids(&mut provider_chat_request);
             genai_client.exec_chat_stream(
                 "PLACEHOLDER_MODEL",
-                current_turn_chat_request.clone(),
+                provider_chat_request,
                 Some(&chat_options),
-            ),
-        );
+            )
+        });
         let connected = match provider_idle_budget {
             Some(budget) => match tokio::time::timeout(budget, connect).await {
                 Ok(result) => result.map_err(ProviderStreamFailure::Provider),
