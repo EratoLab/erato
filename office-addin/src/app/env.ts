@@ -57,4 +57,9 @@ export function injectFrontendEnv() {
     window.DELEGATION_TASKS_APPROVAL_MODE ??=
       import.meta.env.VITE_DELEGATION_TASKS_APPROVAL_MODE;
   }
+
+  // Release builds set this until the in-place Word writer is confirmed on real hosts.
+  if (import.meta.env.VITE_WORD_FORCE_IMPORT_APPLY === "true") {
+    window.WORD_FORCE_IMPORT_APPLY ??= true;
+  }
 }

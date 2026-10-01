@@ -1,0 +1,598 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  escapeXml,
+  packageXml,
+  paragraph,
+  readySnapshot,
+} from "../../../test/mocks/word/authoringFixtures";
+import {
+  realisticSnapshot,
+  realisticWordPackageXml,
+} from "../../../test/mocks/word/realisticWordFixtures";
+import {
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+} from "../wordDocumentPlan";
+import { WordDocumentReadSession } from "../wordDocumentReadTool";
+import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
+import {
+  captureWordAuthoringSnapshot,
+  compileWordDocumentPlan,
+} from "../wordDocumentXml";
+import { wordInPlaceCapabilities } from "../wordInPlaceCapabilities";
+import {
+  WORD_IN_PLACE_FALLBACKS,
+  classifyWordInPlacePlan,
+  sameWordInPlaceProgram,
+} from "../wordInPlacePlan";
+import { expandWordTableCellSubmission } from "../wordTableCellSubmission";
+
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+  WordPlanBlock,
+  WordPlanEntry,
+} from "../wordDocumentPlan";
+import type { WordInPlaceFallback, WordInPlaceOp } from "../wordInPlacePlan";
+
+const caps = wordInPlaceCapabilities("PC");
+const run = (text: string, rPr = "") =>
+  `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+const p = (content: string, pPr = "") =>
+  `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${content}</w:p>`;
+const cells = (rows: string[][]) =>
+  `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>${rows
+    .map(
+      (row) =>
+        `<w:tr>${row.map((cell) => `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>${paragraph(cell)}</w:tc>`).join("")}</w:tr>`,
+    )
+    .join("")}</w:tbl>`;
+
+/** b1 heading, b2 plain, b3 list item, b4 hyperlink, b5 line break, b6 bookmark, b7 mixed languages,
+ * b8 uniform language, b9 centred, b10 table, b11 bold without its complex-script twin, b12 empty,
+ * b13 field. */
+const BODY = [
+  p(run("Title"), '<w:pStyle w:val="Heading1"/>'),
+  p(run("Plain text")),
+  p(
+    run("First item"),
+    '<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>',
+  ),
+  p(`<w:hyperlink><w:r><w:t>Linked</w:t></w:r></w:hyperlink>`),
+  p(`<w:r><w:t>Line</w:t><w:br/><w:t>break</w:t></w:r>`),
+  p(
+    `<w:bookmarkStart w:id="1" w:name="Mark"/>${run("Marked")}<w:bookmarkEnd w:id="1"/>`,
+  ),
+  p(
+    run("English ", '<w:lang w:val="en-GB"/>') +
+      run("Deutsch", '<w:lang w:val="de-DE"/>'),
+  ),
+  p(
+    run("Uniform ", '<w:lang w:val="en-GB"/>') +
+      run("language", '<w:lang w:val="en-GB"/>'),
+  ),
+  p(run("Centred"), '<w:jc w:val="center"/>'),
+  cells([
+    ["Region", "Budget"],
+    ["North", "42"],
+  ]),
+  p(run("Plain ") + run("bold", "<w:b/>")),
+  p(""),
+  p(`<w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple>`),
+].join("");
+
+function snapshot(body = BODY): WordAuthoringSnapshot {
+  const s = captureWordAuthoringSnapshot(packageXml(body), "doc", "Off", true);
+  s.readToken = "read-proof";
+  s.read = new Set(s.blocks.map((b) => b.ref));
+  return s;
+}
+
+function plan(
+  s: WordAuthoringSnapshot,
+  replacements: Record<string, WordPlanBlock | WordPlanBlock[]>,
+  extra: Partial<WordDocumentPlan> = {},
+): WordDocumentPlan {
+  return {
+    version: 1,
+    snapshot: s.token,
+    readToken: "read-proof",
+    scope: "document",
+    deleted: [],
+    entries: s.blocks.map((b): WordPlanEntry => {
+      const replacement = replacements[b.ref];
+      return replacement
+        ? {
+            kind: "replace",
+            source: [b.ref],
+            blocks: Array.isArray(replacement) ? replacement : [replacement],
+          }
+        : { kind: "keep", source: [b.ref] };
+    }),
+    ...extra,
+  };
+}
+
+const text = (value: string, extra: Partial<WordPlanBlock> = {}) =>
+  ({ id: "new", type: "paragraph", text: value, ...extra }) as WordPlanBlock;
+const route = (
+  s: WordAuthoringSnapshot,
+  p: WordDocumentPlan,
+  compiled?: WordAuthoringSnapshot,
+) => classifyWordInPlacePlan(p, s, caps, compiled);
+const fallbackOf = (s: WordAuthoringSnapshot, p: WordDocumentPlan) => {
+  const result = route(s, p);
+  return "fallback" in result ? result.fallback : "in-place";
+};
+const compiledOf = (s: WordAuthoringSnapshot, p: WordDocumentPlan) =>
+  captureWordAuthoringSnapshot(
+    compileWordDocumentPlan(p, s),
+    s.identity,
+    "Off",
+    true,
+    "verify",
+  );
+
+describe("in-place classification", () => {
+  it("turns paragraph, heading and list-item rewrites with b/i/u marks into text ops", () => {
+    const s = snapshot();
+    const list = s.blocks[2];
+    const p = plan(s, {
+      b1: { id: "h", type: "heading", level: 1, text: "New title" },
+      b2: text("Bold and plain", {
+        runs: [
+          { text: "Bold", bold: true },
+          { text: " and " },
+          { text: "plain", italic: true, underline: true },
+        ],
+      }),
+      b3: {
+        id: "l",
+        type: "list-item",
+        text: "Second take",
+        list: list.list,
+        level: list.level,
+        ordered: list.ordered,
+        styleRef: list.styleRef,
+      },
+      b8: text("Still uniform", {
+        runs: [{ text: "Still uniform", language: "en-GB" }],
+      }),
+    });
+    const result = route(s, p, compiledOf(s, p));
+    expect(result).toEqual({
+      ops: [
+        {
+          kind: "text",
+          ref: "b1",
+          paragraph: 0,
+          runs: [
+            { text: "New title", bold: false, italic: false, underline: false },
+          ],
+          original: [
+            { text: "Title", bold: false, italic: false, underline: false },
+          ],
+        },
+        {
+          kind: "text",
+          ref: "b2",
+          paragraph: 0,
+          runs: [
+            { text: "Bold", bold: true, italic: false, underline: false },
+            { text: " and ", bold: false, italic: false, underline: false },
+            { text: "plain", bold: false, italic: true, underline: true },
+          ],
+          original: [
+            {
+              text: "Plain text",
+              bold: false,
+              italic: false,
+              underline: false,
+            },
+          ],
+        },
+        expect.objectContaining({ kind: "text", ref: "b3" }),
+        expect.objectContaining({ kind: "text", ref: "b8" }),
+      ],
+    });
+  });
+
+  it("turns a table_cell expansion into one cell op", () => {
+    const s = snapshot();
+    const table = s.blocks.find((b) => b.nativeKind === "table")!;
+    // As Apply sees it: parsed from the submitted JSON, which derives the table's text.
+    const p = normalizeWordDocumentPlan(
+      parseWordDocumentPlan(
+        JSON.stringify(
+          expandWordTableCellSubmission(
+            {
+              snapshot: s.token,
+              readToken: "read-proof",
+              table_cell: {
+                sourceRef: table.ref,
+                rowIndex: 1,
+                cellIndex: 1,
+                expectedText: "42",
+                text: "43",
+              },
+            },
+            s,
+          ),
+        ),
+      )!,
+      s,
+    );
+    expect(route(s, p, compiledOf(s, p))).toEqual({
+      ops: [
+        {
+          kind: "cell",
+          ref: table.ref,
+          paragraph: 3,
+          rowIndex: 1,
+          cellIndex: 1,
+          text: "43",
+          original: "42",
+        },
+      ],
+    });
+  });
+
+  it("rejects sources and targets the object model cannot reproduce, each with its code", () => {
+    const s = snapshot();
+    const cases: [string, WordPlanBlock, WordInPlaceFallback][] = [
+      ["b4", text("Linked again"), "source-shape"],
+      ["b5", text("Line break gone"), "source-shape"],
+      ["b6", text("Marked again"), "native-target"],
+      ["b7", text("Mixed again"), "source-shape"],
+      ["b8", text("No language"), "run-format"],
+      ["b9", text("Not centred"), "format"],
+      ["b2", text("Now a quote", { styleRef: "Heading1" }), "restyle"],
+      ["b2", text(""), "empty-text"],
+      ["b12", text("Was empty"), "empty-text"],
+      ["b11", text("Plain bold"), "not-invertible"],
+      ["b13", text("2"), "native-target"],
+      ["b2", text("Two\nlines"), "source-shape"],
+    ];
+    for (const [ref, block, code] of cases)
+      expect(
+        fallbackOf(s, plan(s, { [ref]: block })),
+        `${ref} ${block.text}`,
+      ).toBe(code);
+    const realistic = realisticSnapshot(realisticWordPackageXml());
+    const commented = realistic.blocks.find(
+      (b) => b.nativeKind === "anchored-content",
+    )!;
+    expect(
+      fallbackOf(
+        realistic,
+        plan(realistic, { [commented.ref]: text("Commented again") }),
+      ),
+    ).toBe("native-target");
+  });
+
+  it("produces every fallback code M2 can reach from a minimal plan, in ladder order", () => {
+    const s = snapshot();
+    const list = s.blocks[2];
+    const refs = s.blocks.map((b) => b.ref);
+    const keepAll = plan(s, {});
+    const many = snapshot(
+      Array.from({ length: 51 }, (_, i) => paragraph(`Paragraph ${i}`)).join(
+        "",
+      ),
+    );
+    const reached: Record<string, WordInPlaceFallback | "in-place"> = {
+      stories: fallbackOf(s, {
+        ...keepAll,
+        stories: [
+          {
+            kind: "upsert",
+            type: "header",
+            id: "header",
+            blocks: [text("Header")],
+          },
+        ],
+      }),
+      sections: fallbackOf(s, {
+        ...keepAll,
+        sections: [{ id: "final", source: "section-1" }],
+      }),
+      moved: fallbackOf(s, {
+        ...keepAll,
+        entries: [
+          { kind: "keep", source: [refs[1]] },
+          { kind: "keep", source: [refs[0]] },
+          { kind: "keep", source: refs.slice(2) },
+        ],
+      }),
+      insert: fallbackOf(s, {
+        ...keepAll,
+        entries: [
+          { kind: "keep", source: refs },
+          { kind: "insert", blocks: [text("Appended")] },
+        ],
+      }),
+      delete: fallbackOf(s, {
+        ...keepAll,
+        entries: [{ kind: "keep", source: refs.slice(1) }],
+        deleted: [{ source: [refs[0]], reason: "Duplicate" }],
+      }),
+      split: fallbackOf(
+        s,
+        plan(s, { b2: [text("One"), { ...text("Two"), id: "two" }] }),
+      ),
+      restyle: fallbackOf(
+        s,
+        plan(s, {
+          b2: { id: "h", type: "heading", level: 2, text: "Promoted" },
+        }),
+      ),
+      list: fallbackOf(
+        s,
+        plan(s, {
+          b3: {
+            id: "l",
+            type: "list-item",
+            text: "Indented",
+            list: list.list,
+            level: 1,
+            ordered: list.ordered,
+            styleRef: list.styleRef,
+          },
+        }),
+      ),
+      "native-target": fallbackOf(s, plan(s, { b10: text("No table") })),
+      "rich-block": fallbackOf(
+        s,
+        plan(s, {
+          b2: {
+            id: "t",
+            type: "table",
+            text: "",
+            rows: [{ cells: [{ blocks: [text("Cell")] }] }],
+          },
+        }),
+      ),
+      "new-list": fallbackOf(
+        s,
+        plan(s, {
+          b3: {
+            id: "l",
+            type: "list-item",
+            text: "Fresh list",
+            list: "fresh",
+            ordered: true,
+            styleRef: list.styleRef,
+          },
+        }),
+      ),
+      format: fallbackOf(
+        s,
+        plan(s, { b2: text("Centred", { format: { alignment: "center" } }) }),
+      ),
+      "run-format": fallbackOf(
+        s,
+        plan(s, {
+          b2: text("Bigger", { runs: [{ text: "Bigger", fontSize: 14 }] }),
+        }),
+      ),
+      "source-shape": fallbackOf(s, plan(s, { b4: text("Unlinked") })),
+      "empty-text": fallbackOf(s, plan(s, { b2: text("") })),
+      "not-invertible": fallbackOf(s, plan(s, { b11: text("Plain") })),
+      "program-mismatch": (() => {
+        const result = route(
+          s,
+          plan(s, { b2: text("Changed") }),
+          compiledOf(s, plan(s, { b2: text("Different") })),
+        );
+        return "fallback" in result ? result.fallback : "in-place";
+      })(),
+      "too-many-ops": fallbackOf(
+        many,
+        plan(
+          many,
+          Object.fromEntries(
+            many.blocks.map((b, i) => [
+              b.ref,
+              { ...text(`New ${i}`), id: `n${i}` },
+            ]),
+          ),
+        ),
+      ),
+    };
+    for (const [code, actual] of Object.entries(reached))
+      expect(actual, code).toBe(code);
+    // Reserved for later mechanisms: no M2 plan can need them before an earlier rule fails.
+    expect(
+      WORD_IN_PLACE_FALLBACKS.filter((code) => !(code in reached)),
+    ).toEqual(["story-text", "inherited-format"]);
+    expect(
+      fallbackOf(s, {
+        ...plan(s, { b2: text("Two\nlines") }),
+        sections: [{ id: "final", source: "section-1" }],
+      }),
+    ).toBe("sections");
+  });
+
+  it("routes a disabled mechanism to the import", () => {
+    const s = snapshot();
+    expect(
+      classifyWordInPlacePlan(plan(s, { b2: text("Changed") }), s, {
+        ...caps,
+        text: false,
+      }),
+    ).toEqual({ fallback: "not-invertible" });
+  });
+});
+
+describe("in-place program equivalence", () => {
+  it("detects a tampered op list and an import result that disagrees", () => {
+    const s = snapshot();
+    const p = plan(s, { b2: text("Changed") });
+    const result = route(s, p);
+    if (!("ops" in result)) throw new Error("expected ops");
+    expect(sameWordInPlaceProgram(p, s, result.ops)).toBe(true);
+    const [op] = result.ops as Extract<WordInPlaceOp, { kind: "text" }>[];
+    const tampered: WordInPlaceOp[][] = [
+      [{ ...op, runs: [{ ...op.runs[0], text: "Something else" }] }],
+      [{ ...op, runs: [{ ...op.runs[0], bold: true }] }],
+      [{ ...op, ref: "b9" }],
+      [op, { ...op, ref: "b8" }],
+      [],
+    ];
+    for (const ops of tampered)
+      expect(sameWordInPlaceProgram(p, s, ops)).toBe(false);
+    const other = compiledOf(s, plan(s, { b2: text("Different") }));
+    expect(route(s, p, other)).toEqual({ fallback: "program-mismatch" });
+  });
+
+  it("matches wordPlanOutput for every eligible scoped edit and names the rule for the rest", async () => {
+    const context = {
+      chatId: "chat",
+      messageId: "message",
+      toolCallId: "read",
+    };
+    const scoped = async (
+      s: WordAuthoringSnapshot,
+      target: Record<string, unknown>,
+      scoped_edit: Record<string, unknown>,
+    ) => {
+      const session = new WordDocumentReadSession();
+      session.activate(s, context);
+      const read = await session.execute(
+        {
+          snapshot: s.token,
+          documentIdentity: s.identity,
+          target,
+        },
+        context,
+      );
+      if (!read.ok) throw new Error(read.error);
+      const result = await createWordDocumentSubmissionExecutor(session)(
+        {
+          snapshot: s.token,
+          readToken: (read.result as { readToken: string }).readToken,
+          scoped_edit,
+        },
+        { ...context, toolCallId: "edit" },
+      );
+      if (!result.ok) throw new Error(JSON.stringify(result));
+      return (result.result as { plan: WordDocumentPlan }).plan;
+    };
+    const fresh = () =>
+      readySnapshot(
+        packageXml(
+          paragraph("Before") +
+            p(run("Heading"), '<w:pStyle w:val="Heading1"/>') +
+            paragraph("Target") +
+            paragraph("After"),
+        ),
+      );
+    const cases: [
+      Record<string, unknown>,
+      Record<string, unknown>,
+      WordInPlaceFallback | "in-place",
+    ][] = [
+      [
+        { kind: "paragraph", text: "Target" },
+        {
+          body: [
+            {
+              operation: "replace",
+              source: ["b3"],
+              blocks: [
+                text("Changed", {
+                  runs: [{ text: "Chan" }, { text: "ged", bold: true }],
+                }),
+              ],
+            },
+          ],
+        },
+        "in-place",
+      ],
+      [
+        { ref: "b2" },
+        {
+          body: [
+            {
+              operation: "replace",
+              source: ["b2"],
+              blocks: [{ id: "h", type: "heading", level: 1, text: "Renamed" }],
+            },
+          ],
+        },
+        "in-place",
+      ],
+      [
+        { ref: "b2" },
+        {
+          body: [
+            {
+              operation: "replace",
+              source: ["b2"],
+              blocks: [{ id: "h", type: "heading", level: 2, text: "Demoted" }],
+            },
+          ],
+        },
+        "restyle",
+      ],
+      [
+        { ref: "b3" },
+        {
+          body: [
+            {
+              operation: "delete",
+              source: ["b3"],
+              reason: "Obsolete",
+            },
+          ],
+        },
+        "delete",
+      ],
+      [
+        { ref: "b3" },
+        {
+          body: [
+            {
+              operation: "insert-after",
+              anchor: "b3",
+              blocks: [text("Added")],
+            },
+          ],
+        },
+        "insert",
+      ],
+      [
+        { refs: ["b1", "b4"] },
+        {
+          body: [{ operation: "move-after", source: ["b1"], anchor: "b4" }],
+        },
+        "moved",
+      ],
+      [
+        { ref: "b3", throughRef: "b4" },
+        {
+          body: [
+            {
+              operation: "replace",
+              source: ["b3", "b4"],
+              blocks: [text("Merged")],
+            },
+          ],
+        },
+        "split",
+      ],
+    ];
+    for (const [target, edit, expected] of cases) {
+      const s = fresh();
+      const p = await scoped(s, target, edit);
+      const result = route(s, p, compiledOf(s, p));
+      expect(
+        "fallback" in result ? result.fallback : "in-place",
+        JSON.stringify(edit),
+      ).toBe(expected);
+      if ("ops" in result)
+        expect(sameWordInPlaceProgram(p, s, result.ops)).toBe(true);
+    }
+  });
+});
