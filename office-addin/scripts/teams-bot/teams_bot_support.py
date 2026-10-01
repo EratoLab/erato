@@ -231,7 +231,7 @@ def incomplete(report: dict, name: str, error: Exception) -> None:
     report["checks"].append({"name": name, "status": "UNKNOWN", "detail": str(error)})
 
 
-def evaluate(report: dict, args: argparse.Namespace) -> None:
+def evaluate(report: dict, args: argparse.Namespace, graph_permissions: dict | None = None) -> None:
     """Evaluate only collected metadata; absent/unreadable data is never a pass."""
     bot = report.get("bot")
     connection = report.get("connection")
@@ -274,8 +274,8 @@ def evaluate(report: dict, args: argparse.Namespace) -> None:
             add_check(report, f"Teams {client} pre-authorization", bool(scope_ids & granted), client_id)
         callback = "https://token.botframework.com/.auth/web/redirect"
         add_check(report, "OAuth web callback", callback in ((app.get("web") or {}).get("redirectUris") or []), callback)
-        if "graphPermissions" in report:
-            permission_names = report["graphPermissions"]
+        if graph_permissions is not None:
+            permission_names = graph_permissions
             requested = set()
             for access in app.get("requiredResourceAccess") or []:
                 if access.get("resourceAppId") == GRAPH_APP_ID:
@@ -298,7 +298,9 @@ def evaluate(report: dict, args: argparse.Namespace) -> None:
         add_check(report, "manifest bot ID", any(b.get("botId") == bot_id for b in manifest.get("bots") or []), str(bot_id))
         add_check(report, "manifest SSO app ID", web.get("id") == report.get("authAppId"), str(web.get("id")))
         add_check(report, "manifest SSO resource", bool(resource) and web.get("resource") == resource, str(web.get("resource")))
-        add_check(report, "manifest token-service domain", "token.botframework.com" in (manifest.get("validDomains") or []), "token.botframework.com")
+        domains = manifest.get("validDomains")
+        has_token_domain = isinstance(domains, list) and any(domain == "token.botframework.com" for domain in domains)
+        add_check(report, "manifest token-service domain", has_token_domain, "token.botframework.com")
         if app and web.get("id") == app.get("appId"):
             redirects = set((app.get("spa") or {}).get("redirectUris") or [])
             for entry in web.get("nestedAppAuthInfo") or []:
@@ -332,6 +334,7 @@ def audit(args: argparse.Namespace) -> dict:
                 add_check(report, key + " exists", False, str(error))
             else:
                 incomplete(report, key + " metadata", error)
+    graph_permissions = None
     properties = (report.get("connection") or {}).get("properties") or {}
     app_id = args.auth_app_id or properties.get("clientId")
     if app_id:
@@ -356,7 +359,8 @@ def audit(args: argparse.Namespace) -> dict:
             if len(graph) != 1 or len(service_principals) != 1:
                 raise AuditError("Could not uniquely resolve Graph and authentication service principals")
             report["graphServicePrincipalId"] = graph[0]["id"]
-            report["graphPermissions"] = {s["id"]: s["value"] for s in graph[0].get("oauth2PermissionScopes") or []}
+            # Permission definitions are evaluation input, never support-report data.
+            graph_permissions = {s["id"]: s["value"] for s in graph[0].get("oauth2PermissionScopes") or []}
             report["consent"] = graph_list("oauth2PermissionGrants", **{
                 "$filter": f"clientId eq '{service_principals[0]['id']}'", "$select": "consentType,resourceId,scope"})
         except AuditError as error:
@@ -379,14 +383,13 @@ def audit(args: argparse.Namespace) -> dict:
         report["manifest"] = {key: manifest.get(key) for key in ("id", "version", "bots", "webApplicationInfo", "validDomains")}
     except (AuditError, OSError, ValueError) as error:
         incomplete(report, "Teams manifest", error)
-    evaluate(report, args)
+    evaluate(report, args, graph_permissions)
     report["notes"].extend([
         "Read-only audit: no cloud settings, credentials, Helm values or installed Teams apps were changed.",
         "The generated/downloaded manifest does not prove which package is installed in Teams.",
         "Consent metadata does not prove the OAuth secret is valid or that silent sign-in succeeds. Test the connection and the Teams client.",
         "This helper targets public Azure and the global Bot Framework token service; regional/sovereign endpoints need their matching configuration.",
     ])
-    report.pop("graphPermissions", None)
     report["exitCode"] = 2 if any(c["status"] == "UNKNOWN" for c in report["checks"]) else int(any(c["status"] == "MISSING" for c in report["checks"]))
     return report
 

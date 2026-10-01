@@ -117,6 +117,21 @@ class AuditSafetyTests(unittest.TestCase):
         support.evaluate(report, support.parse_args(CLI))
         self.assertEqual(report["checks"][0]["status"], "MISSING")
 
+    def test_manifest_domain_requires_an_exact_array_entry(self):
+        for domains, expected in [(["token.botframework.com"], "PASS"),
+                                  (["token.botframework.com.attacker.example"], "MISSING"),
+                                  ("token.botframework.com", "MISSING"),
+                                  (None, "MISSING")]:
+            report = {"checks": [], "notes": [], "manifest": {"validDomains": domains}}
+            support.evaluate(report, support.parse_args(CLI))
+            check = next(c for c in report["checks"] if c["name"] == "manifest token-service domain")
+            self.assertEqual(check["status"], expected)
+
+    def test_permission_definitions_are_not_added_to_the_report(self):
+        report = {"checks": [], "notes": [], "authApp": application()}
+        support.evaluate(report, support.parse_args(CLI), {"permission-id": "INTERNAL_PERMISSION_METADATA"})
+        self.assertNotIn("INTERNAL_PERMISSION_METADATA", json.dumps(report))
+
     def test_api_error_does_not_print_secret_body(self):
         response = subprocess.CompletedProcess([], 1, "", "ERROR Forbidden body contains SUPER_SECRET")
         with patch.object(support.subprocess, "run", return_value=response):
