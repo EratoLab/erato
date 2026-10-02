@@ -6417,6 +6417,11 @@ msgid "trace.tool.approved"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/Trace.tsx
+msgid "trace.tool.budget_approval"
+msgstr "Limit wywołań narzędzi"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.denied"
 msgstr ""

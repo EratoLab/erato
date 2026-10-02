@@ -16,7 +16,9 @@ const buildActivityFingerprint = (parts: TraceablePart[]): string =>
     .map((part) =>
       part.content_type === "reasoning"
         ? `r:${(part.text ?? "").length}`
-        : `t:${part.tool_call_id}:${part.status}:${part.progress ?? ""}:${part.progress_message ?? ""}`,
+        : part.content_type === "tool_use"
+          ? `t:${part.tool_call_id}:${part.status}:${part.progress ?? ""}:${part.progress_message ?? ""}`
+          : `${part.content_type}:${part.tool_call_id}`,
     )
     .join("|");
 

@@ -6417,6 +6417,11 @@ msgid "trace.tool.approved"
 msgstr "Approved"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/Trace.tsx
+msgid "trace.tool.budget_approval"
+msgstr "Tool-call budget"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.denied"
 msgstr "Denied"
