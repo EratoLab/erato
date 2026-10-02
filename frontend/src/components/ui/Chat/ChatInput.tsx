@@ -18,6 +18,11 @@ import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecord
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import {
+  holdComposeReload,
+  registerComposeReloadOptions,
+  takeComposeReloadOptions,
+} from "@/hooks/chat/composeReloadState";
+import {
   useConfirmationRegistryStore,
   useHasPendingConfirmation,
 } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -1137,6 +1142,28 @@ export const ChatInput = ({
   const activeComposeSessionIdRef = useRef(composeSessionId);
 
   const hasPersistedInitialDraftRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (isUploading) return holdComposeReload();
+  }, [isUploading]);
+
+  useLayoutEffect(
+    () =>
+      registerComposeReloadOptions(composeSessionId, () => ({
+        selectedFacetIds,
+        selectedChatProviderId: selectedModel?.chat_provider_id,
+      })),
+    [composeSessionId, selectedFacetIds, selectedModel],
+  );
+
+  useLayoutEffect(() => {
+    const options = takeComposeReloadOptions(composeSessionId);
+    if (!options) return;
+    userSelectedFacetsSessionRef.current = composeSessionId;
+    applySelectedFacetIds(options.selectedFacetIds);
+    if (options.selectedChatProviderId)
+      applySelectedChatProviderId(options.selectedChatProviderId);
+  }, [composeSessionId, applySelectedFacetIds, applySelectedChatProviderId]);
 
   // Persist draft state for the currently active session.
   useEffect(() => {

@@ -89,6 +89,16 @@ msgstr "Temat:"
 msgid "officeAddin.appointmentRenderer.when"
 msgstr "Kiedy:"
 
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.draftSaveFailed"
+msgstr "Nie udało się zapisać wersji roboczej przed ponownym załadowaniem dodatku wymaganym po udzieleniu dostępu do mikrofonu. Wyślij wersję roboczą i spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.pendingAttachments"
+msgstr "Dostęp do mikrofonu wymaga ponownego załadowania dodatku. Poczekaj na zakończenie przesyłania i wyślij lub usuń oczekujące załączniki, a następnie spróbuj ponownie."
+
 # ==============================
 # Explicit IDs
 # ==============================
@@ -977,6 +987,11 @@ msgstr "Wybierz i przetestuj mikrofon używany do wprowadzania głosowego w tym 
 #: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.audio.heading"
 msgstr "Mikrofon"
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.audio.unsupported"
+msgstr "Wejście audio nie jest obsługiwane na tej platformie"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx

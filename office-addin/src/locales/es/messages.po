@@ -89,6 +89,16 @@ msgstr "Asunto:"
 msgid "officeAddin.appointmentRenderer.when"
 msgstr "Cuándo:"
 
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.draftSaveFailed"
+msgstr "No se pudo guardar su borrador para recargar el complemento tras conceder permiso al micrófono. Envíe su borrador e inténtelo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.pendingAttachments"
+msgstr "El acceso al micrófono requiere recargar el complemento. Termine de subir los archivos y envíe o quite los adjuntos pendientes; después, inténtelo de nuevo."
+
 # ==============================
 # Explicit IDs
 # ==============================
@@ -977,6 +987,11 @@ msgstr "Elige y prueba el micrófono que se usa para la entrada de voz en este c
 #: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.audio.heading"
 msgstr "Micrófono"
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.audio.unsupported"
+msgstr "La entrada de audio no es compatible con esta plataforma"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx

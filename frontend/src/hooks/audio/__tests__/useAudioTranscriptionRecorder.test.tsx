@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
 import { useAudioTranscriptionRecorder } from "../useAudioTranscriptionRecorder";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -386,6 +387,50 @@ describe("useAudioTranscriptionRecorder", () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+  });
+
+  it("waits for host consent before transcription capture and returns to idle on denial", async () => {
+    let deny!: (error: Error) => void;
+    const beforeCapture = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          deny = reject;
+        }),
+    );
+    const dispose = installAudioCaptureAccessPolicy({
+      beforeCapture,
+      canEnumerateDevices: () => false,
+    });
+    const { result, unmount } = renderHook(() =>
+      useAudioTranscriptionRecorder({
+        audioTranscriptionEnabled: true,
+        uploadEnabled: true,
+        maxRecordingDurationSeconds: 1200,
+        chatId: "chat-1",
+        silentChatId: null,
+        setSilentChatId: vi.fn(),
+        selectedModel: {
+          chat_provider_id: "model",
+          model_display_name: "Model",
+        },
+        attachedFiles: [],
+        setAttachedFiles: vi.fn(),
+      }),
+    );
+    try {
+      act(() => result.current.toggleAudioRecording());
+      expect(beforeCapture).toHaveBeenCalledOnce();
+      expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+      await act(async () => {
+        deny(new DOMException("Denied", "NotAllowedError"));
+      });
+      await waitFor(() => expect(result.current.recordingError).toBeTruthy());
+      expect(result.current.isRecording).toBe(false);
+      expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+    } finally {
+      unmount();
+      dispose();
+    }
   });
 
   it("opens the websocket when recording starts and streams live WAV chunks from a fixture", async () => {

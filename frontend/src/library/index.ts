@@ -657,3 +657,13 @@ export { LocalTaskCoordinator } from "@/providers/LocalTaskCoordinator";
 // that can write to the document supplies an adapter.
 export * from "@/lib/wordReview";
 export * from "@/components/ui/WordReview";
+
+export {
+  installAudioCaptureAccessPolicy,
+  type AudioCaptureAccessPolicy,
+} from "@/hooks/audio/audioCaptureAccess";
+export {
+  holdComposeReload,
+  saveComposeReloadState,
+  restoreComposeReloadState,
+} from "@/hooks/chat/composeReloadState";

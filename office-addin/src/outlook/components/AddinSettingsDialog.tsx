@@ -7,6 +7,7 @@ import {
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
 import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import { useOffice } from "../../providers/OfficeProvider";
 import { outlookClientActionDecisionStore } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
@@ -14,9 +15,11 @@ import {
 } from "../utils/outlookClientActions";
 
 export function AddinSettingsDialog(props: AddinSettingsDialogCoreProps) {
+  const { supportsAudioCapture } = useOffice();
   return (
     <AddinSettingsDialogCore
       {...props}
+      audioInputSupported={supportsAudioCapture}
       hostContribution={{
         tabLabel: t({
           id: "officeAddin.settings.tabs.outlook",

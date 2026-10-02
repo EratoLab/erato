@@ -115,6 +115,10 @@ const createStoreStub = <S,>(readState: () => S) =>
   );
 
 export const DEFAULT_STUBS = {
+  holdComposeReload: () => () => {},
+  installAudioCaptureAccessPolicy: () => () => {},
+  saveComposeReloadState: () => {},
+  restoreComposeReloadState: () => {},
   useMessagingStore: {
     getState: () => ({
       activeStreamKey: "__new_chat__",

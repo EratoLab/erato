@@ -36,6 +36,7 @@ import {
   resampleMonoFloat32ToPcm16,
   type AudioDictationDiagnostics,
 } from "./audio-pcm-codec";
+import { requestAudioStream } from "./audioCaptureAccess";
 import { getAudioEnvironment } from "./audioEnvironment";
 import { describeAudioTranscriptionFailure } from "./audioTranscriptionErrors";
 import { PRE_SPEECH_SILENCE_PRIMER_MS } from "./audioTuning";
@@ -786,7 +787,7 @@ export function useAudioDictationRecorder({
     try {
       let stream: MediaStream;
       try {
-        stream = await mediaDevices.getUserMedia({
+        stream = await requestAudioStream(mediaDevices, {
           audio: selectedAudioInputDeviceId
             ? {
                 deviceId: { exact: selectedAudioInputDeviceId },
@@ -803,7 +804,7 @@ export function useAudioDictationRecorder({
           (firstError.name === "OverconstrainedError" ||
             firstError.name === "NotFoundError")
         ) {
-          stream = await mediaDevices.getUserMedia({
+          stream = await requestAudioStream(mediaDevices, {
             audio: baseAudioConstraints,
           });
         } else {

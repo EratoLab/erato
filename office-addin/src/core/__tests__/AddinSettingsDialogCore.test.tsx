@@ -18,7 +18,7 @@ vi.mock("@erato/frontend/library", async () => {
   return mock.createEratoLibraryMock({
     AppearanceTabContent: () => <div data-testid="appearance-settings" />,
     TextSizeSetting: () => <div data-testid="text-size-settings" />,
-    AudioInputTabContent: () => null,
+    AudioInputTabContent: () => <div data-testid="microphone-controls" />,
     useMcpBrowserAuthorization: () => authorizeInBrowser,
     ServersToolsPane: ({
       mcp,
@@ -80,6 +80,33 @@ describe("AddinSettingsDialogCore", () => {
     featureFlags.mcpServers = false;
   });
   afterEach(cleanup);
+
+  it("keeps the unsupported explanation available when audio features are disabled", () => {
+    render(
+      <AddinSettingsDialogCore
+        isOpen
+        onClose={() => {}}
+        audioInputSupported={false}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Microphone" }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Audio input is not supported on this platform",
+    );
+    expect(screen.queryByTestId("microphone-controls")).toBeNull();
+  });
+
+  it("shows microphone controls without the unsupported indicator on supported hosts", () => {
+    featureFlags.audio = true;
+    render(
+      <AddinSettingsDialogCore isOpen onClose={() => {}} audioInputSupported />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Microphone" }));
+    expect(screen.getByTestId("microphone-controls")).toBeVisible();
+    expect(
+      screen.queryByText("Audio input is not supported on this platform"),
+    ).toBeNull();
+  });
 
   it("hands the selected server to the shared browser authorization controller", () => {
     featureFlags.mcpServers = true;

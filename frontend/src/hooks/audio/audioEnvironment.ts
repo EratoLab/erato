@@ -5,8 +5,8 @@
  * every engine quirk is a named flag, paired with its evidence and an
  * expiry/removal condition, so a future reader knows *why* the branch
  * exists and *when* it can be deleted. Pure and userAgent-injectable, so
- * it unit-tests without a DOM. Mirrors the `isAudioCaptureSupportedPlatform`
- * capability-probe precedent in `office-addin/src/providers/OfficeProvider.tsx`.
+ * it unit-tests without a DOM. Office host consent is handled separately by
+ * the audioCaptureAccess policy.
  *
  * Scope note (ERMAIN-379): this module covers *audio-capture* engine
  * quirks only. The Firefox `NetworkError` check in `hooks/files/errors.ts`
@@ -92,8 +92,8 @@ export function detectBrowserEngine(userAgent: string): BrowserEngine {
   // Fail open to "unknown" → all capability flags false → treated like
   // Chromium (no WebKit hardening). A WebKit webview with a stripped custom
   // UA (no Safari token, no ip(hone|ad|od) token) would miss the hardening,
-  // but every mainstream browser carries one of those tokens and the add-in
-  // already blocks audio on Mac WKWebView, so the practical risk is nil.
+  // but every mainstream browser carries one of those tokens and Office hosts
+  // separately require DevicePermissionService before permitting capture.
   return "unknown";
 }
 

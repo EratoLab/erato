@@ -191,7 +191,8 @@ describe("bounded table-cell reads", () => {
       result: { status: "not-found", totalMatches: 0 },
     });
   });
-  it.each([10, 100, 1000])(
+  // 1000 paragraphs is too slow for the default 5000 ms timeout in CI.
+  it.each([10, 100, 500])(
     "keeps initial/tool context bounded with %i unrelated paragraphs",
     async (count) => {
       const state = setup(

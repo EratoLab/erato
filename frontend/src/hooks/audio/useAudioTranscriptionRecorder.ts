@@ -27,6 +27,7 @@ import {
   getAudioLevelBarsFromTimeDomainData,
   resampleMonoFloat32ToPcm16,
 } from "./audio-pcm-codec";
+import { requestAudioStream } from "./audioCaptureAccess";
 import { getAudioEnvironment } from "./audioEnvironment";
 import {
   type AudioTranscriptionErrorCode,
@@ -1290,7 +1291,7 @@ export function useAudioTranscriptionRecorder({
     try {
       let stream: MediaStream;
       try {
-        stream = await mediaDevices.getUserMedia({
+        stream = await requestAudioStream(mediaDevices, {
           audio: selectedAudioInputDeviceId
             ? {
                 deviceId: { exact: selectedAudioInputDeviceId },
@@ -1307,7 +1308,7 @@ export function useAudioTranscriptionRecorder({
           (firstError.name === "OverconstrainedError" ||
             firstError.name === "NotFoundError")
         ) {
-          stream = await mediaDevices.getUserMedia({
+          stream = await requestAudioStream(mediaDevices, {
             audio: baseAudioConstraints,
           });
         } else {

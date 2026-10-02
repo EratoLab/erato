@@ -89,6 +89,16 @@ msgstr "Subject:"
 msgid "officeAddin.appointmentRenderer.when"
 msgstr "When:"
 
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.draftSaveFailed"
+msgstr "Your draft could not be saved for the microphone permission reload. Please send your draft and try again."
+
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.pendingAttachments"
+msgstr "Microphone access needs a reload. Finish uploading and send or remove staged attachments, then try again."
+
 # ==============================
 # Explicit IDs
 # ==============================
@@ -977,6 +987,11 @@ msgstr "Choose and test the microphone used for voice input in this add-in."
 #: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.audio.heading"
 msgstr "Microphone"
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.audio.unsupported"
+msgstr "Audio input is not supported on this platform"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
