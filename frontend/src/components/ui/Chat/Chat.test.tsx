@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import {
   afterEach,
@@ -19,8 +19,11 @@ import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { Chat } from "./Chat";
+import AssistantsPageStructure from "../Assistant/AssistantsPageStructure";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
+import SearchPageStructure from "../Search/SearchPageStructure";
 
+import type { ChatHistorySidebarProps } from "./ChatHistorySidebar";
 import type {
   ChatDetail,
   RecentChat,
@@ -37,7 +40,22 @@ const chatLists = vi.hoisted(() => ({
 // where — so heavyweight children are stubs while the delegated-runs bar
 // and message controls stay real.
 vi.mock("./ChatHistorySidebar", () => ({
-  ChatHistorySidebar: () => <div data-testid="sidebar-stub" />,
+  ChatHistorySidebar: ({
+    sessions,
+    pinnedSessions = [],
+    onSessionEditTitle,
+  }: ChatHistorySidebarProps) => (
+    <div data-testid="sidebar-stub">
+      {[...sessions, ...pinnedSessions].map((session) => (
+        <button
+          key={session.id}
+          onClick={() => onSessionEditTitle?.(session.id)}
+        >
+          Rename {session.id}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 // Mutable so a test can rerender the same tree under a different chat
 // state or layout mode without swapping the mocks.
@@ -110,7 +128,6 @@ vi.mock("./ChatShareDialog", () => ({
       <div data-testid="share-dialog-stub" data-chat-id={chatId ?? undefined} />
     ) : null,
 }));
-vi.mock("./EditChatTitleDialog", () => ({ EditChatTitleDialog: () => null }));
 vi.mock("../Feedback/FeedbackCommentDialog", () => ({
   FeedbackCommentDialog: () => null,
 }));
@@ -360,6 +377,76 @@ describe("Chat surface composition", () => {
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
   });
+
+  it.each(
+    [
+      {
+        name: "chat",
+        renderPage: () => (
+          <Chat messages={{}} messageOrder={[]} controlsContext={{}} />
+        ),
+      },
+      {
+        name: "search",
+        renderPage: () => <SearchPageStructure>{null}</SearchPageStructure>,
+      },
+      {
+        name: "assistants",
+        renderPage: () => (
+          <AssistantsPageStructure>{null}</AssistantsPageStructure>
+        ),
+      },
+    ].flatMap((page) =>
+      [false, true].map((isPinned) => ({ ...page, isPinned })),
+    ),
+  )(
+    "opens and saves the sidebar rename dialog on $name (pinned: $isPinned)",
+    async ({ renderPage, isPinned }) => {
+      const chat = {
+        ...backgroundRun("rename-target"),
+        can_edit: true,
+        is_pinned: isPinned,
+        title_by_summary: "Generated title",
+        title_by_user_provided: "Original custom title",
+      };
+      chatLists[isPinned ? "pinnedChats" : "chats"] = [chat];
+
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <I18nProvider i18n={i18n}>
+            <MemoryRouter>{renderPage()}</MemoryRouter>
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Rename rename-target" }),
+      );
+      expect(
+        screen.getByRole("dialog", { name: "Rename chat" }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Generated title")).toHaveValue(
+        "Generated title",
+      );
+      expect(screen.getByLabelText("Custom title")).toHaveValue(
+        "Original custom title",
+      );
+
+      fireEvent.change(screen.getByLabelText("Custom title"), {
+        target: { value: "Renamed chat" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+      await waitFor(() => {
+        expect(baseChatContext.updateChatTitle).toHaveBeenCalledWith(
+          "rename-target",
+          "Renamed chat",
+        );
+        expect(
+          screen.queryByRole("dialog", { name: "Rename chat" }),
+        ).not.toBeInTheDocument();
+      });
+    },
+  );
 
   it.each([false, true])(
     "shows edit, regenerate and share for an editable chat (pinned: %s)",
