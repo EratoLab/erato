@@ -1246,35 +1246,31 @@ function classify(
       else for (const block of entry.blocks) add(insertOp(block, anchor, ctx));
       continue;
     }
-    const [head, ...merged] = entry.source;
-    const [first, ...split] = entry.blocks;
-    previous = head;
-    if (merged.length && split.length) {
+    // N sources to M blocks: rewrite them pairwise, then insert the extra blocks after the last pair or
+    // delete the extra sources.
+    const pairs = Math.min(entry.source.length, entry.blocks.length);
+    const reshaped = entry.source.length > 1 || entry.blocks.length > 1;
+    previous = entry.source[pairs - 1];
+    if (reshaped && !caps.split) {
       failures.add("split");
       continue;
     }
-    if ((merged.length || split.length) && !caps.split) {
-      failures.add("split");
-      continue;
+    for (let i = 0; i < pairs; i++) {
+      const source = sources.get(entry.source[i]);
+      if (!source) failures.add("program-mismatch");
+      else if (source.type === "native")
+        add(reshaped ? "native-target" : cellOp(source, entry.blocks[i]));
+      else add(textOp(source, entry.blocks[i], ctx));
     }
-    const source = sources.get(head);
-    if (!source) {
-      failures.add("program-mismatch");
-      continue;
-    }
-    if (source.type === "native") {
-      add(
-        merged.length || split.length ? "native-target" : cellOp(source, first),
-      );
-      continue;
-    }
-    add(textOp(source, first, ctx));
-    if (split.length) {
-      const anchor = caps.insert ? anchorFor(head, undefined, ctx) : "insert";
+    const extra = entry.blocks.slice(pairs);
+    if (extra.length) {
+      const anchor = caps.insert
+        ? anchorFor(previous, undefined, ctx)
+        : "insert";
       if (typeof anchor === "string") failures.add(anchor);
-      else for (const block of split) add(insertOp(block, anchor, ctx));
+      else for (const block of extra) add(insertOp(block, anchor, ctx));
     }
-    for (const ref of merged) add(deleteOp(ref, ctx));
+    for (const ref of entry.source.slice(pairs)) add(deleteOp(ref, ctx));
   }
   for (const deletion of plan.deleted)
     for (const ref of deletion.source) add(deleteOp(ref, ctx));
@@ -1364,8 +1360,20 @@ export function sameWordInPlaceProgram(
   const output = wordPlanOutput(plan, snapshot);
   if (!slots || output.length !== slots.length) return false;
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
-  const heads = new Set(
-    plan.entries.flatMap((e) => (e.kind === "replace" ? [e.blocks[0]] : [])),
+  /** Where each block sits in its replace entry, which pairs the first min(N, M) sources and blocks. */
+  const positions = new Map(
+    plan.entries.flatMap((e) =>
+      e.kind === "replace"
+        ? e.blocks.map((block, index) => [
+            block,
+            {
+              index,
+              source: e.source,
+              pairs: Math.min(e.source.length, e.blocks.length),
+            },
+          ])
+        : [],
+    ),
   );
   return slots.every((slot, i) => {
     const entry = output[i];
@@ -1403,16 +1411,20 @@ export function sameWordInPlaceProgram(
         edits[0].expectedText === op.original
       );
     }
-    // A rewritten paragraph is the head of its replace entry; a split's tail is inserted after it.
+    // A replace entry rewrites its sources pairwise; blocks beyond the pairs are inserted after the
+    // last paired source.
+    const at = positions.get(block);
     if (
       op.kind === "text"
         ? entry.kind !== "replace" ||
-          entry.source[0] !== op.ref ||
-          !heads.has(block)
+          !at ||
+          at.index >= at.pairs ||
+          at.source[at.index] !== op.ref
         : entry.kind === "replace" &&
-          (heads.has(block) ||
+          (!at ||
+            at.index < at.pairs ||
             op.location !== "After" ||
-            entry.source[0] !== op.ref)
+            at.source[at.pairs - 1] !== op.ref)
     )
       return false;
     if (!TYPED.has(block.type)) return false;

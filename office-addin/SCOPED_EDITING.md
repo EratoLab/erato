@@ -126,7 +126,9 @@ switch, no Compatibility mode and no session latch; otherwise the reason is
 then admits only changes with an exact object-model inverse; the first failing
 rule sends the plan to the import with a fixed code. A `sections` entry that
 compiles to the same document as the plan without it only restates the captured
-sections and does not count as a change:
+sections and does not count as a change. A replace entry with N sources and M
+blocks is written pairwise: the first min(N, M) blocks rewrite their sources,
+extra blocks are inserted after the last pair and extra sources deleted:
 
 | Group       | Codes                                                                                          | Preview says it changes…              |
 | ----------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- |
@@ -176,9 +178,10 @@ the step it reached.
   written paragraphs must have exactly the planned text, marks, style and list.
 
 Adjustment codes form a closed list: `numbering-identity`,
-`list-instance-renumbered` and `first-paragraph-page-break` (a break before the
-document's first paragraph has no effect) are not visible, while
-`first-paragraph-spacing` is visible and disclosed on the card. Growth in
+`list-instance-renumbered`, `first-paragraph-page-break` (a break before the
+document's first paragraph has no effect) and `style-redundant-spacing` (direct
+spacing equal to what the paragraph's style chain already gives it) are not
+visible, while `first-paragraph-spacing` is visible and disclosed on the card. Growth in
 customXml items or custom document properties is always `package-growth`, a
 failure. Diagnostics carry only routes, codes, counts and part paths, never
 document text, paragraph IDs or Office error messages.

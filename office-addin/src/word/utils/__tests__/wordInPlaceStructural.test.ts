@@ -197,6 +197,19 @@ const cases: [string, (s: WordAuthoringSnapshot) => Change][] = [
   ],
   ["deletes the opening heading", () => ({ delete: [SENTINEL] })],
   [
+    "reshapes a heading and paragraph into three blocks",
+    () => ({
+      replace: {
+        [SENTINEL]: [
+          { id: "h", type: "heading", level: 1, text: "Quarterly plan" },
+          paragraph("p1", "Status: on track."),
+          paragraph("p2", "Next review in May."),
+        ],
+      },
+      merge: { [SENTINEL]: [STATUS] },
+    }),
+  ],
+  [
     "splits one paragraph into three",
     () => ({
       replace: {
@@ -757,6 +770,7 @@ describe(
     it.each([
       "inserts a heading after an anchor",
       "splits one paragraph into three",
+      "reshapes a heading and paragraph into three blocks",
       "restyles a paragraph as Heading 2",
       "restyles a paragraph with a custom style",
     ])("%s in place and undoes it exactly", async (name) => {

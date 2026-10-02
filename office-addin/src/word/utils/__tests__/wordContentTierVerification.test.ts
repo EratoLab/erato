@@ -85,6 +85,50 @@ function setup(plan?: (source: WordAuthoringSnapshot) => WordDocumentPlan) {
 }
 
 describe("content-tier write verification", () => {
+  it("accepts Word leaving out direct spacing the paragraph's style already gives it", () => {
+    const withSpacing = (points: number) =>
+      setup((source) => {
+        const plan = statusRewritePlan(source, "Status: revised.");
+        const entry = plan.entries[1];
+        if (entry.kind !== "replace")
+          throw new Error("Expected a replace entry.");
+        entry.blocks = [
+          {
+            id: "status",
+            type: "paragraph",
+            text: "Status: revised.",
+            format: { spacingAfter: points },
+          },
+        ];
+        return plan;
+      });
+    const dropAfter = (doc: Document) =>
+      all(body(doc), "spacing")
+        .filter((e) => e.hasAttributeNS(W, "after"))
+        .forEach((e) => e.removeAttributeNS(W, "after"));
+    // The document default gives Normal paragraphs 8 pt after.
+    const redundant = withSpacing(8);
+    expect(
+      verifyWordPlanWrite(
+        redundant.plan,
+        redundant.source,
+        redundant.after(dropAfter),
+      ),
+    ).toEqual({
+      ok: true,
+      tier: "content",
+      adjustments: ["style-redundant-spacing"],
+    });
+    const changed = withSpacing(4);
+    expect(
+      verifyWordPlanWrite(
+        changed.plan,
+        changed.source,
+        changed.after(dropAfter),
+      ),
+    ).toMatchObject({ ok: false });
+  });
+
   it("accepts Word dropping a page break before the first paragraph, which has no effect there", () => {
     const pageBreak = (index: number) => (doc: Document) => {
       const paragraph = paragraphs(doc)[index];

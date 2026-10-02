@@ -147,6 +147,40 @@ const compiledOf = (s: WordAuthoringSnapshot, p: WordDocumentPlan) =>
   );
 
 describe("in-place classification", () => {
+  it("rewrites N sources as M blocks pairwise, deleting or inserting the rest", () => {
+    const s = snapshot(
+      p(run("One")) + p(run("Two")) + p(run("Three")) + p(run("Tail")),
+    );
+    const reshape = (blocks: string[]): WordDocumentPlan => ({
+      ...plan(s, {}),
+      entries: [
+        {
+          kind: "replace",
+          source: ["b1", "b2", "b3"],
+          blocks: blocks.map((value, i) => text(value, { id: `r${i}` })),
+        },
+        { kind: "keep", source: ["b4"] },
+      ],
+    });
+    const kinds = (blocks: string[]) => {
+      const result = classifyWordInPlacePlan(reshape(blocks), s, ALL);
+      return "fallback" in result
+        ? result.fallback
+        : result.ops.map((op) => `${op.kind}:${op.ref}`);
+    };
+    expect(kinds(["First", "Second"])).toEqual([
+      "text:b1",
+      "text:b2",
+      "delete:b3",
+    ]);
+    expect(kinds(["A", "B", "C", "D"])).toEqual([
+      "text:b1",
+      "text:b2",
+      "text:b3",
+      "insert:b3",
+    ]);
+  });
+
   it("routes only what Word PC's native probe confirmed: plain rewording and paragraph restyles", () => {
     const s = snapshot();
     const shipped = (p: WordDocumentPlan) => {

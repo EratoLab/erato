@@ -40,6 +40,7 @@ export const WORD_APPLY_ADJUSTMENTS = [
   "list-instance-renumbered",
   "first-paragraph-spacing",
   "first-paragraph-page-break",
+  "style-redundant-spacing",
 ] as const;
 export type WordApplyAdjustment = (typeof WORD_APPLY_ADJUSTMENTS)[number];
 /** Adjustments a reader can see in the document; the others are list bookkeeping only. */
@@ -1018,6 +1019,75 @@ function normalizeFirstParagraphPageBreak(
   return true;
 }
 
+/** Content tier: a direct spacing value equal to what the paragraph's style chain already gives it
+ * has no effect, so Word may write it or leave it out. Only that attribute is set aside. */
+function normalizeStyleRedundantSpacing(
+  expected: PackageView,
+  actual: PackageView,
+): boolean {
+  const styles = expected.roots.get("/word/styles.xml");
+  if (!styles) return false;
+  const paragraphStyles = children(styles).filter(
+    (e) =>
+      e.namespaceURI === W &&
+      e.localName === "style" &&
+      e.getAttributeNS(W, "type") === "paragraph",
+  );
+  const byId = new Map(
+    paragraphStyles.map((style) => [attr(style, "styleId"), style]),
+  );
+  const fallback = paragraphStyles.find((style) =>
+    ["1", "true", "on"].includes(attr(style, "default")),
+  );
+  const defaults = direct(
+    direct(direct(direct(styles, "docDefaults"), "pPrDefault"), "pPr"),
+    "spacing",
+  );
+  const inherited = (styleId: string, name: string) => {
+    let style = styleId ? byId.get(styleId) : fallback;
+    for (let depth = 0; style && depth < 32; depth++) {
+      const spacing = direct(direct(style, "pPr"), "spacing");
+      if (spacing?.hasAttributeNS(W, name)) return attr(spacing, name);
+      const basedOn = attr(direct(style, "basedOn"));
+      style = basedOn ? byId.get(basedOn) : undefined;
+    }
+    return defaults?.hasAttributeNS(W, name) ? attr(defaults, name) : null;
+  };
+  const paragraphs = (v: PackageView) =>
+    children(v.body).filter((e) => e.namespaceURI === W && e.localName === "p");
+  const a = paragraphs(expected),
+    b = paragraphs(actual);
+  if (a.length !== b.length) return false;
+  let changed = false;
+  a.forEach((paragraph, i) => {
+    const style = attr(direct(direct(paragraph, "pPr"), "pStyle"));
+    if (style !== attr(direct(direct(b[i], "pPr"), "pStyle"))) return;
+    const spacings = [paragraph, b[i]].map((p) =>
+      direct(direct(p, "pPr"), "spacing"),
+    );
+    let here = false;
+    for (const name of ["before", "after", "line", "lineRule"]) {
+      const [x, y] = spacings.map((e) =>
+        e?.hasAttributeNS(W, name) ? attr(e, name) : null,
+      );
+      if ((x === null) === (y === null)) continue;
+      if ((x ?? y) !== inherited(style, name)) continue;
+      spacings[x === null ? 1 : 0]!.removeAttributeNS(W, name);
+      here = true;
+    }
+    if (!here) return;
+    changed = true;
+    for (const element of spacings)
+      if (
+        element &&
+        !element.children.length &&
+        Array.from(element.attributes).every((x) => x.namespaceURI === XMLNS)
+      )
+        element.remove();
+  });
+  return changed;
+}
+
 function normalizeContentTier(
   expected: PackageView,
   actual: PackageView,
@@ -1059,6 +1129,8 @@ function normalizeContentTier(
     normalizeFirstParagraphPageBreak(expected, actual)
   )
     adjustments.add("first-paragraph-page-break");
+  if (normalizeStyleRedundantSpacing(expected, actual))
+    adjustments.add("style-redundant-spacing");
   return WORD_APPLY_ADJUSTMENTS.filter((code) => adjustments.has(code));
 }
 
