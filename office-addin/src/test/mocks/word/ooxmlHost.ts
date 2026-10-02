@@ -21,7 +21,11 @@ const OFFICE_REL =
  * Otherwise "word-web" takes the imported file wholesale, while
  * "word-pc-16.0.20326" merges it the way Word PC 16.0.20326 was observed to:
  * list definitions get new nsid values plus one unused definition, and saved
- * task-pane records are dropped.
+ * task-pane records are dropped. Word PC also releases the items a paragraph
+ * collection returned when that collection is loaded again (body.paragraphs is
+ * one cached collection per run), so a handle held across the reload fails, and
+ * a paragraph inserted "After" another takes that paragraph's uniqueLocalId while
+ * the anchor gets a new one.
  */
 export type WordOoxmlHostProfile = "word-web" | "word-pc-16.0.20326";
 
@@ -1348,7 +1352,21 @@ export function installWordOoxmlHost(
         paragraphText(p) +
         (nesting ? (settings.cellParagraphTextSuffix ?? "") : ""),
       isListItem: numIdOf(p) !== undefined,
+      ...paragraphStyleValues(p),
     };
+  };
+  /** Paragraph.style is the style's name, styleBuiltIn its built-in identifier or "Other". */
+  const paragraphStyleValues = (p: Element) => {
+    const styles = paragraphStyles();
+    const id = child(child(p, "pPr"), "pStyle")?.getAttributeNS(W, "val");
+    const style =
+      styles.find((s) => s.getAttributeNS(W, "styleId") === id) ??
+      styles.find((s) => s.getAttributeNS(W, "default") === "1");
+    const name = style ? styleName(style) : "Normal";
+    const builtIn = Object.entries(BUILT_IN_STYLE_NAMES).find(
+      ([, builtInName]) => builtInName.toLowerCase() === name.toLowerCase(),
+    )?.[0];
+    return { style: name, styleBuiltIn: builtIn ?? "Other" };
   };
   const paragraphStyles = () => {
     const root = partRoot(live(), "/word/styles.xml");
@@ -1374,6 +1392,18 @@ export function installWordOoxmlHost(
     const pStyle = paragraph.ownerDocument.createElementNS(W, "w:pStyle");
     pStyle.setAttributeNS(W, "w:val", style.getAttributeNS(W, "styleId") ?? "");
     setParagraphProperty(paragraph, "pStyle", pStyle);
+  };
+  /** Word PC: giving a paragraph the Normal style marks Default Paragraph Font used, and Word drops
+   * its semiHidden, as unhideWhenUsed asks. */
+  const unhideOnNormal = (style: Element) => {
+    if (!pc || style.getAttributeNS(W, "default") !== "1") return;
+    for (const s of elements(partRoot(live(), "/word/styles.xml")!, W, "style"))
+      if (
+        s.getAttributeNS(W, "type") === "character" &&
+        s.getAttributeNS(W, "default") === "1" &&
+        child(s, "unhideWhenUsed")
+      )
+        child(s, "semiHidden")?.remove();
   };
   /** Word PC (probe P6): setting a list item's style drops its numbering. */
   const dropListOnRestyle = (paragraph: Element) => {
@@ -1636,9 +1666,17 @@ export function installWordOoxmlHost(
           setParagraphProperty(target(), "jc", jc);
         });
       },
+      get styleBuiltIn() {
+        return loadedValue(loaded, "styleBuiltIn") as string;
+      },
+      get style() {
+        return loadedValue(loaded, "style") as string;
+      },
       set styleBuiltIn(value: string) {
         enqueue(true, "styleBuiltIn", () => {
-          applyStyle(target(), builtInStyle(value));
+          const style = builtInStyle(value);
+          unhideOnNormal(style);
+          applyStyle(target(), style);
           dropListOnRestyle(target());
         });
       },
@@ -1653,6 +1691,7 @@ export function installWordOoxmlHost(
                 )),
           );
           if (!style) throw itemNotFound();
+          unhideOnNormal(style);
           applyStyle(target(), style);
           dropListOnRestyle(target());
         });
@@ -1880,6 +1919,14 @@ export function installWordOoxmlHost(
             made,
             location === "Before" ? anchor : anchor.nextSibling,
           );
+          // Word PC: the paragraph inserted "After" takes its anchor's ID; the anchor gets a new one.
+          if (
+            settings.profile === "word-pc-16.0.20326" &&
+            location === "After"
+          ) {
+            paragraphIds.set(made, idOf(anchor));
+            paragraphIds.set(anchor, newParagraphId());
+          }
         });
         return paragraphProxy(() => {
           if (!made) throw itemNotFound();
@@ -1923,16 +1970,30 @@ export function installWordOoxmlHost(
     list: () => Element[] = () => bodyParagraphs(live()),
   ) => {
     let items: Word.Paragraph[] | undefined;
+    let loaded = { released: false };
     return {
       load: (properties: string) =>
         enqueue(false, "load", () => {
           const names = properties
             .split(",")
             .map((name) => name.trim().replace(/^items\//, ""));
+          // Word PC: reloading a collection releases the items its earlier load returned.
+          if (settings.profile === "word-pc-16.0.20326") loaded.released = true;
+          const generation = { released: false };
+          loaded = generation;
           items = list().map((p) => {
             const values = paragraphValues(p);
             return paragraphProxy(
-              () => p,
+              () => {
+                if (generation.released)
+                  throw Object.assign(new Error("GeneralException"), {
+                    code: "GeneralException",
+                    debugInfo: {
+                      errorLocation: "Document._GetObjectByReferenceId",
+                    },
+                  });
+                return p;
+              },
               new Map(names.map((name) => [name, values[name]])),
             );
           });

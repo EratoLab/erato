@@ -136,18 +136,18 @@ sections and does not count as a change. A replace entry with N sources and M
 blocks is written pairwise: the first min(N, M) blocks rewrite their sources,
 extra blocks are inserted after the last pair and extra sources deleted:
 
-| Group       | Codes                                                                                          | Preview says it changes…              |
-| ----------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Sections    | `sections`                                                                                     | sections or page layout               |
-| Stories     | `stories`, `story-text`                                                                        | headers, footers, notes or comments   |
-| Moves       | `moved`                                                                                        | moves content                         |
-| Objects     | `native-target`, `rich-block`                                                                  | tables, images or other objects       |
-| Formatting  | `format`, `run-format`, `inherited-format`, `restyle`                                          | formatting or styles                  |
-| Lists       | `list`, `new-list`                                                                             | lists                                 |
-| Paragraphs  | `insert`, `delete`, `split`                                                                    | adds, removes or splits paragraphs    |
-| Setting     | `setting`                                                                                      | compatibility mode is on              |
-| Unavailable | `disabled`, `latched`, `host-sets`, `no-package`, `host-error`                                 | none; in-place editing is off         |
-| Other       | `source-shape`, `empty-text`, `boundary`, `not-invertible`, `too-many-ops`, `program-mismatch` | this change can't be written in place |
+| Group       | Codes                                                                                                         | Preview says it changes…              |
+| ----------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Sections    | `sections`                                                                                                    | sections or page layout               |
+| Stories     | `stories`, `story-text`                                                                                       | headers, footers, notes or comments   |
+| Moves       | `moved`                                                                                                       | moves content                         |
+| Objects     | `native-target`, `rich-block`                                                                                 | tables, images or other objects       |
+| Formatting  | `format`, `run-format`, `inherited-format`, `restyle`                                                         | formatting or styles                  |
+| Lists       | `list`, `new-list`                                                                                            | lists                                 |
+| Paragraphs  | `insert`, `delete`, `split`                                                                                   | adds, removes or splits paragraphs    |
+| Setting     | `setting`                                                                                                     | compatibility mode is on              |
+| Unavailable | `disabled`, `latched`, `host-sets`, `no-package`, `host-error`                                                | none; in-place editing is off         |
+| Other       | `script-text`, `source-shape`, `empty-text`, `boundary`, `not-invertible`, `too-many-ops`, `program-mismatch` | this change can't be written in place |
 
 `alignment` and `host-error` come from the live read just before writing, while
 nothing has been saved or written; the plan then takes the import. Once the
@@ -166,9 +166,23 @@ off:
   and drops a list item's numbering when its style is set (P6). The writer
   therefore leaves a list, sets the style, then joins; list items in place must
   carry List Paragraph, and a list item's restyle needs `list`.
+- Word PC releases a paragraph collection's items when that collection is
+  loaded again, and `body.paragraphs` is one cached collection per run (P8).
+  The writer reads through the first load's items, reloads last in that batch
+  and writes through the reloaded items.
+- Word PC gives a paragraph inserted "After" another that paragraph's
+  `uniqueLocalId` and the anchor a new one. The backup record and Undo read
+  every ID they keep through the paragraphs once written, never from before.
+- Giving a paragraph the Normal style makes Word PC drop `w:semiHidden` from
+  Default Paragraph Font (`w:unhideWhenUsed`), even when it was Normal already.
+  The writer sets a style only when it differs, and verification accepts that
+  flag as `style-unhidden`.
+- Word PC writes East Asian text and emoji as if typed, in font-association
+  runs (P2), so text in those scripts, written by Apply or restored by Undo,
+  takes the import as `script-text` until `scriptText` passes on a platform.
 
-`list`, `span`, `tracked`, `trackedStructure` and `storyText` stay off until
-their probe passes. `window.eratoWordInPlaceProbe()` runs the probes in
+`list`, `span`, `tracked`, `trackedStructure`, `storyText` and `scriptText`
+stay off until their probe passes. `window.eratoWordInPlaceProbe()` runs the probes in
 development builds, on an empty scratch document only; a failed probe reports
 the step it reached.
 
@@ -178,15 +192,18 @@ the step it reached.
   first. It accepts serialization noise only.
 - `content`: import writes and restores, after strict failed. It also accepts
   list identity (`nsid`, renumbered list instances), the first paragraph's
-  spacing-before when the plan kept that paragraph, and direct paragraph
-  properties Word leaves out because the style chain already gives them.
+  spacing-before when the plan kept that paragraph, direct paragraph
+  properties Word leaves out because the style chain already gives them, and a
+  hidden-until-used style Word showed once it was used.
 - `block`: in-place writes. Untouched blocks must keep their signature, and
   written paragraphs must have exactly the planned text, marks, style and list.
 
 Adjustment codes form a closed list: `numbering-identity`,
-`list-instance-renumbered` and `style-redundant-format` (a direct spacing or
+`list-instance-renumbered`, `style-redundant-format` (a direct spacing or
 on/off paragraph property, such as an explicit page-break-off, equal to what the
-paragraph's style chain already gives it) are not visible, while
+paragraph's style chain already gives it) and `style-unhidden` (a style marked
+`w:unhideWhenUsed` lost `w:semiHidden`: Styles-pane visibility, not formatting;
+in-place writes accept it silently) are not visible, while
 `first-paragraph-spacing` is visible and disclosed on the card. Growth in
 customXml items or custom document properties is always `package-growth`, a
 failure. Diagnostics carry only routes, codes, counts and part paths, never

@@ -368,9 +368,6 @@ describe("structural in-place writes", { timeout: 30_000 }, () => {
     expect(applied.outcome).toMatchObject({ route: "in-place", tier: "block" });
     expect(host.insert).not.toHaveBeenCalled();
     expect(shape(host.ooxml())).toEqual(shape(original));
-    const inserted = host
-      .paragraphIds()
-      .filter((id) => !idsBefore.includes(id));
     const reverted = await revertWordDocumentPlan(
       applied.before!,
       applied.afterFingerprint!,
@@ -379,9 +376,9 @@ describe("structural in-place writes", { timeout: 30_000 }, () => {
     expect(reverted.outcome?.route).toBe("in-place");
     expect(host.insert).not.toHaveBeenCalled();
     expect(bodySignatures(host.ooxml())).toEqual(bodySignatures(original));
-    expect(host.paragraphIds().filter((id) => inserted.includes(id))).toEqual(
-      [],
-    );
+    // Word PC renumbers the anchor of an "After" insert, so the count, not the IDs, shows that
+    // every inserted paragraph is gone.
+    expect(host.paragraphIds()).toHaveLength(idsBefore.length);
     expect(shape(host.ooxml())).toEqual(shape(original));
   });
 });

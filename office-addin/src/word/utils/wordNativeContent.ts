@@ -3,6 +3,7 @@ import {
   isWordMediaElementActive,
 } from "./wordMediaComparison";
 import {
+  acceptWordStylesUnhiddenByUse,
   createWordXmlComparison,
   removeWordNumberingIdentity,
 } from "./wordXmlComparison";
@@ -334,6 +335,7 @@ export function sameWordPreservedParts(
     });
   const a = parse(before),
     b = parse(after);
+  if (tier === "content") acceptWordStylesUnhiddenByUse(a, b);
   const beforeSignature = createNativeContentSignature(before);
   const afterSignature = createNativeContentSignature(after);
   // New style/list definitions are allowed, but existing definitions must survive.

@@ -90,6 +90,7 @@ describe("in-place native probe", { timeout: 30_000 }, () => {
       replaceKeepsFirstRunMarks: true,
       boldWritesBCs: false,
       italicWritesICs: false,
+      scriptTextExact: true,
     });
     expect(result.probes.P4).toEqual({
       forwardChanged: true,
@@ -137,7 +138,8 @@ describe("in-place native probe", { timeout: 30_000 }, () => {
       neighboursUnchanged: true,
       recreateExact: true,
       anchorSurvives: true,
-      staleHandleWorks: true,
+      readsBeforeReload: true,
+      heldAfterReload: false,
       finalDeleteDropsCount: false,
       finalDeleteKeepsPrevious: false,
     });

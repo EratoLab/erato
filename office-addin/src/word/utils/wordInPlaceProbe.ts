@@ -157,9 +157,9 @@ export async function runWordInPlaceProbe(
         trackingMode,
         probes: {},
       };
-    const pristine = existing.items[0];
-    const pristineId = pristine.uniqueLocalId;
-    /** The untouched paragraph, found again by its ID: a proxy held across edits went stale on Word PC. */
+    const pristineId = existing.items[0].uniqueLocalId;
+    /** The untouched paragraph, found again by its ID: Word PC releases a collection's items when
+     * body.paragraphs is loaded again. */
     const anchorParagraph = async () => {
       const all = body.paragraphs;
       all.load("items/uniqueLocalId");
@@ -291,6 +291,17 @@ export async function runWordInPlaceProbe(
       );
       const has = (run: Element | undefined, name: string) =>
         !!run?.getElementsByTagNameNS(W, name).length;
+      // East Asian text and emoji: Word PC writes them in font-association runs (scriptText).
+      const scripted = await paragraph("Probe two script");
+      scripted.insertText("Probe two 東京 😀.", "Replace");
+      await context.sync();
+      const scriptDoc = new DOMParser().parseFromString(
+        (await signature(scripted)).ooxml,
+        "application/xml",
+      );
+      const scriptRuns = Array.from(
+        (wordMainBody(scriptDoc) ?? scriptDoc).getElementsByTagNameNS(W, "r"),
+      );
       return {
         keepsId: target.uniqueLocalId === id,
         replaceKeepsFirstRunMarks: after.marks.italic && before.marks.italic,
@@ -299,6 +310,8 @@ export async function runWordInPlaceProbe(
         boldWritesBCs: has(runs.at(-1), "bCs"),
         italicWritesICs: has(runs[0], "iCs"),
         runs: runs.length,
+        scriptTextExact:
+          scriptRuns.length === 1 && !has(scriptRuns[0], "rFonts"),
       };
     });
 
@@ -562,12 +575,28 @@ export async function runWordInPlaceProbe(
       await context.sync();
       at(5);
       const recreated = await signature(made);
-      let staleHandleWorks = true;
+      at(6);
+      // The writer reads through a collection's items, reloads it last in that batch and writes
+      // through the reloaded items; Word PC releases the old items on the reload.
+      const all = body.paragraphs;
+      all.load("items/uniqueLocalId");
+      await context.sync();
+      const held = all.items[0];
+      let readsBeforeReload = true;
       try {
-        pristine.load("uniqueLocalId");
+        const read = held.getOoxml();
+        all.load("items/uniqueLocalId");
+        await context.sync();
+        readsBeforeReload = !!read.value;
+      } catch {
+        readsBeforeReload = false;
+      }
+      let heldAfterReload = true;
+      try {
+        held.load("uniqueLocalId");
         await context.sync();
       } catch {
-        staleHandleWorks = false;
+        heldAfterReload = false;
       }
       return {
         startsClean: true,
@@ -577,7 +606,8 @@ export async function runWordInPlaceProbe(
           lastAfter.signature === last.signature,
         recreateExact: recreated.signature === removed.signature,
         anchorSurvives: (await bodyIds()).includes(pristineId),
-        staleHandleWorks,
+        readsBeforeReload,
+        heldAfterReload,
       };
     });
 
@@ -775,6 +805,7 @@ export async function runWordInPlaceProbe(
       );
       await context.sync();
       added.styleBuiltIn = "Normal";
+      added.load("uniqueLocalId");
       await context.sync();
       const neighbours = [anchor, next].map((target) => {
         const changes = target.getTrackedChanges();
@@ -787,12 +818,17 @@ export async function runWordInPlaceProbe(
       inserted.changes.rejectAll();
       await context.sync();
       const [anchorAfter, nextAfter] = await signatures([anchor, next]);
+      // Word PC gives the inserted paragraph its anchor's ID and the anchor a new one, which the
+      // reject leaves: the count and the inserted ID tell, not the anchor's.
+      const rejected = await bodyIds();
       Object.assign(measured, {
         insertNeighboursUntouched: neighbours.every((c) => !c.items.length),
         insertTracked: inserted.types.includes("Added"),
         insertReviewed: inserted.reviewed,
         insertChangesInside: inserted.inside,
-        insertRejectRemoves: sameIds(await bodyIds(), ids),
+        insertRejectRemoves:
+          rejected.length === ids.length &&
+          !rejected.includes(added.uniqueLocalId),
         insertRejectExact:
           anchorAfter.signature === anchorBefore.signature &&
           nextAfter.signature === nextBefore.signature,
@@ -959,16 +995,16 @@ export async function runWordInPlaceProbe(
     if (probes.P8 && !("result" in probes.P8)) {
       step = 0;
       try {
-        at(6);
+        at(7);
         const tail = body.insertParagraph("Probe eight tail", "End");
         tail.styleBuiltIn = "Quote";
         await context.sync();
         const withTail = (await counted()).length;
         const previous = await signature(await anchorParagraph());
-        at(7);
+        at(8);
         tail.delete();
         await context.sync();
-        at(8);
+        at(9);
         const remaining = await counted();
         const final = remaining.at(-1)!;
         const finalAfter = await signature(final);

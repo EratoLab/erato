@@ -11,6 +11,7 @@ export const WORD_IN_PLACE_MECHANISMS_LIST = [
   "tracked",
   "trackedStructure",
   "storyText",
+  "scriptText",
 ] as const;
 export type WordInPlaceMechanism =
   (typeof WORD_IN_PLACE_MECHANISMS_LIST)[number];
@@ -46,6 +47,7 @@ const PENDING: Record<
   tracked: { probe: "P9" },
   trackedStructure: { probe: "P13" },
   storyText: { probe: "P11" },
+  scriptText: { probe: "P2" },
 };
 
 /**
@@ -57,7 +59,8 @@ export const WORD_IN_PLACE_MECHANISMS: Record<
   WordInPlacePlatform,
   Record<WordInPlaceMechanism, WordInPlaceGate>
 > = {
-  // Word PC 16.0.20326: P4 (marks), P5 (insert, split), P7 (restyle) and P8 (delete) passed.
+  // Word PC 16.0.20326: P4 (marks), P5 (insert, split), P7 (restyle) and P8 (delete) passed; P2
+  // showed East Asian text and emoji written in font-association runs (scriptText).
   PC: {
     text: true,
     cell: true,

@@ -465,6 +465,7 @@ describe("in-place classification", () => {
           b2: text("Bigger", { runs: [{ text: "Bigger", fontSize: 14 }] }),
         }),
       ),
+      "script-text": fallbackOf(s, plan(s, { b2: text("Tokyo 東京") })),
       "source-shape": fallbackOf(s, plan(s, { b4: text("Unlinked") })),
       "empty-text": fallbackOf(s, plan(s, { b2: text("") })),
       "not-invertible": fallbackOf(s, plan(s, { b11: text("Plain") })),
@@ -501,6 +502,29 @@ describe("in-place classification", () => {
         sections: [{ id: "final", source: "section-1" }],
       }),
     ).toBe("sections");
+  });
+
+  it("writes East Asian text and emoji in place only where the host writes them exactly, either way", () => {
+    const withScript = { ...caps, scriptText: true };
+    const of = (s: WordAuthoringSnapshot, p: WordDocumentPlan, c = caps) => {
+      const result = classifyWordInPlacePlan(p, s, c);
+      return "fallback" in result ? result.fallback : "in-place";
+    };
+    const s = snapshot();
+    for (const value of ["Tokyo 東京", "Done 😀", "서울", "Ｆｕｌｌ"])
+      expect(of(s, plan(s, { b2: text(value) })), value).toBe("script-text");
+    expect(of(s, plan(s, { b2: text("Tokyo 東京") }), withScript)).toBe(
+      "in-place",
+    );
+    // Latin, Greek, Cyrillic and Arabic text, dashes and ©: Word PC writes them as one plain run.
+    expect(
+      of(s, plan(s, { b2: text("München — café © αβγ Привет مرحبا") })),
+    ).toBe("in-place");
+    // Restore writes the original back, so an original in those scripts counts too.
+    const eastern = snapshot(p(run("東京の天気")) + p(run("Closing")));
+    expect(
+      of(eastern, plan(eastern, { [eastern.blocks[0].ref]: text("Weather") })),
+    ).toBe("script-text");
   });
 
   it("admits structural edits only when the object model can reproduce and undo them", () => {

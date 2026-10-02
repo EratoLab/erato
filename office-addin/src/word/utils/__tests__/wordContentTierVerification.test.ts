@@ -163,6 +163,26 @@ describe("content-tier write verification", () => {
     ).toMatchObject({ ok: false });
   });
 
+  it("accepts Word showing a style it hides until used, and nothing else about that style", () => {
+    const { source, plan, after } = setup();
+    const defaultFont = (doc: Document) =>
+      all(part(doc, "/word/styles.xml"), "style").find(
+        (s) => s.getAttributeNS(W, "styleId") === "DefaultParagraphFont",
+      )!;
+    const shown = (doc: Document) =>
+      all(defaultFont(doc), "semiHidden").forEach((e) => e.remove());
+    expect(verifyWordPlanWrite(plan, source, after(shown))).toEqual({
+      ok: true,
+      tier: "content",
+      adjustments: ["style-unhidden"],
+    });
+    const reprioritized = (doc: Document) =>
+      all(defaultFont(doc), "uiPriority")[0].setAttributeNS(W, "w:val", "9");
+    expect(
+      verifyWordPlanWrite(plan, source, after(shown, reprioritized)),
+    ).toMatchObject({ ok: false });
+  });
+
   it("is strict when Word wrote exactly the compiled package", () => {
     const { source, plan, after } = setup();
     expect(verifyWordPlanWrite(plan, source, after())).toEqual({

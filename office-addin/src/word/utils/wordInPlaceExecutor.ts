@@ -1,4 +1,5 @@
 import {
+  logWordDiagnostic,
   packageStats,
   strictDifferingParts,
   wordDocumentDiagnostic as diagnostic,
@@ -159,40 +160,69 @@ function queueWrite(
     );
 }
 
-interface ListState {
+interface ParagraphState {
   isListItem: boolean;
   listId?: number;
+  style: string;
+  styleBuiltIn: string;
 }
 
-function loadListState(paragraph: Word.Paragraph) {
-  paragraph.load("isListItem");
+function loadParagraphState(paragraph: Word.Paragraph) {
+  paragraph.load("isListItem,style,styleBuiltIn");
   const list = paragraph.listOrNullObject;
   list.load("id");
-  return (): ListState => ({
+  return (): ParagraphState => ({
     isListItem: paragraph.isListItem,
     ...(list.isNullObject ? {} : { listId: list.id }),
+    style: paragraph.style,
+    styleBuiltIn: String(paragraph.styleBuiltIn),
   });
 }
 
+interface StateWrite {
+  paragraph: Word.Paragraph;
+  current: ParagraphState;
+  target: WordInPlaceState;
+  listId: number | undefined;
+  relist?: boolean;
+}
+
 /** Word PC (probe P6) applies List Paragraph when attaching, clears the style when detaching and
- * drops a list item's numbering when its style is set: so leave the list, set the style, then join. */
-function queueState(
-  paragraph: Word.Paragraph,
-  current: ListState,
-  target: WordInPlaceState,
-  listId: number | undefined,
-  relist = true,
-): void {
-  const joins = target.type === "list-item";
-  const id = relist ? listId : (listId ?? current.listId);
-  if (joins && id === undefined)
-    throw new Error("The list to continue is no longer available.");
-  if (current.isListItem) paragraph.detachFromList();
-  if ("builtIn" in target.style)
-    paragraph.styleBuiltIn = target.style
-      .builtIn as Word.Paragraph["styleBuiltIn"];
-  else paragraph.style = target.style.name;
-  if (joins) paragraph.attachToList(id!, target.level ?? 0);
+ * drops a list item's numbering when its style is set: so leave the list, set the style, then join.
+ * A style is set only when it differs from the one the paragraph has by then: on Word PC, giving a
+ * paragraph the Normal style un-hides Default Paragraph Font in styles.xml even when it had it. */
+async function writeStates(
+  context: Word.RequestContext,
+  writes: readonly StateWrite[],
+): Promise<void> {
+  const lists = writes.map(({ current, target, listId, relist = true }) => {
+    const id = relist ? listId : (listId ?? current.listId);
+    if (target.type === "list-item" && id === undefined)
+      throw new Error("The list to continue is no longer available.");
+    return id;
+  });
+  const styles = writes.map(({ paragraph, current }) => {
+    if (!current.isListItem) return () => current;
+    paragraph.detachFromList();
+    paragraph.load("style,styleBuiltIn");
+    return () => ({
+      style: paragraph.style,
+      styleBuiltIn: String(paragraph.styleBuiltIn),
+    });
+  });
+  if (writes.some(({ current }) => current.isListItem)) await context.sync();
+  writes.forEach(({ paragraph, target }, i) => {
+    const now = styles[i]();
+    if ("builtIn" in target.style) {
+      if (now.styleBuiltIn !== target.style.builtIn)
+        paragraph.styleBuiltIn = target.style
+          .builtIn as Word.Paragraph["styleBuiltIn"];
+    } else if (now.style !== target.style.name)
+      paragraph.style = target.style.name;
+    if (target.type === "list-item")
+      paragraph.attachToList(lists[i]!, target.level ?? 0);
+  });
+  await context.sync();
 }
 
 /** Where a TrackedChange may lie relative to the paragraphs the write touched. */
@@ -575,9 +605,9 @@ export async function applyWordPlanInPlace(
       for (const region of regions)
         for (let i = region.start; i <= region.end; i++)
           if (i >= 0 && i < predicted.length) checked.add(i);
-      const second = context.document.body.paragraphs;
-      second.load(PARAGRAPH_FIELDS);
-      const proxies = first.items.slice();
+      // Only reads go through these: body.paragraphs is one cached collection, and Word PC releases
+      // the items of its first load when it is loaded again below.
+      const held = first.items.slice();
       const storySecond = new Map(
         [...stories].map(([key, target]) => {
           const paragraphs = wordStoryParagraphs(sections, target);
@@ -598,12 +628,12 @@ export async function applyWordPlanInPlace(
         return ranges;
       });
       const readOps = ops.map((op, i) =>
-        op.kind === "insert" ? undefined : proxies[positions[i]].getOoxml(),
+        op.kind === "insert" ? undefined : held[positions[i]].getOoxml(),
       );
       const textRanges = ops.map((op, i) => {
         if (!trackedWrite || !caps.span) return undefined;
         if (op.kind !== "cell" && op.kind !== "text") return undefined;
-        const ranges = proxies[positions[i]].getTextRanges(
+        const ranges = held[positions[i]].getTextRanges(
           WORD_SPAN_ENDING_MARKS,
           false,
         );
@@ -612,7 +642,7 @@ export async function applyWordPlanInPlace(
       });
       const cells = ops.map((op, i) => {
         if (op.kind !== "cell") return undefined;
-        const cell = proxies[positions[i]].parentTableCellOrNullObject;
+        const cell = held[positions[i]].parentTableCellOrNullObject;
         cell.load("rowIndex,cellIndex");
         return cell;
       });
@@ -631,7 +661,7 @@ export async function applyWordPlanInPlace(
                 .filter((at) => at >= 0 && at < predicted.length),
             ),
           ].map((at) => {
-            const changes = proxies[at].getTrackedChanges();
+            const changes = held[at].getTrackedChanges();
             changes.load("items/type");
             return changes;
           })
@@ -640,7 +670,7 @@ export async function applyWordPlanInPlace(
       const targetChanges = trackedWrite
         ? [
             ...ops.flatMap((op, i) =>
-              op.kind === "insert" ? [] : [proxies[positions[i]]],
+              op.kind === "insert" ? [] : [held[positions[i]]],
             ),
             ...storyOps.map(storyProxy),
           ].map((paragraph) => {
@@ -658,11 +688,14 @@ export async function applyWordPlanInPlace(
                 ? op.restyle?.to.listRef
                 : undefined;
           if (!ref) return [];
-          const list = proxies[listAt.get(ref)!].listOrNullObject;
+          const list = held[listAt.get(ref)!].listOrNullObject;
           list.load("id");
           return [[ref, list] as const];
         }),
       );
+      // Last in the batch, so the reads above still reach the items it releases.
+      const second = context.document.body.paragraphs;
+      second.load(PARAGRAPH_FIELDS);
       await context.sync();
       const liveB = liveParagraphs(second);
       const storyB = new Map(
@@ -679,6 +712,8 @@ export async function applyWordPlanInPlace(
             paragraphs: { predicted: predicted.length, live: liveB.length },
           }),
         };
+      // The same paragraphs as `held`, and the handles Word PC still resolves.
+      const proxies = second.items.slice();
       // Equal reads around the capture rule out typing: a text difference is the prediction's or the
       // host's Paragraph.text, which the import does not depend on.
       const textIssue = wordParagraphAlignmentIssue(predicted, liveB, checked);
@@ -753,7 +788,7 @@ export async function applyWordPlanInPlace(
           target,
         );
       });
-      const recordOps: WordInPlaceBackupOp[] = ops.map((op, i) => {
+      let recordOps: WordInPlaceBackupOp[] = ops.map((op, i) => {
         const read = readOps[i];
         const anchor =
           op.kind === "delete"
@@ -790,7 +825,7 @@ export async function applyWordPlanInPlace(
           originalSignature: wordParagraphSignature(storyReads[k].value),
         })),
       );
-      const backupRegions: WordInPlaceRegion[] = regions.map((region) => ({
+      let backupRegions: WordInPlaceRegion[] = regions.map((region) => ({
         start: region.start >= 0 ? liveB[region.start].id : null,
         end: region.end < liveB.length ? liveB[region.end].id : null,
         before: region.points
@@ -870,39 +905,78 @@ export async function applyWordPlanInPlace(
             "apply",
           );
       });
+      // Word PC gives a paragraph inserted "After" another that paragraph's ID and the anchor a new
+      // one, so with inserts the IDs the record keeps are read back in the batch that wrote them.
+      const removed = new Set(
+        ops.flatMap((op, i) => (op.kind === "delete" ? [positions[i]] : [])),
+      );
+      const renamable = made.size
+        ? [
+            ...new Set([
+              ...positions,
+              ...listAt.values(),
+              ...regions.flatMap((region) => [region.start, region.end]),
+            ]),
+          ].filter((at) => at >= 0 && at < proxies.length && !removed.has(at))
+        : [];
+      for (const at of renamable) proxies[at].load("uniqueLocalId");
+      for (const paragraph of made.values()) paragraph.load("uniqueLocalId");
       await context.sync();
+      if (renamable.length) {
+        const renamed = new Map(
+          renamable.map((at) => [liveB[at].id, proxies[at].uniqueLocalId]),
+        );
+        const rename = (id: string) => renamed.get(id) ?? id;
+        recordOps = recordOps.map((op) => ({
+          ...op,
+          ...(op.id ? { id: rename(op.id) } : {}),
+          ...(op.listAnchor ? { listAnchor: rename(op.listAnchor) } : {}),
+        }));
+        backupRegions = backupRegions.map((region) => ({
+          ...region,
+          start: region.start === null ? null : rename(region.start),
+          end: region.end === null ? null : rename(region.end),
+        }));
+        record = {
+          ...record,
+          ops: recordOps,
+          regions: [...backupRegions, ...storyRegions],
+        };
+      }
       const restyled = ops.flatMap((op, i) =>
         op.kind === "text" && op.restyle
           ? [{ i, paragraph: proxies[positions[i]], restyle: op.restyle }]
           : [],
       );
-      const states = new Map<number, () => ListState>();
-      for (const [i, paragraph] of made) {
-        paragraph.load("uniqueLocalId");
-        states.set(i, loadListState(paragraph));
-      }
+      const states = new Map<number, () => ParagraphState>();
+      for (const [i, paragraph] of made)
+        states.set(i, loadParagraphState(paragraph));
       for (const { i, paragraph } of restyled)
-        states.set(i, loadListState(paragraph));
+        states.set(i, loadParagraphState(paragraph));
       if (states.size) {
         await context.sync();
-        for (const [i, paragraph] of made) {
-          const op = ops[i] as Extract<WordInPlaceOp, { kind: "insert" }>;
-          queueState(
+        await writeStates(context, [
+          ...[...made].map(([i, paragraph]) => {
+            const op = ops[i] as Extract<WordInPlaceOp, { kind: "insert" }>;
+            return {
+              paragraph,
+              current: states.get(i)!(),
+              target: op.state,
+              listId: op.state.listRef
+                ? listIds.get(op.state.listRef)
+                : undefined,
+            };
+          }),
+          ...restyled.map(({ i, paragraph, restyle }) => ({
             paragraph,
-            states.get(i)!(),
-            op.state,
-            op.state.listRef ? listIds.get(op.state.listRef) : undefined,
-          );
-        }
-        for (const { i, paragraph, restyle } of restyled)
-          queueState(
-            paragraph,
-            states.get(i)!(),
-            restyle.to,
-            restyle.to.listRef ? listIds.get(restyle.to.listRef) : undefined,
-            relisted(restyle.from, restyle.to),
-          );
-        await context.sync();
+            current: states.get(i)!(),
+            target: restyle.to,
+            listId: restyle.to.listRef
+              ? listIds.get(restyle.to.listRef)
+              : undefined,
+            relist: relisted(restyle.from, restyle.to),
+          })),
+        ]);
       }
       stage = "verify";
       progress.stage("verifying");
@@ -1218,6 +1292,12 @@ export async function applyWordPlanInPlace(
       // Paragraph collections, Paragraph.getOoxml and list lookups are reads the import never
       // makes; it runs its own preflight and reports a genuinely broken host itself.
       latchWordInPlace("host-error");
+      // The import that follows succeeds on its own, so this is the only trace of the latch's cause.
+      logWordDiagnostic(
+        "in-place",
+        "fell back",
+        diagnostic(stage, "host-error", error, route),
+      );
       return { fallback: "host-error", details: {} };
     }
     if (!writing)
@@ -1775,67 +1855,78 @@ export async function revertWordPlanInPlace(
         }
       }
       await context.sync();
-      const states = new Map<number, () => ListState>();
-      for (const [k, paragraph] of recreated) {
-        paragraph.load("uniqueLocalId");
-        states.set(k, loadListState(paragraph));
-      }
+      const states = new Map<number, () => ParagraphState>();
+      for (const [k, paragraph] of recreated)
+        states.set(k, loadParagraphState(paragraph));
       for (const { k, paragraph } of restyle)
-        states.set(k, loadListState(paragraph));
+        states.set(k, loadParagraphState(paragraph));
       if (states.size) {
         await context.sync();
-        for (const [k, paragraph] of recreated) {
-          const op = ops[k] as Extract<WordInPlaceBackupOp, { kind: "delete" }>;
-          queueState(
-            paragraph,
-            states.get(k)!(),
-            op.state,
-            op.listAnchor ? listIds.get(op.listAnchor) : undefined,
-          );
-        }
-        for (const { k, paragraph } of restyle) {
-          const op = ops[k] as Extract<WordInPlaceBackupOp, { kind: "text" }>;
-          queueState(
-            paragraph,
-            states.get(k)!(),
-            op.restyle!.from,
-            op.listAnchor ? listIds.get(op.listAnchor) : undefined,
-            relisted(op.restyle!.from, op.restyle!.to),
-          );
-        }
-        await context.sync();
+        await writeStates(context, [
+          ...[...recreated].map(([k, paragraph]) => {
+            const op = ops[k] as Extract<
+              WordInPlaceBackupOp,
+              { kind: "delete" }
+            >;
+            return {
+              paragraph,
+              current: states.get(k)!(),
+              target: op.state,
+              listId: op.listAnchor ? listIds.get(op.listAnchor) : undefined,
+            };
+          }),
+          ...restyle.map(({ k, paragraph }) => {
+            const op = ops[k] as Extract<WordInPlaceBackupOp, { kind: "text" }>;
+            return {
+              paragraph,
+              current: states.get(k)!(),
+              target: op.restyle!.from,
+              listId: op.listAnchor ? listIds.get(op.listAnchor) : undefined,
+              relist: relisted(op.restyle!.from, op.restyle!.to),
+            };
+          }),
+        ]);
       }
       stage = "verify";
+      // Word PC gives a paragraph re-created "After" another that paragraph's ID and the anchor a
+      // new one, so the order Restore expects is read through the handles once it has written.
+      const restored = pending.map((r) =>
+        r.region.before.map(
+          (k) => recreated.get(k) ?? items[position.get(ops[k].id!)!],
+        ),
+      );
+      for (const paragraph of [
+        ...restored.flat(),
+        ...boundaries.map((at) => items[at]),
+      ])
+        paragraph.load("uniqueLocalId");
+      const restoredReads = restored.map((list) =>
+        list.map((paragraph) => paragraph.getOoxml()),
+      );
+      const boundariesAfter = boundaries.map((at) => items[at].getOoxml());
+      const storyRestored = storyPending.map((i) =>
+        storyTargets[i].paragraph.getOoxml(),
+      );
+      // Last in the batch: on Word PC this reload releases `items`, which the reads above still use.
+      const recount = context.document.body.paragraphs;
+      recount.load("items/uniqueLocalId");
+      await context.sync();
       const restoredIds = new Map(
-        pending.map((r) => [
+        pending.map((r, i) => [
           r.index,
-          r.region.before.map((k) =>
-            recreated.has(k) ? recreated.get(k)!.uniqueLocalId : ops[k].id!,
-          ),
+          restored[i].map((paragraph) => paragraph.uniqueLocalId),
         ]),
       );
-      const expectedIds = [...idsBefore];
+      const boundaryIds = new Map(
+        boundaries.map((at) => [at, items[at].uniqueLocalId]),
+      );
+      const expectedIds = idsBefore.map((id, at) => boundaryIds.get(at) ?? id);
       for (const r of [...pending].reverse())
         expectedIds.splice(
           r.start + 1,
           r.end - r.start - 1,
           ...restoredIds.get(r.index)!,
         );
-      const recount = context.document.body.paragraphs;
-      recount.load("items/uniqueLocalId");
-      const restoredReads = pending.map((r) =>
-        r.region.before.map((k, at) =>
-          (
-            recreated.get(k) ??
-            items[position.get(restoredIds.get(r.index)![at])!]
-          ).getOoxml(),
-        ),
-      );
-      const boundariesAfter = boundaries.map((at) => items[at].getOoxml());
-      const storyRestored = storyPending.map((i) =>
-        storyTargets[i].paragraph.getOoxml(),
-      );
-      await context.sync();
       const moved = recount.items.findIndex(
         (p, i) => p.uniqueLocalId !== expectedIds[i],
       );

@@ -7,6 +7,7 @@ import { normalizeWordInlineForComparison } from "./wordInlineStructures";
 import { normalizeWordMediaForComparison } from "./wordMediaComparison";
 import { normalizeWordTablesForComparison } from "./wordTableComparison";
 import {
+  acceptWordStylesUnhiddenByUse,
   createWordXmlComparison,
   isWordHostStatePart,
   isWordHostStateRelationship,
@@ -40,6 +41,7 @@ export const WORD_APPLY_ADJUSTMENTS = [
   "list-instance-renumbered",
   "first-paragraph-spacing",
   "style-redundant-format",
+  "style-unhidden",
 ] as const;
 export type WordApplyAdjustment = (typeof WORD_APPLY_ADJUSTMENTS)[number];
 /** Adjustments a reader can see in the document; the others are list bookkeeping only. */
@@ -1137,6 +1139,8 @@ function normalizeContentTier(
     adjustments.add("first-paragraph-spacing");
   if (normalizeStyleRedundantFormat(expected, actual))
     adjustments.add("style-redundant-format");
+  if (acceptWordStylesUnhiddenByUse(expected.doc, actual.doc))
+    adjustments.add("style-unhidden");
   return WORD_APPLY_ADJUSTMENTS.filter((code) => adjustments.has(code));
 }
 

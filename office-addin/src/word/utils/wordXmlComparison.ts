@@ -141,6 +141,37 @@ export function removeWordNumberingIdentity(
   return removed.sort();
 }
 
+/** Word drops w:semiHidden from a style marked w:unhideWhenUsed once that style is used (Word PC
+ * does so for Default Paragraph Font whenever a paragraph is given the Normal style): Styles-pane
+ * visibility, not formatting. Drops it from those styles of `expected` too, and says whether any. */
+export function acceptWordStylesUnhiddenByUse(
+  expected: Document | Element,
+  actual: Document | Element,
+): boolean {
+  const flag = (style: Element, local: string) =>
+    Array.from(style.children).find(
+      (e) => e.namespaceURI === W && e.localName === local,
+    );
+  const shown = new Set(
+    wordXmlElements(actual, W, "style")
+      .filter((s) => flag(s, "unhideWhenUsed") && !flag(s, "semiHidden"))
+      .map((s) => s.getAttributeNS(W, "styleId")),
+  );
+  let changed = false;
+  for (const style of wordXmlElements(expected, W, "style")) {
+    const hidden = flag(style, "semiHidden");
+    if (
+      hidden &&
+      flag(style, "unhideWhenUsed") &&
+      shown.has(style.getAttributeNS(W, "styleId"))
+    ) {
+      hidden.remove();
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 export interface WordXmlComparison {
   fingerprint: () => string;
   /** Per-part strict signatures of a package; empty for a bare body fragment. */

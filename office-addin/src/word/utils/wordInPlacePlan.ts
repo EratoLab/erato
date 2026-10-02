@@ -44,6 +44,7 @@ export const WORD_IN_PLACE_FALLBACKS = [
   "new-list",
   "format",
   "run-format",
+  "script-text",
   "source-shape",
   "empty-text",
   "inherited-format",
@@ -1277,8 +1278,28 @@ function classify(
   if (typeof stories !== "string") stories.forEach(add);
   if (removed.size && joinsNonParagraphs(plan, snapshot, order))
     failures.add("boundary");
+  if (!caps.scriptText && ops.some(writesScriptFontText))
+    failures.add("script-text");
   if (ops.length > MAX_WORD_IN_PLACE_OPS) failures.add("too-many-ops");
   return { ops, failures };
+}
+
+/** East Asian text and emoji: Word PC writes them as if typed, in font-association runs (MS Gothic
+ * with w:hint="eastAsia", Segoe UI Emoji) that match neither the plan nor the original. */
+const SCRIPT_FONT_TEXT =
+  /[\u1100-\u11ff\u2e80-\u9fff\ua960-\ua97f\uac00-\ud7ff\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef\p{Emoji_Presentation}]|\ufe0f/u;
+
+/** Text an op writes on Apply or on Restore. */
+function writesScriptFontText(op: WordInPlaceOp): boolean {
+  const texts =
+    op.kind === "cell"
+      ? [op.text, op.original]
+      : op.kind === "insert"
+        ? op.runs.map((run) => run.text)
+        : op.kind === "delete"
+          ? op.original.map((run) => run.text)
+          : [...op.runs, ...op.original].map((run) => run.text);
+  return texts.some((text) => SCRIPT_FONT_TEXT.test(text));
 }
 
 export type WordInPlaceSlot =
