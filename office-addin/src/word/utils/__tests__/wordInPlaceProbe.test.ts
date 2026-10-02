@@ -84,14 +84,19 @@ describe("in-place native probe", () => {
             typeof value === "number" ||
             CODES.includes(value),
         ).toBe(true);
+    // As measured on Word PC 16.0.20326: the setters write no complex-script twin.
     expect(result.probes.P2).toMatchObject({
       keepsId: true,
       replaceKeepsFirstRunMarks: true,
-      boldWritesBCs: true,
+      boldWritesBCs: false,
+      italicWritesICs: false,
     });
     expect(result.probes.P4).toEqual({
       forwardChanged: true,
       inverseExact: true,
+      twinSetters: true,
+      twinWritesCs: true,
+      twinInverseExact: true,
     });
     expect(result.probes.P3).toEqual({ stableWhenIdle: true });
     // What the mock host does; the native run decides which mechanisms ship.
@@ -110,6 +115,10 @@ describe("in-place native probe", () => {
       detachKeepsStyle: true,
       attachThenStyleKeepsList: true,
       attachThenStyleSetsStyle: true,
+      attachSetsListStyle: false,
+      detachClearsStyle: true,
+      styleThenAttachKeepsList: true,
+      styleThenAttachKeepsStyle: true,
     });
     expect(result.probes.P7).toEqual({
       startsClean: true,

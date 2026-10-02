@@ -728,8 +728,6 @@ describe(
       ["deletes a list item", "delete"],
       ["splits one paragraph into three", "split"],
       ["merges two list items into one", "split"],
-      ["restyles a paragraph as Heading 2", "restyle"],
-      ["restyles a paragraph with a custom style", "restyle"],
       ["detaches a list item from its list", "list"],
     ])("%s through the import (%s)", async (name, reason) => {
       const host = install();
@@ -750,6 +748,34 @@ describe(
         "[erato] Word apply timings (ms)",
         expect.objectContaining({ route: "import", routeReason: reason }),
       );
+    });
+  },
+);
+
+describe(
+  "restyles Word PC's native probe confirmed (P7)",
+  { timeout: 60_000 },
+  () => {
+    it.each([
+      "restyles a paragraph as Heading 2",
+      "restyles a paragraph with a custom style",
+    ])("%s in place and undoes it exactly", async (name) => {
+      const host = install();
+      const original = host.ooxml();
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await apply(
+        planOf(snapshot, changeOf(name, snapshot)),
+        snapshot,
+      );
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome).toMatchObject({ route: "in-place" });
+      expect(host.insert).not.toHaveBeenCalled();
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(bodySignatures(host.ooxml())).toEqual(bodySignatures(original));
     });
   },
 );
@@ -1032,7 +1058,7 @@ describe("structural writes Word stops midway", { timeout: 30_000 }, () => {
       ...changeOf("splits one paragraph into three", snapshot),
       delete: [SCHEDULE],
     });
-    host.failAtCommand(10);
+    host.failAtCommand(11);
     const result = await apply(plan, snapshot);
     expect(result.status).toBe("interrupted");
     expect(result.diagnostic?.details?.partial).toEqual({

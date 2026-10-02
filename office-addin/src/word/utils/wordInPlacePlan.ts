@@ -64,6 +64,34 @@ export interface WordInPlaceMarks {
 export interface WordInPlaceRun extends WordInPlaceMarks {
   text: string;
 }
+
+const NO_MARKS: WordInPlaceMarks = {
+  bold: false,
+  italic: false,
+  underline: false,
+};
+
+/** Whether writing `runs` over a first run carrying `inherited` calls the bold or italic setter, as
+ * queueWordInPlaceTextWrite does; without the "marks" mechanism those calls cannot be undone exactly. */
+export function wordInPlaceRunsSetMarks(
+  runs: readonly WordInPlaceRun[],
+  inherited: WordInPlaceMarks,
+): boolean {
+  let previous = inherited;
+  for (const run of runs) {
+    if (run.bold !== previous.bold || run.italic !== previous.italic)
+      return true;
+    previous = run;
+  }
+  return false;
+}
+
+const rewriteSetsMarks = (
+  runs: readonly WordInPlaceRun[],
+  original: readonly WordInPlaceRun[],
+) =>
+  wordInPlaceRunsSetMarks(runs, original[0] ?? NO_MARKS) ||
+  wordInPlaceRunsSetMarks(original, runs[0] ?? NO_MARKS);
 /** How the object model applies a paragraph style: by its locale-independent built-in name, or by
  * the w:name of a custom style. */
 export type WordInPlaceStyle = { builtIn: string } | { name: string };
@@ -698,6 +726,13 @@ function textOp(
   const restyled = styleChanged(from, to);
   const relisted = listChanged(from, to);
   if (restyled && !caps.restyle) return "restyle";
+  // Word PC drops list membership when a list item's style is set (probe P6).
+  if (
+    restyled &&
+    !caps.list &&
+    (from.type === "list-item" || to.type === "list-item")
+  )
+    return "list";
   if (relisted && !caps.list) return "list";
   if (relisted && !caps.restyle) return "restyle";
   const format = paragraphFormat(block);
@@ -728,6 +763,8 @@ function textOp(
     runs: wordPlanBlockRuns({ ...block, format }),
     original: shape.runs,
   };
+  if (!caps.marks && rewriteSetsMarks(op.runs, op.original))
+    return "run-format";
   if (!restyled && !relisted) return op;
   const props = paragraphProperties(source);
   if (!props.clean) return "inherited-format";
@@ -761,6 +798,9 @@ function insertOp(
   if (block.type === "list-item" && !caps.list) return "list";
   if (!caps.restyle) return "restyle";
   if (!caps.delete) return "not-invertible";
+  const runs = wordPlanBlockRuns({ ...block, format: undefined });
+  if (!caps.marks && wordInPlaceRunsSetMarks(runs, NO_MARKS))
+    return "run-format";
   const state = withStyle(blockTyped(block, snapshot), snapshot);
   if (!state) return "restyle";
   if (state.type === "list-item") {
@@ -774,7 +814,7 @@ function insertOp(
     paragraph: 0,
     location: anchor.location,
     block: block.id,
-    runs: wordPlanBlockRuns({ ...block, format: undefined }),
+    runs,
     state,
   };
 }
@@ -822,6 +862,8 @@ function deleteOp(ref: string, ctx: Context): OpResult {
     return "not-invertible";
   const shape = wordInPlaceSourceRuns(parse(source.xml));
   if ("fallback" in shape || shape.nonMark !== NO_RUN_PROPERTIES)
+    return "not-invertible";
+  if (!caps.marks && wordInPlaceRunsSetMarks(shape.runs, NO_MARKS))
     return "not-invertible";
   const state = withStyle(sourceTyped(source), snapshot);
   if (!state) return "not-invertible";
@@ -1114,6 +1156,7 @@ function storyOps(
         return "stories";
       const runs = wordPlanBlockRuns(block);
       if (sameWordInPlaceRuns(runs, shape.runs)) continue;
+      if (!caps.marks && rewriteSetsMarks(runs, shape.runs)) return "stories";
       if (
         !block.text ||
         !shape.runs.length ||

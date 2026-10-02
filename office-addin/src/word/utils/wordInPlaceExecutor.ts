@@ -12,7 +12,10 @@ import {
   withWordInPlaceBackup,
 } from "./wordDocumentPackage";
 import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
-import { wordInPlaceCapabilities } from "./wordInPlaceCapabilities";
+import {
+  wordComplexScriptMarkSetters,
+  wordInPlaceCapabilities,
+} from "./wordInPlaceCapabilities";
 import { materializeWordInPlaceOps } from "./wordInPlacePlan";
 import {
   WORD_SPAN_ENDING_MARKS,
@@ -115,13 +118,20 @@ export function queueWordInPlaceTextWrite(
   inherited: WordInPlaceMarks,
 ): void {
   let previous = inherited;
+  const twins = wordComplexScriptMarkSetters();
   runs.forEach((run, index) => {
     const range = paragraph.insertText(
       run.text,
       index === 0 ? "Replace" : "End",
     );
-    if (run.bold !== previous.bold) range.font.bold = run.bold;
-    if (run.italic !== previous.italic) range.font.italic = run.italic;
+    if (run.bold !== previous.bold) {
+      range.font.bold = run.bold;
+      if (twins) range.font.boldBidirectional = run.bold;
+    }
+    if (run.italic !== previous.italic) {
+      range.font.italic = run.italic;
+      if (twins) range.font.italicBidirectional = run.italic;
+    }
     if (run.underline !== previous.underline)
       range.font.underline = run.underline ? "Single" : "None";
     previous = run;

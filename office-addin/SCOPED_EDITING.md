@@ -145,10 +145,15 @@ backup is saved there is no fallback and no retry.
 
 Each mechanism is switched on per platform in `WORD_IN_PLACE_MECHANISMS`
 (`wordInPlaceCapabilities.ts`) only after its native probe passed there. Today
-only `text` and `cell` are on; `insert`, `delete`, `split`, `restyle`, `list`,
-`span`, `tracked`, `trackedStructure` and `storyText` name the probe that will
-enable them. `window.eratoWordInPlaceProbe()` runs the probes in development
-builds, on an empty scratch document only.
+`text` and `cell` are on everywhere, and `restyle` on Word PC (P7), except for
+list items: Word PC drops a list item's numbering when its style is set (P6).
+`marks` covers rewrites that call the bold/italic setters: Word PC's setters write
+no complex-script twin (P2), so an exact Undo needs the bidirectional setters
+(WordApiDesktop 1.3), confirmed by P4. Until then such rewrites take the import
+as `run-format`. `insert`, `delete`, `split`, `list`, `span`, `tracked`,
+`trackedStructure` and `storyText` name the probe that will enable them.
+`window.eratoWordInPlaceProbe()` runs the probes in development builds, on an
+empty scratch document only; a failed probe reports the step it reached.
 
 ### Verification tiers
 

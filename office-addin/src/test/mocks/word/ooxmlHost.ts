@@ -904,6 +904,8 @@ export function installWordOoxmlHost(
   source: Uint8Array | string,
   settings: WordOoxmlHostOptions = {},
 ) {
+  // Word PC 16.0.20326 (native probe P2): the bold/italic setters write no complex-script twin.
+  const pc = settings.profile === "word-pc-16.0.20326";
   let current: Uint8Array =
     typeof source === "string"
       ? wordDocumentOoxmlToFile(source)
@@ -1217,10 +1219,32 @@ export function installWordOoxmlHost(
         ),
       font: {
         set bold(value: boolean) {
-          enqueue(true, "font.bold", mark(["b", "bCs"], value ? "" : null));
+          enqueue(
+            true,
+            "font.bold",
+            mark(pc ? ["b"] : ["b", "bCs"], value ? "" : null),
+          );
         },
         set italic(value: boolean) {
-          enqueue(true, "font.italic", mark(["i", "iCs"], value ? "" : null));
+          enqueue(
+            true,
+            "font.italic",
+            mark(pc ? ["i"] : ["i", "iCs"], value ? "" : null),
+          );
+        },
+        set boldBidirectional(value: boolean) {
+          enqueue(
+            true,
+            "font.boldBidirectional",
+            mark(["bCs"], value ? "" : null),
+          );
+        },
+        set italicBidirectional(value: boolean) {
+          enqueue(
+            true,
+            "font.italicBidirectional",
+            mark(["iCs"], value ? "" : null),
+          );
         },
         set underline(value: string) {
           enqueue(

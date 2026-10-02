@@ -1,6 +1,7 @@
 export const WORD_IN_PLACE_MECHANISMS_LIST = [
   "text",
   "cell",
+  "marks",
   "delete",
   "insert",
   "split",
@@ -35,6 +36,7 @@ const PENDING: Record<
   Exclude<WordInPlaceMechanism, "text" | "cell">,
   { probe: WordInPlaceProbeId }
 > = {
+  marks: { probe: "P4" },
   delete: { probe: "P8" },
   insert: { probe: "P5" },
   split: { probe: "P5" },
@@ -55,11 +57,20 @@ export const WORD_IN_PLACE_MECHANISMS: Record<
   WordInPlacePlatform,
   Record<WordInPlaceMechanism, WordInPlaceGate>
 > = {
-  PC: { text: true, cell: true, ...PENDING },
+  PC: { text: true, cell: true, ...PENDING, restyle: true },
   Mac: { text: true, cell: true, ...PENDING },
   OfficeOnline: { text: true, cell: true, ...PENDING },
   unknown: { text: true, cell: true, ...PENDING },
 };
+
+/** Word PC's bold/italic setters write no complex-script twin (probe P2), while Word's own formatting
+ * writes both; only the bidirectional setters can restore such a run exactly. */
+export function wordComplexScriptMarkSetters(): boolean {
+  return !!globalThis.Office?.context?.requirements?.isSetSupported(
+    "WordApiDesktop",
+    "1.3",
+  );
+}
 
 function currentPlatform(): WordInPlacePlatform {
   const platform = String(
@@ -80,7 +91,8 @@ export function wordInPlaceCapabilities(
   return Object.fromEntries(
     WORD_IN_PLACE_MECHANISMS_LIST.map((mechanism) => [
       mechanism,
-      gates[mechanism] === true,
+      gates[mechanism] === true &&
+        (mechanism !== "marks" || wordComplexScriptMarkSetters()),
     ]),
   ) as WordInPlaceCapabilities;
 }

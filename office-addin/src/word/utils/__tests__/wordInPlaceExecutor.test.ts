@@ -22,6 +22,10 @@ import {
   wordDocumentFingerprint,
 } from "../wordDocumentXml";
 import {
+  setWordInPlaceCapabilitiesForTests,
+  wordInPlaceCapabilities,
+} from "../wordInPlaceCapabilities";
+import {
   resetWordInPlaceLatchForTests,
   wordInPlaceAvailability,
 } from "../wordInPlaceSwitch";
@@ -140,7 +144,15 @@ const paragraphXml = (ooxml: string, text: string) => {
 const mutations = (events: string[]) =>
   events.filter((e) => e.startsWith("mutation:"));
 
+/** The shipped PC mechanisms plus the complex-script mark setters P4 has yet to confirm natively. */
+const withMarks = () =>
+  setWordInPlaceCapabilitiesForTests({
+    ...wordInPlaceCapabilities("PC"),
+    marks: true,
+  });
+
 afterEach(() => {
+  setWordInPlaceCapabilitiesForTests(undefined);
   resetWordInPlaceLatchForTests();
   delete window.WORD_FORCE_IMPORT_APPLY;
   vi.restoreAllMocks();
@@ -149,6 +161,7 @@ afterEach(() => {
 
 describe("in-place apply", { timeout: 30_000 }, () => {
   it("rewrites a paragraph with b/i/u, a list item and a language-tagged paragraph without importing", async () => {
+    withMarks();
     const host = install();
     const original = host.get();
     const snapshot = await captureRealisticSnapshot();
@@ -298,6 +311,7 @@ describe("in-place apply", { timeout: 30_000 }, () => {
   });
 
   it("reverts an in-place write to the exact original package", async () => {
+    withMarks();
     const host = install();
     const original = wordDocumentFingerprint(host.ooxml());
     const snapshot = await captureRealisticSnapshot();

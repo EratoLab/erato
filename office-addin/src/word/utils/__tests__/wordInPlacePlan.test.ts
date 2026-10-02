@@ -39,7 +39,8 @@ import type {
 } from "../wordDocumentPlan";
 import type { WordInPlaceFallback, WordInPlaceOp } from "../wordInPlacePlan";
 
-const caps = wordInPlaceCapabilities("PC");
+/** Text and cell rewrites with their mark setters; every structural mechanism off. */
+const caps = { ...wordInPlaceCapabilities("PC"), marks: true, restyle: false };
 const ALL = ALL_WORD_IN_PLACE_CAPABILITIES;
 const run = (text: string, rPr = "") =>
   `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
@@ -139,6 +140,49 @@ const compiledOf = (s: WordAuthoringSnapshot, p: WordDocumentPlan) =>
   );
 
 describe("in-place classification", () => {
+  it("routes only what Word PC's native probe confirmed: plain rewording and paragraph restyles", () => {
+    const s = snapshot();
+    const shipped = (p: WordDocumentPlan) => {
+      const result = classifyWordInPlacePlan(
+        p,
+        s,
+        wordInPlaceCapabilities("PC"),
+      );
+      return "fallback" in result ? result.fallback : "in-place";
+    };
+    const list = s.blocks[2];
+    expect(shipped(plan(s, { b2: text("Reworded plainly") }))).toBe("in-place");
+    expect(
+      shipped(plan(s, { b2: text("Now a heading", { styleRef: "Heading1" }) })),
+    ).toBe("in-place");
+    // Undoing a mark change needs the complex-script setters (P2, P4).
+    expect(
+      shipped(
+        plan(s, {
+          b2: text("Bold start", {
+            runs: [{ text: "Bold", bold: true }, { text: " start" }],
+          }),
+        }),
+      ),
+    ).toBe("run-format");
+    // Word PC drops a list item's numbering when its style is set (P6).
+    expect(
+      shipped(
+        plan(s, {
+          b3: {
+            id: "l",
+            type: "list-item",
+            text: list.text,
+            list: list.list,
+            level: list.level,
+            ordered: list.ordered,
+            styleRef: "Heading1",
+          },
+        }),
+      ),
+    ).toBe("list");
+  });
+
   it("turns paragraph, heading and list-item rewrites with b/i/u marks into text ops", () => {
     const s = snapshot();
     const list = s.blocks[2];

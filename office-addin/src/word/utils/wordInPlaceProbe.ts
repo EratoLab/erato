@@ -1,6 +1,7 @@
 import { captureWordDocumentPackage } from "./wordDocumentPackage";
 import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
 import { wordPackageCounts } from "./wordFullDocumentComparison";
+import { wordComplexScriptMarkSetters } from "./wordInPlaceCapabilities";
 import {
   placedWithin,
   queueRevisionPlacements,
@@ -156,14 +157,20 @@ export async function runWordInPlaceProbe(
       };
     const pristine = existing.items[0];
     const probes: WordInPlaceProbeReport["probes"] = {};
+    let step = 0;
+    /** The last step an attempt reached, so an error report says where Word threw. */
+    const at = (n: number) => {
+      step = n;
+    };
     const attempt = async (
       id: WordInPlaceProbeId,
       run: () => Promise<Measured>,
     ) => {
+      step = 0;
       try {
         probes[id] = await run();
       } catch {
-        probes[id] = { result: "error" };
+        probes[id] = { result: "error", step };
       }
     };
     // Inserted before the untouched paragraph of the empty document, which a new paragraph takes its
@@ -312,9 +319,46 @@ export async function runWordInPlaceProbe(
       );
       await context.sync();
       const restored = await signature(target);
+      const twinSetters = wordComplexScriptMarkSetters();
+      let twinWritesCs: WordInPlaceProbeValue = "not-run";
+      let twinInverseExact: WordInPlaceProbeValue = "not-run";
+      if (twinSetters) {
+        // Formatted the way Word's own Bold command does it, with the complex-script twin.
+        at(1);
+        const styled = await paragraph("Probe four styled");
+        const whole = styled.getRange("Content");
+        whole.font.bold = true;
+        whole.font.boldBidirectional = true;
+        await context.sync();
+        at(2);
+        const start = await signature(styled);
+        twinWritesCs = /<w:bCs\b/.test(start.ooxml);
+        queueWordInPlaceTextWrite(
+          styled,
+          [
+            { text: "Probe four ", ...PLAIN },
+            { text: "styled", ...PLAIN, bold: true, italic: true },
+          ],
+          start.marks,
+        );
+        await context.sync();
+        at(3);
+        const mid = await signature(styled);
+        queueWordInPlaceTextWrite(
+          styled,
+          [{ text: "Probe four styled", ...PLAIN, bold: true }],
+          mid.marks,
+        );
+        await context.sync();
+        twinInverseExact =
+          (await signature(styled)).signature === start.signature;
+      }
       return {
         forwardChanged: changed.signature !== original.signature,
         inverseExact: restored.signature === original.signature,
+        twinSetters,
+        twinWritesCs,
+        twinInverseExact,
       };
     });
 
@@ -348,8 +392,9 @@ export async function runWordInPlaceProbe(
       // Created before the list exists, so none of them can have joined it.
       const plain = await paragraph("Probe six plain");
       const styled = await paragraph("Probe six styled");
+      const ordered = await paragraph("Probe six ordered");
       const first = await paragraph("Probe six first");
-      const start = await signatures([plain, styled, first]);
+      const start = await signatures([plain, styled, ordered, first]);
       if (!start.every(({ ooxml }) => plainStart(ooxml)))
         return { startsClean: false };
       const list = first.startNewList();
@@ -363,6 +408,9 @@ export async function runWordInPlaceProbe(
       // The executor's order within one batch: list membership, then the style.
       styled.attachToList(list.id, 0);
       styled.styleBuiltIn = "ListParagraph";
+      // The opposite order, which Word may handle differently.
+      ordered.styleBuiltIn = "ListParagraph";
+      ordered.attachToList(list.id, 0);
       await context.sync();
       const attached = (await captureWordDocumentPackage()).ooxml;
       if (second.isListItem) second.listItem.level = 1;
@@ -395,6 +443,16 @@ export async function runWordInPlaceProbe(
         attachThenStyleSetsStyle:
           pStyle(at(attached, "Probe six styled")) ===
           inPackage(attached, "Probe six styled").styleId("list paragraph"),
+        attachSetsListStyle:
+          pStyle(at(attached, "Probe six plain")) ===
+          inPackage(attached, "Probe six plain").styleId("list paragraph"),
+        detachClearsStyle: !pStyle(at(detached, "Probe six plain")),
+        styleThenAttachKeepsList:
+          !!listNumId &&
+          numbering(at(attached, "Probe six ordered")).numId === listNumId,
+        styleThenAttachKeepsStyle:
+          pStyle(at(attached, "Probe six ordered")) ===
+          inPackage(attached, "Probe six ordered").styleId("list paragraph"),
       };
     });
 
@@ -427,24 +485,28 @@ export async function runWordInPlaceProbe(
       };
     });
 
+    const counted = async () => {
+      const all = body.paragraphs;
+      all.load("items/uniqueLocalId");
+      await context.sync();
+      return all.items;
+    };
     await attempt("P8", async (): Promise<Measured> => {
+      at(1);
       const one = await paragraph("Probe eight one");
       const two = await paragraph("Probe eight two");
       const three = await paragraph("Probe eight three");
       const [first, removed, last] = await signatures([one, two, three]);
       if (![first, removed, last].every(({ ooxml }) => plainStart(ooxml)))
         return { startsClean: false };
-      const counted = async () => {
-        const all = body.paragraphs;
-        all.load("items/uniqueLocalId");
-        await context.sync();
-        return all.items;
-      };
       const count = (await counted()).length;
+      at(2);
       two.delete();
       await context.sync();
       const afterDelete = (await counted()).length;
+      at(3);
       const [firstAfter, lastAfter] = await signatures([one, three]);
+      at(4);
       const made = one.insertParagraph("", "After");
       queueWordInPlaceTextWrite(
         made,
@@ -453,19 +515,8 @@ export async function runWordInPlaceProbe(
       );
       made.styleBuiltIn = "Normal";
       await context.sync();
+      at(5);
       const recreated = await signature(made);
-      // What undoing a paragraph added at the very end would face: deleting the final paragraph.
-      // The style tells the final paragraph mark apart from the untouched one before it.
-      const tail = body.insertParagraph("Probe eight tail", "End");
-      tail.styleBuiltIn = "Quote";
-      await context.sync();
-      const withTail = (await counted()).length;
-      const previous = await signature(pristine);
-      tail.delete();
-      await context.sync();
-      const remaining = await counted();
-      const final = remaining.at(-1)!;
-      const finalAfter = await signature(final);
       return {
         startsClean: true,
         countDropsByOne: afterDelete === count - 1,
@@ -473,14 +524,11 @@ export async function runWordInPlaceProbe(
           firstAfter.signature === first.signature &&
           lastAfter.signature === last.signature,
         recreateExact: recreated.signature === removed.signature,
-        finalDeleteDropsCount: remaining.length === withTail - 1,
-        finalDeleteKeepsPrevious:
-          final.uniqueLocalId === pristine.uniqueLocalId &&
-          finalAfter.signature === previous.signature,
       };
     });
 
     await attempt("P10", async () => {
+      at(1);
       const target = await paragraph("Probe ten: tabs\tand “quotes”, too.");
       const ranges = target.getTextRanges(WORD_SPAN_ENDING_MARKS, false);
       ranges.load("items/text");
@@ -488,12 +536,15 @@ export async function runWordInPlaceProbe(
       await context.sync();
       // The last range may hold the paragraph mark without showing it: the writer must neither
       // delete it with the last word nor write past it when appending.
+      at(2);
       const last = await paragraph("Probe ten last word");
       const spaced = await paragraph("Probe ten spaced ");
       const next = await paragraph("Probe ten next");
       const nextBefore = await signature(next);
       const idsBefore = await bodyIds();
+      at(3);
       const lastWordReplaced = await spanEdit(last, "Probe ten final term");
+      at(4);
       const appended = await spanEdit(spaced, "Probe ten spaced end");
       const nextAfter = await signature(next);
       return {
@@ -826,6 +877,39 @@ export async function runWordInPlaceProbe(
     });
 
     probes.P12 = { result: "not-run" };
+    // Last: Word may remove the paragraph before a deleted final paragraph, and every other probe
+    // inserts before that paragraph. The style tells the final paragraph mark apart from it.
+    if (probes.P8 && !("result" in probes.P8)) {
+      step = 0;
+      try {
+        at(6);
+        const tail = body.insertParagraph("Probe eight tail", "End");
+        tail.styleBuiltIn = "Quote";
+        await context.sync();
+        const withTail = (await counted()).length;
+        const previous = await signature(pristine);
+        at(7);
+        tail.delete();
+        await context.sync();
+        at(8);
+        const remaining = await counted();
+        const final = remaining.at(-1)!;
+        const finalAfter = await signature(final);
+        probes.P8 = {
+          ...probes.P8,
+          finalDeleteDropsCount: remaining.length === withTail - 1,
+          finalDeleteKeepsPrevious:
+            final.uniqueLocalId === pristine.uniqueLocalId &&
+            finalAfter.signature === previous.signature,
+        };
+      } catch {
+        probes.P8 = {
+          ...probes.P8,
+          finalDelete: "error",
+          finalDeleteStep: step,
+        };
+      }
+    }
     return { status: "completed", platform, trackingMode, probes };
   });
 }
