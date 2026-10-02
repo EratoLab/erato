@@ -1,5 +1,7 @@
 //! Teams bot integration tests: the Erato side of a Teams conversation.
 
+mod sign_in;
+
 use crate::test_utils::{MockLlmConfig, setup_mock_llm_server};
 use crate::{MIGRATOR, test_app_state};
 use erato::db::entity::prelude::{Chats, Messages};

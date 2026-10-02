@@ -160,6 +160,10 @@ pub async fn messages_route(
             let (status, body) = handler::on_invoke(&bot, &host, &activity).await;
             (status, Json(body)).into_response()
         }
+        "event" if activity.name.as_deref() == Some("tokens/response") => {
+            tokio::spawn(handler::on_token_response(bot, host, activity));
+            StatusCode::OK.into_response()
+        }
         // conversationUpdate, installationUpdate, messageReaction, …
         _ => StatusCode::OK.into_response(),
     }

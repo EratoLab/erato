@@ -4,6 +4,8 @@
 //! back as bot-level types ([`GenerationUpdate`], [`Completion`]), so the
 //! protocol side stays independent and could move into its own crate.
 
+mod sign_in;
+
 use super::activity::ConversationKind;
 use super::cards::{ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet};
 use super::graph::{GraphIdentity, SharedItem};

@@ -17,6 +17,7 @@ pub mod mcp_server_oauth_credentials;
 pub mod message_feedbacks;
 pub mod messages;
 pub mod ms_teams_conversations;
+pub mod ms_teams_pending_sign_ins;
 pub mod ms_teams_token_exchanges;
 pub mod runtime_configuration;
 pub mod share_grants;
