@@ -2935,6 +2935,14 @@ pub struct McpServersGlobalConfig {
     #[serde(default)]
     pub show_frontend_tab: bool,
 
+    /// Show MCP connector controls in the chat input. Inherits `show_frontend_tab` when omitted.
+    #[serde(default)]
+    pub show_in_chat_input: Option<bool>,
+
+    /// Show the MCP selector in assistant create/edit forms. Inherits `show_frontend_tab` when omitted.
+    #[serde(default)]
+    pub show_in_assistant_editor: Option<bool>,
+
     /// Whether the synthetic `wait` tool is available for all discovered MCP
     /// tools. Disabled by default; individual servers can opt in via
     /// `mcp_servers.<id>.wait_tools`.
@@ -2957,6 +2965,8 @@ impl Default for McpServersGlobalConfig {
         Self {
             max_session_idle_seconds: None,
             show_frontend_tab: false,
+            show_in_chat_input: None,
+            show_in_assistant_editor: None,
             enable_wait: false,
             max_wait_seconds: default_mcp_wait_max_seconds(),
             approval: McpToolApprovalConfig::default(),

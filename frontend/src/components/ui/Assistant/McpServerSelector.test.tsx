@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+
 import { McpServerSelector } from "./McpServerSelector";
 
 import type { McpServerStatus } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -35,15 +37,19 @@ function renderSelector(
 ) {
   const onSelectionChange = vi.fn();
   const result = render(
-    <MemoryRouter>
-      <McpServerSelector
-        servers={servers}
-        selectedServerIds={[]}
-        onSelectionChange={onSelectionChange}
-        {...props}
-      />
-      <LocationProbe />
-    </MemoryRouter>,
+    <StaticFeatureConfigProvider
+      config={{ userPreferences: { mcpServersTabEnabled: true } }}
+    >
+      <MemoryRouter>
+        <McpServerSelector
+          servers={servers}
+          selectedServerIds={[]}
+          onSelectionChange={onSelectionChange}
+          {...props}
+        />
+        <LocationProbe />
+      </MemoryRouter>
+    </StaticFeatureConfigProvider>,
   );
   return { onSelectionChange, ...result };
 }

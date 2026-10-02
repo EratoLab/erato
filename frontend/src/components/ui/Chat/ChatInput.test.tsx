@@ -5710,6 +5710,35 @@ describe("ChatInput", () => {
       expect(mockFacetSelector).not.toHaveBeenCalled();
     });
 
+    it.each([true, false])(
+      "uses explicit chat visibility %s independently of preferences",
+      async (enabled) => {
+        enableConnectors([CONNECTED, UNCONNECTED]);
+        mockUseUserPreferencesFeature.mockReturnValue({
+          mcpServersTabEnabled: !enabled,
+        });
+        mockUseChatInputFeature.mockReturnValue({
+          autofocus: false,
+          showUsageAdvisory: true,
+          mcpServersEnabled: enabled,
+        });
+        await renderComposer("chat-1");
+        if (enabled) {
+          expect(latestConnectorsSection()?.header).toBe("Connectors");
+          expect(mockUseListMcpServers).toHaveBeenLastCalledWith(
+            {},
+            expect.any(Object),
+          );
+        } else {
+          expect(mockFacetSelector).not.toHaveBeenCalled();
+          expect(mockUseListMcpServers).toHaveBeenLastCalledWith(
+            skipToken,
+            expect.any(Object),
+          );
+        }
+      },
+    );
+
     it("turns writes off on an existing chat through the update endpoint", async () => {
       enableConnectors();
       const mutateAsync = vi.fn().mockResolvedValue({});
