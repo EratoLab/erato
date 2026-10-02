@@ -587,6 +587,7 @@ export async function runWordInPlaceProbe(
     await attempt("P9", async (): Promise<Measured> => {
       // Measured only where the developer turned tracking on; the probe never sets the mode.
       if (!tracking) return { result: "not-run" };
+      at(1);
       const words = await paragraph("Probe nine kept words");
       const spaced = await paragraph("Probe nine spaced ");
       const whole = await paragraph("Probe nine whole");
@@ -594,14 +595,17 @@ export async function runWordInPlaceProbe(
       const next = await paragraph("Probe nine next");
       item.startNewList();
       await context.sync();
+      at(2);
       await accept(words, spaced, whole, item, next);
       const written = [words, spaced, whole, item];
       const before = await signatures([...written, next]);
       const idsBefore = await bodyIds();
       // A middle insertion and the last word replaced, then an append after the last word.
+      at(3);
       const span = await spanEdit(words, "Probe nine new kept terms");
       const append = await spanEdit(spaced, "Probe nine spaced end");
       const listSpan = await spanEdit(item, "Probe nine listed terms");
+      at(4);
       queueWordInPlaceTextWrite(
         whole,
         [
@@ -611,6 +615,7 @@ export async function runWordInPlaceProbe(
         wordFirstRunMarks(before[2].ooxml),
       );
       await context.sync();
+      at(5);
       const reviews = [
         await review(
           words,
@@ -630,6 +635,7 @@ export async function runWordInPlaceProbe(
       await context.sync();
       const idsWritten = await bodyIds();
       const nextWritten = await signature(next);
+      at(6);
       for (const { changes } of [...reviews, listed]) changes.rejectAll();
       await context.sync();
       const restored = await signatures(written);
@@ -659,11 +665,13 @@ export async function runWordInPlaceProbe(
       await context.sync();
       const cell = all.items.find((p) => p.tableNestingLevel > 0);
       if (!cell) return { ...measured, cell: "not-run" };
+      at(7);
       await accept(cell);
       const cellBefore = await signature(cell);
       cell.load("text");
       await context.sync();
       const original = cell.text;
+      at(8);
       cell.insertText("Probe nine cell", "Replace");
       await context.sync();
       const cellReview = await review(cell, "Probe nine cell", original);
@@ -680,6 +688,7 @@ export async function runWordInPlaceProbe(
 
     await attempt("P13", async (): Promise<Measured> => {
       if (!tracking) return { result: "not-run" };
+      at(1);
       const anchor = await paragraph("Probe thirteen anchor");
       const next = await paragraph("Probe thirteen next");
       const doomed = await paragraph("Probe thirteen deleted");
@@ -690,6 +699,7 @@ export async function runWordInPlaceProbe(
       const list = head.startNewList();
       list.load("id");
       await context.sync();
+      at(2);
       await accept(anchor, next, doomed, after, styled, joining, head);
       const measured: Measured = {};
       const reject = async (target: Word.Paragraph) => {
@@ -700,6 +710,7 @@ export async function runWordInPlaceProbe(
 
       // Inserted as the executor inserts: an empty paragraph, its text, then its style. Word may
       // record the new paragraph mark on the anchor, which Restore would never reject.
+      at(3);
       const [anchorBefore, nextBefore] = await signatures([anchor, next]);
       let ids = await bodyIds();
       const added = anchor.insertParagraph("", "After");
@@ -717,6 +728,7 @@ export async function runWordInPlaceProbe(
         return changes;
       });
       await context.sync();
+      at(4);
       const inserted = await review(added, "Probe thirteen added", "");
       inserted.changes.rejectAll();
       await context.sync();
@@ -733,13 +745,16 @@ export async function runWordInPlaceProbe(
       });
 
       // A tracked deletion must stay in body.paragraphs under its ID until it is reviewed.
+      at(5);
       const [doomedBefore, afterBefore] = await signatures([doomed, after]);
       ids = await bodyIds();
       doomed.delete();
       await context.sync();
       const listed = sameIds(await bodyIds(), ids);
+      at(6);
       const deleted = await review(doomed, "", "Probe thirteen deleted");
       const [nextKept, afterKept] = await signatures([next, after]);
+      at(7);
       await reject(doomed);
       Object.assign(measured, {
         deleteListed: listed,
@@ -774,15 +789,18 @@ export async function runWordInPlaceProbe(
           (await signature(target)).signature === original.signature,
         ];
       };
+      at(8);
       const [restyleTracked, restyleRejectExact] = await formatted(
         styled,
         () => {
           styled.styleBuiltIn = "Heading2";
         },
       );
+      at(9);
       const [attachTracked, attachRejectExact] = await formatted(joining, () =>
         joining.attachToList(list.id, 0),
       );
+      at(10);
       const [detachTracked, detachRejectExact] = await formatted(head, () =>
         head.detachFromList(),
       );
@@ -814,6 +832,7 @@ export async function runWordInPlaceProbe(
         (story) => story.id === header && story.type === "header",
       )?.part;
       if (!part) return { result: "not-run" };
+      at(1);
       const sections = context.document.sections;
       sections.load("items");
       await context.sync();
@@ -840,6 +859,7 @@ export async function runWordInPlaceProbe(
       };
       if (!tracking || !live.items.length) return read;
       // Tracked, in a synthetic paragraph of its own that leaves the header as it found it.
+      at(2);
       const made = live.items[0].insertParagraph(
         "Probe eleven kept words",
         "Before",
@@ -847,16 +867,19 @@ export async function runWordInPlaceProbe(
       await context.sync();
       await accept(made);
       const original = await signature(made);
+      at(3);
       const span = await spanEdit(made, "Probe eleven new words");
       const written = await review(
         made,
         "Probe eleven new words",
         "Probe eleven kept words",
       );
+      at(4);
       written.changes.rejectAll();
       await context.sync();
       const rejectExact =
         (await signature(made)).signature === original.signature;
+      at(5);
       made.delete();
       await context.sync();
       await accept(made);
