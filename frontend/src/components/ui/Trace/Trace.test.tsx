@@ -7,7 +7,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { Trace } from "./Trace";
+import { groupIntoTraceClusters, Trace } from "./Trace";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
@@ -64,6 +64,7 @@ const renderTrace = (
   parts: ContentPart[],
   overrides: {
     maskReasoningText?: boolean;
+    isStreaming?: boolean;
     toolApprovalStatuses?: Record<string, "approved" | "denied">;
   } = {},
 ) => {
@@ -76,7 +77,7 @@ const renderTrace = (
       <I18nProvider i18n={i18n}>
         <Trace
           parts={parts as Parameters<typeof Trace>[0]["parts"]}
-          isStreaming={false}
+          isStreaming={overrides.isStreaming ?? false}
           hasLaterContent={false}
           renderMarkdown={(text) => <span>{text}</span>}
           durationMs={null}
@@ -240,5 +241,101 @@ describe("Trace — masked mode (cold-load / done state)", () => {
 
     expect(screen.getByText("Denied")).toBeInTheDocument();
     expect(screen.queryByText("Approved")).not.toBeInTheDocument();
+  });
+});
+
+const budgetRequest = (): ContentPart =>
+  ({
+    content_type: "tool_approval_request",
+    kind: "tool_call_limit",
+    tool_call_id: "tool-budget:1",
+    tool_name: "Tool-call budget",
+    input: { budget: 25 },
+    mcp_server_id: "",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    preset: "",
+    allow_always: false,
+    requested_at: "2026-10-02T14:48:00Z",
+    approvals: [],
+    pending_tool_calls: [],
+  }) as unknown as ContentPart;
+
+const budgetDecision = (approved: boolean): ContentPart =>
+  approved
+    ? {
+        content_type: "tool_approval",
+        tool_call_id: "tool-budget:1",
+        approved_at: "2026-10-02T14:49:00Z",
+        always_allow: false,
+      }
+    : {
+        content_type: "tool_rejection",
+        tool_call_id: "tool-budget:1",
+        rejected_at: "2026-10-02T14:49:00Z",
+      };
+
+describe("tool budget approvals", () => {
+  it.each([
+    { approved: true, isStreaming: false },
+    { approved: false, isStreaming: false },
+    { approved: true, isStreaming: true },
+    { approved: false, isStreaming: true },
+  ])(
+    "keeps the settled budget request and tool chain in one trace ($approved, streaming: $isStreaming)",
+    ({ approved, isStreaming }) => {
+      const parts = [
+        toolUsePart(),
+        budgetRequest(),
+        budgetDecision(approved),
+        reasoningPart("Continuing"),
+      ];
+      expect(groupIntoTraceClusters(parts)).toEqual([
+        { kind: "trace", parts, startIndex: 0 },
+      ]);
+      renderTrace(parts, { isStreaming });
+      expect(screen.getByText("Tool-call budget")).toBeInTheDocument();
+      expect(
+        screen.getByText(approved ? "Approved" : "Denied"),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("leaves pending budget requests available to the approval-card renderer", () => {
+    const request = budgetRequest();
+    expect(groupIntoTraceClusters([toolUsePart(), request])).toEqual([
+      { kind: "trace", parts: [toolUsePart()], startIndex: 0 },
+      { kind: "passthrough", part: request, index: 1 },
+    ]);
+  });
+
+  it("does not let an earlier decision settle a later request", () => {
+    const request = budgetRequest();
+    const clusters = groupIntoTraceClusters([
+      budgetDecision(true),
+      toolUsePart(),
+      request,
+    ]);
+    expect(clusters.at(-1)).toEqual({
+      kind: "passthrough",
+      part: request,
+      index: 2,
+    });
+  });
+
+  it("preserves text boundaries and source indices after a budget decision", () => {
+    const parts = [toolUsePart(), budgetRequest(), budgetDecision(true)];
+    const text: ContentPart = { content_type: "text", text: "Answer" };
+    expect(
+      groupIntoTraceClusters([...parts, text, reasoningPart("More")]),
+    ).toEqual([
+      { kind: "trace", parts, startIndex: 0 },
+      { kind: "passthrough", part: text, index: 3 },
+      { kind: "trace", parts: [reasoningPart("More")], startIndex: 4 },
+    ]);
   });
 });

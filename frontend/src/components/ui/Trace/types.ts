@@ -5,20 +5,35 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
- * The subset of `ContentPart` variants that surface as a step in the trace
- * timeline. Text parts are rendered separately as the assistant's final
- * answer and never appear in the trace.
+ * Content parts eligible for a trace, including decision metadata that
+ * settles a budget request without adding another row. Text parts are rendered
+ * separately as the assistant's final answer and never appear in the trace.
  */
-export type TraceablePart = Extract<
-  ContentPart,
-  { content_type: "reasoning" } | { content_type: "tool_use" }
->;
+export type TraceablePart =
+  | Extract<
+      ContentPart,
+      {
+        content_type:
+          | "reasoning"
+          | "tool_use"
+          | "tool_approval"
+          | "tool_rejection";
+      }
+    >
+  | (Extract<ContentPart, { content_type: "tool_approval_request" }> & {
+      kind: "tool_call_limit";
+    });
 
 /**
  * Discriminator narrowing helper — keep in sync with `TraceablePart`.
  */
 export const isTraceablePart = (part: ContentPart): part is TraceablePart =>
-  part.content_type === "reasoning" || part.content_type === "tool_use";
+  part.content_type === "reasoning" ||
+  part.content_type === "tool_use" ||
+  part.content_type === "tool_approval" ||
+  part.content_type === "tool_rejection" ||
+  (part.content_type === "tool_approval_request" &&
+    part.kind === "tool_call_limit");
 
 /**
  * Visual status of a single step. Used to pick the rail icon and pulse state.
@@ -39,6 +54,11 @@ export type TraceStepStatus = "running" | "done" | "error" | "interrupted";
  * always 1:1.
  */
 export type LogicalStep =
+  | {
+      kind: "tool_budget_approval";
+      key: string;
+      approvalStatus: "approved" | "denied";
+    }
   | {
       kind: "reasoning";
       /** Stable React key derived from part + segment indices. */

@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { useState } from "react";
 
 import {
@@ -10,13 +11,17 @@ import { TraceClusterHeader } from "./TraceClusterHeader";
 import { TraceCollapse } from "./TraceCollapse";
 import { TraceConnector } from "./TraceConnector";
 import { TraceDoneMarker } from "./TraceDoneMarker";
+import { TraceStep } from "./TraceStep";
 import { TraceThinkingPlaceholder } from "./TraceThinkingPlaceholder";
 import { parseReasoningSegments } from "./hooks/useReasoningSegments";
 import { useThinkingGap } from "./hooks/useThinkingGap";
 import { stepStatus, useIsCurrentChatBusy } from "./hooks/useTraceState";
+import { railIconFor } from "./icons";
 import { ReasoningStep } from "./steps/ReasoningStep";
+import { ToolStatusPill } from "./steps/ToolStatusPill";
 import { ToolUseStep } from "./steps/ToolUseStep";
 import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
+import { approvalStopState } from "../Message/approvalItems";
 
 import type {
   ContentPart,
@@ -25,7 +30,7 @@ import type {
 import type { ReactNode } from "react";
 
 interface TraceProps {
-  /** A contiguous run of trace-eligible parts (reasoning, tool_use). */
+  /** A contiguous run of reasoning, tool calls, and settled budget approvals. */
   parts: TraceablePart[];
   /**
    * Whether the parent message is still streaming. Only the last step in a
@@ -266,6 +271,24 @@ export const flattenToLogicalSteps = (
         });
         return;
       }
+      case "tool_approval_request": {
+        const { resolution } = approvalStopState(
+          part,
+          parts.slice(partIndex + 1),
+        );
+        if (resolution !== null) {
+          out.push({
+            // eslint-disable-next-line lingui/no-unlocalized-strings -- internal step kind
+            kind: "tool_budget_approval",
+            key: `b-${part.tool_call_id}-${partIndex}`,
+            approvalStatus: resolution,
+          });
+        }
+        return;
+      }
+      case "tool_approval":
+      case "tool_rejection":
+        return;
       case "tool_use":
         if (!part.tool_call_id) {
           return;
@@ -320,6 +343,25 @@ const approvalStatusForStep = (
 
 const renderStep = (args: RenderStepArgs): ReactNode => {
   switch (args.step.kind) {
+    case "tool_budget_approval": {
+      const { approvalStatus } = args.step;
+      const status = approvalStatus === "denied" ? "error" : "done";
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- content discriminator
+      const railIcon = railIconFor("tool_approval_request", status);
+      return (
+        <TraceStep
+          railIcon={railIcon}
+          hasTrailingRailLine={!args.isLastStep}
+          title={t({
+            id: "trace.tool.budget_approval",
+            message: "Tool-call budget",
+          })}
+          titleSlot={
+            <ToolStatusPill status={status} approvalStatus={approvalStatus} />
+          }
+        />
+      );
+    }
     case "reasoning":
       return (
         <ReasoningStep
@@ -371,6 +413,14 @@ export const groupIntoTraceClusters = (
   content: ContentPart[],
 ): TraceCluster[] => {
   const out: TraceCluster[] = [];
+  const budgetRequestIds = new Set(
+    content.flatMap((part) =>
+      part.content_type === "tool_approval_request" &&
+      part.kind === "tool_call_limit"
+        ? [part.tool_call_id]
+        : [],
+    ),
+  );
   let buffer: TraceablePart[] = [];
   let bufferStart = 0;
 
@@ -382,7 +432,21 @@ export const groupIntoTraceClusters = (
   };
 
   content.forEach((part, index) => {
-    if (isTraceablePart(part)) {
+    const isDecision =
+      part.content_type === "tool_approval" ||
+      part.content_type === "tool_rejection";
+    const isBudgetDecision =
+      isDecision && budgetRequestIds.has(part.tool_call_id);
+    // Keep unresolved requests in the approval-card flow so their controls
+    // remain visible. Once settled, the request and decision join the trace.
+    const isPendingBudgetRequest =
+      part.content_type === "tool_approval_request" &&
+      part.kind === "tool_call_limit" &&
+      approvalStopState(part, content.slice(index + 1)).resolution === null;
+    if (
+      (isTraceablePart(part) && !isDecision && !isPendingBudgetRequest) ||
+      isBudgetDecision
+    ) {
       if (buffer.length === 0) bufferStart = index;
       buffer.push(part);
       return;
