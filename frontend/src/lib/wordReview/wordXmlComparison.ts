@@ -173,6 +173,17 @@ export function acceptWordStylesUnhiddenByUse(
   return changed;
 }
 
+const XML_SPACE = new Set([" ", "\t", "\r", "\n"]);
+
+/** Trims XML whitespace only (not String.trim's Unicode spaces), in linear time. */
+function trimXmlSpace(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && XML_SPACE.has(value[start])) start++;
+  while (end > start && XML_SPACE.has(value[end - 1])) end--;
+  return value.slice(start, end);
+}
+
 export interface WordXmlComparison {
   fingerprint: () => string;
   /** Per-part strict signatures of a package; empty for a bare body fragment. */
@@ -475,9 +486,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         )
           space = ancestor.getAttributeNS(XML, "space");
         const value = element.textContent ?? "";
-        return space === "preserve"
-          ? value
-          : value.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+        return space === "preserve" ? value : trimXmlSpace(value);
       })
       .join("");
     if (!text && !attrs.length && !props.length) return null;
