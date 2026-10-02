@@ -220,8 +220,175 @@ fn namespace_stream_tool_call_ids(
 #[cfg(test)]
 mod generation_tool_call_id_tests {
     use super::*;
-    use crate::models::message::{ToolCallStatus, ToolUse};
+    use crate::models::message::{InputMessage, ToolCallStatus, ToolUse};
     use genai::chat::ToolCall;
+
+    /// Exercise real Gemini SSE parsing before namespacing and persistence. The
+    /// fixture has seven batches of five lookups and a final batch of two.
+    async fn assert_gemini_lookup_history(provider_ids: bool) {
+        use crate::services::tool_arguments::{ToolArgumentStreams, upsert_tool_use};
+        use genai::adapter::AdapterKind;
+        use genai::resolver::{AuthData, Endpoint};
+        use std::time::{Duration, Instant};
+
+        let assistant_message_id = Uuid::new_v4();
+        let mut content = Vec::new();
+        let mut lookup = 0;
+        for (turn, count) in [5, 5, 5, 5, 5, 5, 5, 2].into_iter().enumerate() {
+            let mut frames = String::new();
+            for index in 0..count {
+                let mut call = json!({"name":"lookup_person", "args":{"person":lookup + index}});
+                if provider_ids {
+                    // Providers may reuse IDs in later turns; Erato must not.
+                    call["id"] = json!(format!("provider:call-{index}"));
+                }
+                frames.push_str(&format!(
+                    "data: {}\n\n",
+                    json!({"candidates":[{"content":{"parts":[{"functionCall":call}]}}]})
+                ));
+                if provider_ids && index == 0 {
+                    // An updated snapshot of one logical call must update its
+                    // preview and final arguments, without a second execution.
+                    call["args"]["complete"] = json!(true);
+                    frames.push_str(&format!(
+                        "data: {}\n\n",
+                        json!({"candidates":[{"content":{"parts":[{"functionCall":call}]}}]})
+                    ));
+                }
+            }
+            frames.push_str("data: {\"candidates\":[{\"finishReason\":\"STOP\"}]}\n\n");
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let app = axum::Router::new().fallback(move || {
+                let frames = frames.clone();
+                async move { ([("content-type", "text/event-stream")], frames) }
+            });
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let client = genai::Client::builder()
+                .append_provider_config(
+                    AdapterKind::Gemini,
+                    (
+                        Endpoint::from_owned(format!("http://{addr}/")),
+                        AuthData::from_single("test-key"),
+                    ),
+                )
+                .build()
+                .unwrap();
+            let options = genai::chat::ChatOptions::default().with_capture_tool_calls(true);
+            let mut stream = client
+                .exec_chat_stream(
+                    "gemini-3-flash",
+                    ChatRequest::from_user("look up people"),
+                    Some(&options),
+                )
+                .await
+                .unwrap()
+                .stream;
+            let mut previews = ToolArgumentStreams::default();
+            let mut chunk_ids = HashSet::new();
+            let mut now = Instant::now();
+            let mut final_calls = None;
+            while let Some(event) = stream.next().await {
+                match namespace_stream_tool_call_ids(event.unwrap(), assistant_message_id, turn) {
+                    ChatStreamEvent::ToolCallChunk(chunk) => {
+                        chunk_ids.insert(chunk.tool_call.call_id.clone());
+                        previews.observe(&chunk.tool_call, &mut content, now);
+                        now += Duration::from_secs(1);
+                    }
+                    ChatStreamEvent::End(end) => {
+                        final_calls = Some(
+                            end.captured_tool_calls()
+                                .unwrap()
+                                .into_iter()
+                                .cloned()
+                                .collect::<Vec<_>>(),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            server.abort();
+            let calls = final_calls.expect("terminal event");
+            assert_eq!(calls.len(), count);
+            assert_eq!(chunk_ids.len(), count);
+            let mut replay = Vec::new();
+            for (index, call) in calls.iter().enumerate() {
+                assert!(chunk_ids.contains(&call.call_id));
+                let provider_id = provider_tool_call_id(&call.call_id);
+                if provider_ids {
+                    assert_eq!(provider_id, format!("provider:call-{index}"));
+                }
+                assert_eq!(call.fn_arguments["person"], lookup + index);
+                if provider_ids && index == 0 {
+                    assert_eq!(call.fn_arguments["complete"], true);
+                }
+                let tool_use = ToolUse {
+                    tool_call_id: call.call_id.clone(),
+                    tool_name: call.fn_name.clone(),
+                    input: Some(call.fn_arguments.clone()),
+                    output: Some(json!({"person": lookup + index})),
+                    status: ToolCallStatus::Success,
+                    ..Default::default()
+                };
+                // The same conversion is used to reconstruct saved history.
+                replay.push(
+                    InputMessage {
+                        role: MessageRole::Assistant,
+                        content: ContentPart::ToolUse(tool_use.clone()),
+                    }
+                    .into_chat_message(),
+                );
+                replay.push(
+                    InputMessage {
+                        role: MessageRole::Tool,
+                        content: ContentPart::ToolUse(tool_use.clone()),
+                    }
+                    .into_chat_message(),
+                );
+                upsert_tool_use(&mut content, tool_use);
+            }
+            let mut request = ChatRequest::new(replay);
+            restore_provider_tool_call_ids(&mut request);
+            for pair in request.messages.chunks_exact(2) {
+                let call = pair[0].content.tool_calls()[0];
+                let parts = pair[1].content.clone().into_parts();
+                let GenAiContentPart::ToolResponse(response) = &parts[0] else {
+                    panic!("expected result")
+                };
+                assert_eq!(call.call_id, response.call_id);
+                assert_eq!(response.fn_name.as_deref(), Some("lookup_person"));
+                assert_eq!(
+                    serde_json::from_str::<serde_json::Value>(&response.content).unwrap()["person"],
+                    call.fn_arguments["person"]
+                );
+            }
+            lookup += count;
+        }
+        // Round-trip the actual persisted/API content shape used by the UI.
+        let saved = serde_json::to_value(&content).unwrap();
+        let loaded: Vec<ContentPart> = serde_json::from_value(saved).unwrap();
+        assert_eq!(loaded.len(), 37);
+        let mut ids = HashSet::new();
+        for (index, part) in loaded.iter().enumerate() {
+            let ContentPart::ToolUse(tool) = part else {
+                panic!("expected tool")
+            };
+            assert!(ids.insert(&tool.tool_call_id));
+            assert_eq!(tool.input.as_ref().unwrap()["person"], index);
+            assert_eq!(tool.output.as_ref().unwrap()["person"], index);
+            assert_eq!(tool.status, ToolCallStatus::Success);
+        }
+    }
+
+    #[tokio::test]
+    async fn gemini_37_lookups_with_provider_ids_preserve_history_and_pairing() {
+        assert_gemini_lookup_history(true).await;
+    }
+
+    #[tokio::test]
+    async fn gemini_37_lookups_without_provider_ids_preserve_history_and_pairing() {
+        assert_gemini_lookup_history(false).await;
+    }
 
     fn call() -> ToolCall {
         ToolCall {
@@ -4645,6 +4812,7 @@ async fn settle_delegation_slot<
     )
     .await;
     Ok(genai::chat::ToolResponse {
+        fn_name: Some(tool_call.fn_name.clone()),
         call_id: tool_call.call_id.clone(),
         content: response_text,
     })
@@ -5912,6 +6080,7 @@ async fn stream_generate_chat_completion<
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
                         call_id: unfinished_tool_call.call_id.clone(),
                         content: error_message.to_string(),
                     },
@@ -5960,6 +6129,7 @@ async fn stream_generate_chat_completion<
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
                         call_id: unfinished_tool_call.call_id.clone(),
                         content: error_message,
                     },
@@ -6049,6 +6219,7 @@ async fn stream_generate_chat_completion<
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
                         call_id: unfinished_tool_call.call_id.clone(),
                         content: output.to_string(),
                     },
@@ -6219,6 +6390,7 @@ async fn stream_generate_chat_completion<
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
                         call_id: unfinished_tool_call.call_id.clone(),
                         content: response_text,
                     },
@@ -6555,6 +6727,7 @@ async fn stream_generate_chat_completion<
                     current_turn_tool_responses.push((
                         batch_position,
                         genai::chat::ToolResponse {
+                            fn_name: Some(unfinished_tool_call.fn_name.clone()),
                             call_id,
                             content: response_text,
                         },
@@ -6993,6 +7166,7 @@ async fn stream_generate_chat_completion<
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
                         call_id,
                         content: response_text,
                     },
@@ -7122,6 +7296,7 @@ async fn stream_generate_chat_completion<
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
                         call_id: unfinished_tool_call.call_id.clone(),
                         content: error_message,
                     },
@@ -7387,6 +7562,7 @@ async fn stream_generate_chat_completion<
                             current_turn_tool_responses.push((
                                 batch_position,
                                 genai::chat::ToolResponse {
+                                    fn_name: Some(unfinished_tool_call.fn_name.clone()),
                                     call_id: unfinished_tool_call.call_id.clone(),
                                     content: tool_response_content,
                                 },
@@ -7547,6 +7723,7 @@ async fn stream_generate_chat_completion<
                     current_turn_tool_responses.push((
                         batch_position,
                         genai::chat::ToolResponse {
+                            fn_name: Some(unfinished_tool_call.fn_name.clone()),
                             call_id: unfinished_tool_call.call_id.clone(),
                             content: tool_error,
                         },
@@ -7993,6 +8170,7 @@ async fn stream_generate_chat_completion<
                 current_turn_tool_responses.push((
                     pending_wait.batch_position,
                     genai::chat::ToolResponse {
+                        fn_name: Some(pending_wait.tool_call.fn_name.clone()),
                         call_id: pending_wait.tool_call.call_id,
                         content: response_text,
                     },
@@ -8540,7 +8718,7 @@ async fn stream_generate_chat_completion<
                         }
                         stream_end = Some(end);
                     }
-                    ChatStreamEvent::Start => {}
+                    ChatStreamEvent::Start | ChatStreamEvent::Heartbeat => {}
                 },
                 Err(failure) => {
                     if let ProviderStreamFailure::Provider(err) = &failure

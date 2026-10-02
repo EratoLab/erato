@@ -269,6 +269,9 @@ pub fn convert_mcp_tools_to_genai_tools(
                 schema: Some(input_schema_value),
                 strict: if omit_tool_strict { None } else { Some(false) },
                 config: None,
+                custom_format: None,
+                cache_control: None,
+                eager_input_streaming: None,
             }
         })
         .collect()

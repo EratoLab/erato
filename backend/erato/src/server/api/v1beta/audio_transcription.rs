@@ -1932,7 +1932,7 @@ async fn retry_failed_chunks(
 
 fn audio_transcription_reasoning_effort(provider_kind: &str, model_name: &str) -> ReasoningEffort {
     if !matches!(provider_kind, "gemini" | "vertex_ai") {
-        return ReasoningEffort::None;
+        return ReasoningEffort::Zero;
     }
 
     // Gemini 3 cannot disable thinking. Low maps to thinkingLevel=LOW in the
@@ -2063,7 +2063,7 @@ mod tests {
         ));
         assert!(matches!(
             audio_transcription_reasoning_effort("openai", "gpt-4o-audio-preview"),
-            ReasoningEffort::None
+            ReasoningEffort::Zero
         ));
     }
 

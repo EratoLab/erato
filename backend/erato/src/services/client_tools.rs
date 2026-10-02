@@ -329,6 +329,9 @@ pub fn build_client_tool(
             Some(native_strict)
         },
         config: None,
+        custom_format: None,
+        cache_control: None,
+        eager_input_streaming: None,
     }
 }
 

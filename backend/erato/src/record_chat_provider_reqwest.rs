@@ -75,6 +75,7 @@ async fn async_main() -> Result<(), Report> {
             ChatStreamEvent::End(_) => break,
             ChatStreamEvent::Chunk(_)
             | ChatStreamEvent::Start
+            | ChatStreamEvent::Heartbeat
             | ChatStreamEvent::ToolCallChunk(_)
             | ChatStreamEvent::ReasoningChunk(_)
             | ChatStreamEvent::ThoughtSignatureChunk(_) => {}

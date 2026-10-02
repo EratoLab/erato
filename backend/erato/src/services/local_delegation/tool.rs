@@ -22,6 +22,9 @@ pub fn build(omit_strict: bool) -> Tool {
             "required": ["queryVariants"], "additionalProperties": false
         })),
         strict: (!omit_strict).then_some(false), config: None,
+        custom_format: None,
+        cache_control: None,
+        eager_input_streaming: None,
     }
 }
 pub fn plan(input: &Value, now: i64) -> Result<Value, contract::Invalid> {

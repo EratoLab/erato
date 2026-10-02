@@ -849,7 +849,7 @@ impl AppState {
                 let model = ModelIden::new(adapter_kind, config.model_name.clone());
                 Ok(ServiceTarget { endpoint, auth, model })
             },
-        )).build();
+        )).build()?;
         Ok(genai_client)
     }
 
