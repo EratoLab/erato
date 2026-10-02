@@ -174,7 +174,8 @@ function loadListState(paragraph: Word.Paragraph) {
   });
 }
 
-/** List membership first (Word may restyle while attaching or detaching), then the style itself. */
+/** Word PC (probe P6) applies List Paragraph when attaching, clears the style when detaching and
+ * drops a list item's numbering when its style is set: so leave the list, set the style, then join. */
 function queueState(
   paragraph: Word.Paragraph,
   current: ListState,
@@ -182,22 +183,16 @@ function queueState(
   listId: number | undefined,
   relist = true,
 ): void {
-  if (relist) {
-    if (target.type === "list-item") {
-      if (listId === undefined)
-        throw new Error("The list to continue is no longer available.");
-      const level = target.level ?? 0;
-      if (!current.isListItem) paragraph.attachToList(listId, level);
-      else if (current.listId !== listId) {
-        paragraph.detachFromList();
-        paragraph.attachToList(listId, level);
-      } else paragraph.listItem.level = level;
-    } else if (current.isListItem) paragraph.detachFromList();
-  }
+  const joins = target.type === "list-item";
+  const id = relist ? listId : (listId ?? current.listId);
+  if (joins && id === undefined)
+    throw new Error("The list to continue is no longer available.");
+  if (current.isListItem) paragraph.detachFromList();
   if ("builtIn" in target.style)
     paragraph.styleBuiltIn = target.style
       .builtIn as Word.Paragraph["styleBuiltIn"];
   else paragraph.style = target.style.name;
+  if (joins) paragraph.attachToList(id!, target.level ?? 0);
 }
 
 /** Where a TrackedChange may lie relative to the paragraphs the write touched. */

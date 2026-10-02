@@ -57,7 +57,17 @@ export const WORD_IN_PLACE_MECHANISMS: Record<
   WordInPlacePlatform,
   Record<WordInPlaceMechanism, WordInPlaceGate>
 > = {
-  PC: { text: true, cell: true, ...PENDING, restyle: true },
+  // Word PC 16.0.20326: P4 (marks), P5 (insert, split), P7 (restyle) and P8 (delete) passed.
+  PC: {
+    text: true,
+    cell: true,
+    ...PENDING,
+    marks: true,
+    insert: true,
+    split: true,
+    restyle: true,
+    delete: true,
+  },
   Mac: { text: true, cell: true, ...PENDING },
   OfficeOnline: { text: true, cell: true, ...PENDING },
   unknown: { text: true, cell: true, ...PENDING },

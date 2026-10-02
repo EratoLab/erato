@@ -19,6 +19,7 @@ import {
   predictWordBodyParagraphs,
   wordParagraphAlignmentIssue,
 } from "./wordLiveParagraphs";
+import { wordMainBody } from "./wordNativeContent";
 import { extractWordSections, extractWordStories } from "./wordStories";
 import { wordWriteHost } from "./wordWriteHost";
 
@@ -58,10 +59,11 @@ const code = (
 const PLAIN = { bold: false, italic: false, underline: false };
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-const paragraphOf = (ooxml: string) =>
-  new DOMParser()
-    .parseFromString(ooxml, "application/xml")
-    .getElementsByTagNameNS(W, "p")[0];
+// In a package, the body paragraph: Paragraph.getOoxml also carries headers and footers.
+const paragraphOf = (ooxml: string) => {
+  const doc = new DOMParser().parseFromString(ooxml, "application/xml");
+  return (wordMainBody(doc) ?? doc).getElementsByTagNameNS(W, "p")[0];
+};
 const properties = (ooxml: string) =>
   Array.from(paragraphOf(ooxml)?.children ?? []).find(
     (e) => e.namespaceURI === W && e.localName === "pPr",
@@ -156,6 +158,16 @@ export async function runWordInPlaceProbe(
         probes: {},
       };
     const pristine = existing.items[0];
+    const pristineId = pristine.uniqueLocalId;
+    /** The untouched paragraph, found again by its ID: a proxy held across edits went stale on Word PC. */
+    const anchorParagraph = async () => {
+      const all = body.paragraphs;
+      all.load("items/uniqueLocalId");
+      await context.sync();
+      const found = all.items.find((p) => p.uniqueLocalId === pristineId);
+      if (!found) throw new Error("The scratch paragraph is gone.");
+      return found;
+    };
     const probes: WordInPlaceProbeReport["probes"] = {};
     let step = 0;
     /** The last step an attempt reached, so an error report says where Word threw. */
@@ -176,7 +188,7 @@ export async function runWordInPlaceProbe(
     // Inserted before the untouched paragraph of the empty document, which a new paragraph takes its
     // style and list from, instead of at the end, after whatever the previous probe left there.
     const paragraph = async (text: string) => {
-      const made = pristine.insertParagraph(text, "Before");
+      const made = (await anchorParagraph()).insertParagraph(text, "Before");
       made.load("uniqueLocalId");
       await context.sync();
       return made;
@@ -274,8 +286,9 @@ export async function runWordInPlaceProbe(
         after.ooxml,
         "application/xml",
       );
-      const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-      const runs = Array.from(doc.getElementsByTagNameNS(W, "r"));
+      const runs = Array.from(
+        (wordMainBody(doc) ?? doc).getElementsByTagNameNS(W, "r"),
+      );
       const has = (run: Element | undefined, name: string) =>
         !!run?.getElementsByTagNameNS(W, name).length;
       return {
@@ -365,7 +378,8 @@ export async function runWordInPlaceProbe(
     await attempt("P5", async () => {
       const anchor = await paragraph("Probe five anchor");
       anchor.styleBuiltIn = "Quote";
-      anchor.alignment = "Centered";
+      // Not centred: Word's Quote style may centre already, leaving no direct format to inherit.
+      anchor.alignment = "Right";
       await context.sync();
       const before = await signature(anchor);
       const after = anchor.insertParagraph("", "After");
@@ -374,16 +388,16 @@ export async function runWordInPlaceProbe(
       await context.sync();
       const inserted = await signature(after);
       const preceding = await signature(ahead);
-      const centred = (ooxml: string) =>
+      const aligned = (ooxml: string) =>
         !!properties(ooxml)?.getElementsByTagNameNS(W, "jc").length;
       return {
         inheritsParagraphProperties:
           serialized(properties(inserted.ooxml)) ===
           serialized(properties(before.ooxml)),
         afterInheritsStyle: pStyle(inserted.ooxml) === pStyle(before.ooxml),
-        afterInheritsDirectFormat: centred(inserted.ooxml),
+        afterInheritsDirectFormat: aligned(inserted.ooxml),
         beforeInheritsStyle: pStyle(preceding.ooxml) === pStyle(before.ooxml),
-        beforeInheritsDirectFormat: centred(preceding.ooxml),
+        beforeInheritsDirectFormat: aligned(preceding.ooxml),
         insertedHasId: !!after.uniqueLocalId,
       };
     });
@@ -419,6 +433,35 @@ export async function runWordInPlaceProbe(
       const detached = (await captureWordDocumentPackage()).ooxml;
       const at = (ooxml: string, text: string) => inPackage(ooxml, text).xml;
       const listNumId = numbering(at(attached, "Probe six first")).numId;
+      // The executor's order both ways: the style before attaching, the style after detaching.
+      const joiner = await paragraph("Probe six joiner");
+      const joinerBefore = await signature(joiner);
+      joiner.styleBuiltIn = "ListParagraph";
+      joiner.attachToList(list.id, 0);
+      await context.sync();
+      joiner.detachFromList();
+      joiner.styleBuiltIn = "Normal";
+      await context.sync();
+      const joinRoundTripExact =
+        (await signature(joiner)).signature === joinerBefore.signature;
+      // A List Paragraph item at level 1, as attaching creates one.
+      const third = await paragraph("Probe six third");
+      third.styleBuiltIn = "ListParagraph";
+      third.attachToList(list.id, 1);
+      third.load("isListItem");
+      await context.sync();
+      const thirdListed = third.isListItem;
+      const level = 1;
+      const thirdBefore = await signature(third);
+      third.detachFromList();
+      third.styleBuiltIn = "Normal";
+      await context.sync();
+      third.styleBuiltIn = "ListParagraph";
+      third.attachToList(list.id, level);
+      await context.sync();
+      const leaveRoundTripExact =
+        thirdListed &&
+        (await signature(third)).signature === thirdBefore.signature;
       return {
         startsClean: true,
         insertInheritsList:
@@ -453,6 +496,8 @@ export async function runWordInPlaceProbe(
         styleThenAttachKeepsStyle:
           pStyle(at(attached, "Probe six ordered")) ===
           inPackage(attached, "Probe six ordered").styleId("list paragraph"),
+        joinRoundTripExact,
+        leaveRoundTripExact,
       };
     });
 
@@ -517,6 +562,13 @@ export async function runWordInPlaceProbe(
       await context.sync();
       at(5);
       const recreated = await signature(made);
+      let staleHandleWorks = true;
+      try {
+        pristine.load("uniqueLocalId");
+        await context.sync();
+      } catch {
+        staleHandleWorks = false;
+      }
       return {
         startsClean: true,
         countDropsByOne: afterDelete === count - 1,
@@ -524,6 +576,8 @@ export async function runWordInPlaceProbe(
           firstAfter.signature === first.signature &&
           lastAfter.signature === last.signature,
         recreateExact: recreated.signature === removed.signature,
+        anchorSurvives: (await bodyIds()).includes(pristineId),
+        staleHandleWorks,
       };
     });
 
@@ -910,7 +964,7 @@ export async function runWordInPlaceProbe(
         tail.styleBuiltIn = "Quote";
         await context.sync();
         const withTail = (await counted()).length;
-        const previous = await signature(pristine);
+        const previous = await signature(await anchorParagraph());
         at(7);
         tail.delete();
         await context.sync();
@@ -922,7 +976,7 @@ export async function runWordInPlaceProbe(
           ...probes.P8,
           finalDeleteDropsCount: remaining.length === withTail - 1,
           finalDeleteKeepsPrevious:
-            final.uniqueLocalId === pristine.uniqueLocalId &&
+            final.uniqueLocalId === pristineId &&
             finalAfter.signature === previous.signature,
         };
       } catch {

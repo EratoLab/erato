@@ -723,11 +723,9 @@ describe(
   { timeout: 60_000 },
   () => {
     it.each([
-      ["inserts a heading after an anchor", "insert"],
-      ["inserts a list item that continues an existing list", "insert"],
-      ["deletes a list item", "delete"],
-      ["splits one paragraph into three", "split"],
-      ["merges two list items into one", "split"],
+      ["inserts a list item that continues an existing list", "list"],
+      ["deletes a list item", "not-invertible"],
+      ["merges two list items into one", "not-invertible"],
       ["detaches a list item from its list", "list"],
     ])("%s through the import (%s)", async (name, reason) => {
       const host = install();
@@ -753,10 +751,12 @@ describe(
 );
 
 describe(
-  "restyles Word PC's native probe confirmed (P7)",
+  "structural edits Word PC's native probes confirmed (P5, P7, P8)",
   { timeout: 60_000 },
   () => {
     it.each([
+      "inserts a heading after an anchor",
+      "splits one paragraph into three",
       "restyles a paragraph as Heading 2",
       "restyles a paragraph with a custom style",
     ])("%s in place and undoes it exactly", async (name) => {

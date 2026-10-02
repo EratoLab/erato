@@ -144,16 +144,23 @@ nothing has been saved or written; the plan then takes the import. Once the
 backup is saved there is no fallback and no retry.
 
 Each mechanism is switched on per platform in `WORD_IN_PLACE_MECHANISMS`
-(`wordInPlaceCapabilities.ts`) only after its native probe passed there. Today
-`text` and `cell` are on everywhere, and `restyle` on Word PC (P7), except for
-list items: Word PC drops a list item's numbering when its style is set (P6).
-`marks` covers rewrites that call the bold/italic setters: Word PC's setters write
-no complex-script twin (P2), so an exact Undo needs the bidirectional setters
-(WordApiDesktop 1.3), confirmed by P4. Until then such rewrites take the import
-as `run-format`. `insert`, `delete`, `split`, `list`, `span`, `tracked`,
-`trackedStructure` and `storyText` name the probe that will enable them.
-`window.eratoWordInPlaceProbe()` runs the probes in development builds, on an
-empty scratch document only; a failed probe reports the step it reached.
+(`wordInPlaceCapabilities.ts`) only after its native probe passed there. `text`
+and `cell` are on everywhere. Word PC 16.0.20326 also passed `marks` (P4),
+`insert` and `split` (P5), `restyle` (P7) and `delete` (P8), with Track Changes
+off:
+
+- Word PC's bold/italic setters write no complex-script twin (P2), so the writer
+  also sets the bidirectional setters (WordApiDesktop 1.3); without them `marks`
+  stays off and such rewrites take the import as `run-format`.
+- Word PC applies List Paragraph when attaching, clears the style when detaching
+  and drops a list item's numbering when its style is set (P6). The writer
+  therefore leaves a list, sets the style, then joins; list items in place must
+  carry List Paragraph, and a list item's restyle needs `list`.
+
+`list`, `span`, `tracked`, `trackedStructure` and `storyText` stay off until
+their probe passes. `window.eratoWordInPlaceProbe()` runs the probes in
+development builds, on an empty scratch document only; a failed probe reports
+the step it reached.
 
 ### Verification tiers
 

@@ -32,7 +32,7 @@ const CODES = [
   "OfficeOnline",
 ];
 
-describe("in-place native probe", () => {
+describe("in-place native probe", { timeout: 30_000 }, () => {
   it("refuses a document that already has content and writes nothing", async () => {
     const host = installWordOoxmlHost(
       packageXml(paragraph("Someone's real text")),
@@ -112,13 +112,16 @@ describe("in-place native probe", () => {
       listIdIsNumId: true,
       levelWritesIlvl: true,
       detachRemovesNumbering: true,
-      detachKeepsStyle: true,
-      attachThenStyleKeepsList: true,
+      // As measured on Word PC 16.0.20326.
+      detachKeepsStyle: false,
+      attachThenStyleKeepsList: false,
       attachThenStyleSetsStyle: true,
-      attachSetsListStyle: false,
+      attachSetsListStyle: true,
       detachClearsStyle: true,
       styleThenAttachKeepsList: true,
       styleThenAttachKeepsStyle: true,
+      joinRoundTripExact: true,
+      leaveRoundTripExact: true,
     });
     expect(result.probes.P7).toEqual({
       startsClean: true,
@@ -133,6 +136,8 @@ describe("in-place native probe", () => {
       countDropsByOne: true,
       neighboursUnchanged: true,
       recreateExact: true,
+      anchorSurvives: true,
+      staleHandleWorks: true,
       finalDeleteDropsCount: false,
       finalDeleteKeepsPrevious: false,
     });

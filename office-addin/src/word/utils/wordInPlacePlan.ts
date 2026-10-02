@@ -538,6 +538,12 @@ function withStyle(
           )
         ? { builtIn: `Heading${typed.level ?? 1}` }
         : styleTarget(snapshot, typed.styleRef);
+  // Attaching applies List Paragraph (probe P6), so only such list items can be re-created exactly.
+  if (
+    typed.type === "list-item" &&
+    !(style && "builtIn" in style && style.builtIn === "ListParagraph")
+  )
+    return undefined;
   return style
     ? { ...(typed as Omit<WordInPlaceState, "style">), style }
     : undefined;

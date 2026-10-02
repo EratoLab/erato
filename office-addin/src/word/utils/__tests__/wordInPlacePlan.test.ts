@@ -40,7 +40,14 @@ import type {
 import type { WordInPlaceFallback, WordInPlaceOp } from "../wordInPlacePlan";
 
 /** Text and cell rewrites with their mark setters; every structural mechanism off. */
-const caps = { ...wordInPlaceCapabilities("PC"), marks: true, restyle: false };
+const caps = {
+  ...(Object.fromEntries(
+    Object.keys(ALL_WORD_IN_PLACE_CAPABILITIES).map((k) => [k, false]),
+  ) as typeof ALL_WORD_IN_PLACE_CAPABILITIES),
+  text: true,
+  cell: true,
+  marks: true,
+};
 const ALL = ALL_WORD_IN_PLACE_CAPABILITIES;
 const run = (text: string, rPr = "") =>
   `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
@@ -658,6 +665,26 @@ describe("in-place classification", () => {
     expect(routed(without("b2"), { restyle: false })).toBe("not-invertible");
     expect(routed(without("b3"), {})).toBe("in-place");
     expect(routed(without("b3"), { list: false })).toBe("not-invertible");
+    // Undo re-attaches the item, and attaching gives it List Paragraph instead of its own style (P6).
+    const unstyled = styles(
+      paragraph("Before") +
+        paragraph("Target") +
+        item("One").replace('<w:pStyle w:val="ListParagraph"/>', "") +
+        item("Two").replace('<w:pStyle w:val="ListParagraph"/>', "") +
+        paragraph("Tail"),
+    );
+    const result = classifyWordInPlacePlan(
+      {
+        ...plan(unstyled, {}),
+        entries: unstyled.blocks
+          .filter((b) => b.ref !== "b3")
+          .map((b) => keep(b.ref)),
+        deleted: [{ source: ["b3"], reason: "Requested" }],
+      },
+      unstyled,
+      ALL,
+    );
+    expect("fallback" in result && result.fallback).toBe("not-invertible");
   });
 
   it("anchors nothing after the final paragraph, which Word keeps", () => {

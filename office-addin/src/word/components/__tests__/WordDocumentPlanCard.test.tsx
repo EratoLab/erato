@@ -35,6 +35,7 @@ import { wordDocumentFingerprint } from "../../utils/wordDocumentXml";
 import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   setWordInPlaceCapabilitiesForTests,
+  wordInPlaceCapabilities,
 } from "../../utils/wordInPlaceCapabilities";
 import {
   WORD_COMPATIBILITY_MODE_KEY,
@@ -981,18 +982,6 @@ describe("route preview", () => {
         ]),
       "Replaces the whole document because it changes lists.",
     ],
-    [
-      "paragraphs",
-      (s) =>
-        replaceBlock(s, "Status", (ref) => [
-          { kind: "keep", source: [ref] },
-          {
-            kind: "insert",
-            blocks: [{ id: "a", type: "paragraph", text: "An added line." }],
-          },
-        ]),
-      "Replaces the whole document because it adds, removes or splits paragraphs.",
-    ],
   ])(
     "names why a %s change replaces the whole document",
     async (_, makePlan, text) => {
@@ -1000,6 +989,25 @@ describe("route preview", () => {
       expect(routeText()).toBe(text);
     },
   );
+
+  it("names why a paragraphs change replaces the whole document where inserting awaits its probe", async () => {
+    setWordInPlaceCapabilitiesForTests({
+      ...wordInPlaceCapabilities("PC"),
+      insert: false,
+    });
+    await mountRealistic((s) =>
+      replaceBlock(s, "Status", (ref) => [
+        { kind: "keep", source: [ref] },
+        {
+          kind: "insert",
+          blocks: [{ id: "a", type: "paragraph", text: "An added line." }],
+        },
+      ]),
+    );
+    expect(routeText()).toBe(
+      "Replaces the whole document because it adds, removes or splits paragraphs.",
+    );
+  });
 
   it("says compatibility mode makes every rewrite a full replacement, and Apply follows it", async () => {
     localStorage.setItem(WORD_COMPATIBILITY_MODE_KEY, "1");

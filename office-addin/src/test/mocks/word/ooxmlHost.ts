@@ -1375,6 +1375,11 @@ export function installWordOoxmlHost(
     pStyle.setAttributeNS(W, "w:val", style.getAttributeNS(W, "styleId") ?? "");
     setParagraphProperty(paragraph, "pStyle", pStyle);
   };
+  /** Word PC (probe P6): setting a list item's style drops its numbering. */
+  const dropListOnRestyle = (paragraph: Element) => {
+    if (pc && numIdOf(paragraph) !== undefined)
+      setParagraphProperty(paragraph, "numPr", null);
+  };
   /** Word adds a built-in style the first time it is applied. */
   const builtInStyle = (builtIn: string): Element => {
     const name = BUILT_IN_STYLE_NAMES[builtIn];
@@ -1563,6 +1568,11 @@ export function installWordOoxmlHost(
       },
       get listItem() {
         return {
+          load: () => undefined,
+          get level() {
+            const numPr = child(child(target(), "pPr"), "numPr");
+            return Number(child(numPr, "ilvl")?.getAttributeNS(W, "val") ?? 0);
+          },
           set level(value: number) {
             enqueue(true, "listItem.level", () => {
               const p = target();
@@ -1581,6 +1591,9 @@ export function installWordOoxmlHost(
               new Error("The paragraph is already a list item."),
               { code: "InvalidArgument" },
             );
+          // Word PC (probe P6): attaching an unstyled paragraph applies List Paragraph.
+          if (pc && !child(child(p, "pPr"), "pStyle"))
+            applyStyle(p, builtInStyle("ListParagraph"));
           setNumbering(
             p,
             level,
@@ -1595,6 +1608,8 @@ export function installWordOoxmlHost(
         enqueue(true, "detachFromList", () => {
           recordParagraphChange(target());
           setParagraphProperty(target(), "numPr", null);
+          // Word PC (probe P6): detaching also clears the paragraph style.
+          if (pc) setParagraphProperty(target(), "pStyle", null);
         }),
       startNewList: () => {
         enqueue(true, "startNewList", () => {
@@ -1622,9 +1637,10 @@ export function installWordOoxmlHost(
         });
       },
       set styleBuiltIn(value: string) {
-        enqueue(true, "styleBuiltIn", () =>
-          applyStyle(target(), builtInStyle(value)),
-        );
+        enqueue(true, "styleBuiltIn", () => {
+          applyStyle(target(), builtInStyle(value));
+          dropListOnRestyle(target());
+        });
       },
       set style(value: string) {
         enqueue(true, "style", () => {
@@ -1638,6 +1654,7 @@ export function installWordOoxmlHost(
           );
           if (!style) throw itemNotFound();
           applyStyle(target(), style);
+          dropListOnRestyle(target());
         });
       },
       getText: () => result(() => paragraphText(target())),
