@@ -171,17 +171,17 @@ the step it reached.
 - `strict`: the only check for the dry run and for submission, and always tried
   first. It accepts serialization noise only.
 - `content`: import writes and restores, after strict failed. It also accepts
-  list identity (`nsid`, renumbered list instances), and the first paragraph's
-  spacing-before and page break before it when the plan kept that paragraph:
-  Word merges the first imported paragraph into the one it replaces.
+  list identity (`nsid`, renumbered list instances), the first paragraph's
+  spacing-before when the plan kept that paragraph, and direct paragraph
+  properties Word leaves out because the style chain already gives them.
 - `block`: in-place writes. Untouched blocks must keep their signature, and
   written paragraphs must have exactly the planned text, marks, style and list.
 
 Adjustment codes form a closed list: `numbering-identity`,
-`list-instance-renumbered`, `first-paragraph-page-break` (a break before the
-document's first paragraph has no effect) and `style-redundant-spacing` (direct
-spacing equal to what the paragraph's style chain already gives it) are not
-visible, while `first-paragraph-spacing` is visible and disclosed on the card. Growth in
+`list-instance-renumbered` and `style-redundant-format` (a direct spacing or
+on/off paragraph property, such as an explicit page-break-off, equal to what the
+paragraph's style chain already gives it) are not visible, while
+`first-paragraph-spacing` is visible and disclosed on the card. Growth in
 customXml items or custom document properties is always `package-growth`, a
 failure. Diagnostics carry only routes, codes, counts and part paths, never
 document text, paragraph IDs or Office error messages.

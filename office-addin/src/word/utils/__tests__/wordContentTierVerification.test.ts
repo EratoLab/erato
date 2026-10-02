@@ -117,7 +117,7 @@ describe("content-tier write verification", () => {
     ).toEqual({
       ok: true,
       tier: "content",
-      adjustments: ["style-redundant-spacing"],
+      adjustments: ["style-redundant-format"],
     });
     const changed = withSpacing(4);
     expect(
@@ -129,41 +129,38 @@ describe("content-tier write verification", () => {
     ).toMatchObject({ ok: false });
   });
 
-  it("accepts Word dropping a page break before the first paragraph, which has no effect there", () => {
-    const pageBreak = (index: number) => (doc: Document) => {
-      const paragraph = paragraphs(doc)[index];
-      let pPr = Array.from(paragraph.children).find(
-        (e) => e.localName === "pPr",
-      );
-      if (!pPr) {
-        pPr = doc.createElementNS(W, "w:pPr");
-        paragraph.prepend(pPr);
-      }
-      pPr.append(doc.createElementNS(W, "w:pageBreakBefore"));
-    };
+  it("accepts Word leaving out a plan's explicit page-break-off that the style already gives", () => {
+    const withBreak = (pageBreakBefore: boolean) =>
+      setup((source) => {
+        const plan = statusRewritePlan(source, "Status: revised.");
+        const entry = plan.entries[1];
+        if (entry.kind !== "replace")
+          throw new Error("Expected a replace entry.");
+        entry.blocks = [
+          {
+            id: "status",
+            type: "paragraph",
+            text: "Status: revised.",
+            format: { pageBreakBefore },
+          },
+        ];
+        return plan;
+      });
     const dropped = (doc: Document) =>
       all(body(doc), "pageBreakBefore").forEach((e) => e.remove());
-    const withBreak = (index: number) => {
-      const source = realisticSnapshot(
-        editWordPackage(realisticWordPackageXml(), pageBreak(index)),
-      );
-      const plan = statusRewritePlan(source, "Status: revised.");
-      const written = captureWordAuthoringSnapshot(
-        editWordPackage(compileWordDocumentPlan(plan, source), dropped),
-        source.identity,
-        "Off",
-        true,
-        "verify",
-      );
-      return verifyWordPlanWrite(plan, source, written);
-    };
-    expect(withBreak(0)).toEqual({
+    const off = withBreak(false);
+    expect(
+      verifyWordPlanWrite(off.plan, off.source, off.after(dropped)),
+    ).toEqual({
       ok: true,
       tier: "content",
-      adjustments: ["first-paragraph-page-break"],
+      adjustments: ["style-redundant-format"],
     });
-    // A dropped page break anywhere else moves content to another page.
-    expect(withBreak(2)).toMatchObject({ ok: false });
+    // A requested page break that Word did not write moves content to another page.
+    const on = withBreak(true);
+    expect(
+      verifyWordPlanWrite(on.plan, on.source, on.after(dropped)),
+    ).toMatchObject({ ok: false });
   });
 
   it("is strict when Word wrote exactly the compiled package", () => {
