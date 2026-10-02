@@ -34,6 +34,7 @@ export interface AddinSettingsDialogCoreProps {
   isOpen: boolean;
   onClose: () => void;
   hostContribution?: AddinSettingsHostContribution;
+  audioInputSupported?: boolean;
 }
 
 /** Shared settings surface; host tabs and host-specific copy are opt-in. */
@@ -41,10 +42,12 @@ export function AddinSettingsDialogCore({
   isOpen,
   onClose,
   hostContribution,
+  audioInputSupported = true,
 }: AddinSettingsDialogCoreProps) {
   const featureConfig = useFeatureConfig();
   const authorizeInBrowser = useMcpBrowserAuthorization();
   const audioSettingsEnabled =
+    !audioInputSupported ||
     featureConfig.audioTranscription.enabled ||
     featureConfig.audioDictation.enabled ||
     featureConfig.audioConversational.enabled;
@@ -209,9 +212,18 @@ export function AddinSettingsDialogCore({
                   })}
                 </p>
               </div>
-              <AudioInputTabContent
-                isActive={isOpen && activeTab === "audio"}
-              />
+              {audioInputSupported ? (
+                <AudioInputTabContent
+                  isActive={isOpen && activeTab === "audio"}
+                />
+              ) : (
+                <p role="status" className="text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "officeAddin.settings.audio.unsupported",
+                    message: "Audio input is not supported on this platform",
+                  })}
+                </p>
+              )}
             </section>
           ) : null}
 

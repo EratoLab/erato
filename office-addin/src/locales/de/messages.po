@@ -89,6 +89,16 @@ msgstr "Betreff:"
 msgid "officeAddin.appointmentRenderer.when"
 msgstr "Wann:"
 
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.draftSaveFailed"
+msgstr "Ihr Entwurf konnte für das Neuladen nach der Mikrofonfreigabe nicht gespeichert werden. Bitte senden Sie Ihren Entwurf und versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.pendingAttachments"
+msgstr "Der Mikrofonzugriff erfordert ein Neuladen. Warten Sie, bis die Uploads abgeschlossen sind, und senden oder entfernen Sie die vorgemerkten Anhänge. Versuchen Sie es dann erneut."
+
 # ==============================
 # Explicit IDs
 # ==============================
@@ -977,6 +987,11 @@ msgstr "Wähle das Mikrofon aus, das für die Spracheingabe in diesem Add-in ver
 #: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.audio.heading"
 msgstr "Mikrofon"
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.audio.unsupported"
+msgstr "Audioeingabe wird auf dieser Plattform nicht unterstützt"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx

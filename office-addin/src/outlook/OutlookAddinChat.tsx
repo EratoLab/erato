@@ -1,5 +1,6 @@
 import {
   UploadUnknownError,
+  holdComposeReload,
   useConversationDropzone,
   useFileUploadStore,
   usePersistedState,
@@ -481,6 +482,11 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   const isPreviewIncluded =
     (shouldSuggestCurrentEmail && hasSelectedEmailSource) ||
     hasDroppedStagedEmails;
+  useEffect(() => {
+    if (hasDroppedStagedEmails || isExpandingDroppedEmails)
+      return holdComposeReload();
+  }, [hasDroppedStagedEmails, isExpandingDroppedEmails]);
+
   const previewVirtualFiles = useMemo(
     () =>
       isPreviewIncluded && resolvedFiles.length > 0 ? resolvedFiles : undefined,

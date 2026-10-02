@@ -89,6 +89,16 @@ msgstr "Objet :"
 msgid "officeAddin.appointmentRenderer.when"
 msgstr "Quand :"
 
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.draftSaveFailed"
+msgstr "Votre brouillon n’a pas pu être enregistré avant le rechargement nécessaire à l’autorisation du microphone. Envoyez votre brouillon, puis réessayez."
+
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.audio.pendingAttachments"
+msgstr "L’accès au microphone nécessite un rechargement. Terminez les téléversements et envoyez ou retirez les pièces jointes en attente, puis réessayez."
+
 # ==============================
 # Explicit IDs
 # ==============================
@@ -977,6 +987,11 @@ msgstr "Choisissez et testez le microphone utilisé pour la saisie vocale dans c
 #: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.audio.heading"
 msgstr "Microphone"
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.audio.unsupported"
+msgstr "La saisie audio n’est pas prise en charge sur cette plateforme"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx

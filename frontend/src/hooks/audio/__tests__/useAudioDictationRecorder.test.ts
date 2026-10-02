@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
 import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
+import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
 import { useAudioDictationRecorder } from "../useAudioDictationRecorder";
 
 vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
@@ -321,6 +322,45 @@ describe("useAudioDictationRecorder", () => {
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
   });
+
+  it.each(["dictation", "conversational"] as const)(
+    "waits for host consent and returns to idle on denial in %s mode",
+    async (mode) => {
+      let deny!: (error: Error) => void;
+      const beforeCapture = vi.fn(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            deny = reject;
+          }),
+      );
+      const dispose = installAudioCaptureAccessPolicy({
+        beforeCapture,
+        canEnumerateDevices: () => false,
+      });
+      const { result, unmount } = renderHook(() =>
+        useAudioDictationRecorder({
+          enabled: true,
+          mode,
+          maxRecordingDurationSeconds: 1200,
+          onTranscriptChunk: vi.fn(),
+        }),
+      );
+      try {
+        act(() => result.current.toggleDictation());
+        expect(beforeCapture).toHaveBeenCalledOnce();
+        expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+        await act(async () => {
+          deny(new DOMException("Denied", "NotAllowedError"));
+        });
+        await waitFor(() => expect(result.current.dictationError).toBeTruthy());
+        expect(result.current.isDictating).toBe(false);
+        expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+      } finally {
+        unmount();
+        dispose();
+      }
+    },
+  );
 
   it("prevents duplicate starts while microphone permission is pending", async () => {
     const permission = createDeferred<MockMediaStream>();
