@@ -1,13 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
-mod endpoints;
-mod image_data;
-mod log;
-mod matcher;
-mod mocks;
-mod request_id;
-mod responses;
+use mock_llm_server::{endpoints, log, matcher, mocks, request_id};
 
 use axum::{
     extract::{Extension, Request},

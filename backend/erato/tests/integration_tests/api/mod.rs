@@ -7,6 +7,7 @@ pub mod chat_created_via;
 pub mod chats;
 pub mod delegation;
 pub mod edit;
+pub mod embedded_images;
 pub mod entra_id;
 pub mod facets;
 pub mod files;

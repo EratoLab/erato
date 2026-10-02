@@ -62,3 +62,30 @@ For the isolated mock-only setup, use
 `just run_latency_dial9 /tmp/erato-profiles/my-run/traces`.
 The [local concurrency workflow](../e2e-tests/load-tests/README.md) documents
 Dex setup, the shared infrastructure workload and diagnostics.
+
+## Embedded PDF image integration tests
+
+From `backend/`, run:
+
+```sh
+just test -p erato --test integration_tests api::embedded_images
+```
+
+Use Rust 1.94 or newer (required by the workspace dependencies). The tests use
+`erato/tests/integration_tests/test_files/embedded-images.pdf`, containing two
+distinct images, and start `mock-llm-server`'s chat handler in-process on an
+ephemeral HTTP port. No external LLM or separately running mock server is needed.
+
+As with the existing upload integration tests, PostgreSQL must be available at
+`postgres://eratouser:eratopw@127.0.0.1:5432/erato` (or set `DATABASE_URL` to a
+PostgreSQL role that can create test databases), and SeaweedFS must expose S3 at
+`http://127.0.0.1:8333`, with bucket `erato-storage` and credentials `admin` / `admin`.
+The existing `./run_postgres.sh` and `./run_seaweedfs.sh` scripts start these services.
+The normal backend file-processing build/runtime dependencies are also required;
+PDF extraction uses the real xberg pipeline, with no mocked extraction results.
+
+The four cases cover inherited global enablement, both provider overrides, and
+omitted/default-disabled configuration. Enabled cases select different images
+from the actual request's tool allowlist, validate the MIME type and decoded
+bytes in the follow-up model request, and repeat those assertions on a later
+chat turn to cover persisted replay and tool-response/image ordering.
