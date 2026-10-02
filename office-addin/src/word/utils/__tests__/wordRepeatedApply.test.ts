@@ -32,7 +32,7 @@ import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanEntry,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 afterEach(() => vi.unstubAllGlobals());
 

@@ -18,6 +18,7 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { McpToolDecisionControl } from "./McpToolDecisionControl";
+import { SettingsDisclosure } from "./SettingsDisclosure";
 
 import type { McpToolDecision } from "./mcpToolDecisions";
 import type { DesktopSidecarClient } from "@erato/desktop-sidecar-protocol";
@@ -55,37 +56,39 @@ export function SidecarToolDecisions({
   };
   return (
     <div className="space-y-2" data-testid="sidecar-tool-decisions">
-      <span className="text-sm">
-        {t({
+      <SettingsDisclosure
+        title={t({
           id: "preferences.dialog.desktopSidecar.tools.heading",
-          message: "Tools the assistant may use on this device",
+          message: "Available tools",
         })}
-      </span>
-      <ul className="divide-y divide-theme-border">
-        {tools.map(({ name }) => {
-          const qualifiedName = sidecarQualifiedToolName(name);
-          const label = sidecarToolLabel(name);
-          return (
-            <li
-              key={name}
-              className="flex flex-wrap items-center justify-between gap-2 py-2"
-            >
-              <span className="text-sm text-theme-fg-secondary">{label}</span>
-              <McpToolDecisionControl
-                value={controlDecisionOf(
-                  profile?.client_tool_decisions?.[qualifiedName],
-                )}
-                policy="auto"
-                availability={{ allowAlways: true, askAvailable: true }}
-                onChange={(decision) => void save(qualifiedName, decision)}
-                disabled={!profile || saving !== null}
-                aria-label={label}
-                data-testid={`sidecar-tool-decision-${name}`}
-              />
-            </li>
-          );
-        })}
-      </ul>
+        count={tools.length}
+      >
+        <ul className="divide-y divide-theme-border">
+          {tools.map(({ name }) => {
+            const qualifiedName = sidecarQualifiedToolName(name);
+            const label = sidecarToolLabel(name);
+            return (
+              <li
+                key={name}
+                className="flex flex-wrap items-center justify-between gap-2 py-2"
+              >
+                <span className="text-sm text-theme-fg-secondary">{label}</span>
+                <McpToolDecisionControl
+                  value={controlDecisionOf(
+                    profile?.client_tool_decisions?.[qualifiedName],
+                  )}
+                  policy="auto"
+                  availability={{ allowAlways: true, askAvailable: true }}
+                  onChange={(decision) => void save(qualifiedName, decision)}
+                  disabled={!profile || saving !== null}
+                  aria-label={label}
+                  data-testid={`sidecar-tool-decision-${name}`}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      </SettingsDisclosure>
       {failed ? (
         <p role="alert" className="text-sm text-theme-error-fg">
           {t({

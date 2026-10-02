@@ -1,6 +1,3 @@
-import { describe, expect, it } from "vitest";
-
-import { packageXml } from "../../../test/mocks/word/authoringFixtures";
 import {
   compileWordDrawing,
   compileWordImage,
@@ -8,7 +5,10 @@ import {
   isWordDrawingSpec,
   isWordImageSpec,
   reserveWordNativeIds,
-} from "../wordMediaContent";
+} from "@erato/frontend/word-review";
+import { describe, expect, it } from "vitest";
+
+import { packageXml } from "../../../test/mocks/word/authoringFixtures";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const WP =

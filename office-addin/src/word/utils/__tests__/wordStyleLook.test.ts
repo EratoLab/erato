@@ -1,3 +1,8 @@
+import {
+  normalizeWordDocumentPlan,
+  withoutStyleRedundantFormat,
+  wordParagraphStyleLooks,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,7 +14,6 @@ import {
   wordReadableStyles,
   wordStyleNamesBytes,
 } from "../wordAuthoringReadData";
-import { normalizeWordDocumentPlan } from "../wordDocumentPlan";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -17,13 +21,11 @@ import {
 import { ALL_WORD_IN_PLACE_CAPABILITIES } from "../wordInPlaceCapabilities";
 import { classifyWordInPlacePlan } from "../wordInPlacePlan";
 import { wordScopedReadContract } from "../wordScopedReadContract";
-import {
-  withoutStyleRedundantFormat,
-  wordParagraphStyleLooks,
-} from "../wordStyleLook";
 
-import type { WordParagraphFormatting } from "../wordBlockFormatting";
-import type { WordDocumentPlan } from "../wordDocumentPlan";
+import type {
+  WordParagraphFormatting,
+  WordDocumentPlan,
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const A = "http://schemas.openxmlformats.org/drawingml/2006/main";

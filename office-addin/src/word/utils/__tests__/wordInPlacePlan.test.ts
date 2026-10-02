@@ -1,3 +1,8 @@
+import {
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+  expandWordTableCellSubmission,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -10,10 +15,6 @@ import {
   realisticSnapshot,
   realisticWordPackageXml,
 } from "../../../test/mocks/word/realisticWordFixtures";
-import {
-  normalizeWordDocumentPlan,
-  parseWordDocumentPlan,
-} from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {
@@ -29,15 +30,14 @@ import {
   classifyWordInPlacePlan,
   sameWordInPlaceProgram,
 } from "../wordInPlacePlan";
-import { expandWordTableCellSubmission } from "../wordTableCellSubmission";
 
+import type { WordInPlaceFallback, WordInPlaceOp } from "../wordInPlacePlan";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
-} from "../wordDocumentPlan";
-import type { WordInPlaceFallback, WordInPlaceOp } from "../wordInPlacePlan";
+} from "@erato/frontend/word-review";
 
 /** Text and cell rewrites with their mark setters; every structural mechanism off. */
 const caps = {

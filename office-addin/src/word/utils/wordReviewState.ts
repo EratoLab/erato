@@ -4,10 +4,12 @@ import type {
   WordDocumentDiagnostic,
 } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
-import type { WordDocumentCapture } from "./wordDocumentCapture";
-import type { WordEditOutcome } from "./wordEditPlan";
 import type { WordReviewAnchor, WordTrackingMode } from "./wordReviewLocation";
 import type { WordWriteBlockReason } from "./wordWriteGate";
+import type {
+  WordDocumentCapture,
+  WordEditOutcome,
+} from "@erato/frontend/word-review";
 
 export type WordReviewStatus =
   | "idle"

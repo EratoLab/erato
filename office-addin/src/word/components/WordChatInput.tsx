@@ -39,7 +39,7 @@ import type {
 } from "../../core/AddinChatCore";
 import type { AddinChatInputCoreProps } from "../../core/AddinChatInputCore";
 import type { WordDocumentPreview } from "../hooks/useWordDocumentSource";
-import type { WordDocumentCapture } from "../utils/wordDocumentCapture";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export interface WordChatInputProps {
   chatInputProps: AddinChatInputRenderProps;

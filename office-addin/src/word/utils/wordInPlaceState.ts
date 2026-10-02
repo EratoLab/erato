@@ -1,3 +1,10 @@
+import {
+  createNativeContentSignature,
+  sameWordPreservedParts,
+  wordMainBody,
+  createWordXmlComparison,
+} from "@erato/frontend/word-review";
+
 import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
 import { wordPackageCounts } from "./wordFullDocumentComparison";
 import { wordInPlaceExpected, wordInPlaceTypedIssue } from "./wordInPlacePlan";
@@ -8,24 +15,18 @@ import {
 } from "./wordInPlaceStories";
 import { wordBodyParagraphElements } from "./wordLiveParagraphs";
 import {
-  createNativeContentSignature,
-  sameWordPreservedParts,
-  wordMainBody,
-} from "./wordNativeContent";
-import {
   acceptWordRevisions,
   rejectWordRevisions,
   wordRevisionsOutside,
 } from "./wordRevisionViews";
-import { createWordXmlComparison } from "./wordXmlComparison";
 
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
 import type {
   WordInPlaceMarks,
   WordInPlaceOp,
   WordInPlaceSlot,
 } from "./wordInPlacePlan";
 import type { WordStoryOp } from "./wordInPlaceStories";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 export const WORD_SCOPE_PREFIX = "word-scope-v1:";

@@ -67,6 +67,12 @@ export default defineConfig(({ mode }) => {
           // or writes the format does not pull the component barrel in to get
           // at a constant.
           teams: path.resolve(__dirname, "./src/utils/teams/index.ts"),
+          // `word-review` is the Word plan model without the component barrel,
+          // for host code that validates or compiles plans but renders nothing.
+          "word-review": path.resolve(
+            __dirname,
+            "./src/lib/wordReview/index.ts",
+          ),
           conformance: path.resolve(__dirname, "./src/conformance/index.ts"),
         },
         formats: ["es"],

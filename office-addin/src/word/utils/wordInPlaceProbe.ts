@@ -1,3 +1,9 @@
+import {
+  wordMainBody,
+  extractWordSections,
+  extractWordStories,
+} from "@erato/frontend/word-review";
+
 import { captureWordDocumentPackage } from "./wordDocumentPackage";
 import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
 import { wordPackageCounts } from "./wordFullDocumentComparison";
@@ -19,8 +25,6 @@ import {
   predictWordBodyParagraphs,
   wordParagraphAlignmentIssue,
 } from "./wordLiveParagraphs";
-import { wordMainBody } from "./wordNativeContent";
-import { extractWordSections, extractWordStories } from "./wordStories";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordInPlaceProbeId } from "./wordInPlaceCapabilities";

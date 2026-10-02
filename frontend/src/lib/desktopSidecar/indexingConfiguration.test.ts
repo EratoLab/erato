@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { DesktopSidecarClient } from "@erato/desktop-sidecar-protocol";
+import { describe, expect, it, vi } from "vitest";
 
 import { expectSidecarConfigurationAccepted } from "./__tests__/configurationTestUtils";
+import {
+  indexingStatusFixture,
+  mailboxId as fixtureMailboxId,
+  sourceId,
+} from "./__tests__/indexingStatusFixture";
 import {
   initializeMailboxConfiguration,
   mailboxCoverage,
@@ -112,6 +118,7 @@ describe("mailbox indexing configuration", () => {
       coverage: { indexedCurrent: 2, knownEligible: 5 },
     };
     const status = {
+      discovery: [],
       generations: [
         {
           role: "active",
@@ -143,6 +150,7 @@ describe("mailbox indexing configuration", () => {
 describe("mailbox indexing summary", () => {
   function fixture() {
     const segment = {
+      sourceId,
       mailboxId: sharedUuid,
       kind: "email",
       fileType: null,
@@ -166,6 +174,7 @@ describe("mailbox indexing summary", () => {
       state: "running",
       discovery: [
         {
+          sourceId,
           mailboxId: sharedId,
           state: "complete",
           discoveryComplete: true,
@@ -306,6 +315,331 @@ describe("mailbox indexing summary", () => {
     expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
       total: null,
       percentage: null,
+      state: "unavailable",
+    });
+  });
+});
+
+describe("sparse mailbox status and missing local cache content", () => {
+  const summary = (status = indexingStatusFixture()) =>
+    mailboxIndexingSummary(status, fixtureMailboxId, true);
+
+  it("matches compact mailbox IDs and case-insensitive source UUIDs", () => {
+    const status = indexingStatusFixture();
+    status.generations[0].segments[0].sourceId = sourceId.toUpperCase();
+    status.discovery[0].mailboxId = fixtureMailboxId
+      .replaceAll("-", "")
+      .toUpperCase();
+    expect(summary(status)).toMatchObject({
+      total: 554,
+      indexed: 552,
+      state: "partial",
+    });
+  });
+
+  it("accepts the sparse response through the real RPC validator and preserves the added counter", async () => {
+    const status = indexingStatusFixture();
+    const client = new DesktopSidecarClient({
+      transport: {
+        request: async (body: string) =>
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: JSON.parse(body).id,
+            result: status,
+          }),
+      },
+      clientInfo: {
+        name: "status-test",
+        version: "1",
+        host: { application: "test", runtime: "node" },
+        os: { name: "test" },
+      },
+    });
+    vi.spyOn(client, "supports").mockReturnValue(true);
+    const response = await client.invoke("indexing.status.v1", {
+      includeSourceBreakdowns: true,
+      includeFileTypeBreakdowns: false,
+    });
+    expect(summary(response)).toMatchObject({
+      total: 554,
+      indexed: 552,
+      percentage: 99,
+      missingFromLocalCache: 2,
+      state: "partial",
+      terminal: false,
+      hasUnindexable: false,
+      lastScan: Date.parse(status.sampledAt),
+    });
+    expect(mailboxCoverage(response, fixtureMailboxId, "file")).toEqual({
+      indexed: 0,
+      total: 0,
+    });
+  });
+
+  it.each(["email", "file"] as const)(
+    "handles a mailbox containing only %s documents",
+    (kind) => {
+      const status = indexingStatusFixture();
+      for (const row of status.generations[0].segments) {
+        row.kind =
+          row.kind === "email" ? kind : kind === "email" ? "file" : "email";
+        if (row.coverage.knownEligible === 554) {
+          row.coverage.indexedCurrent = 554;
+          row.coverage.missingFromLocalCacheCurrent = 0;
+        }
+      }
+      expect(summary(status)).toMatchObject({
+        total: 554,
+        indexed: 554,
+        percentage: 100,
+        state: "current",
+      });
+    },
+  );
+
+  it("recognizes a confirmed empty mailbox, without inventing counts before discovery", () => {
+    const status = indexingStatusFixture();
+    status.generations[0].segments = status.generations[0].segments.filter(
+      (row) => row.mailboxId === null,
+    );
+    status.discovery[0].discoveredDocuments = 0;
+    expect(summary(status)).toMatchObject({
+      total: 0,
+      indexed: 0,
+      state: "current",
+    });
+    status.discovery[0].state = "notStarted";
+    status.discovery[0].discoveryComplete = false;
+    expect(summary(status)).toMatchObject({
+      total: null,
+      indexed: null,
+      state: "waiting",
+    });
+    status.discovery = [];
+    expect(summary(status)).toMatchObject({
+      total: null,
+      indexed: null,
+      state: "unavailable",
+      lastScan: null,
+    });
+  });
+
+  it("does not infer zero when a known nonempty source has no breakdown", () => {
+    const status = indexingStatusFixture();
+    status.generations[0].segments = status.generations[0].segments.filter(
+      (row) => row.mailboxId === null,
+    );
+    expect(summary(status)).toMatchObject({
+      total: null,
+      state: "unavailable",
+    });
+  });
+
+  it("preserves unknown metrics and missing generations", () => {
+    for (const damage of [
+      (status: IndexingStatusV1Result) => {
+        status.generations = [];
+      },
+      (status: IndexingStatusV1Result) => {
+        status.generations[0].role = "building";
+      },
+      (status: IndexingStatusV1Result) => {
+        status.generations[0].unavailableReason = "not_instrumented";
+      },
+      (status: IndexingStatusV1Result) => {
+        status.generations[0].segments[0].coverage.knownEligible = null;
+      },
+      (status: IndexingStatusV1Result) => {
+        status.generations[0].segments[0].coverage.unavailableReason =
+          "not_instrumented";
+      },
+      (status: IndexingStatusV1Result) => {
+        status.generations[0].segments[2].coverage.knownEligible = null;
+      },
+      (status: IndexingStatusV1Result) => {
+        status.generations[0].segments[2].coverage.unavailableReason =
+          "not_instrumented";
+      },
+      (status: IndexingStatusV1Result) => {
+        status.generations[0].segments.pop();
+      },
+    ]) {
+      const status = indexingStatusFixture();
+      damage(status);
+      expect(summary(status)).toMatchObject({
+        total: null,
+        percentage: null,
+        state: "unavailable",
+      });
+    }
+  });
+
+  it("treats explicit null cache counters as unknown and omitted legacy counters as zero", () => {
+    const status = indexingStatusFixture();
+    const coverage = status.generations[0].segments[0].coverage;
+    coverage.missingFromLocalCacheCurrent = null;
+    expect(summary(status)).toMatchObject({
+      total: 554,
+      indexed: 552,
+      missingFromLocalCache: null,
+      state: "unavailable",
+    });
+    delete coverage.missingFromLocalCacheCurrent;
+    expect(summary(status)).toMatchObject({
+      missingFromLocalCache: 0,
+      state: "unavailable",
+    });
+    coverage.indexedCurrent = 554;
+    expect(summary(status)).toMatchObject({
+      missingFromLocalCache: 0,
+      state: "current",
+    });
+  });
+
+  it("does not let terminal outcomes explain an unrelated coverage gap", () => {
+    const status = indexingStatusFixture();
+    const coverage = status.generations[0].segments[0].coverage;
+    coverage.indexedCurrent = 550;
+    coverage.emptyCurrent = 1;
+    expect(summary(status)).toMatchObject({
+      state: "unavailable",
+      terminal: false,
+    });
+    coverage.unindexableCurrent = 1;
+    expect(summary(status)).toMatchObject({
+      state: "partial",
+      terminal: true,
+      hasUnindexable: true,
+    });
+  });
+
+  it("supports all-missing mailboxes without classifying them as empty or failed extraction", () => {
+    const status = indexingStatusFixture();
+    Object.assign(status.generations[0].segments[0].coverage, {
+      indexedCurrent: 0,
+      missingFromLocalCacheCurrent: 554,
+    });
+    expect(summary(status)).toMatchObject({
+      total: 554,
+      indexed: 0,
+      percentage: 0,
+      missingFromLocalCache: 554,
+      state: "partial",
+      terminal: false,
+    });
+  });
+
+  it("keeps lifecycle and failure states ahead of settled coverage", () => {
+    const status = indexingStatusFixture();
+    expect(mailboxIndexingSummary(status, fixtureMailboxId, false).state).toBe(
+      "disabled",
+    );
+    status.state = "blocked";
+    expect(summary(status).state).toBe("indexingUnavailable");
+    status.state = "running";
+    status.resetInProgress = true;
+    expect(summary(status).state).toBe("stopped");
+    status.resetInProgress = false;
+    status.discovery[0].state = "failed";
+    expect(summary(status).state).toBe("scanFailed");
+    status.discovery[0].accessible = false;
+    expect(summary(status).state).toBe("sourceUnavailable");
+    status.discovery[0].accessible = true;
+    status.discovery[0].state = "scanning";
+    expect(summary(status)).toMatchObject({
+      state: "scanning",
+      total: 554,
+      lastScan: Date.parse(status.sampledAt),
+    });
+    status.discovery[0].state = "complete";
+    status.discovery[0].discoveryComplete = false;
+    expect(summary(status).state).toBe("unavailable");
+  });
+
+  it("does not claim completion with pending or unknown work", () => {
+    for (const damage of [
+      (
+        row: IndexingStatusV1Result["generations"][number]["segments"][number],
+      ) => {
+        row.backlog.remaining = 1;
+      },
+      (
+        row: IndexingStatusV1Result["generations"][number]["segments"][number],
+      ) => {
+        row.backlog.retryDeferred = 1;
+      },
+      (
+        row: IndexingStatusV1Result["generations"][number]["segments"][number],
+      ) => {
+        row.coverage.stale = 1;
+      },
+      (
+        row: IndexingStatusV1Result["generations"][number]["segments"][number],
+      ) => {
+        row.coverage.neverProcessed = 1;
+      },
+      (
+        row: IndexingStatusV1Result["generations"][number]["segments"][number],
+      ) => {
+        row.coverage.pendingDeletions = 1;
+      },
+    ]) {
+      const status = indexingStatusFixture();
+      damage(status.generations[0].segments[0]);
+      expect(summary(status).state).toBe("waiting");
+    }
+    for (const field of ["remaining", "inProgress", "blocked"] as const) {
+      const status = indexingStatusFixture();
+      status.generations[0].segments[0].backlog[field] = null;
+      expect(summary(status).state).toBe("unavailable");
+    }
+    const status = indexingStatusFixture();
+    status.generations[0].segments[0].backlog.unavailableReason =
+      "not_instrumented";
+    expect(summary(status).state).toBe("unavailable");
+  });
+
+  it("sums distinct sources but never sums mailbox aggregates, file breakdowns or generations with them", () => {
+    const status = indexingStatusFixture();
+    const generation = status.generations[0];
+    const row = generation.segments[0];
+    const second = {
+      ...globalThis.structuredClone(row),
+      sourceId: "22222222-2222-4333-8444-555555555555",
+    };
+    generation.segments.push(second);
+    status.discovery.push({
+      ...status.discovery[0],
+      sourceId: second.sourceId,
+    });
+    expect(summary(status)).toMatchObject({
+      total: 1108,
+      indexed: 1104,
+      missingFromLocalCache: 4,
+    });
+    generation.segments.push({
+      ...globalThis.structuredClone(row),
+      fileType: "pdf",
+    });
+    status.generations.push({
+      ...globalThis.structuredClone(generation),
+      role: "building",
+    });
+    expect(summary(status).total).toBe(1108);
+    generation.segments.push({
+      ...globalThis.structuredClone(row),
+      sourceId: null,
+    });
+    expect(summary(status)).toMatchObject({
+      total: 554,
+      indexed: 552,
+      missingFromLocalCache: 2,
+    });
+    generation.segments = generation.segments.filter(
+      (segment) => segment.sourceId === sourceId || segment.mailboxId === null,
+    );
+    expect(summary(status)).toMatchObject({
+      total: null,
       state: "unavailable",
     });
   });

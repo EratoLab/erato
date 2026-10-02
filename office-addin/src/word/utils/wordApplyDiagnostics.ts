@@ -1,3 +1,5 @@
+import { createWordXmlComparison } from "@erato/frontend/word-review";
+
 import { parseWordXml } from "./wordDocumentPackageCodec";
 import {
   WORD_APPLY_ADJUSTMENTS,
@@ -6,7 +8,6 @@ import {
 } from "./wordFullDocumentComparison";
 import { WORD_IN_PLACE_FALLBACKS } from "./wordInPlacePlan";
 import { wordInPlaceAvailability } from "./wordInPlaceSwitch";
-import { createWordXmlComparison } from "./wordXmlComparison";
 
 import type {
   WordApplyOutcome,

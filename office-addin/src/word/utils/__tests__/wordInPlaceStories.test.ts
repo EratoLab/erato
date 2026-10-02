@@ -1,3 +1,4 @@
+import { createWordXmlComparison } from "@erato/frontend/word-review";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -27,7 +28,6 @@ import {
 import { applyWordPlanInPlace } from "../wordInPlaceExecutor";
 import { classifyWordInPlacePlan } from "../wordInPlacePlan";
 import { resetWordInPlaceLatchForTests } from "../wordInPlaceSwitch";
-import { createWordXmlComparison } from "../wordXmlComparison";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type {
@@ -38,8 +38,8 @@ import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
-} from "../wordDocumentPlan";
-import type { WordStoryChange } from "../wordStories";
+  WordStoryChange,
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

@@ -1354,3 +1354,127 @@ async fn test_assistant_usage_aggregation_and_access(pool: Pool<Postgres>) {
         .await
         .assert_status_not_found();
 }
+
+/// Directory grants must agree between shared-list permissions and updates.
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_organization_user_editor_list_and_update(pool: Pool<Postgres>) {
+    let state = test_app_state(hermetic_app_config(None, None), pool.clone()).await;
+    let owner = erato::models::user::get_or_create_user(
+        &state.db,
+        TEST_USER_ISSUER,
+        "assistant-owner",
+        None,
+    )
+    .await
+    .unwrap();
+    let user = erato::models::user::get_or_create_user(
+        &state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let token = JwtTokenBuilder::new()
+        .organization_user_id("directory-user")
+        .build();
+    let internal_user_id = user.id.to_string();
+    for (id_type, grant_id, role, enabled, visible, editable) in [
+        (
+            "organization_user_id",
+            "directory-user",
+            "editor",
+            true,
+            true,
+            true,
+        ),
+        (
+            "organization_user_id",
+            "directory-user",
+            "viewer",
+            true,
+            true,
+            false,
+        ),
+        (
+            "organization_user_id",
+            "unrelated",
+            "editor",
+            true,
+            false,
+            false,
+        ),
+        (
+            "organization_user_id",
+            internal_user_id.as_str(),
+            "editor",
+            true,
+            false,
+            false,
+        ),
+        ("id", "directory-user", "editor", true, false, false),
+        ("id", internal_user_id.as_str(), "editor", true, true, true),
+        (
+            "organization_user_id",
+            "directory-user",
+            "editor",
+            false,
+            true,
+            false,
+        ),
+    ] {
+        let assistant: sqlx::types::Uuid = sqlx::query_scalar("INSERT INTO assistants (owner_user_id, name, prompt) VALUES ($1, 'Original', 'Original prompt') RETURNING id")
+            .bind(owner.id).fetch_one(&pool).await.unwrap();
+        sqlx::query("INSERT INTO share_grants (resource_type, resource_id, subject_type, subject_id_type, subject_id, role) VALUES ('assistant', $1, 'user', $2, $3, $4)")
+            .bind(assistant.to_string()).bind(id_type).bind(grant_id).bind(role).execute(&pool).await.unwrap();
+        let mut config = hermetic_app_config(None, None);
+        config.assistants.enabled = true;
+        config.assistants.enable_edit_sharing = enabled;
+        let state = test_app_state(config, pool.clone()).await;
+        let server = TestServer::new(
+            router(state.clone())
+                .split_for_parts()
+                .0
+                .with_state(state)
+                .into_make_service(),
+        )
+        .unwrap();
+        let response = server
+            .get("/api/v1beta/assistants?sharing_relation=shared_with_user")
+            .with_bearer_token(&token)
+            .await;
+        response.assert_status_ok();
+        let body: Value = response.json();
+        let entry = body
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["id"] == assistant.to_string());
+        assert_eq!(
+            entry.is_some(),
+            visible,
+            "{id_type}/{grant_id}/{role}/{enabled}"
+        );
+        if let Some(entry) = entry {
+            assert_eq!(entry["can_edit"], editable);
+        }
+        let response = server
+            .put(&format!("/api/v1beta/assistants/{assistant}"))
+            .with_bearer_token(&token)
+            .json(&json!({"name": "Updated"}))
+            .await;
+        response.assert_status(if editable {
+            http::StatusCode::OK
+        } else {
+            http::StatusCode::NOT_FOUND
+        });
+        let name: String = sqlx::query_scalar("SELECT name FROM assistants WHERE id = $1")
+            .bind(assistant)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(name, if editable { "Updated" } else { "Original" });
+    }
+}

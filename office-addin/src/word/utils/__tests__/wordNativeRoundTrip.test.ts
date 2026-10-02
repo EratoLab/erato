@@ -1,9 +1,9 @@
+import { parseWordDocumentPlan } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import fixturePlan from "../../../test/fixtures/word-authoring-native/plan.json";
 import rewrittenXml from "../../../test/fixtures/word-authoring-native/rewritten.xml?raw";
 import sourceXml from "../../../test/fixtures/word-authoring-native/source.xml?raw";
-import { parseWordDocumentPlan } from "../wordDocumentPlan";
 import {
   captureWordAuthoringSnapshot,
   verifyWordPlanOutput,

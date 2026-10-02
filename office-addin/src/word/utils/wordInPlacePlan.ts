@@ -1,32 +1,29 @@
 import {
   WORDPROCESSING_NS as W,
   readWordRunFormatting,
-} from "./wordBlockFormatting";
-import {
   isBuiltInHeadingStyle,
   wordBuiltInParagraphStyle,
-} from "./wordBuiltInStyles";
-import { wordPlanOutput } from "./wordDocumentPlan";
-import { wordBlockParagraphs } from "./wordLiveParagraphs";
-import { createNativeContentSignature } from "./wordNativeContent";
-import { WORD_REVISION_ELEMENTS } from "./wordRevisionViews";
-import { wordTableCellTextEditIssue } from "./wordTableCellText";
+  wordPlanOutput,
+  createNativeContentSignature,
+  wordTableCellTextEditIssue,
+} from "@erato/frontend/word-review";
 
+import { wordBlockParagraphs } from "./wordLiveParagraphs";
+import { WORD_REVISION_ELEMENTS } from "./wordRevisionViews";
+
+import type { WordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 import type {
   WordParagraphFormatting,
   WordRunFormatting,
-} from "./wordBlockFormatting";
-import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
   WordPlanRun,
   WordSourceBlock,
-} from "./wordDocumentPlan";
-import type { WordInPlaceCapabilities } from "./wordInPlaceCapabilities";
-import type { WordSectionStories } from "./wordStories";
-import type { WordTableCellTextEdit } from "./wordTableCellText";
+  WordSectionStories,
+  WordTableCellTextEdit,
+} from "@erato/frontend/word-review";
 
 /** Routing ladder: when several rules fail, the earliest code is reported. */
 export const WORD_IN_PLACE_FALLBACKS = [

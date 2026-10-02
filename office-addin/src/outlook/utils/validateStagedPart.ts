@@ -1,8 +1,6 @@
-import {
-  findCapabilityByExtension,
-  hasSupportedOperations,
-} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
+
+import type { findCapabilityByExtension } from "@erato/frontend/library";
 
 type FileCapabilities = Parameters<typeof findCapabilityByExtension>[1];
 type FileCapability = FileCapabilities[number];
@@ -49,16 +47,35 @@ function findCapability(
   part: StagedPartMetadata,
   capabilities: FileCapabilities,
 ): FileCapability | null {
-  const byExtension = findCapabilityByExtension(part.filename, capabilities);
-  if (byExtension) return byExtension;
+  const hasExtension =
+    part.filename.includes(".") && part.filename.split(".").pop() !== "";
+  const extension = hasExtension
+    ? part.filename.split(".").pop()?.toLowerCase()
+    : null;
+  if (extension) {
+    const byExtension = capabilities.find((capability) =>
+      capability.extensions.some((entry) => entry.toLowerCase() === extension),
+    );
+    if (byExtension) return byExtension;
+    const wildcard = capabilities.find((capability) =>
+      capability.extensions.includes("*"),
+    );
+    if (wildcard) return wildcard;
+  }
+  // An extensionless filename can match the wildcard capability. Prefer a
+  // capability inferred from its MIME type before falling back to that entry.
   const mimeType = part.mimeType.trim().toLowerCase();
-  if (!mimeType) return null;
+  const byMimeType = mimeType
+    ? (capabilities.find((capability) =>
+        capability.mime_types.some((pattern) =>
+          matchesMimePattern(mimeType, pattern.toLowerCase()),
+        ),
+      ) ?? null)
+    : null;
+  if (byMimeType) return byMimeType;
   return (
-    capabilities.find((capability) =>
-      capability.mime_types.some((pattern) =>
-        matchesMimePattern(mimeType, pattern.toLowerCase()),
-      ),
-    ) ?? null
+    capabilities.find((capability) => capability.extensions.includes("*")) ??
+    null
   );
 }
 
@@ -70,7 +87,7 @@ export function validateStagedPart(
   // Until the capabilities have loaded every type passes, as the dropzone does.
   if (!typePolicy.isLoading && typePolicy.capabilities.length > 0) {
     const capability = findCapability(part, typePolicy.capabilities);
-    if (!capability || !hasSupportedOperations(capability)) {
+    if (!capability || capability.operations.length === 0) {
       return {
         ok: false,
         verdict: "unsupported",

@@ -3,6 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
+import {
+  enumerateAudioDevices,
+  requestAudioStream,
+} from "./audioCaptureAccess";
+
 export type AudioInputDeviceOption = {
   deviceId: string;
   label: string;
@@ -80,7 +85,7 @@ export function useAudioInputDevicePreference({
     setAudioInputDeviceError(null);
 
     try {
-      const devices = await mediaDevices.enumerateDevices();
+      const devices = await enumerateAudioDevices(mediaDevices);
       let sawRealLabel = false;
       const audioInputs = devices
         .filter((device) => device.kind === "audioinput")
@@ -146,7 +151,7 @@ export function useAudioInputDevicePreference({
     let stream: MediaStream | null = null;
     try {
       // Minimal constraints — any live audio stream unlocks the labels.
-      stream = await mediaDevices.getUserMedia({ audio: true });
+      stream = await requestAudioStream(mediaDevices, { audio: true });
       // Enumerate while the stream is live so labels are populated.
       await refreshAudioInputDevices();
     } catch (error) {

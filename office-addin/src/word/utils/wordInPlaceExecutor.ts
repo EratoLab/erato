@@ -59,7 +59,6 @@ import type {
   WordInPlaceBackupOp,
   WordInPlaceRegion,
 } from "./wordDocumentPackage";
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
 import type {
   WordInPlaceMarks,
   WordInPlaceOp,
@@ -72,6 +71,7 @@ import type { WordScopeEntry } from "./wordInPlaceState";
 import type { WordStoryOp } from "./wordInPlaceStories";
 import type { WordLiveParagraph } from "./wordLiveParagraphs";
 import type { WordScopeRequest } from "./wordScopeGuard";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 /** The prediction of body.paragraphs did not hold, a read only this route makes failed, or Track
  * Changes is on for a write tracked writing does not cover; nothing was written or saved yet. */

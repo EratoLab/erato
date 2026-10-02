@@ -1,17 +1,21 @@
-import { wordErrorText } from "./wordApplyDiagnostics";
-import { trackWordApply } from "./wordApplyProgress";
-import { wordDocumentFingerprint } from "./wordDocumentXml";
 import {
   buildWordEditReport,
   planWordEdits,
   verifyWordEdits,
-} from "./wordEditPlan";
+} from "@erato/frontend/word-review";
+
+import { wordErrorText } from "./wordApplyDiagnostics";
+import { trackWordApply } from "./wordApplyProgress";
+import { wordDocumentFingerprint } from "./wordDocumentXml";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
-import type { WordDocumentCapture } from "./wordDocumentCapture";
-import type { WordEdit, WordEditOutcome } from "./wordEditPlan";
 import type { WordReviewAnchor } from "./wordReviewLocation";
+import type {
+  WordDocumentCapture,
+  WordEdit,
+  WordEditOutcome,
+} from "@erato/frontend/word-review";
 
 export interface WordApplyResult {
   outcomes: WordEditOutcome[];

@@ -356,6 +356,7 @@ impl AuthorizeFull for PolicyEngine {
             resource_kind,
             resource_id,
             action,
+            None,
             &[],
             &[],
         )
@@ -373,6 +374,7 @@ impl PolicyEngine {
         resource_kind: ResourceKind,
         resource_id: &ResourceId,
         action: Action,
+        organization_user_id: Option<&str>,
         organization_group_ids: &[String],
         groups: &[String],
     ) -> Result<(), Report> {
@@ -399,6 +401,7 @@ impl PolicyEngine {
                 resource_kind,
                 resource_id,
                 action,
+                organization_user_id,
                 organization_group_ids,
                 groups,
                 facts,
@@ -429,6 +432,7 @@ impl PolicyEngine {
         let mut input = json!({
             "subject_kind": subject_kind, "subject_id": subject_id,
             "resource_kind": kind, "action": action,
+            "organization_user_id": subject.organization_user_id(),
             "organization_group_ids": subject.organization_group_ids(), "groups": [],
         });
         if let Some(facts) = facts {
@@ -472,6 +476,7 @@ impl PolicyEngine {
         resource_kind: ResourceKind,
         resource_id: &ResourceId,
         action: Action,
+        organization_user_id: Option<&str>,
         organization_group_ids: &[String],
         groups: &[String],
         facts: Option<JsonValue>,
@@ -486,6 +491,7 @@ impl PolicyEngine {
         let mut input = json!({
             "subject_kind": subject_kind, "subject_id": subject_id,
             "resource_kind": resource_kind, "resource_id": resource_id, "action": action,
+            "organization_user_id": organization_user_id,
             "organization_group_ids": organization_group_ids, "groups": groups,
         });
         if let Some(facts) = facts {
@@ -536,6 +542,7 @@ impl PolicyEngine {
                     resource_kind,
                     &ResourceId(resource_id.clone()),
                     Action::Read,
+                    subject.organization_user_id(),
                     subject.organization_group_ids(),
                     groups,
                 )
@@ -671,6 +678,7 @@ impl AuthorizeShort for PolicyEngine {
             resource_kind,
             &resource_id,
             action,
+            subject.organization_user_id(),
             organization_group_ids,
             &[],
         )
@@ -858,6 +866,127 @@ mod tests {
         // This should work using the short form
         let result = authorize!(engine, &subject, &resource, action);
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_user_share_grant_identity_in_individual_and_batch_authorization() {
+        let id = Uuid::new_v4();
+        let subject = Subject::UserWithOrganizationInfo {
+            id: "internal-user".to_string(),
+            organization_user_id: Some("directory-user".to_string()),
+            organization_group_ids: vec![],
+        };
+        for (id_type, grant_id, role, enabled, hub, can_read, can_edit) in [
+            ("id", "internal-user", "editor", true, false, true, true),
+            (
+                "organization_user_id",
+                "directory-user",
+                "editor",
+                true,
+                false,
+                true,
+                true,
+            ),
+            (
+                "organization_user_id",
+                "directory-user",
+                "viewer",
+                true,
+                false,
+                true,
+                false,
+            ),
+            (
+                "organization_user_id",
+                "unrelated",
+                "editor",
+                true,
+                false,
+                false,
+                false,
+            ),
+            (
+                "organization_user_id",
+                "internal-user",
+                "editor",
+                true,
+                false,
+                false,
+                false,
+            ),
+            ("id", "directory-user", "editor", true, false, false, false),
+            (
+                "unknown",
+                "internal-user",
+                "editor",
+                true,
+                false,
+                false,
+                false,
+            ),
+            (
+                "organization_user_id",
+                "directory-user",
+                "editor",
+                false,
+                false,
+                false,
+                false,
+            ),
+            (
+                "organization_user_id",
+                "directory-user",
+                "editor",
+                true,
+                true,
+                true,
+                false,
+            ),
+        ] {
+            let engine = PolicyEngine::new();
+            engine.set_data(json!({
+                "resource_attributes": {"assistant": {id.to_string(): {"id": id, "owner_id": "owner"}}},
+                "share_grants": [{"resource_type": "assistant", "resource_id": id,
+                    "subject_type": "user", "subject_id_type": id_type, "subject_id": grant_id, "role": role}],
+                "config": {"assistants": {"enable_edit_sharing": enabled}},
+                "assistant_hub_versions": if hub { vec![json!({"assistant_id": id,
+                    "status": "review_accepted", "is_published": true, "is_current_published_version": true})] } else { vec![] },
+            })).await.unwrap();
+            for (action, expected) in [(Action::Read, can_read), (Action::Update, can_edit)] {
+                assert_eq!(
+                    authorize!(
+                        engine,
+                        &subject,
+                        Resource::Assistant(id.to_string()),
+                        action
+                    )
+                    .is_ok(),
+                    expected,
+                    "individual: {id_type}/{grant_id}/{role}/{enabled}/{hub}/{action:?}"
+                );
+                let allowed = engine
+                    .filter_authorized_ids(&subject, ResourceKind::Assistant, &[id], action)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    allowed.contains(&id),
+                    expected,
+                    "batch: {id_type}/{grant_id}/{role}/{enabled}/{hub}/{action:?}"
+                );
+            }
+            // A subject without directory identity must never match a directory grant.
+            if id_type == "organization_user_id" {
+                assert!(
+                    authorize!(
+                        engine,
+                        Subject::User("directory-user".to_string()),
+                        Resource::Assistant(id.to_string()),
+                        Action::Update
+                    )
+                    .is_err()
+                );
+            }
+        }
     }
 
     #[tokio::test]

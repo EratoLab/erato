@@ -1,0 +1,390 @@
+#requires -Version 7.2
+<#
+.SYNOPSIS
+Checks and configures Erato Teams bot SSO. Version 1.0.0.
+.DESCRIPTION
+Run in Azure Cloud Shell (PowerShell), or PowerShell 7.2+ with Azure CLI.
+The default run only reads Azure and Entra. -WhatIf previews changes.
+-Apply requests confirmation before changing the existing authentication app
+and creating a separate Azure Bot OAuth connection with a dedicated credential.
+Existing redirects, permissions, credentials and bot identity are preserved.
+Admin consent, Erato deployment and the Teams package update remain separate.
+Public Azure and the global Bot Framework token service are supported.
+Exit codes: 0 = checks/writes completed; 1 = settings missing; 2 = blocked/failed.
+Source and instructions: https://erato.chat/docs/integrations/ms_teams
+#>
+[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+param(
+    [Parameter(Mandatory)][guid]$TenantId,
+    [Parameter(Mandatory)][guid]$SubscriptionId,
+    [Parameter(Mandatory)][guid]$BotAppId,
+    [Parameter(Mandatory)][guid]$AuthAppId,
+    [Parameter(Mandatory)][string]$BaseUrl,
+    [string]$SsoResource,
+    [ValidatePattern('^[A-Za-z0-9_-]{1,64}$')][string]$CurrentConnection = 'graph',
+    [ValidatePattern('^[A-Za-z0-9_-]{1,64}$')][string]$ConnectionName = 'graph-sso',
+    [string]$ResourceGroup,
+    [string]$BotName,
+    [switch]$Apply,
+    [switch]$Json
+)
+
+$ErrorActionPreference = 'Stop'
+$script:GraphAppId = '00000003-0000-0000-c000-000000000000'
+$script:ProviderId = '30dd229c-58e3-4a48-bdfd-91ec48eb906c'
+$script:TeamsClients = @('1fec8e78-bce4-4aaf-ab1b-5451cc387264', '5e3ce6c0-2b1f-4285-8d4b-75ee78787346')
+$script:Scopes = @('openid', 'profile', 'email', 'offline_access', 'User.Read', 'GroupMember.Read.All', 'Files.Read.All', 'Sites.Read.All', 'Chat.Read', 'ChannelMessage.Read.All')
+$script:Callback = 'https://token.botframework.com/.auth/web/redirect'
+$script:ConnectionQuery = "{name:name,properties:{clientId:properties.clientId,scopes:properties.scopes,serviceProviderId:properties.serviceProviderId,parameters:properties.parameters[?key=='tenantId' || key=='tokenExchangeUrl']}}"
+
+function Invoke-EratoAz {
+    param([string[]]$Arguments)
+    # Capture both streams. Raw CLI errors can contain request bodies/secrets.
+    $output = & az @Arguments --only-show-errors --output json 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | ForEach-Object { "$_" }) -join "`n"
+    if ($code -ne 0) {
+        $reason = switch -Regex ($text) {
+            'ResourceNotFound|Request_ResourceNotFound|\b404\b' { 'NotFound'; break }
+            'Forbidden|AuthorizationFailed|Insufficient privileges|\b403\b' { 'AccessDenied'; break }
+            'az login|AADSTS|expired|\b401\b' { 'SignInRequired'; break }
+            default { 'RequestFailed' }
+        }
+        throw "Azure request failed ($reason). Check the selected account and permissions; raw responses are withheld."
+    }
+    if ($text.Trim()) {
+        try { return ConvertFrom-Json -InputObject $text -AsHashtable }
+        catch { throw 'Azure CLI returned an unexpected response; raw output is withheld.' }
+    }
+    return @{}
+}
+
+function Invoke-EratoApi {
+    param([string]$Url, [string]$Method = 'GET', [hashtable]$Body, [string]$Query)
+    if ($Url -cnotmatch '^https://(graph\.microsoft\.com/v1\.0/|management\.azure\.com/)') {
+        throw 'Refusing a request outside public Azure and Microsoft Graph.'
+    }
+    $arguments = @('rest', '--method', $Method, '--url', $Url)
+    if ($Query) { $arguments += @('--query', $Query) }
+    $directory = $null
+    try {
+        if ($Body) {
+            # Never put a credential in process arguments. Restrict the temporary
+            # directory BEFORE writing the body, and remove it in finally.
+            $directory = Join-Path ([IO.Path]::GetTempPath()) ('erato-teams-' + [guid]::NewGuid())
+            [IO.Directory]::CreateDirectory($directory) | Out-Null
+            if ($IsWindows) {
+                $acl = Get-Acl $directory
+                $acl.SetAccessRuleProtection($true, $false)
+                $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+                $rule = [Security.AccessControl.FileSystemAccessRule]::new($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+                $acl.AddAccessRule($rule)
+                Set-Acl -Path $directory -AclObject $acl
+            } else {
+                & chmod 700 $directory
+                if ($LASTEXITCODE -ne 0) { throw 'Could not secure the temporary request directory.' }
+            }
+            $file = Join-Path $directory 'request.json'
+            [IO.File]::WriteAllText($file, ($Body | ConvertTo-Json -Depth 50 -Compress))
+            $arguments += @('--headers', 'Content-Type=application/json', '--body', "@$file")
+        }
+        return Invoke-EratoAz -Arguments $arguments
+    } finally {
+        if ($directory) { [IO.Directory]::Delete($directory, $true) }
+    }
+}
+
+function Get-EratoCollection {
+    param([string]$Url)
+    $items = @()
+    for ($page = 0; $page -lt 100; $page++) {
+        $response = Invoke-EratoApi -Url $Url
+        if (-not $response.ContainsKey('value')) { throw 'Azure returned an invalid collection.' }
+        $items += @($response.value)
+        $Url = $response.'@odata.nextLink'
+        if (-not $Url) { $Url = $response.nextLink }
+        if (-not $Url) { return ,$items }
+    }
+    throw 'Azure returned too many pages; narrow the selected resource.'
+}
+
+function Add-EratoCheck {
+    param($Checks, [string]$Name, [bool]$Pass, [string]$Detail)
+    $Checks.Add(@{ name = $Name; status = $(if ($Pass) { 'PASS' } else { 'MISSING' }); detail = $Detail })
+}
+
+function Test-EratoConnection {
+    param($Connection, $Settings)
+    if (-not $Connection) { return $false }
+    $p = $Connection.properties
+    $parameters = @{}
+    foreach ($item in $p.parameters) { $parameters[$item.key] = $item.value }
+    return ($p.clientId -eq $Settings.AuthAppId -and $p.serviceProviderId -eq $script:ProviderId -and
+        $parameters.tenantId -eq $Settings.TenantId -and $parameters.tokenExchangeUrl -ceq $Settings.SsoResource -and
+        @($script:Scopes | Where-Object { $_ -cnotin ($p.scopes -split '\s+') }).Count -eq 0)
+}
+
+function Get-EratoAudit {
+    param([hashtable]$Settings)
+    $account = Invoke-EratoAz -Arguments @('account', 'show', '--query', '{tenantId:tenantId,id:id,environmentName:environmentName}')
+    $target = Invoke-EratoAz -Arguments @('account', 'show', '--subscription', $Settings.SubscriptionId, '--query', '{tenantId:tenantId,id:id,environmentName:environmentName}')
+    if ($account.environmentName -ne 'AzureCloud' -or $target.environmentName -ne 'AzureCloud') { throw 'Select a public Azure subscription.' }
+    if ($account.tenantId -ne $Settings.TenantId -or $target.tenantId -ne $Settings.TenantId) {
+        throw "Wrong Azure CLI tenant. Run az login --tenant $($Settings.TenantId), then rerun the check. No cloud changes were made."
+    }
+    if ($Settings.ResourceGroup -and $Settings.BotName) {
+        # Resource-scoped administrators need not enumerate the subscription.
+        $group = [uri]::EscapeDataString($Settings.ResourceGroup)
+        $name = [uri]::EscapeDataString($Settings.BotName)
+        $bots = @(Invoke-EratoApi -Url "https://management.azure.com/subscriptions/$($Settings.SubscriptionId)/resourceGroups/$group/providers/Microsoft.BotService/botServices/$name`?api-version=2022-09-15")
+    } else {
+        $bots = Get-EratoCollection -Url "https://management.azure.com/subscriptions/$($Settings.SubscriptionId)/providers/Microsoft.BotService/botServices?api-version=2022-09-15"
+    }
+    $matches = @($bots | Where-Object {
+        $_.properties.msaAppId -eq $Settings.BotAppId -and
+        (-not $Settings.BotName -or $_.name -eq $Settings.BotName) -and
+        (-not $Settings.ResourceGroup -or ($_.id -split '/')[4] -eq $Settings.ResourceGroup)
+    })
+    if ($matches.Count -ne 1) { throw "Found $($matches.Count) matching bots in the selected subscription. Check the subscription, or pass -ResourceGroup and -BotName to select one existing bot." }
+    $bot = $matches[0]
+    if ($bot.id -notmatch "^/subscriptions/$([regex]::Escape($Settings.SubscriptionId))/resourceGroups/[^/]+/providers/Microsoft.BotService/botServices/[^/]+$") { throw 'Unexpected bot resource identity.' }
+    $checks = [Collections.Generic.List[object]]::new()
+    Add-EratoCheck $checks 'Bot tenant' ($bot.properties.msaAppTenantId -eq $Settings.TenantId) $Settings.TenantId
+    Add-EratoCheck $checks 'Single-tenant bot' ($bot.properties.msaAppType -eq 'SingleTenant') 'Existing single-tenant bot required'
+    Add-EratoCheck $checks 'Messaging endpoint' ($bot.properties.endpoint -ceq "$($Settings.BaseUrl)/api/integrations/ms_teams/messages") 'Must point to this Erato deployment'
+    Add-EratoCheck $checks 'Teams channel' ('msteams' -in $bot.properties.enabledChannels) 'Microsoft Teams channel enabled'
+    $appSelect = 'id,appId,displayName,signInAudience,identifierUris,api,web,spa,requiredResourceAccess'
+    $app = Invoke-EratoApi -Url "https://graph.microsoft.com/v1.0/applications(appId='$($Settings.AuthAppId)')?`$select=$appSelect"
+    Add-EratoCheck $checks 'Single-tenant authentication app' ($app.signInAudience -eq 'AzureADMyOrg') $Settings.AuthAppId
+    $graphFilter = [uri]::EscapeDataString("appId eq '$script:GraphAppId'")
+    $graph = @(Get-EratoCollection -Url "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=$graphFilter&`$select=id,oauth2PermissionScopes")
+    if ($graph.Count -ne 1) { throw 'Could not uniquely resolve Microsoft Graph permissions.' }
+    $scopeIds = @{}
+    foreach ($scope in $graph[0].oauth2PermissionScopes) { if ($scope.isEnabled) { $scopeIds[$scope.value] = $scope.id } }
+    foreach ($name in $script:Scopes) { if (-not $scopeIds[$name]) { throw "Microsoft Graph permission unavailable: $name" } }
+    Add-EratoCheck $checks 'Application ID URI' ($Settings.SsoResource -cin $app.identifierUris) $Settings.SsoResource
+    Add-EratoCheck $checks 'V2 access tokens' ($app.api.requestedAccessTokenVersion -eq 2) 'Access tokens for the exposed API'
+    $scope = @($app.api.oauth2PermissionScopes | Where-Object { $_.value -ceq 'access_as_user' -and $_.isEnabled })
+    Add-EratoCheck $checks 'access_as_user scope' ($scope.Count -eq 1) 'Enabled delegated scope'
+    foreach ($client in $script:TeamsClients) {
+        $authorized = @($app.api.preAuthorizedApplications | Where-Object { $_.appId -eq $client })
+        Add-EratoCheck $checks "Teams client $client" ($scope.Count -eq 1 -and $scope[0].id -in $authorized.delegatedPermissionIds) 'Pre-authorized for access_as_user'
+    }
+    Add-EratoCheck $checks 'OAuth web callback' ($script:Callback -cin $app.web.redirectUris) $script:Callback
+    $requested = @($app.requiredResourceAccess | Where-Object { $_.resourceAppId -eq $script:GraphAppId }).resourceAccess
+    $missing = @($script:Scopes | Where-Object { $scopeIds[$_] -notin @($requested | Where-Object { $_.type -eq 'Scope' }).id })
+    Add-EratoCheck $checks 'Delegated Graph permissions' ($missing.Count -eq 0) $(if ($missing) { 'Missing: ' + ($missing -join ', ') } else { 'All requested permissions present' })
+    $appFilter = [uri]::EscapeDataString("appId eq '$($Settings.AuthAppId)'")
+    $principals = @(Get-EratoCollection -Url "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=$appFilter&`$select=id")
+    $granted = @()
+    if ($principals.Count -eq 1) {
+        $filter = [uri]::EscapeDataString("clientId eq '$($principals[0].id)'")
+        $grants = Get-EratoCollection -Url "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=$filter&`$select=consentType,resourceId,scope"
+        $granted = @($grants | Where-Object { $_.consentType -eq 'AllPrincipals' -and $_.resourceId -eq $graph[0].id } | ForEach-Object { $_.scope -split '\s+' })
+    }
+    $missingConsent = @($script:Scopes | Where-Object { $_ -cnotin $granted })
+    Add-EratoCheck $checks 'Tenant admin consent' ($missingConsent.Count -eq 0) $(if ($missingConsent) { 'An administrator must consent to: ' + ($missingConsent -join ', ') } else { 'Required delegated scopes granted' })
+    $connection = $null
+    $connectionUrl = "https://management.azure.com$($bot.id)/connections/$($Settings.ConnectionName)?api-version=2022-09-15"
+    try { $connection = Invoke-EratoApi -Url $connectionUrl -Query $script:ConnectionQuery }
+    catch { if ($_.Exception.Message -notmatch '\(NotFound\)') { throw } }
+    Add-EratoCheck $checks 'SSO OAuth connection' (Test-EratoConnection $connection $Settings) $Settings.ConnectionName
+    # Only these public fields go into the printed/JSON report.
+    $report = [ordered]@{
+        version = '1.0.0'; checkedAt = [DateTime]::UtcNow.ToString('o'); mode = 'Check'
+        tenantId = $Settings.TenantId; subscriptionId = $Settings.SubscriptionId
+        botName = $bot.name; botAppId = $Settings.BotAppId; authAppId = $Settings.AuthAppId
+        baseUrl = $Settings.BaseUrl; connectionName = $Settings.ConnectionName
+        checks = $checks.ToArray(); changes = @(); remainingSteps = @(
+            'Grant any missing tenant admin consent in Entra.',
+            'Use Test Connection on the new OAuth connection in Azure Bot Configuration.',
+            "Deploy Erato with oauth_connection_name = `"$($Settings.ConnectionName)`", sso_app_id = `"$($Settings.AuthAppId)`", sso_resource = `"$($Settings.SsoResource)`".",
+            'Increase the Teams package version, deploy, and upload the updated package as an update to the existing app.',
+            'Test a personal bot chat in Teams desktop and web, then test the tab and other Office add-ins.'
+        )
+        note = 'Azure checks do not verify the deployed Erato configuration, bot route, installed Teams package, credential validity, or end-to-end sign-in.'
+        exitCode = $(if (@($checks | Where-Object status -eq 'MISSING').Count) { 1 } else { 0 })
+    }
+    return @{ Report = $report; App = $app; Bot = $bot; Connection = $connection; ConnectionUrl = $connectionUrl; ScopeIds = $scopeIds }
+}
+
+function New-EratoSsoPlan {
+    param($Audit, $Settings)
+    $basics = @('Bot tenant', 'Single-tenant bot', 'Messaging endpoint', 'Teams channel', 'Single-tenant authentication app')
+    if (@($Audit.Report.checks | Where-Object { $_.name -in $basics -and $_.status -ne 'PASS' }).Count) { throw 'Resolve the bot tenant, endpoint, channel and app identity checks before configuring SSO.' }
+    if ($Settings.ConnectionName -eq $Settings.CurrentConnection) { throw 'Choose a separate SSO connection name so the current connection is preserved.' }
+    if ($Audit.Connection -and -not (Test-EratoConnection $Audit.Connection $Settings)) { throw 'The selected SSO connection already has different settings. Choose a new name or reconcile it manually; it will not be overwritten.' }
+    $app = $Audit.App
+    $desired = $app | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable
+    $desired.identifierUris = @($desired.identifierUris | Where-Object { $null -ne $_ })
+    if ($Settings.SsoResource -cnotin $desired.identifierUris) { $desired.identifierUris += $Settings.SsoResource }
+    if (-not $desired.api) { $desired.api = @{} }
+    $desired.api.requestedAccessTokenVersion = 2
+    $scopes = @($desired.api.oauth2PermissionScopes | Where-Object { $null -ne $_ })
+    $existing = @($scopes | Where-Object { $_.value -ceq 'access_as_user' })
+    if ($existing.Count -gt 1) { throw 'Multiple access_as_user scopes exist; reconcile them before setup.' }
+    if ($existing.Count) { $scope = $existing[0]; $scope.isEnabled = $true }
+    else {
+        $scope = @{ id = [guid]::NewGuid().ToString(); value = 'access_as_user'; type = 'User'; isEnabled = $true
+            adminConsentDisplayName = 'Access Erato as the signed-in user'; adminConsentDescription = 'Allow Microsoft Teams to sign the user in to Erato.'
+            userConsentDisplayName = 'Access Erato as you'; userConsentDescription = 'Allow Microsoft Teams to sign you in to Erato.' }
+        $scopes += $scope
+    }
+    $desired.api.oauth2PermissionScopes = $scopes
+    $clients = @($desired.api.preAuthorizedApplications | Where-Object { $null -ne $_ })
+    foreach ($clientId in $script:TeamsClients) {
+        $client = $clients | Where-Object { $_.appId -eq $clientId } | Select-Object -First 1
+        if (-not $client) { $client = @{ appId = $clientId; delegatedPermissionIds = @() }; $clients += $client }
+        if ($scope.id -notin $client.delegatedPermissionIds) { $client.delegatedPermissionIds = @($client.delegatedPermissionIds | Where-Object { $null -ne $_ }) + $scope.id }
+    }
+    $desired.api.preAuthorizedApplications = $clients
+    if (-not $desired.web) { $desired.web = @{} }
+    if ($script:Callback -cnotin $desired.web.redirectUris) { $desired.web.redirectUris = @($desired.web.redirectUris | Where-Object { $null -ne $_ }) + $script:Callback }
+    $access = @($desired.requiredResourceAccess | Where-Object { $null -ne $_ })
+    $graph = $access | Where-Object { $_.resourceAppId -eq $script:GraphAppId } | Select-Object -First 1
+    if (-not $graph) { $graph = @{ resourceAppId = $script:GraphAppId; resourceAccess = @() }; $access += $graph }
+    foreach ($name in $script:Scopes) {
+        if (-not @($graph.resourceAccess | Where-Object { $_.id -eq $Audit.ScopeIds[$name] -and $_.type -eq 'Scope' }).Count) {
+            $graph.resourceAccess = @($graph.resourceAccess | Where-Object { $null -ne $_ }) + @{ id = $Audit.ScopeIds[$name]; type = 'Scope' }
+        }
+    }
+    $desired.requiredResourceAccess = $access
+    $patch = @{}
+    foreach ($key in @('identifierUris', 'api', 'web', 'requiredResourceAccess')) {
+        if (($desired[$key] | ConvertTo-Json -Depth 50 -Compress) -cne ($app[$key] | ConvertTo-Json -Depth 50 -Compress)) { $patch[$key] = $desired[$key] }
+    }
+    if ($patch.web) {
+        $web = @{}
+        foreach ($key in @('homePageUrl', 'implicitGrantSettings', 'logoutUrl', 'redirectUris')) {
+            if ($patch.web.ContainsKey($key)) { $web[$key] = $patch.web[$key] }
+        }
+        $patch.web = $web
+    }
+    return @{ applicationPatch = $patch; createConnection = (-not $Audit.Connection); connectionName = $Settings.ConnectionName
+        credentialLifetimeDays = 365; ssoResource = $Settings.SsoResource; delegatedPermissions = $script:Scopes }
+}
+
+function Write-EratoReport {
+    param($Report)
+    Write-Host "`nErato Teams SSO — $($Report.mode)"
+    Write-Host "Deployment:   $($Report.baseUrl)"
+    Write-Host "Tenant:       $($Report.tenantId)"
+    Write-Host "Subscription: $($Report.subscriptionId)"
+    Write-Host "Bot:          $($Report.botName) ($($Report.botAppId))"
+    Write-Host "Existing authentication app: $($Report.authAppId)"
+    foreach ($check in $Report.checks) { Write-Host ("{0,-8} {1}: {2}" -f $check.status, $check.name, $check.detail) }
+    if ($Report.plan) {
+        Write-Host "`nProposed changes (review before applying):"
+        $patch = $Report.plan.applicationPatch
+        if ($patch.identifierUris) { Write-Host "- Add Application ID URI: $($Report.plan.ssoResource)" }
+        if ($patch.api) { Write-Host '- Enable v2 API access tokens and access_as_user; pre-authorize Teams desktop/mobile and web.' }
+        if ($patch.web) { Write-Host "- Add Web callback: $script:Callback" }
+        if ($patch.requiredResourceAccess) { Write-Host "- Add missing delegated Graph permissions from: $($Report.plan.delegatedPermissions -join ', ')" }
+        if ($Report.plan.createConnection) { Write-Host "- Create OAuth connection '$($Report.plan.connectionName)' with a dedicated 365-day credential, subject to tenant policy." }
+        if (-not $patch.Count -and -not $Report.plan.createConnection) { Write-Host '- No Azure changes needed.' }
+        Write-Host 'Existing app settings are preserved. Use -Json to inspect the full additive application patch.'
+    }
+    foreach ($change in $Report.changes) { Write-Host "APPLIED  $change" }
+    Write-Host "`nStill to finish:"
+    foreach ($step in $Report.remainingSteps) { Write-Host "- $step" }
+    Write-Host "`n$($Report.note)"
+}
+
+function Invoke-EratoSetup {
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    param([hashtable]$Settings, [switch]$Apply, [switch]$Json)
+    $origin = $null
+    if (-not [uri]::TryCreate($Settings.BaseUrl, [UriKind]::Absolute, [ref]$origin) -or
+        $origin.Scheme -ne 'https' -or $origin.UserInfo -or $origin.Query -or $origin.Fragment -or $origin.AbsolutePath -ne '/') { throw 'BaseUrl must be an HTTPS origin without credentials, path or query.' }
+    $Settings.BaseUrl = $origin.GetLeftPart([UriPartial]::Authority)
+    if (-not $Settings.SsoResource) { $Settings.SsoResource = "api://$($origin.Authority)/botid-$($Settings.AuthAppId)" }
+    if ($Settings.SsoResource -cnotmatch '^api://[^\s]+$' -or $Settings.SsoResource.EndsWith('/access_as_user')) { throw 'SsoResource must be an Application ID URI starting with api://, without the scope suffix.' }
+    $audit = Get-EratoAudit $Settings
+    $report = $audit.Report
+    if ($Apply -or $WhatIfPreference) {
+        $plan = New-EratoSsoPlan $audit $Settings
+        $report.mode = 'Preview'
+        $report.plan = $plan
+        # Always show the target and concrete plan before a confirmation prompt.
+        if ($Apply -and -not $WhatIfPreference -and -not $Json) { Write-EratoReport $report }
+        $target = "tenant $($Settings.TenantId), subscription $($Settings.SubscriptionId), bot $($audit.Bot.name), authentication app $($Settings.AuthAppId)"
+        if (($plan.applicationPatch.Count -or $plan.createConnection) -and $PSCmdlet.ShouldProcess($target, 'Apply the displayed Entra changes and create the separate OAuth connection if missing')) {
+            if (-not $Apply) { throw 'Use -Apply to configure SSO. A check never writes cloud settings.' }
+            # Re-read immediately after confirmation. Shared apps may have gained
+            # another environment's URI while the administrator reviewed the plan.
+            $fresh = Get-EratoAudit $Settings
+            $freshPlan = New-EratoSsoPlan $fresh $Settings
+            $appUrl = "https://graph.microsoft.com/v1.0/applications/$($fresh.App.id)"
+            $report.mode = 'Apply'
+            try {
+                # Graph validates pre-authorizations against scopes already saved
+                # on the app, not scopes introduced in the same PATCH. Expose the
+                # scope first, retaining existing pre-authorized clients, then
+                # re-read and merge the remaining settings with its persisted ID.
+                $enabledScope = @($fresh.App.api.oauth2PermissionScopes | Where-Object { $_.value -ceq 'access_as_user' -and $_.isEnabled })
+                if (-not $enabledScope.Count) {
+                    $scopeApi = $freshPlan.applicationPatch.api | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable
+                    $scopeApi.preAuthorizedApplications = @($fresh.App.api.preAuthorizedApplications | Where-Object { $null -ne $_ })
+                    Invoke-EratoApi -Url $appUrl -Method PATCH -Body @{ api = $scopeApi } | Out-Null
+                    $report.changes += 'Enabled the access_as_user scope and v2 API tokens.'
+                    if (-not $Json) { Write-Host 'APPLIED  Exposed API scope.' }
+                    $fresh = Get-EratoAudit $Settings
+                    if (@($fresh.App.api.oauth2PermissionScopes | Where-Object { $_.value -ceq 'access_as_user' -and $_.isEnabled }).Count -ne 1) {
+                        throw 'The saved API scope is not visible yet. Rerun the check before retrying Apply; no OAuth credential has been created.'
+                    }
+                    $freshPlan = New-EratoSsoPlan $fresh $Settings
+                }
+                if ($freshPlan.applicationPatch.Count) {
+                    Invoke-EratoApi -Url $appUrl -Method PATCH -Body $freshPlan.applicationPatch | Out-Null
+                    $report.changes += 'Added missing Entra SSO settings and delegated Graph permissions.'
+                    if (-not $Json) { Write-Host 'APPLIED  Entra SSO settings.' }
+                }
+                if ($freshPlan.createConnection) {
+                    $expiry = [DateTime]::UtcNow.AddDays(365).ToString('yyyy-MM-ddTHH:mm:ssZ')
+                    $label = "Erato Teams SSO $($fresh.Bot.name)/$($Settings.ConnectionName)"
+                    $credential = Invoke-EratoApi -Url "$appUrl/addPassword" -Method POST -Body @{ passwordCredential = @{ displayName = $label; endDateTime = $expiry } }
+                    if (-not $credential.secretText -or -not $credential.keyId) { throw "Credential creation returned an incomplete response. Inspect credentials named '$label' before retrying; Entra changes may already be applied." }
+                    $properties = @{ clientId = $Settings.AuthAppId; clientSecret = $credential.secretText; serviceProviderId = $script:ProviderId
+                        scopes = $script:Scopes -join ' '; parameters = @(@{ key = 'tenantId'; value = $Settings.TenantId }, @{ key = 'tokenExchangeUrl'; value = $Settings.SsoResource }) }
+                    try {
+                        Invoke-EratoApi -Url $fresh.ConnectionUrl -Method PUT -Query $script:ConnectionQuery -Body @{ location = $fresh.Bot.location; properties = $properties } | Out-Null
+                    } catch {
+                        throw "OAuth creation failed after adding credential $($credential.keyId) ('$label', expires $expiry). Entra changes may already be applied. Inspect the connection and this credential before retrying. $($_.Exception.Message)"
+                    } finally { $properties.Remove('clientSecret'); $credential.Remove('secretText') }
+                    $report.credential = @{ keyId = $credential.keyId; displayName = $label; expiresAt = $expiry }
+                    $report.changes += "Created OAuth connection '$($Settings.ConnectionName)'. Record credential $($credential.keyId), expiry $expiry, for rotation."
+                }
+                $verified = Get-EratoAudit $Settings
+                $report.checks = $verified.Report.checks
+                $report.exitCode = $verified.Report.exitCode
+                $report.note = 'Azure changes applied and rechecked. Finish the remaining steps to enable and verify Teams SSO.'
+                $report.Remove('plan')
+            } catch {
+                $completed = if ($report.changes.Count) { $report.changes -join ' ' } else { 'No writes confirmed.' }
+                throw "Apply stopped. Completed: $completed $($_.Exception.Message)"
+            }
+        } else {
+            $report.note = $(if (-not $plan.applicationPatch.Count -and -not $plan.createConnection) { 'No Azure changes needed. Complete the remaining deployment and Teams verification steps.' } else { 'No cloud changes made. Review the preview, then use -Apply when ready.' })
+        }
+    } else { $report.note = 'Read-only check. No cloud settings or credentials changed. ' + $report.note }
+    return $report
+}
+
+if ($MyInvocation.InvocationName -ne '.') {
+    try {
+        if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw 'Azure CLI is required. Open Azure Cloud Shell and choose PowerShell.' }
+        $settings = @{ TenantId = "$TenantId"; SubscriptionId = "$SubscriptionId"; BotAppId = "$BotAppId"; AuthAppId = "$AuthAppId"
+            BaseUrl = $BaseUrl; SsoResource = $SsoResource; CurrentConnection = $CurrentConnection; ConnectionName = $ConnectionName; ResourceGroup = $ResourceGroup; BotName = $BotName }
+        $options = @{ Settings = $settings; Apply = $Apply; Json = $Json; WhatIf = $WhatIfPreference }
+        if ($PSBoundParameters.ContainsKey('Confirm')) { $options.Confirm = $PSBoundParameters.Confirm }
+        $report = Invoke-EratoSetup @options
+        if ($Json) { $report | ConvertTo-Json -Depth 50 } else { Write-EratoReport $report }
+        exit $report.exitCode
+    } catch {
+        # Do not print exception objects/stack traces that may retain credentials.
+        $message = $_.Exception.Message
+        if ($Json) { @{ mode = 'Blocked'; exitCode = 2; message = $message } | ConvertTo-Json }
+        else { Write-Host "Setup stopped: $message"; Write-Host 'Some changes may have completed if Apply was started. Review the reported state before retrying.' }
+        exit 2
+    }
+}

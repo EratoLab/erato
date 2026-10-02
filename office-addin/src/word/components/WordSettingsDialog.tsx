@@ -7,6 +7,7 @@ import {
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
 import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import { useOffice } from "../../providers/OfficeProvider";
 import { wordClientActionDecisionStore } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
@@ -18,9 +19,11 @@ import {
 } from "../utils/wordInPlaceSwitch";
 
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
+  const { supportsAudioCapture } = useOffice();
   return (
     <AddinSettingsDialogCore
       {...props}
+      audioInputSupported={supportsAudioCapture}
       hostContribution={{
         systemDescription: t({
           id: "officeAddin.settings.appearance.system.description.word",

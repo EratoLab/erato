@@ -1,26 +1,27 @@
-import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
-import { wordReadableSourceBlock } from "./wordAuthoringReadData";
 import {
   readWordParagraphFormatting,
   readWordRunFormatting,
   wordChild,
   WORDPROCESSING_NS as W,
-} from "./wordBlockFormatting";
-import {
   MAX_WORD_SCOPE_BYTES,
   MAX_WORD_SCOPE_TARGETS,
   MAX_WORD_SCOPES,
-} from "./wordReadScope";
-import { wordSourceDetails } from "./wordRichContent";
+  wordSourceDetails,
+} from "@erato/frontend/word-review";
+
+import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
+import { wordReadableSourceBlock } from "./wordAuthoringReadData";
 import {
   WORD_SCOPED_GUIDANCE,
   wordScopedReadContract,
 } from "./wordScopedReadContract";
 
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
-import type { WordScopeTarget } from "./wordReadScope";
 import type { WordScopedGuidance } from "./wordScopedReadContract";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
+import type {
+  WordScopeTarget,
+  WordAuthoringSnapshot,
+} from "@erato/frontend/word-review";
 
 const encoder = new TextEncoder();
 const object = (v: unknown): v is Record<string, unknown> =>

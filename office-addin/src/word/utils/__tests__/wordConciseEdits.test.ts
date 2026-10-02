@@ -1,3 +1,8 @@
+import {
+  acceptedWordPlanFromHistory,
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,23 +11,16 @@ import {
   readySnapshot,
   W,
 } from "../../../test/mocks/word/authoringFixtures";
-import {
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
-import {
-  acceptedWordDocumentSubmission,
-  createWordDocumentSubmissionExecutor,
-} from "../wordDocumentSubmission";
+import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
 
-import type { WordDocumentPlan } from "../wordDocumentPlan";
 import type { ContentPart } from "@erato/frontend/library";
+import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 const context = {
   chatId: "chat-A",
@@ -156,13 +154,13 @@ describe("concise Word table-cell submissions", () => {
     ) as ContentPart[];
     session.clear();
     expect(
-      parseWordDocumentPlan(acceptedWordDocumentSubmission(parts)!.content),
+      parseWordDocumentPlan(acceptedWordPlanFromHistory(parts)!.content),
     ).toEqual(plan);
     const outputResult = (
       parts[0] as unknown as { output: { result: Record<string, unknown> } }
     ).output.result;
     delete outputResult.plan;
-    expect(acceptedWordDocumentSubmission(parts)).toBeUndefined();
+    expect(acceptedWordPlanFromHistory(parts)).toBeUndefined();
   });
 
   it("preserves uniform formatting when Word splits text across runs", async () => {

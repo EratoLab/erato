@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import Ajv from "ajv";
+import addFormats from "ajv-formats";
 import {
   validateIndexingStartV1Params,
   validateSearchQueryV1Params,
@@ -23,7 +25,99 @@ const fixture = JSON.parse(
   ),
 ) as IndexingStatusV1Result;
 
+const sourceFixture = JSON.parse(
+  readFileSync(
+    new URL("../conformance/fixtures/source-indexing.json", import.meta.url),
+    "utf8",
+  ),
+);
+
 describe("indexing statistics contract", () => {
+  it("accepts source policies and optional missing-cache coverage alongside previous v1 snapshots", () => {
+    expect(validateSidecarConfigureV1Params(sourceFixture.configuration)).toBe(
+      true,
+    );
+    expect(validateIndexingStatusV1Result(fixture)).toBe(true);
+    const current = structuredClone(fixture);
+    current.configuration = sourceFixture.configuration;
+    Object.assign(
+      current.generations[0].segments[0].coverage,
+      sourceFixture.coverage,
+    );
+    expect(validateIndexingStatusV1Result(current)).toBe(true);
+    const coverage = current.generations[0].segments[0].coverage;
+    for (const value of [null, 0, 2]) {
+      coverage.missingFromLocalCacheCurrent = value;
+      expect(validateIndexingStatusV1Result(current)).toBe(true);
+    }
+    for (const value of [-1, 1.5, "2", Number.MAX_SAFE_INTEGER + 1]) {
+      Object.assign(coverage, { missingFromLocalCacheCurrent: value });
+      expect(validateIndexingStatusV1Result(current)).toBe(false);
+    }
+  });
+
+  it("keeps source policies and missing-cache counters compatible with the previous schemas", () => {
+    const previousConfiguration = JSON.parse(
+      readFileSync(
+        new URL(
+          "../schemas/configuration/sidecar-configuration.schema.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    delete previousConfiguration.properties.indexing_sources;
+    const previousCoverage = JSON.parse(
+      readFileSync(
+        new URL(
+          "../schemas/methods/indexing-status-v1-result.schema.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ).definitions.Coverage;
+    delete previousCoverage.properties.missingFromLocalCacheCurrent;
+    const ajv = new Ajv({ strict: true });
+    addFormats(ajv);
+    const validateConfiguration = ajv.compile(previousConfiguration);
+    const validateCoverage = ajv.compile(previousCoverage);
+    expect(
+      validateConfiguration(sourceFixture.configuration.user_configuration),
+    ).toBe(true);
+    expect(
+      validateCoverage({
+        ...fixture.generations[0].segments[0].coverage,
+        ...sourceFixture.coverage,
+      }),
+    ).toBe(true);
+  });
+
+  it("validates source configuration fields while preserving additive policy extensions", () => {
+    for (const indexing_sources of [
+      null,
+      [],
+      sourceFixture.configuration.user_configuration.indexing_sources,
+    ]) {
+      expect(
+        validateSidecarConfigureV1Params({
+          user_configuration: { indexing_sources },
+          organization_configuration: {},
+        }),
+      ).toBe(true);
+    }
+    for (const override of [
+      { source_id: "invalid" },
+      { enabled: "false" },
+      { priority: -1 },
+      { priority: 1.5 },
+      { priority: undefined },
+    ]) {
+      const config = structuredClone(sourceFixture.configuration);
+      Object.assign(config.user_configuration.indexing_sources[0], override);
+      expect(validateSidecarConfigureV1Params(config)).toBe(false);
+    }
+  });
+
   it("requires explicit valid mailbox priorities independently of array order", () => {
     const mailbox = {
       mailbox_id: "00000000-0000-4000-8000-000000000001",

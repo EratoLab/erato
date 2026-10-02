@@ -2,7 +2,7 @@ import {
   wordAttribute,
   wordChild,
   WORDPROCESSING_NS as W,
-} from "./wordBlockFormatting";
+} from "@erato/frontend/word-review";
 
 const direct = (parent: Element, name: string) =>
   Array.from(parent.children).filter(

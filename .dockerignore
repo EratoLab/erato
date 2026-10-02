@@ -25,7 +25,13 @@ tmp/
 # Irellevant projects for build
 ./backend
 ./e2e-tests
-./site
+./site/*
+# Only the versioned Teams helper is needed by the Office add-in build.
+!./site/public
+./site/public/*
+!./site/public/setup
+./site/public/setup/*
+!./site/public/setup/teams
 
 # Requirements directory (managed via git submodules)
 .requirements/

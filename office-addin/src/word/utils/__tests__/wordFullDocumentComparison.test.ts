@@ -1,3 +1,4 @@
+import { createWordXmlComparison } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import expectedRich from "../../../test/fixtures/word-rich-native/all-content-expected.xml?raw";
@@ -26,7 +27,6 @@ import {
   wordPackageCounts,
   wordPackageGrew,
 } from "../wordFullDocumentComparison";
-import { createWordXmlComparison } from "../wordXmlComparison";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const W15 = "http://schemas.microsoft.com/office/word/2012/wordml";

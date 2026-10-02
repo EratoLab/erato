@@ -8,7 +8,9 @@ use crate::models::message::{
 };
 use crate::policy::engine::{PolicyEngine, authorize};
 use crate::policy::types::{Action, Resource};
-use crate::server::api::v1beta::file_resolution::format_successful_file_content;
+use crate::server::api::v1beta::file_resolution::{
+    format_reference_only_file, format_successful_file_content,
+};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::{
     ActionFacetRequest, FileContent, FileContentsForGeneration, MeProfileChatRequestInput,
@@ -463,26 +465,28 @@ pub async fn token_usage_estimate(
 
         let app_state_ref = &app_state;
         let file_token_futures = files_for_generation.iter().filter_map(|file| {
-            if let FileContent::Text(ref text) = file.content {
-                let file_id = file.id;
-                let filename = file.filename.clone();
-                let formatted = format_successful_file_content(&filename, file_id, text);
-                Some(async move {
-                    let token_count =
-                        file_processing_cached::get_token_count_cached(app_state_ref, &formatted)
-                            .await
-                            .map_err(|err| {
-                                format!("Failed to count tokens for file {}: {}", filename, err)
-                            })?;
-                    Ok::<_, String>(TokenUsageResponseFileItem {
-                        id: file_id.to_string(),
-                        filename,
-                        token_count,
-                    })
+            let formatted = match &file.content {
+                FileContent::Text(text) => {
+                    format_successful_file_content(&file.filename, file.id, text)
+                }
+                FileContent::ReferenceOnly => format_reference_only_file(&file.filename, file.id),
+                FileContent::Image { .. } => return None,
+            };
+            let file_id = file.id;
+            let filename = file.filename.clone();
+            Some(async move {
+                let token_count =
+                    file_processing_cached::get_token_count_cached(app_state_ref, &formatted)
+                        .await
+                        .map_err(|err| {
+                            format!("Failed to count tokens for file {}: {}", filename, err)
+                        })?;
+                Ok::<_, String>(TokenUsageResponseFileItem {
+                    id: file_id.to_string(),
+                    filename,
+                    token_count,
                 })
-            } else {
-                None
-            }
+            })
         });
 
         let file_details_results = futures::future::join_all(file_token_futures).await;
@@ -620,10 +624,14 @@ pub async fn token_usage_estimate(
         // virtuals are absent from `chat_request.messages` until we add
         // them here. Without this, `total_tokens` would under-count.
         for file in &files_for_generation[virtual_files_range.clone()] {
-            if let FileContent::Text(ref text) = file.content {
-                let formatted = format_successful_file_content(&file.filename, file.id, text);
-                chat_request.messages.push(ChatMessage::user(formatted));
-            }
+            let formatted = match &file.content {
+                FileContent::Text(text) => {
+                    format_successful_file_content(&file.filename, file.id, text)
+                }
+                FileContent::ReferenceOnly => format_reference_only_file(&file.filename, file.id),
+                FileContent::Image { .. } => continue,
+            };
+            chat_request.messages.push(ChatMessage::user(formatted));
         }
         chat_request
     } else {
@@ -639,15 +647,19 @@ pub async fn token_usage_estimate(
                 });
         }
         for file in &files_for_generation {
-            if let FileContent::Text(ref text) = file.content {
-                let formatted = format_successful_file_content(&file.filename, file.id, text);
-                messages
-                    .messages
-                    .push(crate::models::message::InputMessage {
-                        role: MessageRole::User,
-                        content: ContentPart::Text(ContentPartText { text: formatted }),
-                    });
-            }
+            let formatted = match &file.content {
+                FileContent::Text(text) => {
+                    format_successful_file_content(&file.filename, file.id, text)
+                }
+                FileContent::ReferenceOnly => format_reference_only_file(&file.filename, file.id),
+                FileContent::Image { .. } => continue,
+            };
+            messages
+                .messages
+                .push(crate::models::message::InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText { text: formatted }),
+                });
         }
         messages.into_chat_request()
     };

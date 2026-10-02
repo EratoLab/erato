@@ -3518,6 +3518,837 @@ msgid "navigation.page.new_chat"
 msgstr "New chat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.clearBody"
+msgstr "The body will be cleared, leaving Word’s empty final paragraph."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.comment"
+msgstr "Comment"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.continuousSection"
+msgstr "Continue on the same page"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.defaultPages"
+msgstr "Default pages"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.emptyPart"
+msgstr "Empty"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.endnote"
+msgstr "Endnote"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.evenPages"
+msgstr "Even pages"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.evenSection"
+msgstr "Start on the next even page"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.firstPage"
+msgstr "First page"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.footer"
+msgstr "Footer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.footerDistance"
+msgstr "Footer from bottom"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.footnote"
+msgstr "Footnote"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.gutter"
+msgstr "Gutter"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.header"
+msgstr "Header"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.headerDistance"
+msgstr "Header from top"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.landscape"
+msgstr "Landscape"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.marginBottom"
+msgstr "Bottom margin"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.marginLeft"
+msgstr "Left margin"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.marginRight"
+msgstr "Right margin"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.marginTop"
+msgstr "Top margin"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeAnchored"
+msgstr "Content with linked annotations"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeControl"
+msgstr "Content control"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeField"
+msgstr "Document field"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeImage"
+msgstr "Image or drawing"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeObject"
+msgstr "Native document content"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeSection"
+msgstr "Section boundary"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.authoring.nativeTable"
+msgstr "Table"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.nextPageSection"
+msgstr "Start on the next page"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.oddSection"
+msgstr "Start on the next odd page"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.authoring.opening"
+msgstr "Opening content"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.portrait"
+msgstr "Portrait"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.sameFirstPage"
+msgstr "Use regular header and footer on the first page"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.sameOddEvenPages"
+msgstr "Use the same headers and footers on odd and even pages"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.separateFirstPage"
+msgstr "Different first-page header and footer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.authoring.separateOddEvenPages"
+msgstr "Different headers and footers on odd and even pages"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.checkFirst.headingsLost"
+msgstr "{n, plural, one {# heading is no longer in the document} other {# headings are no longer in the document}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.checkFirst.layoutChanged"
+msgstr "{n, plural, one {Page layout changes in # section} other {Page layout changes in # sections}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.checkFirst.nativesRemoved"
+msgstr "{n, plural, one {# table, image or object is removed or not carried over} other {# tables, images or objects are removed or not carried over}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.checkFirst.partsChanged"
+msgstr "Document parts change too: {parts}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.checkFirst.sectionsRemoved"
+msgstr "{n, plural, one {# section break is removed} other {# section breaks are removed}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.checkFirst.title"
+msgstr "Check first"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.boundary"
+msgstr "Ends after"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.boundaryEnd"
+msgstr "End of the document"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.boundaryItem"
+msgstr "Item {item}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.break"
+msgstr "Section start"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.columns"
+msgstr "Columns"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.columnSpacing"
+msgstr "Column spacing"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.height"
+msgstr "Page height"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.oddEvenPages"
+msgstr "Odd and even pages"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.orientation"
+msgstr "Orientation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.pageNumberStart"
+msgstr "First page number"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.layout.width"
+msgstr "Page width"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planAction.insert"
+msgstr "Insert paragraphs"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planAction.many"
+msgstr "Apply changes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planAction.one"
+msgstr "Apply change"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planAction.replace"
+msgstr "Replace document"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: summary.removed
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planGroup.removedCount"
+msgstr "{0, plural, one {# removed} other {# removed}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.all"
+msgstr "All"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.changes"
+msgstr "Changes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.checkInWord"
+msgstr "Objects, pagination and page appearance are not drawn here. Check them in Word after applying."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.documentParts"
+msgstr "Document parts"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.hidePreview"
+msgstr "Hide preview"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.moreBlocks"
+msgstr "{hidden, plural, one {# more block not shown here. Check it in Word after applying.} other {# more blocks not shown here. Check them in Word after applying.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.moreBlocksShort"
+msgstr "{hidden, plural, one {# more block not shown here.} other {# more blocks not shown here.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.newVersion"
+msgstr "New version"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.onlyChanged"
+msgstr "Only changed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.preview"
+msgstr "Preview of the result"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.savedDraft"
+msgstr "Saved draft: the original document is not available in this session, so removed headings, tables and objects could not be checked."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.sectionFilter"
+msgstr "Sections to show"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.showPreview"
+msgstr "Preview the result"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.beforeUnavailable"
+msgstr "Previous values were not captured; only the new settings are shown."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.cellsChanged"
+msgstr "{n, plural, one {# cell changed} other {# cells changed}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.changed"
+msgstr "Changed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.changedRows"
+msgstr "Changed table rows"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.heading"
+msgstr "Heading"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.headingLevel"
+msgstr "Heading {level}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.kept"
+msgstr "Kept"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.levelChange"
+msgstr "Heading level {beforeLevel} → {level}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.listItem"
+msgstr "List item"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.moreRows"
+msgstr "{more, plural, one {# more row in Word} other {# more rows in Word}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.moreRowsRemoved"
+msgstr "{more, plural, one {# more row, also removed} other {# more rows, also removed}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.new"
+msgstr "New"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.newSectionSettings"
+msgstr "{count, plural, one {{sectionBreak} · # setting} other {{sectionBreak} · # settings}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.objectCount"
+msgstr "{n, plural, one {# other item} other {# other items}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.pageLayout"
+msgstr "Page layout"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.paragraph"
+msgstr "Paragraph"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.paragraphCount"
+msgstr "{n, plural, one {# paragraph} other {# paragraphs}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.removed"
+msgstr "Removed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.rewritten"
+msgstr "Rewritten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.rowsAdded"
+msgstr "{n, plural, one {# row added} other {# rows added}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.rowsRemoved"
+msgstr "{n, plural, one {# row removed} other {# rows removed}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.sectionBreak"
+msgstr "Section break"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.settingsChanged"
+msgstr "{count, plural, one {# setting changed} other {# settings changed}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.tableCount"
+msgstr "{n, plural, one {# table} other {# tables}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.tableSize"
+msgstr "{rows} × {cols}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.unchanged"
+msgstr "Unchanged"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.unchangedRun"
+msgstr "{list} unchanged"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.updated"
+msgstr "Updated"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planScope.comments"
+msgstr "comments"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planScope.footers"
+msgstr "footers"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planScope.headers"
+msgstr "headers"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planScope.layout"
+msgstr "page layout"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planScope.notes"
+msgstr "notes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planScope.unchanged"
+msgstr "{count, plural, one {{list} stays as it is.} other {{list} stay as they are.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planScope.wholeFile"
+msgstr "Word reloads the whole document file to apply this."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planSize.addition"
+msgstr "Addition"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planSize.large"
+msgstr "Large"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planSize.layout"
+msgstr "Layout"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planSize.medium"
+msgstr "Medium"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planSize.restructured"
+msgstr "Restructured"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planSize.small"
+msgstr "Small"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: title.n
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.blocksAdded"
+msgstr "{0, plural, one {Add # item} other {Add # items}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.blocksChanged"
+msgstr "{n, plural, one {Change # item} other {Change # items}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.blocksChangedAnd"
+msgstr "{n, plural, one {Change # item and {also}} other {Change # items and {also}}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: title.n
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.cells"
+msgstr "{0, plural, one {Change # table cell} other {Change # table cells}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.comments"
+msgstr "comments"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.endnotes"
+msgstr "endnotes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.footer"
+msgstr "the footer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.footnotes"
+msgstr "footnotes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.header"
+msgstr "the header"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.layout"
+msgstr "page layout"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.layoutOnly"
+msgstr "Update {also}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.none"
+msgstr "Nothing to change"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: title.n
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.paragraphsAdded"
+msgstr "{0, plural, one {Add # paragraph} other {Add # paragraphs}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: title.n
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.paragraphsChanged"
+msgstr "{0, plural, one {Change # paragraph} other {Change # paragraphs}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: title.n
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.removed"
+msgstr "{0, plural, one {Remove # item} other {Remove # items}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.sections"
+msgstr "Update {changed} of {total} sections"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.sectionsAdded"
+msgstr "{added, plural, one {Update {changed} of {total} sections and add # section} other {Update {changed} of {total} sections and add # sections}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.sectionsAddedAnd"
+msgstr "{added, plural, one {Update {changed} of {total} sections and {also}, and add # section} other {Update {changed} of {total} sections and {also}, and add # sections}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.sectionsAnd"
+msgstr "Update {changed} of {total} sections and {also}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planTitle.summary"
+msgstr "Rewrite as a new version"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.copied"
+msgstr "Text copied."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.copy"
+msgstr "Copy text"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.copyFailed"
+msgstr "The text could not be copied."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.fromDocument"
+msgstr "From Word · {documentName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.fromWord"
+msgstr "From Word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.label"
+msgstr "Proposed document changes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.openInWord"
+msgstr "Open this chat in Word with the document to apply."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.review.hideDetails"
+msgstr "Hide details"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.review.showDetails"
+msgstr "Show details"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.review.showInWord"
+msgstr "Show in Word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.review.undo"
+msgstr "Undo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordReviewCardParts.tsx
+msgid "officeAddin.word.review.undoAvailable"
+msgstr "Undo available until another change is applied or the pane is closed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.after"
+msgstr "After:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.before"
+msgstr "Before:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.bindingRemoved"
+msgstr "Remove the link to document data."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.rich.bookmark"
+msgstr "Bookmark"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.bothLocked"
+msgstr "Content is locked; the control cannot be removed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.contentLocked"
+msgstr "Content is locked; the control can be removed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.controlLocked"
+msgstr "Content can be edited; the control cannot be removed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.controlTag"
+msgstr "Tag: {tag}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.controlUnlocked"
+msgstr "Content can be edited; the control can be removed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordNativeBlockPreview.tsx
+msgid "officeAddin.word.rich.drawing"
+msgstr "Drawing"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.emptyCell"
+msgstr "Empty cell"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.fieldCode"
+msgstr "Field code: {instruction}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.fieldInWord"
+msgstr "Value is calculated in Word."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.image"
+msgstr "Image"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.imageInWord"
+msgstr "Image appearance is shown in Word."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.mediaSize"
+msgstr "{width} × {height} cm"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.objectChanges"
+msgstr "Changes to existing content"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.removeObject"
+msgstr "Remove {label}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.tableContents"
+msgstr "Table contents"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.tableDimensions"
+msgstr "{rows} rows · {columnCount} columns"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.unwrapObject"
+msgstr "Remove {label}, keep its content"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordRichBlockPreview.tsx
+msgid "officeAddin.word.rich.updateObject"
+msgstr "Update {label}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.actions.cancel"
 msgstr "Cancel"
@@ -3910,8 +4741,13 @@ msgstr "Archive all chats in your account."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
-msgid "preferences.dialog.desktopSidecar.connected.description"
-msgstr "{name} {version} is ready to use."
+#~ msgid "preferences.dialog.desktopSidecar.connected.description"
+#~ msgstr "{name} {version} is ready to use."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.connection"
+msgstr "Connection"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
@@ -3945,6 +4781,11 @@ msgstr "Desktop Sidecar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.introduction"
+msgstr "Connect the assistant to emails, files and Teams messages available on this device."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.launch"
 msgstr "Launch Desktop Sidecar"
 
@@ -3957,6 +4798,16 @@ msgstr "Open data directory"
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.openDataDirectory.error"
 msgstr "Could not open the sidecar data directory."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permissions.description"
+msgstr "Choose when the assistant may use content from this device. Permission changes are saved automatically."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.permissions.title"
+msgstr "Tool permissions"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
@@ -3986,7 +4837,7 @@ msgstr "Not connected"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/SidecarToolDecisions.tsx
 msgid "preferences.dialog.desktopSidecar.tools.heading"
-msgstr "Tools the assistant may use on this device"
+msgstr "Available tools"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/SidecarToolDecisions.tsx
@@ -4886,9 +5737,14 @@ msgid "sidecar.indexing.caption"
 msgstr "Local search on this device"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.decreasePriority"
 msgstr "Decrease priority"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.description"
+msgstr "Choose what is indexed for local search. Changes take effect when you save."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4908,20 +5764,25 @@ msgstr "Totals reflect discovered documents and may grow while scanning."
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.empty"
-msgstr "No local mailboxes found."
+msgstr "No local sources found."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.emptyDocuments"
 msgstr "Empty documents contain no searchable text, so coverage is below 100%."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.enable"
 msgstr "Enable indexing for {mailbox}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.enabledSources"
+msgstr "{enabled} enabled"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.increasePriority"
 msgstr "Increase priority"
 
@@ -4931,7 +5792,7 @@ msgstr "Increase priority"
 #~ msgstr "Totals reflect discovered items. A dash means statistics are not available yet."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.lastScan"
 msgstr "Last successful scan {time}"
 
@@ -4946,24 +5807,39 @@ msgid "sidecar.indexing.loading"
 msgstr "Loading indexing statistics…"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.localSource"
+msgstr "Local data source"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.missingFromLocalCache"
+msgstr "{missingCount, plural, one {# document is unavailable in the local cache.} other {# documents are unavailable in the local cache.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.moveDown"
 msgstr "Decrease priority for {mailbox}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.moveUp"
 msgstr "Increase priority for {mailbox}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.noDocuments"
 msgstr "No documents discovered yet"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.noScan"
 msgstr "No successful scan yet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.numberedSource"
+msgstr "{name} ({number})"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4976,32 +5852,42 @@ msgid "sidecar.indexing.parallelismHelp"
 msgstr "Maximum number of documents processed at the same time."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.progress"
-msgstr "{percentage}% of {total} documents indexed"
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.priority"
+msgstr "Indexing priority"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.progress"
+msgstr "{indexed} of {total} documents indexed ({percentage}%)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.progressUnavailable"
 msgstr "Indexing progress unavailable"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
 msgid "sidecar.indexing.reset"
 msgstr "Reset sidecar indices"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
 msgid "sidecar.indexing.resetConfirm"
 msgstr "Clear all local search indices? Original emails, attachments and settings are kept. Indexing stays stopped until resumed or the sidecar is restarted."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
 msgid "sidecar.indexing.resetError"
 msgstr "Could not confirm the reset completed. Check the status or try again."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+msgid "sidecar.indexing.resetHelp"
+msgstr "Resetting clears the local search index and stops indexing. Your original content and settings are kept."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
 msgid "sidecar.indexing.resetSuccess"
 msgstr "Local search indices cleared. Indexing is stopped."
 
@@ -5016,9 +5902,44 @@ msgid "sidecar.indexing.saveError"
 msgstr "Could not save indexing settings. Please try again."
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.source.outlook"
 msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.source.teams"
+msgstr "Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.sourceDetails"
+msgstr "Details for {source}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.sources"
+msgstr "Sources"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.sourcesHelp"
+msgstr "Enable sources for indexing. Expand a source to see progress and change its priority."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.sourceUpgrade"
+msgstr "Update the desktop sidecar to change indexing for this source."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.speed"
+msgstr "Indexing speed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.speedHelp"
+msgstr "Control how much work the sidecar processes at once."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5026,67 +5947,77 @@ msgstr "Outlook"
 #~ msgstr "Needs attention"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.complete"
 msgstr "Indexing complete"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.current"
 msgstr "Up-to-date"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.disabled"
 msgstr "Disabled"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.indexing"
 msgstr "Indexing"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.indexingUnavailable"
 msgstr "Indexing unavailable"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.partial"
 msgstr "Partially indexed"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.scanFailed"
 msgstr "Scan failed"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.scanning"
 msgstr "Scanning"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.sourceUnavailable"
 msgstr "Source unavailable"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.stopped"
 msgstr "Stopped"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.unavailable"
 msgstr "Status unavailable"
 
 #. js-lingui-explicit-id
-#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.status.waiting"
 msgstr "Waiting"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.teamsCache"
+msgstr "Microsoft Teams local cache"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.teamsScope"
+msgstr "Teams status and settings apply to each local cache. Accounts sharing a cache are combined."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.terminal"
 msgstr "Some documents are empty or could not be indexed, so coverage is below 100%."
 
@@ -5103,7 +6034,7 @@ msgstr "Maximum number of documents that can start processing per minute."
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.title"
-msgstr "Mailbox indexing"
+msgstr "Local indexing"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5114,6 +6045,16 @@ msgstr "Unsaved changes"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.upgrade"
 msgstr "Update the desktop sidecar to configure indexing."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+msgid "sidecar.maintenance.description"
+msgstr "Manage the connection and local search data."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+msgid "sidecar.maintenance.title"
+msgstr "Maintenance"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
@@ -5561,6 +6502,56 @@ msgstr "Unsupported file type(s): {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Maximum file size: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.coverage"
+msgstr "Request window: paragraphs 1–{paragraphsSent} of {paragraphsTotal}. Only included text was reviewed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsLabel"
+msgstr "Proposed paragraph edits"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.editsTitle"
+msgstr "{paragraphs, plural, one {Change # paragraph} other {Change # paragraphs}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertLabel"
+msgstr "Proposed text to insert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.insertTitle"
+msgstr "Insert text at the cursor"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+#~ msgid "wordReview.history.noChanges"
+#~ msgstr "No changes were proposed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.notAccepted"
+msgstr "A change was proposed but did not pass validation, so there is nothing to apply."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraph"
+msgstr "Paragraph {paragraph}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.paragraphRange"
+msgstr "Paragraphs {paragraph}–{through}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.partial"
+msgstr "Paragraph {partialOrdinal} was only partly included in the request."
 
 # ==============================
 # Unstable IDs

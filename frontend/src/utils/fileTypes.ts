@@ -105,8 +105,16 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
   },
   text: {
     displayName: "Text",
-    extensions: ["txt", "md", "markdown"],
-    mimeTypes: ["text/plain", "text/markdown"],
+    extensions: ["txt", "md", "markdown", "json", "xml", "csv", "html", "htm"],
+    mimeTypes: [
+      "text/plain",
+      "text/markdown",
+      "application/json",
+      "application/xml",
+      "text/xml",
+      "text/csv",
+      "text/html",
+    ],
     iconId: "Page",
     iconColor: "rgb(107, 114, 128)", // gray-500
     enabled: true,

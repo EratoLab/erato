@@ -897,7 +897,8 @@ async fn crashed_continuation_is_replayed_and_old_generation_is_fenced(pool: Poo
         .unwrap()
         .unwrap();
     let parsed = erato::models::message::MessageSchema::validate(&message.raw_message).unwrap();
-    assert_eq!(parsed.content.iter().filter(|part| matches!(part, erato::models::message::ContentPart::ToolUse(tool) if tool.tool_call_id == "page-call")).count(), 1);
+    let expected_call_id = super::generated_tool_call_id(request.message_id, 1, "page-call");
+    assert_eq!(parsed.content.iter().filter(|part| matches!(part, erato::models::message::ContentPart::ToolUse(tool) if tool.tool_call_id == expected_call_id)).count(), 1);
     assert_eq!(turn_requests(&recorder).len(), 2);
 }
 
@@ -1612,6 +1613,7 @@ async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool
     });
     let crash = install_policy_kind(&mut state, ConsentPolicy::None);
     let first = park(&state, chat_id).await;
+    let second_call_id = super::generated_tool_call_id(first.message_id, 2, "page-call-2");
     let mut rejected = page_result(&first, binding("device-one"));
     rejected.outcome = OperationOutcome::Rejected;
     rejected.result = None;
@@ -1649,7 +1651,7 @@ async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool
                 && params
                     .turn_consumption
                     .tool_charges
-                    .get("page-call-2")
+                    .get(&second_call_id)
                     .is_some_and(|charge| charge.submission_attempt == Some(2))
             {
                 break params.turn_consumption;
@@ -1660,7 +1662,7 @@ async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool
     .await
     .unwrap();
     assert_eq!(checkpoint.tool_calls, 2);
-    let second_id = checkpoint.tool_charges["page-call-2"]
+    let second_id = checkpoint.tool_charges[&second_call_id]
         .operation_identity
         .as_ref()
         .unwrap()
@@ -1766,7 +1768,7 @@ async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool
         parts
             .iter()
             .filter(
-                |part| part["tool_call_id"] == "page-call-2" && part["content_type"] == "tool_use"
+                |part| part["tool_call_id"] == second_call_id && part["content_type"] == "tool_use"
             )
             .count(),
         1
@@ -2067,7 +2069,10 @@ async fn joint_replay_case(pool: Pool<Postgres>, withdraw: bool) {
         previous_message_id = Some(plan.message_id);
     }
     let request = next_inbox_request(&state, chat_id).await;
-    assert_eq!(request.tool_call_id, "plan-B2");
+    assert_eq!(
+        request.tool_call_id,
+        super::generated_tool_call_id(request.message_id, 3, "plan-B2")
+    );
     let message = Messages::find_by_id(request.message_id)
         .one(&state.db)
         .await
@@ -2163,7 +2168,9 @@ async fn joint_replay_case(pool: Pool<Postgres>, withdraw: bool) {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == "plan-B2")
+            .filter(|part| part["content_type"] == "tool_use"
+                && part["tool_call_id"]
+                    == super::generated_tool_call_id(request.message_id, 3, "plan-B2"))
             .count(),
         1
     );

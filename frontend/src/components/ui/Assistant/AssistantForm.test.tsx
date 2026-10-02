@@ -1,3 +1,4 @@
+import { skipToken } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,6 +59,8 @@ vi.mock("@/hooks/ui", () => ({
 let mockedMcpServersData: { servers: McpServerStatus[] } | undefined =
   undefined;
 
+const mockListMcpServers = vi.fn();
+
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   usePromptOptimizer: () => ({
     isPending: false,
@@ -69,9 +72,10 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
       global_facet_settings: null,
     },
   }),
-  useListMcpServers: () => ({
-    data: mockedMcpServersData,
-  }),
+  useListMcpServers: (variables: unknown) => {
+    mockListMcpServers(variables);
+    return { data: mockedMcpServersData };
+  },
 }));
 
 vi.mock("@/components/ui/FileUpload", () => ({
@@ -139,8 +143,12 @@ const mockMcpServers: McpServerStatus[] = [
 
 function renderFormWithMcpServers({
   initialData,
+  tabEnabled = true,
+  editorEnabled,
 }: {
   initialData?: React.ComponentProps<typeof AssistantForm>["initialData"];
+  tabEnabled?: boolean;
+  editorEnabled?: boolean;
 } = {}) {
   const onSubmit =
     vi.fn<React.ComponentProps<typeof AssistantForm>["onSubmit"]>();
@@ -149,13 +157,14 @@ function renderFormWithMcpServers({
       <StaticFeatureConfigProvider
         config={{
           assistants: {
+            mcpServersEnabled: editorEnabled,
             enabled: false,
             showRecentItems: false,
             showRecentItemsCollapsible: false,
             contextWarningThreshold: 0.5,
             contextFileContributorThreshold: 0.05,
           },
-          userPreferences: { mcpServersTabEnabled: true },
+          userPreferences: { mcpServersTabEnabled: tabEnabled },
         }}
       >
         <AssistantForm
@@ -498,6 +507,63 @@ describe("AssistantForm", () => {
         "Some files are linked from Sharepoint. If you share this assistant, ensure those files are also shared with recipients.",
       ),
     ).toBeInTheDocument();
+  });
+
+  describe.each(["create", "edit"] as const)(
+    "MCP visibility in %s mode",
+    (mode) => {
+      it.each([
+        [false, undefined, false],
+        [true, undefined, true],
+        [false, true, true],
+        [true, false, false],
+      ] as const)(
+        "tab=%s editor=%s visible=%s",
+        (tabEnabled, editorEnabled, visible) => {
+          mockedMcpServersData = { servers: mockMcpServers };
+          renderFormWithMcpServers({
+            tabEnabled,
+            editorEnabled,
+            initialData:
+              mode === "edit"
+                ? {
+                    name: "Existing assistant",
+                    prompt: "Configured assistant",
+                    mcpServerIds: ["oauth-server"],
+                  }
+                : undefined,
+          });
+          expect(
+            Boolean(screen.queryByRole("group", { name: "MCP Servers" })),
+          ).toBe(visible);
+          expect(mockListMcpServers).toHaveBeenLastCalledWith(
+            visible ? {} : skipToken,
+          );
+          expect(
+            Boolean(screen.queryByTestId("mcp-server-connect-oauth-server")),
+          ).toBe(visible && tabEnabled);
+        },
+      );
+    },
+  );
+
+  it("preserves hidden server selections despite cached listing data", () => {
+    mockedMcpServersData = { servers: mockMcpServers };
+    const { onSubmit } = renderFormWithMcpServers({
+      editorEnabled: false,
+      initialData: {
+        name: "Existing assistant",
+        prompt: "Configured assistant",
+        mcpServerIds: ["ghost-server", "oauth-server"],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mcpServerIds: ["ghost-server", "oauth-server"],
+      }),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("renders the MCP server control with the all-servers default state", () => {

@@ -1,3 +1,7 @@
+import {
+  compileWordTableBlock,
+  readWordTableContent,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import expectedFormatting from "../../../test/fixtures/word-rich-native/formatting-expected.xml?raw";
@@ -14,10 +18,6 @@ import {
   sameWordBodyContent,
   wordDocumentFingerprint,
 } from "../wordDocumentXml";
-import {
-  compileWordTableBlock,
-  readWordTableContent,
-} from "../wordTableContent";
 
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const parse = (value: string) =>

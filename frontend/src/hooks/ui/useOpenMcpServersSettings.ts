@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { useInRouterContext, useSearchParams } from "react-router-dom";
 
+import { useUserPreferencesFeature } from "@/providers/FeatureConfigProvider";
+
 const useOpenMcpServersSettingsUnderRouter = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -20,16 +22,20 @@ const useOpenMcpServersSettingsUnderRouter = () => {
  * the sidebar chrome is mounted — every "connect this server" affordance must
  * mint the same spelling, so this hook is the single place it is written.
  *
- * Returns `null` where no react-router `Router` is mounted (component-kit and
- * add-in hosts): nothing watches the query params there, so consumers must
+ * Returns `null` when the MCP tab is hidden or no react-router `Router` is
+ * mounted (component-kit and add-in hosts). Consumers must
  * treat `null` as "no settings shortcut available" and drop their affordance
  * instead of rendering a dead button.
  */
 export const useOpenMcpServersSettings = (): (() => void) | null => {
   const isRouterMounted = useInRouterContext();
+  const { mcpServersTabEnabled } = useUserPreferencesFeature();
 
   // Router presence cannot change for a mounted component instance, so hook
   // order stays stable across renders despite the conditional call.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return isRouterMounted ? useOpenMcpServersSettingsUnderRouter() : null;
+  const openSettings = isRouterMounted
+    ? // eslint-disable-next-line react-hooks/rules-of-hooks
+      useOpenMcpServersSettingsUnderRouter()
+    : null;
+  return mcpServersTabEnabled ? openSettings : null;
 };

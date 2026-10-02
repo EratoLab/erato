@@ -41,8 +41,9 @@ use crate::test_utils::{
     BodyContainsMatcher, JwtTokenBuilder, RequestBodyRecorder, RequestHeadersRecorder,
     TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, archive_chat_via_api,
     build_openai_text_streaming_response, build_openai_tool_calls_streaming_response,
-    extract_chat_id, extract_full_text, has_event_type, hermetic_app_config, parse_sse_events,
-    read_integration_test_file_bytes, setup_mock_llm_server, setup_mock_llm_server_with_mocks,
+    extract_chat_id, extract_full_text, generated_tool_call_id, has_event_type,
+    hermetic_app_config, parse_sse_events, read_integration_test_file_bytes, setup_mock_llm_server,
+    setup_mock_llm_server_with_mocks,
 };
 
 fn mock_mcp_base_url() -> String {
@@ -4059,16 +4060,23 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
     // SSE: both calls get a terminal update — success for the first emitted
     // call, the already-proposed error for the second.
     let updates = terminal_tool_call_update_events(&events);
+    let assistant_message_id = assistant_message_id_from_events(&events);
     assert_eq!(
         updates.len(),
         2,
         "Expected one terminal tool_call_update per proposal, got: {updates:?}"
     );
-    assert_eq!(updates[0]["tool_call_id"], "call_first");
+    assert_eq!(
+        updates[0]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 1, "call_first")
+    );
     assert_eq!(updates[0]["status"], "success");
     assert_eq!(updates[0]["output"]["status"], "proposed");
     assert_eq!(updates[0]["output"]["action"], "outlook.reply");
-    assert_eq!(updates[1]["tool_call_id"], "call_second");
+    assert_eq!(
+        updates[1]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 1, "call_second")
+    );
     assert_eq!(updates[1]["status"], "error");
     assert_eq!(updates[1]["output"]["status"], "rejected");
     assert!(
@@ -4082,7 +4090,6 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
     // Persisted message: exactly one successful proposal (the FIRST action)
     // plus the error part for the superseded call.
     let chat_id = extract_chat_id(&events).expect("Expected chat_id");
-    let assistant_message_id = assistant_message_id_from_events(&events);
     let tool_use_parts =
         fetch_assistant_tool_use_parts(&server, &chat_id, &assistant_message_id).await;
     let proposed: Vec<&Value> = tool_use_parts
@@ -4094,7 +4101,10 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
         1,
         "Expected exactly one successful proposal part, got: {tool_use_parts:?}"
     );
-    assert_eq!(proposed[0]["tool_call_id"], "call_first");
+    assert_eq!(
+        proposed[0]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 1, "call_first")
+    );
     assert_eq!(proposed[0]["status"], "success");
     assert_eq!(proposed[0]["output"]["action"], "outlook.reply");
     let rejected: Vec<&Value> = tool_use_parts
@@ -4106,7 +4116,10 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
         1,
         "Expected exactly one rejected proposal part, got: {tool_use_parts:?}"
     );
-    assert_eq!(rejected[0]["tool_call_id"], "call_second");
+    assert_eq!(
+        rejected[0]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 1, "call_second")
+    );
     assert_eq!(rejected[0]["status"], "error");
     assert_eq!(tool_use_parts.len(), 2);
 
@@ -4197,7 +4210,11 @@ async fn test_client_action_invalid_proposal_then_valid_retry_succeeds(pool: Poo
         2,
         "Expected one terminal tool_call_update per proposal, got: {updates:?}"
     );
-    assert_eq!(updates[0]["tool_call_id"], "call_invalid");
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    assert_eq!(
+        updates[0]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 1, "call_invalid")
+    );
     assert_eq!(updates[0]["status"], "error");
     assert_eq!(updates[0]["output"]["status"], "rejected");
     assert!(
@@ -4207,19 +4224,27 @@ async fn test_client_action_invalid_proposal_then_valid_retry_succeeds(pool: Poo
         "Expected the out-of-enum error, got: {}",
         updates[0]["output"]
     );
-    assert_eq!(updates[1]["tool_call_id"], "call_valid");
+    assert_eq!(
+        updates[1]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 2, "call_valid")
+    );
     assert_eq!(updates[1]["status"], "success");
     assert_eq!(updates[1]["output"]["status"], "proposed");
     assert_eq!(updates[1]["output"]["action"], "outlook.reply_all");
 
     let chat_id = extract_chat_id(&events).expect("Expected chat_id");
-    let assistant_message_id = assistant_message_id_from_events(&events);
     let tool_use_parts =
         fetch_assistant_tool_use_parts(&server, &chat_id, &assistant_message_id).await;
     assert_eq!(tool_use_parts.len(), 2, "Got: {tool_use_parts:?}");
-    assert_eq!(tool_use_parts[0]["tool_call_id"], "call_invalid");
+    assert_eq!(
+        tool_use_parts[0]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 1, "call_invalid")
+    );
     assert_eq!(tool_use_parts[0]["output"]["status"], "rejected");
-    assert_eq!(tool_use_parts[1]["tool_call_id"], "call_valid");
+    assert_eq!(
+        tool_use_parts[1]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 2, "call_valid")
+    );
     assert_eq!(tool_use_parts[1]["output"]["status"], "proposed");
     assert_eq!(tool_use_parts[1]["output"]["action"], "outlook.reply_all");
 }
@@ -4307,7 +4332,10 @@ async fn check_unoffered_tool_call_recovers(pool: Pool<Postgres>, nuls: bool) {
     let tool_use_parts =
         fetch_assistant_tool_use_parts(&server, &chat_id, &assistant_message_id).await;
     assert_eq!(tool_use_parts.len(), 1, "Got: {tool_use_parts:?}");
-    assert_eq!(tool_use_parts[0]["tool_call_id"], "call_ghost");
+    assert_eq!(
+        tool_use_parts[0]["tool_call_id"],
+        generated_tool_call_id(&assistant_message_id, 1, "call_ghost")
+    );
     assert_eq!(tool_use_parts[0]["status"], "error");
     if nuls {
         let saved = Messages::find_by_id(Uuid::parse_str(&assistant_message_id).unwrap())
@@ -4685,7 +4713,9 @@ async fn continuestream_resumes_a_parked_tool_approval(
     assert_eq!(approval_request["kind"], "mcp_tool");
     let approvals = approval_request["approvals"].as_array().unwrap();
     assert_eq!(approvals.len(), 1);
-    assert_eq!(approvals[0]["approval_id"], "call_probe");
+    let probe_id = generated_tool_call_id(assistant_message_id, 1, "call_probe");
+    let read_id = generated_tool_call_id(assistant_message_id, 1, "call_read");
+    assert_eq!(approvals[0]["approval_id"], probe_id);
     assert_eq!(approvals[0]["tool_name"], "publish_approval_probe");
     assert!(
         approval_request["pending_tool_calls"]
@@ -4737,7 +4767,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
             }),
             ApprovalDecisionBody::Named => json!({
                 "message_id": assistant_message_id,
-                "decisions": [{ "approval_id": "call_probe", "decision": "approve" }],
+                "decisions": [{ "approval_id": probe_id, "decision": "approve" }],
             }),
         });
     if matches!(probe, ApprovalContinuationProbe::WithdrawModel) {
@@ -4786,7 +4816,8 @@ async fn continuestream_resumes_a_parked_tool_approval(
             .iter()
             .find(|part| {
                 part["content_type"] == "tool_use"
-                    && part["tool_call_id"] == "finish-after-approval"
+                    && part["tool_call_id"]
+                        == generated_tool_call_id(assistant_message_id, 2, "finish-after-approval")
             })
             .unwrap();
         assert_eq!(tool["output"]["submission"]["attempts_remaining"], 0);
@@ -4830,11 +4861,11 @@ async fn continuestream_resumes_a_parked_tool_approval(
             "text"
         ]
     );
-    assert_eq!(resumed_content[0]["tool_call_id"], "call_read");
-    assert_eq!(resumed_content[2]["tool_call_id"], "call_probe");
+    assert_eq!(resumed_content[0]["tool_call_id"], read_id);
+    assert_eq!(resumed_content[2]["tool_call_id"], probe_id);
     assert_eq!(resumed_content[2]["always_allow"], false);
     // The decision names the approval it answered, whichever body carried it.
-    assert_eq!(resumed_content[2]["approval_id"], "call_probe");
+    assert_eq!(resumed_content[2]["approval_id"], probe_id);
     assert_eq!(resumed_content[3]["status"], "success");
     assert!(
         serde_json::to_string(&resumed_content[3]["output"])
@@ -4930,7 +4961,12 @@ async fn continuestream_resumes_a_parked_tool_approval_under_the_task_gate(pool:
 async fn continuestream_with_decisions(
     pool: Pool<Postgres>,
     decisions: serde_json::Value,
-) -> (axum::http::StatusCode, serde_json::Value, Option<String>) {
+) -> (
+    axum::http::StatusCode,
+    serde_json::Value,
+    Option<String>,
+    Uuid,
+) {
     let mut mocks = MockSet::new();
     mocks.mock(|when, then| {
         when.post().path("/v1/chat/completions");
@@ -4981,6 +5017,18 @@ async fn continuestream_with_decisions(
     let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
     let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
 
+    let mut decisions = decisions;
+    if let Some(items) = decisions.as_array_mut() {
+        for item in items {
+            if item["approval_id"] == "call_probe" {
+                item["approval_id"] = json!(generated_tool_call_id(
+                    assistant_message_id,
+                    1,
+                    "call_probe"
+                ));
+            }
+        }
+    }
     let answer = server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
@@ -4999,7 +5047,7 @@ async fn continuestream_with_decisions(
         .unwrap()
         .generation_state;
 
-    (status, body, generation_state)
+    (status, body, generation_state, assistant_message_id)
 }
 
 /// A body that answers something other than the open approval leaves the
@@ -5013,7 +5061,7 @@ async fn continuestream_with_decisions(
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn continuestream_with_missing_approval_id_returns_400_listing_missing(pool: Pool<Postgres>) {
-    let (status, body, generation_state) = continuestream_with_decisions(
+    let (status, body, generation_state, assistant_message_id) = continuestream_with_decisions(
         pool,
         json!([{ "approval_id": "call_other", "decision": "approve" }]),
     )
@@ -5021,7 +5069,14 @@ async fn continuestream_with_missing_approval_id_returns_400_listing_missing(poo
 
     assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
     assert_eq!(body["code"], "decisions_mismatch");
-    assert_eq!(body["missing"], json!(["call_probe"]));
+    assert_eq!(
+        body["missing"],
+        json!([generated_tool_call_id(
+            assistant_message_id,
+            1,
+            "call_probe"
+        )])
+    );
     assert_eq!(body["unknown"], json!(["call_other"]));
     assert_eq!(generation_state.as_deref(), Some("awaiting_approval"));
 }
@@ -5037,7 +5092,7 @@ async fn continuestream_with_missing_approval_id_returns_400_listing_missing(poo
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn continuestream_with_unknown_approval_id_returns_400(pool: Pool<Postgres>) {
-    let (status, body, generation_state) = continuestream_with_decisions(
+    let (status, body, generation_state, _assistant_message_id) = continuestream_with_decisions(
         pool,
         json!([
             { "approval_id": "call_probe", "decision": "approve" },
@@ -5176,7 +5231,6 @@ async fn continuation_replays_earlier_calls_of_parked_turn(pool: Pool<Postgres>)
 
     let (app_state, server, _chat_id, assistant_message_id, parked_content) =
         park_a_turn_on_the_approval_gate(pool, mocks).await;
-
     let parked_types: Vec<&str> = parked_content
         .as_array()
         .unwrap()
@@ -5383,6 +5437,8 @@ async fn continuation_processes_pending_tool_calls_after_decision(pool: Pool<Pos
 
     let (app_state, server, _chat_id, assistant_message_id, parked_content) =
         park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let probe_id = generated_tool_call_id(assistant_message_id, 1, "call_probe");
+    let read_id = generated_tool_call_id(assistant_message_id, 1, "call_read");
 
     let approval_request = parked_content
         .as_array()
@@ -5393,7 +5449,7 @@ async fn continuation_processes_pending_tool_calls_after_decision(pool: Pool<Pos
     assert_eq!(approval_request["content_type"], "tool_approval_request");
     let pending = approval_request["pending_tool_calls"].as_array().unwrap();
     assert_eq!(pending.len(), 1, "Got: {}", approval_request);
-    assert_eq!(pending[0]["call_id"], "call_read");
+    assert_eq!(pending[0]["call_id"], read_id);
     assert_eq!(pending[0]["fn_name"], "read_approval_fixture");
 
     let continued = server
@@ -5427,8 +5483,8 @@ async fn continuation_processes_pending_tool_calls_after_decision(pool: Pool<Pos
             "text"
         ]
     );
-    assert_eq!(parts[2]["tool_call_id"], "call_probe");
-    assert_eq!(parts[3]["tool_call_id"], "call_read");
+    assert_eq!(parts[2]["tool_call_id"], probe_id);
+    assert_eq!(parts[3]["tool_call_id"], read_id);
     assert_eq!(parts[3]["status"], "success");
     assert!(
         serde_json::to_string(&parts[3]["output"])
@@ -5482,6 +5538,7 @@ async fn continuestream_retry_after_crash_resumes_instead_of_400(pool: Pool<Post
 
     let (app_state, server, chat_id, assistant_message_id, parked_content) =
         park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let probe_id = generated_tool_call_id(assistant_message_id, 1, "call_probe");
 
     // What the lost continuation had already written: the decision and the
     // gated call's outcome, with the generation swept to `errored` by the
@@ -5489,14 +5546,14 @@ async fn continuestream_retry_after_crash_resumes_instead_of_400(pool: Pool<Post
     let mut content = parked_content.as_array().unwrap().clone();
     content.push(json!({
         "content_type": "tool_approval",
-        "tool_call_id": "call_probe",
-        "approval_id": "call_probe",
+        "tool_call_id": probe_id,
+        "approval_id": probe_id,
         "always_allow": false,
         "approved_at": Utc::now().to_rfc3339(),
     }));
     content.push(json!({
         "content_type": "tool_use",
-        "tool_call_id": "call_probe",
+        "tool_call_id": probe_id,
         "tool_name": "publish_approval_probe",
         "status": "success",
         "input": {},
@@ -5601,18 +5658,20 @@ async fn continuestream_retry_resumes_after_a_pending_call_already_ran(pool: Poo
 
     let (app_state, server, chat_id, assistant_message_id, parked_content) =
         park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let probe_id = generated_tool_call_id(assistant_message_id, 1, "call_probe");
+    let read_id = generated_tool_call_id(assistant_message_id, 1, "call_read");
 
     let mut content = parked_content.as_array().unwrap().clone();
     content.push(json!({
         "content_type": "tool_approval",
-        "tool_call_id": "call_probe",
-        "approval_id": "call_probe",
+        "tool_call_id": probe_id,
+        "approval_id": probe_id,
         "always_allow": false,
         "approved_at": Utc::now().to_rfc3339(),
     }));
     content.push(json!({
         "content_type": "tool_use",
-        "tool_call_id": "call_probe",
+        "tool_call_id": probe_id,
         "tool_name": "publish_approval_probe",
         "status": "success",
         "input": {},
@@ -5621,7 +5680,7 @@ async fn continuestream_retry_resumes_after_a_pending_call_already_ran(pool: Poo
     // The pending call the lost continuation got as far as running.
     content.push(json!({
         "content_type": "tool_use",
-        "tool_call_id": "call_read",
+        "tool_call_id": read_id,
         "tool_name": "read_approval_fixture",
         "status": "success",
         "input": {},
@@ -6059,6 +6118,7 @@ async fn continuestream_retry_after_a_mid_turn_text_commit_resumes(pool: Pool<Po
 
     let (app_state, server, chat_id, assistant_message_id, parked_content) =
         park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let probe_id = generated_tool_call_id(assistant_message_id, 1, "call_probe");
 
     // What a continuation that streamed prose and then died leaves behind: the
     // decision, the gated call's outcome, and a `text` part committed while the
@@ -6066,14 +6126,14 @@ async fn continuestream_retry_after_a_mid_turn_text_commit_resumes(pool: Pool<Po
     let mut content = parked_content.as_array().unwrap().clone();
     content.push(json!({
         "content_type": "tool_approval",
-        "tool_call_id": "call_probe",
-        "approval_id": "call_probe",
+        "tool_call_id": probe_id,
+        "approval_id": probe_id,
         "always_allow": false,
         "approved_at": Utc::now().to_rfc3339(),
     }));
     content.push(json!({
         "content_type": "tool_use",
-        "tool_call_id": "call_probe",
+        "tool_call_id": probe_id,
         "tool_name": "publish_approval_probe",
         "status": "success",
         "input": {},
@@ -6233,18 +6293,20 @@ async fn continuestream_retry_after_crash_runs_the_calls_the_park_abandoned(pool
 
     let (app_state, server, chat_id, assistant_message_id, parked_content) =
         park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let probe_id = generated_tool_call_id(assistant_message_id, 1, "call_probe");
+    let read_id = generated_tool_call_id(assistant_message_id, 1, "call_read");
 
     let mut content = parked_content.as_array().unwrap().clone();
     content.push(json!({
         "content_type": "tool_approval",
-        "tool_call_id": "call_probe",
-        "approval_id": "call_probe",
+        "tool_call_id": probe_id,
+        "approval_id": probe_id,
         "always_allow": false,
         "approved_at": Utc::now().to_rfc3339(),
     }));
     content.push(json!({
         "content_type": "tool_use",
-        "tool_call_id": "call_probe",
+        "tool_call_id": probe_id,
         "tool_name": "publish_approval_probe",
         "status": "success",
         "input": {},
@@ -6307,7 +6369,7 @@ async fn continuestream_retry_after_crash_runs_the_calls_the_park_abandoned(pool
             "text"
         ]
     );
-    assert_eq!(parts[3]["tool_call_id"], "call_read");
+    assert_eq!(parts[3]["tool_call_id"], read_id);
     assert_eq!(parts[3]["status"], "success");
 
     let bodies = continuation_recorder.bodies();
@@ -6365,6 +6427,8 @@ async fn continuation_refuses_an_abandoned_call_denied_after_the_park(pool: Pool
 
     let (app_state, server, _chat_id, assistant_message_id, parked_content) =
         park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let probe_id = generated_tool_call_id(assistant_message_id, 1, "call_probe");
+    let read_id = generated_tool_call_id(assistant_message_id, 1, "call_read");
     let approval_request = parked_content
         .as_array()
         .unwrap()
@@ -6433,9 +6497,9 @@ async fn continuation_refuses_an_abandoned_call_denied_after_the_park(pool: Pool
             "text"
         ]
     );
-    assert_eq!(parts[2]["tool_call_id"], "call_probe");
+    assert_eq!(parts[2]["tool_call_id"], probe_id);
     assert_eq!(parts[2]["status"], "success");
-    assert_eq!(parts[3]["tool_call_id"], "call_read");
+    assert_eq!(parts[3]["tool_call_id"], read_id);
     assert_eq!(parts[3]["status"], "error");
     assert!(
         parts[3]["output"]["error"]
@@ -6754,7 +6818,10 @@ async fn test_continuestream_numbers_deltas_after_the_decision_and_call_parts(
             1,
             "{decision}: expected one terminal update for the gated call, got {tool_updates:?}"
         );
-        assert_eq!(tool_updates[0]["tool_call_id"], "call_probe");
+        assert_eq!(
+            tool_updates[0]["tool_call_id"],
+            generated_tool_call_id(assistant_message_id, 1, "call_probe")
+        );
         assert_eq!(tool_updates[0]["content_index"], parked_len + 1);
         assert_eq!(
             tool_updates[0]["status"],
@@ -6944,7 +7011,10 @@ async fn test_continuestream_denies_a_parked_tool_approval(pool: Pool<Postgres>)
             "text"
         ]
     );
-    assert_eq!(resumed_content[1]["tool_call_id"], "call_probe");
+    assert_eq!(
+        resumed_content[1]["tool_call_id"],
+        generated_tool_call_id(assistant_message_id, 1, "call_probe")
+    );
     assert_eq!(resumed_content[2]["status"], "error");
     assert_eq!(resumed_content[2]["output"]["status"], "rejected");
     assert_eq!(resumed_content[2]["output"]["error"], DENIAL);

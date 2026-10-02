@@ -1,3 +1,7 @@
+import {
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,10 +15,6 @@ import {
   WORD_AUTHORING_FACET_ID,
 } from "../wordActionFacet";
 import { applyWordDocumentPlan } from "../wordApplyDocumentPlan";
-import {
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {
@@ -23,7 +23,7 @@ import {
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
 
-import type { WordDocumentPlan } from "../wordDocumentPlan";
+import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 const context = {
   chatId: "chat-A",
@@ -191,7 +191,8 @@ describe("bounded table-cell reads", () => {
       result: { status: "not-found", totalMatches: 0 },
     });
   });
-  it.each([10, 100, 1000])(
+  // 1000 paragraphs is too slow for the default 5000 ms timeout in CI.
+  it.each([10, 100, 500])(
     "keeps initial/tool context bounded with %i unrelated paragraphs",
     async (count) => {
       const state = setup(

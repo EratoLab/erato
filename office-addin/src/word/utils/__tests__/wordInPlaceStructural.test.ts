@@ -1,3 +1,4 @@
+import { createNativeContentSignature } from "@erato/frontend/word-review";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -39,7 +40,6 @@ import {
   resetWordInPlaceLatchForTests,
   wordInPlaceAvailability,
 } from "../wordInPlaceSwitch";
-import { createNativeContentSignature } from "../wordNativeContent";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type {
@@ -51,7 +51,7 @@ import type {
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const STATUS = "Status:";

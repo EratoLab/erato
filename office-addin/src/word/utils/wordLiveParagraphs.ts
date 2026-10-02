@@ -1,5 +1,8 @@
-import { isWordMediaElementActive } from "./wordMediaComparison";
-import { nativeBodyGroups, wordMainBody } from "./wordNativeContent";
+import {
+  isWordMediaElementActive,
+  nativeBodyGroups,
+  wordMainBody,
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 

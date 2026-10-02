@@ -1,3 +1,7 @@
+import {
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,10 +10,6 @@ import {
   readySnapshot,
 } from "../../../test/mocks/word/authoringFixtures";
 import { WORD_AUTHORING_CONTRACT } from "../wordAuthoringContract";
-import {
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "../wordDocumentPlan";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {
@@ -23,7 +23,7 @@ import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const context = { chatId: "chat", messageId: "message", toolCallId: "read" };
 function setup(

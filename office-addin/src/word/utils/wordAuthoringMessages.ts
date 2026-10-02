@@ -4,9 +4,9 @@ import { wordRouteGroup } from "./wordInPlaceRoute";
 
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
-import type { WordPlanIssue } from "./wordDocumentPlan";
 import type { WordApplyAdjustment } from "./wordFullDocumentComparison";
 import type { WordPlanRoute, WordRouteGroup } from "./wordInPlaceRoute";
+import type { WordPlanIssue } from "@erato/frontend/word-review";
 
 export function wordDocumentDiagnosticText(
   diagnostic: WordDocumentDiagnostic,
@@ -253,9 +253,9 @@ export function wordAuthoringIssueText(
   switch (issue) {
     case "incomplete":
       return t({
-        id: "officeAddin.word.authoring.incomplete",
+        id: "officeAddin.word.authoring.incompleteRead",
         message:
-          "The complete document has not been read for this plan. Ask for a new rewrite that reads every source block.",
+          "The complete document has not been read for this plan. Ask for a new rewrite that reads the whole document.",
       });
     case "expired":
       return t({

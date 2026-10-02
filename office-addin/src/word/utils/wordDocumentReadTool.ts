@@ -1,3 +1,14 @@
+import {
+  MAX_SOURCE_BYTES,
+  MAX_PLAN_BYTES,
+  MAX_DOCUMENT_BLOCKS,
+  wordSourceReadRefs,
+  wordImageAssetMetadata,
+  wordSourceDetails,
+  isWordHistorySnapshot,
+  WORD_READ_TOOL,
+} from "@erato/frontend/word-review";
+
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
 import {
   wordReadableSourceBlock,
@@ -6,24 +17,19 @@ import {
 } from "./wordAuthoringReadData";
 import { WordDocumentDraftStore } from "./wordDocumentDrafts";
 import { MAX_WORD_DOCX_BYTES } from "./wordDocumentPackageCodec";
-import {
-  MAX_SOURCE_BYTES,
-  MAX_PLAN_BYTES,
-  MAX_DOCUMENT_BLOCKS,
-  wordSourceReadRefs,
-} from "./wordDocumentPlan";
-import { wordImageAssetMetadata } from "./wordImageAssetData";
-import { wordSourceDetails } from "./wordRichContent";
 import { readWordTableCell } from "./wordTableCellRead";
 import { readWordTargets } from "./wordTargetRead";
 
-import type { WordAuthoringSnapshot, WordPlanRun } from "./wordDocumentPlan";
 import type {
   ClientToolCallContext,
   ClientToolExecutor,
 } from "@erato/frontend/library";
+import type {
+  WordAuthoringSnapshot,
+  WordPlanRun,
+} from "@erato/frontend/word-review";
 
-export const WORD_READ_TOOL = "read_document_blocks";
+export { WORD_READ_TOOL };
 const PAGE_BYTES = 20 * 1024;
 const MAX_PAGES = 12;
 interface Fragment {
@@ -101,7 +107,7 @@ export class WordDocumentReadSession {
     completeBudgetCheck?: () => Promise<string | undefined>,
   ): void {
     this.clear();
-    if (!snapshot) return;
+    if (!snapshot || isWordHistorySnapshot(snapshot)) return;
     this.completeBudgetCheck = completeBudgetCheck;
     snapshot.revoked = false;
     snapshot.read.clear();

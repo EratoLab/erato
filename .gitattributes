@@ -2,6 +2,9 @@
 # never normalises a fixture down to LF and breaks MIME parsers.
 *.eml -text
 
+# Published setup scripts are checksum-pinned; preserve identical bytes everywhere.
+site/public/setup/teams/** text eol=lf
+
 frontend/src/lib/generated/**/* linguist-generated
 infrastructure/charts/erato/tests_schema/helm-testsuite.json linguist-generated
 infrastructure/k3d/erato-local/tests_schema/helm-testsuite.json linguist-generated

@@ -9,8 +9,8 @@ import {
 
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 
-import type { WordDocumentCapture } from "../utils/wordDocumentCapture";
 import type { WordReviewState } from "../utils/wordReviewState";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 import type { ReactNode } from "react";
 
 /** Keep one recovery batch in memory; reloading the pane loses it. */

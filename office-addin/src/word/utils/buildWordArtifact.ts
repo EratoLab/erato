@@ -1,3 +1,5 @@
+import { acceptedWordPlanFromHistory } from "@erato/frontend/word-review";
+
 import {
   extractProposedClientAction,
   offerableWordClientActionsForFacet,
@@ -5,13 +7,10 @@ import {
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
 } from "./wordClientActions";
-import {
-  acceptedWordDocumentSubmission,
-  WORD_SUBMIT_PLAN_ACTION,
-} from "./wordDocumentSubmission";
+import { WORD_SUBMIT_PLAN_ACTION } from "./wordDocumentSubmission";
 
-import type { WordDocumentCapture } from "./wordDocumentCapture";
 import type { ContentPart, HostArtifact } from "@erato/frontend/library";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export const WORD_CARD_FENCE_LANGUAGES: readonly string[] = [
   WORD_EDITS_FENCE,
@@ -45,7 +44,7 @@ export function buildWordArtifact(args: {
     args.facetId,
     allowedClientActions,
   ).includes(WORD_SUBMIT_PLAN_ACTION)
-    ? acceptedWordDocumentSubmission(args.content)
+    ? acceptedWordPlanFromHistory(args.content)
     : undefined;
   const proposedClientAction = submitted
     ? WORD_SUBMIT_PLAN_ACTION
@@ -57,7 +56,13 @@ export function buildWordArtifact(args: {
     renderMode: "suggestions",
     cardFenceLanguages: WORD_CARD_FENCE_LANGUAGES,
     ...(submitted
-      ? { submittedCard: { ...submitted, language: WORD_PLAN_FENCE } }
+      ? {
+          submittedCard: {
+            toolCallId: submitted.toolCallId,
+            content: submitted.content,
+            language: WORD_PLAN_FENCE,
+          },
+        }
       : {}),
     messageId: args.messageId,
     ...(allowedClientActions ? { allowedClientActions } : {}),

@@ -24,7 +24,7 @@ import {
   wordRouteGroup,
 } from "../wordInPlaceRoute";
 
-import type { WordDocumentPlan } from "../wordDocumentPlan";
+import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 const ON = { enabled: true } as const;
 const caps = wordInPlaceCapabilities("PC");

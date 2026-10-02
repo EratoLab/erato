@@ -71,7 +71,7 @@ impl TeamsAppDistribution {
         let manifest = &app.manifest;
         let mut document = self.template.clone();
         document["id"] = json!(app.app_id);
-        document["version"] = json!(release_version());
+        document["version"] = json!(manifest.version.clone().unwrap_or_else(release_version));
         document["developer"] = json!({
             "name": manifest.developer_name,
             "websiteUrl": manifest.website_url,
@@ -204,6 +204,8 @@ fn apply_bot(document: &mut Value, app: &MsOfficeTeamsAppConfig, host: &str) {
             "commands": [{"title": "/new", "description": "Start a new Erato chat"}],
         }],
     }]);
+    // Manifests v1.25+ with team scope must declare channel feature support.
+    document["supportsChannelFeatures"] = json!("tier1");
     // The sign-in button opens the Bot Framework token service.
     document["validDomains"] = json!([host, "token.botframework.com"]);
     if let (Some(sso_app_id), Some(sso_resource)) =
@@ -238,6 +240,10 @@ fn validate_manifest(document: &Value, app: &MsOfficeTeamsAppConfig) -> Result<(
         "Teams manifest must contain the personal tab"
     );
     if app.bot.enabled {
+        ensure!(
+            document["supportsChannelFeatures"] == "tier1",
+            "Teams bot with team scope requires supportsChannelFeatures to be tier1"
+        );
         ensure!(
             document["bots"][0]["botId"].as_str() == app.bot.app_id.as_deref().map(str::trim),
             "rendered Teams bot ID does not match configuration"
@@ -296,7 +302,21 @@ mod tests {
     fn renders_the_tab_without_a_bot_by_default() {
         let manifest = render(&MsOfficeTeamsAppConfig::default());
         assert!(manifest["bots"].is_null());
+        assert!(manifest["supportsChannelFeatures"].is_null());
         assert_eq!(manifest["validDomains"], json!(["erato.example.com"]));
+        assert_eq!(manifest["version"], json!(release_version()));
+    }
+
+    #[test]
+    fn deployment_version_override_preserves_app_identity_and_bot() {
+        let mut app = MsOfficeTeamsAppConfig::default();
+        app.manifest.version = Some("0.6.3".to_string());
+        app.bot.enabled = true;
+        app.bot.app_id = Some("11111111-2222-3333-4444-555555555555".to_string());
+        let manifest = render(&app);
+        assert_eq!(manifest["version"], "0.6.3");
+        assert_eq!(manifest["id"], app.app_id);
+        assert_eq!(manifest["bots"][0]["botId"], app.bot.app_id.unwrap());
     }
 
     #[test]
@@ -307,6 +327,7 @@ mod tests {
         app.bot.sso_app_id = Some("11111111-2222-3333-4444-555555555555".to_string());
         app.bot.sso_resource = Some("api://botid-11111111-2222-3333-4444-555555555555".to_string());
         let manifest = render(&app);
+        assert_eq!(manifest["supportsChannelFeatures"], "tier1");
         assert_eq!(
             manifest["bots"][0]["botId"],
             "11111111-2222-3333-4444-555555555555"
@@ -328,5 +349,22 @@ mod tests {
             manifest["webApplicationInfo"]["nestedAppAuthInfo"][0]["redirectUri"],
             "brk-multihub://erato.example.com"
         );
+    }
+
+    #[test]
+    fn rejects_bot_packages_without_channel_feature_support() {
+        let mut app = MsOfficeTeamsAppConfig::default();
+        app.bot.enabled = true;
+        app.bot.app_id = Some("11111111-2222-3333-4444-555555555555".to_string());
+        let mut manifest = render(&app);
+        manifest
+            .as_object_mut()
+            .unwrap()
+            .remove("supportsChannelFeatures");
+
+        let error = distribution()
+            .package(&serde_json::to_vec(&manifest).unwrap(), &app)
+            .expect_err("a bot package without channel feature support must be rejected");
+        assert!(error.to_string().contains("supportsChannelFeatures"));
     }
 }

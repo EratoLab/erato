@@ -79,6 +79,27 @@ Before exposing the tool to the model, Erato adds this URI requirement to the fi
 
 The MCP server therefore continues to receive the Base64 value declared by its original input schema; the URI is only used between the model and Erato.
 
+#### Declaring MIME types
+
+Optionally list the MIME types accepted by a file input with `chat.erato/accepted_mime_types`. For file outputs, list possible MIME types with `chat.erato/produced_mime_types` in `outputSchema`. Each value belongs on the schema object marked with `chat.erato/file_content_field: true`; these are Erato annotations, not standard MCP fields. Both accept exact MIME types (such as `application/pdf`), `type/*` patterns, or `*/*`. The corresponding `x-chat.erato/...` aliases are accepted as well.
+
+```json
+{
+  "type": "string",
+  "contentEncoding": "base64",
+  "chat.erato/file_content_field": true,
+  "chat.erato/accepted_mime_types": ["text/plain", "text/markdown"]
+}
+```
+
+For one exact format, `contentMediaType` is used if the directional annotation is absent. If both are present, the annotation must list only that same MIME type. Missing or invalid declarations mean that Erato does not know the tool's compatibility; they do not mean the tool accepts no formats. An input declaration of `*/*` means the tool accepts arbitrary bytes, not that it understands or can parse every file format.
+
+Input and output declarations are independent: a tool that produces PDF does not thereby accept PDF. Output capabilities do not replace the actual `mime_type` or `content_type` required in the returned file object.
+
+Erato adds accepted input MIME types to the model-facing file-field description and summarizes input and output file capabilities in the tool description. Each listing names at most 10 distinct MIME types and then gives the number omitted, such as “and 2 further MIME types.” The complete declaration remains available for compatibility matching. MIME annotations and Base64 representation keywords are removed from the provider-facing schema after Erato adds this textual guidance, because the model passes an `erato-file://` URI.
+
+The summary describes declared capabilities of tools exposed to the current chat. For output format selection, the tool still needs an ordinary input parameter such as `format` with an `enum`; `produced_mime_types` alone advertises capability but does not select a format.
+
 #### File outputs
 
 A marked output field must be part of an object that also contains a sibling `mime_type` or `content_type` string. The MCP tool result must provide the object in `structuredContent` or as JSON in text content. When both are present, `structuredContent` takes precedence.

@@ -13,7 +13,7 @@ import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 
-import type { WordDocumentPlan } from "../wordDocumentPlan";
+import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 function word(ooxml: string, transform = (value: string) => value) {
   let current = ooxml;

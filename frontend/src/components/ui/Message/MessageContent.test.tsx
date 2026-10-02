@@ -644,6 +644,43 @@ describe("MessageContent", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows each cold-load trace cluster's duration when file pointers split the trace", () => {
+    renderWithTheme(
+      <MessageContent
+        createdAt="2026-05-07T12:00:00Z"
+        updatedAt="2026-05-07T12:00:30Z"
+        content={[
+          reasoningContent(
+            "Inspecting the input.",
+            "2026-05-07T12:00:00Z",
+            "2026-05-07T12:00:02Z",
+          ),
+          toolUseContent({
+            startedAt: "2026-05-07T12:00:02Z",
+            endedAt: "2026-05-07T12:00:06Z",
+          }),
+          { content_type: "text_file_pointer", file_upload_id: "file-a" },
+          { content_type: "text_file_pointer", file_upload_id: "file-b" },
+          reasoningContent(
+            "Reviewing the result.",
+            "2026-05-07T12:00:10Z",
+            "2026-05-07T12:00:12Z",
+          ),
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Thought for 6s/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Thought for 2s/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Thought for 30s/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("streams reasoning expanded and collapses it once answer text arrives", () => {
     const { rerender } = renderWithTheme(
       <MessageContent

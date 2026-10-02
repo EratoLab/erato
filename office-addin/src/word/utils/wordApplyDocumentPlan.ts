@@ -1,4 +1,11 @@
 import {
+  isWordHistorySnapshot,
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+  validateWordDocumentPlan,
+} from "@erato/frontend/word-review";
+
+import {
   logWordDiagnostic,
   packageStats,
   strictDifferingParts,
@@ -21,11 +28,6 @@ import {
   supportsWordDocumentPackage,
   wordDocumentOoxmlToFile,
 } from "./wordDocumentPackage";
-import {
-  normalizeWordDocumentPlan,
-  parseWordDocumentPlan,
-  validateWordDocumentPlan,
-} from "./wordDocumentPlan";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -64,16 +66,16 @@ import type {
 } from "./wordApplyDiagnostics";
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
 import type { WordContentControlLocks } from "./wordContentControlWrite";
-import type {
-  WordAuthoringSnapshot,
-  WordDocumentPlan,
-  WordPlanIssue,
-} from "./wordDocumentPlan";
 import type { WordWriteVerification } from "./wordDocumentXml";
 import type {
   WordApplyAdjustment,
   WordVerifyTier,
 } from "./wordFullDocumentComparison";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+  WordPlanIssue,
+} from "@erato/frontend/word-review";
 
 export type WordDocumentApplyStatus =
   | "applied"
@@ -277,7 +279,7 @@ async function applyPlan(
     ? "host-unavailable"
     : !plan
       ? "invalid"
-      : !snapshot
+      : !snapshot || isWordHistorySnapshot(snapshot)
         ? "no-capture"
         : !messageId || snapshot.ownerMessageId !== messageId
           ? "wrong-request"

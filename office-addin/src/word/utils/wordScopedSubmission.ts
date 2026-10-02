@@ -1,21 +1,20 @@
 import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
-} from "./wordDocumentPlan";
-import {
   MAX_WORD_SCOPE_BYTES,
   canonicalWordPlan,
   wordReadScope,
-} from "./wordReadScope";
-import { WordTableCellSubmissionError } from "./wordTableCellSubmission";
+  WordTableCellSubmissionError,
+} from "@erato/frontend/word-review";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
-} from "./wordDocumentPlan";
-import type { WordSectionPlan, WordStoryChange } from "./wordStories";
+  WordSectionPlan,
+  WordStoryChange,
+} from "@erato/frontend/word-review";
 
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);

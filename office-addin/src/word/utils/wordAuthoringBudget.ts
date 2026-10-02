@@ -1,13 +1,15 @@
 import { fetchTokenUsageEstimate } from "@erato/frontend/library";
+import {
+  wordImageAssetMetadata,
+  wordSourceDetails,
+  MAX_WORD_SCOPE_BYTES,
+} from "@erato/frontend/word-review";
 
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
-import { wordImageAssetMetadata } from "./wordImageAssetData";
-import { MAX_WORD_SCOPE_BYTES } from "./wordReadScope";
-import { wordSourceDetails } from "./wordRichContent";
 
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
 import type { TokenUsageRequest } from "@erato/frontend/library";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 type WordAuthoringBudgetResult =
   | { ok: true }

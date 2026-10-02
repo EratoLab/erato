@@ -6,12 +6,14 @@ import type {
   IndexingStatusV1Result,
   OutlookMailbox,
   SidecarConfiguration,
+  SourcesListV1Result,
 } from "@erato/desktop-sidecar-protocol";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 interface IndexingData {
   status: IndexingStatusV1Result;
   mailboxes: OutlookMailbox[];
+  sources?: SourcesListV1Result["sources"];
 }
 
 type SidecarIndexingState = UseQueryResult<IndexingData, Error> & {
@@ -32,7 +34,8 @@ export function useSidecarIndexing(): SidecarIndexingState {
   const supported =
     snapshot.state === "ready" &&
     !!client?.supports("indexing.status.v1") &&
-    client.supports("outlook.list_mailboxes.v1") &&
+    (client.supports("sources.list.v1") ||
+      client.supports("outlook.list_mailboxes.v1")) &&
     client.supports("sidecar.configure.v1");
   const queryKey = ["sidecar-indexing", snapshot.instanceId];
   const query = useQuery<IndexingData, Error>({
@@ -41,15 +44,20 @@ export function useSidecarIndexing(): SidecarIndexingState {
     refetchInterval: 5_000,
     queryFn: async ({ signal }) => {
       if (!client) throw new Error("Sidecar unavailable");
-      const [status, { mailboxes }] = await Promise.all([
+      const [status, { mailboxes }, sourceResult] = await Promise.all([
         client.invoke(
           "indexing.status.v1",
           { includeSourceBreakdowns: true, includeFileTypeBreakdowns: false },
           { signal },
         ),
-        client.invoke("outlook.list_mailboxes.v1", {}, { signal }),
+        client.supports("outlook.list_mailboxes.v1")
+          ? client.invoke("outlook.list_mailboxes.v1", {}, { signal })
+          : Promise.resolve({ mailboxes: [] }),
+        client.supports("sources.list.v1")
+          ? client.invoke("sources.list.v1", {}, { signal })
+          : Promise.resolve(undefined),
       ]);
-      return { status, mailboxes };
+      return { status, mailboxes, sources: sourceResult?.sources };
     },
   });
   const mutation = useMutation({

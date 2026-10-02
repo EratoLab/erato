@@ -132,6 +132,7 @@ describe("FeatureConfigProvider", () => {
           maxSizeFormatted: "50 MB",
         },
         chatInput: {
+          mcpServersEnabled: false,
           autofocus: true,
           emptyStateLayout: "centered",
           showUsageAdvisory: true,
@@ -157,6 +158,7 @@ describe("FeatureConfigProvider", () => {
           showLogout: true,
         },
         assistants: {
+          mcpServersEnabled: false,
           enabled: false,
           delegationEnabled: false,
           delegationAllowBackground: false,
@@ -299,6 +301,7 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.chatInput).toEqual({
+        mcpServersEnabled: false,
         autofocus: true,
         emptyStateLayout: "centered",
         showUsageAdvisory: false,
@@ -595,6 +598,7 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current).toEqual({
+        mcpServersEnabled: false,
         autofocus: true,
         emptyStateLayout: "centered",
         showUsageAdvisory: true,
@@ -874,6 +878,37 @@ describe("FeatureConfigProvider", () => {
     });
   });
 
+  describe("MCP surface configuration", () => {
+    it.each([
+      [false, undefined, undefined, false, false],
+      [true, undefined, undefined, true, true],
+      [true, false, undefined, false, true],
+      [true, undefined, false, true, false],
+      [false, true, undefined, true, false],
+      [false, undefined, true, false, true],
+    ])(
+      "resolves tab=%s chat=%s editor=%s with Office overrides",
+      (tab, chat, editor, expectedChat, expectedEditor) => {
+        mockEnv.mockReturnValue({
+          ...env(),
+          mcpServersTabEnabled: tab,
+          mcpServersInChatInputEnabled: chat,
+          mcpServersInAssistantEditorEnabled: editor,
+        });
+        // The Office add-in overrides chat advisory visibility in its shared shell.
+        const { result } = renderHook(() => useFeatureConfig(), {
+          wrapper: createWrapper({ chatInput: { showUsageAdvisory: false } }),
+        });
+        expect(result.current.userPreferences.mcpServersTabEnabled).toBe(tab);
+        expect(result.current.chatInput.mcpServersEnabled).toBe(expectedChat);
+        expect(result.current.assistants.mcpServersEnabled).toBe(
+          expectedEditor,
+        );
+        expect(result.current.chatInput.showUsageAdvisory).toBe(false);
+      },
+    );
+  });
+
   describe("useAssistantsFeature", () => {
     it("should return assistants config with the default context warning threshold", () => {
       const { result } = renderHook(() => useAssistantsFeature(), {
@@ -881,6 +916,7 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current).toEqual({
+        mcpServersEnabled: false,
         enabled: false,
         delegationEnabled: false,
         delegationAllowBackground: false,

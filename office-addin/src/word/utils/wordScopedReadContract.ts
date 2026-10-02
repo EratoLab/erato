@@ -1,13 +1,16 @@
+import { wordImageAssetMetadata } from "@erato/frontend/word-review";
+
 import {
   WORD_AUTHORING_CONTRACT as full,
   WORD_SECTION_PROPERTIES,
 } from "./wordAuthoringContract";
 import { wordReadableStyles } from "./wordAuthoringReadData";
-import { wordImageAssetMetadata } from "./wordImageAssetData";
 import { isWordTrackingMode } from "./wordInPlaceSwitch";
 
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
-import type { WordScopeTarget } from "./wordReadScope";
+import type {
+  WordAuthoringSnapshot,
+  WordScopeTarget,
+} from "@erato/frontend/word-review";
 
 export const WORD_SCOPED_GUIDANCE = [
   "text",

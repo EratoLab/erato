@@ -7709,8 +7709,8 @@ return errors === 0;
 
 export const validateIndexingStartV1Result = validate54;
 const schema61 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-result.schema.json","title":"IndexingStartV1Result","$ref":"./indexing-status-v1-result.schema.json"};
-const schema62 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json","title":"IndexingStatusV1Result","type":"object","properties":{"configuration":{"description":"Persisted layers for editing configuration without losing unrelated settings. Updated sidecars include both layers; absent on older servers.","type":"object","properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"required":["user_configuration","organization_configuration"],"additionalProperties":true},"sampledAt":{"type":"string","format":"date-time"},"sessionId":{"type":"string","minLength":1},"uptimeSeconds":{"type":"number","minimum":0},"state":{"type":"string","enum":["running","stopping","stopped","blocked"]},"effectiveConfiguration":{"$ref":"#/definitions/EffectiveIndexingConfiguration"},"resources":{"$ref":"#/definitions/Resources"},"generations":{"type":"array","items":{"$ref":"#/definitions/Generation"}},"discovery":{"type":"array","items":{"$ref":"#/definitions/DiscoverySource"}},"search":{"$ref":"#/definitions/SearchStatistics"},"resetInProgress":{"type":"boolean","default":false,"description":"True while a full reset is draining activity or deleting files. State is stopping during reset. Optional; absence means false."},"indexingDirectory":{"type":"string","minLength":1,"pattern":"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)","description":"Absolute local filesystem path of the sidecar-managed indexing root, in the sidecar OS native path syntax (not a URI). Report it even before initialization or after reset, without creating the directory. Updated implementations must include it; optional in the wire schema for compatibility with older v1 servers."}},"required":["sampledAt","sessionId","uptimeSeconds","state","effectiveConfiguration","resources","generations","discovery","search"],"additionalProperties":true,"definitions":{"EffectiveIndexingConfiguration":{"type":"object","properties":{"parallelism":{"type":"integer","minimum":1,"maximum":9007199254740991},"documentsPerMinute":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["parallelism","documentsPerMinute"],"additionalProperties":true},"UnavailableMetric":{"type":"object","properties":{"metric":{"type":"string","minLength":1},"reason":{"type":"string","minLength":1}},"required":["metric","reason"],"additionalProperties":true,"description":"Metric is a dotted path relative to its containing section. Every unavailable null measurement must have an entry; zero means an observed zero."},"ProcessResources":{"type":"object","properties":{"processCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"cpuCoresUsed":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"memoryResidentBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"memoryResidentPeakBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"diskReadBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"diskWriteBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["processCount","cpuCoresUsed","memoryResidentBytes","memoryResidentPeakBytes","diskReadBytesPerSecond","diskWriteBytesPerSecond","unavailableMetrics"],"additionalProperties":true,"description":"Sidecar measurements include search and discovery. Worker measurements aggregate extraction children, including CPU/I/O accrued by children that exit between samples. Resident sums may double-count shared pages; peak is the maximum simultaneously observed aggregate since process startup."},"DiskUsage":{"type":"object","properties":{"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]}},"required":["allocatedBytes","logicalBytes"],"additionalProperties":true},"Resources":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"sidecar":{"$ref":"#/definitions/ProcessResources"},"extractionWorkers":{"$ref":"#/definitions/ProcessResources"},"disk":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"availableBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"breakdown":{"type":"object","properties":{"control":{"$ref":"#/definitions/DiskUsage"},"catalog":{"$ref":"#/definitions/DiskUsage"},"activeIndex":{"$ref":"#/definitions/DiskUsage"},"buildingIndex":{"$ref":"#/definitions/DiskUsage"},"retiredIndexes":{"$ref":"#/definitions/DiskUsage"},"wal":{"$ref":"#/definitions/DiskUsage"},"temporary":{"$ref":"#/definitions/DiskUsage"}},"required":["control","catalog","activeIndex","buildingIndex","retiredIndexes","wal","temporary"],"additionalProperties":true},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["sampledAt","allocatedBytes","logicalBytes","availableBytes","breakdown","unavailableMetrics"],"additionalProperties":true},"liveExtractionWorkers":{"type":"array","description":"Individual currently live workers. Their memory sums can double-count shared pages. Aggregate CPU/I/O above also includes workers that exited during the sample.","items":{"type":"object","properties":{"processId":{"type":"integer","minimum":1,"maximum":9007199254740991},"sampledAt":{"type":"string","format":"date-time"},"resources":{"$ref":"#/definitions/ProcessResources"}},"required":["processId","sampledAt","resources"],"additionalProperties":true}}},"required":["sampledAt","observationSeconds","sidecar","extractionWorkers","disk","liveExtractionWorkers"],"additionalProperties":true},"ThroughputWindow":{"type":"object","properties":{"targetWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"emptyPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unindexablePerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"completedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"attemptsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"retriesPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"deletionsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"extractedTextBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["targetWindowSeconds","observationSeconds","sampleCount","indexedPerMinute","emptyPerMinute","unindexablePerMinute","completedPerMinute","attemptsPerMinute","retriesPerMinute","deletionsPerMinute","extractedTextBytesPerSecond","unavailableReason"],"additionalProperties":true},"Backlog":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"discoveryComplete":{"type":"boolean"},"remaining":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"ready":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"inProgress":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"retryDeferred":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"blocked":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"firstTime":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"updates":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","discoveryComplete","remaining","ready","inProgress","retryDeferred","blocked","firstTime","updates","unavailableReason"],"additionalProperties":true,"description":"Counts concern current eligible revisions, not queue entries. remaining = ready + inProgress + retryDeferred + blocked = firstTime + updates. Incomplete discovery still permits exact counts for known work. Terminal outcomes and deletion-only cleanup are excluded."},"Eta":{"type":"object","properties":{"state":{"type":"string","enum":["available","unavailable"]},"estimatedRemainingSeconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"estimatedCompletionAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"basis":{"const":"knownBacklog"},"rateWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","estimatedRemainingSeconds","estimatedCompletionAt","basis","rateWindowSeconds","observationSeconds","sampleCount","unavailableReason"],"additionalProperties":true,"allOf":[{"if":{"properties":{"state":{"const":"available"}},"required":["state"],"additionalProperties":true},"then":{"properties":{"estimatedRemainingSeconds":{"type":"number","minimum":0},"estimatedCompletionAt":{"type":"string","format":"date-time"},"unavailableReason":{"type":"null"}},"additionalProperties":true},"else":{"properties":{"estimatedRemainingSeconds":{"type":"null"},"estimatedCompletionAt":{"type":"null"},"unavailableReason":{"type":"string","minLength":1}},"additionalProperties":true}}]},"Coverage":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"knownEligible":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"emptyCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"stale":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"neverProcessed":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"pendingDeletions":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","knownEligible","indexedCurrent","emptyCurrent","unindexableCurrent","stale","neverProcessed","pendingDeletions","unavailableReason"],"additionalProperties":true,"description":"knownEligible is the sum of the five mutually exclusive revision states. stale means an older receipt exists, including an older failed receipt. pendingDeletions is separate. These counts do not imply discovery is complete."},"DepthBoundary":{"type":"object","properties":{"at":{"type":"string","format":"date-time"},"inclusive":{"type":"boolean"}},"required":["at","inclusive"],"additionalProperties":true,"description":"All known eligible dated documents between this boundary and the snapshot are covered; inclusive says whether documents exactly at the boundary are included. An old pending document makes an exclusive boundary possible without rounding timestamps."},"Depth":{"type":"object","properties":{"state":{"type":"string","enum":["applicable","notApplicable","unknown"]},"dateBasis":{"anyOf":[{"type":"string","enum":["emailReceivedAtThenSentAt","parentEmailReceivedAtThenSentAt","sourceDefined"]},{"type":"null"}]},"sourceDateField":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"discoveryComplete":{"type":"boolean"},"oldestIndexedDocumentAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"fullyIndexedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"processedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"pendingDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"undatedDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","dateBasis","sourceDateField","discoveryComplete","oldestIndexedDocumentAt","fullyIndexedSince","processedSince","pendingDocuments","unindexableDocuments","undatedDocuments","unavailableReason"],"additionalProperties":true,"description":"Only applicable to chronologically prioritized kinds. fullyIndexedSince requires current indexed/empty receipts; processedSince also accepts current terminal failures. Unknown dates are excluded from the boundary and counted explicitly. Oldest indexed date alone makes no coverage claim."},"Latency":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["observationSeconds","sampleCount","p50Seconds","p95Seconds","unavailableReason"],"additionalProperties":true,"description":"Freshness is measured from discovery of a revision until its first searchable commit. Retry attempts do not reset the start; failed/empty/deleted revisions are excluded."},"ErrorCount":{"type":"object","properties":{"code":{"type":"string","minLength":1},"count":{"type":"integer","minimum":0,"maximum":9007199254740991},"lastOccurredAt":{"type":"string","format":"date-time"}},"required":["code","count","lastOccurredAt"],"additionalProperties":true},"ErrorWindow":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"attemptFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"terminalFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"byCode":{"type":"array","items":{"$ref":"#/definitions/ErrorCount"}},"truncated":{"type":"boolean"}},"required":["observationSeconds","attemptFailures","terminalFailures","byCode","truncated"],"additionalProperties":true,"description":"Bounded recent error-code histogram, without content or filesystem paths. Counts include all failures even when byCode is truncated."},"Segment":{"type":"object","properties":{"kind":{"type":"string","enum":["email","file","teams_message"]},"sourceId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"fileType":{"anyOf":[{"type":"string","enum":["pdf","office","text","image","email","archive","other"]},{"type":"null"}]},"throughput":{"type":"array","items":{"$ref":"#/definitions/ThroughputWindow"}},"backlog":{"$ref":"#/definitions/Backlog"},"eta":{"$ref":"#/definitions/Eta"},"coverage":{"$ref":"#/definitions/Coverage"},"depth":{"$ref":"#/definitions/Depth"},"freshness":{"$ref":"#/definitions/Latency"},"errors":{"$ref":"#/definitions/ErrorWindow"}},"required":["kind","sourceId","mailboxId","fileType","throughput","backlog","eta","coverage","depth","freshness","errors"],"additionalProperties":true,"description":"Null source/mailbox denotes an all-source aggregate. Non-null scopes are independent views, not additional documents. Null fileType denotes all file types; breakdowns apply only to file rows. There must be one 60-second and one 300-second throughput window per segment."},"Generation":{"type":"object","properties":{"instanceId":{"type":"string","minLength":1},"role":{"type":"string","enum":["active","building"]},"sampledAt":{"type":"string","format":"date-time"},"segments":{"type":"array","items":{"$ref":"#/definitions/Segment"}},"chunks":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"terms":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"observedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["instanceId","role","sampledAt","segments","chunks","terms","indexedAvgdl","observedAvgdl","unavailableReason"],"additionalProperties":true,"description":"Active and building counters have independent revision receipts. Never sum generations to estimate mailbox progress. An extraction shared across generations can appear in both generation throughput views."},"DiscoverySource":{"type":"object","properties":{"sourceId":{"type":"string","minLength":1},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"state":{"type":"string","enum":["notStarted","scanning","complete","failed","disabled"]},"discoveryComplete":{"type":"boolean"},"scanStartedAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"lastSuccessfulScanAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"discoveredDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"accessible":{"type":"boolean"},"lastErrorCode":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sourceId","mailboxId","state","discoveryComplete","scanStartedAt","lastSuccessfulScanAt","discoveredDocuments","accessible","lastErrorCode"],"additionalProperties":true,"description":"discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."},"SearchStatistics":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"queryCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"errorCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"inFlight":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","observationSeconds","queryCount","errorCount","inFlight","p50LatencyMilliseconds","p95LatencyMilliseconds","unavailableReason"],"additionalProperties":true}}};
-const schema63 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/configuration/sidecar-configuration.schema.json","title":"SidecarConfiguration","description":"An extensible configuration layer. Unknown properties must be accepted and preserved.","type":"object","properties":{"indexing_mailboxes":{"description":"Mailbox indexing overrides. Priority is explicit and independent of array order: lower numbers are processed first, with mailbox ID as a deterministic tie-breaker. Unlisted mailboxes remain enabled with priority 9007199254740991. Null inherits the other layer; an empty array explicitly uses defaults. Mailbox IDs must be unique. Disabling stops new discovery and processing but retains existing searchable data; in-flight work may finish.","type":["array","null"],"items":{"type":"object","properties":{"mailbox_id":{"type":"string","format":"uuid"},"enabled":{"type":"boolean"},"priority":{"description":"Indexing priority; lower numbers are processed first. Array order has no effect.","type":"integer","minimum":0,"maximum":9007199254740991}},"required":["mailbox_id","enabled","priority"],"additionalProperties":true}},"show_tray_icon":{"description":"Whether the sidecar should show its system tray icon. Null leaves the decision to the other configuration layer or the sidecar default.","type":["boolean","null"]},"indexing_parallelism":{"type":["integer","null"],"minimum":1,"maximum":9007199254740991,"description":"Maximum documents concurrently processed across all kinds and generations, including extraction and commit. Lowering it lets in-flight documents finish and prevents excess new starts. Null or absence inherits the other layer; the sidecar default is 1. Zero is invalid and does not pause indexing."},"indexing_documents_per_minute":{"type":["integer","null"],"minimum":1,"maximum":9007199254740991,"description":"Global maximum document-processing starts per rolling 60 seconds, shared by all workers, kinds and generations. Retry attempts consume this budget; one extraction shared by generations consumes it once. Deletion-only cleanup does not consume it. Null or absence inherits the other layer; the sidecar default is 40. Zero is invalid and does not pause indexing."}},"additionalProperties":true};
+const schema62 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json","title":"IndexingStatusV1Result","type":"object","properties":{"configuration":{"description":"Persisted layers for editing configuration without losing unrelated settings. Updated sidecars include both layers; absent on older servers.","type":"object","properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"required":["user_configuration","organization_configuration"],"additionalProperties":true},"sampledAt":{"type":"string","format":"date-time"},"sessionId":{"type":"string","minLength":1},"uptimeSeconds":{"type":"number","minimum":0},"state":{"type":"string","enum":["running","stopping","stopped","blocked"]},"effectiveConfiguration":{"$ref":"#/definitions/EffectiveIndexingConfiguration"},"resources":{"$ref":"#/definitions/Resources"},"generations":{"type":"array","items":{"$ref":"#/definitions/Generation"}},"discovery":{"type":"array","items":{"$ref":"#/definitions/DiscoverySource"}},"search":{"$ref":"#/definitions/SearchStatistics"},"resetInProgress":{"type":"boolean","default":false,"description":"True while a full reset is draining activity or deleting files. State is stopping during reset. Optional; absence means false."},"indexingDirectory":{"type":"string","minLength":1,"pattern":"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)","description":"Absolute local filesystem path of the sidecar-managed indexing root, in the sidecar OS native path syntax (not a URI). Report it even before initialization or after reset, without creating the directory. Updated implementations must include it; optional in the wire schema for compatibility with older v1 servers."}},"required":["sampledAt","sessionId","uptimeSeconds","state","effectiveConfiguration","resources","generations","discovery","search"],"additionalProperties":true,"definitions":{"EffectiveIndexingConfiguration":{"type":"object","properties":{"parallelism":{"type":"integer","minimum":1,"maximum":9007199254740991},"documentsPerMinute":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["parallelism","documentsPerMinute"],"additionalProperties":true},"UnavailableMetric":{"type":"object","properties":{"metric":{"type":"string","minLength":1},"reason":{"type":"string","minLength":1}},"required":["metric","reason"],"additionalProperties":true,"description":"Metric is a dotted path relative to its containing section. Every unavailable null measurement must have an entry; zero means an observed zero."},"ProcessResources":{"type":"object","properties":{"processCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"cpuCoresUsed":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"memoryResidentBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"memoryResidentPeakBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"diskReadBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"diskWriteBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["processCount","cpuCoresUsed","memoryResidentBytes","memoryResidentPeakBytes","diskReadBytesPerSecond","diskWriteBytesPerSecond","unavailableMetrics"],"additionalProperties":true,"description":"Sidecar measurements include search and discovery. Worker measurements aggregate extraction children, including CPU/I/O accrued by children that exit between samples. Resident sums may double-count shared pages; peak is the maximum simultaneously observed aggregate since process startup."},"DiskUsage":{"type":"object","properties":{"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]}},"required":["allocatedBytes","logicalBytes"],"additionalProperties":true},"Resources":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"sidecar":{"$ref":"#/definitions/ProcessResources"},"extractionWorkers":{"$ref":"#/definitions/ProcessResources"},"disk":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"availableBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"breakdown":{"type":"object","properties":{"control":{"$ref":"#/definitions/DiskUsage"},"catalog":{"$ref":"#/definitions/DiskUsage"},"activeIndex":{"$ref":"#/definitions/DiskUsage"},"buildingIndex":{"$ref":"#/definitions/DiskUsage"},"retiredIndexes":{"$ref":"#/definitions/DiskUsage"},"wal":{"$ref":"#/definitions/DiskUsage"},"temporary":{"$ref":"#/definitions/DiskUsage"}},"required":["control","catalog","activeIndex","buildingIndex","retiredIndexes","wal","temporary"],"additionalProperties":true},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["sampledAt","allocatedBytes","logicalBytes","availableBytes","breakdown","unavailableMetrics"],"additionalProperties":true},"liveExtractionWorkers":{"type":"array","description":"Individual currently live workers. Their memory sums can double-count shared pages. Aggregate CPU/I/O above also includes workers that exited during the sample.","items":{"type":"object","properties":{"processId":{"type":"integer","minimum":1,"maximum":9007199254740991},"sampledAt":{"type":"string","format":"date-time"},"resources":{"$ref":"#/definitions/ProcessResources"}},"required":["processId","sampledAt","resources"],"additionalProperties":true}}},"required":["sampledAt","observationSeconds","sidecar","extractionWorkers","disk","liveExtractionWorkers"],"additionalProperties":true},"ThroughputWindow":{"type":"object","properties":{"targetWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"emptyPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unindexablePerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"completedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"attemptsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"retriesPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"deletionsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"extractedTextBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["targetWindowSeconds","observationSeconds","sampleCount","indexedPerMinute","emptyPerMinute","unindexablePerMinute","completedPerMinute","attemptsPerMinute","retriesPerMinute","deletionsPerMinute","extractedTextBytesPerSecond","unavailableReason"],"additionalProperties":true},"Backlog":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"discoveryComplete":{"type":"boolean"},"remaining":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"ready":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"inProgress":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"retryDeferred":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"blocked":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"firstTime":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"updates":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","discoveryComplete","remaining","ready","inProgress","retryDeferred","blocked","firstTime","updates","unavailableReason"],"additionalProperties":true,"description":"Counts concern current eligible revisions, not queue entries. remaining = ready + inProgress + retryDeferred + blocked = firstTime + updates. Incomplete discovery still permits exact counts for known work. Terminal outcomes and deletion-only cleanup are excluded."},"Eta":{"type":"object","properties":{"state":{"type":"string","enum":["available","unavailable"]},"estimatedRemainingSeconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"estimatedCompletionAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"basis":{"const":"knownBacklog"},"rateWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","estimatedRemainingSeconds","estimatedCompletionAt","basis","rateWindowSeconds","observationSeconds","sampleCount","unavailableReason"],"additionalProperties":true,"allOf":[{"if":{"properties":{"state":{"const":"available"}},"required":["state"],"additionalProperties":true},"then":{"properties":{"estimatedRemainingSeconds":{"type":"number","minimum":0},"estimatedCompletionAt":{"type":"string","format":"date-time"},"unavailableReason":{"type":"null"}},"additionalProperties":true},"else":{"properties":{"estimatedRemainingSeconds":{"type":"null"},"estimatedCompletionAt":{"type":"null"},"unavailableReason":{"type":"string","minLength":1}},"additionalProperties":true}}]},"Coverage":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"knownEligible":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"emptyCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"stale":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"neverProcessed":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"pendingDeletions":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"missingFromLocalCacheCurrent":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991,"description":"Current revisions whose body or attachment content is unavailable in the local cache. A separate terminal outcome from empty or unindexable. Older sidecars may omit this counter; null means unknown."}},"required":["sampledAt","knownEligible","indexedCurrent","emptyCurrent","unindexableCurrent","stale","neverProcessed","pendingDeletions","unavailableReason"],"additionalProperties":true,"description":"knownEligible is the sum of indexedCurrent, emptyCurrent, unindexableCurrent, missingFromLocalCacheCurrent (when reported), stale and neverProcessed. pendingDeletions is separate. These counts do not imply discovery is complete."},"DepthBoundary":{"type":"object","properties":{"at":{"type":"string","format":"date-time"},"inclusive":{"type":"boolean"}},"required":["at","inclusive"],"additionalProperties":true,"description":"All known eligible dated documents between this boundary and the snapshot are covered; inclusive says whether documents exactly at the boundary are included. An old pending document makes an exclusive boundary possible without rounding timestamps."},"Depth":{"type":"object","properties":{"state":{"type":"string","enum":["applicable","notApplicable","unknown"]},"dateBasis":{"anyOf":[{"type":"string","enum":["emailReceivedAtThenSentAt","parentEmailReceivedAtThenSentAt","sourceDefined"]},{"type":"null"}]},"sourceDateField":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"discoveryComplete":{"type":"boolean"},"oldestIndexedDocumentAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"fullyIndexedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"processedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"pendingDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"undatedDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","dateBasis","sourceDateField","discoveryComplete","oldestIndexedDocumentAt","fullyIndexedSince","processedSince","pendingDocuments","unindexableDocuments","undatedDocuments","unavailableReason"],"additionalProperties":true,"description":"Only applicable to chronologically prioritized kinds. fullyIndexedSince requires current indexed/empty receipts; processedSince also accepts current terminal failures. Unknown dates are excluded from the boundary and counted explicitly. Oldest indexed date alone makes no coverage claim."},"Latency":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["observationSeconds","sampleCount","p50Seconds","p95Seconds","unavailableReason"],"additionalProperties":true,"description":"Freshness is measured from discovery of a revision until its first searchable commit. Retry attempts do not reset the start; failed/empty/deleted revisions are excluded."},"ErrorCount":{"type":"object","properties":{"code":{"type":"string","minLength":1},"count":{"type":"integer","minimum":0,"maximum":9007199254740991},"lastOccurredAt":{"type":"string","format":"date-time"}},"required":["code","count","lastOccurredAt"],"additionalProperties":true},"ErrorWindow":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"attemptFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"terminalFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"byCode":{"type":"array","items":{"$ref":"#/definitions/ErrorCount"}},"truncated":{"type":"boolean"}},"required":["observationSeconds","attemptFailures","terminalFailures","byCode","truncated"],"additionalProperties":true,"description":"Bounded recent error-code histogram, without content or filesystem paths. Counts include all failures even when byCode is truncated."},"Segment":{"type":"object","properties":{"kind":{"type":"string","enum":["email","file","teams_message"]},"sourceId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"fileType":{"anyOf":[{"type":"string","enum":["pdf","office","text","image","email","archive","other"]},{"type":"null"}]},"throughput":{"type":"array","items":{"$ref":"#/definitions/ThroughputWindow"}},"backlog":{"$ref":"#/definitions/Backlog"},"eta":{"$ref":"#/definitions/Eta"},"coverage":{"$ref":"#/definitions/Coverage"},"depth":{"$ref":"#/definitions/Depth"},"freshness":{"$ref":"#/definitions/Latency"},"errors":{"$ref":"#/definitions/ErrorWindow"}},"required":["kind","sourceId","mailboxId","fileType","throughput","backlog","eta","coverage","depth","freshness","errors"],"additionalProperties":true,"description":"Null source/mailbox denotes an all-source aggregate. Non-null scopes are independent views, not additional documents. Null fileType denotes all file types; breakdowns apply only to file rows. There must be one 60-second and one 300-second throughput window per segment."},"Generation":{"type":"object","properties":{"instanceId":{"type":"string","minLength":1},"role":{"type":"string","enum":["active","building"]},"sampledAt":{"type":"string","format":"date-time"},"segments":{"type":"array","items":{"$ref":"#/definitions/Segment"}},"chunks":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"terms":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"observedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["instanceId","role","sampledAt","segments","chunks","terms","indexedAvgdl","observedAvgdl","unavailableReason"],"additionalProperties":true,"description":"Active and building counters have independent revision receipts. Never sum generations to estimate mailbox progress. An extraction shared across generations can appear in both generation throughput views."},"DiscoverySource":{"type":"object","properties":{"sourceId":{"type":"string","minLength":1},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"state":{"type":"string","enum":["notStarted","scanning","complete","failed","disabled"]},"discoveryComplete":{"type":"boolean"},"scanStartedAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"lastSuccessfulScanAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"discoveredDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"accessible":{"type":"boolean"},"lastErrorCode":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sourceId","mailboxId","state","discoveryComplete","scanStartedAt","lastSuccessfulScanAt","discoveredDocuments","accessible","lastErrorCode"],"additionalProperties":true,"description":"discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."},"SearchStatistics":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"queryCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"errorCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"inFlight":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","observationSeconds","queryCount","errorCount","inFlight","p50LatencyMilliseconds","p95LatencyMilliseconds","unavailableReason"],"additionalProperties":true}}};
+const schema63 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/configuration/sidecar-configuration.schema.json","title":"SidecarConfiguration","description":"An extensible configuration layer. Unknown properties must be accepted and preserved.","type":"object","properties":{"indexing_mailboxes":{"description":"Mailbox indexing overrides. Priority is explicit and independent of array order: lower numbers are processed first, with mailbox ID as a deterministic tie-breaker. Unlisted mailboxes remain enabled with priority 9007199254740991. Null inherits the other layer; an empty array explicitly uses defaults. Mailbox IDs must be unique. Disabling stops new discovery and processing but retains existing searchable data; in-flight work may finish.","type":["array","null"],"items":{"type":"object","properties":{"mailbox_id":{"type":"string","format":"uuid"},"enabled":{"type":"boolean"},"priority":{"description":"Indexing priority; lower numbers are processed first. Array order has no effect.","type":"integer","minimum":0,"maximum":9007199254740991}},"required":["mailbox_id","enabled","priority"],"additionalProperties":true}},"show_tray_icon":{"description":"Whether the sidecar should show its system tray icon. Null leaves the decision to the other configuration layer or the sidecar default.","type":["boolean","null"]},"indexing_parallelism":{"type":["integer","null"],"minimum":1,"maximum":9007199254740991,"description":"Maximum documents concurrently processed across all kinds and generations, including extraction and commit. Lowering it lets in-flight documents finish and prevents excess new starts. Null or absence inherits the other layer; the sidecar default is 1. Zero is invalid and does not pause indexing."},"indexing_documents_per_minute":{"type":["integer","null"],"minimum":1,"maximum":9007199254740991,"description":"Global maximum document-processing starts per rolling 60 seconds, shared by all workers, kinds and generations. Retry attempts consume this budget; one extraction shared by generations consumes it once. Deletion-only cleanup does not consume it. Null or absence inherits the other layer; the sidecar default is 40. Zero is invalid and does not pause indexing."},"indexing_sources":{"description":"Source indexing overrides keyed by sourceId from sources.list.v1. Lower priorities are processed first, independent of array order. Source IDs must be unique. Null inherits the other layer; an empty array uses source defaults. Disabling stops new discovery and processing while retaining the existing index. This is authoritative when supported; indexing_mailboxes is a legacy projection. Older sidecars may preserve this field without applying it.","type":["array","null"],"items":{"type":"object","properties":{"enabled":{"type":"boolean"},"priority":{"description":"Indexing priority; lower numbers are processed first. Array order has no effect.","type":"integer","minimum":0,"maximum":9007199254740991},"source_id":{"type":"string","format":"uuid"}},"required":["source_id","enabled","priority"],"additionalProperties":true}}},"additionalProperties":true};
 const schema65 = {"type":"object","properties":{"parallelism":{"type":"integer","minimum":1,"maximum":9007199254740991},"documentsPerMinute":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["parallelism","documentsPerMinute"],"additionalProperties":true};
 const schema89 = {"type":"object","properties":{"sourceId":{"type":"string","minLength":1},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"state":{"type":"string","enum":["notStarted","scanning","complete","failed","disabled"]},"discoveryComplete":{"type":"boolean"},"scanStartedAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"lastSuccessfulScanAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"discoveredDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"accessible":{"type":"boolean"},"lastErrorCode":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sourceId","mailboxId","state","discoveryComplete","scanStartedAt","lastSuccessfulScanAt","discoveredDocuments","accessible","lastErrorCode"],"additionalProperties":true,"description":"discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."};
 const schema90 = {"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"queryCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"errorCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"inFlight":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","observationSeconds","queryCount","errorCount","inFlight","p50LatencyMilliseconds","p95LatencyMilliseconds","unavailableReason"],"additionalProperties":true};
@@ -10391,7 +10391,7 @@ const schema78 = {"type":"object","properties":{"kind":{"type":"string","enum":[
 const schema79 = {"type":"object","properties":{"targetWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"emptyPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unindexablePerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"completedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"attemptsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"retriesPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"deletionsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"extractedTextBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["targetWindowSeconds","observationSeconds","sampleCount","indexedPerMinute","emptyPerMinute","unindexablePerMinute","completedPerMinute","attemptsPerMinute","retriesPerMinute","deletionsPerMinute","extractedTextBytesPerSecond","unavailableReason"],"additionalProperties":true};
 const schema80 = {"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"discoveryComplete":{"type":"boolean"},"remaining":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"ready":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"inProgress":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"retryDeferred":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"blocked":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"firstTime":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"updates":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","discoveryComplete","remaining","ready","inProgress","retryDeferred","blocked","firstTime","updates","unavailableReason"],"additionalProperties":true,"description":"Counts concern current eligible revisions, not queue entries. remaining = ready + inProgress + retryDeferred + blocked = firstTime + updates. Incomplete discovery still permits exact counts for known work. Terminal outcomes and deletion-only cleanup are excluded."};
 const schema81 = {"type":"object","properties":{"state":{"type":"string","enum":["available","unavailable"]},"estimatedRemainingSeconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"estimatedCompletionAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"basis":{"const":"knownBacklog"},"rateWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","estimatedRemainingSeconds","estimatedCompletionAt","basis","rateWindowSeconds","observationSeconds","sampleCount","unavailableReason"],"additionalProperties":true,"allOf":[{"if":{"properties":{"state":{"const":"available"}},"required":["state"],"additionalProperties":true},"then":{"properties":{"estimatedRemainingSeconds":{"type":"number","minimum":0},"estimatedCompletionAt":{"type":"string","format":"date-time"},"unavailableReason":{"type":"null"}},"additionalProperties":true},"else":{"properties":{"estimatedRemainingSeconds":{"type":"null"},"estimatedCompletionAt":{"type":"null"},"unavailableReason":{"type":"string","minLength":1}},"additionalProperties":true}}]};
-const schema82 = {"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"knownEligible":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"emptyCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"stale":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"neverProcessed":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"pendingDeletions":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","knownEligible","indexedCurrent","emptyCurrent","unindexableCurrent","stale","neverProcessed","pendingDeletions","unavailableReason"],"additionalProperties":true,"description":"knownEligible is the sum of the five mutually exclusive revision states. stale means an older receipt exists, including an older failed receipt. pendingDeletions is separate. These counts do not imply discovery is complete."};
+const schema82 = {"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"knownEligible":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"emptyCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"stale":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"neverProcessed":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"pendingDeletions":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"missingFromLocalCacheCurrent":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991,"description":"Current revisions whose body or attachment content is unavailable in the local cache. A separate terminal outcome from empty or unindexable. Older sidecars may omit this counter; null means unknown."}},"required":["sampledAt","knownEligible","indexedCurrent","emptyCurrent","unindexableCurrent","stale","neverProcessed","pendingDeletions","unavailableReason"],"additionalProperties":true,"description":"knownEligible is the sum of indexedCurrent, emptyCurrent, unindexableCurrent, missingFromLocalCacheCurrent (when reported), stale and neverProcessed. pendingDeletions is separate. These counts do not imply discovery is complete."};
 const schema86 = {"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["observationSeconds","sampleCount","p50Seconds","p95Seconds","unavailableReason"],"additionalProperties":true,"description":"Freshness is measured from discovery of a revision until its first searchable commit. Retry attempts do not reset the start; failed/empty/deleted revisions are excluded."};
 const schema83 = {"type":"object","properties":{"state":{"type":"string","enum":["applicable","notApplicable","unknown"]},"dateBasis":{"anyOf":[{"type":"string","enum":["emailReceivedAtThenSentAt","parentEmailReceivedAtThenSentAt","sourceDefined"]},{"type":"null"}]},"sourceDateField":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"discoveryComplete":{"type":"boolean"},"oldestIndexedDocumentAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"fullyIndexedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"processedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"pendingDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"undatedDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","dateBasis","sourceDateField","discoveryComplete","oldestIndexedDocumentAt","fullyIndexedSince","processedSince","pendingDocuments","unindexableDocuments","undatedDocuments","unavailableReason"],"additionalProperties":true,"description":"Only applicable to chronologically prioritized kinds. fullyIndexedSince requires current indexed/empty receipts; processedSince also accepts current terminal failures. Unknown dates are excluded from the boundary and counted explicitly. Oldest indexed date alone makes no coverage claim."};
 const schema84 = {"type":"object","properties":{"at":{"type":"string","format":"date-time"},"inclusive":{"type":"boolean"}},"required":["at","inclusive"],"additionalProperties":true,"description":"All known eligible dated documents between this boundary and the snapshot are covered; inclusive says whether documents exactly at the boundary are included. An old pending document makes an exclusive boundary possible without rounding timestamps."};
@@ -14818,14 +14818,49 @@ vErrors = null;
 }
 }
 }
-}
-else {
-const err228 = {instancePath:instancePath+"/coverage",schemaPath:"#/definitions/Coverage/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data45.missingFromLocalCacheCurrent !== undefined){
+let data55 = data45.missingFromLocalCacheCurrent;
+if((!(((typeof data55 == "number") && (!(data55 % 1) && !isNaN(data55))) && (isFinite(data55)))) && (data55 !== null)){
+const err228 = {instancePath:instancePath+"/coverage/missingFromLocalCacheCurrent",schemaPath:"#/definitions/Coverage/properties/missingFromLocalCacheCurrent/type",keyword:"type",params:{type: schema82.properties.missingFromLocalCacheCurrent.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err228];
 }
 else {
 vErrors.push(err228);
+}
+errors++;
+}
+if((typeof data55 == "number") && (isFinite(data55))){
+if(data55 > 9007199254740991 || isNaN(data55)){
+const err229 = {instancePath:instancePath+"/coverage/missingFromLocalCacheCurrent",schemaPath:"#/definitions/Coverage/properties/missingFromLocalCacheCurrent/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err229];
+}
+else {
+vErrors.push(err229);
+}
+errors++;
+}
+if(data55 < 0 || isNaN(data55)){
+const err230 = {instancePath:instancePath+"/coverage/missingFromLocalCacheCurrent",schemaPath:"#/definitions/Coverage/properties/missingFromLocalCacheCurrent/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err230];
+}
+else {
+vErrors.push(err230);
+}
+errors++;
+}
+}
+}
+}
+else {
+const err231 = {instancePath:instancePath+"/coverage",schemaPath:"#/definitions/Coverage/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err231];
+}
+else {
+vErrors.push(err231);
 }
 errors++;
 }
@@ -14837,40 +14872,10 @@ errors = vErrors.length;
 }
 }
 if(data.freshness !== undefined){
-let data56 = data.freshness;
-if(data56 && typeof data56 == "object" && !Array.isArray(data56)){
-if(data56.observationSeconds === undefined){
-const err229 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "observationSeconds"},message:"must have required property '"+"observationSeconds"+"'"};
-if(vErrors === null){
-vErrors = [err229];
-}
-else {
-vErrors.push(err229);
-}
-errors++;
-}
-if(data56.sampleCount === undefined){
-const err230 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "sampleCount"},message:"must have required property '"+"sampleCount"+"'"};
-if(vErrors === null){
-vErrors = [err230];
-}
-else {
-vErrors.push(err230);
-}
-errors++;
-}
-if(data56.p50Seconds === undefined){
-const err231 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "p50Seconds"},message:"must have required property '"+"p50Seconds"+"'"};
-if(vErrors === null){
-vErrors = [err231];
-}
-else {
-vErrors.push(err231);
-}
-errors++;
-}
-if(data56.p95Seconds === undefined){
-const err232 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "p95Seconds"},message:"must have required property '"+"p95Seconds"+"'"};
+let data57 = data.freshness;
+if(data57 && typeof data57 == "object" && !Array.isArray(data57)){
+if(data57.observationSeconds === undefined){
+const err232 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "observationSeconds"},message:"must have required property '"+"observationSeconds"+"'"};
 if(vErrors === null){
 vErrors = [err232];
 }
@@ -14879,8 +14884,8 @@ vErrors.push(err232);
 }
 errors++;
 }
-if(data56.unavailableReason === undefined){
-const err233 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "unavailableReason"},message:"must have required property '"+"unavailableReason"+"'"};
+if(data57.sampleCount === undefined){
+const err233 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "sampleCount"},message:"must have required property '"+"sampleCount"+"'"};
 if(vErrors === null){
 vErrors = [err233];
 }
@@ -14889,11 +14894,8 @@ vErrors.push(err233);
 }
 errors++;
 }
-if(data56.observationSeconds !== undefined){
-let data57 = data56.observationSeconds;
-if((typeof data57 == "number") && (isFinite(data57))){
-if(data57 < 0 || isNaN(data57)){
-const err234 = {instancePath:instancePath+"/freshness/observationSeconds",schemaPath:"#/definitions/Latency/properties/observationSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data57.p50Seconds === undefined){
+const err234 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "p50Seconds"},message:"must have required property '"+"p50Seconds"+"'"};
 if(vErrors === null){
 vErrors = [err234];
 }
@@ -14902,9 +14904,8 @@ vErrors.push(err234);
 }
 errors++;
 }
-}
-else {
-const err235 = {instancePath:instancePath+"/freshness/observationSeconds",schemaPath:"#/definitions/Latency/properties/observationSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(data57.p95Seconds === undefined){
+const err235 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "p95Seconds"},message:"must have required property '"+"p95Seconds"+"'"};
 if(vErrors === null){
 vErrors = [err235];
 }
@@ -14913,11 +14914,8 @@ vErrors.push(err235);
 }
 errors++;
 }
-}
-if(data56.sampleCount !== undefined){
-let data58 = data56.sampleCount;
-if(!(((typeof data58 == "number") && (!(data58 % 1) && !isNaN(data58))) && (isFinite(data58)))){
-const err236 = {instancePath:instancePath+"/freshness/sampleCount",schemaPath:"#/definitions/Latency/properties/sampleCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data57.unavailableReason === undefined){
+const err236 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/required",keyword:"required",params:{missingProperty: "unavailableReason"},message:"must have required property '"+"unavailableReason"+"'"};
 if(vErrors === null){
 vErrors = [err236];
 }
@@ -14926,9 +14924,11 @@ vErrors.push(err236);
 }
 errors++;
 }
+if(data57.observationSeconds !== undefined){
+let data58 = data57.observationSeconds;
 if((typeof data58 == "number") && (isFinite(data58))){
-if(data58 > 9007199254740991 || isNaN(data58)){
-const err237 = {instancePath:instancePath+"/freshness/sampleCount",schemaPath:"#/definitions/Latency/properties/sampleCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(data58 < 0 || isNaN(data58)){
+const err237 = {instancePath:instancePath+"/freshness/observationSeconds",schemaPath:"#/definitions/Latency/properties/observationSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err237];
 }
@@ -14937,8 +14937,9 @@ vErrors.push(err237);
 }
 errors++;
 }
-if(data58 < 0 || isNaN(data58)){
-const err238 = {instancePath:instancePath+"/freshness/sampleCount",schemaPath:"#/definitions/Latency/properties/sampleCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+else {
+const err238 = {instancePath:instancePath+"/freshness/observationSeconds",schemaPath:"#/definitions/Latency/properties/observationSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
 if(vErrors === null){
 vErrors = [err238];
 }
@@ -14948,15 +14949,10 @@ vErrors.push(err238);
 errors++;
 }
 }
-}
-if(data56.p50Seconds !== undefined){
-let data59 = data56.p50Seconds;
-const _errs260 = errors;
-let valid49 = false;
-const _errs261 = errors;
-if((typeof data59 == "number") && (isFinite(data59))){
-if(data59 < 0 || isNaN(data59)){
-const err239 = {instancePath:instancePath+"/freshness/p50Seconds",schemaPath:"#/definitions/Latency/properties/p50Seconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data57.sampleCount !== undefined){
+let data59 = data57.sampleCount;
+if(!(((typeof data59 == "number") && (!(data59 % 1) && !isNaN(data59))) && (isFinite(data59)))){
+const err239 = {instancePath:instancePath+"/freshness/sampleCount",schemaPath:"#/definitions/Latency/properties/sampleCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err239];
 }
@@ -14965,9 +14961,9 @@ vErrors.push(err239);
 }
 errors++;
 }
-}
-else {
-const err240 = {instancePath:instancePath+"/freshness/p50Seconds",schemaPath:"#/definitions/Latency/properties/p50Seconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if((typeof data59 == "number") && (isFinite(data59))){
+if(data59 > 9007199254740991 || isNaN(data59)){
+const err240 = {instancePath:instancePath+"/freshness/sampleCount",schemaPath:"#/definitions/Latency/properties/sampleCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err240];
 }
@@ -14976,12 +14972,8 @@ vErrors.push(err240);
 }
 errors++;
 }
-var _valid32 = _errs261 === errors;
-valid49 = valid49 || _valid32;
-if(!valid49){
-const _errs263 = errors;
-if(data59 !== null){
-const err241 = {instancePath:instancePath+"/freshness/p50Seconds",schemaPath:"#/definitions/Latency/properties/p50Seconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(data59 < 0 || isNaN(data59)){
+const err241 = {instancePath:instancePath+"/freshness/sampleCount",schemaPath:"#/definitions/Latency/properties/sampleCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err241];
 }
@@ -14990,11 +14982,16 @@ vErrors.push(err241);
 }
 errors++;
 }
-var _valid32 = _errs263 === errors;
-valid49 = valid49 || _valid32;
 }
-if(!valid49){
-const err242 = {instancePath:instancePath+"/freshness/p50Seconds",schemaPath:"#/definitions/Latency/properties/p50Seconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+}
+if(data57.p50Seconds !== undefined){
+let data60 = data57.p50Seconds;
+const _errs262 = errors;
+let valid49 = false;
+const _errs263 = errors;
+if((typeof data60 == "number") && (isFinite(data60))){
+if(data60 < 0 || isNaN(data60)){
+const err242 = {instancePath:instancePath+"/freshness/p50Seconds",schemaPath:"#/definitions/Latency/properties/p50Seconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err242];
 }
@@ -15003,26 +15000,9 @@ vErrors.push(err242);
 }
 errors++;
 }
-else {
-errors = _errs260;
-if(vErrors !== null){
-if(_errs260){
-vErrors.length = _errs260;
 }
 else {
-vErrors = null;
-}
-}
-}
-}
-if(data56.p95Seconds !== undefined){
-let data60 = data56.p95Seconds;
-const _errs266 = errors;
-let valid50 = false;
-const _errs267 = errors;
-if((typeof data60 == "number") && (isFinite(data60))){
-if(data60 < 0 || isNaN(data60)){
-const err243 = {instancePath:instancePath+"/freshness/p95Seconds",schemaPath:"#/definitions/Latency/properties/p95Seconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+const err243 = {instancePath:instancePath+"/freshness/p50Seconds",schemaPath:"#/definitions/Latency/properties/p50Seconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
 if(vErrors === null){
 vErrors = [err243];
 }
@@ -15031,9 +15011,12 @@ vErrors.push(err243);
 }
 errors++;
 }
-}
-else {
-const err244 = {instancePath:instancePath+"/freshness/p95Seconds",schemaPath:"#/definitions/Latency/properties/p95Seconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
+var _valid32 = _errs263 === errors;
+valid49 = valid49 || _valid32;
+if(!valid49){
+const _errs265 = errors;
+if(data60 !== null){
+const err244 = {instancePath:instancePath+"/freshness/p50Seconds",schemaPath:"#/definitions/Latency/properties/p50Seconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err244];
 }
@@ -15042,12 +15025,11 @@ vErrors.push(err244);
 }
 errors++;
 }
-var _valid33 = _errs267 === errors;
-valid50 = valid50 || _valid33;
-if(!valid50){
-const _errs269 = errors;
-if(data60 !== null){
-const err245 = {instancePath:instancePath+"/freshness/p95Seconds",schemaPath:"#/definitions/Latency/properties/p95Seconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+var _valid32 = _errs265 === errors;
+valid49 = valid49 || _valid32;
+}
+if(!valid49){
+const err245 = {instancePath:instancePath+"/freshness/p50Seconds",schemaPath:"#/definitions/Latency/properties/p50Seconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
 if(vErrors === null){
 vErrors = [err245];
 }
@@ -15056,11 +15038,26 @@ vErrors.push(err245);
 }
 errors++;
 }
-var _valid33 = _errs269 === errors;
-valid50 = valid50 || _valid33;
+else {
+errors = _errs262;
+if(vErrors !== null){
+if(_errs262){
+vErrors.length = _errs262;
 }
-if(!valid50){
-const err246 = {instancePath:instancePath+"/freshness/p95Seconds",schemaPath:"#/definitions/Latency/properties/p95Seconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data57.p95Seconds !== undefined){
+let data61 = data57.p95Seconds;
+const _errs268 = errors;
+let valid50 = false;
+const _errs269 = errors;
+if((typeof data61 == "number") && (isFinite(data61))){
+if(data61 < 0 || isNaN(data61)){
+const err246 = {instancePath:instancePath+"/freshness/p95Seconds",schemaPath:"#/definitions/Latency/properties/p95Seconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err246];
 }
@@ -15069,26 +15066,9 @@ vErrors.push(err246);
 }
 errors++;
 }
-else {
-errors = _errs266;
-if(vErrors !== null){
-if(_errs266){
-vErrors.length = _errs266;
 }
 else {
-vErrors = null;
-}
-}
-}
-}
-if(data56.unavailableReason !== undefined){
-let data61 = data56.unavailableReason;
-const _errs272 = errors;
-let valid51 = false;
-const _errs273 = errors;
-if(typeof data61 === "string"){
-if(func2(data61) < 1){
-const err247 = {instancePath:instancePath+"/freshness/unavailableReason",schemaPath:"#/definitions/Latency/properties/unavailableReason/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+const err247 = {instancePath:instancePath+"/freshness/p95Seconds",schemaPath:"#/definitions/Latency/properties/p95Seconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
 if(vErrors === null){
 vErrors = [err247];
 }
@@ -15097,9 +15077,12 @@ vErrors.push(err247);
 }
 errors++;
 }
-}
-else {
-const err248 = {instancePath:instancePath+"/freshness/unavailableReason",schemaPath:"#/definitions/Latency/properties/unavailableReason/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+var _valid33 = _errs269 === errors;
+valid50 = valid50 || _valid33;
+if(!valid50){
+const _errs271 = errors;
+if(data61 !== null){
+const err248 = {instancePath:instancePath+"/freshness/p95Seconds",schemaPath:"#/definitions/Latency/properties/p95Seconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err248];
 }
@@ -15108,12 +15091,11 @@ vErrors.push(err248);
 }
 errors++;
 }
-var _valid34 = _errs273 === errors;
-valid51 = valid51 || _valid34;
-if(!valid51){
-const _errs275 = errors;
-if(data61 !== null){
-const err249 = {instancePath:instancePath+"/freshness/unavailableReason",schemaPath:"#/definitions/Latency/properties/unavailableReason/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+var _valid33 = _errs271 === errors;
+valid50 = valid50 || _valid33;
+}
+if(!valid50){
+const err249 = {instancePath:instancePath+"/freshness/p95Seconds",schemaPath:"#/definitions/Latency/properties/p95Seconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
 if(vErrors === null){
 vErrors = [err249];
 }
@@ -15122,11 +15104,26 @@ vErrors.push(err249);
 }
 errors++;
 }
-var _valid34 = _errs275 === errors;
-valid51 = valid51 || _valid34;
+else {
+errors = _errs268;
+if(vErrors !== null){
+if(_errs268){
+vErrors.length = _errs268;
 }
-if(!valid51){
-const err250 = {instancePath:instancePath+"/freshness/unavailableReason",schemaPath:"#/definitions/Latency/properties/unavailableReason/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data57.unavailableReason !== undefined){
+let data62 = data57.unavailableReason;
+const _errs274 = errors;
+let valid51 = false;
+const _errs275 = errors;
+if(typeof data62 === "string"){
+if(func2(data62) < 1){
+const err250 = {instancePath:instancePath+"/freshness/unavailableReason",schemaPath:"#/definitions/Latency/properties/unavailableReason/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err250];
 }
@@ -15135,11 +15132,49 @@ vErrors.push(err250);
 }
 errors++;
 }
+}
 else {
-errors = _errs272;
+const err251 = {instancePath:instancePath+"/freshness/unavailableReason",schemaPath:"#/definitions/Latency/properties/unavailableReason/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err251];
+}
+else {
+vErrors.push(err251);
+}
+errors++;
+}
+var _valid34 = _errs275 === errors;
+valid51 = valid51 || _valid34;
+if(!valid51){
+const _errs277 = errors;
+if(data62 !== null){
+const err252 = {instancePath:instancePath+"/freshness/unavailableReason",schemaPath:"#/definitions/Latency/properties/unavailableReason/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err252];
+}
+else {
+vErrors.push(err252);
+}
+errors++;
+}
+var _valid34 = _errs277 === errors;
+valid51 = valid51 || _valid34;
+}
+if(!valid51){
+const err253 = {instancePath:instancePath+"/freshness/unavailableReason",schemaPath:"#/definitions/Latency/properties/unavailableReason/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err253];
+}
+else {
+vErrors.push(err253);
+}
+errors++;
+}
+else {
+errors = _errs274;
 if(vErrors !== null){
-if(_errs272){
-vErrors.length = _errs272;
+if(_errs274){
+vErrors.length = _errs274;
 }
 else {
 vErrors = null;
@@ -15149,12 +15184,12 @@ vErrors = null;
 }
 }
 else {
-const err251 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err254 = {instancePath:instancePath+"/freshness",schemaPath:"#/definitions/Latency/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
-vErrors = [err251];
+vErrors = [err254];
 }
 else {
-vErrors.push(err251);
+vErrors.push(err254);
 }
 errors++;
 }
@@ -15167,12 +15202,12 @@ errors = vErrors.length;
 }
 }
 else {
-const err252 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err255 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
-vErrors = [err252];
+vErrors = [err255];
 }
 else {
-vErrors.push(err252);
+vErrors.push(err255);
 }
 errors++;
 }
@@ -16074,9 +16109,10 @@ errors++;
 }
 }
 }
-}
-else {
-const err29 = {instancePath:instancePath+"/configuration/user_configuration",schemaPath:"../configuration/sidecar-configuration.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data1.indexing_sources !== undefined){
+let data10 = data1.indexing_sources;
+if((!(Array.isArray(data10))) && (data10 !== null)){
+const err29 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/type",keyword:"type",params:{type: schema63.properties.indexing_sources.type},message:"must be array,null"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -16085,14 +16121,13 @@ vErrors.push(err29);
 }
 errors++;
 }
-}
-if(data0.organization_configuration !== undefined){
-let data10 = data0.organization_configuration;
-if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
-if(data10.indexing_mailboxes !== undefined){
-let data11 = data10.indexing_mailboxes;
-if((!(Array.isArray(data11))) && (data11 !== null)){
-const err30 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/type",keyword:"type",params:{type: schema63.properties.indexing_mailboxes.type},message:"must be array,null"};
+if(Array.isArray(data10)){
+const len1 = data10.length;
+for(let i1=0; i1<len1; i1++){
+let data11 = data10[i1];
+if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
+if(data11.source_id === undefined){
+const err30 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "source_id"},message:"must have required property '"+"source_id"+"'"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -16101,13 +16136,8 @@ vErrors.push(err30);
 }
 errors++;
 }
-if(Array.isArray(data11)){
-const len1 = data11.length;
-for(let i1=0; i1<len1; i1++){
-let data12 = data11[i1];
-if(data12 && typeof data12 == "object" && !Array.isArray(data12)){
-if(data12.mailbox_id === undefined){
-const err31 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "mailbox_id"},message:"must have required property '"+"mailbox_id"+"'"};
+if(data11.enabled === undefined){
+const err31 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "enabled"},message:"must have required property '"+"enabled"+"'"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -16116,8 +16146,8 @@ vErrors.push(err31);
 }
 errors++;
 }
-if(data12.enabled === undefined){
-const err32 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "enabled"},message:"must have required property '"+"enabled"+"'"};
+if(data11.priority === undefined){
+const err32 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "priority"},message:"must have required property '"+"priority"+"'"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -16126,8 +16156,9 @@ vErrors.push(err32);
 }
 errors++;
 }
-if(data12.priority === undefined){
-const err33 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "priority"},message:"must have required property '"+"priority"+"'"};
+if(data11.enabled !== undefined){
+if(typeof data11.enabled !== "boolean"){
+const err33 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1+"/enabled",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -16136,11 +16167,11 @@ vErrors.push(err33);
 }
 errors++;
 }
-if(data12.mailbox_id !== undefined){
-let data13 = data12.mailbox_id;
-if(typeof data13 === "string"){
-if(!(formats0.test(data13))){
-const err34 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1+"/mailbox_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/mailbox_id/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+}
+if(data11.priority !== undefined){
+let data13 = data11.priority;
+if(!(((typeof data13 == "number") && (!(data13 % 1) && !isNaN(data13))) && (isFinite(data13)))){
+const err34 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -16149,9 +16180,9 @@ vErrors.push(err34);
 }
 errors++;
 }
-}
-else {
-const err35 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1+"/mailbox_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/mailbox_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if((typeof data13 == "number") && (isFinite(data13))){
+if(data13 > 9007199254740991 || isNaN(data13)){
+const err35 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -16160,10 +16191,8 @@ vErrors.push(err35);
 }
 errors++;
 }
-}
-if(data12.enabled !== undefined){
-if(typeof data12.enabled !== "boolean"){
-const err36 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1+"/enabled",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data13 < 0 || isNaN(data13)){
+const err36 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -16173,10 +16202,12 @@ vErrors.push(err36);
 errors++;
 }
 }
-if(data12.priority !== undefined){
-let data15 = data12.priority;
-if(!(((typeof data15 == "number") && (!(data15 % 1) && !isNaN(data15))) && (isFinite(data15)))){
-const err37 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+}
+if(data11.source_id !== undefined){
+let data14 = data11.source_id;
+if(typeof data14 === "string"){
+if(!(formats0.test(data14))){
+const err37 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1+"/source_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/source_id/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -16185,9 +16216,9 @@ vErrors.push(err37);
 }
 errors++;
 }
-if((typeof data15 == "number") && (isFinite(data15))){
-if(data15 > 9007199254740991 || isNaN(data15)){
-const err38 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+}
+else {
+const err38 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1+"/source_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/source_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -16196,8 +16227,10 @@ vErrors.push(err38);
 }
 errors++;
 }
-if(data15 < 0 || isNaN(data15)){
-const err39 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+}
+else {
+const err39 = {instancePath:instancePath+"/configuration/user_configuration/indexing_sources/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -16209,8 +16242,9 @@ errors++;
 }
 }
 }
+}
 else {
-const err40 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err40 = {instancePath:instancePath+"/configuration/user_configuration",schemaPath:"../configuration/sidecar-configuration.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -16220,12 +16254,13 @@ vErrors.push(err40);
 errors++;
 }
 }
-}
-}
-if(data10.show_tray_icon !== undefined){
-let data16 = data10.show_tray_icon;
-if((typeof data16 !== "boolean") && (data16 !== null)){
-const err41 = {instancePath:instancePath+"/configuration/organization_configuration/show_tray_icon",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/show_tray_icon/type",keyword:"type",params:{type: schema63.properties.show_tray_icon.type},message:"must be boolean,null"};
+if(data0.organization_configuration !== undefined){
+let data15 = data0.organization_configuration;
+if(data15 && typeof data15 == "object" && !Array.isArray(data15)){
+if(data15.indexing_mailboxes !== undefined){
+let data16 = data15.indexing_mailboxes;
+if((!(Array.isArray(data16))) && (data16 !== null)){
+const err41 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/type",keyword:"type",params:{type: schema63.properties.indexing_mailboxes.type},message:"must be array,null"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -16234,11 +16269,13 @@ vErrors.push(err41);
 }
 errors++;
 }
-}
-if(data10.indexing_parallelism !== undefined){
-let data17 = data10.indexing_parallelism;
-if((!(((typeof data17 == "number") && (!(data17 % 1) && !isNaN(data17))) && (isFinite(data17)))) && (data17 !== null)){
-const err42 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/type",keyword:"type",params:{type: schema63.properties.indexing_parallelism.type},message:"must be integer,null"};
+if(Array.isArray(data16)){
+const len2 = data16.length;
+for(let i2=0; i2<len2; i2++){
+let data17 = data16[i2];
+if(data17 && typeof data17 == "object" && !Array.isArray(data17)){
+if(data17.mailbox_id === undefined){
+const err42 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "mailbox_id"},message:"must have required property '"+"mailbox_id"+"'"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -16247,9 +16284,8 @@ vErrors.push(err42);
 }
 errors++;
 }
-if((typeof data17 == "number") && (isFinite(data17))){
-if(data17 > 9007199254740991 || isNaN(data17)){
-const err43 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(data17.enabled === undefined){
+const err43 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "enabled"},message:"must have required property '"+"enabled"+"'"};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -16258,8 +16294,8 @@ vErrors.push(err43);
 }
 errors++;
 }
-if(data17 < 1 || isNaN(data17)){
-const err44 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(data17.priority === undefined){
+const err44 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "priority"},message:"must have required property '"+"priority"+"'"};
 if(vErrors === null){
 vErrors = [err44];
 }
@@ -16268,12 +16304,11 @@ vErrors.push(err44);
 }
 errors++;
 }
-}
-}
-if(data10.indexing_documents_per_minute !== undefined){
-let data18 = data10.indexing_documents_per_minute;
-if((!(((typeof data18 == "number") && (!(data18 % 1) && !isNaN(data18))) && (isFinite(data18)))) && (data18 !== null)){
-const err45 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/type",keyword:"type",params:{type: schema63.properties.indexing_documents_per_minute.type},message:"must be integer,null"};
+if(data17.mailbox_id !== undefined){
+let data18 = data17.mailbox_id;
+if(typeof data18 === "string"){
+if(!(formats0.test(data18))){
+const err45 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2+"/mailbox_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/mailbox_id/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
 if(vErrors === null){
 vErrors = [err45];
 }
@@ -16282,9 +16317,9 @@ vErrors.push(err45);
 }
 errors++;
 }
-if((typeof data18 == "number") && (isFinite(data18))){
-if(data18 > 9007199254740991 || isNaN(data18)){
-const err46 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+}
+else {
+const err46 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2+"/mailbox_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/mailbox_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err46];
 }
@@ -16293,8 +16328,10 @@ vErrors.push(err46);
 }
 errors++;
 }
-if(data18 < 1 || isNaN(data18)){
-const err47 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+}
+if(data17.enabled !== undefined){
+if(typeof data17.enabled !== "boolean"){
+const err47 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2+"/enabled",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err47];
 }
@@ -16304,10 +16341,10 @@ vErrors.push(err47);
 errors++;
 }
 }
-}
-}
-else {
-const err48 = {instancePath:instancePath+"/configuration/organization_configuration",schemaPath:"../configuration/sidecar-configuration.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data17.priority !== undefined){
+let data20 = data17.priority;
+if(!(((typeof data20 == "number") && (!(data20 % 1) && !isNaN(data20))) && (isFinite(data20)))){
+const err48 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err48];
 }
@@ -16316,10 +16353,9 @@ vErrors.push(err48);
 }
 errors++;
 }
-}
-}
-else {
-const err49 = {instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if((typeof data20 == "number") && (isFinite(data20))){
+if(data20 > 9007199254740991 || isNaN(data20)){
+const err49 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err49];
 }
@@ -16328,12 +16364,8 @@ vErrors.push(err49);
 }
 errors++;
 }
-}
-if(data.sampledAt !== undefined){
-let data19 = data.sampledAt;
-if(typeof data19 === "string"){
-if(!(formats6.validate(data19))){
-const err50 = {instancePath:instancePath+"/sampledAt",schemaPath:"#/properties/sampledAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(data20 < 0 || isNaN(data20)){
+const err50 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err50];
 }
@@ -16343,8 +16375,10 @@ vErrors.push(err50);
 errors++;
 }
 }
+}
+}
 else {
-const err51 = {instancePath:instancePath+"/sampledAt",schemaPath:"#/properties/sampledAt/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err51 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_mailboxes/" + i2,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err51];
 }
@@ -16354,11 +16388,12 @@ vErrors.push(err51);
 errors++;
 }
 }
-if(data.sessionId !== undefined){
-let data20 = data.sessionId;
-if(typeof data20 === "string"){
-if(func2(data20) < 1){
-const err52 = {instancePath:instancePath+"/sessionId",schemaPath:"#/properties/sessionId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+}
+if(data15.show_tray_icon !== undefined){
+let data21 = data15.show_tray_icon;
+if((typeof data21 !== "boolean") && (data21 !== null)){
+const err52 = {instancePath:instancePath+"/configuration/organization_configuration/show_tray_icon",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/show_tray_icon/type",keyword:"type",params:{type: schema63.properties.show_tray_icon.type},message:"must be boolean,null"};
 if(vErrors === null){
 vErrors = [err52];
 }
@@ -16368,8 +16403,10 @@ vErrors.push(err52);
 errors++;
 }
 }
-else {
-const err53 = {instancePath:instancePath+"/sessionId",schemaPath:"#/properties/sessionId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data15.indexing_parallelism !== undefined){
+let data22 = data15.indexing_parallelism;
+if((!(((typeof data22 == "number") && (!(data22 % 1) && !isNaN(data22))) && (isFinite(data22)))) && (data22 !== null)){
+const err53 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/type",keyword:"type",params:{type: schema63.properties.indexing_parallelism.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err53];
 }
@@ -16378,12 +16415,9 @@ vErrors.push(err53);
 }
 errors++;
 }
-}
-if(data.uptimeSeconds !== undefined){
-let data21 = data.uptimeSeconds;
-if((typeof data21 == "number") && (isFinite(data21))){
-if(data21 < 0 || isNaN(data21)){
-const err54 = {instancePath:instancePath+"/uptimeSeconds",schemaPath:"#/properties/uptimeSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if((typeof data22 == "number") && (isFinite(data22))){
+if(data22 > 9007199254740991 || isNaN(data22)){
+const err54 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err54];
 }
@@ -16392,9 +16426,8 @@ vErrors.push(err54);
 }
 errors++;
 }
-}
-else {
-const err55 = {instancePath:instancePath+"/uptimeSeconds",schemaPath:"#/properties/uptimeSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(data22 < 1 || isNaN(data22)){
+const err55 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err55];
 }
@@ -16404,10 +16437,11 @@ vErrors.push(err55);
 errors++;
 }
 }
-if(data.state !== undefined){
-let data22 = data.state;
-if(typeof data22 !== "string"){
-const err56 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data15.indexing_documents_per_minute !== undefined){
+let data23 = data15.indexing_documents_per_minute;
+if((!(((typeof data23 == "number") && (!(data23 % 1) && !isNaN(data23))) && (isFinite(data23)))) && (data23 !== null)){
+const err56 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/type",keyword:"type",params:{type: schema63.properties.indexing_documents_per_minute.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err56];
 }
@@ -16416,8 +16450,9 @@ vErrors.push(err56);
 }
 errors++;
 }
-if(!((((data22 === "running") || (data22 === "stopping")) || (data22 === "stopped")) || (data22 === "blocked"))){
-const err57 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/enum",keyword:"enum",params:{allowedValues: schema62.properties.state.enum},message:"must be equal to one of the allowed values"};
+if((typeof data23 == "number") && (isFinite(data23))){
+if(data23 > 9007199254740991 || isNaN(data23)){
+const err57 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err57];
 }
@@ -16426,12 +16461,8 @@ vErrors.push(err57);
 }
 errors++;
 }
-}
-if(data.effectiveConfiguration !== undefined){
-let data23 = data.effectiveConfiguration;
-if(data23 && typeof data23 == "object" && !Array.isArray(data23)){
-if(data23.parallelism === undefined){
-const err58 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/required",keyword:"required",params:{missingProperty: "parallelism"},message:"must have required property '"+"parallelism"+"'"};
+if(data23 < 1 || isNaN(data23)){
+const err58 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err58];
 }
@@ -16440,8 +16471,12 @@ vErrors.push(err58);
 }
 errors++;
 }
-if(data23.documentsPerMinute === undefined){
-const err59 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/required",keyword:"required",params:{missingProperty: "documentsPerMinute"},message:"must have required property '"+"documentsPerMinute"+"'"};
+}
+}
+if(data15.indexing_sources !== undefined){
+let data24 = data15.indexing_sources;
+if((!(Array.isArray(data24))) && (data24 !== null)){
+const err59 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/type",keyword:"type",params:{type: schema63.properties.indexing_sources.type},message:"must be array,null"};
 if(vErrors === null){
 vErrors = [err59];
 }
@@ -16450,10 +16485,13 @@ vErrors.push(err59);
 }
 errors++;
 }
-if(data23.parallelism !== undefined){
-let data24 = data23.parallelism;
-if(!(((typeof data24 == "number") && (!(data24 % 1) && !isNaN(data24))) && (isFinite(data24)))){
-const err60 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(Array.isArray(data24)){
+const len3 = data24.length;
+for(let i3=0; i3<len3; i3++){
+let data25 = data24[i3];
+if(data25 && typeof data25 == "object" && !Array.isArray(data25)){
+if(data25.source_id === undefined){
+const err60 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "source_id"},message:"must have required property '"+"source_id"+"'"};
 if(vErrors === null){
 vErrors = [err60];
 }
@@ -16462,9 +16500,8 @@ vErrors.push(err60);
 }
 errors++;
 }
-if((typeof data24 == "number") && (isFinite(data24))){
-if(data24 > 9007199254740991 || isNaN(data24)){
-const err61 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(data25.enabled === undefined){
+const err61 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "enabled"},message:"must have required property '"+"enabled"+"'"};
 if(vErrors === null){
 vErrors = [err61];
 }
@@ -16473,8 +16510,8 @@ vErrors.push(err61);
 }
 errors++;
 }
-if(data24 < 1 || isNaN(data24)){
-const err62 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(data25.priority === undefined){
+const err62 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "priority"},message:"must have required property '"+"priority"+"'"};
 if(vErrors === null){
 vErrors = [err62];
 }
@@ -16483,12 +16520,9 @@ vErrors.push(err62);
 }
 errors++;
 }
-}
-}
-if(data23.documentsPerMinute !== undefined){
-let data25 = data23.documentsPerMinute;
-if(!(((typeof data25 == "number") && (!(data25 % 1) && !isNaN(data25))) && (isFinite(data25)))){
-const err63 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data25.enabled !== undefined){
+if(typeof data25.enabled !== "boolean"){
+const err63 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3+"/enabled",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err63];
 }
@@ -16497,9 +16531,11 @@ vErrors.push(err63);
 }
 errors++;
 }
-if((typeof data25 == "number") && (isFinite(data25))){
-if(data25 > 9007199254740991 || isNaN(data25)){
-const err64 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+}
+if(data25.priority !== undefined){
+let data27 = data25.priority;
+if(!(((typeof data27 == "number") && (!(data27 % 1) && !isNaN(data27))) && (isFinite(data27)))){
+const err64 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err64];
 }
@@ -16508,8 +16544,9 @@ vErrors.push(err64);
 }
 errors++;
 }
-if(data25 < 1 || isNaN(data25)){
-const err65 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if((typeof data27 == "number") && (isFinite(data27))){
+if(data27 > 9007199254740991 || isNaN(data27)){
+const err65 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err65];
 }
@@ -16518,16 +16555,280 @@ vErrors.push(err65);
 }
 errors++;
 }
-}
-}
-}
-else {
-const err66 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data27 < 0 || isNaN(data27)){
+const err66 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err66];
 }
 else {
 vErrors.push(err66);
+}
+errors++;
+}
+}
+}
+if(data25.source_id !== undefined){
+let data28 = data25.source_id;
+if(typeof data28 === "string"){
+if(!(formats0.test(data28))){
+const err67 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3+"/source_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/source_id/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+if(vErrors === null){
+vErrors = [err67];
+}
+else {
+vErrors.push(err67);
+}
+errors++;
+}
+}
+else {
+const err68 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3+"/source_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/source_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err68];
+}
+else {
+vErrors.push(err68);
+}
+errors++;
+}
+}
+}
+else {
+const err69 = {instancePath:instancePath+"/configuration/organization_configuration/indexing_sources/" + i3,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err69];
+}
+else {
+vErrors.push(err69);
+}
+errors++;
+}
+}
+}
+}
+}
+else {
+const err70 = {instancePath:instancePath+"/configuration/organization_configuration",schemaPath:"../configuration/sidecar-configuration.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err70];
+}
+else {
+vErrors.push(err70);
+}
+errors++;
+}
+}
+}
+else {
+const err71 = {instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err71];
+}
+else {
+vErrors.push(err71);
+}
+errors++;
+}
+}
+if(data.sampledAt !== undefined){
+let data29 = data.sampledAt;
+if(typeof data29 === "string"){
+if(!(formats6.validate(data29))){
+const err72 = {instancePath:instancePath+"/sampledAt",schemaPath:"#/properties/sampledAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(vErrors === null){
+vErrors = [err72];
+}
+else {
+vErrors.push(err72);
+}
+errors++;
+}
+}
+else {
+const err73 = {instancePath:instancePath+"/sampledAt",schemaPath:"#/properties/sampledAt/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err73];
+}
+else {
+vErrors.push(err73);
+}
+errors++;
+}
+}
+if(data.sessionId !== undefined){
+let data30 = data.sessionId;
+if(typeof data30 === "string"){
+if(func2(data30) < 1){
+const err74 = {instancePath:instancePath+"/sessionId",schemaPath:"#/properties/sessionId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err74];
+}
+else {
+vErrors.push(err74);
+}
+errors++;
+}
+}
+else {
+const err75 = {instancePath:instancePath+"/sessionId",schemaPath:"#/properties/sessionId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err75];
+}
+else {
+vErrors.push(err75);
+}
+errors++;
+}
+}
+if(data.uptimeSeconds !== undefined){
+let data31 = data.uptimeSeconds;
+if((typeof data31 == "number") && (isFinite(data31))){
+if(data31 < 0 || isNaN(data31)){
+const err76 = {instancePath:instancePath+"/uptimeSeconds",schemaPath:"#/properties/uptimeSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err76];
+}
+else {
+vErrors.push(err76);
+}
+errors++;
+}
+}
+else {
+const err77 = {instancePath:instancePath+"/uptimeSeconds",schemaPath:"#/properties/uptimeSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(vErrors === null){
+vErrors = [err77];
+}
+else {
+vErrors.push(err77);
+}
+errors++;
+}
+}
+if(data.state !== undefined){
+let data32 = data.state;
+if(typeof data32 !== "string"){
+const err78 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err78];
+}
+else {
+vErrors.push(err78);
+}
+errors++;
+}
+if(!((((data32 === "running") || (data32 === "stopping")) || (data32 === "stopped")) || (data32 === "blocked"))){
+const err79 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/enum",keyword:"enum",params:{allowedValues: schema62.properties.state.enum},message:"must be equal to one of the allowed values"};
+if(vErrors === null){
+vErrors = [err79];
+}
+else {
+vErrors.push(err79);
+}
+errors++;
+}
+}
+if(data.effectiveConfiguration !== undefined){
+let data33 = data.effectiveConfiguration;
+if(data33 && typeof data33 == "object" && !Array.isArray(data33)){
+if(data33.parallelism === undefined){
+const err80 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/required",keyword:"required",params:{missingProperty: "parallelism"},message:"must have required property '"+"parallelism"+"'"};
+if(vErrors === null){
+vErrors = [err80];
+}
+else {
+vErrors.push(err80);
+}
+errors++;
+}
+if(data33.documentsPerMinute === undefined){
+const err81 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/required",keyword:"required",params:{missingProperty: "documentsPerMinute"},message:"must have required property '"+"documentsPerMinute"+"'"};
+if(vErrors === null){
+vErrors = [err81];
+}
+else {
+vErrors.push(err81);
+}
+errors++;
+}
+if(data33.parallelism !== undefined){
+let data34 = data33.parallelism;
+if(!(((typeof data34 == "number") && (!(data34 % 1) && !isNaN(data34))) && (isFinite(data34)))){
+const err82 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err82];
+}
+else {
+vErrors.push(err82);
+}
+errors++;
+}
+if((typeof data34 == "number") && (isFinite(data34))){
+if(data34 > 9007199254740991 || isNaN(data34)){
+const err83 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err83];
+}
+else {
+vErrors.push(err83);
+}
+errors++;
+}
+if(data34 < 1 || isNaN(data34)){
+const err84 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(vErrors === null){
+vErrors = [err84];
+}
+else {
+vErrors.push(err84);
+}
+errors++;
+}
+}
+}
+if(data33.documentsPerMinute !== undefined){
+let data35 = data33.documentsPerMinute;
+if(!(((typeof data35 == "number") && (!(data35 % 1) && !isNaN(data35))) && (isFinite(data35)))){
+const err85 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err85];
+}
+else {
+vErrors.push(err85);
+}
+errors++;
+}
+if((typeof data35 == "number") && (isFinite(data35))){
+if(data35 > 9007199254740991 || isNaN(data35)){
+const err86 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err86];
+}
+else {
+vErrors.push(err86);
+}
+errors++;
+}
+if(data35 < 1 || isNaN(data35)){
+const err87 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(vErrors === null){
+vErrors = [err87];
+}
+else {
+vErrors.push(err87);
+}
+errors++;
+}
+}
+}
+}
+else {
+const err88 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err88];
+}
+else {
+vErrors.push(err88);
 }
 errors++;
 }
@@ -16539,296 +16840,18 @@ errors = vErrors.length;
 }
 }
 if(data.generations !== undefined){
-let data27 = data.generations;
-if(Array.isArray(data27)){
-const len2 = data27.length;
-for(let i2=0; i2<len2; i2++){
-if(!(validate62(data27[i2], {instancePath:instancePath+"/generations/" + i2,parentData:data27,parentDataProperty:i2,rootData}))){
+let data37 = data.generations;
+if(Array.isArray(data37)){
+const len4 = data37.length;
+for(let i4=0; i4<len4; i4++){
+if(!(validate62(data37[i4], {instancePath:instancePath+"/generations/" + i4,parentData:data37,parentDataProperty:i4,rootData}))){
 vErrors = vErrors === null ? validate62.errors : vErrors.concat(validate62.errors);
 errors = vErrors.length;
 }
 }
 }
 else {
-const err67 = {instancePath:instancePath+"/generations",schemaPath:"#/properties/generations/type",keyword:"type",params:{type: "array"},message:"must be array"};
-if(vErrors === null){
-vErrors = [err67];
-}
-else {
-vErrors.push(err67);
-}
-errors++;
-}
-}
-if(data.discovery !== undefined){
-let data29 = data.discovery;
-if(Array.isArray(data29)){
-const len3 = data29.length;
-for(let i3=0; i3<len3; i3++){
-let data30 = data29[i3];
-if(data30 && typeof data30 == "object" && !Array.isArray(data30)){
-if(data30.sourceId === undefined){
-const err68 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "sourceId"},message:"must have required property '"+"sourceId"+"'"};
-if(vErrors === null){
-vErrors = [err68];
-}
-else {
-vErrors.push(err68);
-}
-errors++;
-}
-if(data30.mailboxId === undefined){
-const err69 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "mailboxId"},message:"must have required property '"+"mailboxId"+"'"};
-if(vErrors === null){
-vErrors = [err69];
-}
-else {
-vErrors.push(err69);
-}
-errors++;
-}
-if(data30.state === undefined){
-const err70 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "state"},message:"must have required property '"+"state"+"'"};
-if(vErrors === null){
-vErrors = [err70];
-}
-else {
-vErrors.push(err70);
-}
-errors++;
-}
-if(data30.discoveryComplete === undefined){
-const err71 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "discoveryComplete"},message:"must have required property '"+"discoveryComplete"+"'"};
-if(vErrors === null){
-vErrors = [err71];
-}
-else {
-vErrors.push(err71);
-}
-errors++;
-}
-if(data30.scanStartedAt === undefined){
-const err72 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "scanStartedAt"},message:"must have required property '"+"scanStartedAt"+"'"};
-if(vErrors === null){
-vErrors = [err72];
-}
-else {
-vErrors.push(err72);
-}
-errors++;
-}
-if(data30.lastSuccessfulScanAt === undefined){
-const err73 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "lastSuccessfulScanAt"},message:"must have required property '"+"lastSuccessfulScanAt"+"'"};
-if(vErrors === null){
-vErrors = [err73];
-}
-else {
-vErrors.push(err73);
-}
-errors++;
-}
-if(data30.discoveredDocuments === undefined){
-const err74 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "discoveredDocuments"},message:"must have required property '"+"discoveredDocuments"+"'"};
-if(vErrors === null){
-vErrors = [err74];
-}
-else {
-vErrors.push(err74);
-}
-errors++;
-}
-if(data30.accessible === undefined){
-const err75 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "accessible"},message:"must have required property '"+"accessible"+"'"};
-if(vErrors === null){
-vErrors = [err75];
-}
-else {
-vErrors.push(err75);
-}
-errors++;
-}
-if(data30.lastErrorCode === undefined){
-const err76 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "lastErrorCode"},message:"must have required property '"+"lastErrorCode"+"'"};
-if(vErrors === null){
-vErrors = [err76];
-}
-else {
-vErrors.push(err76);
-}
-errors++;
-}
-if(data30.sourceId !== undefined){
-let data31 = data30.sourceId;
-if(typeof data31 === "string"){
-if(func2(data31) < 1){
-const err77 = {instancePath:instancePath+"/discovery/" + i3+"/sourceId",schemaPath:"#/definitions/DiscoverySource/properties/sourceId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err77];
-}
-else {
-vErrors.push(err77);
-}
-errors++;
-}
-}
-else {
-const err78 = {instancePath:instancePath+"/discovery/" + i3+"/sourceId",schemaPath:"#/definitions/DiscoverySource/properties/sourceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err78];
-}
-else {
-vErrors.push(err78);
-}
-errors++;
-}
-}
-if(data30.mailboxId !== undefined){
-let data32 = data30.mailboxId;
-const _errs76 = errors;
-let valid20 = false;
-const _errs77 = errors;
-if(typeof data32 === "string"){
-if(func2(data32) < 1){
-const err79 = {instancePath:instancePath+"/discovery/" + i3+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
-if(vErrors === null){
-vErrors = [err79];
-}
-else {
-vErrors.push(err79);
-}
-errors++;
-}
-}
-else {
-const err80 = {instancePath:instancePath+"/discovery/" + i3+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err80];
-}
-else {
-vErrors.push(err80);
-}
-errors++;
-}
-var _valid0 = _errs77 === errors;
-valid20 = valid20 || _valid0;
-if(!valid20){
-const _errs79 = errors;
-if(data32 !== null){
-const err81 = {instancePath:instancePath+"/discovery/" + i3+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
-if(vErrors === null){
-vErrors = [err81];
-}
-else {
-vErrors.push(err81);
-}
-errors++;
-}
-var _valid0 = _errs79 === errors;
-valid20 = valid20 || _valid0;
-}
-if(!valid20){
-const err82 = {instancePath:instancePath+"/discovery/" + i3+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
-if(vErrors === null){
-vErrors = [err82];
-}
-else {
-vErrors.push(err82);
-}
-errors++;
-}
-else {
-errors = _errs76;
-if(vErrors !== null){
-if(_errs76){
-vErrors.length = _errs76;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data30.state !== undefined){
-let data33 = data30.state;
-if(typeof data33 !== "string"){
-const err83 = {instancePath:instancePath+"/discovery/" + i3+"/state",schemaPath:"#/definitions/DiscoverySource/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err83];
-}
-else {
-vErrors.push(err83);
-}
-errors++;
-}
-if(!(((((data33 === "notStarted") || (data33 === "scanning")) || (data33 === "complete")) || (data33 === "failed")) || (data33 === "disabled"))){
-const err84 = {instancePath:instancePath+"/discovery/" + i3+"/state",schemaPath:"#/definitions/DiscoverySource/properties/state/enum",keyword:"enum",params:{allowedValues: schema89.properties.state.enum},message:"must be equal to one of the allowed values"};
-if(vErrors === null){
-vErrors = [err84];
-}
-else {
-vErrors.push(err84);
-}
-errors++;
-}
-}
-if(data30.discoveryComplete !== undefined){
-if(typeof data30.discoveryComplete !== "boolean"){
-const err85 = {instancePath:instancePath+"/discovery/" + i3+"/discoveryComplete",schemaPath:"#/definitions/DiscoverySource/properties/discoveryComplete/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
-if(vErrors === null){
-vErrors = [err85];
-}
-else {
-vErrors.push(err85);
-}
-errors++;
-}
-}
-if(data30.scanStartedAt !== undefined){
-let data35 = data30.scanStartedAt;
-const _errs86 = errors;
-let valid21 = false;
-const _errs87 = errors;
-if(typeof data35 === "string"){
-if(!(formats6.validate(data35))){
-const err86 = {instancePath:instancePath+"/discovery/" + i3+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/0/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
-if(vErrors === null){
-vErrors = [err86];
-}
-else {
-vErrors.push(err86);
-}
-errors++;
-}
-}
-else {
-const err87 = {instancePath:instancePath+"/discovery/" + i3+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err87];
-}
-else {
-vErrors.push(err87);
-}
-errors++;
-}
-var _valid1 = _errs87 === errors;
-valid21 = valid21 || _valid1;
-if(!valid21){
-const _errs89 = errors;
-if(data35 !== null){
-const err88 = {instancePath:instancePath+"/discovery/" + i3+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
-if(vErrors === null){
-vErrors = [err88];
-}
-else {
-vErrors.push(err88);
-}
-errors++;
-}
-var _valid1 = _errs89 === errors;
-valid21 = valid21 || _valid1;
-}
-if(!valid21){
-const err89 = {instancePath:instancePath+"/discovery/" + i3+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+const err89 = {instancePath:instancePath+"/generations",schemaPath:"#/properties/generations/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err89];
 }
@@ -16837,26 +16860,16 @@ vErrors.push(err89);
 }
 errors++;
 }
-else {
-errors = _errs86;
-if(vErrors !== null){
-if(_errs86){
-vErrors.length = _errs86;
 }
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data30.lastSuccessfulScanAt !== undefined){
-let data36 = data30.lastSuccessfulScanAt;
-const _errs92 = errors;
-let valid22 = false;
-const _errs93 = errors;
-if(typeof data36 === "string"){
-if(!(formats6.validate(data36))){
-const err90 = {instancePath:instancePath+"/discovery/" + i3+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/0/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(data.discovery !== undefined){
+let data39 = data.discovery;
+if(Array.isArray(data39)){
+const len5 = data39.length;
+for(let i5=0; i5<len5; i5++){
+let data40 = data39[i5];
+if(data40 && typeof data40 == "object" && !Array.isArray(data40)){
+if(data40.sourceId === undefined){
+const err90 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "sourceId"},message:"must have required property '"+"sourceId"+"'"};
 if(vErrors === null){
 vErrors = [err90];
 }
@@ -16865,9 +16878,8 @@ vErrors.push(err90);
 }
 errors++;
 }
-}
-else {
-const err91 = {instancePath:instancePath+"/discovery/" + i3+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data40.mailboxId === undefined){
+const err91 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "mailboxId"},message:"must have required property '"+"mailboxId"+"'"};
 if(vErrors === null){
 vErrors = [err91];
 }
@@ -16876,12 +16888,8 @@ vErrors.push(err91);
 }
 errors++;
 }
-var _valid2 = _errs93 === errors;
-valid22 = valid22 || _valid2;
-if(!valid22){
-const _errs95 = errors;
-if(data36 !== null){
-const err92 = {instancePath:instancePath+"/discovery/" + i3+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(data40.state === undefined){
+const err92 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "state"},message:"must have required property '"+"state"+"'"};
 if(vErrors === null){
 vErrors = [err92];
 }
@@ -16890,11 +16898,8 @@ vErrors.push(err92);
 }
 errors++;
 }
-var _valid2 = _errs95 === errors;
-valid22 = valid22 || _valid2;
-}
-if(!valid22){
-const err93 = {instancePath:instancePath+"/discovery/" + i3+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(data40.discoveryComplete === undefined){
+const err93 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "discoveryComplete"},message:"must have required property '"+"discoveryComplete"+"'"};
 if(vErrors === null){
 vErrors = [err93];
 }
@@ -16903,25 +16908,8 @@ vErrors.push(err93);
 }
 errors++;
 }
-else {
-errors = _errs92;
-if(vErrors !== null){
-if(_errs92){
-vErrors.length = _errs92;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data30.discoveredDocuments !== undefined){
-let data37 = data30.discoveredDocuments;
-const _errs98 = errors;
-let valid23 = false;
-const _errs99 = errors;
-if(!(((typeof data37 == "number") && (!(data37 % 1) && !isNaN(data37))) && (isFinite(data37)))){
-const err94 = {instancePath:instancePath+"/discovery/" + i3+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data40.scanStartedAt === undefined){
+const err94 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "scanStartedAt"},message:"must have required property '"+"scanStartedAt"+"'"};
 if(vErrors === null){
 vErrors = [err94];
 }
@@ -16930,9 +16918,8 @@ vErrors.push(err94);
 }
 errors++;
 }
-if((typeof data37 == "number") && (isFinite(data37))){
-if(data37 > 9007199254740991 || isNaN(data37)){
-const err95 = {instancePath:instancePath+"/discovery/" + i3+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(data40.lastSuccessfulScanAt === undefined){
+const err95 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "lastSuccessfulScanAt"},message:"must have required property '"+"lastSuccessfulScanAt"+"'"};
 if(vErrors === null){
 vErrors = [err95];
 }
@@ -16941,8 +16928,8 @@ vErrors.push(err95);
 }
 errors++;
 }
-if(data37 < 0 || isNaN(data37)){
-const err96 = {instancePath:instancePath+"/discovery/" + i3+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data40.discoveredDocuments === undefined){
+const err96 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "discoveredDocuments"},message:"must have required property '"+"discoveredDocuments"+"'"};
 if(vErrors === null){
 vErrors = [err96];
 }
@@ -16951,13 +16938,8 @@ vErrors.push(err96);
 }
 errors++;
 }
-}
-var _valid3 = _errs99 === errors;
-valid23 = valid23 || _valid3;
-if(!valid23){
-const _errs101 = errors;
-if(data37 !== null){
-const err97 = {instancePath:instancePath+"/discovery/" + i3+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(data40.accessible === undefined){
+const err97 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "accessible"},message:"must have required property '"+"accessible"+"'"};
 if(vErrors === null){
 vErrors = [err97];
 }
@@ -16966,16 +16948,92 @@ vErrors.push(err97);
 }
 errors++;
 }
-var _valid3 = _errs101 === errors;
-valid23 = valid23 || _valid3;
-}
-if(!valid23){
-const err98 = {instancePath:instancePath+"/discovery/" + i3+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(data40.lastErrorCode === undefined){
+const err98 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "lastErrorCode"},message:"must have required property '"+"lastErrorCode"+"'"};
 if(vErrors === null){
 vErrors = [err98];
 }
 else {
 vErrors.push(err98);
+}
+errors++;
+}
+if(data40.sourceId !== undefined){
+let data41 = data40.sourceId;
+if(typeof data41 === "string"){
+if(func2(data41) < 1){
+const err99 = {instancePath:instancePath+"/discovery/" + i5+"/sourceId",schemaPath:"#/definitions/DiscoverySource/properties/sourceId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err99];
+}
+else {
+vErrors.push(err99);
+}
+errors++;
+}
+}
+else {
+const err100 = {instancePath:instancePath+"/discovery/" + i5+"/sourceId",schemaPath:"#/definitions/DiscoverySource/properties/sourceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err100];
+}
+else {
+vErrors.push(err100);
+}
+errors++;
+}
+}
+if(data40.mailboxId !== undefined){
+let data42 = data40.mailboxId;
+const _errs98 = errors;
+let valid26 = false;
+const _errs99 = errors;
+if(typeof data42 === "string"){
+if(func2(data42) < 1){
+const err101 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err101];
+}
+else {
+vErrors.push(err101);
+}
+errors++;
+}
+}
+else {
+const err102 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err102];
+}
+else {
+vErrors.push(err102);
+}
+errors++;
+}
+var _valid0 = _errs99 === errors;
+valid26 = valid26 || _valid0;
+if(!valid26){
+const _errs101 = errors;
+if(data42 !== null){
+const err103 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err103];
+}
+else {
+vErrors.push(err103);
+}
+errors++;
+}
+var _valid0 = _errs101 === errors;
+valid26 = valid26 || _valid0;
+}
+if(!valid26){
+const err104 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err104];
+}
+else {
+vErrors.push(err104);
 }
 errors++;
 }
@@ -16991,77 +17049,320 @@ vErrors = null;
 }
 }
 }
-if(data30.accessible !== undefined){
-if(typeof data30.accessible !== "boolean"){
-const err99 = {instancePath:instancePath+"/discovery/" + i3+"/accessible",schemaPath:"#/definitions/DiscoverySource/properties/accessible/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data40.state !== undefined){
+let data43 = data40.state;
+if(typeof data43 !== "string"){
+const err105 = {instancePath:instancePath+"/discovery/" + i5+"/state",schemaPath:"#/definitions/DiscoverySource/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
-vErrors = [err99];
+vErrors = [err105];
 }
 else {
-vErrors.push(err99);
+vErrors.push(err105);
+}
+errors++;
+}
+if(!(((((data43 === "notStarted") || (data43 === "scanning")) || (data43 === "complete")) || (data43 === "failed")) || (data43 === "disabled"))){
+const err106 = {instancePath:instancePath+"/discovery/" + i5+"/state",schemaPath:"#/definitions/DiscoverySource/properties/state/enum",keyword:"enum",params:{allowedValues: schema89.properties.state.enum},message:"must be equal to one of the allowed values"};
+if(vErrors === null){
+vErrors = [err106];
+}
+else {
+vErrors.push(err106);
 }
 errors++;
 }
 }
-if(data30.lastErrorCode !== undefined){
-let data39 = data30.lastErrorCode;
-const _errs106 = errors;
-let valid24 = false;
-const _errs107 = errors;
-if(typeof data39 === "string"){
-if(func2(data39) < 1){
-const err100 = {instancePath:instancePath+"/discovery/" + i3+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data40.discoveryComplete !== undefined){
+if(typeof data40.discoveryComplete !== "boolean"){
+const err107 = {instancePath:instancePath+"/discovery/" + i5+"/discoveryComplete",schemaPath:"#/definitions/DiscoverySource/properties/discoveryComplete/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
-vErrors = [err100];
+vErrors = [err107];
 }
 else {
-vErrors.push(err100);
+vErrors.push(err107);
 }
 errors++;
 }
 }
-else {
-const err101 = {instancePath:instancePath+"/discovery/" + i3+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err101];
-}
-else {
-vErrors.push(err101);
-}
-errors++;
-}
-var _valid4 = _errs107 === errors;
-valid24 = valid24 || _valid4;
-if(!valid24){
+if(data40.scanStartedAt !== undefined){
+let data45 = data40.scanStartedAt;
+const _errs108 = errors;
+let valid27 = false;
 const _errs109 = errors;
-if(data39 !== null){
-const err102 = {instancePath:instancePath+"/discovery/" + i3+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(typeof data45 === "string"){
+if(!(formats6.validate(data45))){
+const err108 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/0/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
 if(vErrors === null){
-vErrors = [err102];
+vErrors = [err108];
 }
 else {
-vErrors.push(err102);
+vErrors.push(err108);
 }
 errors++;
 }
-var _valid4 = _errs109 === errors;
-valid24 = valid24 || _valid4;
-}
-if(!valid24){
-const err103 = {instancePath:instancePath+"/discovery/" + i3+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
-if(vErrors === null){
-vErrors = [err103];
 }
 else {
-vErrors.push(err103);
+const err109 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err109];
+}
+else {
+vErrors.push(err109);
+}
+errors++;
+}
+var _valid1 = _errs109 === errors;
+valid27 = valid27 || _valid1;
+if(!valid27){
+const _errs111 = errors;
+if(data45 !== null){
+const err110 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err110];
+}
+else {
+vErrors.push(err110);
+}
+errors++;
+}
+var _valid1 = _errs111 === errors;
+valid27 = valid27 || _valid1;
+}
+if(!valid27){
+const err111 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err111];
+}
+else {
+vErrors.push(err111);
 }
 errors++;
 }
 else {
-errors = _errs106;
+errors = _errs108;
 if(vErrors !== null){
-if(_errs106){
-vErrors.length = _errs106;
+if(_errs108){
+vErrors.length = _errs108;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data40.lastSuccessfulScanAt !== undefined){
+let data46 = data40.lastSuccessfulScanAt;
+const _errs114 = errors;
+let valid28 = false;
+const _errs115 = errors;
+if(typeof data46 === "string"){
+if(!(formats6.validate(data46))){
+const err112 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/0/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(vErrors === null){
+vErrors = [err112];
+}
+else {
+vErrors.push(err112);
+}
+errors++;
+}
+}
+else {
+const err113 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err113];
+}
+else {
+vErrors.push(err113);
+}
+errors++;
+}
+var _valid2 = _errs115 === errors;
+valid28 = valid28 || _valid2;
+if(!valid28){
+const _errs117 = errors;
+if(data46 !== null){
+const err114 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err114];
+}
+else {
+vErrors.push(err114);
+}
+errors++;
+}
+var _valid2 = _errs117 === errors;
+valid28 = valid28 || _valid2;
+}
+if(!valid28){
+const err115 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err115];
+}
+else {
+vErrors.push(err115);
+}
+errors++;
+}
+else {
+errors = _errs114;
+if(vErrors !== null){
+if(_errs114){
+vErrors.length = _errs114;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data40.discoveredDocuments !== undefined){
+let data47 = data40.discoveredDocuments;
+const _errs120 = errors;
+let valid29 = false;
+const _errs121 = errors;
+if(!(((typeof data47 == "number") && (!(data47 % 1) && !isNaN(data47))) && (isFinite(data47)))){
+const err116 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err116];
+}
+else {
+vErrors.push(err116);
+}
+errors++;
+}
+if((typeof data47 == "number") && (isFinite(data47))){
+if(data47 > 9007199254740991 || isNaN(data47)){
+const err117 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err117];
+}
+else {
+vErrors.push(err117);
+}
+errors++;
+}
+if(data47 < 0 || isNaN(data47)){
+const err118 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err118];
+}
+else {
+vErrors.push(err118);
+}
+errors++;
+}
+}
+var _valid3 = _errs121 === errors;
+valid29 = valid29 || _valid3;
+if(!valid29){
+const _errs123 = errors;
+if(data47 !== null){
+const err119 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err119];
+}
+else {
+vErrors.push(err119);
+}
+errors++;
+}
+var _valid3 = _errs123 === errors;
+valid29 = valid29 || _valid3;
+}
+if(!valid29){
+const err120 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err120];
+}
+else {
+vErrors.push(err120);
+}
+errors++;
+}
+else {
+errors = _errs120;
+if(vErrors !== null){
+if(_errs120){
+vErrors.length = _errs120;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data40.accessible !== undefined){
+if(typeof data40.accessible !== "boolean"){
+const err121 = {instancePath:instancePath+"/discovery/" + i5+"/accessible",schemaPath:"#/definitions/DiscoverySource/properties/accessible/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(vErrors === null){
+vErrors = [err121];
+}
+else {
+vErrors.push(err121);
+}
+errors++;
+}
+}
+if(data40.lastErrorCode !== undefined){
+let data49 = data40.lastErrorCode;
+const _errs128 = errors;
+let valid30 = false;
+const _errs129 = errors;
+if(typeof data49 === "string"){
+if(func2(data49) < 1){
+const err122 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err122];
+}
+else {
+vErrors.push(err122);
+}
+errors++;
+}
+}
+else {
+const err123 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err123];
+}
+else {
+vErrors.push(err123);
+}
+errors++;
+}
+var _valid4 = _errs129 === errors;
+valid30 = valid30 || _valid4;
+if(!valid30){
+const _errs131 = errors;
+if(data49 !== null){
+const err124 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err124];
+}
+else {
+vErrors.push(err124);
+}
+errors++;
+}
+var _valid4 = _errs131 === errors;
+valid30 = valid30 || _valid4;
+}
+if(!valid30){
+const err125 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err125];
+}
+else {
+vErrors.push(err125);
+}
+errors++;
+}
+else {
+errors = _errs128;
+if(vErrors !== null){
+if(_errs128){
+vErrors.length = _errs128;
 }
 else {
 vErrors = null;
@@ -17071,256 +17372,7 @@ vErrors = null;
 }
 }
 else {
-const err104 = {instancePath:instancePath+"/discovery/" + i3,schemaPath:"#/definitions/DiscoverySource/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err104];
-}
-else {
-vErrors.push(err104);
-}
-errors++;
-}
-}
-}
-else {
-const err105 = {instancePath:instancePath+"/discovery",schemaPath:"#/properties/discovery/type",keyword:"type",params:{type: "array"},message:"must be array"};
-if(vErrors === null){
-vErrors = [err105];
-}
-else {
-vErrors.push(err105);
-}
-errors++;
-}
-}
-if(data.search !== undefined){
-let data40 = data.search;
-if(data40 && typeof data40 == "object" && !Array.isArray(data40)){
-if(data40.sampledAt === undefined){
-const err106 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "sampledAt"},message:"must have required property '"+"sampledAt"+"'"};
-if(vErrors === null){
-vErrors = [err106];
-}
-else {
-vErrors.push(err106);
-}
-errors++;
-}
-if(data40.observationSeconds === undefined){
-const err107 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "observationSeconds"},message:"must have required property '"+"observationSeconds"+"'"};
-if(vErrors === null){
-vErrors = [err107];
-}
-else {
-vErrors.push(err107);
-}
-errors++;
-}
-if(data40.queryCount === undefined){
-const err108 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "queryCount"},message:"must have required property '"+"queryCount"+"'"};
-if(vErrors === null){
-vErrors = [err108];
-}
-else {
-vErrors.push(err108);
-}
-errors++;
-}
-if(data40.errorCount === undefined){
-const err109 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "errorCount"},message:"must have required property '"+"errorCount"+"'"};
-if(vErrors === null){
-vErrors = [err109];
-}
-else {
-vErrors.push(err109);
-}
-errors++;
-}
-if(data40.inFlight === undefined){
-const err110 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "inFlight"},message:"must have required property '"+"inFlight"+"'"};
-if(vErrors === null){
-vErrors = [err110];
-}
-else {
-vErrors.push(err110);
-}
-errors++;
-}
-if(data40.p50LatencyMilliseconds === undefined){
-const err111 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "p50LatencyMilliseconds"},message:"must have required property '"+"p50LatencyMilliseconds"+"'"};
-if(vErrors === null){
-vErrors = [err111];
-}
-else {
-vErrors.push(err111);
-}
-errors++;
-}
-if(data40.p95LatencyMilliseconds === undefined){
-const err112 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "p95LatencyMilliseconds"},message:"must have required property '"+"p95LatencyMilliseconds"+"'"};
-if(vErrors === null){
-vErrors = [err112];
-}
-else {
-vErrors.push(err112);
-}
-errors++;
-}
-if(data40.unavailableReason === undefined){
-const err113 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "unavailableReason"},message:"must have required property '"+"unavailableReason"+"'"};
-if(vErrors === null){
-vErrors = [err113];
-}
-else {
-vErrors.push(err113);
-}
-errors++;
-}
-if(data40.sampledAt !== undefined){
-let data41 = data40.sampledAt;
-if(typeof data41 === "string"){
-if(!(formats6.validate(data41))){
-const err114 = {instancePath:instancePath+"/search/sampledAt",schemaPath:"#/definitions/SearchStatistics/properties/sampledAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
-if(vErrors === null){
-vErrors = [err114];
-}
-else {
-vErrors.push(err114);
-}
-errors++;
-}
-}
-else {
-const err115 = {instancePath:instancePath+"/search/sampledAt",schemaPath:"#/definitions/SearchStatistics/properties/sampledAt/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err115];
-}
-else {
-vErrors.push(err115);
-}
-errors++;
-}
-}
-if(data40.observationSeconds !== undefined){
-let data42 = data40.observationSeconds;
-if((typeof data42 == "number") && (isFinite(data42))){
-if(data42 < 0 || isNaN(data42)){
-const err116 = {instancePath:instancePath+"/search/observationSeconds",schemaPath:"#/definitions/SearchStatistics/properties/observationSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err116];
-}
-else {
-vErrors.push(err116);
-}
-errors++;
-}
-}
-else {
-const err117 = {instancePath:instancePath+"/search/observationSeconds",schemaPath:"#/definitions/SearchStatistics/properties/observationSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
-if(vErrors === null){
-vErrors = [err117];
-}
-else {
-vErrors.push(err117);
-}
-errors++;
-}
-}
-if(data40.queryCount !== undefined){
-let data43 = data40.queryCount;
-if(!(((typeof data43 == "number") && (!(data43 % 1) && !isNaN(data43))) && (isFinite(data43)))){
-const err118 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err118];
-}
-else {
-vErrors.push(err118);
-}
-errors++;
-}
-if((typeof data43 == "number") && (isFinite(data43))){
-if(data43 > 9007199254740991 || isNaN(data43)){
-const err119 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err119];
-}
-else {
-vErrors.push(err119);
-}
-errors++;
-}
-if(data43 < 0 || isNaN(data43)){
-const err120 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err120];
-}
-else {
-vErrors.push(err120);
-}
-errors++;
-}
-}
-}
-if(data40.errorCount !== undefined){
-let data44 = data40.errorCount;
-if(!(((typeof data44 == "number") && (!(data44 % 1) && !isNaN(data44))) && (isFinite(data44)))){
-const err121 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err121];
-}
-else {
-vErrors.push(err121);
-}
-errors++;
-}
-if((typeof data44 == "number") && (isFinite(data44))){
-if(data44 > 9007199254740991 || isNaN(data44)){
-const err122 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err122];
-}
-else {
-vErrors.push(err122);
-}
-errors++;
-}
-if(data44 < 0 || isNaN(data44)){
-const err123 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err123];
-}
-else {
-vErrors.push(err123);
-}
-errors++;
-}
-}
-}
-if(data40.inFlight !== undefined){
-let data45 = data40.inFlight;
-if(!(((typeof data45 == "number") && (!(data45 % 1) && !isNaN(data45))) && (isFinite(data45)))){
-const err124 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err124];
-}
-else {
-vErrors.push(err124);
-}
-errors++;
-}
-if((typeof data45 == "number") && (isFinite(data45))){
-if(data45 > 9007199254740991 || isNaN(data45)){
-const err125 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
-if(vErrors === null){
-vErrors = [err125];
-}
-else {
-vErrors.push(err125);
-}
-errors++;
-}
-if(data45 < 0 || isNaN(data45)){
-const err126 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+const err126 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err126];
 }
@@ -17331,14 +17383,8 @@ errors++;
 }
 }
 }
-if(data40.p50LatencyMilliseconds !== undefined){
-let data46 = data40.p50LatencyMilliseconds;
-const _errs126 = errors;
-let valid27 = false;
-const _errs127 = errors;
-if((typeof data46 == "number") && (isFinite(data46))){
-if(data46 < 0 || isNaN(data46)){
-const err127 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+else {
+const err127 = {instancePath:instancePath+"/discovery",schemaPath:"#/properties/discovery/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err127];
 }
@@ -17348,8 +17394,11 @@ vErrors.push(err127);
 errors++;
 }
 }
-else {
-const err128 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(data.search !== undefined){
+let data50 = data.search;
+if(data50 && typeof data50 == "object" && !Array.isArray(data50)){
+if(data50.sampledAt === undefined){
+const err128 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "sampledAt"},message:"must have required property '"+"sampledAt"+"'"};
 if(vErrors === null){
 vErrors = [err128];
 }
@@ -17358,12 +17407,8 @@ vErrors.push(err128);
 }
 errors++;
 }
-var _valid5 = _errs127 === errors;
-valid27 = valid27 || _valid5;
-if(!valid27){
-const _errs129 = errors;
-if(data46 !== null){
-const err129 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(data50.observationSeconds === undefined){
+const err129 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "observationSeconds"},message:"must have required property '"+"observationSeconds"+"'"};
 if(vErrors === null){
 vErrors = [err129];
 }
@@ -17372,11 +17417,8 @@ vErrors.push(err129);
 }
 errors++;
 }
-var _valid5 = _errs129 === errors;
-valid27 = valid27 || _valid5;
-}
-if(!valid27){
-const err130 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(data50.queryCount === undefined){
+const err130 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "queryCount"},message:"must have required property '"+"queryCount"+"'"};
 if(vErrors === null){
 vErrors = [err130];
 }
@@ -17385,26 +17427,8 @@ vErrors.push(err130);
 }
 errors++;
 }
-else {
-errors = _errs126;
-if(vErrors !== null){
-if(_errs126){
-vErrors.length = _errs126;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data40.p95LatencyMilliseconds !== undefined){
-let data47 = data40.p95LatencyMilliseconds;
-const _errs132 = errors;
-let valid28 = false;
-const _errs133 = errors;
-if((typeof data47 == "number") && (isFinite(data47))){
-if(data47 < 0 || isNaN(data47)){
-const err131 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data50.errorCount === undefined){
+const err131 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "errorCount"},message:"must have required property '"+"errorCount"+"'"};
 if(vErrors === null){
 vErrors = [err131];
 }
@@ -17413,9 +17437,8 @@ vErrors.push(err131);
 }
 errors++;
 }
-}
-else {
-const err132 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(data50.inFlight === undefined){
+const err132 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "inFlight"},message:"must have required property '"+"inFlight"+"'"};
 if(vErrors === null){
 vErrors = [err132];
 }
@@ -17424,12 +17447,8 @@ vErrors.push(err132);
 }
 errors++;
 }
-var _valid6 = _errs133 === errors;
-valid28 = valid28 || _valid6;
-if(!valid28){
-const _errs135 = errors;
-if(data47 !== null){
-const err133 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(data50.p50LatencyMilliseconds === undefined){
+const err133 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "p50LatencyMilliseconds"},message:"must have required property '"+"p50LatencyMilliseconds"+"'"};
 if(vErrors === null){
 vErrors = [err133];
 }
@@ -17438,11 +17457,8 @@ vErrors.push(err133);
 }
 errors++;
 }
-var _valid6 = _errs135 === errors;
-valid28 = valid28 || _valid6;
-}
-if(!valid28){
-const err134 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(data50.p95LatencyMilliseconds === undefined){
+const err134 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "p95LatencyMilliseconds"},message:"must have required property '"+"p95LatencyMilliseconds"+"'"};
 if(vErrors === null){
 vErrors = [err134];
 }
@@ -17451,26 +17467,8 @@ vErrors.push(err134);
 }
 errors++;
 }
-else {
-errors = _errs132;
-if(vErrors !== null){
-if(_errs132){
-vErrors.length = _errs132;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data40.unavailableReason !== undefined){
-let data48 = data40.unavailableReason;
-const _errs138 = errors;
-let valid29 = false;
-const _errs139 = errors;
-if(typeof data48 === "string"){
-if(func2(data48) < 1){
-const err135 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data50.unavailableReason === undefined){
+const err135 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "unavailableReason"},message:"must have required property '"+"unavailableReason"+"'"};
 if(vErrors === null){
 vErrors = [err135];
 }
@@ -17479,9 +17477,11 @@ vErrors.push(err135);
 }
 errors++;
 }
-}
-else {
-const err136 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data50.sampledAt !== undefined){
+let data51 = data50.sampledAt;
+if(typeof data51 === "string"){
+if(!(formats6.validate(data51))){
+const err136 = {instancePath:instancePath+"/search/sampledAt",schemaPath:"#/definitions/SearchStatistics/properties/sampledAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
 if(vErrors === null){
 vErrors = [err136];
 }
@@ -17490,12 +17490,9 @@ vErrors.push(err136);
 }
 errors++;
 }
-var _valid7 = _errs139 === errors;
-valid29 = valid29 || _valid7;
-if(!valid29){
-const _errs141 = errors;
-if(data48 !== null){
-const err137 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+}
+else {
+const err137 = {instancePath:instancePath+"/search/sampledAt",schemaPath:"#/definitions/SearchStatistics/properties/sampledAt/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err137];
 }
@@ -17504,11 +17501,12 @@ vErrors.push(err137);
 }
 errors++;
 }
-var _valid7 = _errs141 === errors;
-valid29 = valid29 || _valid7;
 }
-if(!valid29){
-const err138 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(data50.observationSeconds !== undefined){
+let data52 = data50.observationSeconds;
+if((typeof data52 == "number") && (isFinite(data52))){
+if(data52 < 0 || isNaN(data52)){
+const err138 = {instancePath:instancePath+"/search/observationSeconds",schemaPath:"#/definitions/SearchStatistics/properties/observationSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err138];
 }
@@ -17517,21 +17515,9 @@ vErrors.push(err138);
 }
 errors++;
 }
-else {
-errors = _errs138;
-if(vErrors !== null){
-if(_errs138){
-vErrors.length = _errs138;
 }
 else {
-vErrors = null;
-}
-}
-}
-}
-}
-else {
-const err139 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err139 = {instancePath:instancePath+"/search/observationSeconds",schemaPath:"#/definitions/SearchStatistics/properties/observationSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
 if(vErrors === null){
 vErrors = [err139];
 }
@@ -17541,9 +17527,10 @@ vErrors.push(err139);
 errors++;
 }
 }
-if(data.resetInProgress !== undefined){
-if(typeof data.resetInProgress !== "boolean"){
-const err140 = {instancePath:instancePath+"/resetInProgress",schemaPath:"#/properties/resetInProgress/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data50.queryCount !== undefined){
+let data53 = data50.queryCount;
+if(!(((typeof data53 == "number") && (!(data53 % 1) && !isNaN(data53))) && (isFinite(data53)))){
+const err140 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err140];
 }
@@ -17552,12 +17539,9 @@ vErrors.push(err140);
 }
 errors++;
 }
-}
-if(data.indexingDirectory !== undefined){
-let data50 = data.indexingDirectory;
-if(typeof data50 === "string"){
-if(func2(data50) < 1){
-const err141 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if((typeof data53 == "number") && (isFinite(data53))){
+if(data53 > 9007199254740991 || isNaN(data53)){
+const err141 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err141];
 }
@@ -17566,8 +17550,8 @@ vErrors.push(err141);
 }
 errors++;
 }
-if(!pattern53.test(data50)){
-const err142 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/pattern",keyword:"pattern",params:{pattern: "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"},message:"must match pattern \""+"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"+"\""};
+if(data53 < 0 || isNaN(data53)){
+const err142 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err142];
 }
@@ -17577,8 +17561,11 @@ vErrors.push(err142);
 errors++;
 }
 }
-else {
-const err143 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data50.errorCount !== undefined){
+let data54 = data50.errorCount;
+if(!(((typeof data54 == "number") && (!(data54 % 1) && !isNaN(data54))) && (isFinite(data54)))){
+const err143 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err143];
 }
@@ -17587,15 +17574,329 @@ vErrors.push(err143);
 }
 errors++;
 }
-}
-}
-else {
-const err144 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if((typeof data54 == "number") && (isFinite(data54))){
+if(data54 > 9007199254740991 || isNaN(data54)){
+const err144 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err144];
 }
 else {
 vErrors.push(err144);
+}
+errors++;
+}
+if(data54 < 0 || isNaN(data54)){
+const err145 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err145];
+}
+else {
+vErrors.push(err145);
+}
+errors++;
+}
+}
+}
+if(data50.inFlight !== undefined){
+let data55 = data50.inFlight;
+if(!(((typeof data55 == "number") && (!(data55 % 1) && !isNaN(data55))) && (isFinite(data55)))){
+const err146 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err146];
+}
+else {
+vErrors.push(err146);
+}
+errors++;
+}
+if((typeof data55 == "number") && (isFinite(data55))){
+if(data55 > 9007199254740991 || isNaN(data55)){
+const err147 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err147];
+}
+else {
+vErrors.push(err147);
+}
+errors++;
+}
+if(data55 < 0 || isNaN(data55)){
+const err148 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err148];
+}
+else {
+vErrors.push(err148);
+}
+errors++;
+}
+}
+}
+if(data50.p50LatencyMilliseconds !== undefined){
+let data56 = data50.p50LatencyMilliseconds;
+const _errs148 = errors;
+let valid33 = false;
+const _errs149 = errors;
+if((typeof data56 == "number") && (isFinite(data56))){
+if(data56 < 0 || isNaN(data56)){
+const err149 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err149];
+}
+else {
+vErrors.push(err149);
+}
+errors++;
+}
+}
+else {
+const err150 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(vErrors === null){
+vErrors = [err150];
+}
+else {
+vErrors.push(err150);
+}
+errors++;
+}
+var _valid5 = _errs149 === errors;
+valid33 = valid33 || _valid5;
+if(!valid33){
+const _errs151 = errors;
+if(data56 !== null){
+const err151 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err151];
+}
+else {
+vErrors.push(err151);
+}
+errors++;
+}
+var _valid5 = _errs151 === errors;
+valid33 = valid33 || _valid5;
+}
+if(!valid33){
+const err152 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err152];
+}
+else {
+vErrors.push(err152);
+}
+errors++;
+}
+else {
+errors = _errs148;
+if(vErrors !== null){
+if(_errs148){
+vErrors.length = _errs148;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data50.p95LatencyMilliseconds !== undefined){
+let data57 = data50.p95LatencyMilliseconds;
+const _errs154 = errors;
+let valid34 = false;
+const _errs155 = errors;
+if((typeof data57 == "number") && (isFinite(data57))){
+if(data57 < 0 || isNaN(data57)){
+const err153 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err153];
+}
+else {
+vErrors.push(err153);
+}
+errors++;
+}
+}
+else {
+const err154 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(vErrors === null){
+vErrors = [err154];
+}
+else {
+vErrors.push(err154);
+}
+errors++;
+}
+var _valid6 = _errs155 === errors;
+valid34 = valid34 || _valid6;
+if(!valid34){
+const _errs157 = errors;
+if(data57 !== null){
+const err155 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err155];
+}
+else {
+vErrors.push(err155);
+}
+errors++;
+}
+var _valid6 = _errs157 === errors;
+valid34 = valid34 || _valid6;
+}
+if(!valid34){
+const err156 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err156];
+}
+else {
+vErrors.push(err156);
+}
+errors++;
+}
+else {
+errors = _errs154;
+if(vErrors !== null){
+if(_errs154){
+vErrors.length = _errs154;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data50.unavailableReason !== undefined){
+let data58 = data50.unavailableReason;
+const _errs160 = errors;
+let valid35 = false;
+const _errs161 = errors;
+if(typeof data58 === "string"){
+if(func2(data58) < 1){
+const err157 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err157];
+}
+else {
+vErrors.push(err157);
+}
+errors++;
+}
+}
+else {
+const err158 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err158];
+}
+else {
+vErrors.push(err158);
+}
+errors++;
+}
+var _valid7 = _errs161 === errors;
+valid35 = valid35 || _valid7;
+if(!valid35){
+const _errs163 = errors;
+if(data58 !== null){
+const err159 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err159];
+}
+else {
+vErrors.push(err159);
+}
+errors++;
+}
+var _valid7 = _errs163 === errors;
+valid35 = valid35 || _valid7;
+}
+if(!valid35){
+const err160 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err160];
+}
+else {
+vErrors.push(err160);
+}
+errors++;
+}
+else {
+errors = _errs160;
+if(vErrors !== null){
+if(_errs160){
+vErrors.length = _errs160;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+}
+else {
+const err161 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err161];
+}
+else {
+vErrors.push(err161);
+}
+errors++;
+}
+}
+if(data.resetInProgress !== undefined){
+if(typeof data.resetInProgress !== "boolean"){
+const err162 = {instancePath:instancePath+"/resetInProgress",schemaPath:"#/properties/resetInProgress/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(vErrors === null){
+vErrors = [err162];
+}
+else {
+vErrors.push(err162);
+}
+errors++;
+}
+}
+if(data.indexingDirectory !== undefined){
+let data60 = data.indexingDirectory;
+if(typeof data60 === "string"){
+if(func2(data60) < 1){
+const err163 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err163];
+}
+else {
+vErrors.push(err163);
+}
+errors++;
+}
+if(!pattern53.test(data60)){
+const err164 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/pattern",keyword:"pattern",params:{pattern: "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"},message:"must match pattern \""+"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"+"\""};
+if(vErrors === null){
+vErrors = [err164];
+}
+else {
+vErrors.push(err164);
+}
+errors++;
+}
+}
+else {
+const err165 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err165];
+}
+else {
+vErrors.push(err165);
+}
+errors++;
+}
+}
+}
+else {
+const err166 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err166];
+}
+else {
+vErrors.push(err166);
 }
 errors++;
 }
@@ -17976,7 +18277,7 @@ return errors === 0;
 
 export const validateSearchQueryV1Result = validate75;
 const schema95 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json","title":"SearchQueryV1Result","type":"object","properties":{"hits":{"type":"array","items":{"type":"object","properties":{"documentId":{"type":"string"},"uri":{"description":"A URI identifying the document, ideally an externally retrievable URL.","type":"string","format":"uri","minLength":1},"external_ids":{"$ref":"../source/external-ids.schema.json"},"chunkId":{"type":["string","null"]},"score":{"type":"number"},"kind":{"type":"string"},"title":{"type":["string","null"]},"sender":{"type":["string","null"]},"mailboxId":{"type":["string","null"]},"date":{"type":["integer","null"]},"mimeType":{"type":["string","null"]},"conversationKey":{"type":["string","null"]},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["documentId","chunkId","score","kind","title","sender","mailboxId","date","mimeType","conversationKey"],"additionalProperties":true}},"elapsedMs":{"type":"integer","minimum":0},"blocksRead":{"type":"integer","minimum":0},"candidatesScored":{"type":"integer","minimum":0}},"required":["hits","elapsedMs","blocksRead","candidatesScored"],"additionalProperties":true};
-const formats62 = (value) => /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/)?[^\s]*$/i.test(value);
+const formats66 = (value) => /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/)?[^\s]*$/i.test(value);
 const schema97 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/top-level-parent.schema.json","title":"TopLevelParent","description":"The outermost containing document, never a folder. External IDs belong to that parent, not to the attachment.","type":"object","properties":{"documentId":{"type":"string","format":"uuid","description":"Catalog UUID, when indexed; can be passed to sources.get_document.v1."},"external_ids":{"$ref":"./external-ids.schema.json"}},"required":["external_ids"],"additionalProperties":true};
 
 function validate76(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -18313,7 +18614,7 @@ vErrors.push(err15);
 }
 errors++;
 }
-if(!(formats62(data3))){
+if(!(formats66(data3))){
 const err16 = {instancePath:instancePath+"/hits/" + i0+"/uri",schemaPath:"#/properties/hits/items/properties/uri/format",keyword:"format",params:{format: "uri"},message:"must match format \""+"uri"+"\""};
 if(vErrors === null){
 vErrors = [err16];
@@ -22478,9 +22779,10 @@ errors++;
 }
 }
 }
-}
-else {
-const err20 = {instancePath:instancePath+"/user_configuration",schemaPath:"../configuration/sidecar-configuration.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data0.indexing_sources !== undefined){
+let data9 = data0.indexing_sources;
+if((!(Array.isArray(data9))) && (data9 !== null)){
+const err20 = {instancePath:instancePath+"/user_configuration/indexing_sources",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/type",keyword:"type",params:{type: schema63.properties.indexing_sources.type},message:"must be array,null"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -22489,14 +22791,13 @@ vErrors.push(err20);
 }
 errors++;
 }
-}
-if(data.organization_configuration !== undefined){
-let data9 = data.organization_configuration;
-if(data9 && typeof data9 == "object" && !Array.isArray(data9)){
-if(data9.indexing_mailboxes !== undefined){
-let data10 = data9.indexing_mailboxes;
-if((!(Array.isArray(data10))) && (data10 !== null)){
-const err21 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/type",keyword:"type",params:{type: schema63.properties.indexing_mailboxes.type},message:"must be array,null"};
+if(Array.isArray(data9)){
+const len1 = data9.length;
+for(let i1=0; i1<len1; i1++){
+let data10 = data9[i1];
+if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
+if(data10.source_id === undefined){
+const err21 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "source_id"},message:"must have required property '"+"source_id"+"'"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -22505,13 +22806,8 @@ vErrors.push(err21);
 }
 errors++;
 }
-if(Array.isArray(data10)){
-const len1 = data10.length;
-for(let i1=0; i1<len1; i1++){
-let data11 = data10[i1];
-if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
-if(data11.mailbox_id === undefined){
-const err22 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "mailbox_id"},message:"must have required property '"+"mailbox_id"+"'"};
+if(data10.enabled === undefined){
+const err22 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "enabled"},message:"must have required property '"+"enabled"+"'"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -22520,8 +22816,8 @@ vErrors.push(err22);
 }
 errors++;
 }
-if(data11.enabled === undefined){
-const err23 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "enabled"},message:"must have required property '"+"enabled"+"'"};
+if(data10.priority === undefined){
+const err23 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "priority"},message:"must have required property '"+"priority"+"'"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -22530,8 +22826,9 @@ vErrors.push(err23);
 }
 errors++;
 }
-if(data11.priority === undefined){
-const err24 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "priority"},message:"must have required property '"+"priority"+"'"};
+if(data10.enabled !== undefined){
+if(typeof data10.enabled !== "boolean"){
+const err24 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1+"/enabled",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -22540,11 +22837,11 @@ vErrors.push(err24);
 }
 errors++;
 }
-if(data11.mailbox_id !== undefined){
-let data12 = data11.mailbox_id;
-if(typeof data12 === "string"){
-if(!(formats0.test(data12))){
-const err25 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1+"/mailbox_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/mailbox_id/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+}
+if(data10.priority !== undefined){
+let data12 = data10.priority;
+if(!(((typeof data12 == "number") && (!(data12 % 1) && !isNaN(data12))) && (isFinite(data12)))){
+const err25 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -22553,9 +22850,9 @@ vErrors.push(err25);
 }
 errors++;
 }
-}
-else {
-const err26 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1+"/mailbox_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/mailbox_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if((typeof data12 == "number") && (isFinite(data12))){
+if(data12 > 9007199254740991 || isNaN(data12)){
+const err26 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -22564,10 +22861,8 @@ vErrors.push(err26);
 }
 errors++;
 }
-}
-if(data11.enabled !== undefined){
-if(typeof data11.enabled !== "boolean"){
-const err27 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1+"/enabled",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data12 < 0 || isNaN(data12)){
+const err27 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -22577,10 +22872,12 @@ vErrors.push(err27);
 errors++;
 }
 }
-if(data11.priority !== undefined){
-let data14 = data11.priority;
-if(!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))){
-const err28 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+}
+if(data10.source_id !== undefined){
+let data13 = data10.source_id;
+if(typeof data13 === "string"){
+if(!(formats0.test(data13))){
+const err28 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1+"/source_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/source_id/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -22589,9 +22886,9 @@ vErrors.push(err28);
 }
 errors++;
 }
-if((typeof data14 == "number") && (isFinite(data14))){
-if(data14 > 9007199254740991 || isNaN(data14)){
-const err29 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+}
+else {
+const err29 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1+"/source_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/source_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -22600,8 +22897,10 @@ vErrors.push(err29);
 }
 errors++;
 }
-if(data14 < 0 || isNaN(data14)){
-const err30 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+}
+else {
+const err30 = {instancePath:instancePath+"/user_configuration/indexing_sources/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -22613,8 +22912,9 @@ errors++;
 }
 }
 }
+}
 else {
-const err31 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i1,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err31 = {instancePath:instancePath+"/user_configuration",schemaPath:"../configuration/sidecar-configuration.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -22624,12 +22924,13 @@ vErrors.push(err31);
 errors++;
 }
 }
-}
-}
-if(data9.show_tray_icon !== undefined){
-let data15 = data9.show_tray_icon;
-if((typeof data15 !== "boolean") && (data15 !== null)){
-const err32 = {instancePath:instancePath+"/organization_configuration/show_tray_icon",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/show_tray_icon/type",keyword:"type",params:{type: schema63.properties.show_tray_icon.type},message:"must be boolean,null"};
+if(data.organization_configuration !== undefined){
+let data14 = data.organization_configuration;
+if(data14 && typeof data14 == "object" && !Array.isArray(data14)){
+if(data14.indexing_mailboxes !== undefined){
+let data15 = data14.indexing_mailboxes;
+if((!(Array.isArray(data15))) && (data15 !== null)){
+const err32 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/type",keyword:"type",params:{type: schema63.properties.indexing_mailboxes.type},message:"must be array,null"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -22638,11 +22939,13 @@ vErrors.push(err32);
 }
 errors++;
 }
-}
-if(data9.indexing_parallelism !== undefined){
-let data16 = data9.indexing_parallelism;
-if((!(((typeof data16 == "number") && (!(data16 % 1) && !isNaN(data16))) && (isFinite(data16)))) && (data16 !== null)){
-const err33 = {instancePath:instancePath+"/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/type",keyword:"type",params:{type: schema63.properties.indexing_parallelism.type},message:"must be integer,null"};
+if(Array.isArray(data15)){
+const len2 = data15.length;
+for(let i2=0; i2<len2; i2++){
+let data16 = data15[i2];
+if(data16 && typeof data16 == "object" && !Array.isArray(data16)){
+if(data16.mailbox_id === undefined){
+const err33 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "mailbox_id"},message:"must have required property '"+"mailbox_id"+"'"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -22651,9 +22954,8 @@ vErrors.push(err33);
 }
 errors++;
 }
-if((typeof data16 == "number") && (isFinite(data16))){
-if(data16 > 9007199254740991 || isNaN(data16)){
-const err34 = {instancePath:instancePath+"/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(data16.enabled === undefined){
+const err34 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "enabled"},message:"must have required property '"+"enabled"+"'"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -22662,8 +22964,8 @@ vErrors.push(err34);
 }
 errors++;
 }
-if(data16 < 1 || isNaN(data16)){
-const err35 = {instancePath:instancePath+"/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(data16.priority === undefined){
+const err35 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/required",keyword:"required",params:{missingProperty: "priority"},message:"must have required property '"+"priority"+"'"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -22672,12 +22974,11 @@ vErrors.push(err35);
 }
 errors++;
 }
-}
-}
-if(data9.indexing_documents_per_minute !== undefined){
-let data17 = data9.indexing_documents_per_minute;
-if((!(((typeof data17 == "number") && (!(data17 % 1) && !isNaN(data17))) && (isFinite(data17)))) && (data17 !== null)){
-const err36 = {instancePath:instancePath+"/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/type",keyword:"type",params:{type: schema63.properties.indexing_documents_per_minute.type},message:"must be integer,null"};
+if(data16.mailbox_id !== undefined){
+let data17 = data16.mailbox_id;
+if(typeof data17 === "string"){
+if(!(formats0.test(data17))){
+const err36 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2+"/mailbox_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/mailbox_id/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -22686,9 +22987,9 @@ vErrors.push(err36);
 }
 errors++;
 }
-if((typeof data17 == "number") && (isFinite(data17))){
-if(data17 > 9007199254740991 || isNaN(data17)){
-const err37 = {instancePath:instancePath+"/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+}
+else {
+const err37 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2+"/mailbox_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/mailbox_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -22697,8 +22998,10 @@ vErrors.push(err37);
 }
 errors++;
 }
-if(data17 < 1 || isNaN(data17)){
-const err38 = {instancePath:instancePath+"/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+}
+if(data16.enabled !== undefined){
+if(typeof data16.enabled !== "boolean"){
+const err38 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2+"/enabled",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -22708,10 +23011,10 @@ vErrors.push(err38);
 errors++;
 }
 }
-}
-}
-else {
-const err39 = {instancePath:instancePath+"/organization_configuration",schemaPath:"../configuration/sidecar-configuration.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data16.priority !== undefined){
+let data19 = data16.priority;
+if(!(((typeof data19 == "number") && (!(data19 % 1) && !isNaN(data19))) && (isFinite(data19)))){
+const err39 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -22720,15 +23023,279 @@ vErrors.push(err39);
 }
 errors++;
 }
-}
-}
-else {
-const err40 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if((typeof data19 == "number") && (isFinite(data19))){
+if(data19 > 9007199254740991 || isNaN(data19)){
+const err40 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err40];
 }
 else {
 vErrors.push(err40);
+}
+errors++;
+}
+if(data19 < 0 || isNaN(data19)){
+const err41 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/properties/priority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err41];
+}
+else {
+vErrors.push(err41);
+}
+errors++;
+}
+}
+}
+}
+else {
+const err42 = {instancePath:instancePath+"/organization_configuration/indexing_mailboxes/" + i2,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_mailboxes/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err42];
+}
+else {
+vErrors.push(err42);
+}
+errors++;
+}
+}
+}
+}
+if(data14.show_tray_icon !== undefined){
+let data20 = data14.show_tray_icon;
+if((typeof data20 !== "boolean") && (data20 !== null)){
+const err43 = {instancePath:instancePath+"/organization_configuration/show_tray_icon",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/show_tray_icon/type",keyword:"type",params:{type: schema63.properties.show_tray_icon.type},message:"must be boolean,null"};
+if(vErrors === null){
+vErrors = [err43];
+}
+else {
+vErrors.push(err43);
+}
+errors++;
+}
+}
+if(data14.indexing_parallelism !== undefined){
+let data21 = data14.indexing_parallelism;
+if((!(((typeof data21 == "number") && (!(data21 % 1) && !isNaN(data21))) && (isFinite(data21)))) && (data21 !== null)){
+const err44 = {instancePath:instancePath+"/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/type",keyword:"type",params:{type: schema63.properties.indexing_parallelism.type},message:"must be integer,null"};
+if(vErrors === null){
+vErrors = [err44];
+}
+else {
+vErrors.push(err44);
+}
+errors++;
+}
+if((typeof data21 == "number") && (isFinite(data21))){
+if(data21 > 9007199254740991 || isNaN(data21)){
+const err45 = {instancePath:instancePath+"/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err45];
+}
+else {
+vErrors.push(err45);
+}
+errors++;
+}
+if(data21 < 1 || isNaN(data21)){
+const err46 = {instancePath:instancePath+"/organization_configuration/indexing_parallelism",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_parallelism/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(vErrors === null){
+vErrors = [err46];
+}
+else {
+vErrors.push(err46);
+}
+errors++;
+}
+}
+}
+if(data14.indexing_documents_per_minute !== undefined){
+let data22 = data14.indexing_documents_per_minute;
+if((!(((typeof data22 == "number") && (!(data22 % 1) && !isNaN(data22))) && (isFinite(data22)))) && (data22 !== null)){
+const err47 = {instancePath:instancePath+"/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/type",keyword:"type",params:{type: schema63.properties.indexing_documents_per_minute.type},message:"must be integer,null"};
+if(vErrors === null){
+vErrors = [err47];
+}
+else {
+vErrors.push(err47);
+}
+errors++;
+}
+if((typeof data22 == "number") && (isFinite(data22))){
+if(data22 > 9007199254740991 || isNaN(data22)){
+const err48 = {instancePath:instancePath+"/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err48];
+}
+else {
+vErrors.push(err48);
+}
+errors++;
+}
+if(data22 < 1 || isNaN(data22)){
+const err49 = {instancePath:instancePath+"/organization_configuration/indexing_documents_per_minute",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_documents_per_minute/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(vErrors === null){
+vErrors = [err49];
+}
+else {
+vErrors.push(err49);
+}
+errors++;
+}
+}
+}
+if(data14.indexing_sources !== undefined){
+let data23 = data14.indexing_sources;
+if((!(Array.isArray(data23))) && (data23 !== null)){
+const err50 = {instancePath:instancePath+"/organization_configuration/indexing_sources",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/type",keyword:"type",params:{type: schema63.properties.indexing_sources.type},message:"must be array,null"};
+if(vErrors === null){
+vErrors = [err50];
+}
+else {
+vErrors.push(err50);
+}
+errors++;
+}
+if(Array.isArray(data23)){
+const len3 = data23.length;
+for(let i3=0; i3<len3; i3++){
+let data24 = data23[i3];
+if(data24 && typeof data24 == "object" && !Array.isArray(data24)){
+if(data24.source_id === undefined){
+const err51 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "source_id"},message:"must have required property '"+"source_id"+"'"};
+if(vErrors === null){
+vErrors = [err51];
+}
+else {
+vErrors.push(err51);
+}
+errors++;
+}
+if(data24.enabled === undefined){
+const err52 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "enabled"},message:"must have required property '"+"enabled"+"'"};
+if(vErrors === null){
+vErrors = [err52];
+}
+else {
+vErrors.push(err52);
+}
+errors++;
+}
+if(data24.priority === undefined){
+const err53 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/required",keyword:"required",params:{missingProperty: "priority"},message:"must have required property '"+"priority"+"'"};
+if(vErrors === null){
+vErrors = [err53];
+}
+else {
+vErrors.push(err53);
+}
+errors++;
+}
+if(data24.enabled !== undefined){
+if(typeof data24.enabled !== "boolean"){
+const err54 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3+"/enabled",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(vErrors === null){
+vErrors = [err54];
+}
+else {
+vErrors.push(err54);
+}
+errors++;
+}
+}
+if(data24.priority !== undefined){
+let data26 = data24.priority;
+if(!(((typeof data26 == "number") && (!(data26 % 1) && !isNaN(data26))) && (isFinite(data26)))){
+const err55 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err55];
+}
+else {
+vErrors.push(err55);
+}
+errors++;
+}
+if((typeof data26 == "number") && (isFinite(data26))){
+if(data26 > 9007199254740991 || isNaN(data26)){
+const err56 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err56];
+}
+else {
+vErrors.push(err56);
+}
+errors++;
+}
+if(data26 < 0 || isNaN(data26)){
+const err57 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3+"/priority",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/priority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err57];
+}
+else {
+vErrors.push(err57);
+}
+errors++;
+}
+}
+}
+if(data24.source_id !== undefined){
+let data27 = data24.source_id;
+if(typeof data27 === "string"){
+if(!(formats0.test(data27))){
+const err58 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3+"/source_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/source_id/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+if(vErrors === null){
+vErrors = [err58];
+}
+else {
+vErrors.push(err58);
+}
+errors++;
+}
+}
+else {
+const err59 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3+"/source_id",schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/properties/source_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err59];
+}
+else {
+vErrors.push(err59);
+}
+errors++;
+}
+}
+}
+else {
+const err60 = {instancePath:instancePath+"/organization_configuration/indexing_sources/" + i3,schemaPath:"../configuration/sidecar-configuration.schema.json/properties/indexing_sources/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err60];
+}
+else {
+vErrors.push(err60);
+}
+errors++;
+}
+}
+}
+}
+}
+else {
+const err61 = {instancePath:instancePath+"/organization_configuration",schemaPath:"../configuration/sidecar-configuration.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err61];
+}
+else {
+vErrors.push(err61);
+}
+errors++;
+}
+}
+}
+else {
+const err62 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err62];
+}
+else {
+vErrors.push(err62);
 }
 errors++;
 }
@@ -26979,7 +27546,7 @@ return errors === 0;
 
 export const validateSourcesListV1Result = validate127;
 const schema168 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":true};
-const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"locator":{"type":"object","additionalProperties":true},"enabled":{"type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
+const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"displayName":{"description":"Human-readable source name for direct presentation. Older sidecars may omit it.","type":"string","minLength":1,"maxLength":1024},"indexingEnabled":{"description":"Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.","type":"boolean"},"product":{"description":"Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"product_variant":{"description":"Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"locator":{"type":"object","additionalProperties":true},"enabled":{"description":"Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.","type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
 
 function validate127(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json" */;
@@ -27168,12 +27735,11 @@ vErrors.push(err15);
 errors++;
 }
 }
-if(data1.locator !== undefined){
-let data5 = data1.locator;
-if(data5 && typeof data5 == "object" && !Array.isArray(data5)){
-}
-else {
-const err16 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data1.displayName !== undefined){
+let data5 = data1.displayName;
+if(typeof data5 === "string"){
+if(func2(data5) > 1024){
+const err16 = {instancePath:instancePath+"/sources/" + i0+"/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/displayName/maxLength",keyword:"maxLength",params:{limit: 1024},message:"must NOT have more than 1024 characters"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -27182,10 +27748,8 @@ vErrors.push(err16);
 }
 errors++;
 }
-}
-if(data1.enabled !== undefined){
-if(typeof data1.enabled !== "boolean"){
-const err17 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(func2(data5) < 1){
+const err17 = {instancePath:instancePath+"/sources/" + i0+"/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/displayName/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -27195,10 +27759,8 @@ vErrors.push(err17);
 errors++;
 }
 }
-if(data1.discoveryCursor !== undefined){
-let data7 = data1.discoveryCursor;
-if((!(data7 && typeof data7 == "object" && !Array.isArray(data7))) && (data7 !== null)){
-const err18 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
+else {
+const err18 = {instancePath:instancePath+"/sources/" + i0+"/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/displayName/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -27208,10 +27770,9 @@ vErrors.push(err18);
 errors++;
 }
 }
-if(data1.completedScanId !== undefined){
-let data8 = data1.completedScanId;
-if((typeof data8 !== "string") && (data8 !== null)){
-const err19 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
+if(data1.indexingEnabled !== undefined){
+if(typeof data1.indexingEnabled !== "boolean"){
+const err19 = {instancePath:instancePath+"/sources/" + i0+"/indexingEnabled",schemaPath:"../source/source-descriptor.schema.json/properties/indexingEnabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -27220,9 +27781,12 @@ vErrors.push(err19);
 }
 errors++;
 }
-if(typeof data8 === "string"){
-if(!(formats0.test(data8))){
-const err20 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+}
+if(data1.product !== undefined){
+let data7 = data1.product;
+if(typeof data7 === "string"){
+if(func2(data7) < 1){
+const err20 = {instancePath:instancePath+"/sources/" + i0+"/product",schemaPath:"../source/source-descriptor.schema.json/properties/product/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -27232,11 +27796,8 @@ vErrors.push(err20);
 errors++;
 }
 }
-}
-if(data1.lastSuccessAt !== undefined){
-let data9 = data1.lastSuccessAt;
-if((typeof data9 !== "string") && (data9 !== null)){
-const err21 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
+else {
+const err21 = {instancePath:instancePath+"/sources/" + i0+"/product",schemaPath:"../source/source-descriptor.schema.json/properties/product/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -27245,9 +27806,12 @@ vErrors.push(err21);
 }
 errors++;
 }
-if(typeof data9 === "string"){
-if(!(formats6.validate(data9))){
-const err22 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+}
+if(data1.product_variant !== undefined){
+let data8 = data1.product_variant;
+if(typeof data8 === "string"){
+if(func2(data8) < 1){
+const err22 = {instancePath:instancePath+"/sources/" + i0+"/product_variant",schemaPath:"../source/source-descriptor.schema.json/properties/product_variant/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -27257,11 +27821,8 @@ vErrors.push(err22);
 errors++;
 }
 }
-}
-if(data1.lastErrorCode !== undefined){
-let data10 = data1.lastErrorCode;
-if((typeof data10 !== "string") && (data10 !== null)){
-const err23 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
+else {
+const err23 = {instancePath:instancePath+"/sources/" + i0+"/product_variant",schemaPath:"../source/source-descriptor.schema.json/properties/product_variant/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -27271,9 +27832,12 @@ vErrors.push(err23);
 errors++;
 }
 }
+if(data1.locator !== undefined){
+let data9 = data1.locator;
+if(data9 && typeof data9 == "object" && !Array.isArray(data9)){
 }
 else {
-const err24 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err24 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -27283,9 +27847,9 @@ vErrors.push(err24);
 errors++;
 }
 }
-}
-else {
-const err25 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(data1.enabled !== undefined){
+if(typeof data1.enabled !== "boolean"){
+const err25 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -27295,14 +27859,114 @@ vErrors.push(err25);
 errors++;
 }
 }
-}
-else {
-const err26 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data1.discoveryCursor !== undefined){
+let data11 = data1.discoveryCursor;
+if((!(data11 && typeof data11 == "object" && !Array.isArray(data11))) && (data11 !== null)){
+const err26 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
 if(vErrors === null){
 vErrors = [err26];
 }
 else {
 vErrors.push(err26);
+}
+errors++;
+}
+}
+if(data1.completedScanId !== undefined){
+let data12 = data1.completedScanId;
+if((typeof data12 !== "string") && (data12 !== null)){
+const err27 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err27];
+}
+else {
+vErrors.push(err27);
+}
+errors++;
+}
+if(typeof data12 === "string"){
+if(!(formats0.test(data12))){
+const err28 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+if(vErrors === null){
+vErrors = [err28];
+}
+else {
+vErrors.push(err28);
+}
+errors++;
+}
+}
+}
+if(data1.lastSuccessAt !== undefined){
+let data13 = data1.lastSuccessAt;
+if((typeof data13 !== "string") && (data13 !== null)){
+const err29 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err29];
+}
+else {
+vErrors.push(err29);
+}
+errors++;
+}
+if(typeof data13 === "string"){
+if(!(formats6.validate(data13))){
+const err30 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(vErrors === null){
+vErrors = [err30];
+}
+else {
+vErrors.push(err30);
+}
+errors++;
+}
+}
+}
+if(data1.lastErrorCode !== undefined){
+let data14 = data1.lastErrorCode;
+if((typeof data14 !== "string") && (data14 !== null)){
+const err31 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err31];
+}
+else {
+vErrors.push(err31);
+}
+errors++;
+}
+}
+}
+else {
+const err32 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err32];
+}
+else {
+vErrors.push(err32);
+}
+errors++;
+}
+}
+}
+else {
+const err33 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err33];
+}
+else {
+vErrors.push(err33);
+}
+errors++;
+}
+}
+}
+else {
+const err34 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err34];
+}
+else {
+vErrors.push(err34);
 }
 errors++;
 }

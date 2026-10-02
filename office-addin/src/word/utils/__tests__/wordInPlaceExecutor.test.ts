@@ -1,3 +1,4 @@
+import { expandWordTableCellSubmission } from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -30,7 +31,6 @@ import {
   wordInPlaceAvailability,
 } from "../wordInPlaceSwitch";
 import { predictWordBodyParagraphs } from "../wordLiveParagraphs";
-import { expandWordTableCellSubmission } from "../wordTableCellSubmission";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type {
@@ -42,7 +42,7 @@ import type {
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const CLOSING = "Closing paragraph.";

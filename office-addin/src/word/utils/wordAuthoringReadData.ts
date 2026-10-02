@@ -1,7 +1,7 @@
 import type {
   WordAuthoringSnapshot,
   WordSourceBlock,
-} from "./wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 /** The style catalogue a read returns: every style by name, and for the styles the body uses, the
  * look a block keeps when its plan sets no format. */

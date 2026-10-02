@@ -40,6 +40,9 @@ vi.mock("@/hooks/ui/useThemedIcon", () => ({
 }));
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
+  useUserPreferencesFeature: () => ({
+    mcpServersTabEnabled: true,
+  }),
   useErrorReportFeature: () => ({
     showVerboseAssistantErrors: showVerboseAssistantErrorsMock(),
     showCopyErrorReport: showCopyErrorReportMock(),

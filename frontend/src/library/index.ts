@@ -652,3 +652,18 @@ export {
 } from "@/components/ui/Message/TextComparison";
 
 export { LocalTaskCoordinator } from "@/providers/LocalTaskCoordinator";
+
+// Word review: the plan model and the review card, read-only unless a host
+// that can write to the document supplies an adapter.
+export * from "@/lib/wordReview";
+export * from "@/components/ui/WordReview";
+
+export {
+  installAudioCaptureAccessPolicy,
+  type AudioCaptureAccessPolicy,
+} from "@/hooks/audio/audioCaptureAccess";
+export {
+  holdComposeReload,
+  saveComposeReloadState,
+  restoreComposeReloadState,
+} from "@/hooks/chat/composeReloadState";

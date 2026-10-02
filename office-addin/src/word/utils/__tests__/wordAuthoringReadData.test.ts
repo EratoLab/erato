@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { wordReadableSourceBlock } from "../wordAuthoringReadData";
 
-import type { WordSourceBlock } from "../wordDocumentPlan";
+import type { WordSourceBlock } from "@erato/frontend/word-review";
 
 const source = (): WordSourceBlock => ({
   ref: "b1",

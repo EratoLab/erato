@@ -1,8 +1,11 @@
-import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
-import { createNativeContentSignature } from "./wordNativeContent";
-import { removeWordNumberingIdentity } from "./wordXmlComparison";
+import {
+  createNativeContentSignature,
+  removeWordNumberingIdentity,
+} from "@erato/frontend/word-review";
 
-import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
+import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
+
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 

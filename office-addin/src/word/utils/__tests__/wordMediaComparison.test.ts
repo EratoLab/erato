@@ -1,22 +1,18 @@
+import {
+  inventoryWordNativeStructures,
+  normalizeWordInlineForComparison,
+  cloneWordMediaNode,
+  effectiveWordMediaChildren,
+  normalizeWordMediaForComparison,
+  compileWordDrawing,
+  inventoryWordMedia,
+  reserveWordNativeIds,
+  createWordXmlComparison,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import expectedXml from "../../../test/fixtures/word-rich-native/all-content-expected.xml?raw";
 import observedXml from "../../../test/fixtures/word-rich-native/all-content-observed.xml?raw";
-import {
-  inventoryWordNativeStructures,
-  normalizeWordInlineForComparison,
-} from "../wordInlineStructures";
-import {
-  cloneWordMediaNode,
-  effectiveWordMediaChildren,
-  normalizeWordMediaForComparison,
-} from "../wordMediaComparison";
-import {
-  compileWordDrawing,
-  inventoryWordMedia,
-  reserveWordNativeIds,
-} from "../wordMediaContent";
-import { createWordXmlComparison } from "../wordXmlComparison";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const WP =

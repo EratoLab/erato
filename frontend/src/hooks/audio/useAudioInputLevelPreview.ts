@@ -6,6 +6,7 @@ import {
   AUDIO_BARS_COUNT,
   getAudioLevelBarsFromTimeDomainData,
 } from "./audio-pcm-codec";
+import { requestAudioStream } from "./audioCaptureAccess";
 
 // Live-meter adaptive auto-gain (browser-agnostic): lift a quiet signal so
 // the bars stay responsive when raw capture is low (e.g. WebKit with AGC
@@ -157,7 +158,7 @@ export function useAudioInputLevelPreview({
 
       let stream: MediaStream;
       try {
-        stream = await mediaDevices.getUserMedia({
+        stream = await requestAudioStream(mediaDevices, {
           audio: {
             ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
             echoCancellation: false,

@@ -115,6 +115,10 @@ const createStoreStub = <S,>(readState: () => S) =>
   );
 
 export const DEFAULT_STUBS = {
+  holdComposeReload: () => () => {},
+  installAudioCaptureAccessPolicy: () => () => {},
+  saveComposeReloadState: () => {},
+  restoreComposeReloadState: () => {},
   useMessagingStore: {
     getState: () => ({
       activeStreamKey: "__new_chat__",
@@ -326,6 +330,7 @@ export const DEFAULT_STUBS = {
   seedGenerationStatusFromListing: noop,
   setAuthRecoveryHandler: noop,
   setClientPlatform: noop,
+  setWordLiveCards: noop,
   toast: { info: noop, success: noop, warning: noop, error: noop },
   transformEmailFencesForCopy: (value: string) => value,
   UploadUnknownError: class extends Error {},

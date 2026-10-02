@@ -15,6 +15,7 @@ on:
       - 'desktop-sidecar-protocol/**'
       - 'frontend/**'
       - 'office-addin/**'
+      - 'site/public/setup/teams/**'
       - 'e2e-tests/**'
       - 'infrastructure/charts/**'
       - 'infrastructure/k3d/**'
@@ -30,6 +31,7 @@ on:
       - 'desktop-sidecar-protocol/**'
       - 'frontend/**'
       - 'office-addin/**'
+      - 'site/public/setup/teams/**'
       - 'e2e-tests/**'
       - 'infrastructure/charts/**'
       - 'infrastructure/k3d/**'
@@ -264,6 +266,15 @@ jobs:
         working-directory: ./office-addin
         if: success() || failure()
         run: pnpm run test
+
+      - name: "Teams setup command delivery (PowerShell)"
+        working-directory: ./office-addin
+        if: success() || failure()
+        run: pnpm run test:teams-setup
+
+      - name: "Teams setup helper safety tests (offline)"
+        if: success() || failure()
+        run: pwsh -NoLogo -NoProfile -File office-addin/scripts/teams-bot/Test-EratoTeamsSetup.ps1
 
       # Validates the manifest as the backend serves it (placeholders rendered,
       # launch-event blocks absent and present) against Microsoft's schema
@@ -572,7 +583,7 @@ jobs:
           tool: cargo-nextest@0.9.88
       - name: "Run tests"
         working-directory: backend
-        run: RUST_MIN_STACK=8388608 cargo nextest run --retries 2
+        run: RUST_MIN_STACK=8388608 cargo nextest run --retries 2 --no-fail-fast
       - name: "Check if OpenAPI spec is up to date"
         working-directory: backend
         run: cargo run --bin gen-openapi -- --check

@@ -9,6 +9,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { validateFileSizes } from "@/utils/validateFileSizes";
 
 import {
+  UnsupportedFileTypeError,
   UploadTooLargeError,
   UploadUnknownError,
   type UploadError,
@@ -119,9 +120,15 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
           );
         }
 
+        if (result.rejected_files && result.rejected_files.length > 0) {
+          setError(new UnsupportedFileTypeError(result.rejected_files));
+        }
+
         if (result.files.length > 0) {
           uploadedItems = result.files;
           logger.log(`Successfully uploaded ${result.files.length} file(s)`);
+        } else if (result.rejected_files && result.rejected_files.length > 0) {
+          uploadedItems = [];
         }
       } catch (err) {
         logger.error("Error uploading standalone files:", err);

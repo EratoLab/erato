@@ -1,3 +1,7 @@
+import {
+  createNativeContentSignature,
+  expandWordTableCellSubmission,
+} from "@erato/frontend/word-review";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -29,9 +33,7 @@ import {
 import { applyWordPlanInPlace } from "../wordInPlaceExecutor";
 import { resetWordInPlaceLatchForTests } from "../wordInPlaceSwitch";
 import { wordBodyParagraphElements } from "../wordLiveParagraphs";
-import { createNativeContentSignature } from "../wordNativeContent";
 import { acceptedWordView, rejectedWordView } from "../wordRevisionViews";
-import { expandWordTableCellSubmission } from "../wordTableCellSubmission";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type {
@@ -43,7 +45,7 @@ import type {
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const STATUS = "Status:";

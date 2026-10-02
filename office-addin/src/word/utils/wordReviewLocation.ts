@@ -1,9 +1,12 @@
-import { planWordEdits } from "./wordEditPlan";
+import { planWordEdits } from "@erato/frontend/word-review";
+
 import { wordWriteHost } from "./wordWriteHost";
 
-import type { WordDocumentCapture } from "./wordDocumentCapture";
 import type { WordInPlaceBackup } from "./wordDocumentPackage";
-import type { WordEdit } from "./wordEditPlan";
+import type {
+  WordDocumentCapture,
+  WordEdit,
+} from "@erato/frontend/word-review";
 
 export type WordTrackingMode = "off" | "on" | "unknown";
 export interface WordReviewAnchor {

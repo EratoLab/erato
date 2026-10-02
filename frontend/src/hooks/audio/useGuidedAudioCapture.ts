@@ -7,6 +7,7 @@ import { useMountedState } from "react-use";
 // same import the dictation recorder uses (see its header note on why the
 // `new URL("./worklet.ts", import.meta.url)` pattern does not work here).
 import audioDictationWorkletUrl from "./audio-dictation-worklet.ts?worker&url";
+import { requestAudioStream } from "./audioCaptureAccess";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
@@ -423,7 +424,7 @@ export function useGuidedAudioCapture({
 
       let stream: MediaStream;
       try {
-        stream = await mediaDevices.getUserMedia({
+        stream = await requestAudioStream(mediaDevices, {
           audio: {
             ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
             echoCancellation: false,

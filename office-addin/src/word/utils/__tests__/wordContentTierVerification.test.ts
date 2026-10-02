@@ -25,7 +25,7 @@ import {
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";

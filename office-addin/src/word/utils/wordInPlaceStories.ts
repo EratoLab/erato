@@ -1,7 +1,10 @@
 import {
   WORDPROCESSING_NS as W,
   readWordRunFormatting,
-} from "./wordBlockFormatting";
+  createNativeContentSignature,
+  extractWordSections,
+} from "@erato/frontend/word-review";
+
 import {
   sameWordInPlaceRuns,
   wordInPlaceSourceRuns,
@@ -9,8 +12,6 @@ import {
   wordStoryReference,
 } from "./wordInPlacePlan";
 import { plainText, wordBlockParagraphs } from "./wordLiveParagraphs";
-import { createNativeContentSignature } from "./wordNativeContent";
-import { extractWordSections } from "./wordStories";
 
 import type { WordInPlaceOp, WordInPlaceStoryTarget } from "./wordInPlacePlan";
 import type { WordPredictedParagraph } from "./wordLiveParagraphs";

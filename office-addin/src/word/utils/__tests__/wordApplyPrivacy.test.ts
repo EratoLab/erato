@@ -34,7 +34,7 @@ import type {
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 /** The values firstDivergence may print; anything else must be masked. */

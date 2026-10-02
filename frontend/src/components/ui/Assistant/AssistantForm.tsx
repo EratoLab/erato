@@ -182,21 +182,22 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const promptOptimizer = usePromptOptimizer();
   const { data: facetsData } = useFacets({});
   const { mcpServersTabEnabled } = useUserPreferencesFeature();
-  // Deployments without the MCP settings surface have no per-user connect
-  // flow, so the attachment control would dead-end; skip the probe entirely.
-  const { data: mcpServersData } = useListMcpServers(
-    mcpServersTabEnabled ? {} : skipToken,
-    {
-      retry: false,
-      refetchOnWindowFocus: false,
-    },
-  );
   const {
+    mcpServersEnabled = mcpServersTabEnabled,
     contextWarningThreshold,
     contextFileContributorThreshold,
     maxSystemPromptLength,
     maxFiles,
   } = useAssistantsFeature();
+  const { data: listedMcpServersData } = useListMcpServers(
+    mcpServersEnabled ? {} : skipToken,
+    {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  );
+  // A disabled query may still return cached data; do not edit hidden selections.
+  const mcpServersData = mcpServersEnabled ? listedMcpServersData : undefined;
   const {
     estimateTokenUsageFromParts,
     lastEstimation,

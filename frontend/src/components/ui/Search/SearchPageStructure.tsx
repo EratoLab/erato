@@ -127,8 +127,11 @@ export default function SearchPageStructure({
   }, [isUpdatingChatTitle]);
 
   const activeTitleDialogSession = useMemo(
-    () => sessions.find((session) => session.id === titleDialogChatId) ?? null,
-    [sessions, titleDialogChatId],
+    () =>
+      pinnedSessions.find((session) => session.id === titleDialogChatId) ??
+      sessions.find((session) => session.id === titleDialogChatId) ??
+      null,
+    [pinnedSessions, sessions, titleDialogChatId],
   );
 
   const handleSubmitEditTitleDialog = useCallback(

@@ -1,12 +1,13 @@
+import { wordSourceReadRefs } from "@erato/frontend/word-review";
+
 import { escapeXml, W } from "./authoringFixtures";
 import { captureWordDocumentPackage } from "../../../word/utils/wordDocumentPackage";
-import { wordSourceReadRefs } from "../../../word/utils/wordDocumentPlan";
 import { captureWordAuthoringSnapshot } from "../../../word/utils/wordDocumentXml";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
-} from "../../../word/utils/wordDocumentPlan";
+} from "@erato/frontend/word-review";
 
 /** Appears in body, header, comment, customXml and custom-property content; diagnostics must never show it. */
 export const SENTINEL = "SENTINEL-PRIVATE-TEXT";

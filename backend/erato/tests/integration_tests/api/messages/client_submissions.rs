@@ -332,6 +332,10 @@ async fn client_tool_attachments_are_linked_streamed_and_persisted(pool: Pool<Po
         );
     });
     let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    // This test verifies that client tools can attach image bytes even when
+    // the mock model itself does not support image understanding.
+    config.file_uploads.upload_allowed_if_supports =
+        vec![erato::config::FileUploadOperationSelector::Any];
     config.client_tools.tools.insert(
         "files".into(),
         ClientToolConfig {

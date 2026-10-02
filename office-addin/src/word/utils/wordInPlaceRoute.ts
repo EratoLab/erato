@@ -7,13 +7,13 @@ import { classifyWordInPlacePlan } from "./wordInPlacePlan";
 import { isWordTrackingMode } from "./wordInPlaceSwitch";
 
 import type { WordRouteReason } from "./wordApplyDiagnostics";
-import type {
-  WordAuthoringSnapshot,
-  WordDocumentPlan,
-} from "./wordDocumentPlan";
 import type { WordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 import type { WordInPlaceOp } from "./wordInPlacePlan";
 import type { WordInPlaceAvailability } from "./wordInPlaceSwitch";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+} from "@erato/frontend/word-review";
 
 export type WordPlanRoute =
   /** The capture lacks the complete package, so there is no exact backup to write in place from. */

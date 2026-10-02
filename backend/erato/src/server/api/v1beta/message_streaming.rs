@@ -29,7 +29,8 @@ use crate::server::api::v1beta::file_resolution::{
 };
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming_file_extraction::{
-    parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
+    mcp_tool_processing_error_output, parse_content_filter_error_from_mcp_tool_result,
+    post_process_mcp_tool_result,
 };
 use crate::services::background_tasks::{
     BackgroundTaskManager, ClientStreamGuard, StreamingEvent, StreamingTask, Takeover,
@@ -131,6 +132,200 @@ fn reasoning_summary_part(summary: Option<&str>) -> ReasoningSummaryText {
 
 fn now_timestamp() -> String {
     Utc::now().to_rfc3339()
+}
+
+fn generation_tool_call_id(assistant_message_id: Uuid, turn: usize, call_id: &str) -> String {
+    format!("{assistant_message_id}:{turn}:{call_id}")
+}
+
+fn provider_tool_call_id(tool_call_id: &str) -> String {
+    let mut parts = tool_call_id.splitn(3, ':');
+    let Some(message_id) = parts.next() else {
+        return tool_call_id.to_string();
+    };
+    let Some(turn) = parts.next() else {
+        return tool_call_id.to_string();
+    };
+    let Some(provider_call_id) = parts.next() else {
+        return tool_call_id.to_string();
+    };
+
+    if Uuid::parse_str(message_id).is_ok() && turn.parse::<usize>().is_ok() {
+        provider_call_id.to_string()
+    } else {
+        tool_call_id.to_string()
+    }
+}
+
+fn restore_provider_tool_call_ids(chat_request: &mut ChatRequest) {
+    for message in &mut chat_request.messages {
+        let parts: Vec<GenAiContentPart> = message
+            .content
+            .clone()
+            .into_parts()
+            .into_iter()
+            .map(|part| match part {
+                GenAiContentPart::ToolCall(mut call) => {
+                    call.call_id = provider_tool_call_id(&call.call_id);
+                    GenAiContentPart::ToolCall(call)
+                }
+                GenAiContentPart::ToolResponse(mut response) => {
+                    response.call_id = provider_tool_call_id(&response.call_id);
+                    GenAiContentPart::ToolResponse(response)
+                }
+                other => other,
+            })
+            .collect();
+        message.content = MessageContent::from_parts(parts);
+    }
+}
+
+fn namespace_stream_tool_call_ids(
+    event: ChatStreamEvent,
+    assistant_message_id: Uuid,
+    turn: usize,
+) -> ChatStreamEvent {
+    match event {
+        ChatStreamEvent::ToolCallChunk(mut chunk) => {
+            chunk.tool_call.call_id =
+                generation_tool_call_id(assistant_message_id, turn, &chunk.tool_call.call_id);
+            ChatStreamEvent::ToolCallChunk(chunk)
+        }
+        ChatStreamEvent::End(mut end) => {
+            if let Some(content) = end.captured_content.take() {
+                end.captured_content = Some(MessageContent::from_parts(
+                    content
+                        .into_parts()
+                        .into_iter()
+                        .map(|part| match part {
+                            GenAiContentPart::ToolCall(mut call) => {
+                                call.call_id = generation_tool_call_id(
+                                    assistant_message_id,
+                                    turn,
+                                    &call.call_id,
+                                );
+                                GenAiContentPart::ToolCall(call)
+                            }
+                            other => other,
+                        })
+                        .collect::<Vec<_>>(),
+                ));
+            }
+            ChatStreamEvent::End(end)
+        }
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod generation_tool_call_id_tests {
+    use super::*;
+    use crate::models::message::{ToolCallStatus, ToolUse};
+    use genai::chat::ToolCall;
+
+    fn call() -> ToolCall {
+        ToolCall {
+            call_id: "call#run_python_code#0".into(),
+            fn_name: "run_python_code".into(),
+            fn_arguments: json!({"code": "print('hello')"}),
+            thought_signatures: None,
+        }
+    }
+
+    #[test]
+    fn repeated_provider_ids_are_unique_across_model_turns_and_match_stream_events() {
+        let assistant_message_id = Uuid::parse_str("01a0f45a-6fea-7d38-b761-25f0b0436423").unwrap();
+        let first_turn = namespace_stream_tool_call_ids(
+            ChatStreamEvent::ToolCallChunk(genai::chat::ToolChunk { tool_call: call() }),
+            assistant_message_id,
+            1,
+        );
+        let second_turn = namespace_stream_tool_call_ids(
+            ChatStreamEvent::End(StreamEnd {
+                captured_content: Some(MessageContent::from_tool_calls(vec![call()])),
+                ..Default::default()
+            }),
+            assistant_message_id,
+            2,
+        );
+
+        let ChatStreamEvent::ToolCallChunk(first_turn) = first_turn else {
+            panic!("expected a tool-call chunk");
+        };
+        let ChatStreamEvent::End(second_turn) = second_turn else {
+            panic!("expected end event");
+        };
+        let first_id = first_turn.tool_call.call_id;
+        let second_id = second_turn.captured_tool_calls().unwrap()[0]
+            .call_id
+            .clone();
+
+        assert_eq!(
+            first_id,
+            "01a0f45a-6fea-7d38-b761-25f0b0436423:1:call#run_python_code#0"
+        );
+        assert_eq!(
+            second_id,
+            "01a0f45a-6fea-7d38-b761-25f0b0436423:2:call#run_python_code#0"
+        );
+        assert_ne!(first_id, second_id);
+    }
+
+    #[test]
+    fn repeated_run_python_calls_keep_each_outcome_in_generation_order() {
+        let assistant_message_id = Uuid::parse_str("01a0f45a-6fea-7d38-b761-25f0b0436423").unwrap();
+        let mut content = Vec::new();
+
+        for turn in 1..=14 {
+            let event = namespace_stream_tool_call_ids(
+                ChatStreamEvent::End(StreamEnd {
+                    captured_content: Some(MessageContent::from_tool_calls(vec![call()])),
+                    ..Default::default()
+                }),
+                assistant_message_id,
+                turn,
+            );
+            let ChatStreamEvent::End(end) = event else {
+                panic!("expected end event");
+            };
+            let tool_call = end.captured_tool_calls().unwrap()[0];
+            let status = if turn == 13 {
+                ToolCallStatus::Success
+            } else {
+                ToolCallStatus::Error
+            };
+            crate::services::tool_arguments::upsert_tool_use(
+                &mut content,
+                ToolUse {
+                    tool_call_id: tool_call.call_id.clone(),
+                    tool_name: tool_call.fn_name.clone(),
+                    status,
+                    output: (turn == 13).then(|| json!({"files": ["result.csv", "summary.txt"]})),
+                    ..Default::default()
+                },
+            );
+        }
+
+        assert_eq!(content.len(), 14);
+        for (index, part) in content.iter().enumerate() {
+            let ContentPart::ToolUse(tool_use) = part else {
+                panic!("expected tool-use part");
+            };
+            assert_eq!(
+                tool_use.tool_call_id,
+                generation_tool_call_id(assistant_message_id, index + 1, "call#run_python_code#0")
+            );
+            if index == 12 {
+                assert_eq!(tool_use.status, ToolCallStatus::Success);
+                assert_eq!(
+                    tool_use.output,
+                    Some(json!({"files": ["result.csv", "summary.txt"]}))
+                );
+            } else {
+                assert_eq!(tool_use.status, ToolCallStatus::Error);
+            }
+        }
+    }
 }
 
 /// What the approval gate does with one MCP or client tool call once the
@@ -7119,10 +7314,10 @@ async fn stream_generate_chat_completion<
                         Ok(result) => result,
                         Err(err) => {
                             let tool_error = format!("Failed to process MCP tool output: {err}");
-                            let output_value = json!({
-                                "status": "error",
-                                "error": tool_error,
-                            });
+                            let output_value =
+                                mcp_tool_processing_error_output(&tool_call_result, &tool_error);
+                            let tool_response_content = serde_json::to_string(&output_value)
+                                .unwrap_or_else(|_| tool_error.clone());
                             persist_otel_tool_call(
                                 tracing_client.as_ref(),
                                 &unfinished_tool_call,
@@ -7193,7 +7388,7 @@ async fn stream_generate_chat_completion<
                                 batch_position,
                                 genai::chat::ToolResponse {
                                     call_id: unfinished_tool_call.call_id.clone(),
-                                    content: tool_error,
+                                    content: tool_response_content,
                                 },
                             ));
                             continue;
@@ -7929,14 +8124,15 @@ async fn stream_generate_chat_completion<
             0 => None,
             secs => Some(Duration::from_secs(secs)),
         };
-        let connect = crate::latency::stage(
-            "provider.connect",
+        let connect = crate::latency::stage("provider.connect", {
+            let mut provider_chat_request = current_turn_chat_request.clone();
+            restore_provider_tool_call_ids(&mut provider_chat_request);
             genai_client.exec_chat_stream(
                 "PLACEHOLDER_MODEL",
-                current_turn_chat_request.clone(),
+                provider_chat_request,
                 Some(&chat_options),
-            ),
-        );
+            )
+        });
         let connected = match provider_idle_budget {
             Some(budget) => match tokio::time::timeout(budget, connect).await {
                 Ok(result) => result.map_err(ProviderStreamFailure::Provider),
@@ -8148,7 +8344,11 @@ async fn stream_generate_chat_completion<
             };
 
             match result {
-                Ok(message) => match message {
+                Ok(message) => match namespace_stream_tool_call_ids(
+                    message,
+                    assistant_message_id,
+                    current_turn,
+                ) {
                     ChatStreamEvent::Chunk(StreamChunk { content }) => {
                         let elapsed = provider_request_start.elapsed();
                         first_response_elapsed.get_or_insert(elapsed);
@@ -9450,6 +9650,9 @@ pub struct FileContentsForGeneration {
 pub enum FileContent {
     /// Parsed text content (ready to use)
     Text(String),
+    /// File is stored and can be passed to compatible tools, but has no text
+    /// representation available from the configured file processor.
+    ReferenceOnly,
     /// Raw image bytes with MIME type (encode to base64 on-demand)
     Image {
         raw_bytes: Vec<u8>,
@@ -9461,7 +9664,7 @@ impl FileContentsForGeneration {
     /// Helper to encode image to base64 if this is an image file
     pub fn as_base64_image(&self) -> Option<ContentPartImage> {
         match &self.content {
-            FileContent::Text(_) => None,
+            FileContent::Text(_) | FileContent::ReferenceOnly => None,
             FileContent::Image {
                 raw_bytes,
                 mime_type,
@@ -9531,6 +9734,10 @@ async fn get_assistant_files_for_generation(
 
             let text = match file_contents.content {
                 FileContent::Text(text) => text,
+                FileContent::ReferenceOnly => format!(
+                    "File name: {}\nFile ID: erato_file_id:{}\nThe file is attached as bytes. Erato could not extract text from it. A file accepting tool may access it as erato-file://{}.",
+                    filename, file_id, file_id
+                ),
                 FileContent::Image { .. } => {
                     return Err(eyre::eyre!(
                         "Assistant file {} was expected to be text but resolved as image",

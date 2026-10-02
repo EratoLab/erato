@@ -1877,6 +1877,8 @@ export type FileCapability = {
    * Operations that can be performed on matching files
    */
   operations: FileOperation[];
+  /** Whether this file type may be uploaded under the active deployment policy. */
+  upload_allowed?: boolean;
 };
 
 /**
@@ -1939,6 +1941,8 @@ export type FileUploadResponse = {
    * The list of uploaded files with their IDs and filenames
    */
   files: FileUploadItem[];
+  /** Filenames skipped by the configured operation policy. */
+  rejected_files?: string[];
 };
 
 /**

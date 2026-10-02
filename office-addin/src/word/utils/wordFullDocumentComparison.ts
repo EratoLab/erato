@@ -1,19 +1,20 @@
 import {
-  parseWordXml,
-  wordRelationshipOwner,
-  wordRelationshipTarget,
-} from "./wordDocumentPackageCodec";
-import { normalizeWordInlineForComparison } from "./wordInlineStructures";
-import { normalizeWordMediaForComparison } from "./wordMediaComparison";
-import { normalizeWordTablesForComparison } from "./wordTableComparison";
-import {
   acceptWordStylesUnhiddenByUse,
   createWordXmlComparison,
   isWordHostStatePart,
   isWordHostStateRelationship,
+  normalizeWordInlineForComparison,
+  normalizeWordMediaForComparison,
   removeWordNumberingIdentity,
   wordXmlElements as all,
-} from "./wordXmlComparison";
+} from "@erato/frontend/word-review";
+
+import {
+  parseWordXml,
+  wordRelationshipOwner,
+  wordRelationshipTarget,
+} from "./wordDocumentPackageCodec";
+import { normalizeWordTablesForComparison } from "./wordTableComparison";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

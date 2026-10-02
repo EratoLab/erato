@@ -22,6 +22,10 @@
       "types": "./dist-library/utils/teams/index.d.ts",
       "import": "./dist-library/teams.mjs"
     },
+    "./word-review": {
+      "types": "./dist-library/lib/wordReview/index.d.ts",
+      "import": "./dist-library/word-review.mjs"
+    },
     "./conformance": {
       "types": "./dist-library/conformance/index.d.ts",
       "import": "./dist-library/conformance.mjs"

@@ -9,12 +9,13 @@ use genai::chat::{ToolCall, ToolResponse};
 use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
 use serde_json::Value;
+use serde_json::json;
 use std::collections::HashSet;
 use std::time::SystemTime;
 
 #[derive(Clone, Debug)]
 enum FileContentPathPart {
-    Field(String),
+    Field { name: String, required: bool },
     ArrayItem,
 }
 
@@ -129,7 +130,14 @@ fn collect_file_content_paths_inner(
             .collect::<Vec<_>>();
 
         for (name, subschema) in properties {
-            current_path.push(FileContentPathPart::Field(name.clone()));
+            let required = schema
+                .get("required")
+                .and_then(Value::as_array)
+                .is_some_and(|fields| fields.iter().any(|field| field.as_str() == Some(name)));
+            current_path.push(FileContentPathPart::Field {
+                name: name.clone(),
+                required,
+            });
             collect_file_content_paths_inner(
                 root,
                 subschema,
@@ -154,43 +162,56 @@ fn expand_paths_for_value(
     path: &[FileContentPathPart],
     current: &mut Vec<String>,
     out: &mut Vec<Vec<String>>,
-) {
+) -> Result<(), Report> {
     if path.is_empty() {
         out.push(current.clone());
-        return;
+        return Ok(());
     }
 
     match &path[0] {
-        FileContentPathPart::Field(field) => {
-            if let Value::Object(map) = value
-                && let Some(next_value) = map.get(field)
-            {
-                current.push(field.clone());
-                expand_paths_for_value(next_value, &path[1..], current, out);
-                current.pop();
-            }
+        FileContentPathPart::Field { name, required } => {
+            let object = value
+                .as_object()
+                .ok_or_else(|| eyre!("File content field parent is not an object"))?;
+            let Some(next_value) = object.get(name) else {
+                if *required {
+                    return Err(eyre!("Missing file content field '{}'", name));
+                }
+                // Only absence is optional; present values still need validation.
+                return Ok(());
+            };
+            current.push(name.clone());
+            let result = expand_paths_for_value(next_value, &path[1..], current, out);
+            current.pop();
+            result?;
         }
         FileContentPathPart::ArrayItem => {
-            if let Value::Array(items) = value {
-                for (index, item) in items.iter().enumerate() {
-                    current.push(index.to_string());
-                    expand_paths_for_value(item, &path[1..], current, out);
-                    current.pop();
-                }
+            let items = value
+                .as_array()
+                .ok_or_else(|| eyre!("File content field parent is not an array"))?;
+            // An empty array is a valid zero-file result. Continue validating other
+            // annotated paths so malformed entries cannot be hidden beside it.
+            for (index, item) in items.iter().enumerate() {
+                current.push(index.to_string());
+                let result = expand_paths_for_value(item, &path[1..], current, out);
+                current.pop();
+                result?;
             }
         }
     }
+
+    Ok(())
 }
 
 fn expand_value_paths(
     value: &Value,
     schema_paths: &[Vec<FileContentPathPart>],
-) -> Vec<Vec<String>> {
+) -> Result<Vec<Vec<String>>, Report> {
     let mut results = Vec::new();
     for path in schema_paths {
-        expand_paths_for_value(value, path, &mut Vec::new(), &mut results);
+        expand_paths_for_value(value, path, &mut Vec::new(), &mut results)?;
     }
-    results
+    Ok(results)
 }
 
 fn extract_mcp_file_fields(
@@ -204,16 +225,11 @@ fn extract_mcp_file_fields(
 
     let mut expanded_paths = Vec::new();
     for schema_path in &schema_paths {
-        for value_path in expand_value_paths(output_value, std::slice::from_ref(&schema_path.parts))
+        for value_path in
+            expand_value_paths(output_value, std::slice::from_ref(&schema_path.parts))?
         {
             expanded_paths.push((value_path, &schema_path.file_name_fields));
         }
-    }
-
-    if expanded_paths.is_empty() {
-        return Err(eyre!(
-            "MCP tool output schema marked file content, but no output values were found"
-        ));
     }
 
     let mut extracted = Vec::new();
@@ -471,6 +487,32 @@ fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
         .join("\n")
 }
 
+fn mcp_tool_output_value(
+    tool_call_result: &rmcp::model::CallToolResult,
+    tool_response_content: &str,
+) -> Result<Value, Report> {
+    match &tool_call_result.structured_content {
+        Some(value) => Ok(value.clone()),
+        None => serde_json::from_str(tool_response_content)
+            .wrap_err("Failed to parse MCP tool output as JSON"),
+    }
+}
+
+pub(super) fn mcp_tool_processing_error_output(
+    tool_call_result: &rmcp::model::CallToolResult,
+    processing_error: &str,
+) -> Value {
+    let tool_response_content = mcp_result_to_text(tool_call_result);
+    let original_output = mcp_tool_output_value(tool_call_result, &tool_response_content)
+        .unwrap_or_else(|_| Value::String(tool_response_content));
+
+    json!({
+        "status": "error",
+        "error": processing_error,
+        "mcp_output": original_output,
+    })
+}
+
 fn parse_content_filter_error_payload(value: &Value) -> Option<GenerationErrorType> {
     let mut candidates = vec![value];
     if let Some(error_object) = value.get("error") {
@@ -558,11 +600,7 @@ pub async fn post_process_mcp_tool_result(
         let output_schema_value = Value::Object(output_schema.as_ref().clone());
         let schema_paths = collect_file_content_paths(&output_schema_value);
         if !schema_paths.is_empty() {
-            let mut output_json: Value = match &tool_call_result.structured_content {
-                Some(value) => value.clone(),
-                None => serde_json::from_str(&tool_response_content)
-                    .wrap_err("Failed to parse MCP tool output as JSON")?,
-            };
+            let mut output_json = mcp_tool_output_value(tool_call_result, &tool_response_content)?;
             file_content_parts = process_mcp_file_outputs(
                 app_state,
                 policy,
@@ -593,6 +631,304 @@ mod tests {
     use super::*;
     use rmcp::model::{CallToolResult, ContentBlock};
     use serde_json::json;
+    use std::sync::Arc;
+
+    fn app_state_without_storage() -> AppState {
+        let config = crate::config::AppConfig::default();
+        let distribution = Arc::new(crate::distribution::Distribution::load(&config));
+        let reloadable = crate::distribution::runtime::ReloadableAppState::new(
+            &config,
+            crate::services::mcp_manager::McpServers::new(&config),
+        );
+        AppState {
+            db: sea_orm::DatabaseConnection::default(),
+            local_delegation_signer: None,
+            ms_teams_bot: None,
+            default_file_storage_provider: None,
+            file_storage_providers: Default::default(),
+            client_operations: Default::default(),
+            prompt_guardrails: Arc::new(
+                crate::services::prompt_guardrails::CompiledPromptGuardrails::new(&config.guardrails)
+                    .unwrap(),
+            ),
+            actor_manager: crate::actors::manager::ActorManager,
+            langfuse_client: crate::services::langfuse::LangfuseClient::from_config(
+                &config.integrations.langfuse,
+                None,
+            )
+            .unwrap(),
+            global_policy_engine: crate::state::GlobalPolicyEngine::new(),
+            background_tasks: crate::services::background_tasks::BackgroundTaskManager::new(
+                None,
+                config.generation_status.clone(),
+                None,
+            ),
+            system_prompt_renderer:
+                crate::services::template_rendering::consumers::system_prompt::SystemPromptRenderer::new(),
+            distribution,
+            reloadable: Arc::new(tokio::sync::RwLock::new(reloadable)),
+            genai_client_override: None,
+            file_bytes_cache: moka::future::Cache::new(0),
+            file_contents_cache: moka::future::Cache::new(0),
+            token_count_cache: moka::future::Cache::new(0),
+            file_processing_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
+            file_processing_pipeline_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
+            file_processor: crate::services::file_processor::create_file_processor(
+                &config.file_processor.processor,
+            )
+            .unwrap(),
+            file_type_detector: None,
+            config,
+        }
+    }
+
+    fn optional_files_schema() -> Value {
+        json!({
+            "type": "object",
+            "required": ["success"],
+            "properties": {
+                "success": { "type": "boolean" },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["content_base64", "mime_type"],
+                        "properties": {
+                            "content_base64": {
+                                "type": "string",
+                                "contentEncoding": "base64",
+                                "chat.erato/file_content_field": true
+                            },
+                            "mime_type": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    #[tokio::test]
+    async fn omitted_optional_files_preserve_structured_and_json_text_results() {
+        // Any unexpected persistence attempt fails: no database or storage is configured.
+        let app_state = app_state_without_storage();
+        let policy = PolicyEngine::new();
+        let subject = Subject::User(Uuid::new_v4().to_string());
+        let tool_call = ToolCall {
+            call_id: "python-call".into(),
+            fn_name: "run_python_code".into(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        let schema = Arc::new(optional_files_schema().as_object().unwrap().clone());
+        for original in [
+            json!({
+                "success": true,
+                "stdout": "ok\n",
+                "stderr": "",
+                "result": null,
+                "error": null,
+                "timed_out": false,
+                "output_truncated": false
+            }),
+            json!({ "success": true, "stdout": "", "result": 2 }),
+            json!({
+                "success": false,
+                "stdout": "starting worker\n",
+                "stderr": "ModuleNotFoundError: No module named 'docx'",
+                "result": null,
+                "error": { "type": "ModuleNotFoundError", "message": "No module named 'docx'" },
+                "timed_out": false,
+                "output_truncated": false
+            }),
+        ] {
+            for is_error in [false, true] {
+                for structured in [false, true] {
+                    let mut result = if structured {
+                        CallToolResult::structured(original.clone())
+                    } else {
+                        CallToolResult::success(vec![ContentBlock::text(original.to_string())])
+                    };
+                    result.is_error = Some(is_error);
+                    let processed = post_process_mcp_tool_result(
+                        &app_state,
+                        &policy,
+                        &subject,
+                        Uuid::new_v4(),
+                        &tool_call,
+                        Some(&schema),
+                        &result,
+                    )
+                    .await
+                    .expect("omitted optional files are valid");
+                    assert!(processed.file_content_parts.is_empty());
+                    assert_eq!(processed.output_value, Some(original.clone()));
+                    assert_eq!(processed.tool_response.call_id, tool_call.call_id);
+                    let output: Value =
+                        serde_json::from_str(&processed.tool_response.content).unwrap();
+                    assert_eq!(output, original);
+                    assert!(output.get("files").is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn optional_nested_file_paths_resolve_local_refs_and_preserve_siblings() {
+        let schema = json!({
+            "$ref": "#/$defs/Output",
+            "$defs": {
+                "Output": {
+                    "type": "object",
+                    "properties": {
+                        "groups": { "type": "array", "items": { "$ref": "#/$defs/Group" } }
+                    }
+                },
+                "Group": {
+                    "type": "object",
+                    "properties": { "result": { "$ref": "#/$defs/Result" } }
+                },
+                "Result": optional_files_schema()
+            }
+        });
+        for output in [
+            json!({}),
+            json!({ "groups": [{}] }),
+            json!({ "groups": [{ "result": { "success": true } }] }),
+        ] {
+            assert!(
+                extract_mcp_file_fields(&schema, &output)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+        let output = json!({
+            "groups": [
+                {},
+                { "result": { "success": true } },
+                { "result": { "success": true, "files": [] } },
+                { "result": { "success": true, "files": [
+                    { "content_base64": "aGVsbG8=", "mime_type": "text/plain" }
+                ] } }
+            ]
+        });
+        let extracted = extract_mcp_file_fields(&schema, &output).unwrap();
+        assert_eq!(extracted.len(), 1);
+        assert_eq!(
+            extracted[0].json_pointer,
+            "/groups/3/result/files/0/content_base64"
+        );
+        assert_eq!(decode_mcp_file(&extracted[0]).unwrap(), b"hello");
+
+        let mut required_schema = schema.clone();
+        required_schema["$defs"]["Result"]["required"] = json!(["success", "files"]);
+        let error = extract_mcp_file_fields(&required_schema, &output).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Missing file content field 'files'")
+        );
+        required_schema["$defs"]["Group"]["required"] = json!(["result"]);
+        let error = extract_mcp_file_fields(&required_schema, &output).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Missing file content field 'result'")
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_files_after_valid_files_fail_before_persistence() {
+        let app_state = app_state_without_storage();
+        let policy = PolicyEngine::new();
+        let subject = Subject::User(Uuid::new_v4().to_string());
+        let tool_call = ToolCall {
+            call_id: "python-call".into(),
+            fn_name: "run_python_code".into(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        let mut schema = optional_files_schema();
+        schema["properties"]["absent_files"] = schema["properties"]["files"].clone();
+        let schema = Arc::new(schema.as_object().unwrap().clone());
+        for (invalid, expected_error) in [
+            (json!({}), "Missing file content field 'content_base64'"),
+            (json!({ "content_base64": "aGVsbG8=" }), "Missing mime_type"),
+            (
+                json!({ "content_base64": "invalid!", "mime_type": "text/plain" }),
+                "Failed to decode base64",
+            ),
+            (
+                json!({ "content_base64": "aGVsbG8=", "mime_type": "invalid" }),
+                "Invalid MIME type",
+            ),
+        ] {
+            let result = CallToolResult::structured(json!({
+                "success": true,
+                "files": [
+                    { "content_base64": "aGVsbG8=", "mime_type": "text/plain" },
+                    invalid
+                ]
+            }));
+            let error = post_process_mcp_tool_result(
+                &app_state,
+                &policy,
+                &subject,
+                Uuid::new_v4(),
+                &tool_call,
+                Some(&schema),
+                &result,
+            )
+            .await
+            .err()
+            .expect("malformed files must fail before accessing storage");
+            assert!(error.to_string().contains(expected_error), "{error}");
+        }
+    }
+
+    #[test]
+    fn optional_files_still_validate_present_values_and_required_fields() {
+        let mut schema = optional_files_schema();
+        // An omitted path must not hide malformed entries on another path.
+        schema["properties"]["absent_files"] = schema["properties"]["files"].clone();
+        let valid = json!({ "content_base64": "aGVsbG8=", "mime_type": "text/plain" });
+        for files in [
+            Value::Null,
+            json!({}),
+            json!("not an array"),
+            json!([null]),
+            json!([valid.clone(), {}]),
+            json!([valid.clone(), { "mime_type": "text/plain" }]),
+            json!([valid.clone(), { "content_base64": "aGVsbG8=" }]),
+            json!([valid.clone(), { "content_base64": null, "mime_type": "text/plain" }]),
+        ] {
+            let output = json!({ "success": true, "files": files });
+            assert!(
+                extract_mcp_file_fields(&schema, &output).is_err(),
+                "{output}"
+            );
+        }
+        for invalid in [
+            json!({ "content_base64": "invalid!", "mime_type": "text/plain" }),
+            json!({ "content_base64": "aGVsbG8=", "mime_type": "invalid" }),
+        ] {
+            let output = json!({ "success": true, "files": [valid.clone(), invalid] });
+            let fields = extract_mcp_file_fields(&schema, &output).unwrap();
+            assert!(
+                fields
+                    .iter()
+                    .map(decode_mcp_file)
+                    .collect::<Result<Vec<_>, _>>()
+                    .is_err()
+            );
+        }
+        schema["required"] = json!(["success", "files"]);
+        let error = extract_mcp_file_fields(&schema, &json!({ "success": true })).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Missing file content field 'files'")
+        );
+    }
 
     #[test]
     fn document_and_mixed_outputs_decode_and_become_file_references() {
@@ -756,6 +1092,158 @@ mod tests {
                 base64_data: "d29ybGQ=".to_string(),
                 file_name: None,
             }
+        );
+    }
+
+    #[test]
+    fn extract_mcp_file_fields_accepts_empty_annotated_arrays() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "object",
+                    "properties": {
+                        "files": {
+                            "type": "array",
+                            "items": { "$ref": "#/$defs/File" }
+                        }
+                    }
+                }
+            },
+            "$defs": {
+                "File": {
+                    "type": "object",
+                    "properties": {
+                        "content": { "chat.erato/file_content_field": true, "type": "string" },
+                        "mime_type": { "type": "string" }
+                    }
+                }
+            }
+        });
+        let output = json!({ "result": { "files": [] }, "stdout": "2" });
+
+        assert!(
+            extract_mcp_file_fields(&schema, &output)
+                .expect("empty files are valid")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn empty_file_arrays_preserve_structured_and_json_text_results() {
+        let structured_error = json!({
+            "files": [],
+            "stderr": "Python runtime initialization failed",
+            "error": { "type": "runtime_initialization", "message": "worker unavailable" }
+        });
+        let structured_result = CallToolResult::structured_error(structured_error.clone());
+        assert_eq!(
+            mcp_tool_output_value(&structured_result, "").expect("structured result"),
+            structured_error
+        );
+
+        let text_result =
+            CallToolResult::success(vec![ContentBlock::text(r#"{"files":[],"stdout":"2"}"#)]);
+        let text_content = mcp_result_to_text(&text_result);
+        assert_eq!(
+            mcp_tool_output_value(&text_result, &text_content).expect("JSON text result"),
+            json!({ "files": [], "stdout": "2" })
+        );
+    }
+
+    #[test]
+    fn file_processing_error_output_keeps_original_logs_and_diagnostics() {
+        let original_output = json!({
+            "files": [{ "content": "aGVsbG8=" }],
+            "stdout": "starting worker",
+            "stderr": "worker returned incomplete file metadata",
+            "error": { "type": "runtime", "message": "worker failed" }
+        });
+        let tool_result = CallToolResult::structured_error(original_output.clone());
+
+        let output = mcp_tool_processing_error_output(
+            &tool_result,
+            "Failed to process MCP tool output: Missing mime_type",
+        );
+
+        assert_eq!(output["status"], "error");
+        assert_eq!(
+            output["error"],
+            "Failed to process MCP tool output: Missing mime_type"
+        );
+        assert_eq!(output["mcp_output"], original_output);
+    }
+
+    #[test]
+    fn extract_mcp_file_fields_accepts_empty_nested_arrays_alongside_files() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "files": {
+                                "type": "array",
+                                "items": { "$ref": "#/$defs/File" }
+                            }
+                        }
+                    }
+                }
+            },
+            "$defs": {
+                "File": {
+                    "type": "object",
+                    "properties": {
+                        "content": { "chat.erato/file_content_field": true, "type": "string" },
+                        "mime_type": { "type": "string" }
+                    }
+                }
+            }
+        });
+        let output = json!({
+            "groups": [
+                { "files": [] },
+                { "files": [{ "content": "aGVsbG8=", "mime_type": "text/plain" }] }
+            ]
+        });
+
+        let extracted = extract_mcp_file_fields(&schema, &output).expect("extract");
+        assert_eq!(extracted.len(), 1);
+        assert_eq!(extracted[0].json_pointer, "/groups/1/files/0/content");
+        assert_eq!(extracted[0].mime_type, "text/plain");
+    }
+
+    #[test]
+    fn extract_mcp_file_fields_rejects_malformed_output_shapes() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["content", "mime_type"],
+                        "properties": {
+                            "content": { "chat.erato/file_content_field": true, "type": "string" },
+                            "mime_type": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        });
+
+        for output in [json!({ "files": null }), json!({ "files": [{}] })] {
+            assert!(extract_mcp_file_fields(&schema, &output).is_err());
+        }
+
+        let output = json!({ "files": [{ "content": "aGVsbG8=" }] });
+        assert!(
+            extract_mcp_file_fields(&schema, &output)
+                .unwrap_err()
+                .to_string()
+                .contains("Missing mime_type")
         );
     }
 

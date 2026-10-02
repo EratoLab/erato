@@ -50,6 +50,8 @@ export type Env = {
   userPreferencesEnabled: boolean;
   userPreferencesDataTabEnabled: boolean;
   mcpServersTabEnabled: boolean;
+  mcpServersInChatInputEnabled?: boolean;
+  mcpServersInAssistantEditorEnabled?: boolean;
   sharepointEnabled: boolean;
   sharepointShowDisclaimer: boolean;
   chatSharingEnabled: boolean;
@@ -118,6 +120,8 @@ declare global {
     USER_PREFERENCES_ENABLED?: boolean;
     USER_PREFERENCES_DATA_TAB_ENABLED?: boolean;
     MCP_SERVERS_TAB_ENABLED?: boolean;
+    MCP_SERVERS_IN_CHAT_INPUT_ENABLED?: boolean;
+    MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
     SHAREPOINT_SHOW_DISCLAIMER?: boolean;
     CHAT_SHARING_ENABLED?: boolean;
@@ -333,6 +337,15 @@ export const env = (): Env => {
     import.meta.env.VITE_MCP_SERVERS_TAB_ENABLED === "true"
       ? true
       : (window.MCP_SERVERS_TAB_ENABLED ?? false);
+  const mcpServersInChatInputEnabled =
+    import.meta.env.VITE_MCP_SERVERS_IN_CHAT_INPUT_ENABLED !== undefined
+      ? import.meta.env.VITE_MCP_SERVERS_IN_CHAT_INPUT_ENABLED === "true"
+      : (window.MCP_SERVERS_IN_CHAT_INPUT_ENABLED ?? mcpServersTabEnabled);
+  const mcpServersInAssistantEditorEnabled =
+    import.meta.env.VITE_MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED !== undefined
+      ? import.meta.env.VITE_MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED === "true"
+      : (window.MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED ??
+        mcpServersTabEnabled);
   const sharepointEnabled =
     import.meta.env.VITE_SHAREPOINT_ENABLED === "true"
       ? true
@@ -493,6 +506,8 @@ export const env = (): Env => {
     userPreferencesEnabled,
     userPreferencesDataTabEnabled,
     mcpServersTabEnabled,
+    mcpServersInChatInputEnabled,
+    mcpServersInAssistantEditorEnabled,
     sharepointEnabled,
     sharepointShowDisclaimer,
     chatSharingEnabled,

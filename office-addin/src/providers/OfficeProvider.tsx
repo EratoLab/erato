@@ -1,6 +1,16 @@
+import {
+  installAudioCaptureAccessPolicy,
+  toast,
+  saveComposeReloadState,
+  restoreComposeReloadState,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { createContext, useContext, useEffect, useState } from "react";
 
+import {
+  createOfficeAudioAccess,
+  isOfficeAudioCaptureSupported,
+} from "./officeAudioAccess";
 import { activateHostLocale } from "../utils/activateHostLocale";
 import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 
@@ -15,11 +25,7 @@ interface OfficeContextValue {
   host: string | null;
   platform: string | null;
   mailboxUser: MailboxUser | null;
-  /**
-   * Whether this Office host can capture microphone audio. False on the
-   * WebKit-based Mac desktop client and on mobile, where mic capture is
-   * blocked regardless of permissions. See {@link isAudioCaptureSupportedPlatform}.
-   */
+  /** Whether DevicePermissionService 1.1 is available in this Office host. */
   supportsAudioCapture: boolean;
   /**
    * True when the task pane only follows mail navigation while pinned AND a
@@ -69,37 +75,6 @@ function loadOfficeJs(): Promise<void> {
   return officeJsPromise;
 }
 
-/**
- * Platforms where Outlook blocks microphone capture entirely:
- * - `Mac`: the desktop client runs in a WebKit (WKWebView) host; the Device
- *   Permission API "isn't supported in Safari" and getUserMedia is blocked.
- * - `iOS` / `Android`: mobile add-ins can't capture audio.
- *
- * `PC` (classic Outlook desktop — the host shows a native prompt automatically)
- * and `OfficeOnline` (Outlook on the web AND new Outlook on Windows, both
- * Chromium) are supported. Values come from `Office.PlatformType`.
- */
-const AUDIO_CAPTURE_BLOCKED_PLATFORMS = new Set(["Mac", "iOS", "Android"]);
-
-/**
- * Reliable, synchronous probe for whether the current Office host can capture
- * microphone audio, based on `Office.onReady().platform`. Returns false for an
- * unknown/missing platform so audio is only surfaced where we know it works.
- *
- * Note: we deliberately do NOT probe `navigator.mediaDevices.enumerateDevices()`
- * — on new Outlook on Windows it reports zero microphones until the Device
- * Permission API grants access, which would wrongly flag a supported host as
- * unsupported.
- */
-export function isAudioCaptureSupportedPlatform(
-  platform: string | null,
-): boolean {
-  if (!platform) {
-    return false;
-  }
-  return !AUDIO_CAPTURE_BLOCKED_PLATFORMS.has(platform);
-}
-
 export function useOffice() {
   return useContext(OfficeContext);
 }
@@ -115,6 +90,8 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
+    let disposed = false;
+    let disposeAudioAccess: (() => void) | undefined;
     void loadOfficeJs()
       .then(() => {
         return Office.onReady().then(async (info) => {
@@ -144,18 +121,65 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          if (disposed) return;
+          const supportsAudioCapture = isOfficeAudioCaptureSupported();
+          const draftKey = `erato.office.audioConsentDraft.${host}`;
+          try {
+            restoreComposeReloadState(window.sessionStorage, draftKey);
+          } catch (error) {
+            console.warn(
+              "Failed to restore composer after microphone consent",
+              error,
+            );
+          }
+          disposeAudioAccess = installAudioCaptureAccessPolicy(
+            createOfficeAudioAccess({
+              host,
+              supported: supportsAudioCapture,
+              beforeReload: () => {
+                try {
+                  saveComposeReloadState(window.sessionStorage, draftKey);
+                } catch (error) {
+                  toast.error({
+                    title:
+                      error instanceof Error &&
+                      error.name === "ComposeReloadBlockedError"
+                        ? t({
+                            id: "officeAddin.audio.pendingAttachments",
+                            message:
+                              "Microphone access needs a reload. Finish uploading and send or remove staged attachments, then try again.",
+                          })
+                        : t({
+                            id: "officeAddin.audio.draftSaveFailed",
+                            message:
+                              "Your draft could not be saved for the microphone permission reload. Please send your draft and try again.",
+                          }),
+                  });
+                  throw error;
+                }
+              },
+            }),
+          );
           setContext({
             isReady: true,
             host,
             platform,
             mailboxUser,
-            supportsAudioCapture: isAudioCaptureSupportedPlatform(platform),
+            supportsAudioCapture,
             itemTrackingRequiresPin:
               platform === "Mac" && !detectExchangeOnPrem(),
           });
         });
       })
       .catch(() => {
+        if (disposed) return;
+        disposeAudioAccess = installAudioCaptureAccessPolicy(
+          createOfficeAudioAccess({
+            host: null,
+            supported: false,
+            beforeReload: () => {},
+          }),
+        );
         setContext({
           isReady: true,
           host: null,
@@ -165,6 +189,10 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
           itemTrackingRequiresPin: false,
         });
       });
+    return () => {
+      disposed = true;
+      disposeAudioAccess?.();
+    };
   }, []);
 
   if (!context.isReady) {

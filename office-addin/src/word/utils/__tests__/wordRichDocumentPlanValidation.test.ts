@@ -1,15 +1,18 @@
-import { describe, expect, it } from "vitest";
-
-import nativeSource from "../../../test/fixtures/word-authoring-state/mixed-source.xml?raw";
 import {
   parseWordDocumentPlan,
   validateWordDocumentPlan,
   wordSourceReadRefs,
-} from "../wordDocumentPlan";
-import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
-import { wordSourceDetails } from "../wordRichContent";
+  wordSourceDetails,
+} from "@erato/frontend/word-review";
+import { describe, expect, it } from "vitest";
 
-import type { WordDocumentPlan, WordPlanBlock } from "../wordDocumentPlan";
+import nativeSource from "../../../test/fixtures/word-authoring-state/mixed-source.xml?raw";
+import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
+
+import type {
+  WordDocumentPlan,
+  WordPlanBlock,
+} from "@erato/frontend/word-review";
 
 function setup(xml = nativeSource) {
   const source = captureWordAuthoringSnapshot(xml, "doc-A", "Off", true);

@@ -1,13 +1,13 @@
+import { resolveEditWordCapture } from "@erato/frontend/word-review";
 import { useEffect, useRef, useState } from "react";
 
 import { FreshCompletionTracker } from "../../core/clientActions/freshCompletionTracker";
-import { resolveEditWordCapture } from "../utils/wordDocumentCapture";
 
 import type {
   AddinChatController,
   AddinChatHostCallbacks,
 } from "../../core/AddinChatCore";
-import type { WordDocumentCapture } from "../utils/wordDocumentCapture";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export interface WordDocumentCaptures {
   /** Stage separately: beforeSend receives only hostContextIdentity. */

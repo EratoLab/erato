@@ -1,4 +1,6 @@
-import type { WordDocumentCapture } from "./wordDocumentCapture";
+import { isWordHistorySnapshot } from "@erato/frontend/word-review";
+
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export type WordWriteBlockReason =
   /** Pane reloads lose the in-memory capture; text search cannot reconstruct ownership. */
@@ -15,7 +17,7 @@ export function resolveWordWriteGate(args: {
   expectedIdentity: string | undefined;
   currentIdentity: string | null;
 }): WordWriteGate {
-  if (!args.capture) {
+  if (!args.capture || isWordHistorySnapshot(args.capture.authoring)) {
     return { allowed: false, reason: "no-capture" };
   }
   if (

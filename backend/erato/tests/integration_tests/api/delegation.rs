@@ -4,8 +4,8 @@
 use crate::test_app_state;
 use crate::test_utils::{
     Event, JwtTokenBuilder, RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER,
-    TEST_USER_SUBJECT, TestRequestAuthExt, archive_chat_via_api, parse_sse_events,
-    setup_mock_llm_server_with_mocks, unarchive_chat_via_api,
+    TEST_USER_SUBJECT, TestRequestAuthExt, archive_chat_via_api, generated_tool_call_id,
+    parse_sse_events, setup_mock_llm_server_with_mocks, unarchive_chat_via_api,
 };
 use axum::Router;
 use axum::http;
@@ -4212,18 +4212,25 @@ async fn test_per_message_background_cap_refuses_second_launch_in_one_turn(pool:
     .await;
     response.assert_status_ok();
     let events = parse_sse_events(&response);
+    let parent_message_id = assistant_message_id_from_events(&events);
 
     let updates = terminal_tool_call_updates(&events, "delegate_to_assistant");
     assert_eq!(updates.len(), 2, "got: {updates:?}");
     let launched = updates
         .iter()
-        .find(|update| update["tool_call_id"] == "call_turncap_a")
+        .find(|update| {
+            update["tool_call_id"]
+                == generated_tool_call_id(&parent_message_id, 1, "call_turncap_a")
+        })
         .expect("first call's terminal update");
     assert_eq!(launched["status"], "success");
     assert_eq!(launched["output"]["background"], true);
     let refused = updates
         .iter()
-        .find(|update| update["tool_call_id"] == "call_turncap_b")
+        .find(|update| {
+            update["tool_call_id"]
+                == generated_tool_call_id(&parent_message_id, 1, "call_turncap_b")
+        })
         .expect("second call's terminal update");
     assert_eq!(refused["status"], "error");
     assert!(
@@ -7928,7 +7935,13 @@ async fn a_task_run_returns_its_answer_into_the_origin_turn(pool: Pool<Postgres>
     );
     // The two ids the frontend and later parts of the level key off.
     assert!(output["child_run_id"].is_string());
-    assert_eq!(output["parent_tool_call_id"], "call_task_1");
+    assert_eq!(
+        output["parent_tool_call_id"],
+        format!(
+            "{}:1:call_task_1",
+            assistant_message_id_from_events(&events)
+        )
+    );
     assert!(extract_full_text_answer(&events).contains("PARENT-TASK-FINAL"));
 
     // The child is a real chat, marked as a task run, and never offered a
@@ -8830,6 +8843,7 @@ async fn two_tasks_of_one_batch_overlap_and_answer_in_call_order(pool: Pool<Post
     let server = app_server(app_state.clone());
     let chat = create_chat(&server, None).await;
     let events = submit_with_facets(&server, &chat, "fan out question", &["plan"]).await;
+    let parent_message_id = assistant_message_id_from_events(&events);
 
     // Both settled, and the quick one settled first — impossible unless the
     // slow one was being waited on at the same time rather than before.
@@ -8846,7 +8860,10 @@ async fn two_tasks_of_one_batch_overlap_and_answer_in_call_order(pool: Pool<Post
         .collect();
     assert_eq!(
         settle_order,
-        vec!["call_quick".to_string(), "call_slow".to_string()],
+        vec![
+            generated_tool_call_id(&parent_message_id, 1, "call_quick"),
+            generated_tool_call_id(&parent_message_id, 1, "call_slow"),
+        ],
         "the quick task must settle while the slow one is still running"
     );
 
@@ -9630,6 +9647,7 @@ async fn async_task_dispatch_settles_the_slot_and_detaches(pool: Pool<Postgres>)
     let server = app_server(app_state.clone());
     let chat = create_chat(&server, None).await;
     let events = submit_with_facets(&server, &chat, "async task question", &["plan"]).await;
+    let parent_message_id = assistant_message_id_from_events(&events);
 
     let output = find_tool_call_update_output(&events, "delegate_task");
     assert_eq!(
@@ -9654,7 +9672,8 @@ async fn async_task_dispatch_settles_the_slot_and_detaches(pool: Pool<Postgres>)
         .expect("child configuration");
     assert_eq!(configuration["provenance"]["run_mode"], "async");
     assert_eq!(
-        configuration["task"]["parent_tool_call_id"], "call_async_1",
+        configuration["task"]["parent_tool_call_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_async_1"),
         "the origin call is persisted at launch, for a delivery that may never see this turn"
     );
 }
@@ -10024,6 +10043,7 @@ async fn async_child_completion_delivers_task_result_and_reacts(pool: Pool<Postg
     let chat = create_chat(&server, None).await;
     let chat_id = Uuid::parse_str(&chat).unwrap();
     let events = submit_with_facets(&server, &chat, "delivery question", &["plan"]).await;
+    let parent_message_id = assistant_message_id_from_events(&events);
     assert!(extract_full_text_answer(&events).contains("PARENT-DISPATCH-FINAL"));
 
     let child_chat = delegated_child_chat(&app_state.db, chat_id).await;
@@ -10046,7 +10066,10 @@ async fn async_child_completion_delivers_task_result_and_reacts(pool: Pool<Postg
     let part = &result_row.raw_message["content"][0];
     assert_eq!(part["content_type"], "task_result");
     assert_eq!(part["child_chat_id"], child_chat.id.to_string());
-    assert_eq!(part["parent_tool_call_id"], "call_delivery_1");
+    assert_eq!(
+        part["parent_tool_call_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_delivery_1")
+    );
     assert_eq!(part["status"], "completed");
     assert!(
         part["summary"]
@@ -14401,9 +14424,16 @@ fn content_of(row: &erato::db::entity::messages::Model) -> Vec<Value> {
 }
 
 fn slot_for(content: &[Value], tool_call_id: &str) -> Value {
+    let namespaced_suffix = format!(":{tool_call_id}");
     content
         .iter()
-        .find(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == tool_call_id)
+        .find(|part| {
+            part["content_type"] == "tool_use"
+                && (part["tool_call_id"] == tool_call_id
+                    || part["tool_call_id"]
+                        .as_str()
+                        .is_some_and(|id| id.ends_with(&namespaced_suffix)))
+        })
         .unwrap_or_else(|| panic!("no slot for {tool_call_id}: {content:?}"))
         .clone()
 }
@@ -14483,19 +14513,24 @@ async fn task_child_parks_and_parent_surfaces_one_delegated_task_approval(pool: 
     );
 
     let approvals = request["approvals"].as_array().unwrap();
+    let parent_tool_call_id = generated_tool_call_id(parent_message_id, 1, "call_task_one");
     assert_eq!(
         approvals.len(),
         1,
         "one item per parked child: {approvals:?}"
     );
     assert_eq!(
-        approvals[0]["approval_id"], "call_task_one",
+        approvals[0]["approval_id"], parent_tool_call_id,
         "the approval is named after the origin call it covers"
     );
-    assert_eq!(approvals[0]["tool_call_id"], "call_task_one");
+    assert_eq!(approvals[0]["tool_call_id"], parent_tool_call_id);
     let child_ref = &approvals[0]["child"];
+    let child_message_id = child_parked_row(&app_state.db, child_chat.id).await.id;
     assert_eq!(child_ref["child_chat_id"], json!(child_chat.id));
-    assert_eq!(child_ref["child_tool_call_id"], "call_child_probe");
+    assert_eq!(
+        child_ref["child_tool_call_id"],
+        generated_tool_call_id(child_message_id, 1, "call_child_probe")
+    );
     assert_eq!(child_ref["tool_name"], PARKED_TOOL);
     assert_eq!(child_ref["mcp_server_id"], "mock_mcp_approval");
     assert_eq!(child_ref["preset"], "restrictive");
@@ -14572,7 +14607,10 @@ async fn envelope_reports_input_required_for_parked_child(pool: Pool<Postgres>) 
     assert_eq!(slot["output"]["reason"], "approval_pending");
     assert_eq!(slot["output"]["child_run_id"], json!(child_chat.id));
     assert_eq!(slot["output"]["delegate_chat_id"], json!(child_chat.id));
-    assert_eq!(slot["output"]["parent_tool_call_id"], "call_task_one");
+    assert_eq!(
+        slot["output"]["parent_tool_call_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_task_one")
+    );
     assert!(
         slot["output"]["result"].is_null(),
         "there is no result yet: {slot}"
@@ -14707,7 +14745,10 @@ async fn batch_of_two_tasks_one_parks_other_settles_before_park(pool: Pool<Postg
         1,
         "only the child that asked is on the card: {approvals:?}"
     );
-    assert_eq!(approvals[0]["approval_id"], "call_task_gated");
+    assert_eq!(
+        approvals[0]["approval_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_task_gated")
+    );
     assert_eq!(
         generation_state(&app_state.db, parent_chat_id).await,
         "awaiting_approval"
@@ -14776,7 +14817,10 @@ async fn approve_resumes_child_and_parent_settles_slot(pool: Pool<Postgres>) {
         .iter()
         .find(|part| part["content_type"] == "tool_approval")
         .expect("the decision is recorded on the origin row");
-    assert_eq!(decision["approval_id"], "call_task_one");
+    assert_eq!(
+        decision["approval_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_task_one")
+    );
     assert_eq!(decision["child_chat_id"], json!(child_chat.id));
     assert_eq!(decision["always_allow"], false);
 
@@ -14883,7 +14927,10 @@ async fn deny_child_finishes_in_prose_and_parent_continues(pool: Pool<Postgres>)
         .iter()
         .find(|part| part["content_type"] == "tool_rejection")
         .expect("the denial is recorded on the origin row too");
-    assert_eq!(rejection["approval_id"], "call_task_one");
+    assert_eq!(
+        rejection["approval_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_task_one")
+    );
     assert_eq!(rejection["child_chat_id"], json!(child_chat.id));
     assert!(
         rejection["reason"].is_null(),
@@ -15010,11 +15057,17 @@ async fn chained_child_approval_reparks_parent(pool: Pool<Postgres>) {
     let approvals = second["approvals"].as_array().unwrap();
     assert_eq!(approvals.len(), 1);
     assert_eq!(
-        approvals[0]["approval_id"], "call_task_one",
+        approvals[0]["approval_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_task_one"),
         "the same origin call is still the one being covered"
     );
     assert_eq!(
-        approvals[0]["child"]["child_tool_call_id"], "call_child_probe_again",
+        approvals[0]["child"]["child_tool_call_id"],
+        generated_tool_call_id(
+            child_parked_row(&app_state.db, child_chat.id).await.id,
+            2,
+            "call_child_probe_again"
+        ),
         "the copy names the NEW call, not the one already answered"
     );
     let slot = slot_for(&content, "call_task_one");
@@ -15133,11 +15186,12 @@ async fn a_child_answered_on_its_own_card_settles_the_orphaned_origin_slot(pool:
 
     let (origin_chat_id, parent_message_id, child_chat_id, child_message_id) =
         park_one_child(&server, &app_state).await;
+    let parent_tool_call_id = format!("{parent_message_id}:1:call_task_one");
 
     // Asserted before the repair so a pass cannot be a run that never parked.
     let parked_slot = slot_for(
         &content_of(&message_row(&app_state.db, parent_message_id).await),
-        "call_task_one",
+        &parent_tool_call_id,
     );
     assert_eq!(parked_slot["output"]["status"], "input_required");
     assert_eq!(parked_slot["status"], "in_progress");
@@ -15151,7 +15205,7 @@ async fn a_child_answered_on_its_own_card_settles_the_orphaned_origin_slot(pool:
 
     let settled = slot_for(
         &content_of(&message_row(&app_state.db, parent_message_id).await),
-        "call_task_one",
+        &parent_tool_call_id,
     );
     assert_ne!(
         settled["output"]["status"], "input_required",
@@ -15211,6 +15265,7 @@ async fn a_covered_child_never_settles_the_origin_slot(pool: Pool<Postgres>) {
 
     let (_origin_chat_id, parent_message_id, child_chat_id, child_message_id) =
         park_one_child(&server, &app_state).await;
+    let parent_tool_call_id = format!("{parent_message_id}:1:call_task_one");
 
     post_continuestream(&server, child_message_id, "approve")
         .await
@@ -15218,7 +15273,7 @@ async fn a_covered_child_never_settles_the_origin_slot(pool: Pool<Postgres>) {
 
     let slot = slot_for(
         &content_of(&message_row(&app_state.db, parent_message_id).await),
-        "call_task_one",
+        &parent_tool_call_id,
     );
     assert_eq!(
         slot["output"]["status"], "input_required",
@@ -15553,15 +15608,21 @@ async fn async_park_state(
 async fn park_one_async_child(
     server: &TestServer,
     app_state: &erato::state::AppState,
-) -> (Uuid, Uuid, Uuid) {
+) -> (Uuid, Uuid, Uuid, Uuid) {
     let chat = create_chat(server, None).await;
     let events = submit_with_facets(server, &chat, ASYNC_PARK_USER_MESSAGE, &["plan"]).await;
     assert!(extract_full_text_answer(&events).contains("PARENT-ASYNC-FINAL"));
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
     let origin_chat_id = Uuid::parse_str(&chat).unwrap();
     let child_chat = delegated_child_chat(&app_state.db, origin_chat_id).await;
     wait_for_generation_state(&app_state.db, child_chat.id, "awaiting_approval").await;
     let child_message_id = child_parked_row(&app_state.db, child_chat.id).await.id;
-    (origin_chat_id, child_chat.id, child_message_id)
+    (
+        origin_chat_id,
+        child_chat.id,
+        child_message_id,
+        parent_message_id,
+    )
 }
 
 /// The child's delivery envelope once it is `delivered` at `sequence`.
@@ -15607,7 +15668,7 @@ async fn async_child_parks_and_origin_receives_input_required_task_result(pool: 
     let (app_state, _llm) = async_park_state(pool, mocks).await;
     let server = app_server(app_state.clone());
 
-    let (origin_chat_id, child_chat_id, child_message_id) =
+    let (origin_chat_id, child_chat_id, child_message_id, parent_message_id) =
         park_one_async_child(&server, &app_state).await;
 
     let child_content = content_of(&message_row(&app_state.db, child_message_id).await);
@@ -15633,7 +15694,10 @@ async fn async_child_parks_and_origin_receives_input_required_task_result(pool: 
         json!(child_chat_id),
         "the card points at the chat the question is on: {part}"
     );
-    assert_eq!(part["parent_tool_call_id"], ASYNC_PARK_CALL_ID);
+    assert_eq!(
+        part["parent_tool_call_id"],
+        generated_tool_call_id(parent_message_id, 1, ASYNC_PARK_CALL_ID)
+    );
 
     let origin_rows = active_thread_rows(&app_state.db, origin_chat_id).await;
     assert!(
@@ -15670,7 +15734,7 @@ async fn deciding_on_async_child_rearms_delivery_and_delivers_final_result_with_
     let (app_state, _llm) = async_park_state(pool, mocks).await;
     let server = app_server(app_state.clone());
 
-    let (origin_chat_id, child_chat_id, child_message_id) =
+    let (origin_chat_id, child_chat_id, child_message_id, _parent_message_id) =
         park_one_async_child(&server, &app_state).await;
     let notification = wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
 
@@ -15739,7 +15803,7 @@ async fn denied_async_child_delivers_completed_in_prose(pool: Pool<Postgres>) {
     let (app_state, _llm) = async_park_state(pool, mocks).await;
     let server = app_server(app_state.clone());
 
-    let (origin_chat_id, child_chat_id, child_message_id) =
+    let (origin_chat_id, child_chat_id, child_message_id, _parent_message_id) =
         park_one_async_child(&server, &app_state).await;
     wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
 
@@ -15795,7 +15859,7 @@ async fn writing_into_a_parked_async_child_also_rearms_its_delivery(pool: Pool<P
     let (app_state, _llm) = async_park_state(pool, mocks).await;
     let server = app_server(app_state.clone());
 
-    let (origin_chat_id, child_chat_id, child_message_id) =
+    let (origin_chat_id, child_chat_id, child_message_id, _parent_message_id) =
         park_one_async_child(&server, &app_state).await;
     wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
 
@@ -15847,7 +15911,7 @@ async fn an_async_child_that_parks_again_delivers_no_second_notification(pool: P
     let (app_state, _llm) = async_park_state(pool, mocks).await;
     let server = app_server(app_state.clone());
 
-    let (origin_chat_id, child_chat_id, child_message_id) =
+    let (origin_chat_id, child_chat_id, child_message_id, _parent_message_id) =
         park_one_async_child(&server, &app_state).await;
     let notification = wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
 
@@ -16139,8 +16203,14 @@ async fn plan_policy_parks_before_any_child_is_created(pool: Pool<Postgres>) {
     assert_eq!(approvals.len(), 2, "one item per task: {approvals:?}");
     assert_eq!(approvals[0]["approval_id"], "plan:1:0");
     assert_eq!(approvals[1]["approval_id"], "plan:1:1");
-    assert_eq!(approvals[0]["tool_call_id"], "call_plan_a");
-    assert_eq!(approvals[1]["tool_call_id"], "call_plan_b");
+    assert_eq!(
+        approvals[0]["tool_call_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_plan_a")
+    );
+    assert_eq!(
+        approvals[1]["tool_call_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_plan_b")
+    );
     assert_eq!(approvals[0]["tool_name"], "delegate_task");
     assert_eq!(approvals[0]["input"]["task"], PLAN_BRIEF_A);
     assert!(
@@ -16217,7 +16287,10 @@ async fn approve_plan_dispatches_recorded_calls_in_order(pool: Pool<Postgres>) {
         .collect();
     assert_eq!(
         dispatched,
-        vec!["call_plan_a", "call_plan_b"],
+        vec![
+            generated_tool_call_id(parent_message_id, 1, "call_plan_a").as_str(),
+            generated_tool_call_id(parent_message_id, 1, "call_plan_b").as_str(),
+        ],
         "the model is answered in the order it asked: {content:?}"
     );
     for (tool_call_id, answer) in [
@@ -16488,7 +16561,10 @@ async fn async_only_policy_asks_only_for_async_calls(pool: Pool<Postgres>) {
         1,
         "only the detached call is asked about: {approvals:?}"
     );
-    assert_eq!(approvals[0]["tool_call_id"], "call_plan_b");
+    assert_eq!(
+        approvals[0]["tool_call_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_plan_b")
+    );
     let pending: Vec<&str> = request["pending_tool_calls"]
         .as_array()
         .unwrap()
@@ -16497,7 +16573,7 @@ async fn async_only_policy_asks_only_for_async_calls(pool: Pool<Postgres>) {
         .collect();
     assert_eq!(
         pending,
-        vec!["call_plan_a"],
+        vec![generated_tool_call_id(parent_message_id, 1, "call_plan_a").as_str()],
         "the awaited call of the same batch waits for the decision rather than \
          being asked about"
     );
@@ -16612,7 +16688,10 @@ async fn always_policy_asks_for_a_single_wait_task(pool: Pool<Postgres>) {
     let approvals = request["approvals"].as_array().unwrap();
     assert_eq!(approvals.len(), 1);
     assert_eq!(approvals[0]["approval_id"], "plan:1:0");
-    assert_eq!(approvals[0]["tool_call_id"], "call_plan_a");
+    assert_eq!(
+        approvals[0]["tool_call_id"],
+        generated_tool_call_id(parent_message_id, 1, "call_plan_a")
+    );
     assert!(
         delegated_child_chats(&app_state.db, parent_chat_id)
             .await

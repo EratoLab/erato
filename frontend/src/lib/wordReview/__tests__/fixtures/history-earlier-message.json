@@ -1,0 +1,1086 @@
+{
+  "source": "messages 01a0c553 and 01a0c554 of one chat",
+  "messages": [
+    {
+      "id": "01a0c553-aa03-7305-81b7-70dd52827f38",
+      "role": "user",
+      "content": [],
+      "action_facet_id": "word_document_authoring",
+      "action_facet_args": {
+        "document_name": "",
+        "heading_outline": "",
+        "paragraphs_sent": "32",
+        "truncation_note": "",
+        "authoring_status": "available",
+        "paragraphs_total": "32",
+        "document_identity": "pane-session:c75bec54-23a3-4c83-bdb7-b4af885dd7e5",
+        "document_snapshot": "f78dea8f-0c27-4f82-8737-794cd0f0380d"
+      }
+    },
+    {
+      "id": "01a0c553-b5f0-7c10-a301-0cb0cc6f34fe",
+      "role": "assistant",
+      "previous_message_id": "01a0c553-aa03-7305-81b7-70dd52827f38",
+      "content": [
+        {
+          "input": {
+            "cursor": null,
+            "snapshot": "46245937-774b-45b6-a12c-242e7d392fcd"
+          },
+          "output": {
+            "result": {
+              "scope": "document",
+              "assets": [],
+              "blocks": [
+                {
+                  "ref": "b1",
+                  "part": 1,
+                  "text": "Dokumentziel & Vorgehen",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "styleRef": "Title",
+                  "protected": false
+                },
+                {
+                  "ref": "b1",
+                  "part": 2,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"alignment\":\"center\",\"spacingAfter\":6}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b2",
+                  "part": 1,
+                  "text": "Kurzleitfaden: Was wir mit diesem Dokument erreichen – und wie wir es am schnellsten umsetzen",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "styleRef": "Subtitle",
+                  "protected": false
+                },
+                {
+                  "ref": "b2",
+                  "part": 2,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"alignment\":\"center\",\"spacingAfter\":18}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b3",
+                  "part": 1,
+                  "text": "1. Ziel dieses Dokuments",
+                  "type": "heading",
+                  "level": 1,
+                  "parts": 2,
+                  "styleRef": "Heading1",
+                  "protected": false
+                },
+                {
+                  "ref": "b3",
+                  "part": 2,
+                  "text": "",
+                  "type": "heading",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingAfter\":6}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b4",
+                  "part": 1,
+                  "text": "",
+                  "type": "native",
+                  "parts": 2,
+                  "protected": false,
+                  "nativeKind": "image",
+                  "description": "Beispielbild"
+                },
+                {
+                  "ref": "b4",
+                  "part": 2,
+                  "text": "",
+                  "type": "native",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"objects\":[{\"ref\":\"b4_image_1\",\"target\":\"image-1\",\"kind\":\"image\",\"sourceIndex\":0,\"widthPt\":180,\"heightPt\":180,\"alt\":\"Beispielbild\",\"title\":\"Beispielbild\",\"wrap\":\"square\"}]}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b5",
+                  "part": 1,
+                  "text": "Damit ich dich optimal unterstützen kann, klären wir zuerst kurz das Ziel (z. B. Inhalt ergänzen, Struktur verbessern, Sprache glätten oder Layout vereinheitlichen). Danach wählen wir einen passenden Weg, wie wir die Änderungen effizient umsetzen.",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false
+                },
+                {
+                  "ref": "b5",
+                  "part": 2,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingAfter\":12}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b6",
+                  "part": 1,
+                  "text": "2. Zusammenarbeit: Zwei Optionen",
+                  "type": "heading",
+                  "level": 1,
+                  "parts": 2,
+                  "styleRef": "Heading1",
+                  "protected": false
+                },
+                {
+                  "ref": "b6",
+                  "part": 2,
+                  "text": "",
+                  "type": "heading",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingAfter\":6}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b7",
+                  "part": 1,
+                  "text": "Wähle die Option, die am besten zu deiner Situation passt. Wenn du unsicher bist, nenne mir dein Ziel und den Zeitdruck – ich empfehle dir dann die schnellste Variante.",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false
+                },
+                {
+                  "ref": "b7",
+                  "part": 2,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingAfter\":10}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b8",
+                  "part": 1,
+                  "text": "Option\tGeeignet, wenn …\tWas du lieferst / Ergebnis\nA – Anleitung\tdu die Änderungen selbst in Word umsetzen möchtest\tDu bekommst klare Schritte (inkl. Formatvorlagen-Tipps) und setzt sie direkt im Dokument um.\nB – Überarbeitung durch mich\tdu Zeit sparen willst oder mehrere Stellen betroffen sind\tDu gibst Text/Datei und Einfügeposition an; ich liefere eine überarbeitete, konsistente Fassung.",
+                  "type": "native",
+                  "parts": 3,
+                  "protected": false,
+                  "nativeKind": "table"
+                },
+                {
+                  "ref": "b8",
+                  "part": 2,
+                  "text": "",
+                  "type": "native",
+                  "parts": 3,
+                  "protected": false,
+                  "structureJson": "{\"content\":{\"columns\":[150.1,149.15,151.05],\"format\":{\"alignment\":\"center\",\"width\":\"auto\",\"borders\":{\"top\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"left\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"bottom\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"right\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"insideH\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"insideV\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0}},\"firstRow\":true,\"lastRow\":false,\"firstColumn\":true,\"lastColumn\":false,\"bandedRows\":true,\"bandedColumns\":false},\"rows\":[{\"sourceIndex\":0,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Option\",\"colSpan\":1,\"rowSpan\":1,\"format\":{\"shading\":\"F2F2F2\"}},{\"sourceIndex\":1,\"text\":\"Geeignet, wenn …\",\"colSpan\":1,\"rowSpan\":1,\"format\":{\"shading\":\"F2F2F2\"}},{\"sourceIndex\":2,\"text\":\"Was du lieferst / Ergebnis\",\"colSpan\":1,\"rowSpan\":1,\"format\":{\"shading\":\"F2F2F2\"}}]},{\"sourceIndex\":1,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"A – Anleitung\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"du die Änderungen selbst in Word umsetzen möchtest\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":2,\"text\":\"Du bekommst klare Schritte (inkl. Formatvorlagen-Tipps) und setzt sie direkt im Dokument um.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":2,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"B – Überarbeitung durch mich\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"du Zeit sparen willst oder mehrere Stellen betroffen sind\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":2,\"text\":\"Du gibst Text/Datei und Einfügeposition an; ich liefere eine überarbeitete, konsistente Fassung.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]}],\"sourcePatchSupported\":true},\"objects\":[{\"ref\":\"b8_table_1\",\"kind\":\"table\",\"selector\":\"table-1\",\"table\":{\"columns\":[150.1,149.15,151.05],\"format\":{\"alignment\":\"center\",\"width\":\"auto\",\"borders\":{\"top\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"left\":{\"style\":\"single\",\"color\":\"000000\",\"width\":",
+                  "structurePart": 1,
+                  "structureParts": 2
+                },
+                {
+                  "ref": "b8",
+                  "part": 3,
+                  "text": "",
+                  "type": "native",
+                  "parts": 3,
+                  "protected": false,
+                  "structureJson": "1,\"space\":0},\"bottom\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"right\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"insideH\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0},\"insideV\":{\"style\":\"single\",\"color\":\"000000\",\"width\":1,\"space\":0}},\"firstRow\":true,\"lastRow\":false,\"firstColumn\":true,\"lastColumn\":false,\"bandedRows\":true,\"bandedColumns\":false},\"rows\":[{\"sourceIndex\":0,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"Option\",\"colSpan\":1,\"rowSpan\":1,\"format\":{\"shading\":\"F2F2F2\"}},{\"sourceIndex\":1,\"text\":\"Geeignet, wenn …\",\"colSpan\":1,\"rowSpan\":1,\"format\":{\"shading\":\"F2F2F2\"}},{\"sourceIndex\":2,\"text\":\"Was du lieferst / Ergebnis\",\"colSpan\":1,\"rowSpan\":1,\"format\":{\"shading\":\"F2F2F2\"}}]},{\"sourceIndex\":1,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"A – Anleitung\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"du die Änderungen selbst in Word umsetzen möchtest\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":2,\"text\":\"Du bekommst klare Schritte (inkl. Formatvorlagen-Tipps) und setzt sie direkt im Dokument um.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]},{\"sourceIndex\":2,\"format\":{},\"cells\":[{\"sourceIndex\":0,\"text\":\"B – Überarbeitung durch mich\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":1,\"text\":\"du Zeit sparen willst oder mehrere Stellen betroffen sind\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}},{\"sourceIndex\":2,\"text\":\"Du gibst Text/Datei und Einfügeposition an; ich liefere eine überarbeitete, konsistente Fassung.\",\"colSpan\":1,\"rowSpan\":1,\"format\":{}}]}],\"sourcePatchSupported\":true}}]}",
+                  "structurePart": 2,
+                  "structureParts": 2
+                },
+                {
+                  "ref": "b9",
+                  "part": 1,
+                  "text": "Tipp: Nenne mir bei Option B am besten auch Tonalität (z. B. sachlich, freundlich, prägnant) und Zielgruppe (intern/extern).",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "styleRef": "Quote",
+                  "protected": false
+                },
+                {
+                  "ref": "b9",
+                  "part": 2,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingBefore\":10,\"spacingAfter\":14}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b10",
+                  "part": 1,
+                  "text": "3. Wenn du selbst Text einfügen möchtest (Schritt für Schritt)",
+                  "type": "heading",
+                  "level": 1,
+                  "parts": 2,
+                  "styleRef": "Heading1",
+                  "protected": false
+                },
+                {
+                  "ref": "b10",
+                  "part": 2,
+                  "text": "",
+                  "type": "heading",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingAfter\":6}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b11",
+                  "part": 1,
+                  "text": "So fügst du einen Absatz ein und sorgst dafür, dass das Layout sauber bleibt:",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false
+                },
+                {
+                  "ref": "b11",
+                  "part": 2,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingAfter\":6}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b12",
+                  "list": "existing-11",
+                  "part": 1,
+                  "text": "Öffne das Dokument in Microsoft Word.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": true,
+                  "protected": false
+                },
+                {
+                  "ref": "b13",
+                  "list": "existing-11",
+                  "part": 1,
+                  "text": "Klicke an die Stelle, an der der Absatz eingefügt werden soll.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": true,
+                  "protected": false
+                },
+                {
+                  "ref": "b14",
+                  "list": "existing-11",
+                  "part": 1,
+                  "text": "Füge den Text ein (Strg+V / Cmd+V).",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": true,
+                  "protected": false
+                },
+                {
+                  "ref": "b15",
+                  "list": "existing-11",
+                  "part": 1,
+                  "text": "Wende eine passende Formatvorlage an (Start → Formatvorlagen), z. B. „Standard“ für Fließtext oder „Überschrift“ für Titelzeilen.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": true,
+                  "protected": false
+                },
+                {
+                  "ref": "b16",
+                  "list": "existing-11",
+                  "part": 1,
+                  "text": "Speichere das Dokument (Strg+S / Cmd+S).",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": true,
+                  "protected": false
+                },
+                {
+                  "ref": "b17",
+                  "part": 1,
+                  "text": "4. Formatierungs-Tipps (für ein „schönes“ Dokument)",
+                  "type": "heading",
+                  "level": 1,
+                  "parts": 2,
+                  "styleRef": "Heading1",
+                  "protected": false
+                },
+                {
+                  "ref": "b17",
+                  "part": 2,
+                  "text": "",
+                  "type": "heading",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingBefore\":10,\"spacingAfter\":6}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b18",
+                  "list": "existing-12",
+                  "part": 1,
+                  "text": "Nutze Überschriften (Überschrift 1/2/3), statt Text nur fett zu machen – so bleibt alles einheitlich und ein Inhaltsverzeichnis wäre später möglich.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b19",
+                  "list": "existing-12",
+                  "part": 1,
+                  "text": "Halte Absätze kurz (2–5 Zeilen) und setze gezielt Abstand nach Absätzen statt vieler Leerzeilen.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b20",
+                  "list": "existing-12",
+                  "part": 1,
+                  "text": "Verwende Listen für Schritte/Checklisten und Tabellen nur für Vergleiche oder strukturierte Daten.",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b21",
+                  "list": "existing-12",
+                  "part": 1,
+                  "text": "Achte auf konsistente Schreibweise (z. B. „du“/„Du“ einheitlich, gleiche Begriffe für die gleichen Dinge).",
+                  "type": "list-item",
+                  "level": 0,
+                  "parts": 1,
+                  "ordered": false,
+                  "protected": false
+                },
+                {
+                  "ref": "b22",
+                  "part": 1,
+                  "text": "5. Nächste Schritte",
+                  "type": "heading",
+                  "level": 1,
+                  "parts": 2,
+                  "styleRef": "Heading1",
+                  "protected": false
+                },
+                {
+                  "ref": "b22",
+                  "part": 2,
+                  "text": "",
+                  "type": "heading",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"format\":{\"spacingBefore\":10,\"spacingAfter\":6}}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                },
+                {
+                  "ref": "b23",
+                  "part": 1,
+                  "text": "Antworte kurz mit (1) deinem Ziel und (2) Option A oder B. Wenn Option B: Bitte nenne zusätzlich, wo genau eingefügt/geändert werden soll (z. B. „nach der zweiten Überschrift“ oder „ganz oben“).",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "b24",
+                  "part": 1,
+                  "text": "",
+                  "type": "paragraph",
+                  "parts": 1,
+                  "protected": false
+                },
+                {
+                  "ref": "document_sections",
+                  "part": 1,
+                  "text": "",
+                  "type": "sections",
+                  "parts": 2,
+                  "protected": false
+                },
+                {
+                  "ref": "document_sections",
+                  "part": 2,
+                  "text": "",
+                  "type": "sections",
+                  "parts": 2,
+                  "protected": false,
+                  "structureJson": "{\"sections\":[{\"id\":\"section-1\",\"layout\":{\"width\":595.3,\"height\":841.9,\"orientation\":\"portrait\",\"margins\":{\"top\":72,\"right\":72,\"bottom\":72,\"left\":72,\"header\":35.4,\"footer\":35.4,\"gutter\":0},\"columns\":1,\"columnSpacing\":35.4,\"differentFirstPage\":false},\"headers\":{},\"footers\":{}}]}",
+                  "structurePart": 1,
+                  "structureParts": 1
+                }
+              ],
+              "styles": [
+                {
+                  "id": "Normal",
+                  "name": "Normal",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading1",
+                  "name": "heading 1",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading2",
+                  "name": "heading 2",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading3",
+                  "name": "heading 3",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading4",
+                  "name": "heading 4",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading5",
+                  "name": "heading 5",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading6",
+                  "name": "heading 6",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading7",
+                  "name": "heading 7",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading8",
+                  "name": "heading 8",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Heading9",
+                  "name": "heading 9",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "TableNormal",
+                  "name": "Normal Table",
+                  "type": "table"
+                },
+                {
+                  "id": "Title",
+                  "name": "Title",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Subtitle",
+                  "name": "Subtitle",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Quote",
+                  "name": "Quote",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "ListParagraph",
+                  "name": "List Paragraph",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "IntenseQuote",
+                  "name": "Intense Quote",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Header",
+                  "name": "header",
+                  "type": "paragraph"
+                },
+                {
+                  "id": "Footer",
+                  "name": "footer",
+                  "type": "paragraph"
+                }
+              ],
+              "complete": true,
+              "snapshot": "f78dea8f-0c27-4f82-8737-794cd0f0380d",
+              "readToken": "1a98865c-ad10-476e-8072-80851059b4af",
+              "blocksRead": 25,
+              "nextCursor": null,
+              "blocksTotal": 25,
+              "fullDocument": true,
+              "imageAssetIssues": [],
+              "preservedStories": ["footnotes", "endnotes"],
+              "snapshotRecovery": {
+                "restarted": true,
+                "requestedSnapshot": "46245937-774b-45b6-a12c-242e7d392fcd"
+              }
+            },
+            "status": "success"
+          },
+          "status": "success",
+          "tool_name": "read_document_blocks",
+          "content_type": "tool_use",
+          "tool_call_id": "call_qTM2oo1uqEmMlKj7AI9eOv9a"
+        },
+        {
+          "input": {
+            "scope": "document",
+            "entries": [
+              {
+                "kind": "keep",
+                "source": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5",
+                  "b6",
+                  "b7",
+                  "b8",
+                  "b9",
+                  "b10",
+                  "b11",
+                  "b12",
+                  "b13",
+                  "b14",
+                  "b15",
+                  "b16",
+                  "b17",
+                  "b18",
+                  "b19",
+                  "b20",
+                  "b21",
+                  "b22",
+                  "b23",
+                  "b24"
+                ]
+              }
+            ],
+            "stories": [
+              {
+                "id": "hdr-default",
+                "kind": "upsert",
+                "type": "header",
+                "blocks": [
+                  {
+                    "id": "hdr-p1",
+                    "text": "Dokumentziel & Vorgehen",
+                    "type": "paragraph",
+                    "format": {
+                      "borders": {
+                        "bottom": {
+                          "color": "000000",
+                          "space": 2,
+                          "style": "single",
+                          "width": 1
+                        }
+                      },
+                      "alignment": "center",
+                      "spacingAfter": 4
+                    },
+                    "styleRef": "Header"
+                  }
+                ]
+              },
+              {
+                "id": "ftr-default",
+                "kind": "upsert",
+                "type": "footer",
+                "blocks": [
+                  {
+                    "id": "ftr-table",
+                    "rows": [
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "ftr-txt1",
+                                "text": "Seite",
+                                "type": "paragraph",
+                                "format": {
+                                  "alignment": "right"
+                                },
+                                "styleRef": "Footer"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "ftr-page",
+                                "type": "field",
+                                "field": {
+                                  "text": "1",
+                                  "instruction": "PAGE"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "ftr-txt2",
+                                "text": "von",
+                                "type": "paragraph",
+                                "format": {
+                                  "alignment": "center"
+                                },
+                                "styleRef": "Footer"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "ftr-numpages",
+                                "type": "field",
+                                "field": {
+                                  "text": "1",
+                                  "instruction": "NUMPAGES"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    "type": "table",
+                    "format": {
+                      "width": "auto",
+                      "layout": "autofit",
+                      "borders": {
+                        "top": {
+                          "color": "000000",
+                          "space": 2,
+                          "style": "single",
+                          "width": 1
+                        },
+                        "left": {
+                          "style": "none"
+                        },
+                        "right": {
+                          "style": "none"
+                        },
+                        "bottom": {
+                          "style": "none"
+                        },
+                        "insideH": {
+                          "style": "none"
+                        },
+                        "insideV": {
+                          "style": "none"
+                        }
+                      },
+                      "alignment": "right",
+                      "cellMargins": {
+                        "top": 2,
+                        "left": 0,
+                        "right": 0,
+                        "bottom": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "version": 1,
+            "sections": [
+              {
+                "id": "sec-1",
+                "source": "section-1",
+                "footers": {
+                  "default": "ftr-default"
+                },
+                "headers": {
+                  "default": "hdr-default"
+                }
+              }
+            ],
+            "snapshot": "f78dea8f-0c27-4f82-8737-794cd0f0380d",
+            "readToken": "1a98865c-ad10-476e-8072-80851059b4af"
+          },
+          "output": {
+            "result": {
+              "action": "word.apply_document_plan",
+              "draft_id": "call_HJyPSDXCZBfRN4qZIIGJywkJ",
+              "snapshot": "f78dea8f-0c27-4f82-8737-794cd0f0380d"
+            },
+            "status": "success",
+            "submission": {
+              "status": "accepted",
+              "attempts_remaining": 0
+            }
+          },
+          "status": "success",
+          "tool_name": "submit_document_plan",
+          "content_type": "tool_use",
+          "tool_call_id": "call_HJyPSDXCZBfRN4qZIIGJywkJ"
+        }
+      ]
+    },
+    {
+      "id": "01a0c554-cd07-7ddd-88cd-ca2c4d3cf459",
+      "role": "user",
+      "previous_message_id": "01a0c553-b5f0-7c10-a301-0cb0cc6f34fe",
+      "content": [],
+      "action_facet_id": "word_document_authoring",
+      "action_facet_args": {
+        "document_name": "",
+        "heading_outline": "",
+        "paragraphs_sent": "32",
+        "truncation_note": "",
+        "authoring_status": "available",
+        "paragraphs_total": "32",
+        "document_identity": "pane-session:c75bec54-23a3-4c83-bdb7-b4af885dd7e5",
+        "document_snapshot": "cc0569dd-351d-4501-b5f7-39d5fb38c61b"
+      }
+    },
+    {
+      "id": "01a0c554-cf1a-7f4e-bf1c-59b2a43634af",
+      "role": "assistant",
+      "previous_message_id": "01a0c554-cd07-7ddd-88cd-ca2c4d3cf459",
+      "content": [
+        {
+          "text": "Ich mache Header & Footer „clean“ und professioneller:  \n- **Header**: links Dokumenttitel, rechts **Stand: (Datum)**, dezente graue Trennlinie unten.  \n- **Footer**: links „ACME INC | intern“, rechts „Seite X von Y“, dezente graue Trennlinie oben, kleinere Schrift.\n\n",
+          "content_type": "text"
+        },
+        {
+          "input": {
+            "scope": "document",
+            "entries": [
+              {
+                "kind": "keep",
+                "source": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5",
+                  "b6",
+                  "b7",
+                  "b8",
+                  "b9",
+                  "b10",
+                  "b11",
+                  "b12",
+                  "b13",
+                  "b14",
+                  "b15",
+                  "b16",
+                  "b17",
+                  "b18",
+                  "b19",
+                  "b20",
+                  "b21",
+                  "b22",
+                  "b23",
+                  "b24"
+                ]
+              }
+            ],
+            "stories": [
+              {
+                "id": "hdr-default",
+                "kind": "upsert",
+                "type": "header",
+                "blocks": [
+                  {
+                    "id": "hdr-table-1",
+                    "rows": [
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "hdr-left",
+                                "text": "Dokumentziel & Vorgehen",
+                                "type": "paragraph",
+                                "format": {
+                                  "font": {
+                                    "bold": true,
+                                    "color": "404040",
+                                    "fontSize": 9
+                                  },
+                                  "alignment": "left",
+                                  "spacingAfter": 0,
+                                  "spacingBefore": 0
+                                },
+                                "styleRef": "Header"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "hdr-right",
+                                "text": "Stand: ",
+                                "type": "paragraph",
+                                "format": {
+                                  "font": {
+                                    "color": "404040",
+                                    "fontSize": 9
+                                  },
+                                  "alignment": "right",
+                                  "spacingAfter": 0,
+                                  "spacingBefore": 0
+                                },
+                                "styleRef": "Header"
+                              },
+                              {
+                                "id": "hdr-date",
+                                "type": "field",
+                                "field": {
+                                  "text": "21.09.2026",
+                                  "instruction": "DATE"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    "type": "table",
+                    "format": {
+                      "layout": "fixed",
+                      "borders": {
+                        "top": {
+                          "style": "none"
+                        },
+                        "left": {
+                          "style": "none"
+                        },
+                        "right": {
+                          "style": "none"
+                        },
+                        "bottom": {
+                          "color": "BFBFBF",
+                          "space": 2,
+                          "style": "single",
+                          "width": 0.75
+                        },
+                        "insideH": {
+                          "style": "none"
+                        },
+                        "insideV": {
+                          "style": "none"
+                        }
+                      },
+                      "alignment": "center",
+                      "cellMargins": {
+                        "top": 0,
+                        "left": 0,
+                        "right": 0,
+                        "bottom": 0
+                      },
+                      "widthPercent": 100
+                    },
+                    "columns": [300, 150]
+                  }
+                ]
+              },
+              {
+                "id": "ftr-default",
+                "kind": "upsert",
+                "type": "footer",
+                "blocks": [
+                  {
+                    "id": "ftr-table-1",
+                    "rows": [
+                      {
+                        "cells": [
+                          {
+                            "blocks": [
+                              {
+                                "id": "ftr-left",
+                                "text": "ACME INC | intern",
+                                "type": "paragraph",
+                                "format": {
+                                  "font": {
+                                    "color": "666666",
+                                    "fontSize": 9
+                                  },
+                                  "alignment": "left",
+                                  "spacingAfter": 0,
+                                  "spacingBefore": 0
+                                },
+                                "styleRef": "Footer"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "ftr-mid",
+                                "text": "",
+                                "type": "paragraph",
+                                "format": {
+                                  "font": {
+                                    "color": "666666",
+                                    "fontSize": 9
+                                  },
+                                  "alignment": "center",
+                                  "spacingAfter": 0,
+                                  "spacingBefore": 0
+                                },
+                                "styleRef": "Footer"
+                              }
+                            ]
+                          },
+                          {
+                            "blocks": [
+                              {
+                                "id": "ftr-right-1",
+                                "text": "Seite ",
+                                "type": "paragraph",
+                                "format": {
+                                  "font": {
+                                    "color": "666666",
+                                    "fontSize": 9
+                                  },
+                                  "alignment": "right",
+                                  "spacingAfter": 0,
+                                  "spacingBefore": 0
+                                },
+                                "styleRef": "Footer"
+                              },
+                              {
+                                "id": "ftr-page",
+                                "type": "field",
+                                "field": {
+                                  "text": "1",
+                                  "instruction": "PAGE"
+                                }
+                              },
+                              {
+                                "id": "ftr-right-2",
+                                "text": " von ",
+                                "type": "paragraph",
+                                "format": {
+                                  "font": {
+                                    "color": "666666",
+                                    "fontSize": 9
+                                  },
+                                  "alignment": "right",
+                                  "spacingAfter": 0,
+                                  "spacingBefore": 0
+                                },
+                                "styleRef": "Footer"
+                              },
+                              {
+                                "id": "ftr-numpages",
+                                "type": "field",
+                                "field": {
+                                  "text": "1",
+                                  "instruction": "NUMPAGES"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    "type": "table",
+                    "format": {
+                      "layout": "fixed",
+                      "borders": {
+                        "top": {
+                          "color": "BFBFBF",
+                          "space": 2,
+                          "style": "single",
+                          "width": 0.75
+                        },
+                        "left": {
+                          "style": "none"
+                        },
+                        "right": {
+                          "style": "none"
+                        },
+                        "bottom": {
+                          "style": "none"
+                        },
+                        "insideH": {
+                          "style": "none"
+                        },
+                        "insideV": {
+                          "style": "none"
+                        }
+                      },
+                      "alignment": "center",
+                      "cellMargins": {
+                        "top": 0,
+                        "left": 0,
+                        "right": 0,
+                        "bottom": 0
+                      },
+                      "widthPercent": 100
+                    },
+                    "columns": [260, 120, 170]
+                  }
+                ]
+              }
+            ],
+            "version": 1,
+            "snapshot": "f78dea8f-0c27-4f82-8737-794cd0f0380d",
+            "readToken": "1a98865c-ad10-476e-8072-80851059b4af"
+          },
+          "output": {
+            "error": "Submission validation failed",
+            "status": "error",
+            "submission": {
+              "status": "retry",
+              "attempts_remaining": 2
+            },
+            "validation_errors": [
+              {
+                "code": "expired",
+                "path": "/snapshot",
+                "message": "The snapshot token is mismatched, revoked or already used. Use the current request's active snapshot."
+              }
+            ]
+          },
+          "status": "error",
+          "tool_name": "submit_document_plan",
+          "content_type": "tool_use",
+          "tool_call_id": "call_e6w8Xq9fS6v9DQJ64rmrzgIi"
+        },
+        {
+          "text": "Ich kann es nochmal schöner machen – aber der **Snapshot, mit dem ich Header/Footer gerade editieren kann, ist abgelaufen/ungültig** (Fehler: `snapshot … expired`). Das passiert, wenn sich das Dokument seit dem letzten Lesen/Planen geändert hat (z. B. durch „Apply/Übernehmen“).\n\nDamit ich Header/Footer jetzt sauber überarbeiten kann, brauche ich einmal eine **aktuelle Dokument-Erfassung (neuen Snapshot)**.\n\nBitte mach kurz eins davon (je nachdem, was du im Add-in siehst):\n\n1) Im Add-in **„Aktualisieren/Refresh“** (oder Dokument erneut „für Bearbeitung bereitstellen“) klicken, **oder**  \n2) Das Dokument kurz **neu öffnen** und das Add-in erneut starten.\n\nSobald der neue Snapshot da ist, setze ich dir:\n- Header: links Titel, rechts Datum, dezente graue Linie\n- Footer: links „ACME INC | intern“, rechts „Seite X von Y“, dezente Linie, kleinere Schrift\n\nSchreib mir kurz, wenn du aktualisiert hast – dann starte ich direkt.",
+          "content_type": "text"
+        }
+      ]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import { McpNotices } from "./McpNotices";
 
@@ -30,9 +31,13 @@ const renderNotices = async (message: UiChatMessage, showConnect?: boolean) => {
 
   render(
     <I18nProvider i18n={i18n}>
-      <MemoryRouter>
-        <McpNotices message={message} showConnect={showConnect} />
-      </MemoryRouter>
+      <StaticFeatureConfigProvider
+        config={{ userPreferences: { mcpServersTabEnabled: true } }}
+      >
+        <MemoryRouter>
+          <McpNotices message={message} showConnect={showConnect} />
+        </MemoryRouter>
+      </StaticFeatureConfigProvider>
     </I18nProvider>,
   );
 };

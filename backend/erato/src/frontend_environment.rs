@@ -56,6 +56,10 @@ const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLE
 const FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED: &str =
     "USER_PREFERENCES_DATA_TAB_ENABLED";
 const FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED: &str = "MCP_SERVERS_TAB_ENABLED";
+const FRONTEND_ENV_KEY_MCP_SERVERS_IN_CHAT_INPUT_ENABLED: &str =
+    "MCP_SERVERS_IN_CHAT_INPUT_ENABLED";
+const FRONTEND_ENV_KEY_MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED: &str =
+    "MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_SHOW_DISCLAIMER: &str = "SHAREPOINT_SHOW_DISCLAIMER";
 const FRONTEND_ENV_KEY_CHAT_SHARING_ENABLED: &str = "CHAT_SHARING_ENABLED";
@@ -430,6 +434,24 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED.to_string(),
         Value::Bool(config.mcp_servers_global.show_frontend_tab),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_MCP_SERVERS_IN_CHAT_INPUT_ENABLED.to_string(),
+        Value::Bool(
+            config
+                .mcp_servers_global
+                .show_in_chat_input
+                .unwrap_or(config.mcp_servers_global.show_frontend_tab),
+        ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED.to_string(),
+        Value::Bool(
+            config
+                .mcp_servers_global
+                .show_in_assistant_editor
+                .unwrap_or(config.mcp_servers_global.show_frontend_tab),
+        ),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SHAREPOINT_ENABLED.to_string(),
@@ -1147,6 +1169,39 @@ pub mod axum {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn mcp_visibility_inherits_and_overrides_for_both_frontends() {
+        for parent in [false, true] {
+            for chat in [None, Some(false), Some(true)] {
+                for assistant in [None, Some(false), Some(true)] {
+                    let mut config = AppConfig::default();
+                    config.mcp_servers_global.show_frontend_tab = parent;
+                    config.mcp_servers_global.show_in_chat_input = chat;
+                    config.mcp_servers_global.show_in_assistant_editor = assistant;
+                    for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+                        let environment = build_frontend_environment(&config, kind);
+                        for (key, expected) in [
+                            (FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED, parent),
+                            (
+                                FRONTEND_ENV_KEY_MCP_SERVERS_IN_CHAT_INPUT_ENABLED,
+                                chat.unwrap_or(parent),
+                            ),
+                            (
+                                FRONTEND_ENV_KEY_MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED,
+                                assistant.unwrap_or(parent),
+                            ),
+                        ] {
+                            assert_eq!(
+                                environment.additional_environment.get(key),
+                                Some(&Value::Bool(expected))
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn desktop_sidecar_endpoint_matches_bootstrap_for_both_frontends() {
