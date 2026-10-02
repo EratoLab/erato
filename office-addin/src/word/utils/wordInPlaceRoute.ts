@@ -1,3 +1,7 @@
+import {
+  captureWordAuthoringSnapshot,
+  compileWordDocumentPlan,
+} from "./wordDocumentXml";
 import { wordTrackedInPlaceCapabilities } from "./wordInPlaceCapabilities";
 import { classifyWordInPlacePlan } from "./wordInPlacePlan";
 import { isWordTrackingMode } from "./wordInPlaceSwitch";
@@ -19,6 +23,30 @@ export type WordPlanRoute =
   /** Track Changes is on and the plan needs the import, which cannot write revisions. */
   | { route: "blocked"; reason: WordRouteReason };
 
+/** A plan may restate the captured sections unchanged; only a real section change needs the import. */
+function withoutRestatedSections(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  compiled: WordAuthoringSnapshot | undefined,
+): WordDocumentPlan {
+  if (!plan.sections || !compiled) return plan;
+  const { sections: _sections, ...without } = plan;
+  try {
+    const restated = captureWordAuthoringSnapshot(
+      compileWordDocumentPlan(without, snapshot),
+      snapshot.identity,
+      "Off",
+      snapshot.fullDocument,
+      "verify",
+    );
+    return !restated.issue && restated.fingerprint === compiled.fingerprint
+      ? without
+      : plan;
+  } catch {
+    return plan;
+  }
+}
+
 /**
  * The routing ladder without host calls, shared by the card's preview and Apply; Apply runs it again
  * with live availability right before writing, so the preview is only a forecast.
@@ -37,7 +65,7 @@ export function routeWordDocumentPlan(
   if (!availability.enabled) return needsImport(availability.reason);
   try {
     const classified = classifyWordInPlacePlan(
-      plan,
+      withoutRestatedSections(plan, snapshot, compiled),
       snapshot,
       tracked ? wordTrackedInPlaceCapabilities(caps) : caps,
       compiled,

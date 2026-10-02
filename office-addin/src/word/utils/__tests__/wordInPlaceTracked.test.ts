@@ -854,7 +854,13 @@ describe("Track Changes gates", { timeout: 60_000 }, () => {
   };
   const withSection = (snapshot: WordAuthoringSnapshot): WordDocumentPlan => ({
     ...planOf(snapshot, {}),
-    sections: [{ id: "final", source: "section-1" }],
+    sections: [
+      {
+        id: "final",
+        source: "section-1",
+        layout: { orientation: "landscape" },
+      },
+    ],
   });
 
   beforeEach(() =>

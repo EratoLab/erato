@@ -678,7 +678,13 @@ describe("structural document review", () => {
       snapshot,
       JSON.stringify({
         ...statusRewritePlan(snapshot, "Status: revised."),
-        sections: [{ id: "final", source: "section-1" }],
+        sections: [
+          {
+            id: "final",
+            source: "section-1",
+            layout: { orientation: "landscape" },
+          },
+        ],
       }),
     );
     fireEvent.click(
@@ -878,7 +884,13 @@ describe("route preview", () => {
     const { word } = await mountRealistic(
       (s) => ({
         ...statusRewritePlan(s, "Status: revised."),
-        sections: [{ id: "final", source: "section-1" }],
+        sections: [
+          {
+            id: "final",
+            source: "section-1",
+            layout: { orientation: "landscape" },
+          },
+        ],
       }),
       { trackChanges: true, tracking: "TrackAll" },
     );
@@ -895,7 +907,13 @@ describe("route preview", () => {
       "sections",
       (s) => ({
         ...statusRewritePlan(s, "Status: revised."),
-        sections: [{ id: "final", source: "section-1" }],
+        sections: [
+          {
+            id: "final",
+            source: "section-1",
+            layout: { orientation: "landscape" },
+          },
+        ],
       }),
       "Replaces the whole document because it changes sections or page layout.",
     ],

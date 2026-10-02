@@ -124,7 +124,9 @@ preview and Apply. In-place writing needs WordApi 1.6, package support, no kill
 switch, no Compatibility mode and no session latch; otherwise the reason is
 `disabled`, `setting`, `latched`, `host-sets` or `no-package`. The classifier
 then admits only changes with an exact object-model inverse; the first failing
-rule sends the plan to the import with a fixed code:
+rule sends the plan to the import with a fixed code. A `sections` entry that
+compiles to the same document as the plan without it only restates the captured
+sections and does not count as a change:
 
 | Group       | Codes                                                                                          | Preview says it changes…              |
 | ----------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- |
@@ -167,13 +169,15 @@ the step it reached.
 - `strict`: the only check for the dry run and for submission, and always tried
   first. It accepts serialization noise only.
 - `content`: import writes and restores, after strict failed. It also accepts
-  list identity (`nsid`, renumbered list instances) and the first paragraph's
-  spacing-before when the plan kept that paragraph.
+  list identity (`nsid`, renumbered list instances), and the first paragraph's
+  spacing-before and page break before it when the plan kept that paragraph:
+  Word merges the first imported paragraph into the one it replaces.
 - `block`: in-place writes. Untouched blocks must keep their signature, and
   written paragraphs must have exactly the planned text, marks, style and list.
 
-Adjustment codes form a closed list: `numbering-identity` and
-`list-instance-renumbered` are bookkeeping only, while
+Adjustment codes form a closed list: `numbering-identity`,
+`list-instance-renumbered` and `first-paragraph-page-break` (a break before the
+document's first paragraph has no effect) are not visible, while
 `first-paragraph-spacing` is visible and disclosed on the card. Growth in
 customXml items or custom document properties is always `package-growth`, a
 failure. Diagnostics carry only routes, codes, counts and part paths, never

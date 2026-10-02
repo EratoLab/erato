@@ -85,6 +85,43 @@ function setup(plan?: (source: WordAuthoringSnapshot) => WordDocumentPlan) {
 }
 
 describe("content-tier write verification", () => {
+  it("accepts Word dropping a page break before the first paragraph, which has no effect there", () => {
+    const pageBreak = (index: number) => (doc: Document) => {
+      const paragraph = paragraphs(doc)[index];
+      let pPr = Array.from(paragraph.children).find(
+        (e) => e.localName === "pPr",
+      );
+      if (!pPr) {
+        pPr = doc.createElementNS(W, "w:pPr");
+        paragraph.prepend(pPr);
+      }
+      pPr.append(doc.createElementNS(W, "w:pageBreakBefore"));
+    };
+    const dropped = (doc: Document) =>
+      all(body(doc), "pageBreakBefore").forEach((e) => e.remove());
+    const withBreak = (index: number) => {
+      const source = realisticSnapshot(
+        editWordPackage(realisticWordPackageXml(), pageBreak(index)),
+      );
+      const plan = statusRewritePlan(source, "Status: revised.");
+      const written = captureWordAuthoringSnapshot(
+        editWordPackage(compileWordDocumentPlan(plan, source), dropped),
+        source.identity,
+        "Off",
+        true,
+        "verify",
+      );
+      return verifyWordPlanWrite(plan, source, written);
+    };
+    expect(withBreak(0)).toEqual({
+      ok: true,
+      tier: "content",
+      adjustments: ["first-paragraph-page-break"],
+    });
+    // A dropped page break anywhere else moves content to another page.
+    expect(withBreak(2)).toMatchObject({ ok: false });
+  });
+
   it("is strict when Word wrote exactly the compiled package", () => {
     const { source, plan, after } = setup();
     expect(verifyWordPlanWrite(plan, source, after())).toEqual({

@@ -11,6 +11,10 @@ import {
 } from "../../../test/mocks/word/realisticWordFixtures";
 import { WORD_ROUTE_REASONS } from "../wordApplyDiagnostics";
 import {
+  captureWordAuthoringSnapshot,
+  compileWordDocumentPlan,
+} from "../wordDocumentXml";
+import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   wordInPlaceCapabilities,
 } from "../wordInPlaceCapabilities";
@@ -57,6 +61,31 @@ describe("routeWordDocumentPlan", () => {
         ALL_WORD_IN_PLACE_CAPABILITIES,
       ),
     ).toMatchObject({ route: "in-place", tracked: true });
+  });
+
+  it("writes in place when a plan only restates the captured sections", () => {
+    const snapshot = realisticSnapshot(realisticWordPackageXml());
+    const route = (layout?: { orientation: "landscape" }) => {
+      const plan: WordDocumentPlan = {
+        ...statusRewritePlan(snapshot, "Status: revised."),
+        sections: [
+          { id: "final", source: "section-1", ...(layout ? { layout } : {}) },
+        ],
+      };
+      const compiled = captureWordAuthoringSnapshot(
+        compileWordDocumentPlan(plan, snapshot),
+        snapshot.identity,
+        "Off",
+        true,
+        "verify",
+      );
+      return routeWordDocumentPlan(plan, snapshot, ON, caps, compiled);
+    };
+    expect(route()).toMatchObject({ route: "in-place" });
+    expect(route({ orientation: "landscape" })).toEqual({
+      route: "import",
+      reason: "sections",
+    });
   });
 
   it("names why a plan needs the import, and blocks it under Track Changes", () => {

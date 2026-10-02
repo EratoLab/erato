@@ -39,6 +39,7 @@ export const WORD_APPLY_ADJUSTMENTS = [
   "numbering-identity",
   "list-instance-renumbered",
   "first-paragraph-spacing",
+  "first-paragraph-page-break",
 ] as const;
 export type WordApplyAdjustment = (typeof WORD_APPLY_ADJUSTMENTS)[number];
 /** Adjustments a reader can see in the document; the others are list bookkeeping only. */
@@ -999,6 +1000,24 @@ function normalizeFirstParagraphSpacing(
   return true;
 }
 
+/** Content tier: Word can drop pageBreakBefore from the first body paragraph on import, where a
+ * break before the document's first paragraph has no effect. Set aside without disclosure. */
+function normalizeFirstParagraphPageBreak(
+  expected: PackageView,
+  actual: PackageView,
+): boolean {
+  const pageBreak = (v: PackageView) =>
+    direct(direct(all(v.body, W, "p")[0], "pPr"), "pageBreakBefore");
+  const on = (e: Element | undefined) =>
+    !!e && !["0", "false", "off"].includes(attr(e));
+  const a = pageBreak(expected),
+    b = pageBreak(actual);
+  if (on(a) === on(b)) return false;
+  a?.remove();
+  b?.remove();
+  return true;
+}
+
 function normalizeContentTier(
   expected: PackageView,
   actual: PackageView,
@@ -1035,6 +1054,11 @@ function normalizeContentTier(
     normalizeFirstParagraphSpacing(expected, actual)
   )
     adjustments.add("first-paragraph-spacing");
+  if (
+    allowFirstParagraphSpacing &&
+    normalizeFirstParagraphPageBreak(expected, actual)
+  )
+    adjustments.add("first-paragraph-page-break");
   return WORD_APPLY_ADJUSTMENTS.filter((code) => adjustments.has(code));
 }
 
