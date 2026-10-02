@@ -63,6 +63,16 @@ impl Connector {
         &self.http
     }
 
+    #[cfg(test)]
+    pub(super) fn with_test_token(http: reqwest::Client) -> Self {
+        let mut connector = Self::new(http, "bot".into(), "unused".into(), "tenant".into());
+        connector.token = Mutex::new(Some((
+            "test-bot-token".into(),
+            Instant::now() + Duration::from_secs(600),
+        )));
+        connector
+    }
+
     /// The bot's app token for the Bot Connector and the token service,
     /// from the single-tenant authority.
     pub async fn app_token(&self) -> Result<String, Report> {

@@ -491,6 +491,27 @@ CREATE TABLE public.ms_teams_conversations (
 
 
 --
+-- Name: ms_teams_pending_sign_ins; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ms_teams_pending_sign_ins (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    bot_app_id text NOT NULL,
+    tenant_id text NOT NULL,
+    connection_name text NOT NULL,
+    conversation_id text NOT NULL,
+    ms_teams_user_id text NOT NULL,
+    entra_object_id text NOT NULL,
+    source_conversation_id text NOT NULL,
+    source_activity_id text NOT NULL,
+    exchange_id text,
+    activity jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: ms_teams_token_exchanges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -896,6 +917,22 @@ ALTER TABLE ONLY public.ms_teams_conversations
 
 ALTER TABLE ONLY public.ms_teams_conversations
     ADD CONSTRAINT ms_teams_conversations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ms_teams_pending_sign_ins ms_teams_pending_sign_ins_bot_app_id_tenant_id_connection_n_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_pending_sign_ins
+    ADD CONSTRAINT ms_teams_pending_sign_ins_bot_app_id_tenant_id_connection_n_key UNIQUE (bot_app_id, tenant_id, connection_name, ms_teams_user_id, source_conversation_id, source_activity_id);
+
+
+--
+-- Name: ms_teams_pending_sign_ins ms_teams_pending_sign_ins_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_pending_sign_ins
+    ADD CONSTRAINT ms_teams_pending_sign_ins_pkey PRIMARY KEY (id);
 
 
 --
@@ -1316,6 +1353,20 @@ CREATE UNIQUE INDEX idx_users_issuer_subject ON public.users USING btree (issuer
 --
 
 CREATE INDEX ms_teams_conversations_current_chat ON public.ms_teams_conversations USING btree (current_chat_id) WHERE (current_chat_id IS NOT NULL);
+
+
+--
+-- Name: ms_teams_pending_sign_ins_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ms_teams_pending_sign_ins_expiry ON public.ms_teams_pending_sign_ins USING btree (expires_at);
+
+
+--
+-- Name: ms_teams_pending_sign_ins_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ms_teams_pending_sign_ins_scope ON public.ms_teams_pending_sign_ins USING btree (bot_app_id, tenant_id, connection_name, conversation_id, ms_teams_user_id, entra_object_id);
 
 
 --

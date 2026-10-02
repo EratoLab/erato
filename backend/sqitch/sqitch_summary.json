@@ -54,7 +54,8 @@
     "deploy/0052_add_local_evidence_exports.sql",
     "deploy/0053_add_ms_teams_bot.sql",
     "deploy/0054_add_chat_created_via.sql",
-    "deploy/0055_add_client_tool_decisions.sql"
+    "deploy/0055_add_client_tool_decisions.sql",
+    "deploy/0056_add_ms_teams_pending_sign_ins.sql"
   ],
-  "latest_change": "9746a1a741c25d1696e75587085647d53277fb96"
+  "latest_change": "e1f0a291b8a09ceb5b9081eb0202282050691ccb"
 }

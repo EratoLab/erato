@@ -11,11 +11,12 @@ use super::graph::{Graph, GraphIdentity, context_markdown};
 use super::host::{Completion, GenerationUpdate, Host, Session, StartError};
 use super::render::{self, Mention};
 use super::streaming::{ReplyTarget, StreamingReply};
-use super::user_token::oauth_card;
+use super::user_token::sign_in_activity;
 use axum::http::StatusCode;
 use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -23,17 +24,24 @@ const NEW_CHAT_COMMANDS: [&str; 3] = ["/new", "new chat", "neuer chat"];
 const TYPING_INTERVAL: Duration = Duration::from_secs(4);
 const CONTEXT_FILE_NAME: &str = "teams-conversation-context.md";
 
+#[cfg(test)]
+mod sign_in_tests;
+
 struct UserContext {
     session: Session,
     identity: GraphIdentity,
     graph_token: String,
 }
 
-pub(super) async fn on_message(bot: std::sync::Arc<TeamsBot>, host: Host, activity: Activity) {
+pub(super) async fn on_message(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
+    handle_message(bot, host, activity, true).await;
+}
+
+async fn handle_message(bot: Arc<TeamsBot>, host: Host, activity: Activity, allow_sign_in: bool) {
     let Some(target) = reply_target(&bot, &activity) else {
         return;
     };
-    if let Err(error) = process_message(&bot, &host, &activity, &target).await {
+    if let Err(error) = process_message(&bot, &host, &activity, &target, allow_sign_in).await {
         tracing::error!(error = %error, "Teams message handling failed");
         let _ = target
             .send_text("Sorry, something went wrong while handling your message.")
@@ -46,10 +54,11 @@ async fn process_message(
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
+    allow_sign_in: bool,
 ) -> Result<(), Report> {
     let kind = activity.conversation_kind();
     if let Some(submit) = activity.value.as_ref().and_then(ApprovalSubmit::from_value) {
-        return on_approval(bot, host, activity, target, submit).await;
+        return on_approval(bot, host, activity, target, submit, allow_sign_in).await;
     }
 
     let text = activity.text_without_bot_mention();
@@ -63,7 +72,7 @@ async fn process_message(
         return Ok(());
     }
 
-    let Some(user) = authenticate(bot, host, activity, target).await? else {
+    let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
         return Ok(());
     };
     let (conversation_id, service_url, from_id) = routing(activity)?;
@@ -131,8 +140,9 @@ async fn on_approval(
     activity: &Activity,
     target: &ReplyTarget<'_>,
     submit: ApprovalSubmit,
+    allow_sign_in: bool,
 ) -> Result<(), Report> {
-    let Some(user) = authenticate(bot, host, activity, target).await? else {
+    let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
         return Ok(());
     };
     let message_id = Uuid::parse_str(&submit.message_id)?;
@@ -213,6 +223,7 @@ async fn authenticate(
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
+    allow_sign_in: bool,
 ) -> Result<Option<UserContext>, Report> {
     let (Some(entra_object_id), Some(from)) =
         (activity.from_aad_object_id(), activity.from.as_ref())
@@ -230,12 +241,27 @@ async fn authenticate(
             .await?;
         return Ok(None);
     };
-    let Some(graph_token) = bot
+    let graph_token = bot
         .user_tokens
         .get_token(&bot.connector, &from.id, None)
-        .await?
-    else {
-        send_sign_in(bot, activity, target).await?;
+        .await?;
+    // Check after reading the token: another replica may have completed SSO
+    // while GetToken was in flight. A retry must not also submit that message.
+    // Resumed messages skip this check because they already own the claim.
+    if allow_sign_in
+        && host
+            .has_sign_in_request(&bot.user_tokens.sign_in_scope(activity)?, activity)
+            .await?
+    {
+        return Ok(None);
+    }
+    let Some(graph_token) = graph_token else {
+        if !allow_sign_in {
+            return Err(eyre!(
+                "Teams Graph token unavailable after successful sign-in"
+            ));
+        }
+        send_sign_in(bot, host, activity).await?;
         return Ok(None);
     };
 
@@ -282,65 +308,62 @@ async fn authenticate(
 
 /// Ask for sign-in. Personal chats get the card directly; group chats and
 /// channels get it in a private chat, so nobody signs in in front of others.
-async fn send_sign_in(
-    bot: &TeamsBot,
-    activity: &Activity,
-    target: &ReplyTarget<'_>,
-) -> Result<(), Report> {
-    let text = "Please sign in so I can work with your Microsoft 365 data.";
-    if activity.conversation_kind().is_personal() {
-        let resource = bot
-            .user_tokens
-            .sign_in_resource(&bot.connector, activity)
-            .await?;
-        let card = oauth_card(bot.user_tokens.connection_name(), &resource, text);
-        target
-            .send(&render::with_attachment(render::message(text, None), card))
-            .await?;
-        return Ok(());
-    }
-
+async fn send_sign_in(bot: &TeamsBot, host: &Host, activity: &Activity) -> Result<(), Report> {
     let (_, service_url, from_id) = routing(activity)?;
-    let bot_id = activity
-        .recipient
-        .as_ref()
-        .map(|recipient| recipient.id.clone())
-        .ok_or_else(|| eyre!("activity has no recipient"))?;
-    let personal_id = bot
-        .connector
-        .create_personal_conversation(service_url, &bot_id, from_id, &bot.settings.tenant_id)
-        .await?;
     let mut personal = activity.clone();
-    if let Some(conversation) = personal.conversation.as_mut() {
-        conversation.id = personal_id.clone();
-        conversation.conversation_type = Some("personal".to_string());
+    if !activity.conversation_kind().is_personal() {
+        let bot_id = activity
+            .recipient
+            .as_ref()
+            .map(|recipient| recipient.id.as_str())
+            .ok_or_else(|| eyre!("activity has no recipient"))?;
+        let personal_id = bot
+            .connector
+            .create_personal_conversation(service_url, bot_id, from_id, &bot.settings.tenant_id)
+            .await?;
+        if let Some(conversation) = personal.conversation.as_mut() {
+            conversation.id = personal_id;
+            conversation.conversation_type = Some("personal".to_string());
+        }
     }
     let resource = bot
         .user_tokens
         .sign_in_resource(&bot.connector, &personal)
         .await?;
-    let card = oauth_card(bot.user_tokens.connection_name(), &resource, text);
-    bot.connector
-        .send(
-            service_url,
-            &personal_id,
-            &render::with_attachment(render::message(text, None), card),
-        )
-        .await?;
-    target
-        .send_text("I sent you a private message to sign in. Mention me again afterwards.")
-        .await
+    let scope = bot.user_tokens.sign_in_scope(&personal)?;
+    let exchange_id = resource
+        .token_exchange_resource
+        .as_ref()
+        .and_then(|value| value.get("id"))
+        .and_then(Value::as_str);
+    let card = sign_in_activity(&personal, bot.user_tokens.connection_name(), &resource)?;
+    if host.remember_sign_in(&scope, exchange_id, activity).await?
+        && let Err(error) = bot
+            .connector
+            .send(service_url, &scope.conversation_id, &card)
+            .await
+    {
+        host.discard_sign_in(&scope, activity).await?;
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// Answer an `invoke` activity; the return value is the HTTP response.
 pub(super) async fn on_invoke(
-    bot: &TeamsBot,
+    bot: &Arc<TeamsBot>,
     host: &Host,
     activity: &Activity,
 ) -> (StatusCode, Value) {
     let result = match activity.name.as_deref() {
         Some("signin/tokenExchange") => token_exchange(bot, host, activity).await,
-        Some("signin/verifyState") => verify_state(bot, activity).await,
+        Some("signin/verifyState") => verify_state(bot, host, activity).await,
+        Some("signin/failure") => {
+            // Do not log the whole payload: it may contain authentication data.
+            tracing::warn!(code = ?activity.value.as_ref().and_then(|v| v.get("code")).and_then(|v| v.as_str()),
+                "Teams client could not complete SSO");
+            Ok((StatusCode::OK, json!({})))
+        }
         _ => Ok((StatusCode::OK, json!({}))),
     };
     result.unwrap_or_else(|error| {
@@ -350,7 +373,7 @@ pub(super) async fn on_invoke(
 }
 
 async fn token_exchange(
-    bot: &TeamsBot,
+    bot: &Arc<TeamsBot>,
     host: &Host,
     activity: &Activity,
 ) -> Result<(StatusCode, Value), Report> {
@@ -375,6 +398,12 @@ async fn token_exchange(
             "failureDetail": "The bot is unable to exchange token. Proceed with regular login.",
         }),
     );
+    if value.get("connectionName").and_then(Value::as_str) != Some(connection_name) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            json!({"failureDetail": "Unknown OAuth connection"}),
+        ));
+    }
     if exchange_id.is_empty() || sso_token.is_empty() || from_id.is_empty() {
         return Ok(not_exchanged);
     }
@@ -392,14 +421,24 @@ async fn token_exchange(
     if token.is_none() {
         return Ok(not_exchanged);
     }
-    // Every open Teams client sends this invoke; only one confirms the sign-in.
-    if host.claim_token_exchange(exchange_id).await? {
-        send_signed_in(bot, activity).await;
-    }
+    resume_after_sign_in(bot, host, activity, Some(exchange_id)).await?;
     Ok((StatusCode::OK, exchanged))
 }
 
-async fn verify_state(bot: &TeamsBot, activity: &Activity) -> Result<(StatusCode, Value), Report> {
+async fn verify_state(
+    bot: &Arc<TeamsBot>,
+    host: &Host,
+    activity: &Activity,
+) -> Result<(StatusCode, Value), Report> {
+    if let Some(connection) = activity
+        .value
+        .as_ref()
+        .and_then(|v| v.get("connectionName"))
+        .and_then(Value::as_str)
+        && connection != bot.user_tokens.connection_name()
+    {
+        return Ok((StatusCode::BAD_REQUEST, json!({})));
+    }
     let code = activity
         .value
         .as_ref()
@@ -415,20 +454,49 @@ async fn verify_state(bot: &TeamsBot, activity: &Activity) -> Result<(StatusCode
         .get_token(&bot.connector, from_id, code)
         .await?;
     if token.is_some() {
-        send_signed_in(bot, activity).await;
+        resume_after_sign_in(bot, host, activity, None).await?;
         Ok((StatusCode::OK, json!({})))
     } else {
         Ok((StatusCode::PRECONDITION_FAILED, json!({})))
     }
 }
 
-async fn send_signed_in(bot: &TeamsBot, activity: &Activity) {
-    if let Some(target) = reply_target(bot, activity)
-        && let Err(error) = target
-            .send_text("You're signed in. Send your question again and I'll get to work.")
-            .await
+async fn resume_after_sign_in(
+    bot: &Arc<TeamsBot>,
+    host: &Host,
+    activity: &Activity,
+    exchange_id: Option<&str>,
+) -> Result<(), Report> {
+    let scope = bot.user_tokens.sign_in_scope(activity)?;
+    let pending = host.claim_pending_sign_ins(&scope, exchange_id).await?;
+    if !pending.is_empty() {
+        let bot = bot.clone();
+        let host = host.clone();
+        // Acknowledge the invoke without waiting for Graph, attachments or the
+        // model. Only the replica which claimed the payload can submit it.
+        tokio::spawn(async move {
+            for activity in pending {
+                handle_message(bot.clone(), host.clone(), activity, false).await;
+            }
+        });
+    }
+    Ok(())
+}
+
+/// Some interactive OAuth clients complete with an event rather than a
+/// verifyState invoke. Read the token from the token service, not the payload.
+pub(super) async fn on_token_response(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
+    if activity
+        .value
+        .as_ref()
+        .and_then(|v| v.get("connectionName"))
+        .and_then(Value::as_str)
+        != Some(bot.user_tokens.connection_name())
     {
-        tracing::debug!(%error, "Could not confirm the Teams sign-in");
+        return;
+    }
+    if let Err(error) = verify_state(&bot, &host, &activity).await {
+        tracing::warn!(%error, "Teams OAuth completion failed");
     }
 }
 
