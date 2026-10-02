@@ -1805,14 +1805,26 @@ export function installWordOoxmlHost(
         let inserted: Element[] = [];
         enqueue(true, "insertText", () => {
           const p = target();
-          // Word for the web gives every cell of a table it writes into an empty w:tcMar.
+          // Word for the web gives every cell of a table it writes into an empty w:tcMar, its rows
+          // a w:rsidTr and a wp14:textId, and the run it writes there an empty w:rPr.
           let table: Element | null = p.parentElement;
           while (table && !isWElement(table, "tbl"))
             table = table.parentElement;
-          if (table && (settings.profile ?? "word-web") === "word-web")
-            for (const props of elements(table, W, "tcPr"))
+          const webCell =
+            !!table && (settings.profile ?? "word-web") === "word-web";
+          if (webCell) {
+            for (const props of elements(table!, W, "tcPr"))
               if (!child(props, "tcMar"))
                 props.append(p.ownerDocument.createElementNS(W, "w:tcMar"));
+            for (const row of elements(table!, W, "tr")) {
+              row.setAttributeNS(W, "w:rsidTr", "04D703BD");
+              row.setAttributeNS(
+                "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing",
+                "wp14:textId",
+                "77777777",
+              );
+            }
+          }
           if (tracked()) {
             const visible = visibleRuns(p);
             const props = (run: Element | undefined) => {
@@ -1888,6 +1900,10 @@ export function installWordOoxmlHost(
             p.insertBefore(run, child(p, "pPr")?.nextSibling ?? p.firstChild);
             inserted = [run];
           } else throw new Error(`Unsupported insert location ${location}.`);
+          if (webCell)
+            for (const run of inserted)
+              if (!child(run, "rPr"))
+                run.prepend(p.ownerDocument.createElementNS(W, "w:rPr"));
         });
         return rangeProxy(() => inserted);
       },

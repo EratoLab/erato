@@ -19,6 +19,7 @@ const RSIDS = new Set([
   "rsidP",
   "rsidDel",
   "rsidSect",
+  "rsidTr",
 ]);
 const ON_OFF_PROPERTIES = new Set([
   "b",
@@ -310,7 +311,8 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         if (
           ns === XMLNS ||
           (ns === W && RSIDS.has(name)) ||
-          (ns === W14 && name === "textId")
+          // Word for the web writes its text IDs under the drawing namespace's wp14 prefix too.
+          ((ns === W14 || ns === WP14) && name === "textId")
         )
           return [];
         let value = attribute.value;
