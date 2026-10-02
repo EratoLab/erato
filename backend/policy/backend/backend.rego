@@ -43,7 +43,7 @@ package backend
 #     "resource_type": "assistant",
 #     "resource_id": "some-assistant-id",
 #     "subject_type": "user", # or "organization_group" or "organization"
-#     "subject_id_type": "id", # or "organization_group_id" or "organization_id"
+#     "subject_id_type": "id", # or "organization_user_id", "organization_group_id", "organization_id"
 #     "subject_id": "some-user-id",
 #     "role": "viewer"
 #   }
@@ -97,6 +97,7 @@ else := []
 # {
 #   "subject_kind": "user",
 #   "subject_id": "some-user-id",
+#   "organization_user_id": "some-directory-user-id", # null when unavailable
 #   "resource_kind": "chat",
 #   "resource_id": "some-chat-id",
 #   "action": "read"
@@ -215,6 +216,21 @@ allow_config_resource(resource_kind) if {
 	config_permission_rule_applies(rule, input.resource_id)
 }
 
+# Match each user grant only against the identity namespace it names.
+user_share_grant_matches(grant) if {
+	grant.subject_type == "user"
+	grant.subject_id_type == "id"
+	grant.subject_id == input.subject_id
+}
+
+user_share_grant_matches(grant) if {
+	grant.subject_type == "user"
+	grant.subject_id_type == "organization_user_id"
+	is_string(input.organization_user_id)
+	input.organization_user_id != ""
+	grant.subject_id == input.organization_user_id
+}
+
 can_read_assistant(assistant_id) if {
 	facts.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
 }
@@ -239,8 +255,7 @@ can_read_assistant(assistant_id) if {
 	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == assistant_id
-	grant.subject_type == "user"
-	grant.subject_id == input.subject_id
+	user_share_grant_matches(grant)
 	assistant_share_grant_read_role(grant)
 	assistant_share_grant_active(assistant_id)
 }
@@ -255,8 +270,7 @@ can_edit_assistant(assistant_id) if {
 	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == assistant_id
-	grant.subject_type == "user"
-	grant.subject_id == input.subject_id
+	user_share_grant_matches(grant)
 	grant.role == "editor"
 }
 
@@ -499,8 +513,7 @@ allow if {
 	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == input.resource_id
-	grant.subject_type == "user"
-	grant.subject_id == input.subject_id
+	user_share_grant_matches(grant)
 	assistant_share_grant_read_role(grant)
 	assistant_share_grant_active(input.resource_id)
 }

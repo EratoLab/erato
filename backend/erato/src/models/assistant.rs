@@ -397,6 +397,7 @@ async fn get_assistant_by_id_for_modification(
                 ResourceKind::Assistant,
                 &ResourceId(assistant_id.to_string()),
                 Action::Update,
+                subject.organization_user_id(),
                 subject.organization_group_ids(),
                 &[],
             )
@@ -424,6 +425,7 @@ pub async fn can_subject_edit_assistant(
             ResourceKind::Assistant,
             &ResourceId(assistant_id.to_string()),
             Action::Update,
+            subject.organization_user_id(),
             subject.organization_group_ids(),
             &[],
         )
