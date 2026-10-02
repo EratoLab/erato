@@ -148,3 +148,51 @@ describe("applyToolUseUpdate", () => {
     expect(ids(content)).toEqual(["call-a", "call-b"]);
   });
 });
+
+describe("Gemini repeated lookups", () => {
+  it.each(["provider", "fallback"])(
+    "keeps all 37 %s calls and results across eight turns",
+    (kind) => {
+      let content: ContentPart[] = [];
+      let offset = 0;
+      for (const [turn, count] of [5, 5, 5, 5, 5, 5, 5, 2].entries()) {
+        const calls = Array.from({ length: count }, (_, index) => ({
+          id: `01a0f45a-6fea-7d38-b761-25f0b0436423:${turn}:${
+            kind === "provider"
+              ? `provider:call-${index}`
+              : `call#lookup_person#${index}`
+          }`,
+          index: offset + index,
+        }));
+        for (const call of calls) {
+          const proposal = {
+            ...proposed(call.id, call.index),
+            tool_name: "lookup_person",
+            input: { person: call.index },
+          } as unknown as MessageSubmitStreamingResponseToolCallProposed;
+          content = insertProposedToolUse(content, proposal);
+          content = insertProposedToolUse(content, proposal);
+        }
+        // Completion order must not change call/result pairing or display order.
+        for (const call of [...calls].reverse()) {
+          content = applyToolUseUpdate(content, {
+            ...update(call.id, call.index, { person: call.index }),
+            tool_name: "lookup_person",
+          });
+        }
+        offset += count;
+      }
+      const loaded = JSON.parse(JSON.stringify(content)) as ContentPart[];
+      expect(loaded).toHaveLength(37);
+      expect(new Set(ids(loaded)).size).toBe(37);
+      for (const [index, tool] of loaded.entries()) {
+        expect(tool).toMatchObject({
+          tool_name: "lookup_person",
+          status: "success",
+          input: { person: index },
+          output: { person: index },
+        });
+      }
+    },
+  );
+});

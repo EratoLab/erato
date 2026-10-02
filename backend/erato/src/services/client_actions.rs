@@ -41,6 +41,9 @@ pub fn build_client_action_tool(client_actions: &[String], omit_tool_strict: boo
         })),
         strict: if omit_tool_strict { None } else { Some(false) },
         config: None,
+        custom_format: None,
+        cache_control: None,
+        eager_input_streaming: None,
     }
 }
 

@@ -86,6 +86,7 @@ impl From<ContentPart> for GenAiMessageContent {
             ContentPart::ToolUse(tool_use) => {
                 GenAiMessageContent::from_parts(vec![genai::chat::ContentPart::ToolResponse(
                     ToolResponse {
+                        fn_name: Some(tool_use.tool_name),
                         call_id: tool_use.tool_call_id,
                         content: serde_json::to_string(&tool_use.output)
                             .expect("Failed to serialize tool output"),
@@ -161,6 +162,7 @@ impl InputMessage {
             },
             MessageRole::Tool => match self.content {
                 ContentPart::ToolUse(tool_use) => ChatMessage::from(ToolResponse {
+                    fn_name: Some(tool_use.tool_name),
                     call_id: tool_use.tool_call_id,
                     content: serde_json::to_string(&tool_use.output)
                         .expect("Failed to serialize tool output"),
@@ -330,7 +332,7 @@ pub fn into_openai_request_parts(chat_req: &ChatRequest) -> Result<OpenAIRequest
 
 fn map_reasoning_effort(effort: ModelReasoningEffort) -> ReasoningEffort {
     match effort {
-        ModelReasoningEffort::None => ReasoningEffort::None,
+        ModelReasoningEffort::None => ReasoningEffort::Zero,
         ModelReasoningEffort::Minimal => ReasoningEffort::Minimal,
         ModelReasoningEffort::Low => ReasoningEffort::Low,
         ModelReasoningEffort::Medium => ReasoningEffort::Medium,

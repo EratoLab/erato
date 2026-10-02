@@ -443,6 +443,9 @@ pub fn build_delegate_to_assistant_tool(
         })),
         strict: if omit_tool_strict { None } else { Some(false) },
         config: None,
+        custom_format: None,
+        cache_control: None,
+        eager_input_streaming: None,
     }
 }
 
@@ -771,6 +774,9 @@ pub(crate) fn build_delegate_task_tool(
         })),
         strict: if omit_tool_strict { None } else { Some(false) },
         config: None,
+        custom_format: None,
+        cache_control: None,
+        eager_input_streaming: None,
     }
 }
 

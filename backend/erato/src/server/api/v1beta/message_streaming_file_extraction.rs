@@ -618,6 +618,7 @@ pub async fn post_process_mcp_tool_result(
 
     Ok(McpToolPostProcessResult {
         tool_response: ToolResponse {
+            fn_name: Some(unfinished_tool_call.fn_name.clone()),
             call_id: unfinished_tool_call.call_id.clone(),
             content: tool_response_content,
         },

@@ -218,6 +218,9 @@ fn build_tool(ids: Vec<String>, omit_strict: bool) -> Tool {
         schema: Some(json!({"type": "object", "properties": {"embedded_id": id_schema}, "required": ["embedded_id"], "additionalProperties": false})),
         strict: if omit_strict { None } else { Some(false) },
         config: None,
+        custom_format: None,
+        cache_control: None,
+        eager_input_streaming: None,
     }
 }
 
