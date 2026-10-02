@@ -4,10 +4,7 @@ use rand::Rng;
 use serde_json::json;
 use std::time::Duration;
 
-use crate::matcher::{
-    ResponseConfig, StaticResponseConfig, ToolCallDef, ToolCallResponseConfig,
-    ToolCallsResponseConfig,
-};
+use crate::matcher::{ResponseConfig, ToolCallDef};
 
 /// Build an OpenAI-compatible SSE streaming chunk
 /// Based on backend/erato/tests/integration_tests/test_utils.rs:437-463

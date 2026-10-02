@@ -2802,6 +2802,7 @@ dependencies = [
  "magika",
  "metrics",
  "metrics-exporter-prometheus",
+ "mock-llm-server",
  "mock-mcp-server",
  "mocktail",
  "moka",
