@@ -161,7 +161,7 @@ describe("bounded table-cell reads", () => {
       result: { status: "ambiguous", totalMatches: 7, nextOffset: 5 },
     });
     expect(ambiguous).not.toHaveProperty("result.readToken");
-    expect(state.snapshot.cellReads?.size).toBe(0);
+    expect(state.snapshot.readScopes?.size).toBe(0);
     const next = await state.read({ ...query, offset: 5 });
     expect(next).toMatchObject({
       ok: true,
@@ -249,7 +249,7 @@ describe("bounded table-cell reads", () => {
         ok: false,
         validationErrors: [{ code: "snapshot-mismatch" }],
       });
-      expect(state.snapshot.cellReads?.size).toBe(0);
+      expect(state.snapshot.readScopes?.size).toBe(0);
     },
   );
   it.each([
@@ -356,7 +356,7 @@ describe("bounded table-cell reads", () => {
         ok: true,
         result: { status: "unsupported", fallback: "complete-read" },
       });
-      expect(state.snapshot.cellReads?.size).toBe(0);
+      expect(state.snapshot.readScopes?.size).toBe(0);
       expect(
         (
           await state.session.execute(

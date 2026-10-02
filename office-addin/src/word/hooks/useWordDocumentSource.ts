@@ -22,6 +22,8 @@ export interface WordDocumentPreview {
   status: WordDocumentStatus;
   coverage: WordDocumentCoverage | null;
   changedSinceLastSend: boolean;
+  /** Why the last read failed, for the copyable error report. */
+  readError?: string;
 }
 
 export interface WordDocumentSource {
@@ -71,6 +73,7 @@ export function useWordDocumentSource({
             status: "unreadable",
             coverage: null,
             changedSinceLastSend: false,
+            readError: result.error,
           });
         }
         return null;

@@ -2,6 +2,11 @@ import { wordEditCounts } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 
 import { wordEditsAppliedText, wordEditExceptionsText } from "./WordEditReport";
+import {
+  wordPlanAdjustedHeadline,
+  wordPlanVerifiedText,
+} from "../utils/wordAuthoringMessages";
+import { wordPlanOutcomeState } from "../utils/wordReviewState";
 
 import type { WordReviewState } from "../utils/wordReviewState";
 
@@ -28,17 +33,21 @@ export function WordReviewReceipt({
   kind,
   title = "",
   wholeDocument = false,
+  note = "",
 }: {
   review: WordReviewState;
   kind: "edits" | "insert" | "plan";
   /** The card's own title, so the receipt names what was changed or undone. */
   title?: string;
   wholeDocument?: boolean;
+  /** What Word did on its own while writing, which the folded card still says. */
+  note?: string;
 }) {
   const exceptions =
     kind === "edits" && review.status === "done"
       ? wordEditExceptionsText(wordEditCounts(review.outcomes))
       : "";
+  const outcome = kind === "plan" ? wordPlanOutcomeState(review) : undefined;
   return (
     <div
       className="word-review__receipt focus-ring"
@@ -57,16 +66,28 @@ export function WordReviewReceipt({
                   message: "Restored the document",
                 })
               : wordUndoneText(title)
-            : kind === "plan"
-              ? t({
-                  id: "officeAddin.word.planReceipt.applied",
-                  message: `Applied: ${title}`,
-                })
-              : kind === "insert"
-                ? wordInsertedText()
-                : wordEditsAppliedText(wordEditCounts(review.outcomes).applied)}
+            : outcome === "adjusted"
+              ? wordPlanAdjustedHeadline()
+              : kind === "plan"
+                ? t({
+                    id: "officeAddin.word.planReceipt.applied",
+                    message: `Applied: ${title}`,
+                  })
+                : kind === "insert"
+                  ? wordInsertedText()
+                  : wordEditsAppliedText(
+                      wordEditCounts(review.outcomes).applied,
+                    )}
       </strong>
+      {outcome === "verified" && (
+        <span className="word-review__hint">{wordPlanVerifiedText()}</span>
+      )}
       {exceptions && <span className="word-review__hint">{exceptions}</span>}
+      {note && (
+        <span className="word-review__hint" data-testid="word-plan-adjustments">
+          {note}
+        </span>
+      )}
       {review.automatic && review.status === "done" && (
         <span className="word-review__hint">{wordAutomaticText()}</span>
       )}

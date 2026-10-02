@@ -1,3 +1,4 @@
+import { wordErrorText } from "./wordApplyDiagnostics";
 import {
   captureWordDocumentPackage,
   supportsWordDocumentPackage,
@@ -16,7 +17,8 @@ export type WordDocumentReadResult =
         documentUrl?: string;
       };
     }
-  | { ok: false };
+  /** `error` names the failed step with our own or Office's generic message, never document text. */
+  | { ok: false; error?: string };
 
 interface WordGlobal {
   run: <T>(
@@ -41,6 +43,7 @@ export async function readWordDocument(
 
   // The full package supersedes the body OOXML, which is then not fetched.
   const packaged = includeAuthoring && supportsWordDocumentPackage();
+  let step = "paragraph read";
   try {
     const result = await word.run(async (context) => {
       const paragraphs = context.document.body.paragraphs;
@@ -75,6 +78,7 @@ export async function readWordDocument(
       };
     });
     if (packaged && result.authoring) {
+      step = "full-document capture";
       // A failed full capture must not degrade into a partial rewrite or clear.
       const full = await captureWordDocumentPackage();
       return {
@@ -88,7 +92,7 @@ export async function readWordDocument(
       };
     }
     return result;
-  } catch {
-    return { ok: false };
+  } catch (error) {
+    return { ok: false, error: `${step}: ${wordErrorText(error)}` };
   }
 }

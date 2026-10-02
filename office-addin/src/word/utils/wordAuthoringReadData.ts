@@ -1,4 +1,26 @@
-import type { WordSourceBlock } from "@erato/frontend/word-review";
+import type {
+  WordAuthoringSnapshot,
+  WordSourceBlock,
+} from "@erato/frontend/word-review";
+
+/** The style catalogue a read returns: every style by name, and for the styles the body uses, the
+ * look a block keeps when its plan sets no format. */
+export function wordReadableStyles(
+  styles: WordAuthoringSnapshot["styles"],
+): Omit<WordAuthoringSnapshot["styles"][number], "inUse">[] {
+  return styles.map(({ look, inUse, ...style }) =>
+    inUse && look ? { ...style, look } : style,
+  );
+}
+
+/** What the catalogue costs without looks; reads refuse documents whose names alone exceed it. */
+export function wordStyleNamesBytes(
+  styles: WordAuthoringSnapshot["styles"],
+): number {
+  return new TextEncoder().encode(
+    JSON.stringify(styles.map(({ look: _look, inUse: _inUse, ...s }) => s)),
+  ).length;
+}
 
 export type WordReadableSourceBlock = Omit<
   WordSourceBlock,

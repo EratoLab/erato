@@ -16,6 +16,7 @@ describe("authoring model budget", () => {
     expect(
       await checkWordAuthoringBudget(s, {
         message: "Restructure",
+        mode: "complete",
         chatId: "chat",
         modelId: "model",
         fileIds: ["file"],
@@ -29,6 +30,30 @@ describe("authoring model budget", () => {
     });
     expect(request.user_message).toContain("Pilot in October.");
     expect(request.user_message).not.toContain("pkg:package");
+  });
+  it("keeps scoped estimation independent of captured document contents", async () => {
+    estimate.mockResolvedValue({
+      stats: { total_tokens: 10000, max_tokens: 128000 },
+    });
+    const snapshot = readySnapshot();
+    await checkWordAuthoringBudget(snapshot, {
+      message: "Local edit",
+      chatId: null,
+    });
+    const before = estimate.mock.calls.at(-1)?.[0].body.user_message;
+    snapshot.blocks = Array.from({ length: 1000 }, (_, i) => ({
+      ...snapshot.blocks[0],
+      ref: `b${i}`,
+      text: `Private content ${i}`,
+    }));
+    await checkWordAuthoringBudget(snapshot, {
+      message: "Local edit",
+      chatId: null,
+    });
+    const after = estimate.mock.calls.at(-1)?.[0].body.user_message;
+    expect(after).toBe(before);
+    expect(after).not.toContain("Private content");
+    expect(after).not.toContain("Pilot in October.");
   });
   it("reports insufficient context only after a successful estimate", async () => {
     estimate.mockResolvedValue({

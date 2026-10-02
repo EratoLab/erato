@@ -2,6 +2,7 @@ import { wordSourceReadRefs } from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import nativeSource from "../../../test/fixtures/word-authoring-state/rewrite-source.xml?raw";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
 import {
   applyWordDocumentPlan,
   revertWordDocumentPlan,
@@ -26,8 +27,6 @@ import type {
 } from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-const decode = (base64: string) =>
-  Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 function changeStory(xml: string, kind: "hdr" | "ftr", text: string): string {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   const root = doc.getElementsByTagNameNS(W, kind)[0];
@@ -43,294 +42,6 @@ function changeStory(xml: string, kind: "hdr" | "ftr", text: string): string {
   }
   textNode.textContent = text;
   return new XMLSerializer().serializeToString(doc);
-}
-
-function fullWord(original: Uint8Array) {
-  let current: Uint8Array = new Uint8Array(original);
-  let pending: Uint8Array | undefined;
-  let faultAfterWrite = false;
-  let faultBeforeWrite = false;
-  let faultLockId: number | undefined;
-  let changeUrlOnFailure: string | undefined;
-  let cannotRead = false;
-  let decorateWrite = (bytes: Uint8Array) => bytes;
-  const events: string[] = [];
-  type ControlState = {
-    id: number;
-    parentId?: number;
-    cannotEdit: boolean;
-    cannotDelete: boolean;
-  };
-  let controls = new Map<number, ControlState>();
-  const pendingLocks: {
-    id: number;
-    key: "cannotEdit" | "cannotDelete";
-    value: boolean;
-  }[] = [];
-  const child = (parent: Element, name: string) =>
-    Array.from(parent.children).find(
-      (e) => e.namespaceURI === W && e.localName === name,
-    );
-  const controlId = (node: Element) => {
-    const props = child(node, "sdtPr");
-    const id = props && child(props, "id")?.getAttributeNS(W, "val");
-    return id === null || id === undefined ? undefined : Number(id);
-  };
-  const loadControls = () => {
-    const doc = new DOMParser().parseFromString(
-      wordDocumentFileToOoxml(current),
-      "application/xml",
-    );
-    controls = new Map(
-      Array.from(doc.getElementsByTagNameNS(W, "sdt")).flatMap((node) => {
-        const id = controlId(node);
-        if (id === undefined) return [];
-        const props = child(node, "sdtPr")!;
-        const lock = child(props, "lock")?.getAttributeNS(W, "val");
-        let parentId: number | undefined;
-        for (
-          let parent = node.parentElement;
-          parent;
-          parent = parent.parentElement
-        )
-          if (parent.namespaceURI === W && parent.localName === "sdt") {
-            parentId = controlId(parent);
-            break;
-          }
-        return [
-          [
-            id,
-            {
-              id,
-              parentId,
-              cannotEdit:
-                lock === "contentLocked" || lock === "sdtContentLocked",
-              cannotDelete: lock === "sdtLocked" || lock === "sdtContentLocked",
-            },
-          ],
-        ];
-      }),
-    );
-  };
-  const persistLocks = () => {
-    const doc = new DOMParser().parseFromString(
-      wordDocumentFileToOoxml(current),
-      "application/xml",
-    );
-    for (const node of doc.getElementsByTagNameNS(W, "sdt")) {
-      const id = controlId(node),
-        state = id === undefined ? undefined : controls.get(id);
-      if (!state) continue;
-      const props = child(node, "sdtPr")!;
-      child(props, "lock")?.remove();
-      if (state.cannotEdit || state.cannotDelete) {
-        const lock = doc.createElementNS(W, "w:lock");
-        lock.setAttributeNS(
-          W,
-          "w:val",
-          state.cannotEdit
-            ? state.cannotDelete
-              ? "sdtContentLocked"
-              : "contentLocked"
-            : "sdtLocked",
-        );
-        props.append(lock);
-      }
-    }
-    current = wordDocumentOoxmlToFile(
-      new XMLSerializer().serializeToString(doc),
-    );
-  };
-  const controlProxy = (id: number | undefined): Word.ContentControl => {
-    const proxy = {
-      get id() {
-        return id;
-      },
-      get isNullObject() {
-        return id === undefined || !controls.has(id);
-      },
-      get cannotEdit() {
-        return controls.get(id!)!.cannotEdit;
-      },
-      set cannotEdit(value: boolean) {
-        events.push(`queue-lock:${id}:cannotEdit=${value}`);
-        pendingLocks.push({ id: id!, key: "cannotEdit", value });
-      },
-      get cannotDelete() {
-        return controls.get(id!)!.cannotDelete;
-      },
-      set cannotDelete(value: boolean) {
-        events.push(`queue-lock:${id}:cannotDelete=${value}`);
-        pendingLocks.push({ id: id!, key: "cannotDelete", value });
-      },
-      get parentContentControlOrNullObject() {
-        return controlProxy(controls.get(id!)?.parentId);
-      },
-      load: vi.fn(),
-    };
-    return proxy as unknown as Word.ContentControl;
-  };
-  loadControls();
-  const close = vi.fn((callback: () => void) => callback());
-  const insert = vi.fn((base64: string) => {
-    events.push("queue-import");
-    pending = decode(base64);
-  });
-  const bodyInsert = vi.fn(() => {
-    throw new Error("A complete document must not use a body-only mutation.");
-  });
-  const officeDocument = {
-    url: "file:///disposable-rich-document.docx",
-    getFileAsync: vi.fn(
-      (
-        _type: unknown,
-        _options: unknown,
-        callback: (result: unknown) => void,
-      ) => {
-        events.push("capture-file");
-        if (cannotRead) {
-          callback({ status: "failed" });
-          return;
-        }
-        const captured = new Uint8Array(current);
-        const count = Math.ceil(captured.length / 65536);
-        callback({
-          status: "succeeded",
-          value: {
-            size: captured.length,
-            sliceCount: count,
-            closeAsync: close,
-            getSliceAsync: (index: number, done: (result: unknown) => void) => {
-              const data = captured.slice(index * 65536, (index + 1) * 65536);
-              done({
-                status: "succeeded",
-                value: { index, size: data.length, data: Array.from(data) },
-              });
-            },
-          },
-        });
-      },
-    ),
-  };
-  const document = {
-    changeTrackingMode: "Off",
-    load: vi.fn(),
-    insertFileFromBase64: insert,
-    contentControls: {
-      get items() {
-        return [...controls.keys()].map(controlProxy);
-      },
-      getByIdOrNullObject: controlProxy,
-      load: vi.fn(),
-    },
-    body: {
-      insertOoxml: bodyInsert,
-      getOoxml: () => ({ value: wordDocumentFileToOoxml(current) }),
-    },
-  };
-  const context = {
-    document,
-    sync: vi.fn(async () => {
-      events.push("sync");
-      let changedLocks = false;
-      while (pendingLocks.length) {
-        const write = pendingLocks.shift()!;
-        if (write.id === faultLockId) {
-          pendingLocks.length = 0;
-          if (changedLocks) persistLocks();
-          throw Object.assign(new Error("Native control flag rejected."), {
-            code: "GeneralException",
-          });
-        }
-        const state = controls.get(write.id)!;
-        let ancestor = state.parentId;
-        while (ancestor !== undefined) {
-          if (controls.get(ancestor)?.cannotEdit)
-            throw new Error("Outer control is still locked.");
-          ancestor = controls.get(ancestor)?.parentId;
-        }
-        state[write.key] = write.value;
-        changedLocks = true;
-        events.push(`native-lock:${write.id}:${write.key}=${write.value}`);
-      }
-      if (changedLocks) persistLocks();
-      if (!pending) return;
-      if (
-        faultBeforeWrite ||
-        [...controls.values()].some((c) => c.cannotEdit || c.cannotDelete)
-      ) {
-        pending = undefined;
-        if (changeUrlOnFailure) officeDocument.url = changeUrlOnFailure;
-        throw Object.assign(new Error("Native import rejected."), {
-          code: "GeneralException",
-          debugInfo: { errorLocation: "Document.insertFileFromBase64" },
-        });
-      }
-      current = decorateWrite(pending);
-      pending = undefined;
-      loadControls();
-      events.push("native-import-completed");
-      if (faultAfterWrite)
-        throw Object.assign(new Error("private content must not escape"), {
-          code: "GeneralException",
-          debugInfo: {
-            errorLocation: "Document.insertFileFromBase64",
-            statement: "private content must not escape",
-          },
-        });
-    }),
-  };
-  vi.stubGlobal("Office", {
-    context: {
-      document: officeDocument,
-      requirements: { isSetSupported: () => true },
-    },
-    FileType: { Compressed: "compressed" },
-    AsyncResultStatus: { Succeeded: "succeeded" },
-  });
-  vi.stubGlobal("Word", {
-    run: async (callback: (context: Word.RequestContext) => Promise<unknown>) =>
-      callback(context as unknown as Word.RequestContext),
-  });
-  return {
-    insert,
-    bodyInsert,
-    close,
-    document,
-    officeDocument,
-    context,
-    events,
-    get: () => current,
-    set: (bytes: Uint8Array) => {
-      current = new Uint8Array(bytes);
-      loadControls();
-    },
-    controls: () => [...controls.values()].map((control) => ({ ...control })),
-    failImport: (newUrl?: string) => {
-      faultBeforeWrite = true;
-      changeUrlOnFailure = newUrl;
-    },
-    failUnlock: (id: number) => {
-      faultLockId = id;
-    },
-    failAfterWrite: () => {
-      faultAfterWrite = true;
-    },
-    failRead: () => {
-      cannotRead = true;
-    },
-    resume: () => {
-      faultAfterWrite = false;
-      faultBeforeWrite = false;
-      faultLockId = undefined;
-      changeUrlOnFailure = undefined;
-      cannotRead = false;
-    },
-    transform: (value: (bytes: Uint8Array) => Uint8Array) => {
-      decorateWrite = value;
-    },
-    clearNativeUndo: () => events.push("native-undo-cleared"),
-  };
 }
 
 async function sourceAndPlan(options: { lockedControls?: boolean } = {}) {
@@ -363,7 +74,7 @@ async function sourceAndPlan(options: { lockedControls?: boolean } = {}) {
   const bytes = wordDocumentOoxmlToFile(
     new XMLSerializer().serializeToString(fixture),
   );
-  const host = fullWord(bytes);
+  const host = installWordOoxmlHost(bytes);
   const file = await captureWordDocumentPackage();
   const source: WordAuthoringSnapshot = captureWordAuthoringSnapshot(
     file.ooxml,
@@ -756,6 +467,52 @@ describe("complete-document writer", { timeout: 15_000 }, () => {
     expect(host.bodyInsert).not.toHaveBeenCalled();
   });
 
+  it("names the parts and package counts when Word adds customXml during import", async () => {
+    const { host, source, plan } = await sourceAndPlan();
+    host.transform((value) => {
+      const doc = new DOMParser().parseFromString(
+        wordDocumentFileToOoxml(value),
+        "application/xml",
+      );
+      const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+      const part = doc.createElementNS(PKG, "pkg:part");
+      part.setAttributeNS(PKG, "pkg:name", "/customXml/item1.xml");
+      part.setAttributeNS(PKG, "pkg:contentType", "application/xml");
+      const data = doc.createElementNS(PKG, "pkg:xmlData");
+      data.append(doc.createElementNS("urn:test", "t:secret-metadata"));
+      part.append(data);
+      doc.documentElement.append(part);
+      return wordDocumentOoxmlToFile(
+        new XMLSerializer().serializeToString(doc),
+      );
+    });
+    const result = await applyWordDocumentPlan(plan, source, "message-A");
+    expect(result.status).toBe("interrupted");
+    const details = result.diagnostic?.details;
+    expect(details?.parts).toEqual(["/customXml/item1.xml"]);
+    const items = Object.fromEntries(
+      details!.packages!.map((p) => [p.label, p.customXmlItems]),
+    );
+    expect(items).toEqual({ live: 0, expected: 0, actual: 1 });
+    expect(JSON.stringify(result.diagnostic)).not.toContain("secret-metadata");
+  });
+
+  it("names the changed part when the document changed before Apply", async () => {
+    const { bytes, host, source, plan } = await sourceAndPlan();
+    host.set(
+      wordDocumentOoxmlToFile(
+        changeStory(wordDocumentFileToOoxml(bytes), "hdr", "Private header"),
+      ),
+    );
+    const result = await applyWordDocumentPlan(plan, source, "message-A");
+    expect(result.status).toBe("stale");
+    expect(result.diagnostic?.details?.parts).toEqual([
+      expect.stringMatching(/^\/word\/header\d*\.xml$/),
+    ]);
+    expect(JSON.stringify(result.diagnostic)).not.toContain("Private header");
+    expect(host.insert).not.toHaveBeenCalled();
+  });
+
   it("accepts native revision-session metadata normalization without losing recovery", async () => {
     const { bytes, host, source, plan } = await sourceAndPlan();
     host.transform((value) =>
@@ -778,7 +535,7 @@ describe("complete-document writer", { timeout: 15_000 }, () => {
 
   it("never changes Track Changes to make an import pass", async () => {
     const { host, source, plan } = await sourceAndPlan();
-    host.document.changeTrackingMode = "TrackAll";
+    host.setTrackingMode("TrackAll");
     expect(
       (await applyWordDocumentPlan(plan, source, "message-A")).status,
     ).toBe("stale");

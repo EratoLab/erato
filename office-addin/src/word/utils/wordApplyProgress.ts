@@ -15,9 +15,17 @@ export function yieldToPaint(): Promise<void> {
   });
 }
 
+/** Codes and counts only, never content. */
+export interface WordApplyRouteLog {
+  route?: string;
+  routeReason?: string;
+  ops?: number;
+  tier?: string;
+}
+
 export interface WordApplyProgress {
   stage: (stage: WordApplyStage) => void;
-  finish: (outcome: string) => void;
+  finish: (outcome: string, route?: WordApplyRouteLog) => void;
 }
 
 /** Logged at debug level so stage costs can be measured on real hosts. */
@@ -42,11 +50,14 @@ export function trackWordApply(
       current = { stage, at: globalThis.performance.now() };
       onStage?.(stage);
     },
-    finish: (outcome) => {
+    finish: (outcome, route = {}) => {
       close();
       console.debug("[erato] Word apply timings (ms)", {
         kind,
         outcome,
+        ...Object.fromEntries(
+          Object.entries(route).filter(([, value]) => value !== undefined),
+        ),
         total: Math.round(globalThis.performance.now() - started),
         ...Object.fromEntries(
           Object.entries(durations).map(([stage, ms]) => [

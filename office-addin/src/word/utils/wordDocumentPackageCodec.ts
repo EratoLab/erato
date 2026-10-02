@@ -107,10 +107,13 @@ function inspectZipDirectory(bytes: Uint8Array): void {
   const count = view.getUint16(end + 10, true);
   let cursor = view.getUint32(end + 16, true),
     expanded = 0;
+  if (count > 2048)
+    throw new Error(
+      `The DOCX has ${count} parts; this pane supports up to 2048.`,
+    );
   if (
     view.getUint16(end + 4, true) ||
     view.getUint16(end + 6, true) ||
-    count > 2048 ||
     cursor + view.getUint32(end + 12, true) !== end
   )
     throw new Error("Unsupported DOCX ZIP directory.");

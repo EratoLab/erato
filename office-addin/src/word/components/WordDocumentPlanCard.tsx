@@ -1,6 +1,7 @@
 import {
   Button,
   Alert,
+  CopyErrorButton,
   useChatContext,
   useHostArtifact,
   useWordMessageLineage,
@@ -38,25 +39,61 @@ import {
   isActionDenied,
   wordClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
-import { revertWordDocumentPlan } from "../utils/wordApplyDocumentPlan";
 import {
+  renderWordDiagnosticReport,
+  renderWordOutcomeReport,
+} from "../utils/wordApplyDiagnostics";
+import {
+  revertWordDocumentPlan,
+  wordRevertMechanism,
+} from "../utils/wordApplyDocumentPlan";
+import {
+  wordApplyAdjustmentText,
   wordAuthoringIssueText,
   wordDocumentDiagnosticText,
+  wordPartlyWrittenText,
+  wordPlanAdjustedText,
+  wordRoutePreviewText,
+  wordTrackedApplyText,
+  wordUnverifiedPassagesText,
 } from "../utils/wordAuthoringMessages";
 import { offerableWordClientActionsForFacet } from "../utils/wordClientActions";
 import {
   decodeWordDocumentBackup,
+  decodeWordInPlaceBackup,
   isWordDocumentBackup,
 } from "../utils/wordDocumentPackage";
-import { wordPlanDraftText } from "../utils/wordDocumentXml";
-import { showWordReviewLocation } from "../utils/wordReviewLocation";
-import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
+import {
+  captureWordAuthoringSnapshot,
+  compileWordDocumentPlan,
+  wordPlanDraftText,
+} from "../utils/wordDocumentXml";
+import { WORD_VISIBLE_ADJUSTMENTS } from "../utils/wordFullDocumentComparison";
+import { wordInPlaceCapabilities } from "../utils/wordInPlaceCapabilities";
+import {
+  routeWordDocumentPlan,
+  wordPlanPassages,
+} from "../utils/wordInPlaceRoute";
+import { wordInPlaceAvailability } from "../utils/wordInPlaceSwitch";
+import {
+  showWordParagraphs,
+  showWordReviewLocation,
+  wordInPlaceMismatchedParagraphs,
+  wordInPlaceRegionOf,
+  wordInPlaceWrittenRegions,
+} from "../utils/wordReviewLocation";
+import {
+  EMPTY_WORD_REVIEW,
+  wordMismatchedPassages,
+  wordPlanOutcomeState,
+} from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
 import type {
   WordClientAction,
   WordClientActionEntry,
 } from "../utils/wordClientActions";
+import type { WordInPlaceBackup } from "../utils/wordDocumentPackage";
 import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 export function WordDocumentPlanCard({
@@ -67,7 +104,7 @@ export function WordDocumentPlanCard({
   content: string;
 }) {
   const artifact = useHostArtifact();
-  const { messages } = useChatContext();
+  const { messages, currentChatId } = useChatContext();
   const host = useWordWrite();
   const [decisions, setDecisions] = useClientActionDecisions(
     wordClientActionDecisionStore,
@@ -140,6 +177,35 @@ export function WordDocumentPlanCard({
     gate.allowed &&
     snapshot?.ownerMessageId === messageId &&
     offered;
+  const availability = wordInPlaceAvailability();
+  const unavailable = availability.enabled ? undefined : availability.reason;
+  const routePreview = useMemo(() => {
+    if (!ready || !plan || !snapshot) return undefined;
+    try {
+      const compiled = captureWordAuthoringSnapshot(
+        compileWordDocumentPlan(plan, snapshot),
+        snapshot.identity,
+        "Off",
+        snapshot.fullDocument,
+        "verify",
+      );
+      if (compiled.issue) return undefined;
+      return wordRoutePreviewText(
+        routeWordDocumentPlan(
+          plan,
+          snapshot,
+          unavailable
+            ? { enabled: false, reason: unavailable }
+            : { enabled: true },
+          wordInPlaceCapabilities(),
+          compiled,
+        ),
+        wordPlanPassages(plan),
+      );
+    } catch {
+      return undefined;
+    }
+  }, [ready, plan, snapshot, unavailable]);
   const execute = useCallback(async () => {
     if (!ready || !capture || !host.beginOperation()) return false;
     host.updateReview(key, {
@@ -147,6 +213,7 @@ export function WordDocumentPlanCard({
       applyStage: "checking",
       capture,
       documentPlanDiagnostic: undefined,
+      documentPlanOutcome: undefined,
     });
     try {
       const run = await entry.execute({
@@ -188,6 +255,7 @@ export function WordDocumentPlanCard({
             : "error",
         documentPlanStatus: result?.status,
         documentPlanDiagnostic: result?.diagnostic,
+        documentPlanOutcome: result?.outcome,
         detailsExpanded: false,
         automatic: isAutomaticWordRun({
           presentation: artifact?.clientActionPresentation,
@@ -247,6 +315,27 @@ export function WordDocumentPlanCard({
     host.revertSlot.identity === host.documentIdentity
       ? host.revertSlot
       : null;
+  const slotOoxml = recoverySlot?.ooxml;
+  const slotAfter = recoverySlot?.afterFingerprint;
+  const written = useMemo(() => {
+    if (!slotOoxml) return undefined;
+    let record: WordInPlaceBackup | undefined;
+    try {
+      record = isWordDocumentBackup(slotOoxml)
+        ? decodeWordInPlaceBackup(slotOoxml).inPlace
+        : undefined;
+    } catch {
+      record = undefined;
+    }
+    return { mechanism: wordRevertMechanism(slotOoxml, slotAfter), record };
+  }, [slotOoxml, slotAfter]);
+  const writtenRecord =
+    written?.mechanism === "in-place" || written?.mechanism === "tracked"
+      ? written.record
+      : undefined;
+  const writtenRegions = writtenRecord
+    ? wordInPlaceWrittenRegions(writtenRecord)
+    : [];
   // After a stale revert the slot is kept only for download: retrying would
   // hit the same later edits, so the undo line would promise too much.
   const canRevert =
@@ -266,7 +355,11 @@ export function WordDocumentPlanCard({
         slot.ooxml,
         slot.afterFingerprint,
       );
-      if (result.status === "reverted") host.setRevertSlot(null);
+      // Only a strict match equals the backup; after a content-tier restore it stays downloadable.
+      if (result.status === "reverted" && result.outcome?.tier === "strict")
+        host.setRevertSlot(null);
+      else if (result.status === "reverted")
+        host.setRevertSlot({ ...slot, afterFingerprint: undefined });
       else if (result.status === "interrupted")
         host.setRevertSlot({
           ...slot,
@@ -284,6 +377,9 @@ export function WordDocumentPlanCard({
             ? "revert-stale"
             : review.documentPlanStatus,
         documentPlanDiagnostic: result.diagnostic,
+        ...(result.status === "reverted"
+          ? { documentPlanOutcome: result.outcome }
+          : {}),
         detailsExpanded: result.status !== "reverted",
       });
     } catch {
@@ -297,6 +393,14 @@ export function WordDocumentPlanCard({
       host.endOperation();
     }
   };
+  const cannotLocate = () =>
+    setCopyNote(
+      t({
+        id: "officeAddin.word.authoring.locationChanged",
+        message:
+          "This source passage has changed or cannot be located reliably.",
+      }),
+    );
   const locate = async (ref: string) => {
     const source = snapshot?.blocks.find((b) => b.ref === ref);
     const paragraph = source?.paragraphOrdinal
@@ -315,50 +419,131 @@ export function WordDocumentPlanCard({
         { identity: gate.capture.identity, paragraphs: [paragraph] },
         host.documentIdentity,
       );
-      if (result !== "selected")
-        setCopyNote(
-          t({
-            id: "officeAddin.word.authoring.locationChanged",
-            message:
-              "This source passage has changed or cannot be located reliably.",
-          }),
-        );
+      if (result !== "selected") cannotLocate();
     } finally {
       host.endOperation();
     }
   };
+  /** After an in-place write, by the paragraph IDs it recorded; `tracked` selects its first revision. */
+  const showWritten = async (ids: readonly string[], tracked = false) => {
+    if (!recoverySlot || !host.beginOperation()) return;
+    setCopyNote("");
+    try {
+      const result = await showWordParagraphs(
+        ids,
+        recoverySlot.identity,
+        host.documentIdentity,
+        tracked,
+      );
+      if (result !== "selected") cannotLocate();
+    } finally {
+      host.endOperation();
+    }
+  };
+  const copyText = (text: string, copied: string, failedText: string) => {
+    setCopyNote("");
+    const failed = () => setCopyNote(failedText);
+    if (!navigator.clipboard) {
+      failed();
+      return;
+    }
+    try {
+      void navigator.clipboard
+        .writeText(text)
+        .then(() => setCopyNote(copied), failed);
+    } catch {
+      failed();
+    }
+  };
   const completed = ["done", "denied", "reverted"].includes(review.status);
   const collapsed = completed && !review.detailsExpanded;
-  const status = review.documentPlanDiagnostic
-    ? wordDocumentDiagnosticText(
-        review.documentPlanDiagnostic,
-        review.status === "revert-failed" ||
-          review.documentPlanStatus === "revert-stale",
-      )
-    : review.status === "write-failed" || review.status === "revert-failed"
-      ? t({
-          id: "officeAddin.word.authoring.interrupted",
-          message:
-            "Word stopped during the operation. The document may be partially changed. Inspect it before continuing; this plan will not run again.",
-        })
-      : review.status === "error"
-        ? t({
-            id: "officeAddin.word.authoring.failed",
-            message:
-              "The rewrite could not be applied. No document changes were made.",
-          })
-        : review.status === "reverting"
-          ? t({
-              id: "officeAddin.word.authoring.reverting",
-              message: "Checking and restoring the document…",
-            })
-          : undefined;
+  const outcomeState = wordPlanOutcomeState(review);
+  // Only the Apply's own result: a later Revert attempt replaces the diagnostic.
+  const applyStopped =
+    review.status === "write-failed" &&
+    review.documentPlanStatus === "interrupted";
+  const mismatches = applyStopped
+    ? wordMismatchedPassages(review.documentPlanDiagnostic)
+    : 0;
+  const partial = review.documentPlanDiagnostic?.details?.partial;
+  const mismatchedParagraphs =
+    applyStopped && outcomeState === "unverified" && written?.record
+      ? wordInPlaceMismatchedParagraphs(written.record)
+      : [];
+  const status =
+    applyStopped &&
+    outcomeState === "unverified" &&
+    review.documentPlanDiagnostic?.reason === "output-mismatch" &&
+    mismatches
+      ? wordUnverifiedPassagesText(mismatches)
+      : applyStopped &&
+          outcomeState === "partly-written" &&
+          partial &&
+          partial.untouched > 0
+        ? wordPartlyWrittenText(
+            partial.applied,
+            partial.applied + partial.untouched,
+          )
+        : review.documentPlanDiagnostic
+          ? wordDocumentDiagnosticText(
+              review.documentPlanDiagnostic,
+              review.status === "revert-failed" ||
+                review.documentPlanStatus === "revert-stale",
+            )
+          : review.status === "write-failed" ||
+              review.status === "revert-failed"
+            ? t({
+                id: "officeAddin.word.authoring.interrupted",
+                message:
+                  "Word stopped during the operation. The document may be partially changed. Inspect it before continuing; this plan will not run again.",
+              })
+            : review.status === "error"
+              ? t({
+                  id: "officeAddin.word.authoring.failed",
+                  message:
+                    "The rewrite could not be applied. No document changes were made.",
+                })
+              : review.status === "reverting"
+                ? t({
+                    id: "officeAddin.word.authoring.reverting",
+                    message: "Checking and restoring the document…",
+                  })
+                : undefined;
+  const adjustedOutcome =
+    ["done", "reverted"].includes(review.status) &&
+    review.documentPlanOutcome?.tier === "content"
+      ? review.documentPlanOutcome
+      : undefined;
+  const adjustmentNote = [
+    ...(review.status === "done" && review.documentPlanOutcome?.tracked
+      ? [wordTrackedApplyText()]
+      : []),
+    ...(outcomeState === "adjusted" ? [wordPlanAdjustedText()] : []),
+    ...(["done", "reverted"].includes(review.status)
+      ? (review.documentPlanOutcome?.adjustments ?? [])
+          .filter((code) => WORD_VISIBLE_ADJUSTMENTS.includes(code))
+          .map(wordApplyAdjustmentText)
+          .filter(Boolean)
+      : []),
+  ].join(" ");
+  const reverting =
+    review.status === "revert-failed" ||
+    review.documentPlanStatus === "revert-stale";
+  const errorReport =
+    review.documentPlanDiagnostic ||
+    ["error", "write-failed", "revert-failed"].includes(review.status)
+      ? renderWordDiagnosticReport(
+          reverting ? "revert" : "apply",
+          review.documentPlanStatus ?? review.status,
+          review.documentPlanDiagnostic,
+        )
+      : undefined;
   if (generating)
     return (
       <WordReviewGenerating
         label={t({
-          id: "officeAddin.word.authoring.preparing",
-          message: "Preparing a complete document rewrite…",
+          id: "officeAddin.word.authoring.preparingChanges",
+          message: "Preparing document changes…",
         })}
       />
     );
@@ -389,15 +574,24 @@ export function WordDocumentPlanCard({
       review={planReview}
       showSavedPlan={!!artifact?.submittedCard}
       adapter={{
-        locate:
-          shown === snapshot &&
-          idle &&
-          gate.allowed &&
-          !host.operationInProgress
+        locate: host.operationInProgress
+          ? undefined
+          : shown === snapshot && idle && gate.allowed
             ? (ref) => void locate(ref)
-            : undefined,
+            : review.status === "done" && writtenRecord
+              ? (ref) => {
+                  const ids = wordInPlaceRegionOf(writtenRecord, ref);
+                  if (ids) void showWritten(ids);
+                  else cannotLocate();
+                }
+              : undefined,
         apply: (
           <>
+            {routePreview && idle && offered && (
+              <p className="word-review__hint" data-testid="word-plan-route">
+                {routePreview}
+              </p>
+            )}
             {(idle || applying) && offered && !confirmCard && (
               <WordApplyButton
                 applying={applying}
@@ -441,40 +635,68 @@ export function WordDocumentPlanCard({
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => {
-                  setCopyNote("");
-                  const failed = () =>
-                    setCopyNote(
-                      t({
-                        id: "officeAddin.word.authoring.copyFailed",
-                        message: "The draft could not be copied.",
-                      }),
-                    );
-                  if (!navigator.clipboard) {
-                    failed();
-                    return;
-                  }
-                  try {
-                    void navigator.clipboard
-                      .writeText(wordPlanDraftText(plan, snapshot))
-                      .then(
-                        () =>
-                          setCopyNote(
-                            t({
-                              id: "officeAddin.word.authoring.copied",
-                              message: "Draft copied.",
-                            }),
-                          ),
-                        failed,
-                      );
-                  } catch {
-                    failed();
-                  }
-                }}
+                onClick={() =>
+                  copyText(
+                    wordPlanDraftText(plan, snapshot),
+                    t({
+                      id: "officeAddin.word.authoring.copied",
+                      message: "Draft copied.",
+                    }),
+                    t({
+                      id: "officeAddin.word.authoring.copyFailed",
+                      message: "The draft could not be copied.",
+                    }),
+                  )
+                }
               >
                 {t({
                   id: "officeAddin.word.authoring.copy",
                   message: "Copy draft",
+                })}
+              </Button>
+            )}
+            {adjustedOutcome && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  copyText(
+                    renderWordOutcomeReport(
+                      review.status === "reverted" ? "revert" : "apply",
+                      adjustedOutcome,
+                    ),
+                    t({
+                      id: "officeAddin.word.authoring.detailsCopied",
+                      message: "Details copied.",
+                    }),
+                    t({
+                      id: "officeAddin.word.authoring.detailsCopyFailed",
+                      message: "The details could not be copied.",
+                    }),
+                  )
+                }
+              >
+                {t({
+                  id: "officeAddin.word.authoring.copyDetails",
+                  message: "Copy details",
+                })}
+              </Button>
+            )}
+            {review.status === "done" && writtenRegions.length > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={host.operationInProgress}
+                onClick={() =>
+                  void showWritten(
+                    writtenRegions[0],
+                    written?.mechanism === "tracked",
+                  )
+                }
+              >
+                {t({
+                  id: "officeAddin.word.authoring.showChanges",
+                  message: "Show changes in Word",
                 })}
               </Button>
             )}
@@ -544,17 +766,22 @@ export function WordDocumentPlanCard({
           <WordUndoLine
             canRevert={canRevert}
             label={
-              review.status === "done"
-                ? wordUndoLabel()
-                : recoverySlot && isWordDocumentBackup(recoverySlot.ooxml)
-                  ? t({
-                      id: "officeAddin.word.authoring.restoreDocument",
-                      message: "Restore original document",
-                    })
-                  : t({
-                      id: "officeAddin.word.authoring.restoreBody",
-                      message: "Restore original body",
-                    })
+              written?.mechanism === "tracked"
+                ? t({
+                    id: "officeAddin.word.authoring.rejectTracked",
+                    message: "Reject these tracked changes",
+                  })
+                : review.status === "done" || written?.mechanism === "in-place"
+                  ? wordUndoLabel()
+                  : recoverySlot && isWordDocumentBackup(recoverySlot.ooxml)
+                    ? t({
+                        id: "officeAddin.word.authoring.restoreDocument",
+                        message: "Restore original document",
+                      })
+                    : t({
+                        id: "officeAddin.word.authoring.restoreBody",
+                        message: "Restore original body",
+                      })
             }
             disabled={host.operationInProgress}
             onUndo={() => void revert()}
@@ -571,13 +798,45 @@ export function WordDocumentPlanCard({
               kind="plan"
               title={planTitle}
               wholeDocument={planReview.scope.wholeFile}
+              note={adjustmentNote}
             />
           ),
           alert: status && (
             <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
           ),
           trailing: (
-            <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
+            <>
+              {mismatchedParagraphs.length > 0 && (
+                <div className="word-review__actions m-3 mt-0">
+                  {mismatchedParagraphs.map((id, i) => (
+                    <Button
+                      key={id}
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={host.operationInProgress}
+                      onClick={() => void showWritten([id])}
+                    >
+                      {t({
+                        id: "officeAddin.word.scoped.locate",
+                        message: `Locate passage ${i + 1}`,
+                      })}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              <WordDiagnosticDetails
+                diagnostic={review.documentPlanDiagnostic}
+              />
+              {status && errorReport && (
+                <div className="m-3 mt-0">
+                  <CopyErrorButton
+                    error={errorReport}
+                    reportOptions={{ chatId: currentChatId }}
+                  />
+                </div>
+              )}
+            </>
           ),
           notice: idle && blockedText && (
             <Alert

@@ -269,7 +269,10 @@ describe("applyWordEdits", () => {
       "failed",
       "failed",
     ]);
-    await expect(revertWordEdits(result.snapshotOoxml!)).resolves.toBe(true);
+    expect(result.afterFingerprint).toBeDefined();
+    await expect(
+      revertWordEdits(result.snapshotOoxml!, result.afterFingerprint),
+    ).resolves.toBe("reverted");
     expect(bodyText()).toEqual(texts);
   });
 
@@ -345,16 +348,79 @@ describe("revertWordEdits", () => {
       "Bravo.",
     ]);
 
-    await expect(revertWordEdits(result.snapshotOoxml!)).resolves.toBe(true);
+    await expect(
+      revertWordEdits(result.snapshotOoxml!, result.afterFingerprint),
+    ).resolves.toBe("reverted");
     expect(word.word.paragraphs().map((entry) => entry.text)).toEqual([
       "Alpha.",
       "Bravo.",
     ]);
   });
 
+  it("refuses after a later edit and leaves the body untouched", async () => {
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 1, text: "Alpha, revised." }],
+      capture: captureOf(["Alpha.", "Bravo."]),
+    });
+    word.word.setParagraphs([
+      { text: "Alpha, revised." },
+      { text: "Bravo, typed later." },
+    ]);
+
+    await expect(
+      revertWordEdits(result.snapshotOoxml!, result.afterFingerprint),
+    ).resolves.toBe("stale");
+    expect(word.word.writes()).toEqual([]);
+    expect(word.word.paragraphs().map((entry) => entry.text)).toEqual([
+      "Alpha, revised.",
+      "Bravo, typed later.",
+    ]);
+  });
+
+  it("refuses while Track Changes is on, and without a recorded post-write body", async () => {
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 1, text: "Alpha, revised." }],
+      capture: captureOf(["Alpha.", "Bravo."]),
+    });
+    word.word.setTrackingMode("TrackAll");
+    await expect(
+      revertWordEdits(result.snapshotOoxml!, result.afterFingerprint),
+    ).resolves.toBe("tracking");
+    word.word.setTrackingMode("Off");
+    await expect(
+      revertWordEdits(result.snapshotOoxml!, undefined),
+    ).resolves.toBe("stale");
+    expect(word.word.paragraphs()[0].text).toBe("Alpha, revised.");
+  });
+
   it("reports failure rather than throwing when the host rejects", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     word.word.run.mockRejectedValueOnce(new Error("nope"));
-    await expect(revertWordEdits("[]")).resolves.toBe(false);
+    await expect(revertWordEdits("[]", "raw:[]")).resolves.toBe("failed");
+  });
+
+  it("logs Office errors without the message, which can quote the document", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const officeError = () =>
+      Object.assign(
+        new Error("Cannot edit 'SENTINEL-PRIVATE-TEXT' in this paragraph."),
+        { name: "RichApi.Error", code: "GeneralException" },
+      );
+    word.word.run.mockRejectedValueOnce(officeError());
+    await applyWordEdits({
+      edits: [{ paragraph: 1, text: "A." }],
+      capture: captureOf(["Alpha.", "Bravo."]),
+    });
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 1, text: "Alpha, revised." }],
+      capture: captureOf(["Alpha.", "Bravo."]),
+    });
+    word.word.run.mockRejectedValueOnce(officeError());
+    await revertWordEdits(result.snapshotOoxml!, result.afterFingerprint);
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).toContain("RichApi.Error");
+    expect(logged).not.toContain("SENTINEL-PRIVATE-TEXT");
   });
 });

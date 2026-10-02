@@ -10,10 +10,15 @@ import {
 } from "@erato/frontend/word-review";
 
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
-import { wordReadableSourceBlock } from "./wordAuthoringReadData";
+import {
+  wordReadableSourceBlock,
+  wordReadableStyles,
+  wordStyleNamesBytes,
+} from "./wordAuthoringReadData";
 import { WordDocumentDraftStore } from "./wordDocumentDrafts";
 import { MAX_WORD_DOCX_BYTES } from "./wordDocumentPackageCodec";
 import { readWordTableCell } from "./wordTableCellRead";
+import { readWordTargets } from "./wordTargetRead";
 
 import type {
   ClientToolCallContext,
@@ -58,6 +63,8 @@ export type WordDocumentReadRequest = Pick<
 
 export class WordDocumentReadSession {
   private session: Session | null = null;
+  private completeBudgetCheck?: () => Promise<string | undefined>;
+  private completeBudget?: Promise<string | undefined>;
   readonly drafts = new WordDocumentDraftStore();
   /** The host binds ownership; model arguments cannot transfer a snapshot to another turn. */
   bindRequest(token: string, request: WordDocumentReadRequest): boolean {
@@ -88,6 +95,8 @@ export class WordDocumentReadSession {
       : undefined;
   }
   clear(): void {
+    this.completeBudgetCheck = undefined;
+    this.completeBudget = undefined;
     this.drafts.clear();
     if (this.session) this.session.snapshot.revoked = true;
     this.session = null;
@@ -95,12 +104,14 @@ export class WordDocumentReadSession {
   activate(
     snapshot?: WordAuthoringSnapshot,
     request?: WordDocumentReadRequest,
+    completeBudgetCheck?: () => Promise<string | undefined>,
   ): void {
     this.clear();
     if (!snapshot || isWordHistorySnapshot(snapshot)) return;
+    this.completeBudgetCheck = completeBudgetCheck;
     snapshot.revoked = false;
     snapshot.read.clear();
-    snapshot.cellReads = new Map();
+    snapshot.readScopes = new Map();
     snapshot.readToken = undefined;
     snapshot.ownerMessageId = undefined;
     const pages: Fragment[][] = [[]];
@@ -223,9 +234,7 @@ export class WordDocumentReadSession {
         page.push(fragment);
       }
     }
-    if (
-      new TextEncoder().encode(JSON.stringify(snapshot.styles)).length > 16384
-    )
+    if (wordStyleNamesBytes(snapshot.styles) > 16384)
       snapshot.issue = "too-large";
     if (pages.length > MAX_PAGES) snapshot.issue = "too-large";
     this.session = {
@@ -265,6 +274,7 @@ export class WordDocumentReadSession {
         "",
       );
     const args = input as Record<string, unknown>;
+    if ("target" in args) return readWordTargets(snapshot, args);
     if ("table_cell" in args) {
       if (snapshot.revoked || snapshot.used || snapshot.issue)
         return fail(
@@ -299,6 +309,24 @@ export class WordDocumentReadSession {
         `Whole-body authoring unavailable: ${snapshot.issue}${snapshot.issueDetails?.length ? ` (${snapshot.issueDetails.join(", ")})` : ""}. No document changes were made.`,
         snapshot.issue,
       );
+    if (this.completeBudgetCheck) {
+      this.completeBudget ??= this.completeBudgetCheck().catch(
+        () => "budget-unavailable",
+      );
+      const issue = await this.completeBudget;
+      if (
+        this.session !== session ||
+        snapshot.revoked ||
+        snapshot.used ||
+        context.signal?.aborted
+      )
+        return fail("Document read stopped or expired.", "read-unavailable");
+      if (issue)
+        return fail(
+          "The complete read is unavailable within this request's model budget. Scoped reads remain available.",
+          issue,
+        );
+    }
     const firstPage = args.cursor == null || args.cursor === "";
     const snapshotChanged = args.snapshot !== snapshot.token;
     const restart = `Restart read_document_blocks with ${JSON.stringify({ snapshot: snapshot.token, cursor: null })}. Use the snapshot, source refs, cursors and readToken returned by that read.`;
@@ -329,7 +357,7 @@ export class WordDocumentReadSession {
         blocks: session.pages[index],
         ...(index === 0
           ? {
-              styles: snapshot.styles,
+              styles: wordReadableStyles(snapshot.styles),
               limits: {
                 maxSourceBytes: MAX_SOURCE_BYTES,
                 maxPages: MAX_PAGES,

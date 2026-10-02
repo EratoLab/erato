@@ -3,9 +3,11 @@ import {
   isDefaultTableStyle,
 } from "./wordBuiltInStyles";
 import { wordPlanError } from "./wordPlanDiagnostics";
+import { wordPlanMatchesObjectScope } from "./wordReadScope";
 import { resolveWordSource, wordSourceDetails } from "./wordRichContent";
 import { parseWordBlock, wordBlockChildEntries } from "./wordRichPlan";
 import { parseWordSections, parseWordStoryChanges } from "./wordStories";
+import { withoutStyleRedundantFormat } from "./wordStyleLook";
 import { wordPlanMatchesCellScope } from "./wordTableCellScope";
 import { WORD_FINGERPRINT_PREFIX } from "./wordXmlComparison";
 
@@ -22,13 +24,14 @@ import type {
 } from "./wordInlineStructures";
 import type { WordImageSpec, WordDrawingSpec } from "./wordMediaContent";
 import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
+import type { WordReadScope } from "./wordReadScope";
 import type {
   WordStoryChange,
   WordSectionPlan,
   WordStorySource,
   WordSectionSource,
 } from "./wordStories";
-import type { WordTableCellScope } from "./wordTableCellScope";
+import type { WordStyleLook } from "./wordStyleLook";
 import type { WordTableBlock, WordTableContent } from "./wordTableContent";
 
 export interface WordPlanRun extends WordRunFormatting {
@@ -114,7 +117,16 @@ export interface WordAuthoringSnapshot {
   ooxml: string;
   fingerprint: string;
   blocks: WordSourceBlock[];
-  styles: { id: string; name: string; type?: string }[];
+  styles: {
+    id: string;
+    name: string;
+    type?: string;
+    /** The paragraph style a block without styleRef has. */
+    default?: boolean;
+    /** Body blocks use it, so reads show its look. */
+    inUse?: boolean;
+    look?: WordStyleLook;
+  }[];
   issue?:
     | "unsupported"
     | "too-large"
@@ -124,6 +136,8 @@ export interface WordAuthoringSnapshot {
     | "model-budget";
   /** Fixed diagnostic codes, never document text or XML. */
   issueDetails?: string[];
+  /** Word's Track Changes mode at capture; edits then go in as revisions or not at all. */
+  trackingMode?: string;
   preservedStories?: string[];
   /** True only when all DOCX parts were read, including out-of-body stories. */
   fullDocument?: boolean;
@@ -138,7 +152,7 @@ export interface WordAuthoringSnapshot {
   used: boolean;
   readToken?: string;
   /** Targeted reads never populate full-document coverage or its token. */
-  cellReads?: Map<string, WordTableCellScope>;
+  readScopes?: Map<string, WordReadScope>;
   ownerMessageId?: string;
   /** Rebuilt from stored chat history: reviewable, never writable. */
   source?: "history";
@@ -368,8 +382,49 @@ export function normalizeWordDocumentPlan(
       visit(wordBlockChildEntries(block, "").map((child) => child.block));
     }
   };
+  const looks = new Map(
+    snapshot.styles.flatMap((s) => (s.look ? [[s.id, s.look] as const] : [])),
+  );
+  const defaultStyle = snapshot.styles.find((s) => s.default)?.id;
+  /** The look of the style a typed block compiles to; table cells also take table-style formatting. */
+  const lookOf = (block: WordPlanBlock) => {
+    if (block.type === "heading") {
+      const level = block.level;
+      if (block.styleRef || level === undefined) return undefined;
+      const style = snapshot.styles.find(
+        (s) =>
+          s.type === "paragraph" && isBuiltInHeadingStyle(s.id, s.name, level),
+      );
+      return style && looks.get(style.id);
+    }
+    if (block.type === "paragraph") {
+      const id = block.styleRef ?? defaultStyle;
+      return id ? looks.get(id) : undefined;
+    }
+    if (block.type === "list-item")
+      return block.styleRef ? looks.get(block.styleRef) : undefined;
+    return undefined;
+  };
+  const stripRedundantFormat = (blocks: WordPlanBlock[]) => {
+    for (const block of blocks) {
+      if (
+        !["paragraph", "heading", "list-item"].includes(block.type) ||
+        !("format" in block) ||
+        !block.format
+      )
+        continue;
+      const look = lookOf(block);
+      if (!look) continue;
+      const format = withoutStyleRedundantFormat(block.format, look);
+      if (format) block.format = format;
+      else delete block.format;
+    }
+  };
   for (const entry of normalized.entries)
-    if (entry.kind !== "keep") visit(entry.blocks);
+    if (entry.kind !== "keep") {
+      visit(entry.blocks);
+      stripRedundantFormat(entry.blocks);
+    }
   for (const story of normalized.stories ?? []) visit(story.blocks ?? []);
   return normalized;
 }
@@ -444,13 +499,14 @@ export function validateWordDocumentPlan(
     (!snapshot.readToken ||
       plan.readToken !== snapshot.readToken ||
       wordSourceReadRefs(snapshot).some((ref) => !snapshot.read.has(ref))) &&
-    !wordPlanMatchesCellScope(plan, snapshot)
+    !wordPlanMatchesCellScope(plan, snapshot) &&
+    !wordPlanMatchesObjectScope(plan, snapshot)
   )
     return fail(
       "incomplete",
       "/readToken",
       "incomplete-read",
-      "A complete read is required unless the entire plan matches exactly one authorized table-cell text edit.",
+      "A complete read is required unless the entire plan matches an explicitly authorized scoped edit.",
     );
 
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));

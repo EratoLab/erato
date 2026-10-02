@@ -341,8 +341,8 @@ export interface WordHistoryPlan {
 
 /**
  * The one accepted `submit_document_plan` call of a message. Concise
- * table-cell edits and draft repairs resolve to the complete plan the host
- * returned on acceptance; retries and failures never count.
+ * table-cell edits, scoped edits and draft repairs resolve to the complete
+ * plan the host returned on acceptance; retries and failures never count.
  */
 export function acceptedWordPlanFromHistory(
   content: readonly ContentPart[] | undefined,
@@ -355,7 +355,9 @@ export function acceptedWordPlanFromHistory(
   if (!object(output) || !object(output.result)) return undefined;
   const plan =
     object(part.input) &&
-    ("draft_id" in part.input || "table_cell" in part.input)
+    ("draft_id" in part.input ||
+      "table_cell" in part.input ||
+      "scoped_edit" in part.input)
       ? output.result.plan
       : part.input;
   if (

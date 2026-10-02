@@ -2,7 +2,11 @@ import {
   effectiveWordMediaChildren,
   isWordMediaElementActive,
 } from "./wordMediaComparison";
-import { createWordXmlComparison } from "./wordXmlComparison";
+import {
+  acceptWordStylesUnhiddenByUse,
+  createWordXmlComparison,
+  removeWordNumberingIdentity,
+} from "./wordXmlComparison";
 
 export const WORD_NS =
   "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -301,12 +305,37 @@ export function preservedWordStories(doc: Document): string[] {
   );
 }
 
-/** Check even unreferenced stories; the compiler may extend styles and numbering separately. */
-export function sameWordPreservedParts(before: string, after: string): boolean {
+/** Check even unreferenced stories; the compiler may extend styles and numbering separately.
+ * The content tier only ignores list definition nsid/tmpl; every other part stays exact. */
+export function sameWordPreservedParts(
+  before: string,
+  after: string,
+  tier: "strict" | "content" = "strict",
+  /** Story parts a caller compares itself, e.g. headers written in place. */
+  exclude: ReadonlySet<string> = new Set(),
+): boolean {
   const parse = (v: string) =>
     new DOMParser().parseFromString(v, "application/xml");
+  if (exclude.size) {
+    // Section references resolve their stories by content; an excluded story counts as unchanged.
+    const source = parts(parse(before));
+    const target = parse(after);
+    for (const [path, part] of parts(target)) {
+      const original = source.get(path);
+      if (exclude.has(path) && original)
+        part.replaceWith(target.importNode(original, true));
+    }
+    after = new XMLSerializer().serializeToString(target);
+  }
+  if (tier === "content")
+    [before, after] = [before, after].map((value) => {
+      const doc = parse(value);
+      removeWordNumberingIdentity(doc);
+      return new XMLSerializer().serializeToString(doc);
+    });
   const a = parse(before),
     b = parse(after);
+  if (tier === "content") acceptWordStylesUnhiddenByUse(a, b);
   const beforeSignature = createNativeContentSignature(before);
   const afterSignature = createNativeContentSignature(after);
   // New style/list definitions are allowed, but existing definitions must survive.

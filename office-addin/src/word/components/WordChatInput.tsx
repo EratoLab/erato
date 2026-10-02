@@ -1,11 +1,12 @@
 import {
   Button,
   Alert,
+  CopyErrorButton,
   DocumentIcon,
   registerClientToolExecutor,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
 import { useAvailableActionFacetIds } from "../../core/clientActions/useAvailableActionFacets";
@@ -16,6 +17,7 @@ import {
   WORD_AUTHORING_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
 } from "../utils/wordActionFacet";
+import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
 import { checkWordAuthoringBudget } from "../utils/wordAuthoringBudget";
 import { wordAuthoringIssueText } from "../utils/wordAuthoringMessages";
 import { resolveWordDocumentName } from "../utils/wordDocumentIdentity";
@@ -225,7 +227,29 @@ export function WordChatInput({
           return withoutDocument();
         }
         // Finalize paging limits before exposing whole-document availability.
-        wordDocumentReadSession.activate(build?.authoring);
+        const authoringSnapshot = build?.authoring;
+        wordDocumentReadSession.activate(
+          authoringSnapshot,
+          undefined,
+          authoringSnapshot
+            ? async () => {
+                const budget = await checkWordAuthoringBudget(
+                  authoringSnapshot,
+                  {
+                    message,
+                    chatId,
+                    assistantId: chatInputProps.assistantId,
+                    modelId:
+                      modelId ??
+                      chatInputProps.controlledSelectedModel?.chat_provider_id,
+                    fileIds: inputFileIds,
+                    mode: "complete",
+                  },
+                );
+                return budget.ok ? undefined : budget.issue;
+              }
+            : undefined,
+        );
         setAuthoringNotice({
           authoringIssue: build?.authoring?.issue,
           authoringDetails: build?.authoring?.issueDetails,
@@ -309,6 +333,20 @@ export function WordChatInput({
     ],
   );
 
+  const readReport = useMemo(
+    () =>
+      preview.status === "unreadable" && preview.readError
+        ? renderWordDiagnosticReport(
+            "document read",
+            "unreadable",
+            undefined,
+            preview.readError,
+          )
+        : undefined,
+    [preview.status, preview.readError],
+  );
+  const reportOptions = useMemo(() => ({ chatId }), [chatId]);
+
   return (
     <>
       {chipAvailable && (
@@ -326,6 +364,13 @@ export function WordChatInput({
               {chipLabel(chipEnabled, preview)}
             </span>
           </Button>
+          {chipEnabled && readReport && (
+            <CopyErrorButton
+              error={readReport}
+              reportOptions={reportOptions}
+              className="mt-1"
+            />
+          )}
           {chipEnabled && (authoringNotice ?? preview).authoringIssue && (
             <Alert type="warning">
               {wordAuthoringIssueText(

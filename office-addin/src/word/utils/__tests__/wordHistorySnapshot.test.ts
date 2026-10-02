@@ -17,7 +17,10 @@ import {
   nativeTable,
 } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { applyWordDocumentPlan } from "../wordApplyDocumentPlan";
-import { wordReadableSourceBlock } from "../wordAuthoringReadData";
+import {
+  wordReadableSourceBlock,
+  wordReadableStyles,
+} from "../wordAuthoringReadData";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 import { resolveWordWriteGate } from "../wordWriteGate";
@@ -92,7 +95,8 @@ describe("Word snapshot rebuilt from stored reads", () => {
     expect(rebuilt!.blocks[3].content).toEqual(
       json(snapshot.blocks[3].content),
     );
-    expect(rebuilt!.styles).toEqual(json(snapshot.styles));
+    // Reads carry the readable catalogue: looks for the styles in use only, no inUse flag.
+    expect(rebuilt!.styles).toEqual(json(wordReadableStyles(snapshot.styles)));
     expect(rebuilt).toMatchObject({
       source: "history",
       token: snapshot.token,

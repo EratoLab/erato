@@ -19,6 +19,7 @@ const RSIDS = new Set([
   "rsidP",
   "rsidDel",
   "rsidSect",
+  "rsidTr",
 ]);
 const ON_OFF_PROPERTIES = new Set([
   "b",
@@ -102,8 +103,91 @@ function drawingIdentity(element: Element, attribute: Attr): boolean {
   );
 }
 
+/** Word rewrites or drops its saved task-pane records on its own; they are never document content. */
+export function isWordHostStatePart(path: string): boolean {
+  return /^\/word\/webextensions\//.test(path);
+}
+
+export function isWordHostStateRelationship(rel: Element): boolean {
+  return (
+    (rel.getAttribute("Type") ?? "").endsWith("/webextensiontaskpanes") ||
+    /(^|\/)webextensions\//.test(rel.getAttribute("Target") ?? "")
+  );
+}
+
+/** Word reassigns list definition nsid/tmpl values on import; they identify a definition, they do not
+ * format it. Returns the removed values so callers can tell whether they differed. */
+export function removeWordNumberingIdentity(
+  root: Document | Element,
+): string[] {
+  const removed: string[] = [];
+  for (const definition of wordXmlElements(root, W, "abstractNum"))
+    for (const child of Array.from(definition.children)) {
+      const value = child.getAttributeNS(W, "val") ?? "";
+      if (
+        child.namespaceURI === W &&
+        ["nsid", "tmpl"].includes(child.localName) &&
+        !child.children.length &&
+        Array.from(child.attributes).every(
+          (a) =>
+            a.namespaceURI === XMLNS ||
+            (a.namespaceURI === W && a.localName === "val"),
+        ) &&
+        /^[0-9a-f]{8}$/i.test(value)
+      ) {
+        removed.push(`${child.localName}:${value.toUpperCase()}`);
+        child.remove();
+      }
+    }
+  return removed.sort();
+}
+
+/** Word drops w:semiHidden from a style marked w:unhideWhenUsed once that style is used (Word PC
+ * does so for Default Paragraph Font whenever a paragraph is given the Normal style): Styles-pane
+ * visibility, not formatting. Drops it from those styles of `expected` too, and says whether any. */
+export function acceptWordStylesUnhiddenByUse(
+  expected: Document | Element,
+  actual: Document | Element,
+): boolean {
+  const flag = (style: Element, local: string) =>
+    Array.from(style.children).find(
+      (e) => e.namespaceURI === W && e.localName === local,
+    );
+  const shown = new Set(
+    wordXmlElements(actual, W, "style")
+      .filter((s) => flag(s, "unhideWhenUsed") && !flag(s, "semiHidden"))
+      .map((s) => s.getAttributeNS(W, "styleId")),
+  );
+  let changed = false;
+  for (const style of wordXmlElements(expected, W, "style")) {
+    const hidden = flag(style, "semiHidden");
+    if (
+      hidden &&
+      flag(style, "unhideWhenUsed") &&
+      shown.has(style.getAttributeNS(W, "styleId"))
+    ) {
+      hidden.remove();
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+const XML_SPACE = new Set([" ", "\t", "\r", "\n"]);
+
+/** Trims XML whitespace only (not String.trim's Unicode spaces), in linear time. */
+function trimXmlSpace(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && XML_SPACE.has(value[start])) start++;
+  while (end > start && XML_SPACE.has(value[end - 1])) end--;
+  return value.slice(start, end);
+}
+
 export interface WordXmlComparison {
   fingerprint: () => string;
+  /** Per-part strict signatures of a package; empty for a bare body fragment. */
+  partFingerprints: () => Map<string, string>;
   signature: (node: Node, owner?: string) => string;
 }
 
@@ -238,7 +322,8 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         if (
           ns === XMLNS ||
           (ns === W && RSIDS.has(name)) ||
-          (ns === W14 && name === "textId")
+          // Word for the web writes its text IDs under the drawing namespace's wp14 prefix too.
+          ((ns === W14 || ns === WP14) && name === "textId")
         )
           return [];
         let value = attribute.value;
@@ -251,6 +336,18 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
           if (["1", "true", "on"].includes(value)) return [];
           if (["0", "false", "off"].includes(value)) value = "0";
         }
+        // Word for the web writes these section defaults out once it saves an edit.
+        if (
+          ns === W &&
+          element.namespaceURI === W &&
+          ((element.localName === "pgSz" &&
+            name === "orient" &&
+            value === "portrait") ||
+            (element.localName === "cols" &&
+              name === "equalWidth" &&
+              ["1", "true", "on"].includes(value)))
+        )
+          return [];
         if (
           drawingIdentity(element, attribute) &&
           !unknownDrawingReferences.has(value)
@@ -296,6 +393,9 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
     const ns = element.namespaceURI,
       local = element.localName;
     return (
+      (ns === REL &&
+        local === "Relationship" &&
+        isWordHostStateRelationship(element)) ||
       (ns === W && ["proofErr", "lastRenderedPageBreak"].includes(local)) ||
       (ns === W &&
         local === "rsid" &&
@@ -386,9 +486,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         )
           space = ancestor.getAttributeNS(XML, "space");
         const value = element.textContent ?? "";
-        return space === "preserve"
-          ? value
-          : value.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+        return space === "preserve" ? value : trimXmlSpace(value);
       })
       .join("");
     if (!text && !attrs.length && !props.length) return null;
@@ -425,10 +523,11 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         ? signature
         : JSON.stringify(["text-run", signature, text]),
     );
-    // Word omits empty paragraph properties after removing an explicit default style.
+    // Empty containers mean no override: Word omits empty paragraph properties after removing an
+    // explicit default style, and Word for the web adds an empty cell margin to each cell it writes.
     if (
       element.namespaceURI === W &&
-      element.localName === "pPr" &&
+      ["pPr", "tcMar"].includes(element.localName) &&
       !children.length &&
       !attributes(element, owner, content).length
     )
@@ -466,27 +565,30 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
     partCache.set(path, result);
     return result;
   }
+  const partFingerprints = () =>
+    new Map(
+      [...parts]
+        .filter(([path]) => !isWordHostStatePart(path))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([path, part]) => {
+          const root = roots.get(path);
+          const binary = wordXmlElements(part, PKG, "binaryData")[0];
+          return [
+            path,
+            JSON.stringify([path, part.getAttributeNS(PKG, "contentType")]) +
+              (root
+                ? canonical(root, path, false)
+                : (binary?.textContent ?? "").replace(/\s/g, "")),
+          ];
+        }),
+    );
   return {
     fingerprint: () =>
       WORD_FINGERPRINT_PREFIX +
       (!parts.size
         ? canonical(doc.documentElement, "/word/document.xml", false)
-        : [...parts]
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([path, part]) => {
-              const root = roots.get(path);
-              const binary = wordXmlElements(part, PKG, "binaryData")[0];
-              return (
-                JSON.stringify([
-                  path,
-                  part.getAttributeNS(PKG, "contentType"),
-                ]) +
-                (root
-                  ? canonical(root, path, false)
-                  : (binary?.textContent ?? "").replace(/\s/g, ""))
-              );
-            })
-            .join("\n")),
+        : [...partFingerprints().values()].join("\n")),
+    partFingerprints,
     signature: (node, owner = "/word/document.xml") =>
       canonical(node, owner, true),
   };

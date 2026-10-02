@@ -1,6 +1,23 @@
+export const WORD_SECTION_PROPERTIES =
+  "headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.";
+
 /** Protocol vocabulary belongs here; model behavior instructions come from deployment configuration. */
 export const WORD_AUTHORING_CONTRACT = {
   version: 1,
+  scopedEdit: {
+    read: "read_document_blocks accepts {snapshot,documentIdentity,target:{kind?,text?,nearbyText?,ref?,refs?,throughRef?,offset?}}. Search filters are ANDed; text searches object text/properties and nearbyText searches adjacent body blocks. Five bounded candidates per page. An ambiguous search grants no scope. Select returned refs explicitly (at most 16), or ref/throughRef for a contiguous body range. For multiple dependencies, target:{queries:[selectors]} resolves them atomically into one readToken; every selector must resolve uniquely or select explicit refs/a range. Any missing or ambiguous query grants no scope for the entire batch. Query results identify refs by index; select or refine unresolved queries without reading the whole document. At most 16 distinct targets and 24 KiB for the combined response, including guidance/metadata. Optional include:[text|formatting|table|media|structures|stories|sections] requests guidance for new content as well as existing target kinds. Only overall ready grants a readToken; larger responses require a narrower selection or complete read.",
+    input:
+      "{snapshot,readToken,scoped_edit:{body?:[],objects?:[],stories?:[],sections?:[]}}. Supply only changes. The host retains every other source. At most 16 changes per collection; overlapping changes are rejected. No full plans or draft repairs with scoped tokens.",
+    body: "{operation:'replace'|'delete'|'insert-before'|'insert-after'|'move-before'|'move-after',source?:[refs],anchor?:ref,blocks?:[typed blocks],reason?:string}. Replace/delete/move source is an explicitly read contiguous range. Insert/move anchor must also be explicitly read and retained. Replacement/insertion uses the existing typed block contract. Delete needs a reason. Moves preserve the original source exactly.",
+    objects:
+      "{ref:returned-object-ref,edit:{operation:'update'|'delete'|'unwrap',...properties}}. Read the exact object. kind and native target are host-owned. Properties and supported operations follow structures.nativeEdit. The enclosing fragment is retained.",
+    stories:
+      "Existing story changes follow the stories contract and require a complete scoped read of that story. New notes/comments need an explicitly read, retained body anchor. New headers/footers need a read section and an association in the same scoped submission. Deleting a story also removes its anchors/section references. Other stories are preserved.",
+    sections:
+      "Sparse section changes: {id,after?,layout?,headers?,footers?} or {id,delete:true}. Existing sections must be read. Changing a boundary needs a read retained body anchor; after:null makes the selected section final. Splitting a section needs its read section plus boundary. Removing a boundary requires both affected sections. Header/footer associations require read stories or stories created in the same submission. Host retains other sections and their properties.",
+    authorization:
+      "Scope is bound to document identity, immutable snapshot and request. Context neighbors do not grant write permission. Source reuse requires read references. Full-document plans still require complete pagination. Success stores the complete plan for review; it is not model continuation context.",
+  },
   tableCell: {
     tool: "submit_document_plan",
     input:
@@ -40,11 +57,11 @@ export const WORD_AUTHORING_CONTRACT = {
     },
   },
   paragraphs:
-    "{id,type:'paragraph',text,runs?,styleRef?,format?}; heading: {id,type:'heading',text,level:1..9,runs?,format?}; list-item: {id,type:'list-item',text,list:'group-id',level:0..8,ordered:boolean,runs?,styleRef?,format?}. Reuse a captured existing-* list name, level and ordered value to continue that exact list. A new group name creates a separate list; its items share ordered. Each paragraph is a distinct block; text has no newline. Runs concatenate exactly to text.",
+    "{id,type:'paragraph',text,runs?,styleRef?,format?}; heading: {id,type:'heading',text,level:1..9,runs?,format?}. A heading's captured styleRef is read-only metadata: never copy it into a heading block. The host chooses its built-in style from level; list-item: {id,type:'list-item',text,list:'group-id',level:0..8,ordered:boolean,runs?,styleRef?,format?}. Reuse a captured existing-* list name, level and ordered value to continue that exact list. A new group name creates a separate list; its items share ordered. Each paragraph is a distinct block; text has no newline. Runs concatenate exactly to text.",
   runFormatting:
     "Each run has text plus optional bold,italic,underline,strike,caps,smallCaps:boolean; underlineStyle:single|double|dotted|dash|wave; fontFamily; fontSize in points; color/shading:6-digit hex; highlight:Word named color; verticalAlign:baseline|superscript|subscript; characterSpacing in points; language:BCP47.",
   paragraphFormatting:
-    "format:{alignment:left|center|right|justify,spacingBefore?,spacingAfter?,lineSpacing?:{value,rule:multiple|exact|atLeast},indentLeft?,indentRight?,firstLineIndent?,keepNext?,keepTogether?,pageBreakBefore?,widowControl?,shading?,borders?,font?:run-format}. Measurements are points except multiple line spacing. Negative firstLineIndent means hanging indent. styleRef must be a returned paragraph style.",
+    "format:{alignment:left|center|right|justify,spacingBefore?,spacingAfter?,lineSpacing?:{value,rule:multiple|exact|atLeast},indentLeft?,indentRight?,firstLineIndent?,keepNext?,keepTogether?,pageBreakBefore?,widowControl?,shading?,borders?,font?:run-format}. Measurements are points except multiple line spacing. Negative firstLineIndent means hanging indent. styleRef must be a returned paragraph style. format and run formatting are direct formatting on top of the block's style, whose resolved look is styles[].look; omit them to keep the current look and set only properties the user asked to change.",
   borders:
     "{top?,left?,bottom?,right?,between?,insideH?,insideV?}; each border {style:none|single|double|dotted|dashed|thick,color?,width?,space?}. Colors are 6-digit hex, width/space points.",
   table: {
@@ -79,6 +96,7 @@ export const WORD_AUTHORING_CONTRACT = {
   },
   stories:
     "scope=document, fullDocument=true only. stories:[{kind:'upsert'|'delete',type:'header'|'footer'|'footnote'|'endnote'|'comment',id,blocks?,author?,initials?,anchor?:{block:'output-id-or-kept-body-ref',start?,end?}}]. Upsert replaces all story blocks (empty clears); an omitted existing story is preserved. Delete removes the story. New note/comment requires a body paragraph anchor. Offsets are UTF-16 positions; comments use start/end, notes a point. Existing note/comment anchors stay unless explicitly moved. Existing story native sourceRef is 'story_'+id for native-edit/table/image references. Author/initials only for comments.",
-  sections:
-    "scope=document only. sections:[{id,source?:'section-1',after?:'output-id-or-kept-body-ref',layout?,headers?,footers?}]. The complete ordered section list replaces existing boundaries. The last section omits after; all others end after the named output block. The read record's afterBlock identifies its existing boundary. source retains that section's existing properties. An absent sections property preserves existing boundaries and requires their original relative order. headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.",
+  trackedChanges:
+    "Passages that contain pending tracked changes are returned as native anchored-content. They cannot be edited until the user accepts or rejects those changes in Word: keep them and tell the user. While Track Changes is on, accepted edits are written as tracked changes under the user's name, and changes that need a full-document rewrite (sections, new or relinked headers/footers, moves, objects, formatting, new lists) cannot be applied.",
+  sections: `scope=document only. sections:[{id,source?:'section-1',after?:'output-id-or-kept-body-ref',layout?,headers?,footers?}]. The complete ordered section list replaces existing boundaries. The last section omits after; all others end after the named output block. The read record's afterBlock identifies its existing boundary. source retains that section's existing properties. An absent sections property preserves existing boundaries and requires their original relative order. ${WORD_SECTION_PROPERTIES}`,
 } as const;

@@ -2,6 +2,7 @@ import { fetchTokenUsageEstimate } from "@erato/frontend/library";
 import {
   wordImageAssetMetadata,
   wordSourceDetails,
+  MAX_WORD_SCOPE_BYTES,
 } from "@erato/frontend/word-review";
 
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
@@ -28,28 +29,32 @@ export async function checkWordAuthoringBudget(
     modelId?: string;
     fileIds?: string[];
     signal?: AbortSignal;
+    mode?: "scoped" | "complete";
   },
 ): Promise<WordAuthoringBudgetResult> {
-  const source = JSON.stringify({
-    contract: WORD_AUTHORING_CONTRACT,
-    styles: snapshot.styles,
-    blocks: snapshot.blocks.map(wordReadableSourceBlock),
-    stories: snapshot.fullDocument
-      ? snapshot.stories?.map(
-          ({ xml, part: _part, nativeId: _nativeId, ...s }) => ({
-            ...s,
-            ...wordSourceDetails(xml, `story_${s.id}`),
-          }),
-        )
-      : undefined,
-    sections: snapshot.fullDocument
-      ? snapshot.sections?.map(({ xml: _xml, ...s }) => s)
-      : undefined,
-    assets: snapshot.assets?.map(wordImageAssetMetadata),
-    imageAssetIssues: snapshot.imageAssetIssues?.map(
-      ({ fileId: _fileId, ...issue }) => issue,
-    ),
-  });
+  const complete = args.mode === "complete";
+  const source = complete
+    ? JSON.stringify({
+        contract: WORD_AUTHORING_CONTRACT,
+        styles: snapshot.styles,
+        blocks: snapshot.blocks.map(wordReadableSourceBlock),
+        stories: snapshot.fullDocument
+          ? snapshot.stories?.map(
+              ({ xml, part: _part, nativeId: _nativeId, ...s }) => ({
+                ...s,
+                ...wordSourceDetails(xml, `story_${s.id}`),
+              }),
+            )
+          : undefined,
+        sections: snapshot.fullDocument
+          ? snapshot.sections?.map(({ xml: _xml, ...s }) => s)
+          : undefined,
+        assets: snapshot.assets?.map(wordImageAssetMetadata),
+        imageAssetIssues: snapshot.imageAssetIssues?.map(
+          ({ fileId: _fileId, ...issue }) => issue,
+        ),
+      })
+    : JSON.stringify({ contract: WORD_AUTHORING_CONTRACT });
   const controller = new AbortController();
   const abort = () => controller.abort();
   args.signal?.addEventListener("abort", abort, { once: true });
@@ -79,7 +84,9 @@ export async function checkWordAuthoringBudget(
         issue: "budget-unavailable",
         details: ["estimate-invalid"],
       };
-    return total_tokens + 8192 <= max_tokens * 0.9
+    // One bounded read and a bounded proposal, conservatively at one token per byte.
+    const reserve = complete ? 8192 : 8192 + 2 * MAX_WORD_SCOPE_BYTES;
+    return total_tokens + reserve <= max_tokens * 0.9
       ? { ok: true }
       : { ok: false, issue: "model-budget" };
   } catch (error) {

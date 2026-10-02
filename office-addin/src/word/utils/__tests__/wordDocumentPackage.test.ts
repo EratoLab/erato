@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   captureWordDocumentPackage,
   decodeWordDocumentBackup,
+  decodeWordInPlaceBackup,
   encodeWordDocumentBackup,
   insertWordDocumentFile,
   isWordDocumentBackup,
   readWordDocumentFile,
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
+  withWordInPlaceBackup,
   WORD_DOCUMENT_IMPORT_OPTIONS,
 } from "../wordDocumentPackage";
 import { readWordPackage, wordXmlText } from "../wordDocumentPackageCodec";
@@ -101,6 +103,10 @@ describe("complete Word document package transport", () => {
       "Replace",
       WORD_DOCUMENT_IMPORT_OPTIONS,
     );
+    expect(WORD_DOCUMENT_IMPORT_OPTIONS).toMatchObject({
+      importCustomProperties: false,
+      importCustomXmlParts: false,
+    });
   });
 
   it("keeps the exact original DOCX bytes in the string recovery envelope", () => {
@@ -117,6 +123,56 @@ describe("complete Word document package transport", () => {
     expect(decoded.documentUrl).toBe("file:///fixture.docx");
     expect(decoded.ooxml).toContain("Original footer");
     expect(isWordDocumentBackup(fixture())).toBe(false);
+  });
+
+  it("carries an in-place record next to the same original bytes and ignores a malformed one", () => {
+    const bytes = wordDocumentOoxmlToFile(fixture());
+    const snapshot = {
+      bytes,
+      ooxml: fixture(),
+      documentUrl: "file:///fixture.docx",
+      fingerprint: "source",
+    };
+    const op = {
+      kind: "text" as const,
+      ref: "b2",
+      paragraph: 0,
+      runs: [{ text: "New", bold: true, italic: false, underline: false }],
+      original: [{ text: "Old", bold: false, italic: false, underline: false }],
+      id: "{paragraph}",
+      originalSignature: "before",
+    };
+    const regions = [{ start: "{before}", end: null, before: [0] }];
+    const value = encodeWordDocumentBackup(snapshot, {
+      v: 1,
+      ops: [op],
+      regions,
+    });
+    const updated = withWordInPlaceBackup(value, {
+      v: 1,
+      ops: [{ ...op, afterSignature: "after" }],
+      regions: [{ ...regions[0], after: ["{paragraph}"] }],
+    });
+    expect(decodeWordDocumentBackup(updated).bytes).toEqual(bytes);
+    expect(decodeWordInPlaceBackup(updated)).toEqual({
+      documentUrl: "file:///fixture.docx",
+      inPlace: {
+        v: 1,
+        ops: [{ ...op, afterSignature: "after" }],
+        regions: [{ ...regions[0], after: ["{paragraph}"] }],
+      },
+    });
+    for (const malformed of [
+      { v: 1 as const, ops: [{ ...op, runs: "not runs" as never }], regions },
+      { v: 1 as const, ops: [op], regions: [{ ...regions[0], before: [1] }] },
+      { v: 1 as const, ops: [{ ...op, kind: "insert" as never }], regions },
+    ])
+      expect(
+        decodeWordInPlaceBackup(encodeWordDocumentBackup(snapshot, malformed)),
+      ).toEqual({ documentUrl: "file:///fixture.docx" });
+    expect(decodeWordInPlaceBackup(encodeWordDocumentBackup(snapshot))).toEqual(
+      { documentUrl: "file:///fixture.docx" },
+    );
   });
 });
 

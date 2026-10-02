@@ -330,6 +330,7 @@ describe("coherent structural execution", () => {
       reason: "host-error",
       officeCode: "GeneralException",
       officeLocation: "Body.insertOoxml",
+      details: { error: "Error" },
     });
     expect(JSON.stringify(result)).not.toContain("private document text");
     expect(s.used).toBe(true);
@@ -377,6 +378,14 @@ describe("coherent structural execution", () => {
     expect(host.insert).toHaveBeenCalledTimes(2);
   });
   it("retains recovery and a state guard when Word writes a result that differs from the plan", async () => {
+    const bodyPackageCounts = {
+      parts: 3,
+      customXmlItems: 0,
+      customProperties: 0,
+      abstractNums: 0,
+      nums: 0,
+      webextensionParts: 0,
+    };
     const s = readySnapshot();
     const host = word(s.ooxml, (xml) =>
       xml.replace("Recommendation", "Different heading"),
@@ -390,7 +399,18 @@ describe("coherent structural execution", () => {
     expect(result.diagnostic).toEqual({
       stage: "verify",
       reason: "output-mismatch",
+      details: {
+        parts: ["/word/document.xml"],
+        verifyTier: "content",
+        packages: [
+          { label: "expected", ...bodyPackageCounts },
+          { label: "actual", ...bodyPackageCounts },
+        ],
+      },
     });
+    expect(JSON.stringify(result.diagnostic)).not.toContain(
+      "Different heading",
+    );
     expect(result.before).toBe(s.ooxml);
     expect(result.afterFingerprint).toBeTruthy();
     expect(

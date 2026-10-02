@@ -14,6 +14,8 @@ import {
   writeWordPackage,
 } from "./wordDocumentPackageCodec";
 
+import type { WordInPlaceOp, WordInPlaceStoryTarget } from "./wordInPlacePlan";
+
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const CT = "http://schemas.openxmlformats.org/package/2006/content-types";
 const BACKUP_PREFIX = "erato-word-document-backup-v1:";
@@ -45,8 +47,10 @@ export const WORD_DOCUMENT_IMPORT_OPTIONS: Word.InsertFileOptions = {
   importParagraphSpacing: true,
   importPageColor: true,
   importDifferentOddEvenPages: true,
-  importCustomProperties: true,
-  importCustomXmlParts: true,
+  // Word merges rather than replaces these into the same document, duplicating every customXml
+  // item per write until the package exceeds the part limit. Plans never change them.
+  importCustomProperties: false,
+  importCustomXmlParts: false,
 };
 
 /** Office's documented maximum and default; one slice covers every supported DOCX. */
@@ -238,26 +242,78 @@ export function insertWordDocumentFile(
   );
 }
 
+/** One change of an in-place write, recorded in pane memory next to the exact original file so it
+ * can be undone without touching later edits elsewhere. */
+export type WordInPlaceBackupOp = WordInPlaceOp & {
+  /** Session-scoped Paragraph.uniqueLocalId of the written or deleted paragraph, or of the inserted
+   * one once Word created it. */
+  id?: string;
+  /** Paragraph.getOoxml signature before the write; none for an inserted paragraph. */
+  originalSignature?: string;
+  /** Signature after the write; none for a deleted paragraph. */
+  afterSignature?: string;
+  /** ID of a paragraph that stays in the list this one leaves, so Restore can rejoin it. */
+  listAnchor?: string;
+};
+/** Touched paragraphs between two untouched ones (null at the start or end of the body). Restore
+ * puts the region back exactly as `before` was, whatever the write left inside it. */
+export interface WordInPlaceRegion {
+  /** A header or footer paragraph: start and end are null and `before` holds that one op. */
+  story?: WordInPlaceStoryTarget;
+  start: string | null;
+  end: string | null;
+  /** Ops whose paragraphs filled the region before the write, in document order. */
+  before: number[];
+  /** IDs of the paragraphs inside the region after the write, in document order, once known. */
+  after?: string[];
+}
+export interface WordInPlaceBackup {
+  v: 1;
+  ops: WordInPlaceBackupOp[];
+  regions: WordInPlaceRegion[];
+  /** The write did not verify, but every difference lies in the rewritten paragraphs: when later
+   * edits keep the exact restore from running, undoing those paragraphs is still complete. */
+  scopedFallback?: true;
+  /** Written as tracked revisions: Restore rejects them instead of rewriting the paragraphs. */
+  tracked?: true;
+  /** Per paragraph ID inside a touched region, its tracked changes as [type, text] after the write.
+   * Restore rejects only while they are exactly these, so it never undoes a reviewer's decision. */
+  revisions?: Record<string, [string, string][]>;
+  /** Ops whose written paragraph did not verify, so the card can point at each one. */
+  mismatched?: number[];
+}
+
 export function encodeWordDocumentBackup(
   snapshot: WordDocumentPackageSnapshot,
+  inPlace?: WordInPlaceBackup,
 ): string {
   return (
     BACKUP_PREFIX +
     JSON.stringify({
       documentUrl: snapshot.documentUrl,
       base64: wordDocxBase64(snapshot.bytes),
+      ...(inPlace ? { inPlace } : {}),
     })
   );
+}
+
+/** Same exact original with the in-place record replaced; the original bytes are never re-encoded. */
+export function withWordInPlaceBackup(
+  backup: string,
+  inPlace: WordInPlaceBackup,
+): string {
+  const data = parseBackup(backup);
+  return BACKUP_PREFIX + JSON.stringify({ ...data, inPlace });
 }
 
 export function isWordDocumentBackup(value: string): boolean {
   return value.startsWith(BACKUP_PREFIX);
 }
 
-export function decodeWordDocumentBackup(value: string): {
+function parseBackup(value: string): {
   documentUrl: string;
-  bytes: Uint8Array;
-  ooxml: string;
+  base64: string;
+  inPlace?: unknown;
 } {
   if (!isWordDocumentBackup(value))
     throw new Error("Invalid complete-document backup.");
@@ -271,6 +327,181 @@ export function decodeWordDocumentBackup(value: string): {
     typeof data.base64 !== "string"
   )
     throw new Error("Invalid complete-document backup.");
+  return data as { documentUrl: string; base64: string; inPlace?: unknown };
+}
+
+const isString = (v: unknown): v is string => typeof v === "string";
+const isIndex = (v: unknown): v is number =>
+  typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
+const isMarks = (v: unknown): v is Record<string, unknown> =>
+  !!v &&
+  typeof v === "object" &&
+  ["bold", "italic", "underline"].every(
+    (mark) => typeof (v as Record<string, unknown>)[mark] === "boolean",
+  );
+const isRuns = (v: unknown) =>
+  Array.isArray(v) &&
+  v.every((run: unknown) => isMarks(run) && isString(run.text));
+const isState = (v: unknown) => {
+  if (!v || typeof v !== "object") return false;
+  const state = v as Record<string, unknown>;
+  const style = state.style as Record<string, unknown> | undefined;
+  return (
+    ["paragraph", "heading", "list-item"].includes(String(state.type)) &&
+    (state.level === undefined || isIndex(state.level)) &&
+    [state.styleRef, state.list, state.listRef].every(
+      (value) => value === undefined || isString(value),
+    ) &&
+    (state.ordered === undefined || typeof state.ordered === "boolean") &&
+    !!style &&
+    typeof style === "object" &&
+    (isString(style.builtIn) || isString(style.name))
+  );
+};
+const isOptional = (v: unknown) => v === undefined || isString(v);
+const isStory = (v: unknown) => {
+  if (v === undefined) return true;
+  if (!v || typeof v !== "object") return false;
+  const story = v as Record<string, unknown>;
+  return (
+    ["header", "footer"].includes(String(story.kind)) &&
+    isString(story.part) &&
+    isIndex(story.section) &&
+    ["Primary", "FirstPage", "EvenPages"].includes(String(story.type))
+  );
+};
+
+function parseInPlaceOp(entry: Record<string, unknown>): boolean {
+  if (
+    !entry ||
+    typeof entry !== "object" ||
+    !isString(entry.ref) ||
+    !isIndex(entry.paragraph) ||
+    !isOptional(entry.id) ||
+    !isOptional(entry.originalSignature) ||
+    !isOptional(entry.afterSignature) ||
+    !isOptional(entry.listAnchor)
+  )
+    return false;
+  switch (entry.kind) {
+    case "text":
+      return (
+        isRuns(entry.runs) &&
+        isRuns(entry.original) &&
+        isString(entry.id) &&
+        isString(entry.originalSignature) &&
+        isStory(entry.story) &&
+        (entry.story === undefined || entry.restyle === undefined) &&
+        (entry.restyle === undefined ||
+          (!!entry.restyle &&
+            typeof entry.restyle === "object" &&
+            isState((entry.restyle as Record<string, unknown>).from) &&
+            isState((entry.restyle as Record<string, unknown>).to)))
+      );
+    case "cell":
+      return (
+        isString(entry.id) &&
+        isString(entry.originalSignature) &&
+        isIndex(entry.rowIndex) &&
+        isIndex(entry.cellIndex) &&
+        isString(entry.text) &&
+        isString(entry.original)
+      );
+    case "insert":
+      return (
+        ["After", "Before"].includes(String(entry.location)) &&
+        isString(entry.block) &&
+        isRuns(entry.runs) &&
+        isState(entry.state) &&
+        entry.originalSignature === undefined
+      );
+    case "delete":
+      return (
+        ["After", "Before"].includes(String(entry.recreate)) &&
+        isRuns(entry.original) &&
+        isState(entry.state) &&
+        isString(entry.id) &&
+        isString(entry.originalSignature)
+      );
+    default:
+      return false;
+  }
+}
+
+function parseInPlaceBackup(value: unknown): WordInPlaceBackup | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (
+    record.v !== 1 ||
+    !Array.isArray(record.ops) ||
+    !record.ops.length ||
+    !Array.isArray(record.regions) ||
+    !record.regions.length ||
+    (record.scopedFallback !== undefined && record.scopedFallback !== true) ||
+    (record.tracked !== undefined && record.tracked !== true) ||
+    (record.mismatched !== undefined &&
+      (!Array.isArray(record.mismatched) ||
+        !record.mismatched.every(
+          (index: unknown) =>
+            isIndex(index) && index < (record.ops as unknown[]).length,
+        ))) ||
+    (record.revisions !== undefined &&
+      (!record.revisions ||
+        typeof record.revisions !== "object" ||
+        Array.isArray(record.revisions) ||
+        !Object.values(record.revisions as Record<string, unknown>).every(
+          (list) =>
+            Array.isArray(list) &&
+            list.every(
+              (entry: unknown) =>
+                Array.isArray(entry) &&
+                entry.length === 2 &&
+                entry.every(isString),
+            ),
+        )))
+  )
+    return undefined;
+  const ops = record.ops as Record<string, unknown>[];
+  const valid =
+    ops.every(parseInPlaceOp) &&
+    (record.regions as Record<string, unknown>[]).every(
+      (region) =>
+        !!region &&
+        typeof region === "object" &&
+        [region.start, region.end].every((id) => id === null || isString(id)) &&
+        isStory(region.story) &&
+        (region.story === undefined ||
+          (region.start === null &&
+            region.end === null &&
+            Array.isArray(region.before) &&
+            region.before.length === 1)) &&
+        Array.isArray(region.before) &&
+        region.before.every(
+          (index: unknown) => isIndex(index) && index < ops.length,
+        ) &&
+        (region.after === undefined ||
+          (Array.isArray(region.after) && region.after.every(isString))),
+    );
+  return valid ? (record as unknown as WordInPlaceBackup) : undefined;
+}
+
+/** The in-place record without decoding the original file. */
+export function decodeWordInPlaceBackup(value: string): {
+  documentUrl: string;
+  inPlace?: WordInPlaceBackup;
+} {
+  const data = parseBackup(value);
+  const inPlace = parseInPlaceBackup(data.inPlace);
+  return { documentUrl: data.documentUrl, ...(inPlace ? { inPlace } : {}) };
+}
+
+export function decodeWordDocumentBackup(value: string): {
+  documentUrl: string;
+  bytes: Uint8Array;
+  ooxml: string;
+} {
+  const data = parseBackup(value);
   const bytes = decodeWordBase64(data.base64);
   return {
     documentUrl: data.documentUrl,

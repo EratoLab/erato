@@ -1,7 +1,11 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
+
+import { wordRouteGroup } from "./wordInPlaceRoute";
 
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
+import type { WordApplyAdjustment } from "./wordFullDocumentComparison";
+import type { WordPlanRoute, WordRouteGroup } from "./wordInPlaceRoute";
 import type { WordPlanIssue } from "@erato/frontend/word-review";
 
 export function wordDocumentDiagnosticText(
@@ -32,6 +36,18 @@ export function wordDocumentDiagnosticText(
           message:
             "Word wrote changes, but the result could not be verified. Your original is saved for recovery.",
         });
+  if (diagnostic.reason === "package-growth")
+    return restoring
+      ? t({
+          id: "officeAddin.word.authoring.restorePackageGrowth",
+          message:
+            "Word added duplicate document data while restoring. Your saved original is still available for recovery.",
+        })
+      : t({
+          id: "officeAddin.word.authoring.packageGrowth",
+          message:
+            "Word added duplicate document data while writing. Your original is saved for recovery.",
+        });
   if (diagnostic.reason === "compile-failed")
     return t({
       id: "officeAddin.word.authoring.compileFailed",
@@ -50,12 +66,184 @@ export function wordDocumentDiagnosticText(
           message:
             "Word could not read the document for this operation. No changes were made.",
         });
+  if (diagnostic.reason === "tracking" && diagnostic.details?.fallbackReasons)
+    return wordTrackingNeedsImportText();
   if (
     diagnostic.reason === "host-unavailable" ||
     diagnostic.reason === "wrong-request"
   )
     return wordAuthoringIssueText("no-capture");
   return wordAuthoringIssueText(diagnostic.reason);
+}
+
+function wordTrackingNeedsImportText(): string {
+  return t({
+    id: "officeAddin.word.authoring.trackingNeedsImport",
+    message:
+      "This change needs a full-document rewrite, which can't run while Track Changes is on. Turn off Track Changes or ask for a smaller edit.",
+  });
+}
+
+/** One line before Apply on how the plan will be written; Apply decides again with live state. */
+export function wordRoutePreviewText(
+  route: WordPlanRoute,
+  passages: number,
+): string | undefined {
+  switch (route.route) {
+    case "body":
+      return t({
+        id: "officeAddin.word.route.body",
+        message: "Replaces the document body.",
+      });
+    case "blocked":
+      return wordTrackingNeedsImportText();
+    case "in-place":
+      if (!route.ops.length) return undefined;
+      return route.tracked
+        ? t({
+            id: "officeAddin.word.route.tracked",
+            message: plural(passages, {
+              one: "Edits # passage in place as tracked changes under your name.",
+              other:
+                "Edits # passages in place as tracked changes under your name.",
+            }),
+          })
+        : t({
+            id: "officeAddin.word.route.inPlace",
+            message: plural(passages, {
+              one: "Edits # passage in place.",
+              other: "Edits # passages in place.",
+            }),
+          });
+    case "import":
+      return wordImportRouteText(wordRouteGroup(route.reason));
+  }
+}
+
+function wordImportRouteText(group: WordRouteGroup): string {
+  switch (group) {
+    case "sections":
+      return t({
+        id: "officeAddin.word.route.import.sections",
+        message:
+          "Replaces the whole document because it changes sections or page layout.",
+      });
+    case "stories":
+      return t({
+        id: "officeAddin.word.route.import.stories",
+        message:
+          "Replaces the whole document because it changes headers, footers, notes or comments.",
+      });
+    case "moves":
+      return t({
+        id: "officeAddin.word.route.import.moves",
+        message: "Replaces the whole document because it moves content.",
+      });
+    case "objects":
+      return t({
+        id: "officeAddin.word.route.import.objects",
+        message:
+          "Replaces the whole document because it changes tables, images or other objects.",
+      });
+    case "formatting":
+      return t({
+        id: "officeAddin.word.route.import.formatting",
+        message:
+          "Replaces the whole document because it changes formatting or styles.",
+      });
+    case "lists":
+      return t({
+        id: "officeAddin.word.route.import.lists",
+        message: "Replaces the whole document because it changes lists.",
+      });
+    case "paragraphs":
+      return t({
+        id: "officeAddin.word.route.import.paragraphs",
+        message:
+          "Replaces the whole document because it adds, removes or splits paragraphs.",
+      });
+    case "setting":
+      return t({
+        id: "officeAddin.word.route.import.setting",
+        message:
+          "Replaces the whole document because compatibility mode is on.",
+      });
+    case "unavailable":
+      return t({
+        id: "officeAddin.word.route.import.unavailable",
+        message: "Replaces the whole document (in-place editing is off).",
+      });
+    default:
+      return t({
+        id: "officeAddin.word.route.import.other",
+        message:
+          "Replaces the whole document because this change can't be written in place.",
+      });
+  }
+}
+
+export function wordPlanVerifiedText(): string {
+  return t({
+    id: "officeAddin.word.authoring.verified",
+    message: "Verified: the document matches the proposal.",
+  });
+}
+
+export function wordPlanAdjustedHeadline(): string {
+  return t({
+    id: "officeAddin.word.authoring.appliedAdjusted",
+    message: "Applied with Word adjustments",
+  });
+}
+
+/** The content tier passed; any visible adjustment is listed after this. */
+export function wordPlanAdjustedText(): string {
+  return t({
+    id: "officeAddin.word.authoring.adjusted",
+    message:
+      "Word adjusted some details on its own while writing; the content matches the proposal.",
+  });
+}
+
+export function wordUnverifiedPassagesText(count: number): string {
+  return t({
+    id: "officeAddin.word.authoring.unverifiedPassages",
+    message: plural(count, {
+      one: "Word wrote the changes, but # passage doesn't match the proposal. Your original is saved for recovery.",
+      other:
+        "Word wrote the changes, but # passages don't match the proposal. Your original is saved for recovery.",
+    }),
+  });
+}
+
+export function wordPartlyWrittenText(applied: number, total: number): string {
+  return t({
+    id: "officeAddin.word.authoring.partlyWritten",
+    message: `Word stopped after ${applied} of ${total} changes. Your original is saved.`,
+  });
+}
+
+/** Word attributes tracked changes to the signed-in user; the add-in cannot choose the author. */
+export function wordTrackedApplyText(): string {
+  return t({
+    id: "officeAddin.word.authoring.appliedTracked",
+    message: "Applied as tracked changes under your name.",
+  });
+}
+
+/** Only visible adjustments have text; list bookkeeping is not something a reader can see. */
+export function wordApplyAdjustmentText(
+  adjustment: WordApplyAdjustment,
+): string | undefined {
+  switch (adjustment) {
+    case "first-paragraph-spacing":
+      return t({
+        id: "officeAddin.word.authoring.adjustment.firstParagraphSpacing",
+        message: "Word also changed the spacing before the first paragraph.",
+      });
+    default:
+      return undefined;
+  }
 }
 
 export function wordAuthoringIssueText(
@@ -65,7 +253,7 @@ export function wordAuthoringIssueText(
   switch (issue) {
     case "incomplete":
       return t({
-        id: "officeAddin.word.authoring.incomplete",
+        id: "officeAddin.word.authoring.incompleteRead",
         message:
           "The complete document has not been read for this plan. Ask for a new rewrite that reads the whole document.",
       });

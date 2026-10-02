@@ -1,5 +1,6 @@
 import { DocumentIcon, EntityRow } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
+import { useId, useState } from "react";
 
 import {
   AddinSettingsDialogCore,
@@ -12,6 +13,10 @@ import {
   clientActionDisplayLabel,
   offerableWordClientActions,
 } from "../utils/wordClientActions";
+import {
+  readWordCompatibilityMode,
+  writeWordCompatibilityMode,
+} from "../utils/wordInPlaceSwitch";
 
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
@@ -67,9 +72,46 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
                         }),
               }}
             />
+            <WordCompatibilityModeSetting />
           </EntityRow>
         ),
       }}
     />
+  );
+}
+
+/** Per device; the checkbox shows what storage holds, so a failed write leaves it unchecked. */
+function WordCompatibilityModeSetting() {
+  const helperId = useId();
+  const [enabled, setEnabled] = useState(readWordCompatibilityMode);
+  return (
+    <div className="mt-4 space-y-1">
+      <label className="flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          aria-describedby={helperId}
+          onChange={(event) => {
+            writeWordCompatibilityMode(event.target.checked);
+            setEnabled(readWordCompatibilityMode());
+          }}
+          className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0"
+        />
+        <span className="text-sm text-theme-fg-secondary">
+          {t({
+            id: "officeAddin.word.settings.compatibilityMode",
+            message:
+              "Replace the whole document when applying (compatibility mode)",
+          })}
+        </span>
+      </label>
+      <p id={helperId} className="text-xs text-theme-fg-muted">
+        {t({
+          id: "officeAddin.word.settings.compatibilityMode.helper",
+          message:
+            "Rewrites go in as a complete replacement instead of editing only the changed passages. Use it if in-place edits cause problems. Rewrites can't be applied this way while Track Changes is on.",
+        })}
+      </p>
+    </div>
   );
 }

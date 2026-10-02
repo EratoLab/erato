@@ -34,11 +34,25 @@ import {
   compileWordStories,
   compileWordTableBlock,
   createWordXmlComparison,
+  wordParagraphStyleLooks,
 } from "@erato/frontend/word-review";
 
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
-import { sameWordFullDocumentContent } from "./wordFullDocumentComparison";
+import {
+  sameWordFullDocumentContent,
+  wordFullDocumentDifferences,
+  wordPackageGrew,
+} from "./wordFullDocumentComparison";
+import {
+  isWordTrackingMode,
+  wordTrackedWritingAvailable,
+} from "./wordInPlaceSwitch";
+import { WORD_REVISION_ELEMENTS } from "./wordRevisionViews";
 
+import type {
+  WordApplyAdjustment,
+  WordVerifyTier,
+} from "./wordFullDocumentComparison";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -181,10 +195,7 @@ export function captureWordAuthoringSnapshot(
         "commentReference",
         "footnoteReference",
         "endnoteReference",
-        "ins",
-        "del",
-        "moveFrom",
-        "moveTo",
+        ...WORD_REVISION_ELEMENTS,
       ]);
       const specialRun = nodes.some((n) =>
         all(n, "r").some((r) =>
@@ -340,6 +351,23 @@ export function captureWordAuthoringSnapshot(
       );
       if (group >= 0) section.afterBlock = base.blocks[group].ref;
     }
+    if (purpose === "read") {
+      const looks = wordParagraphStyleLooks(doc);
+      const used = new Set(base.blocks.map((block) => block.styleRef));
+      const fallback = styleNodes.find(
+        (s) =>
+          attr(s, "type") === "paragraph" &&
+          ["1", "true", "on"].includes(attr(s, "default")),
+      );
+      for (const style of base.styles) {
+        if (style.type !== "paragraph") continue;
+        const look = looks.get(style.id);
+        if (look) style.look = look;
+        if (fallback && style.id === attr(fallback, "styleId"))
+          style.default = true;
+        if (style.default || used.has(style.id)) style.inUse = true;
+      }
+    }
     if (
       purpose === "read" &&
       (base.blocks.length > MAX_DOCUMENT_BLOCKS ||
@@ -348,7 +376,19 @@ export function captureWordAuthoringSnapshot(
         ).length > MAX_SOURCE_BYTES)
     )
       base.issue = "too-large";
-    if (tracking !== "Off") base.issue = "tracking";
+    base.trackingMode = tracking;
+    // Under Track Changes only the in-place writer can apply a plan, as revisions; it needs the
+    // complete document, and a re-read for verification must never pass while revisions are pending.
+    if (
+      tracking !== "Off" &&
+      !(
+        purpose === "read" &&
+        fullDocument &&
+        isWordTrackingMode(tracking) &&
+        wordTrackedWritingAvailable()
+      )
+    )
+      base.issue = "tracking";
     base.fingerprint = fingerprint;
   } catch {
     base.issue = "unavailable";
@@ -751,11 +791,105 @@ export function wordPlanDraftText(
   return nativeVisibleText(wordMainBody(doc)!);
 }
 
+export type WordWriteVerification =
+  | { ok: true; tier: WordVerifyTier; adjustments: WordApplyAdjustment[] }
+  | { ok: false; reason: "output-mismatch" | "package-growth" };
+
+/** The only check for compiling and submitting a plan; write verification extends it. */
 export function verifyWordPlanOutput(
   plan: WordDocumentPlan,
   before: WordAuthoringSnapshot,
   after: WordAuthoringSnapshot,
 ): boolean {
+  return comparePlanOutput(plan, before, after, "strict").ok;
+}
+
+/** After an import or body write: strict first, then the content tier for Word's own bookkeeping.
+ * Duplicated customXml or custom properties fail whatever the comparison says. */
+export function verifyWordPlanWrite(
+  plan: WordDocumentPlan,
+  before: WordAuthoringSnapshot,
+  after: WordAuthoringSnapshot,
+): WordWriteVerification {
+  if (wordPackageGrew(before.ooxml, after.ooxml))
+    return { ok: false, reason: "package-growth" };
+  let expected: WordAuthoringSnapshot | undefined;
+  const compiled = () =>
+    (expected ??= captureWordAuthoringSnapshot(
+      compileWordDocumentPlan(plan, before),
+      before.identity,
+      "Off",
+      before.fullDocument,
+      "verify",
+    ));
+  if (comparePlanOutput(plan, before, after, "strict", compiled).ok)
+    return { ok: true, tier: "strict", adjustments: [] };
+  const content = comparePlanOutput(plan, before, after, "content", compiled);
+  return content.ok
+    ? { ok: true, tier: "content", adjustments: content.adjustments }
+    : { ok: false, reason: "output-mismatch" };
+}
+
+/** Restoring the saved original is an import too; it gets the same tiers and growth guard. */
+export function verifyWordRestore(
+  original: WordAuthoringSnapshot,
+  restored: WordAuthoringSnapshot,
+): WordWriteVerification {
+  if (wordPackageGrew(original.ooxml, restored.ooxml))
+    return { ok: false, reason: "package-growth" };
+  if (compareSnapshots(original, restored, "strict").ok)
+    return { ok: true, tier: "strict", adjustments: [] };
+  const content = compareSnapshots(original, restored, "content", true);
+  return content.ok
+    ? { ok: true, tier: "content", adjustments: content.adjustments }
+    : { ok: false, reason: "output-mismatch" };
+}
+
+/** Word's spacing drift is only acceptable where the plan itself left the first paragraph's format alone. */
+function firstParagraphFormatKept(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+): boolean {
+  const first = wordPlanOutput(plan, snapshot)[0];
+  const source = snapshot.blocks[0];
+  if (!first || !source) return false;
+  if (first.kind === "keep")
+    return (first.block as WordSourceBlock).ref === source.ref;
+  const block = first.block as WordPlanBlock;
+  const stable = (value: unknown): string =>
+    JSON.stringify(value, (_key, v: unknown) =>
+      v && typeof v === "object" && !Array.isArray(v)
+        ? Object.fromEntries(
+            Object.entries(v as Record<string, unknown>).sort(([a], [b]) =>
+              a.localeCompare(b),
+            ),
+          )
+        : v,
+    ) ?? "";
+  return (
+    first.kind === "replace" &&
+    first.source[0] === source.ref &&
+    source.type !== "native" &&
+    ["paragraph", "heading", "list-item"].includes(block.type) &&
+    stable("format" in block ? block.format : undefined) ===
+      stable(source.format)
+  );
+}
+
+function comparePlanOutput(
+  plan: WordDocumentPlan,
+  before: WordAuthoringSnapshot,
+  after: WordAuthoringSnapshot,
+  tier: WordVerifyTier,
+  compiled: () => WordAuthoringSnapshot = () =>
+    captureWordAuthoringSnapshot(
+      compileWordDocumentPlan(plan, before),
+      before.identity,
+      "Off",
+      before.fullDocument,
+      "verify",
+    ),
+): { ok: boolean; adjustments: WordApplyAdjustment[] } {
   const touchedNative =
     plan.entries.some(
       (e) =>
@@ -789,16 +923,13 @@ export function verifyWordPlanOutput(
     plan.sections ||
     touchedNative ||
     richerBlocks
-  ) {
-    const compiled = captureWordAuthoringSnapshot(
-      compileWordDocumentPlan(plan, before),
-      before.identity,
-      "Off",
-      before.fullDocument,
-      "verify",
+  )
+    return compareSnapshots(
+      compiled(),
+      after,
+      tier,
+      tier === "content" && firstParagraphFormatKept(plan, before),
     );
-    return sameWordBodyContent(compiled, after);
-  }
   const expected = wordPlanOutput(plan, before);
   const beforeNative = createNativeContentSignature(before.ooxml);
   const afterNative = createNativeContentSignature(after.ooxml);
@@ -807,9 +938,9 @@ export function verifyWordPlanOutput(
     after.blocks,
     afterNative,
   );
-  return (
+  const ok =
     !after.issue &&
-    sameWordPreservedParts(before.ooxml, after.ooxml) &&
+    sameWordPreservedParts(before.ooxml, after.ooxml, tier) &&
     expected.length === actualBlocks.length &&
     expected.every((e, i) => {
       const actual = actualBlocks[i];
@@ -830,31 +961,66 @@ export function verifyWordPlanOutput(
               e.block.list === actual.list))) &&
         (!e.block.styleRef || e.block.styleRef === actual.styleRef)
       );
-    })
-  );
+    });
+  // A body write has no import side effects; list definition identity is all the content tier relaxes.
+  return {
+    ok,
+    adjustments: ok && tier === "content" ? ["numbering-identity"] : [],
+  };
 }
 
 export function sameWordBodyContent(
   a: WordAuthoringSnapshot,
   b: WordAuthoringSnapshot,
 ): boolean {
-  if (a.fullDocument && b.fullDocument)
-    return (
-      !a.issue && !b.issue && sameWordFullDocumentContent(a.ooxml, b.ooxml)
-    );
+  return compareSnapshots(a, b, "strict").ok;
+}
+
+function compareSnapshots(
+  a: WordAuthoringSnapshot,
+  b: WordAuthoringSnapshot,
+  tier: WordVerifyTier,
+  allowFirstParagraphSpacing = false,
+): { ok: boolean; adjustments: WordApplyAdjustment[] } {
+  if (a.fullDocument && b.fullDocument) {
+    if (a.issue || b.issue) return { ok: false, adjustments: [] };
+    if (tier === "strict")
+      return {
+        ok: sameWordFullDocumentContent(a.ooxml, b.ooxml),
+        adjustments: [],
+      };
+    try {
+      const { parts, adjustments } = wordFullDocumentDifferences(
+        a.ooxml,
+        b.ooxml,
+        false,
+        tier,
+        allowFirstParagraphSpacing,
+      );
+      return {
+        ok: !parts.length,
+        adjustments: parts.length ? [] : adjustments,
+      };
+    } catch {
+      return { ok: false, adjustments: [] };
+    }
+  }
   const beforeNative = createNativeContentSignature(a.ooxml);
   const afterNative = createNativeContentSignature(b.ooxml);
   const actualBlocks = verifiedBodyBlocks(a.blocks, b.blocks, afterNative);
-  return (
+  const ok =
     !a.issue &&
     !b.issue &&
-    sameWordPreservedParts(a.ooxml, b.ooxml) &&
+    sameWordPreservedParts(a.ooxml, b.ooxml, tier) &&
     a.blocks.length === actualBlocks.length &&
     a.blocks.every(
       (block, i) =>
         beforeNative(block.xml) === afterNative(actualBlocks[i].xml),
-    )
-  );
+    );
+  return {
+    ok,
+    adjustments: ok && tier === "content" ? ["numbering-identity"] : [],
+  };
 }
 
 /** Ignore Word’s empty terminal paragraph only during write verification.

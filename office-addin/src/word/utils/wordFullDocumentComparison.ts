@@ -1,7 +1,11 @@
 import {
+  acceptWordStylesUnhiddenByUse,
+  createWordXmlComparison,
+  isWordHostStatePart,
+  isWordHostStateRelationship,
   normalizeWordInlineForComparison,
   normalizeWordMediaForComparison,
-  createWordXmlComparison,
+  removeWordNumberingIdentity,
   wordXmlElements as all,
 } from "@erato/frontend/word-review";
 
@@ -30,6 +34,64 @@ const direct = (root: Element | undefined, local: string) =>
 const attr = (e: Element | undefined, name = "val") =>
   e?.getAttributeNS(W, name) ?? "";
 const children = (e: Element | undefined) => Array.from(e?.children ?? []);
+
+export type WordVerifyTier = "strict" | "content";
+/** Closed list: each code names one normalization the content tier may apply after strict failed. */
+export const WORD_APPLY_ADJUSTMENTS = [
+  "numbering-identity",
+  "list-instance-renumbered",
+  "first-paragraph-spacing",
+  "style-redundant-format",
+  "style-unhidden",
+] as const;
+export type WordApplyAdjustment = (typeof WORD_APPLY_ADJUSTMENTS)[number];
+/** Adjustments a reader can see in the document; the others are list bookkeeping only. */
+export const WORD_VISIBLE_ADJUSTMENTS: readonly WordApplyAdjustment[] = [
+  "first-paragraph-spacing",
+];
+
+export interface WordPackageCounts {
+  parts: number;
+  customXmlItems: number;
+  customProperties: number;
+  abstractNums: number;
+  nums: number;
+  webextensionParts: number;
+}
+
+/** Shape only, read from the serialized package without parsing it. */
+export function wordPackageCounts(ooxml: string): WordPackageCounts {
+  const part = (name: string) => {
+    const start = ooxml.indexOf(`pkg:name="${name}"`);
+    if (start < 0) return "";
+    const end = ooxml.indexOf("</pkg:part>", start);
+    return ooxml.slice(start, end < 0 ? undefined : end);
+  };
+  const count = (text: string, pattern: RegExp) =>
+    text.match(pattern)?.length ?? 0;
+  const numbering = part("/word/numbering.xml");
+  return {
+    parts: count(ooxml, /<pkg:part\b/g),
+    customXmlItems: count(ooxml, /pkg:name="\/customXml\/item\d+\.xml"/g),
+    customProperties: count(
+      part("/docProps/custom.xml"),
+      /<(?:[\w.-]+:)?property[\s/>]/g,
+    ),
+    abstractNums: count(numbering, /<(?:[\w.-]+:)?abstractNum[\s/>]/g),
+    nums: count(numbering, /<(?:[\w.-]+:)?num[\s/>]/g),
+    webextensionParts: count(ooxml, /pkg:name="\/word\/webextensions\//g),
+  };
+}
+
+/** Word merges rather than replaces these on import; any growth is duplication, never plan output. */
+export function wordPackageGrew(before: string, after: string): boolean {
+  const a = wordPackageCounts(before),
+    b = wordPackageCounts(after);
+  return (
+    b.customXmlItems > a.customXmlItems ||
+    b.customProperties > a.customProperties
+  );
+}
 
 interface PackageView {
   doc: Document;
@@ -216,12 +278,6 @@ function normalizeInheritedFormatting(v: PackageView): void {
         if (!rPr.children.length && !rPr.attributes.length) rPr.remove();
       }
     }
-    for (const columns of all(root, W, "cols"))
-      if (["1", "true", "on"].includes(attr(columns, "equalWidth")))
-        columns.removeAttributeNS(W, "equalWidth");
-    for (const page of all(root, W, "pgSz"))
-      if (attr(page, "orient") === "portrait")
-        page.removeAttributeNS(W, "orient");
   }
 }
 
@@ -821,6 +877,268 @@ function removeOptionalPart(v: PackageView, path: string, type: string): void {
   }
 }
 
+/** Only definitions in WordprocessingML itself may be treated as bookkeeping; extensions stay exact. */
+const plainNum = (num: Element) =>
+  [num, ...all(num, "*", "*")].every(
+    (e) =>
+      e.namespaceURI === W &&
+      Array.from(e.attributes).every(
+        (a) =>
+          a.namespaceURI === W ||
+          a.namespaceURI === XMLNS ||
+          (e === num && a.namespaceURI === CID && a.localName === "durableId"),
+      ),
+  );
+const plainAbstractNum = (definition: Element) =>
+  [definition, ...all(definition, "*", "*")].every(
+    (e) =>
+      e.namespaceURI === W &&
+      Array.from(e.attributes).every(
+        (a) =>
+          a.namespaceURI === W ||
+          a.namespaceURI === XMLNS ||
+          (e === definition &&
+            a.namespaceURI === W15 &&
+            a.localName === "restartNumberingAfterBreak"),
+      ),
+  );
+/** Outside w:numId only Word's own extension vocabularies could name a list instance;
+ * numeric VML, drawing and math ids are object ids. */
+const WORD_EXTENSIONS = "http://schemas.microsoft.com/office/word/";
+
+/** Content tier: a list instance is identified by the paragraphs that share it, not by its numId.
+ * Referenced instances get labels by first use (styles, then the body, then the other parts) and
+ * unreferenced plain definitions are dropped, so merged or split lists still differ. */
+function relabelListInstances(v: PackageView): {
+  labels: Map<string, string>;
+  removed: string[];
+} {
+  const path = "/word/numbering.xml",
+    root = v.roots.get(path);
+  if (!root) return { labels: new Map(), removed: [] };
+  const nums = definitions(root, "num", "numId");
+  const first = ["/word/styles.xml", "/word/document.xml"];
+  const owners = [
+    ...first,
+    ...[...v.roots.keys()]
+      .filter((owner) => owner !== path && !first.includes(owner))
+      .sort(),
+  ];
+  const labels = new Map<string, string>();
+  const references: Element[] = [];
+  // An unknown extension might name a list by id; such an instance is never dropped.
+  const pinned = new Set<string>();
+  for (const owner of owners) {
+    const part = v.roots.get(owner);
+    if (!part) continue;
+    for (const reference of all(part, W, "numId")) {
+      const id = attr(reference);
+      if (!nums.has(id)) continue;
+      if (!labels.has(id)) labels.set(id, `list-${labels.size + 1}`);
+      references.push(reference);
+    }
+    if (part.namespaceURI !== W) continue;
+    for (const element of [part, ...all(part, "*", "*")])
+      for (const a of Array.from(element.attributes))
+        if (a.namespaceURI?.startsWith(WORD_EXTENSIONS) && nums.has(a.value))
+          pinned.add(a.value);
+  }
+  for (const reference of references)
+    reference.setAttributeNS(W, "w:val", labels.get(attr(reference))!);
+  const removed: string[] = [];
+  for (const [id, num] of nums) {
+    const label = labels.get(id);
+    if (label) num.setAttributeNS(W, "w:numId", label);
+    else if (!pinned.has(id) && plainNum(num)) {
+      num.remove();
+      removed.push(`num:${id}`);
+    }
+  }
+  const used = new Set(
+    children(root)
+      .filter((e) => e.namespaceURI === W && e.localName === "num")
+      .map((e) => attr(direct(e, "abstractNumId"))),
+  );
+  for (const [id, definition] of definitions(
+    root,
+    "abstractNum",
+    "abstractNumId",
+  ))
+    if (!used.has(id) && plainAbstractNum(definition)) {
+      definition.remove();
+      removed.push(`abstractNum:${id}`);
+    }
+  return {
+    labels: new Map([...labels].map(([id, label]) => [label, id])),
+    removed,
+  };
+}
+
+/** Content tier: Word can rewrite spacing-before of the first body paragraph on import.
+ * Only that attribute of that paragraph is set aside; the caller discloses it. */
+function normalizeFirstParagraphSpacing(
+  expected: PackageView,
+  actual: PackageView,
+): boolean {
+  const spacing = (v: PackageView) =>
+    direct(direct(all(v.body, W, "p")[0], "pPr"), "spacing");
+  const a = spacing(expected),
+    b = spacing(actual);
+  if (attr(a, "before") === attr(b, "before")) return false;
+  for (const element of [a, b]) {
+    if (!element) continue;
+    element.removeAttributeNS(W, "before");
+    if (
+      !element.children.length &&
+      Array.from(element.attributes).every((x) => x.namespaceURI === XMLNS)
+    )
+      element.remove();
+  }
+  return true;
+}
+
+/** Paragraph on/off properties the compiler writes; absent anywhere in the style chain means off. */
+const PARAGRAPH_SWITCHES = [
+  "pageBreakBefore",
+  "keepNext",
+  "keepLines",
+  "widowControl",
+];
+const SPACING_ATTRIBUTES = ["before", "after", "line", "lineRule"];
+
+/** Content tier: Word leaves out a direct paragraph property equal to what the paragraph's style
+ * chain (style, basedOn, document defaults) already gives it, as a plan's explicit "off" or a
+ * restated style spacing. Rendering is identical, so only that property is set aside. */
+function normalizeStyleRedundantFormat(
+  expected: PackageView,
+  actual: PackageView,
+): boolean {
+  const styles = expected.roots.get("/word/styles.xml");
+  if (!styles) return false;
+  const paragraphStyles = children(styles).filter(
+    (e) =>
+      e.namespaceURI === W &&
+      e.localName === "style" &&
+      e.getAttributeNS(W, "type") === "paragraph",
+  );
+  const byId = new Map(
+    paragraphStyles.map((style) => [attr(style, "styleId"), style]),
+  );
+  const fallback = paragraphStyles.find((style) =>
+    ["1", "true", "on"].includes(attr(style, "default")),
+  );
+  const defaults = direct(
+    direct(direct(styles, "docDefaults"), "pPrDefault"),
+    "pPr",
+  );
+  /** The nearest pPr in the chain that has `has`, else the document defaults' pPr. */
+  const inheritedFrom = (styleId: string, has: (pPr: Element) => boolean) => {
+    let style = styleId ? byId.get(styleId) : fallback;
+    for (let depth = 0; style && depth < 32; depth++) {
+      const pPr = direct(style, "pPr");
+      if (pPr && has(pPr)) return pPr;
+      const basedOn = attr(direct(style, "basedOn"));
+      style = basedOn ? byId.get(basedOn) : undefined;
+    }
+    return defaults && has(defaults) ? defaults : undefined;
+  };
+  const spacingValue = (pPr: Element | undefined, name: string) => {
+    const spacing = direct(pPr, "spacing");
+    return spacing?.hasAttributeNS(W, name) ? attr(spacing, name) : null;
+  };
+  const switchValue = (pPr: Element | undefined, name: string) => {
+    const element = direct(pPr, name);
+    return element ? !["0", "false", "off"].includes(attr(element)) : null;
+  };
+  const paragraphs = (v: PackageView) =>
+    children(v.body).filter((e) => e.namespaceURI === W && e.localName === "p");
+  const a = paragraphs(expected),
+    b = paragraphs(actual);
+  if (a.length !== b.length) return false;
+  let changed = false;
+  a.forEach((paragraph, i) => {
+    const props = [paragraph, b[i]].map((p) => direct(p, "pPr"));
+    const style = attr(direct(props[0], "pStyle"));
+    if (style !== attr(direct(props[1], "pStyle"))) return;
+    for (const name of SPACING_ATTRIBUTES) {
+      const [x, y] = props.map((pPr) => spacingValue(pPr, name));
+      if ((x === null) === (y === null)) continue;
+      const inherited = spacingValue(
+        inheritedFrom(style, (pPr) => spacingValue(pPr, name) !== null),
+        name,
+      );
+      if ((x ?? y) !== inherited) continue;
+      direct(props[x === null ? 1 : 0], "spacing")!.removeAttributeNS(W, name);
+      changed = true;
+    }
+    for (const name of PARAGRAPH_SWITCHES) {
+      const [x, y] = props.map((pPr) => switchValue(pPr, name));
+      if ((x === null) === (y === null)) continue;
+      const inherited =
+        switchValue(
+          inheritedFrom(style, (pPr) => switchValue(pPr, name) !== null),
+          name,
+        ) ?? false;
+      if ((x ?? y) !== inherited) continue;
+      direct(props[x === null ? 1 : 0], name)!.remove();
+      changed = true;
+    }
+    for (const pPr of props) {
+      const spacing = direct(pPr, "spacing");
+      if (
+        spacing &&
+        !spacing.children.length &&
+        Array.from(spacing.attributes).every((x) => x.namespaceURI === XMLNS)
+      )
+        spacing.remove();
+    }
+  });
+  return changed;
+}
+
+function normalizeContentTier(
+  expected: PackageView,
+  actual: PackageView,
+  allowFirstParagraphSpacing: boolean,
+): WordApplyAdjustment[] {
+  const adjustments = new Set<WordApplyAdjustment>();
+  const before = relabelListInstances(expected),
+    after = relabelListInstances(actual);
+  const labels = new Set([...before.labels.keys(), ...after.labels.keys()]);
+  if ([...labels].some((l) => before.labels.get(l) !== after.labels.get(l)))
+    adjustments.add("list-instance-renumbered");
+  // Unused definitions on both sides are not a change, and an instance left behind by renumbering
+  // belongs to that adjustment; any other unused definition is identity bookkeeping.
+  const stray = (
+    removed: string[],
+    other: { labels: Map<string, string>; removed: string[] },
+  ) => {
+    const referenced = new Set(other.labels.values());
+    return removed.some(
+      (entry) =>
+        !other.removed.includes(entry) &&
+        !(entry.startsWith("num:") && referenced.has(entry.slice(4))),
+    );
+  };
+  if (stray(before.removed, after) || stray(after.removed, before))
+    adjustments.add("numbering-identity");
+  if (
+    removeWordNumberingIdentity(expected.doc).join() !==
+    removeWordNumberingIdentity(actual.doc).join()
+  )
+    adjustments.add("numbering-identity");
+  if (
+    allowFirstParagraphSpacing &&
+    normalizeFirstParagraphSpacing(expected, actual)
+  )
+    adjustments.add("first-paragraph-spacing");
+  if (normalizeStyleRedundantFormat(expected, actual))
+    adjustments.add("style-redundant-format");
+  if (acceptWordStylesUnhiddenByUse(expected.doc, actual.doc))
+    adjustments.add("style-unhidden");
+  return WORD_APPLY_ADJUSTMENTS.filter((code) => adjustments.has(code));
+}
+
 /** numId identifies a list instance, not just its definition; distinct instances must not collapse. */
 function normalizeAddedNumbering(
   expected: PackageView,
@@ -881,22 +1199,7 @@ function normalizeAddedNumbering(
           before,
         ]);
     }
-    if (
-      !requiredNums.has(id) &&
-      [num, ...all(num, "*", "*")].every(
-        (e) =>
-          e.namespaceURI === W &&
-          Array.from(e.attributes).every(
-            (a) =>
-              a.namespaceURI === W ||
-              a.namespaceURI === XMLNS ||
-              (e === num &&
-                a.namespaceURI === CID &&
-                a.localName === "durableId"),
-          ),
-      )
-    )
-      num.remove();
+    if (!requiredNums.has(id) && plainNum(num)) num.remove();
   }
   for (const [definition, originals] of matchedAbstracts) {
     for (const name of ["nsid", "tmpl"]) {
@@ -942,18 +1245,7 @@ function normalizeAddedNumbering(
     if (remaining > 0) originalSignatures.set(signature, remaining - 1);
     else if (
       !requiredAbstracts.has(attr(definition, "abstractNumId")) &&
-      [definition, ...all(definition, "*", "*")].every(
-        (e) =>
-          e.namespaceURI === W &&
-          Array.from(e.attributes).every(
-            (a) =>
-              a.namespaceURI === W ||
-              a.namespaceURI === XMLNS ||
-              (e === definition &&
-                a.namespaceURI === W15 &&
-                a.localName === "restartNumberingAfterBreak"),
-          ),
-      )
+      plainAbstractNum(definition)
     )
       definition.remove();
   }
@@ -1176,7 +1468,12 @@ function packageSignatures(v: PackageView): Map<string, string> {
   const result = new Map<string, string>();
   for (const [path, part] of v.parts) {
     const root = v.roots.get(path);
-    if (isHeader(root) || isMedia(part) || (root && emptyOptionalPart(root)))
+    if (
+      isWordHostStatePart(path) ||
+      isHeader(root) ||
+      isMedia(part) ||
+      (root && emptyOptionalPart(root))
+    )
       continue;
     if (root?.namespaceURI === REL && root.localName === "Relationships") {
       const ownerName = wordRelationshipOwner(path.replace(/^\//, ""));
@@ -1195,6 +1492,7 @@ function packageSignatures(v: PackageView): Map<string, string> {
         const target = `/${wordRelationshipTarget(ownerName, rel.getAttribute("Target") ?? "")}`;
         const targetRoot = v.roots.get(target);
         if (refs.has(rel.getAttribute("Id") ?? "")) return false; // checked at the referring element, including its type/target bytes
+        if (isWordHostStateRelationship(rel)) return false;
         if (
           ["header", "footer", "image", "hyperlink"].some(
             (t) => type === `${R}/${t}`,
@@ -1233,37 +1531,155 @@ export function wordFullDocumentComparisonIssue(
   actualXml: string,
 ): string | undefined {
   try {
-    const expected = view(expectedXml),
-      actual = view(actualXml);
-    for (const v of [expected, actual]) {
-      normalizeWordMediaForComparison(v.doc);
-      normalizeWordInlineForComparison(v.doc);
-      normalizeAnchorIds(v);
-      normalizeMarkerDefaults(v);
-      normalizeInheritedFormatting(v);
-      normalizeWordTablesForComparison(v.doc);
-      normalizeShapeIdBookkeeping(v);
-    }
-    normalizeNewCommentMetadata(expected, actual);
-    normalizeAddedCommentMarkers(expected, actual);
-    normalizeAddedFonts(expected, actual);
-    normalizeUnusedLinkedCharacterStyles(expected, actual);
-    normalizeAddedStyles(expected, actual);
-    normalizeAddedNumbering(expected, actual);
-    normalizeAddedNoteSeparators(expected, actual);
-    normalizeCompatibility(expected);
-    normalizeCompatibility(actual);
-    normalizeDefinitionOrder(expected);
-    normalizeDefinitionOrder(actual);
-    const a = packageSignatures(expected),
-      b = packageSignatures(actual);
-    for (const path of new Set([...a.keys(), ...b.keys()]))
-      if (a.get(path) !== b.get(path))
-        return `Document content differs in ${path}`;
-    return undefined;
+    const path = wordFullDocumentDifferingParts(expectedXml, actualXml)[0];
+    return path === undefined
+      ? undefined
+      : `Document content differs in ${path}`;
   } catch {
     return "Document comparison could not validate the package";
   }
+}
+
+/** Part paths that differ after verify normalizations; throws when a package is unreadable. */
+export function wordFullDocumentDifferingParts(
+  expectedXml: string,
+  actualXml: string,
+): string[] {
+  return wordFullDocumentDifferences(expectedXml, actualXml).parts;
+}
+
+/** With `locate`, also names where each differing content part first diverges (structure only, no text or values).
+ * The content tier adds the normalizations named by WORD_APPLY_ADJUSTMENTS; it is only for write and
+ * restore verification after strict comparison failed. */
+export function wordFullDocumentDifferences(
+  expectedXml: string,
+  actualXml: string,
+  locate = false,
+  tier: WordVerifyTier = "strict",
+  allowFirstParagraphSpacing = false,
+): {
+  parts: string[];
+  locations: string[];
+  adjustments: WordApplyAdjustment[];
+} {
+  const expected = view(expectedXml),
+    actual = view(actualXml);
+  for (const v of [expected, actual]) {
+    normalizeWordMediaForComparison(v.doc);
+    normalizeWordInlineForComparison(v.doc);
+    normalizeAnchorIds(v);
+    normalizeMarkerDefaults(v);
+    normalizeInheritedFormatting(v);
+    normalizeWordTablesForComparison(v.doc);
+    normalizeShapeIdBookkeeping(v);
+  }
+  normalizeNewCommentMetadata(expected, actual);
+  normalizeAddedCommentMarkers(expected, actual);
+  normalizeAddedFonts(expected, actual);
+  normalizeUnusedLinkedCharacterStyles(expected, actual);
+  normalizeAddedStyles(expected, actual);
+  normalizeAddedNumbering(expected, actual);
+  normalizeAddedNoteSeparators(expected, actual);
+  const adjustments =
+    tier === "content"
+      ? normalizeContentTier(expected, actual, allowFirstParagraphSpacing)
+      : [];
+  normalizeCompatibility(expected);
+  normalizeCompatibility(actual);
+  normalizeDefinitionOrder(expected);
+  normalizeDefinitionOrder(actual);
+  const a = packageSignatures(expected),
+    b = packageSignatures(actual);
+  const parts = [...new Set([...a.keys(), ...b.keys()])].filter(
+    (path) => a.get(path) !== b.get(path),
+  );
+  if (!locate) return { parts, locations: [], adjustments };
+  const ca = createWordXmlComparison(expected.doc),
+    cb = createWordXmlComparison(actual.doc);
+  const locations = parts
+    .filter((path) => !path.endsWith(".rels"))
+    .slice(0, 3)
+    .flatMap((path) => {
+      const x = expected.roots.get(path),
+        y = actual.roots.get(path);
+      return x && y
+        ? [`${path}: ${firstDivergence(x, y, path, ca, cb)}`]
+        : [`${path}: ${x ? "missing after write" : "added by Word"}`];
+    });
+  return { parts, locations, adjustments };
+}
+
+const QNAME = /^[A-Za-z0-9_.:-]{1,64}$/;
+/** Numbers, hex IDs and OOXML enums are formatting, not document text; anything else stays hidden. */
+const SAFE_VALUE =
+  /^(-?\d{1,9}|[0-9A-Fa-f]{8}|auto|exact|atLeast|true|false|on|off|0|1)$/;
+const shown = (value: string | null) =>
+  value === null ? "none" : SAFE_VALUE.test(value) ? value : "…";
+const childKinds = (list: Element[]) => {
+  const counts = new Map<string, number>();
+  for (const e of list) counts.set(qname(e), (counts.get(qname(e)) ?? 0) + 1);
+  return [...counts].map(([name, n]) => `${n} ${name}`).join(", ");
+};
+const qname = (e: Element) => (QNAME.test(e.nodeName) ? e.nodeName : "?");
+
+/** Descend along the first child whose normalized signature differs. */
+function firstDivergence(
+  a: Element,
+  b: Element,
+  owner: string,
+  ca: ReturnType<typeof createWordXmlComparison>,
+  cb: ReturnType<typeof createWordXmlComparison>,
+): string {
+  const path = [qname(a)];
+  let hint = "";
+  const result = (text: string) => text + hint;
+  for (let depth = 0; depth < 40; depth++) {
+    const xs = children(a).filter((e) => ca.signature(e, owner)),
+      ys = children(b).filter((e) => cb.signature(e, owner));
+    let i = 0;
+    while (
+      i < xs.length &&
+      i < ys.length &&
+      ca.signature(xs[i], owner) === cb.signature(ys[i], owner)
+    )
+      i++;
+    const where = path.join("/");
+    if (!hint && xs.length !== ys.length)
+      hint = `; ${where} has ${xs.length} children expected (${childKinds(xs)}), ${ys.length} actual (${childKinds(ys)})`;
+    if (i === xs.length && i === ys.length) {
+      const names = new Set(
+        [...Array.from(a.attributes), ...Array.from(b.attributes)]
+          .filter(
+            (attr) =>
+              attr.namespaceURI !== "http://www.w3.org/2000/xmlns/" &&
+              a.getAttributeNS(attr.namespaceURI, attr.localName) !==
+                b.getAttributeNS(attr.namespaceURI, attr.localName),
+          )
+          .map((attr) =>
+            QNAME.test(attr.name)
+              ? `${attr.name} ${shown(a.getAttributeNS(attr.namespaceURI, attr.localName))} → ${shown(b.getAttributeNS(attr.namespaceURI, attr.localName))}`
+              : "?",
+          ),
+      );
+      return result(
+        names.size
+          ? `${where} attributes differ (${[...names].join(", ")})`
+          : `${where} text differs`,
+      );
+    }
+    if (i === xs.length || i === ys.length)
+      return result(
+        `${where} child count differs from #${i + 1} (${xs.length} expected, ${ys.length} actual)`,
+      );
+    if (qname(xs[i]) !== qname(ys[i]))
+      return result(
+        `${where} child #${i + 1} is ${qname(ys[i])}, expected ${qname(xs[i])}`,
+      );
+    path.push(`${qname(xs[i])}[${i + 1}]`);
+    a = xs[i];
+    b = ys[i];
+  }
+  return result(`${path.join("/")} (deeply nested)`);
 }
 export function sameWordFullDocumentContent(
   expectedXml: string,

@@ -5,6 +5,13 @@ import {
   validateWordDocumentPlan,
 } from "@erato/frontend/word-review";
 
+import {
+  logWordDiagnostic,
+  packageStats,
+  strictDifferingParts,
+  verifyDifferingParts,
+  wordDocumentDiagnostic as diagnostic,
+} from "./wordApplyDiagnostics";
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
 import {
   unlockWordContentControlsForImport,
@@ -14,6 +21,7 @@ import {
   captureWordDocumentPackage,
   currentWordDocumentUrl,
   decodeWordDocumentBackup,
+  decodeWordInPlaceBackup,
   encodeWordDocumentBackup,
   insertWordDocumentFile,
   isWordDocumentBackup,
@@ -24,14 +32,45 @@ import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
+  verifyWordPlanWrite,
+  verifyWordRestore,
   wordDocumentFingerprint,
-  sameWordBodyContent,
 } from "./wordDocumentXml";
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
+import {
+  wordInPlaceCapabilities,
+  wordTrackedInPlaceCapabilities,
+} from "./wordInPlaceCapabilities";
+import {
+  applyWordPlanInPlace,
+  revertWordPlanInPlace,
+  wordInPlaceFallbackScope,
+} from "./wordInPlaceExecutor";
+import {
+  WORD_IN_PLACE_FALLBACKS,
+  wordInPlaceFallbacks,
+} from "./wordInPlacePlan";
+import { routeWordDocumentPlan } from "./wordInPlaceRoute";
+import { isWordScopeFingerprint } from "./wordInPlaceState";
+import {
+  isWordTrackingMode,
+  wordInPlaceAvailability,
+  wordInPlaceCapabilitiesUnder,
+  wordTrackedWritingAvailable,
+} from "./wordInPlaceSwitch";
 import { wordWriteHost } from "./wordWriteHost";
 
+import type {
+  WordDiagnosticDetails,
+  WordRouteReason,
+} from "./wordApplyDiagnostics";
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
 import type { WordContentControlLocks } from "./wordContentControlWrite";
+import type { WordWriteVerification } from "./wordDocumentXml";
+import type {
+  WordApplyAdjustment,
+  WordVerifyTier,
+} from "./wordFullDocumentComparison";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -52,9 +91,25 @@ export interface WordDocumentDiagnostic {
     | "source-changed"
     | "compile-failed"
     | "output-mismatch"
+    | "package-growth"
     | "host-error";
   officeCode?: string;
   officeLocation?: string;
+  details?: WordDiagnosticDetails;
+}
+/** How a verified write went in: which writer ran and how leniently its result was compared.
+ * In place, "block" means untouched blocks kept their content and written ones match the plan. */
+export interface WordApplyOutcome {
+  route: "import" | "body" | "in-place";
+  tier: WordVerifyTier | "block";
+  adjustments: WordApplyAdjustment[];
+  /** Object-model changes, for in-place writes. */
+  ops?: number;
+  /** Blocks someone changed elsewhere after the capture; an in-place write leaves them as they are. */
+  outsideChanges?: number;
+  /** Written as tracked revisions (true), or written directly although the capture was tracked
+   * because Track Changes was off by then (false). */
+  tracked?: boolean;
 }
 export interface WordDocumentApplyResult {
   status: WordDocumentApplyStatus;
@@ -62,40 +117,33 @@ export interface WordDocumentApplyResult {
   /** Observed post-state, including an unverified/partially written result. */
   afterFingerprint?: string;
   diagnostic?: WordDocumentDiagnostic;
+  outcome?: WordApplyOutcome;
 }
 export interface WordDocumentRevertResult {
   status: "reverted" | "stale" | "interrupted";
   afterFingerprint?: string;
   diagnostic?: WordDocumentDiagnostic;
+  outcome?: WordApplyOutcome;
 }
 
-/** Only error codes/API locations, never statements, document text or raw debugInfo. */
-function diagnostic(
-  stage: WordDocumentDiagnostic["stage"],
-  reason: WordDocumentDiagnostic["reason"],
-  error?: unknown,
-): WordDocumentDiagnostic {
-  const record =
-    typeof error === "object" && error !== null
-      ? (error as Record<string, unknown>)
-      : {};
-  const info =
-    typeof record.debugInfo === "object" && record.debugInfo !== null
-      ? (record.debugInfo as Record<string, unknown>)
-      : {};
-  const code = record.code;
-  const location = info.errorLocation;
+function outcome(
+  route: "import" | "body",
+  verification: Extract<WordWriteVerification, { ok: true }>,
+): WordApplyOutcome {
   return {
-    stage,
-    reason,
-    ...(typeof code === "string" && /^[A-Za-z][A-Za-z0-9.]{0,79}$/.test(code)
-      ? { officeCode: code }
-      : {}),
-    ...(typeof location === "string" &&
-    /^[A-Za-z][A-Za-z0-9_.()[\]-]{0,159}$/.test(location)
-      ? { officeLocation: location }
-      : {}),
+    route,
+    tier: verification.tier,
+    adjustments: verification.adjustments,
   };
+}
+
+/** A content mismatch means the lenient tier failed too; growth is decided before any comparison. */
+function failedTier(
+  verification: Extract<WordWriteVerification, { ok: false }>,
+): Pick<WordDiagnosticDetails, "verifyTier"> {
+  return verification.reason === "output-mismatch"
+    ? { verifyTier: "content" }
+    : {};
 }
 
 /** Read a fresh context after a rejected batch; never retry the mutation. */
@@ -130,6 +178,7 @@ export async function applyWordDocumentPlan(
   onStage?: (stage: WordApplyStage) => void,
 ): Promise<WordDocumentApplyResult> {
   const progress = trackWordApply("plan", onStage);
+  const routing: { reason?: WordRouteReason } = {};
   let result: WordDocumentApplyResult | undefined;
   try {
     result = await applyPlan(
@@ -138,10 +187,77 @@ export async function applyWordDocumentPlan(
       messageId,
       onBeforeWrite,
       progress,
+      routing,
     );
     return result;
   } finally {
-    progress.finish(result?.status ?? "error");
+    const details = result?.diagnostic?.details;
+    progress.finish(result?.status ?? "error", {
+      route: result?.outcome?.route ?? details?.route,
+      routeReason: routing.reason,
+      ops: result?.outcome?.ops ?? details?.inPlaceOps,
+      tier: result?.outcome?.tier ?? details?.verifyTier,
+    });
+    if (result?.diagnostic)
+      logWordDiagnostic("apply", result.status, result.diagnostic);
+  }
+}
+
+/** The route reason rides on the diagnostic so the copyable report says why the import ran. */
+function imported(
+  result: WordDocumentApplyResult,
+  routeReason: WordRouteReason | undefined,
+  extra: WordDiagnosticDetails,
+): WordDocumentApplyResult {
+  if (!result.diagnostic) return result;
+  return {
+    ...result,
+    diagnostic: {
+      ...result.diagnostic,
+      details: {
+        route: "import",
+        ...(routeReason ? { routeReason } : {}),
+        ...extra,
+        ...result.diagnostic.details,
+      },
+    },
+  };
+}
+
+/** Track Changes rules the import out: it would replace the document without revisions. */
+function trackingBlocked(
+  routeReason: WordRouteReason | undefined,
+  fallbackReasons: () => WordRouteReason[],
+): WordDocumentApplyResult {
+  const reasons = fallbackReasons();
+  return {
+    status: "blocked",
+    diagnostic: diagnostic("validate", "tracking", undefined, {
+      route: "import",
+      ...(routeReason ? { routeReason } : {}),
+      fallbackReasons: reasons.length
+        ? reasons
+        : routeReason
+          ? [routeReason]
+          : [],
+    }),
+  };
+}
+
+function trackedFallbacks(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  prepared: WordAuthoringSnapshot,
+): WordRouteReason[] {
+  try {
+    return wordInPlaceFallbacks(
+      plan,
+      snapshot,
+      wordTrackedInPlaceCapabilities(wordInPlaceCapabilities()),
+      prepared,
+    );
+  } catch {
+    return [];
   }
 }
 
@@ -151,6 +267,7 @@ async function applyPlan(
   messageId: string | undefined,
   onBeforeWrite: ((before: string) => void) | undefined,
   progress: WordApplyProgress,
+  routing: { reason?: WordRouteReason },
 ): Promise<WordDocumentApplyResult> {
   progress.stage("checking");
   // Parsing, compiling and verifying below are synchronous; let the busy button paint first.
@@ -189,14 +306,86 @@ async function applyPlan(
         status: "blocked",
         diagnostic: diagnostic("compile", "compile-failed"),
       };
-    if (snapshot.fullDocument)
-      return await applyFullDocument(
+    if (snapshot.fullDocument) {
+      // All or nothing per plan: in place only when every change has an exact object-model inverse.
+      let routeReason: WordRouteReason | undefined;
+      let fallbackDetails: WordDiagnosticDetails = {};
+      const route = routeWordDocumentPlan(
         plan,
         snapshot,
-        compiled,
-        onBeforeWrite,
-        progress,
+        wordInPlaceAvailability(),
+        wordInPlaceCapabilities(),
+        prepared,
       );
+      if (route.route === "import" || route.route === "blocked")
+        routeReason = route.reason;
+      else if (route.route === "in-place" && !route.ops.length) {
+        snapshot.used = true;
+        return {
+          status: "applied",
+          outcome: {
+            route: "in-place",
+            tier: "block",
+            adjustments: [],
+            ops: 0,
+          },
+        };
+      } else if (route.route === "in-place") {
+        const result = await applyWordPlanInPlace({
+          snapshot,
+          compiled: prepared,
+          ops: route.ops,
+          onBeforeWrite,
+          progress,
+          observePackage: (url) => observeAfterFailure(true, url),
+        });
+        if (!("fallback" in result)) return result;
+        // Track Changes is on and the write needs something tracked writing does not cover.
+        if (result.fallback === "tracking") {
+          const live = result.details.fallbackReasons ?? [];
+          return trackingBlocked(undefined, () => [
+            ...new Set([
+              ...trackedFallbacks(plan, snapshot, prepared),
+              ...live,
+            ]),
+          ]);
+        }
+        routeReason = result.fallback;
+        fallbackDetails = result.details;
+      }
+      routing.reason = routeReason;
+      const fallbackReasons = (): WordRouteReason[] => {
+        if (
+          !routeReason ||
+          !(WORD_IN_PLACE_FALLBACKS as readonly string[]).includes(routeReason)
+        )
+          return routeReason ? [routeReason] : [];
+        try {
+          return wordInPlaceFallbacks(
+            plan,
+            snapshot,
+            wordInPlaceCapabilitiesUnder(snapshot.trackingMode),
+            prepared,
+          );
+        } catch {
+          return [routeReason];
+        }
+      };
+      if (isWordTrackingMode(snapshot.trackingMode))
+        return trackingBlocked(routeReason, fallbackReasons);
+      return imported(
+        await applyFullDocument(
+          plan,
+          snapshot,
+          compiled,
+          onBeforeWrite,
+          progress,
+          () => trackingBlocked(routeReason, fallbackReasons),
+        ),
+        routeReason,
+        fallbackDetails,
+      );
+    }
     stage = "preflight";
     progress.stage("backup");
     return await host.run(async (context) => {
@@ -212,7 +401,17 @@ async function applyPlan(
               ? "source-changed"
               : null;
       if (reason)
-        return { status: "stale", diagnostic: diagnostic("preflight", reason) };
+        return {
+          status: "stale",
+          diagnostic: diagnostic(
+            "preflight",
+            reason,
+            undefined,
+            reason === "source-changed"
+              ? strictDifferingParts(snapshot.ooxml, live.value)
+              : {},
+          ),
+        };
       before = live.value;
       onBeforeWrite?.(before);
       snapshot.used = true;
@@ -234,14 +433,28 @@ async function applyPlan(
         "verify",
       );
       const afterFingerprint = verified.fingerprint || undefined;
-      if (!verifyWordPlanOutput(plan, snapshot, verified))
+      const verification = verifyWordPlanWrite(plan, snapshot, verified);
+      if (!verification.ok)
         return {
           status: "interrupted",
           before,
           afterFingerprint,
-          diagnostic: diagnostic("verify", "output-mismatch"),
+          diagnostic: diagnostic("verify", verification.reason, undefined, {
+            ...strictDifferingParts(compiled, after.value),
+            ...(verified.issue ? { snapshotIssue: verified.issue } : {}),
+            ...failedTier(verification),
+            ...packageStats([
+              ["expected", compiled],
+              ["actual", after.value],
+            ]),
+          }),
         };
-      return { status: "applied", before, afterFingerprint };
+      return {
+        status: "applied",
+        before,
+        afterFingerprint,
+        outcome: outcome("body", verification),
+      };
     });
   } catch (error) {
     return {
@@ -262,8 +475,46 @@ export async function revertWordDocumentPlan(
   before: string,
   expectedAfter: string,
 ): Promise<WordDocumentRevertResult> {
-  if (isWordDocumentBackup(before))
-    return revertFullDocument(before, expectedAfter);
+  const result = await revertPlan(before, expectedAfter);
+  if (result.diagnostic)
+    logWordDiagnostic("revert", result.status, result.diagnostic);
+  return result;
+}
+
+/** How Revert would undo a recorded write, as revertPlan dispatches it. */
+export type WordRevertMechanism = "in-place" | "tracked" | "import" | "body";
+
+export function wordRevertMechanism(
+  before: string,
+  expectedAfter: string | undefined,
+): WordRevertMechanism {
+  if (!isWordDocumentBackup(before)) return "body";
+  if (!expectedAfter || !isWordScopeFingerprint(expectedAfter)) return "import";
+  try {
+    return decodeWordInPlaceBackup(before).inPlace?.tracked
+      ? "tracked"
+      : "in-place";
+  } catch {
+    return "in-place";
+  }
+}
+
+async function revertPlan(
+  before: string,
+  expectedAfter: string,
+): Promise<WordDocumentRevertResult> {
+  if (isWordDocumentBackup(before)) {
+    if (isWordScopeFingerprint(expectedAfter))
+      return revertWordPlanInPlace(before, expectedAfter);
+    const exact = await revertFullDocument(before, expectedAfter);
+    const scope =
+      exact.status === "stale" &&
+      exact.diagnostic?.reason === "source-changed" &&
+      !exact.diagnostic.details?.urlChanged
+        ? wordInPlaceFallbackScope(before)
+        : undefined;
+    return scope ? revertWordPlanInPlace(before, scope) : exact;
+  }
   const host = wordWriteHost();
   if (!host)
     return {
@@ -308,13 +559,25 @@ export async function revertWordDocumentPlan(
         "verify",
       );
       const afterFingerprint = restored.fingerprint || undefined;
-      if (!sameWordBodyContent(original, restored))
+      const verification = verifyWordRestore(original, restored);
+      if (!verification.ok)
         return {
           status: "interrupted",
           afterFingerprint,
-          diagnostic: diagnostic("restore", "output-mismatch"),
+          diagnostic: diagnostic("restore", verification.reason, undefined, {
+            ...strictDifferingParts(before, after.value),
+            ...failedTier(verification),
+            ...packageStats([
+              ["expected", before],
+              ["actual", after.value],
+            ]),
+          }),
         };
-      return { status: "reverted", afterFingerprint };
+      return {
+        status: "reverted",
+        afterFingerprint,
+        outcome: outcome("body", verification),
+      };
     });
   } catch (error) {
     return {
@@ -331,6 +594,7 @@ async function applyFullDocument(
   compiled: string,
   onBeforeWrite: ((before: string) => void) | undefined,
   progress: WordApplyProgress,
+  blockedByTracking?: () => WordDocumentApplyResult,
 ): Promise<WordDocumentApplyResult> {
   const host = wordWriteHost();
   if (!host || !supportsWordDocumentPackage())
@@ -344,6 +608,7 @@ async function applyFullDocument(
   let documentUrl: string | undefined;
   let locks: WordContentControlLocks = [];
   let imported = false;
+  let liveOoxml: string | undefined;
   try {
     const bytes = wordDocumentOoxmlToFile(compiled);
     stage = "preflight";
@@ -351,21 +616,52 @@ async function applyFullDocument(
     return await host.run(async (context) => {
       const live = await captureWordDocumentPackage();
       documentUrl = live.documentUrl;
+      liveOoxml = live.ooxml;
       context.document.load("changeTrackingMode");
       await context.sync();
+      const contentChanged = live.fingerprint !== snapshot.fingerprint;
+      const urlChanged =
+        (snapshot.documentUrl !== undefined &&
+          live.documentUrl !== snapshot.documentUrl) ||
+        currentWordDocumentUrl() !== live.documentUrl;
+      // Turned on since the capture: where tracked writing exists this plan simply needs it.
+      if (
+        blockedByTracking &&
+        !snapshot.used &&
+        !snapshot.revoked &&
+        context.document.changeTrackingMode !== "Off" &&
+        wordTrackedWritingAvailable()
+      )
+        return blockedByTracking();
       const reason =
         snapshot.used || snapshot.revoked
           ? "expired"
           : context.document.changeTrackingMode !== "Off"
             ? "tracking"
-            : live.fingerprint !== snapshot.fingerprint ||
-                (snapshot.documentUrl !== undefined &&
-                  live.documentUrl !== snapshot.documentUrl) ||
-                currentWordDocumentUrl() !== live.documentUrl
+            : contentChanged || urlChanged
               ? "source-changed"
               : null;
       if (reason)
-        return { status: "stale", diagnostic: diagnostic("preflight", reason) };
+        return {
+          status: "stale",
+          diagnostic: diagnostic(
+            "preflight",
+            reason,
+            undefined,
+            reason === "source-changed"
+              ? {
+                  ...(contentChanged
+                    ? strictDifferingParts(snapshot.ooxml, live.ooxml)
+                    : {}),
+                  ...(urlChanged ? { urlChanged } : {}),
+                  ...packageStats([
+                    ["source", snapshot.ooxml],
+                    ["live", live.ooxml],
+                  ]),
+                }
+              : {},
+          ),
+        };
       before = encodeWordDocumentBackup(live);
       onBeforeWrite?.(before);
       snapshot.used = true;
@@ -398,7 +694,9 @@ async function applyFullDocument(
         return {
           status: "interrupted",
           before,
-          diagnostic: diagnostic("verify", "output-mismatch"),
+          diagnostic: diagnostic("verify", "output-mismatch", undefined, {
+            urlChanged: true,
+          }),
         };
       context.document.load("changeTrackingMode");
       await context.sync();
@@ -411,14 +709,29 @@ async function applyFullDocument(
       );
       // The snapshot fingerprints the same package; the lazy package fingerprint is only a fallback.
       const afterFingerprint = actual.fingerprint || after.fingerprint;
-      if (!verifyWordPlanOutput(plan, snapshot, actual))
+      const verification = verifyWordPlanWrite(plan, snapshot, actual);
+      if (!verification.ok)
         return {
           status: "interrupted",
           before,
           afterFingerprint,
-          diagnostic: diagnostic("verify", "output-mismatch"),
+          diagnostic: diagnostic("verify", verification.reason, undefined, {
+            ...verifyDifferingParts(compiled, after.ooxml),
+            ...(actual.issue ? { snapshotIssue: actual.issue } : {}),
+            ...failedTier(verification),
+            ...packageStats([
+              ["live", live.ooxml],
+              ["expected", compiled],
+              ["actual", after.ooxml],
+            ]),
+          }),
         };
-      return { status: "applied", before, afterFingerprint };
+      return {
+        status: "applied",
+        before,
+        afterFingerprint,
+        outcome: outcome("import", verification),
+      };
     });
   } catch (error) {
     if (!imported && locks.length)
@@ -437,6 +750,10 @@ async function applyFullDocument(
         stage,
         stage === "compile" ? "compile-failed" : "host-error",
         error,
+        packageStats([
+          ["live", liveOoxml],
+          ["expected", compiled],
+        ]),
       ),
     };
   }
@@ -464,16 +781,34 @@ async function revertFullDocument(
       const live = await captureWordDocumentPackage();
       context.document.load("changeTrackingMode");
       await context.sync();
+      const contentChanged = live.fingerprint !== expectedAfter;
+      const urlChanged =
+        live.documentUrl !== original.documentUrl ||
+        currentWordDocumentUrl() !== live.documentUrl;
       const reason =
         context.document.changeTrackingMode !== "Off"
           ? "tracking"
-          : live.fingerprint !== expectedAfter ||
-              live.documentUrl !== original.documentUrl ||
-              currentWordDocumentUrl() !== live.documentUrl
+          : contentChanged || urlChanged
             ? "source-changed"
             : null;
       if (reason)
-        return { status: "stale", diagnostic: diagnostic("preflight", reason) };
+        return {
+          status: "stale",
+          diagnostic: diagnostic(
+            "preflight",
+            reason,
+            undefined,
+            reason === "source-changed"
+              ? {
+                  ...(urlChanged ? { urlChanged } : {}),
+                  ...packageStats([
+                    ["source", original.ooxml],
+                    ["live", live.ooxml],
+                  ]),
+                }
+              : {},
+          ),
+        };
       stage = "restore";
       await unlockWordContentControlsForImport(context, {
         onLocksCaptured: (value) => {
@@ -500,7 +835,9 @@ async function revertFullDocument(
       )
         return {
           status: "interrupted",
-          diagnostic: diagnostic("restore", "output-mismatch"),
+          diagnostic: diagnostic("restore", "output-mismatch", undefined, {
+            urlChanged: true,
+          }),
         };
       context.document.load("changeTrackingMode");
       await context.sync();
@@ -519,13 +856,26 @@ async function revertFullDocument(
         "verify",
       );
       const afterFingerprint = restored.fingerprint || after.fingerprint;
-      if (!sameWordBodyContent(expected, restored))
+      const verification = verifyWordRestore(expected, restored);
+      if (!verification.ok)
         return {
           status: "interrupted",
           afterFingerprint,
-          diagnostic: diagnostic("restore", "output-mismatch"),
+          diagnostic: diagnostic("restore", verification.reason, undefined, {
+            ...verifyDifferingParts(original.ooxml, after.ooxml),
+            ...failedTier(verification),
+            ...packageStats([
+              ["live", live.ooxml],
+              ["expected", original.ooxml],
+              ["actual", after.ooxml],
+            ]),
+          }),
         };
-      return { status: "reverted", afterFingerprint };
+      return {
+        status: "reverted",
+        afterFingerprint,
+        outcome: outcome("import", verification),
+      };
     });
   } catch (error) {
     if (!imported && locks.length)

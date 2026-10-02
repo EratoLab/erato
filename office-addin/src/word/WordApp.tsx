@@ -4,6 +4,7 @@ import {
 } from "@erato/frontend/library";
 
 import { WordAddinChatPage } from "./WordAddinChatPage";
+import { useWordInPlaceDevProbe } from "./hooks/useWordInPlaceDevProbe";
 import { installWordComponentRegistrations } from "./installWordComponentRegistrations";
 import { WordAuthProvider } from "./providers/WordAuthProvider";
 import {
@@ -44,6 +45,7 @@ function WordFeatureConfig({ children }: { children: React.ReactNode }) {
 }
 
 export default function WordApp() {
+  useWordInPlaceDevProbe();
   return (
     <SharedAddinShell sidecarClientInfo={WORD_SIDECAR_CLIENT_INFO}>
       <OfficeProvider>

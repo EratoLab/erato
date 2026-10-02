@@ -418,7 +418,7 @@ describe("WordHostCardRenderer", () => {
 
       fireEvent.click(screen.getByTestId("word-revert-button"));
       expect(
-        screen.getByText(/This can remove later changes to the body/),
+        screen.getByText(/Nothing is restored if the body changed since/),
       ).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Restore body" }));
       await flush();
@@ -437,6 +437,120 @@ describe("WordHostCardRenderer", () => {
       fireEvent.click(screen.getByRole("button", { name: /Paragraph 2/ }));
       expect(screen.queryByText(/restored to just before/)).toBeNull();
       expect(screen.queryByText(/Revert is unavailable/)).toBeNull();
+    });
+
+    it("keeps a later edit and the Revert when the body changed after the batch", async () => {
+      renderCard({ artifact: makeArtifact() });
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /^Apply (edit|all \d+ edits)$/,
+        }),
+      );
+      await flush();
+      word.word.setParagraphs([
+        { text: "Alpha." },
+        { text: "Bravo, revised." },
+        { text: "Charlie, typed later." },
+      ]);
+
+      fireEvent.click(screen.getByTestId("word-revert-button"));
+      fireEvent.click(screen.getByRole("button", { name: "Restore body" }));
+      await flush();
+
+      expect(word.word.writes()).toEqual([]);
+      expect(word.word.paragraphs()[2].text).toBe("Charlie, typed later.");
+      expect(screen.getByText(/Revert was not run/)).toBeInTheDocument();
+      expect(screen.getByTestId("word-revert-button")).toBeInTheDocument();
+    });
+
+    it("does not restore the body over Track Changes turned on after a direct Apply", async () => {
+      renderCard({ artifact: makeArtifact() });
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /^Apply (edit|all \d+ edits)$/,
+        }),
+      );
+      await flush();
+      word.word.setTrackingMode("TrackAll");
+      const writes = word.word.writes().length;
+
+      fireEvent.click(screen.getByTestId("word-revert-button"));
+      fireEvent.click(screen.getByRole("button", { name: "Restore body" }));
+      await flush();
+
+      expect(word.word.writes()).toHaveLength(writes);
+      expect(
+        screen.getByText(
+          "Revert was not run because Track Changes is on. Turn off Track Changes, then revert the batch again.",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/Edits are applied directly/),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Track Changes is already on/)).toBeNull();
+      expect(screen.getByTestId("word-revert-button")).toBeInTheDocument();
+    });
+
+    it("points to rejecting the revisions of a batch applied under Track Changes", async () => {
+      word.word.setTrackingMode("TrackAll");
+      renderCard({ artifact: makeArtifact() });
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /^Apply (edit|all \d+ edits)$/,
+        }),
+      );
+      await flush();
+      const writes = word.word.writes().length;
+
+      fireEvent.click(screen.getByTestId("word-revert-button"));
+      fireEvent.click(screen.getByRole("button", { name: "Restore body" }));
+      await flush();
+
+      expect(word.word.writes()).toHaveLength(writes);
+      expect(
+        screen.getByText(
+          "Revert was not run because Track Changes is on. Reject these changes in Word instead.",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/Track Changes is already on/),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the Apply-time tracking note when a later edit stops Revert", async () => {
+      word.word.setTrackingMode("TrackAll");
+      renderCard({ artifact: makeArtifact() });
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /^Apply (edit|all \d+ edits)$/,
+        }),
+      );
+      await flush();
+      word.word.setTrackingMode("Off");
+      word.word.setParagraphs([
+        { text: "Alpha." },
+        { text: "Bravo, revised." },
+        { text: "Charlie, typed later." },
+      ]);
+
+      fireEvent.click(screen.getByTestId("word-revert-button"));
+      fireEvent.click(screen.getByRole("button", { name: "Restore body" }));
+      await flush();
+
+      expect(word.word.writes()).toEqual([]);
+      expect(
+        screen.getByText(
+          "The document changed after applying. Revert was not run because it could remove later edits.",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/Track Changes is already on/),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Edits are applied directly/)).toBeNull();
     });
 
     it("offers Revert when Word rejected the write half-way", async () => {
@@ -460,7 +574,7 @@ describe("WordHostCardRenderer", () => {
 
       fireEvent.click(screen.getByTestId("word-revert-button"));
       expect(
-        screen.getByText(/This can remove later changes to the body/),
+        screen.getByText(/Nothing is restored if the body changed since/),
       ).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Restore body" }));
       await flush();

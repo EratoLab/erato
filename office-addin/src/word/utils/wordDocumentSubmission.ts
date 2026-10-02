@@ -4,11 +4,11 @@ import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
-  wordTableCellScope,
   expandWordTableCellSubmission,
   WordTableCellSubmissionError,
   WORD_SUBMIT_PLAN_ACTION,
   WORD_SUBMIT_PLAN_TOOL,
+  wordReadScope,
 } from "@erato/frontend/word-review";
 
 import { WordDraftRepairError } from "./wordDocumentDrafts";
@@ -17,6 +17,13 @@ import {
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "./wordDocumentXml";
+import { wordInPlaceFallbacks } from "./wordInPlacePlan";
+import {
+  isWordTrackingMode,
+  wordInPlaceAvailability,
+  wordInPlaceCapabilitiesUnder,
+} from "./wordInPlaceSwitch";
+import { expandWordScopedSubmission } from "./wordScopedSubmission";
 
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
 import type {
@@ -63,12 +70,17 @@ export function createWordDocumentSubmissionExecutor(
       if (previous) return previous;
       // Redelivery returns its receipt even if Apply has since consumed the
       // capture. New calls still require the original completed, active read.
-      const scoped = wordTableCellScope(snapshot, input.readToken);
-      if (scoped && !("table_cell" in input))
+      const scoped = wordReadScope(snapshot, input.readToken);
+      if (
+        scoped &&
+        !(scoped.kind === "objects"
+          ? "scoped_edit" in input
+          : "table_cell" in input)
+      )
         return {
           ok: false,
           error:
-            "A scoped read permits only a concise table_cell submission. Complete the full read for plans or repairs.",
+            "A scoped read permits only its concise edit format. Complete the full read for plans or repairs.",
           validationErrors: [
             {
               path: "/readToken",
@@ -98,9 +110,11 @@ export function createWordDocumentSubmissionExecutor(
         };
       const submitted = JSON.parse(serialized) as Record<string, unknown>;
       const value =
-        "table_cell" in submitted
-          ? expandWordTableCellSubmission(submitted, snapshot)
-          : session.drafts.materialize(submitted);
+        "scoped_edit" in submitted
+          ? expandWordScopedSubmission(submitted, snapshot)
+          : "table_cell" in submitted
+            ? expandWordTableCellSubmission(submitted, snapshot)
+            : session.drafts.materialize(submitted);
       const prepared = await prepareWordDocumentSubmission(
         value,
         context,
@@ -119,7 +133,9 @@ export function createWordDocumentSubmissionExecutor(
       if (prepared.ok) {
         session.drafts.accepted = true;
         if (
-          ("draft_id" in input || "table_cell" in input) &&
+          ("draft_id" in input ||
+            "table_cell" in input ||
+            "scoped_edit" in input) &&
           prepared.disposition !== "local_only"
         )
           result = {
@@ -163,7 +179,7 @@ export function createWordDocumentSubmissionExecutor(
         error:
           error instanceof WordDraftRepairError
             ? "Document repair rejected."
-            : "Table cell edit rejected.",
+            : "Scoped edit rejected.",
         ...(error instanceof WordDraftRepairError
           ? { submissionFeedback: session.drafts.feedback() }
           : {}),
@@ -240,6 +256,29 @@ async function prepareWordDocumentSubmission(
           },
         ],
       };
+    if (isWordTrackingMode(snapshot.trackingMode)) {
+      const availability = wordInPlaceAvailability();
+      const reasons = availability.enabled
+        ? wordInPlaceFallbacks(
+            plan,
+            snapshot,
+            wordInPlaceCapabilitiesUnder(snapshot.trackingMode),
+            prepared,
+          )
+        : [availability.reason];
+      if (reasons.length)
+        return {
+          ok: false,
+          error: "Document plan needs a full rewrite under Track Changes.",
+          validationErrors: [
+            {
+              path: "",
+              code: "tracking-needs-import",
+              message: `Track Changes is on, so only in-place text and paragraph edits can be applied; Word records them as tracked changes. This plan needs a full-document rewrite because of: ${reasons.join(", ")}. Resubmit only edits that avoid these reasons, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that Track Changes must be turned off for this change.`,
+            },
+          ],
+        };
+    }
   } catch (error) {
     // Return schema paths and constraints, never document contents, in parser diagnostics.
     const hints: Record<string, string> = {

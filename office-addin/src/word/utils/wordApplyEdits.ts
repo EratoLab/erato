@@ -4,7 +4,9 @@ import {
   verifyWordEdits,
 } from "@erato/frontend/word-review";
 
+import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
+import { wordDocumentFingerprint } from "./wordDocumentXml";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
@@ -19,8 +21,34 @@ export interface WordApplyResult {
   outcomes: WordEditOutcome[];
   /** Preserve the backup after a rejected batch: earlier queued writes may already have applied. */
   snapshotOoxml: string | null;
+  /** The body as the batch left it; Revert runs only while the body still matches. */
+  afterFingerprint?: string;
   hostFailed: boolean;
   resultAnchors?: ReadonlyMap<number, WordReviewAnchor>;
+}
+
+/** A body Word returns as something other than a package is compared verbatim. */
+function wordBodyFingerprint(ooxml: string): string {
+  try {
+    return wordDocumentFingerprint(ooxml);
+  } catch {
+    return `raw:${ooxml}`;
+  }
+}
+
+/** Read in a fresh batch after a rejected write; never retry it. */
+async function observeWordBody(
+  word: NonNullable<ReturnType<typeof wordWriteHost>>,
+): Promise<string | undefined> {
+  try {
+    return await word.run(async (context) => {
+      const body = context.document.body.getOoxml();
+      await context.sync();
+      return wordBodyFingerprint(body.value);
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 /** Load IDs as a collection: resolving a deleted ID directly rejects the whole sync.
@@ -73,7 +101,7 @@ async function applyEdits(
   }
 
   try {
-    return await word.run(async (context) => {
+    const result = await word.run(async (context) => {
       const paragraphs = context.document.body.paragraphs;
       paragraphs.load("items/uniqueLocalId");
       await context.sync();
@@ -125,7 +153,7 @@ async function applyEdits(
         }
         await context.sync();
       } catch (error) {
-        console.warn("Failed to write Word edits:", error);
+        console.warn("Failed to write Word edits:", wordErrorText(error));
         return {
           outcomes: buildWordEditReport([
             ...plan.rejected,
@@ -149,6 +177,14 @@ async function applyEdits(
 
       const resultAnchors = new Map<number, WordReviewAnchor>();
       progress.stage("verifying");
+      let afterFingerprint: string | undefined;
+      try {
+        const after = context.document.body.getOoxml();
+        await context.sync();
+        afterFingerprint = wordBodyFingerprint(after.value);
+      } catch {
+        // Without the post-write body, Revert stays unavailable rather than unguarded.
+      }
       try {
         const candidates = verified.applicable.filter(
           (edit) => edit.targets.length === 1 && !/[\r\n\v\f]/u.test(edit.text),
@@ -195,12 +231,16 @@ async function applyEdits(
           ),
         ]),
         snapshotOoxml,
+        afterFingerprint,
         hostFailed: false,
         resultAnchors,
       };
     });
+    return result.hostFailed && result.snapshotOoxml
+      ? { ...result, afterFingerprint: await observeWordBody(word) }
+      : result;
   } catch (error) {
-    console.warn("Failed to apply Word edits:", error);
+    console.warn("Failed to apply Word edits:", wordErrorText(error));
     return failure([
       ...plan.rejected,
       ...plan.resolved.map(
@@ -233,18 +273,35 @@ function writeReplacement(
     .insertText(text, "Replace");
 }
 
-/** Restore the whole body because inserted newlines invalidate the original paragraph positions. */
-export async function revertWordEdits(snapshotOoxml: string): Promise<boolean> {
+export type WordEditsRevertStatus =
+  | "reverted"
+  | "stale"
+  | "tracking"
+  | "failed";
+
+/** Restore the whole body because inserted newlines invalidate the original paragraph positions.
+ * Refused while Track Changes is on ("tracking": the restore would land as revisions) or once the
+ * body differs from what the batch left ("stale"), which would overwrite later edits. */
+export async function revertWordEdits(
+  snapshotOoxml: string,
+  expectedAfter: string | undefined,
+): Promise<WordEditsRevertStatus> {
   const word = wordWriteHost();
-  if (!word) return false;
+  if (!word) return "failed";
+  if (!expectedAfter) return "stale";
   try {
-    await word.run(async (context) => {
+    return await word.run(async (context) => {
+      context.document.load("changeTrackingMode");
+      const live = context.document.body.getOoxml();
+      await context.sync();
+      if (context.document.changeTrackingMode !== "Off") return "tracking";
+      if (wordBodyFingerprint(live.value) !== expectedAfter) return "stale";
       context.document.body.insertOoxml(snapshotOoxml, "Replace");
       await context.sync();
+      return "reverted";
     });
-    return true;
   } catch (error) {
-    console.warn("Failed to revert Word edits:", error);
-    return false;
+    console.warn("Failed to revert Word edits:", wordErrorText(error));
+    return "failed";
   }
 }
