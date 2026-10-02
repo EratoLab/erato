@@ -258,57 +258,61 @@ describe("in-place apply", { timeout: 30_000 }, () => {
     );
   });
 
-  it("edits one table cell in place", async () => {
-    const host = install();
-    const original = host.get();
-    const snapshot = await captureRealisticSnapshot();
-    const setter = vi.spyOn(host.document, "changeTrackingMode", "set");
-    host.events.length = 0;
-    const save = vi.fn((_before: string) => {
-      host.events.push("backup-saved");
-    });
-    const table = snapshot.blocks.find((b) => b.nativeKind === "table")!;
-    const plan = expandWordTableCellSubmission(
-      {
-        snapshot: snapshot.token,
-        readToken: "read-proof",
-        table_cell: {
-          sourceRef: table.ref,
-          rowIndex: 1,
-          cellIndex: 1,
-          expectedText: "42",
-          text: "43",
+  // Word for the web also writes an empty w:tcMar into every cell and the page's portrait orientation.
+  it.each(["word-pc-16.0.20326", "word-web"] as const)(
+    "edits one table cell in place on %s",
+    async (profile) => {
+      const host = install({ profile });
+      const original = host.get();
+      const snapshot = await captureRealisticSnapshot();
+      const setter = vi.spyOn(host.document, "changeTrackingMode", "set");
+      host.events.length = 0;
+      const save = vi.fn((_before: string) => {
+        host.events.push("backup-saved");
+      });
+      const table = snapshot.blocks.find((b) => b.nativeKind === "table")!;
+      const plan = expandWordTableCellSubmission(
+        {
+          snapshot: snapshot.token,
+          readToken: "read-proof",
+          table_cell: {
+            sourceRef: table.ref,
+            rowIndex: 1,
+            cellIndex: 1,
+            expectedText: "42",
+            text: "43",
+          },
         },
-      },
-      snapshot,
-    );
-    const result = await apply(plan, snapshot, save);
-    expect(result.status, report(result)).toBe("applied");
-    expect(result.outcome).toEqual({
-      route: "in-place",
-      tier: "block",
-      adjustments: [],
-      ops: 1,
-    });
-    expect(host.events.indexOf("backup-saved")).toBeGreaterThan(
-      host.events.indexOf("capture-file"),
-    );
-    expect(mutations(host.events)).toEqual(["mutation:insertText"]);
-    expect(host.events.indexOf("mutation:insertText")).toBeGreaterThan(
-      host.events.indexOf("backup-saved"),
-    );
-    expect(decodeWordDocumentBackup(result.before!).bytes).toEqual(original);
-    expect(host.insert).not.toHaveBeenCalled();
-    expect(setter).not.toHaveBeenCalled();
-    expect(
-      typed(host.ooxml())
-        .blocks.find((b) => b.nativeKind === "table")!
-        .content!.rows.map((r) => r.cells.map((c) => c.text)),
-    ).toEqual([
-      ["Region", "Budget"],
-      ["North", "43"],
-    ]);
-  });
+        snapshot,
+      );
+      const result = await apply(plan, snapshot, save);
+      expect(result.status, report(result)).toBe("applied");
+      expect(result.outcome).toEqual({
+        route: "in-place",
+        tier: "block",
+        adjustments: [],
+        ops: 1,
+      });
+      expect(host.events.indexOf("backup-saved")).toBeGreaterThan(
+        host.events.indexOf("capture-file"),
+      );
+      expect(mutations(host.events)).toEqual(["mutation:insertText"]);
+      expect(host.events.indexOf("mutation:insertText")).toBeGreaterThan(
+        host.events.indexOf("backup-saved"),
+      );
+      expect(decodeWordDocumentBackup(result.before!).bytes).toEqual(original);
+      expect(host.insert).not.toHaveBeenCalled();
+      expect(setter).not.toHaveBeenCalled();
+      expect(
+        typed(host.ooxml())
+          .blocks.find((b) => b.nativeKind === "table")!
+          .content!.rows.map((r) => r.cells.map((c) => c.text)),
+      ).toEqual([
+        ["Region", "Budget"],
+        ["North", "43"],
+      ]);
+    },
+  );
 
   it("reverts an in-place write to the exact original package", async () => {
     withMarks();

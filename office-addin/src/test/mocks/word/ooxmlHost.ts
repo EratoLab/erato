@@ -1805,6 +1805,14 @@ export function installWordOoxmlHost(
         let inserted: Element[] = [];
         enqueue(true, "insertText", () => {
           const p = target();
+          // Word for the web gives every cell of a table it writes into an empty w:tcMar.
+          let table: Element | null = p.parentElement;
+          while (table && !isWElement(table, "tbl"))
+            table = table.parentElement;
+          if (table && (settings.profile ?? "word-web") === "word-web")
+            for (const props of elements(table, W, "tcPr"))
+              if (!child(props, "tcMar"))
+                props.append(p.ownerDocument.createElementNS(W, "w:tcMar"));
           if (tracked()) {
             const visible = visibleRuns(p);
             const props = (run: Element | undefined) => {
@@ -2091,6 +2099,11 @@ export function installWordOoxmlHost(
       queue.length = 0;
       if (omDirty && liveDoc === doc) {
         omDirty = false;
+        // Word for the web writes the default page orientation out once it saves an edit.
+        if ((settings.profile ?? "word-web") === "word-web")
+          for (const page of elements(doc, W, "pgSz"))
+            if (!page.hasAttributeNS(W, "orient"))
+              page.setAttributeNS(W, "w:orient", "portrait");
         current = wordDocumentOoxmlToFile(serialize(doc));
         loadControls();
       }

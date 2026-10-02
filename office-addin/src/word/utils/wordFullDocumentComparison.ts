@@ -277,12 +277,6 @@ function normalizeInheritedFormatting(v: PackageView): void {
         if (!rPr.children.length && !rPr.attributes.length) rPr.remove();
       }
     }
-    for (const columns of all(root, W, "cols"))
-      if (["1", "true", "on"].includes(attr(columns, "equalWidth")))
-        columns.removeAttributeNS(W, "equalWidth");
-    for (const page of all(root, W, "pgSz"))
-      if (attr(page, "orient") === "portrait")
-        page.removeAttributeNS(W, "orient");
   }
 }
 

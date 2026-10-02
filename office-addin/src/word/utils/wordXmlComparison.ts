@@ -323,6 +323,18 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
           if (["1", "true", "on"].includes(value)) return [];
           if (["0", "false", "off"].includes(value)) value = "0";
         }
+        // Word for the web writes these section defaults out once it saves an edit.
+        if (
+          ns === W &&
+          element.namespaceURI === W &&
+          ((element.localName === "pgSz" &&
+            name === "orient" &&
+            value === "portrait") ||
+            (element.localName === "cols" &&
+              name === "equalWidth" &&
+              ["1", "true", "on"].includes(value)))
+        )
+          return [];
         if (
           drawingIdentity(element, attribute) &&
           !unknownDrawingReferences.has(value)
@@ -500,10 +512,11 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         ? signature
         : JSON.stringify(["text-run", signature, text]),
     );
-    // Word omits empty paragraph properties after removing an explicit default style.
+    // Empty containers mean no override: Word omits empty paragraph properties after removing an
+    // explicit default style, and Word for the web adds an empty cell margin to each cell it writes.
     if (
       element.namespaceURI === W &&
-      element.localName === "pPr" &&
+      ["pPr", "tcMar"].includes(element.localName) &&
       !children.length &&
       !attributes(element, owner, content).length
     )
