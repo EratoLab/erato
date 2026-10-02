@@ -35,6 +35,8 @@ interface UploadFeatureConfig {
  * Configuration for chat input features
  */
 interface ChatInputFeatureConfig {
+  /** MCP visibility; inherits userPreferences.mcpServersTabEnabled when omitted. */
+  mcpServersEnabled?: boolean;
   /** Whether the chat input should auto-focus on mount */
   autofocus: boolean;
   /** Layout of the chat input before a conversation has started */
@@ -87,6 +89,8 @@ interface AuthFeatureConfig {
  * Configuration for assistants feature
  */
 interface AssistantsFeatureConfig {
+  /** MCP visibility; inherits userPreferences.mcpServersTabEnabled when omitted. */
+  mcpServersEnabled?: boolean;
   /** Whether the assistants feature is enabled */
   enabled: boolean;
   /** Whether a message may delegate to other assistants via @-mentions */
@@ -389,6 +393,9 @@ function createFeatureConfig(
       maxSizeFormatted: formatBytes(environment.maxUploadSizeBytes),
     },
     chatInput: {
+      mcpServersEnabled:
+        environment.mcpServersInChatInputEnabled ??
+        environment.mcpServersTabEnabled,
       autofocus: !environment.disableChatInputAutofocus,
       emptyStateLayout: environment.chatInputEmptyStateLayout,
       showUsageAdvisory: true,
@@ -416,6 +423,9 @@ function createFeatureConfig(
       showLogout: !environment.disableLogout,
     },
     assistants: {
+      mcpServersEnabled:
+        environment.mcpServersInAssistantEditorEnabled ??
+        environment.mcpServersTabEnabled,
       enabled: environment.assistantsEnabled,
       delegationEnabled: Boolean(environment.assistantsDelegationEnabled),
       delegationAllowBackground: Boolean(
