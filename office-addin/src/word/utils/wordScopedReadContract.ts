@@ -2,6 +2,7 @@ import {
   WORD_AUTHORING_CONTRACT as full,
   WORD_SECTION_PROPERTIES,
 } from "./wordAuthoringContract";
+import { wordReadableStyles } from "./wordAuthoringReadData";
 import { wordImageAssetMetadata } from "./wordImageAssetData";
 import { isWordTrackingMode } from "./wordInPlaceSwitch";
 
@@ -86,7 +87,7 @@ export function wordScopedReadContract(
       ...(groups.has("text")
         ? {
             formattingContext:
-              "Target content already includes its supported captured formatting; omitted typed formatting fields do not mean an incomplete read. Reuse the supplied formatting and list identity without a style-catalogue lookup for simple retention or list continuation. Paragraph, heading and list-item blocks do not accept sourceRef; ownership is supplied by the body operation's source/anchor.",
+              "Target content already includes its supported captured formatting: blocks carry only their direct formatting, styles[].look what their style gives. Omitted typed formatting fields do not mean an incomplete read. To retain a look, repeat only the supplied direct formatting and list identity, without a style-catalogue lookup; set only properties the user asked to change. Paragraph, heading and list-item blocks do not accept sourceRef; ownership is supplied by the body operation's source/anchor.",
             paragraphs: full.paragraphs,
             runFormatting: full.runFormatting,
             paragraphFormatting: full.paragraphFormatting,
@@ -109,8 +110,11 @@ export function wordScopedReadContract(
         ? { sectionLayout: WORD_SECTION_PROPERTIES }
         : {}),
     },
-    styles: snapshot.styles.filter(
-      (style) => groups.has("formatting") || styles.has(style.id),
+    styles: wordReadableStyles(
+      snapshot.styles.filter(
+        (style) =>
+          groups.has("formatting") || style.default || styles.has(style.id),
+      ),
     ),
     ...(groups.has("media")
       ? {

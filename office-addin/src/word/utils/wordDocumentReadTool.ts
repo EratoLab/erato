@@ -1,5 +1,9 @@
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
-import { wordReadableSourceBlock } from "./wordAuthoringReadData";
+import {
+  wordReadableSourceBlock,
+  wordReadableStyles,
+  wordStyleNamesBytes,
+} from "./wordAuthoringReadData";
 import { WordDocumentDraftStore } from "./wordDocumentDrafts";
 import { MAX_WORD_DOCX_BYTES } from "./wordDocumentPackageCodec";
 import {
@@ -224,9 +228,7 @@ export class WordDocumentReadSession {
         page.push(fragment);
       }
     }
-    if (
-      new TextEncoder().encode(JSON.stringify(snapshot.styles)).length > 16384
-    )
+    if (wordStyleNamesBytes(snapshot.styles) > 16384)
       snapshot.issue = "too-large";
     if (pages.length > MAX_PAGES) snapshot.issue = "too-large";
     this.session = {
@@ -349,7 +351,7 @@ export class WordDocumentReadSession {
         blocks: session.pages[index],
         ...(index === 0
           ? {
-              styles: snapshot.styles,
+              styles: wordReadableStyles(snapshot.styles),
               limits: {
                 maxSourceBytes: MAX_SOURCE_BYTES,
                 maxPages: MAX_PAGES,

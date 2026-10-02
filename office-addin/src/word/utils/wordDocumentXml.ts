@@ -55,6 +55,7 @@ import {
   compileWordSections,
   compileWordStories,
 } from "./wordStories";
+import { wordParagraphStyleLooks } from "./wordStyleLook";
 import { compileWordTableBlock } from "./wordTableContent";
 import { createWordXmlComparison } from "./wordXmlComparison";
 
@@ -359,6 +360,23 @@ export function captureWordAuthoringSnapshot(
         nodes.some((node) => node === paragraph || node.contains(paragraph)),
       );
       if (group >= 0) section.afterBlock = base.blocks[group].ref;
+    }
+    if (purpose === "read") {
+      const looks = wordParagraphStyleLooks(doc);
+      const used = new Set(base.blocks.map((block) => block.styleRef));
+      const fallback = styleNodes.find(
+        (s) =>
+          attr(s, "type") === "paragraph" &&
+          ["1", "true", "on"].includes(attr(s, "default")),
+      );
+      for (const style of base.styles) {
+        if (style.type !== "paragraph") continue;
+        const look = looks.get(style.id);
+        if (look) style.look = look;
+        if (fallback && style.id === attr(fallback, "styleId"))
+          style.default = true;
+        if (style.default || used.has(style.id)) style.inUse = true;
+      }
     }
     if (
       purpose === "read" &&

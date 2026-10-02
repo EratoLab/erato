@@ -94,8 +94,14 @@ Scoped reads automatically return guidance for selected and nested object kinds.
 Optional `include` groups are `text`, `formatting`, `table`, `media`, `structures`,
 `stories` and `sections`. For example, replacing a paragraph with a table requests
 `include:["table"]`; inserting an attachment requests `include:["media"]`.
-Only referenced styles are returned by default; `formatting` requests the style
-catalogue and `media` requests captured attachment metadata. All metadata remains
+Only referenced styles and the default paragraph style are returned by default;
+`formatting` requests the style catalogue and `media` requests captured
+attachment metadata. Blocks carry only their direct formatting. A style the body
+uses also carries its read-only `look`: the formatting it resolves to through
+basedOn and the document defaults, in plan vocabulary. The 16 KiB catalogue limit
+counts names only. A plan's `format` is direct formatting on top of that look;
+values that only restate the look are removed before routing, so they neither
+change the document nor keep a rewrite from being written in place. All metadata remains
 bounded. A caller can reread the same refs with different guidance. Includes do
 not grant source access or change the host's supported operations or validators.
 Complete reads retain the full authoring contract. Model-budget estimates remain

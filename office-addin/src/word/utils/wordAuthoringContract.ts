@@ -61,7 +61,7 @@ export const WORD_AUTHORING_CONTRACT = {
   runFormatting:
     "Each run has text plus optional bold,italic,underline,strike,caps,smallCaps:boolean; underlineStyle:single|double|dotted|dash|wave; fontFamily; fontSize in points; color/shading:6-digit hex; highlight:Word named color; verticalAlign:baseline|superscript|subscript; characterSpacing in points; language:BCP47.",
   paragraphFormatting:
-    "format:{alignment:left|center|right|justify,spacingBefore?,spacingAfter?,lineSpacing?:{value,rule:multiple|exact|atLeast},indentLeft?,indentRight?,firstLineIndent?,keepNext?,keepTogether?,pageBreakBefore?,widowControl?,shading?,borders?,font?:run-format}. Measurements are points except multiple line spacing. Negative firstLineIndent means hanging indent. styleRef must be a returned paragraph style.",
+    "format:{alignment:left|center|right|justify,spacingBefore?,spacingAfter?,lineSpacing?:{value,rule:multiple|exact|atLeast},indentLeft?,indentRight?,firstLineIndent?,keepNext?,keepTogether?,pageBreakBefore?,widowControl?,shading?,borders?,font?:run-format}. Measurements are points except multiple line spacing. Negative firstLineIndent means hanging indent. styleRef must be a returned paragraph style. format and run formatting are direct formatting on top of the block's style, whose resolved look is styles[].look; omit them to keep the current look and set only properties the user asked to change.",
   borders:
     "{top?,left?,bottom?,right?,between?,insideH?,insideV?}; each border {style:none|single|double|dotted|dashed|thick,color?,width?,space?}. Colors are 6-digit hex, width/space points.",
   table: {
