@@ -23,7 +23,7 @@ it("PowerShell passes deployment data literally and refuses tampered downloads",
     const authAppId = "22222222-2222-2222-2222-222222222222";
     const tenant = "33333333-3333-3333-3333-333333333333";
     const subscription = "44444444-4444-4444-4444-444444444444";
-    const maliciousResource = `api://customer's/$(throw 'injected')/botid-${authAppId}`;
+    const maliciousResource = `api://customer's/$(throw 'injected')/botid-${botId}`;
     const bot = readTeamsBotSetup({
       bots: [{ botId }],
       webApplicationInfo: { id: authAppId, resource: maliciousResource },

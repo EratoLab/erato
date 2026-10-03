@@ -1,5 +1,5 @@
-import release from "../../../site/public/setup/teams/1.0.0/release.json";
-export { default as teamsHelperSource } from "../../../site/public/setup/teams/1.0.0/EratoTeamsSetup.ps1?raw";
+import release from "../../../site/public/setup/teams/1.0.1/release.json";
+export { default as teamsHelperSource } from "../../../site/public/setup/teams/1.0.1/EratoTeamsSetup.ps1?raw";
 
 export const teamsHelperRelease = {
   ...release,
@@ -35,9 +35,18 @@ export function proposedSsoResource(
   origin: string,
 ): string {
   // A tab's default api://<client-id> is not the combined bot/tab SSO URI.
-  // Keep an existing combined URI even when the OAuth and messaging IDs differ.
-  if (bot.manifestResource?.includes("/botid-")) return bot.manifestResource;
-  return `api://${new URL(origin).host}/botid-${bot.authAppId ?? bot.botId}`;
+  // Teams matches this suffix to the messaging bot, including when the
+  // authentication app uses a separate registration.
+  const resource = bot.manifestResource;
+  const suffix = `botid-${bot.botId}`.toLowerCase();
+  if (
+    resource?.startsWith("api://") &&
+    (resource.toLowerCase() === `api://${suffix}` ||
+      resource.toLowerCase().endsWith(`/${suffix}`))
+  ) {
+    return resource;
+  }
+  return `api://${new URL(origin).host}/botid-${bot.botId}`;
 }
 
 export function validConnectionName(value: string): boolean {

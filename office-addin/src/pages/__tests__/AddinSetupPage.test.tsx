@@ -280,9 +280,7 @@ describe("AddinSetupRoute Teams bot section", () => {
     const command = writeText.mock.calls[0][0] as string;
     expect(command).toContain(tenantId);
     expect(command).toContain(subscriptionId);
-    expect(command).toContain(
-      `api://${window.location.host}/botid-${authAppId}`,
-    );
+    expect(command).toContain(`api://${window.location.host}/botid-${botId}`);
     expect(command).toContain("Get-FileHash");
     expect(command).not.toContain("-Apply");
     expect(screen.getByRole("button", { name: "Copied!" })).toBeVisible();

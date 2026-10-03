@@ -5,7 +5,7 @@ Shell**, **Copy command**, and **View script**. The page fills the deployment's
 public application IDs and asks for the target tenant and subscription. It never
 collects credentials.
 
-The canonical helper is `site/public/setup/teams/1.0.0/EratoTeamsSetup.ps1`.
+The canonical helper is `site/public/setup/teams/1.0.1/EratoTeamsSetup.ps1`.
 The site publishes it at the same versioned path on `https://erato.chat`.
 `release.json` pins its SHA-256 checksum. The setup page displays this exact source
 inline, and every generated command checks the downloaded bytes before execution.
@@ -13,7 +13,7 @@ Customers paste the command into Cloud Shell PowerShell; they do not download a
 bundle to their machine or upload files.
 
 - Default: read-only checks of the proposed SSO configuration.
-- `-WhatIf`: preview the Entra additions and separate OAuth connection.
+- `-WhatIf`: preview the Entra additions and OAuth connection creation or repair.
 - `-Apply`: display the target and plan and use PowerShell confirmation before
   writes. `-Apply -WhatIf` also performs no writes.
 - `-Json`: sanitized report; no token or secret values.
@@ -23,6 +23,15 @@ Bot Framework token service. It preserves existing scopes, redirects, permission
 credentials and bot identity, and refuses conflicting OAuth connections. Consent,
 Erato deployment and the Teams package update remain separate customer steps.
 Local execution requires PowerShell 7.2+ and Azure CLI; Cloud Shell is the default.
+
+The resource URI ends in `botid-<BotAppId>`, including when `AuthAppId` belongs
+to a separate authentication registration. Version 1.0.1 corrects the previous
+authentication-ID default and rejects that mismatch before contacting Azure.
+For a connection configured by the old helper, it can repair only that URI when
+the authentication app, tenant, provider, and required scopes already match.
+The repair retains the existing credential and old Entra URIs, rechecks the
+result, and makes no further changes on a second run. Other conflicts still
+require administrator review.
 
 ## Validation
 

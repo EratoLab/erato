@@ -16,7 +16,7 @@ const authAppId = "22222222-2222-2222-2222-222222222222";
 const tenant = "33333333-3333-3333-3333-333333333333";
 const subscription = "44444444-4444-4444-4444-444444444444";
 const origin = "https://erato.example.com";
-const resource = `api://erato.example.com/botid-${authAppId}`;
+const resource = `api://erato.example.com/botid-${botId}`;
 const bot = readTeamsBotSetup({
   bots: [{ botId }],
   webApplicationInfo: { id: authAppId, resource },
@@ -42,6 +42,36 @@ describe("Teams setup delivery", () => {
       webApplicationInfo: { id: authAppId, resource: `api://${authAppId}` },
     })!;
     expect(proposedSsoResource(tab, origin)).toBe(resource);
+  });
+
+  it("repairs a resource generated with the authentication app ID", () => {
+    const wrong = {
+      ...bot,
+      manifestResource: `api://erato.example.com/botid-${authAppId}`,
+    };
+    expect(proposedSsoResource(wrong, origin)).toBe(resource);
+    const generated = createTeamsSetupCommand(
+      wrong,
+      origin,
+      tenant,
+      subscription,
+      "graph",
+      "graph-sso",
+    );
+    expect(generated).toContain(`AuthAppId = '${authAppId}'`);
+    expect(generated).toContain(`BotAppId = '${botId}'`);
+    expect(generated).toContain(`SsoResource = '${resource}'`);
+  });
+
+  it("preserves a standalone or custom-domain resource for the correct bot", () => {
+    for (const manifestResource of [
+      `api://botid-${botId}`,
+      `api://custom.example.com/botid-${botId}`,
+    ]) {
+      expect(proposedSsoResource({ ...bot, manifestResource }, origin)).toBe(
+        manifestResource,
+      );
+    }
   });
 
   it("pins a published version and verifies the exact script bytes", () => {

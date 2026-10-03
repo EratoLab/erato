@@ -143,8 +143,10 @@ Keep its existing redirect URIs, scopes, permissions, and credentials.
    access tokens issued for this application's exposed API; review existing API
    consumers if the registration already exposes one.
 2. Under **Expose an API**, configure the Application ID URI. For a combined
-   bot/tab app, use `api://ERATO_HOST/botid-AUTH_APP_ID`. Record this as
-   `SSO_RESOURCE` without `/access_as_user` at the end.
+   bot/tab app, use `api://ERATO_HOST/botid-BOT_APP_ID`. Record this as
+   `SSO_RESOURCE` without `/access_as_user` at the end. The suffix must use the
+   messaging bot's `BOT_APP_ID`, even when `AUTH_APP_ID` is a separate registration.
+   Teams can otherwise report `resourcematchfailed` and show no reply.
 3. Add an enabled delegated scope named **`access_as_user`**. Use clear admin/user
    consent labels such as “Access Erato as the signed-in user”.
 4. Under **Authorized client applications**, add both clients below and select
@@ -203,6 +205,13 @@ from the OAuth credential when `BOT_APP_ID` and `AUTH_APP_ID` differ.
 On the Azure Bot resource, open **Configuration → OAuth Connection Settings**.
 For a staged rollout, create a new connection named **`graph-sso`** and keep any
 existing `graph` connection until validation is complete.
+
+If helper version 1.0.0 configured `graph-sso` with an authentication-app-ID URI,
+the current setup command previews and repairs that specific mismatch. It keeps
+the existing credential and old Entra URIs, and refuses the repair if the
+connection's authentication app, tenant, provider, or required permissions differ.
+After applying, update Erato's `sso_resource` and the deployed Teams package as
+described below; changing Azure alone does not update the installed manifest.
 
 | Field              | Value                                                       |
 | ------------------ | ----------------------------------------------------------- |
@@ -277,11 +286,12 @@ Cloud Shell helper does not modify Helm, Kubernetes, or Erato configuration.
    Teams web client, existing tab login, and the other Office add-ins.
 5. Test an @mention and a file operation after the personal-chat check succeeds.
 
-Our current handler sends “Please sign in…” even when the OAuth card can trigger
-silent SSO. After a successful exchange it says “You're signed in…” and asks the
-user to resend their question. The persistent **Sign in** button is the useful
-symptom, not the initial text by itself. Channels use a personal conversation
-for authentication; don't expect a channel's shared conversation to perform SSO.
+The bot resumes the original message after successful silent or interactive
+sign-in. Teams can hide the OAuth card when resource matching fails, leaving the
+conversation silent. For `resourcematchfailed`, verify both exact URI agreement
+and that its `botid-` suffix uses the messaging bot's ID. Distribute an updated
+Teams package after changing the manifest. Channels use a personal conversation
+for authentication.
 
 If necessary, roll back the deployment to `oauth_connection_name = "graph"`, remove
 the SSO overrides, and distribute a higher-version package with the prior
@@ -300,7 +310,7 @@ using it; remove only additions whose consumers you have checked.
 | `oauth_connection_name` | string  |                                    | Azure Bot OAuth connection that yields the user's Graph token                                        |
 | `token_service_url`     | string  | `"https://token.botframework.com"` | Bot Framework token service                                                                          |
 | `sso_app_id`            | string  |                                    | App ID for silent sign-in; set together with `sso_resource`                                          |
-| `sso_resource`          | string  |                                    | Token exchange URL for silent sign-in, for a combined tab/bot app, `api://<host>/botid-<sso_app_id>` |
+| `sso_resource`          | string  |                                    | Token exchange URL for silent sign-in, for a combined tab/bot app, `api://<host>/botid-<app_id>` |
 | `public_base_url`       | string  |                                    | HTTPS origin used for links from Teams back to Erato chats                                           |
 | `assistant_id`          | string  |                                    | Assistant that new Teams chats are bound to                                                          |
 | `context_message_count` | integer | `20`                               | Preceding group chat or channel messages attached as context (`0` disables)                          |
