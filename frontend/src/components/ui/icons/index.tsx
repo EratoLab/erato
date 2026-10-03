@@ -62,6 +62,7 @@ import {
   PinSlash,
   OpenSelectHandGesture,
   Prohibition,
+  Table,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -355,6 +356,10 @@ export const DocumentIcon = ({ className, ...props }: IconProps) => (
 
 export const SpreadsheetIcon = ({ className, ...props }: IconProps) => (
   <Page className={className} {...props} />
+);
+
+export const TableIcon = ({ className, ...props }: IconProps) => (
+  <Table className={className} {...props} />
 );
 
 export const PresentationIcon = ({ className, ...props }: IconProps) => (

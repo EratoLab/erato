@@ -85,12 +85,21 @@
 .word-review__row--open {
   background: var(--theme-bg-secondary);
 }
+/* Row variant="list" owns no padding or type scale; the card's inset and
+   text size come from here so rows line up with the header above them. */
 .word-review__row-toggle {
   display: flex;
   align-items: start;
   gap: var(--theme-spacing-control-gap);
   width: 100%;
+  padding: 0.625rem var(--theme-spacing-message-padding-x);
   text-align: left;
+  font-size: var(--theme-font-size-sm);
+  line-height: var(--theme-line-height-sm);
+  letter-spacing: var(--theme-letter-spacing-sm);
+}
+.word-review__row-toggle > svg:first-child {
+  margin-block-start: calc((var(--theme-line-height-sm) - 1rem) / 2);
 }
 .word-review__excerpt {
   display: block;
@@ -99,7 +108,8 @@
   text-overflow: ellipsis;
 }
 .word-review__detail {
-  padding: 0 14px 16px;
+  padding: 0 var(--theme-spacing-message-padding-x)
+    var(--theme-spacing-message-padding-y);
   display: grid;
   gap: 10px;
 }

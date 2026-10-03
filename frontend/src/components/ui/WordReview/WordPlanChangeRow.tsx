@@ -14,7 +14,7 @@ import {
   MultiplePagesIcon,
   OpenNewWindowIcon,
   PageIcon,
-  SpreadsheetIcon,
+  TableIcon,
 } from "@/components/ui/icons";
 import { editExcerpt } from "@/lib/wordReview/wordEditPlan";
 
@@ -536,7 +536,7 @@ export function WordPlanChangeRow({
       return (
         <RowShell
           {...shell}
-          icon={<SpreadsheetIcon className={ICON} />}
+          icon={<TableIcon className={ICON} />}
           title={nativeKindLabel("table")}
           description={tableSummary(row)}
           detail={

@@ -767,6 +767,10 @@ export function compileWordDocumentPlan(
       body.append(make(doc, "p"));
     body.append(...nodes);
   }
+  // Word cannot end a document with a table and adds this paragraph on import. A body write keeps
+  // Word's own final paragraph instead, so only the full-document compile carries it.
+  if (snapshot.fullDocument && body.lastElementChild?.localName === "tbl")
+    body.append(make(doc, "p"));
   if (section) body.append(section);
   compileWordStories(
     doc,

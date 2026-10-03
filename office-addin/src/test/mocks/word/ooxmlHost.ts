@@ -698,6 +698,26 @@ const AFTER_SPACING = new Set([
   "pPrChange",
 ]);
 
+/** Every story and cell ends with a paragraph mark: Word adds an empty paragraph after a final table on import. */
+function closeWordTrailingTables(doc: Document): void {
+  for (const name of [
+    "body",
+    "hdr",
+    "ftr",
+    "footnote",
+    "endnote",
+    "comment",
+    "tc",
+  ])
+    for (const story of elements(doc, W, name)) {
+      const last = Array.from(story.children)
+        .filter((e) => !["sectPr", "tcPr"].includes(e.localName))
+        .at(-1);
+      if (last?.namespaceURI === W && last.localName === "tbl")
+        last.after(doc.createElementNS(W, "w:p"));
+    }
+}
+
 export function driftFirstParagraphSpacing(doc: Document, step = 120): void {
   const body = partRoot(doc, "/word/document.xml");
   const paragraph = body && elements(body, W, "p")[0];
@@ -889,6 +909,7 @@ function merged(
       options?.importCustomProperties !== false
     )
       importWordCustomProperties(doc, source);
+    closeWordTrailingTables(doc);
     if ((settings.profile ?? "word-web") === "word-web") return;
     dropWordTaskPanes(doc);
     renameWordNsids(doc, nsid);
