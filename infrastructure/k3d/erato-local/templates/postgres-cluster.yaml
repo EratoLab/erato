@@ -12,4 +12,7 @@ spec:
   enableSuperuserAccess: true
   storage:
     size: {{ .Values.postgresql.storage.size }}
+    {{- with .Values.postgresql.storage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
 {{- end }}

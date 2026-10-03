@@ -1,5 +1,4 @@
-{{- if .Values.backend.loadBalancer.enabled }}
-{{- if .Values.backend.loadBalancer.serviceAccount.create }}
+{{- if and .Values.backend.loadBalancer.enabled .Values.backend.loadBalancer.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -7,7 +6,6 @@ metadata:
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: erato-backend-load-balancer
-{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

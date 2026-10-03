@@ -6,24 +6,31 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-nginx-auth
     app.kubernetes.io/instance: {{ .Release.Name }}
-  {{- with .Values.nginxAuth.ingress.annotations }}
+  {{- if or .Values.nginxAuth.ingress.annotations (eq .Values.erato.deployment.ingressClassName "tailscale") }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- with .Values.nginxAuth.ingress.annotations }}{{ toYaml . | nindent 4 }}{{- end }}
+    {{- if eq .Values.erato.deployment.ingressClassName "tailscale" }}
+    tailscale.com/tags: {{ .Values.erato.deployment.tailscaleTags | default "tag:k8s-observability" | quote }}
+    {{- end }}
   {{- end }}
 spec:
-  {{- if .Values.nginxAuth.ingress.className }}
-  ingressClassName: {{ .Values.nginxAuth.ingress.className }}
+  {{- if or .Values.erato.deployment.ingressClassName .Values.nginxAuth.ingress.className }}
+  ingressClassName: {{ .Values.erato.deployment.ingressClassName | default .Values.nginxAuth.ingress.className }}
   {{- end }}
   {{- if .Values.nginxAuth.ingress.tls.enabled }}
   tls:
     - hosts:
-        - {{ .Values.nginxAuth.ingress.host }}
+        - {{ .Values.erato.deployment.appTlsHost | default .Values.nginxAuth.ingress.host }}
       {{- if .Values.nginxAuth.ingress.tls.secretName }}
       secretName: {{ .Values.nginxAuth.ingress.tls.secretName }}
       {{- end }}
   {{- end }}
   rules:
-    - host: {{ .Values.nginxAuth.ingress.host }}
+    {{- if ne .Values.erato.deployment.ingressClassName "tailscale" }}
+    - host: {{ .Values.erato.deployment.appHost | default .Values.nginxAuth.ingress.host }}
+    {{- else }}
+    -
+    {{- end }}
       http:
         paths:
           - path: /

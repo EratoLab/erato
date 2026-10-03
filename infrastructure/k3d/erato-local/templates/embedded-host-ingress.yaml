@@ -6,24 +6,31 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
     app.kubernetes.io/instance: {{ .Release.Name }}
-  {{- with .Values.nginxAuth.embeddedHost.ingress.annotations }}
+  {{- if or .Values.nginxAuth.embeddedHost.ingress.annotations (eq .Values.erato.deployment.ingressClassName "tailscale") }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- with .Values.nginxAuth.embeddedHost.ingress.annotations }}{{ toYaml . | nindent 4 }}{{- end }}
+    {{- if eq .Values.erato.deployment.ingressClassName "tailscale" }}
+    tailscale.com/tags: {{ .Values.erato.deployment.tailscaleTags | default "tag:k8s-observability" | quote }}
+    {{- end }}
   {{- end }}
 spec:
-  {{- if .Values.nginxAuth.embeddedHost.ingress.className }}
-  ingressClassName: {{ .Values.nginxAuth.embeddedHost.ingress.className }}
+  {{- if or .Values.erato.deployment.ingressClassName .Values.nginxAuth.embeddedHost.ingress.className }}
+  ingressClassName: {{ .Values.erato.deployment.ingressClassName | default .Values.nginxAuth.embeddedHost.ingress.className }}
   {{- end }}
   {{- if .Values.nginxAuth.embeddedHost.ingress.tls.enabled }}
   tls:
     - hosts:
-        - {{ .Values.nginxAuth.embeddedHost.ingress.host }}
-      {{- if .Values.nginxAuth.embeddedHost.ingress.tls.secretName }}
-      secretName: {{ .Values.nginxAuth.embeddedHost.ingress.tls.secretName }}
+        - {{ .Values.erato.deployment.embeddedTlsHost | default .Values.nginxAuth.embeddedHost.ingress.host }}
+      {{- if or .Values.erato.deployment.tlsSecretName .Values.nginxAuth.embeddedHost.ingress.tls.secretName }}
+      secretName: {{ .Values.erato.deployment.tlsSecretName | default .Values.nginxAuth.embeddedHost.ingress.tls.secretName }}
       {{- end }}
   {{- end }}
   rules:
-    - host: {{ .Values.nginxAuth.embeddedHost.ingress.host }}
+    {{- if ne .Values.erato.deployment.ingressClassName "tailscale" }}
+    - host: {{ .Values.erato.deployment.embeddedHost | default .Values.nginxAuth.embeddedHost.ingress.host }}
+    {{- else }}
+    -
+    {{- end }}
       http:
         paths:
           - path: /

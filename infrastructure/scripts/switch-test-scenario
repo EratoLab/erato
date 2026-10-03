@@ -13,10 +13,16 @@ It preserves existing Helm values (like image tag) while switching to a new test
 """
 
 import argparse
+import json
+import os
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
+import tempfile
+import tomllib
+import yaml
 from typing import Optional, List
 
 # Import shared utilities
@@ -51,11 +57,41 @@ def run_command(
         sys.exit(1)
 
 
+def verify_deployer_kubeconfig(kubeconfig: Path, namespace: str, service_account: str) -> None:
+    """Check that scenario changes use a namespace-only service-account token."""
+    import base64
+
+    try:
+        config = yaml.safe_load(kubeconfig.read_text(encoding="utf-8"))
+        token = config["users"][0]["user"]["token"]
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (OSError, KeyError, IndexError, TypeError, ValueError) as error:
+        raise SystemExit("--kubeconfig must contain a service-account bearer token") from error
+    expected_subject = f"system:serviceaccount:{namespace}:{service_account}"
+    if claims.get("sub") != expected_subject:
+        raise SystemExit(f"--kubeconfig identity must be {expected_subject}")
+    kubectl = ["kubectl", "--kubeconfig", str(kubeconfig)]
+    for permission, expected in (
+        (("get", "deployments", "--namespace", namespace), "yes"),
+        (("list", "namespaces"), "no"),
+        (("create", "namespaces"), "no"),
+        (("list", "pods", "--all-namespaces"), "no"),
+        (("get", "deployments", "--namespace", "kube-system"), "no"),
+    ):
+        result = run_command([*kubectl, "auth", "can-i", *permission], check=False, capture_output=True)
+        if result.returncode != 0 or result.stdout.strip().lower() != expected:
+            raise SystemExit(f"Service account scope check failed for kubectl auth can-i {' '.join(permission)}")
+
+
 def upgrade_chart_with_scenario(
     release_name: str,
     namespace: str,
     chart_path: Path,
     scenario: str,
+    kubeconfig: Optional[Path] = None,
+    scenario_secrets_file: Optional[Path] = None,
+    e2e_secrets_file: Optional[Path] = None,
 ) -> None:
     """Upgrade the Helm chart with new scenario configuration.
     
@@ -72,26 +108,136 @@ def upgrade_chart_with_scenario(
         "-n", namespace,
         "--reuse-values",
     ]
+    if kubeconfig:
+        cmd.extend(["--kubeconfig", str(kubeconfig)])
     
     # Add scenario configuration
     scenario_args = get_helm_scenario_args(scenario)
     cmd.extend(scenario_args)
+    cmd.extend(["--set", f"scenarioSecretsConfig.scenario={scenario}"])
+
+    temporary_files: list[Path] = []
+    if scenario_secrets_file:
+        if not scenario_secrets_file.is_file():
+            raise SystemExit(f"Scenario secrets file not found: {scenario_secrets_file}")
+        marker = re.search(r'(?m)^K3D_TEST_SCENARIO\s*=\s*"([^"]+)"', scenario_secrets_file.read_text(encoding="utf-8"))
+        if marker and marker.group(1) != scenario:
+            raise SystemExit(f"Scenario secrets are for '{marker.group(1)}', but --scenario selects '{scenario}'")
+    base_values = yaml.safe_load((chart_path / "values.yaml").read_text(encoding="utf-8"))
+    oauth_config = base_values.get("erato", {}).get("oauth2Proxy", {}).get("config", "")
+    if scenario == "entra_id":
+        secrets_file = e2e_secrets_file or (chart_path / "config" / "e2e-secrets.toml")
+        if not secrets_file.is_file():
+            raise SystemExit("Entra scenario switches require --e2e-secrets-file with tenant/client credentials")
+        with secrets_file.open("rb") as stream:
+            secrets = tomllib.load(stream)
+        config_dict = {}
+        for line in oauth_config.splitlines():
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                config_dict[key.strip()] = value.strip()
+        try:
+            tenant = secrets["entra_id_tenant_id"]
+            client_id = secrets["entra_id_client_id"]
+            client_secret = secrets["entra_id_client_secret"]
+        except KeyError as error:
+            raise SystemExit(f"Missing Entra credential in {secrets_file}: {error.args[0]}") from error
+        config_dict.update({
+            "provider": '"entra-id"',
+            "oidc_issuer_url": f'"https://login.microsoftonline.com/{tenant}/v2.0"',
+            "client_id": f'"{client_id}"',
+            "client_secret": f'"{client_secret}"',
+            "skip_oidc_discovery": "false",
+            "scope": '"openid profile email offline_access"',
+        })
+        for key in ("login_url", "redeem_url", "oidc_jwks_url", "insecure_oidc_skip_issuer_verification"):
+            config_dict.pop(key, None)
+        oauth_config = "\n".join(f"{key} = {value}" for key, value in config_dict.items())
+    values_fd, values_name = tempfile.mkstemp(prefix="erato-scenario-values-", suffix=".yaml")
+    os.fchmod(values_fd, 0o600)
+    with os.fdopen(values_fd, "w", encoding="utf-8") as stream:
+        yaml.safe_dump({"erato": {"oauth2Proxy": {"config": oauth_config}}}, stream)
+    temporary_files.append(Path(values_name))
+    cmd.extend(["--values", values_name])
+
+    if scenario_secrets_file:
+        contents = scenario_secrets_file.read_text(encoding="utf-8")
+        data_match = re.search(r"(?m)^SCENARIO_DATA\s*=.*(?:\n|$)", contents)
+        private_contents = contents.replace(data_match.group(0), "") if data_match else contents
+        release_fullname = release_name if "erato-local" in release_name else f"{release_name}-erato-local"
+        private_contents = (
+            private_contents
+            .replace('{{ include "erato-local.fullname" . }}', release_fullname)
+            .replace("{{ .Release.Namespace }}", namespace)
+        )
+        marker_match = re.search(r'(?m)^K3D_TEST_SCENARIO\s*=.*(?:\n|$)', contents)
+        public_contents = "[frontend.additional_environment]\n"
+        if marker_match:
+            public_contents += marker_match.group(0)
+        if data_match:
+            public_contents += data_match.group(0)
+        for suffix, data in (("-private.toml", private_contents), ("-public.toml", public_contents)):
+            fd, temp_name = tempfile.mkstemp(prefix="erato-scenario-", suffix=suffix)
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(data)
+            temporary_files.append(Path(temp_name))
+        cmd.extend([
+            "--set", "scenarioSecretsConfig.enabled=true",
+            "--set", "scenarioSecretsConfig.includeLocalFiles=false",
+            "--set-file", f"scenarioSecretsConfig.remoteData={temporary_files[0]}",
+            "--set-file", f"scenarioSecretsConfig.remotePublicData={temporary_files[1]}",
+        ])
+        scenario_config_files = [
+            {"name": "file-storage", "configMapName": f"{release_name}-erato-file-storage-config", "configMapKey": "erato.file-storage.toml"},
+            {"name": "test-scenario", "configMapName": f"{release_name}-erato-test-scenario-config", "configMapKey": "erato.scenario.toml"},
+            {"name": "scenario-secrets", "secretName": f"{release_name}-erato-scenario-{scenario.replace('_', '-')}-secrets", "secretKey": "erato.scenario.auto.toml"},
+            {"name": "frontend-env", "inlineContent": '[frontend.additional_environment]\nFOO_BAR = "true"'},
+        ]
+        cmd.extend(["--set-json", f"erato.backend.extraConfigFiles={json.dumps(scenario_config_files)}"])
+        cmd.extend(["--set-json", f"erato.ingress.extraPaths={json.dumps([{'path': '/e2e-scenario-data', 'pathType': 'Prefix', 'backend': {'service': {'name': f'{release_name}-e2e-scenario-data-server', 'port': {'name': 'http'}}}}])}"])
+    elif kubeconfig and kubeconfig.expanduser().resolve() != (Path.home() / ".kube" / "erato-dev-deployer.yaml").resolve():
+        raise SystemExit("Remote scenario switches require --scenario-secrets-file for the selected scenario")
+    else:
+        local_secret_file = chart_path / "config" / f"erato.scenario-{scenario}.auto.toml"
+        if local_secret_file.exists():
+            scenario_config_files = [
+                {"name": "file-storage", "configMapName": f"{release_name}-erato-file-storage-config", "configMapKey": "erato.file-storage.toml"},
+                {"name": "test-scenario", "configMapName": f"{release_name}-erato-test-scenario-config", "configMapKey": "erato.scenario.toml"},
+                {"name": "scenario-secrets", "secretName": f"{release_name}-erato-scenario-{scenario.replace('_', '-')}-secrets", "secretKey": "erato.scenario.auto.toml"},
+                {"name": "frontend-env", "inlineContent": '[frontend.additional_environment]\nFOO_BAR = "true"'},
+            ]
+            cmd.extend(["--set-json", f"erato.backend.extraConfigFiles={json.dumps(scenario_config_files)}"])
+
+    if scenario == "nginx-auth":
+        cmd.extend([
+            "--set", "erato.oauth2Proxy.enabled=false",
+            "--set", "dex.enabled=false",
+            "--set", "nginxAuth.enabled=true",
+            "--set", "erato.ingress.enabled=false",
+        ])
     
     print(f"Running: {' '.join(cmd)}")
-    run_command(cmd)
+    try:
+        run_command(cmd)
+    finally:
+        for temporary_file in temporary_files:
+            temporary_file.unlink(missing_ok=True)
 
 
-def wait_for_rollout(namespace: str, timeout: int = 300) -> None:
+def wait_for_rollout(namespace: str, release_name: str, timeout: int = 300, kubeconfig: Optional[Path] = None) -> None:
     """Wait for the deployment to complete rollout."""
     print("Waiting for deployment rollout to complete...")
     
-    deployment_name = "erato-local-erato-app"
+    deployment_name = f"{release_name}-erato-app"
     
     result = run_command([
         "kubectl", "rollout", "status",
         f"deployment/{deployment_name}",
         "-n", namespace,
-        f"--timeout={timeout}s"
+        f"--timeout={timeout}s",
+        *(["--kubeconfig", str(kubeconfig)] if kubeconfig else []),
     ], check=False, capture_output=True)
     
     if result.returncode != 0:
@@ -133,8 +279,24 @@ It preserves existing Helm values like image repository and tag.
         default="erato-local-ns",
         help="Kubernetes namespace (default: erato-local-ns)"
     )
+    parser.add_argument("--kubeconfig", type=Path, help="Namespace-scoped deployer kubeconfig for an existing cluster")
+    parser.add_argument("--scenario-secrets-file", type=Path, help="Scenario TOML generated for this environment")
+    parser.add_argument("--e2e-secrets-file", type=Path, help="Private E2E source TOML (required for Entra ID OAuth configuration)")
+    parser.add_argument("--service-account", default="erato-deployer", help="Expected namespace-scoped service account")
     
     args = parser.parse_args()
+
+    # Local setup persists a restricted kubeconfig so scenario changes do not
+    # fall back to the cluster-admin context used for k3d bootstrap.
+    if args.kubeconfig is None:
+        local_deployer_kubeconfig = Path.home() / ".kube" / "erato-dev-deployer.yaml"
+        if local_deployer_kubeconfig.is_file():
+            args.kubeconfig = local_deployer_kubeconfig
+    if args.kubeconfig is None:
+        raise SystemExit(
+            "A namespace-scoped deployer kubeconfig is required. Run setup-dev to provision the local deployer account, or pass --kubeconfig."
+        )
+    verify_deployer_kubeconfig(args.kubeconfig, args.namespace, args.service_account)
     
     # Validate scenario
     if not validate_scenario(args.scenario):
@@ -158,10 +320,13 @@ It preserves existing Helm values like image repository and tag.
         args.namespace,
         chart_path,
         args.scenario,
+        args.kubeconfig,
+        args.scenario_secrets_file,
+        args.e2e_secrets_file,
     )
     
     # Wait for rollout
-    wait_for_rollout(args.namespace)
+    wait_for_rollout(args.namespace, args.release_name, kubeconfig=args.kubeconfig)
     
     print()
     print(f"Successfully switched to scenario: {args.scenario}")
