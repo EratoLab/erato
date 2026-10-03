@@ -923,6 +923,8 @@ export function compileWordStories(
     const oldLastId = paragraphs.at(-1)?.getAttributeNS(W14, "paraId");
     const compiled = compileBlocks(change.blocks ?? [], path!);
     node.replaceChildren(...(compiled.length ? compiled : [make(doc, "p")]));
+    // Every story ends with a paragraph mark; Word adds one after a final table on import.
+    if (node.lastElementChild?.localName === "tbl") node.append(make(doc, "p"));
     if (change.type === "footnote" || change.type === "endnote") {
       const paragraph = elements(node, "p")[0];
       if (!paragraph) throw new Error("A note must contain a paragraph.");

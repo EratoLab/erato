@@ -302,6 +302,107 @@ describe("complete-document writer", { timeout: 15_000 }, () => {
     expect(host.insert).toHaveBeenCalledOnce();
   });
 
+  const closingTable = (id: string) => ({
+    id,
+    type: "table",
+    text: "",
+    columns: [110, 180, 110],
+    format: {
+      alignment: "center",
+      cellMargins: { top: 3, left: 6, right: 6, bottom: 3 },
+      borders: {
+        insideH: { color: "FFFFFF", style: "single", width: 1 },
+        insideV: { color: "FFFFFF", style: "single", width: 1 },
+      },
+    },
+    rows: [
+      ["Category", "Random example", "Sample value"],
+      ["Nature", "Sunflower in a garden", "24 °C"],
+    ].map((texts, r) => ({
+      ...(r === 0 ? { format: { repeatHeader: true } } : {}),
+      cells: texts.map((text, c) => ({
+        format: { shading: r === 0 ? "245A81" : "DCEEFF" },
+        blocks: [{ id: `${id}-${r}-${c}`, type: "paragraph", text }],
+      })),
+    })),
+  });
+  const tail = (root: Element | undefined) =>
+    Array.from(root?.children ?? [])
+      .map((e) => e.localName)
+      .slice(-3);
+
+  it("verifies a table that ends the document after Word adds the closing paragraph", async () => {
+    const { host, source } = await sourceAndPlan();
+    const plan = {
+      version: 1,
+      snapshot: source.token,
+      readToken: "read-proof",
+      scope: "document",
+      entries: [
+        { kind: "keep", source: source.blocks.map((b) => b.ref) },
+        {
+          kind: "insert",
+          contextRefs: [source.blocks.at(-1)!.ref],
+          blocks: [closingTable("examples")],
+        },
+      ],
+      deleted: [],
+    };
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(plan),
+      source,
+      "message-A",
+      vi.fn(),
+    );
+    expect(result.status, JSON.stringify(result.diagnostic)).toBe("applied");
+    expect(host.insert).toHaveBeenCalledOnce();
+    const written = new DOMParser().parseFromString(
+      wordDocumentFileToOoxml(host.get()),
+      "application/xml",
+    );
+    expect(tail(written.getElementsByTagNameNS(W, "body")[0])).toEqual([
+      "tbl",
+      "p",
+      "sectPr",
+    ]);
+  });
+
+  it("verifies a header that ends with a table after Word adds the closing paragraph", async () => {
+    const { host, source } = await sourceAndPlan();
+    const header = source.stories!.find((s) => s.type === "header")!;
+    const plan = {
+      version: 1,
+      snapshot: source.token,
+      readToken: "read-proof",
+      scope: "document",
+      entries: [{ kind: "keep", source: source.blocks.map((b) => b.ref) }],
+      deleted: [],
+      stories: [
+        {
+          kind: "upsert",
+          type: "header",
+          id: header.id,
+          blocks: [closingTable("header-table")],
+        },
+      ],
+    };
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(plan),
+      source,
+      "message-A",
+      vi.fn(),
+    );
+    expect(result.status, JSON.stringify(result.diagnostic)).toBe("applied");
+    const written = new DOMParser().parseFromString(
+      wordDocumentFileToOoxml(host.get()),
+      "application/xml",
+    );
+    const headerRoot = Array.from(
+      written.getElementsByTagNameNS(W, "hdr"),
+    ).find((root) => root.getElementsByTagNameNS(W, "tbl").length);
+    expect(tail(headerRoot).slice(-2)).toEqual(["tbl", "p"]);
+  });
+
   it("reports each stage and guards Revert with the fingerprint of the written package", async () => {
     const { host, source, plan } = await sourceAndPlan();
     const stages: string[] = [];
