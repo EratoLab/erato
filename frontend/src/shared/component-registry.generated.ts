@@ -268,6 +268,7 @@ export { SpreadsheetIcon } from "@/components/ui/icons/index";
 export { StopIcon } from "@/components/ui/icons/index";
 export { SunIcon } from "@/components/ui/icons/index";
 export { SunLight } from "@/components/ui/icons/index";
+export { TableIcon } from "@/components/ui/icons/index";
 export { ThumbDownIcon } from "@/components/ui/icons/index";
 export { ThumbUpIcon } from "@/components/ui/icons/index";
 export { ThumbsDown } from "@/components/ui/icons/index";
