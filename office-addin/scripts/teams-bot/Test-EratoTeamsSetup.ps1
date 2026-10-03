@@ -28,7 +28,10 @@ function Reset-Fixture {
     $script:connection = $null; $script:wrongTenant = $false; $script:denyConsent = $false; $script:failConnection = $false
     $script:duplicateBot = $false; $script:nextLink = $null; $script:scopePage = 0; $script:failPreauthorization = $false
     $script:failRepair = $false
+    $script:connectionLagReads = 0; $script:staleReads = 0; $script:sleeps = 0; $script:staleConnection = $null
 }
+
+function Start-Sleep { param([int]$Seconds) $script:sleeps++ }
 
 function Invoke-EratoAz {
     param([string[]]$Arguments)
@@ -48,6 +51,8 @@ function Invoke-EratoAz {
         if ($method -eq 'PATCH' -and $url -match '/connections/') {
             if ($script:failRepair) { throw 'Azure request failed (RequestFailed).' }
             Assert-True ($body.properties.Keys.Count -eq 1 -and $body.properties.ContainsKey('parameters')) 'Repair must not replace credentials or other connection properties'
+            $script:staleConnection = $script:connection | ConvertTo-Json -Depth 50 | ConvertFrom-Json -AsHashtable
+            $script:staleReads = $script:connectionLagReads
             $script:connection.properties.parameters = $body.properties.parameters
             return $script:connection
         }
@@ -76,7 +81,11 @@ function Invoke-EratoAz {
         return @{ value = $(if ($script:duplicateBot) { @($script:bot, $script:bot) } else { @($script:bot) }) }
     }
     if ($url -match '/botServices/customer-bot\?') { return $script:bot }
-    if ($url -match '/connections/') { if (-not $script:connection) { throw 'Azure request failed (NotFound).' }; return $script:connection }
+    if ($url -match '/connections/') {
+        if ($script:staleReads -gt 0) { $script:staleReads--; return $script:staleConnection }
+        if (-not $script:connection) { throw 'Azure request failed (NotFound).' }
+        return $script:connection
+    }
     if ($url -match '/applications\(appId=') { return $script:app }
     if ($url -match '/oauth2PermissionGrants') {
         if ($script:denyConsent) { throw 'Azure request failed (AccessDenied).' }
@@ -240,6 +249,20 @@ Test-Case 'connection repair failure reports partial state and can be retried' {
     $script:failRepair = $false
     $report = Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json
     Assert-True ($report.exitCode -eq 0) 'Repair retry did not complete'
+}
+Test-Case 'verification tolerates delayed Azure reads without repeating the repair' {
+    Set-LegacyConnection
+    $script:connectionLagReads = 2
+    $report = Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json
+    Assert-True ($report.exitCode -eq 0 -and $sleeps -eq 2) 'Did not wait for the updated connection'
+    Assert-True ($writes.Count -eq 2) 'Delayed verification repeated a write'
+}
+Test-Case 'verification remains bounded and reports a persistently mismatched connection' {
+    Set-LegacyConnection
+    $script:connectionLagReads = 10
+    $report = Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json
+    Assert-True ($report.exitCode -eq 1 -and $sleeps -eq 3) 'Persistent mismatch must not be reported as success or retried indefinitely'
+    Assert-True ($writes.Count -eq 2) 'Persistent mismatch repeated a write'
 }
 Test-Case 'pre-authorization failure preserves the saved scope and resumes without a duplicate' {
     $script:failPreauthorization = $true

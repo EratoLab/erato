@@ -381,6 +381,12 @@ function Invoke-EratoSetup {
                     $report.changes += "Created OAuth connection '$($Settings.ConnectionName)'. Record credential $($credential.keyId), expiry $expiry, for rotation."
                 }
                 $verified = Get-EratoAudit $Settings
+                # ARM can briefly return the previous connection after accepting
+                # a PATCH/PUT. Re-read without repeating writes or credentials.
+                for ($attempt = 0; $attempt -lt 3 -and -not (Test-EratoConnection $verified.Connection $Settings); $attempt++) {
+                    Start-Sleep -Seconds 2
+                    $verified = Get-EratoAudit $Settings
+                }
                 $report.checks = $verified.Report.checks
                 $report.exitCode = $verified.Report.exitCode
                 $report.note = 'Azure changes applied and rechecked. Finish the remaining steps to enable and verify Teams SSO.'
