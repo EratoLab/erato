@@ -26,6 +26,17 @@ impl Submit {
     }
 }
 
+pub fn should_show(request: &TeamsRequest) -> bool {
+    if request.pending_edit.is_some() {
+        return true;
+    }
+    match request.state.as_str() {
+        "preparing" | "running" => !request.native_stop_available,
+        "completed" => false,
+        _ => true,
+    }
+}
+
 pub fn activity(request: &TeamsRequest) -> Value {
     let mut actions = Vec::new();
     let mut body = Vec::new();
@@ -45,7 +56,8 @@ pub fn activity(request: &TeamsRequest) -> Value {
         "Finished."
     };
     body.push(json!({"type":"TextBlock", "text":text, "wrap":true}));
-    if request.running()
+    if request.state == "running"
+        && !request.native_stop_available
         && let Some(message_id) = request.assistant_message_id
     {
         actions.push(json!({"type":"Action.Submit", "title":"Stop", "data":{
@@ -77,4 +89,69 @@ pub fn activity(request: &TeamsRequest) -> Value {
         }}),
         text,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_stream_uses_its_own_stop_then_offers_retry_or_custom_fallback_controls() {
+        let mut request = TeamsRequest {
+            id: Uuid::new_v4(),
+            conversation_id: "conversation".into(),
+            source_activity_id: "question".into(),
+            user_id: Uuid::new_v4(),
+            chat_id: Uuid::new_v4(),
+            user_message_id: Some(Uuid::new_v4()),
+            assistant_message_id: Some(Uuid::new_v4()),
+            control_activity_id: None,
+            state: "running".into(),
+            tools_started: false,
+            native_stop_available: true,
+            pending_edit: None,
+            action_token: None,
+            action_kind: None,
+            run_id: Uuid::new_v4(),
+            claimed_action_token: None,
+        };
+        assert!(
+            !should_show(&request),
+            "no duplicate Stop card during native streaming"
+        );
+        request.pending_edit = Some("Edited question".into());
+        assert!(should_show(&request), "retain the pending-edit explanation");
+        assert!(
+            activity(&request)["attachments"][0]["content"]["actions"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        request.pending_edit = None;
+        request.native_stop_available = false;
+        assert!(should_show(&request));
+        assert_eq!(
+            activity(&request)["attachments"][0]["content"]["actions"][0]["title"],
+            "Stop"
+        );
+        request.state = "stopping".into();
+        assert!(
+            activity(&request)["attachments"][0]["content"]["actions"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        request.state = "stopped".into();
+        request.native_stop_available = true;
+        request.action_kind = Some("retry".into());
+        request.action_token = Some(Uuid::new_v4());
+        assert!(should_show(&request), "native Stop still gets Erato Retry");
+        assert_eq!(
+            activity(&request)["attachments"][0]["content"]["actions"][0]["title"],
+            "Retry"
+        );
+        request.state = "completed".into();
+        request.action_token = None;
+        assert!(!should_show(&request));
+    }
 }

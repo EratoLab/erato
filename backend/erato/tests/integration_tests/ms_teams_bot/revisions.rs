@@ -426,6 +426,22 @@ async fn revisions_reject_foreign_users_and_superseded_questions(pool: Pool<Post
 async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
     let fixture = fixture(pool).await;
     let (request, _) = initial_generation(&fixture, Vec::new()).await;
+    assert!(!request.native_stop_available);
+    let request = fixture
+        .host
+        .record_native_stop(&request, true)
+        .await
+        .unwrap();
+    assert!(
+        fixture
+            .host
+            .request_snapshot(request.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .native_stop_available,
+        "edit callbacks read the native Stop mode from shared state"
+    );
     assert!(
         fixture
             .host
@@ -463,6 +479,14 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
     };
     assert_eq!(claimed.state, "preparing");
     assert_ne!(claimed.run_id, stopped.run_id);
+    assert!(
+        fixture
+            .host
+            .record_native_stop(&stopped, false)
+            .await
+            .is_err(),
+        "an old renderer cannot change a new run's Stop controls"
+    );
     let now = chrono::Utc::now();
     let edited = fixture
         .host

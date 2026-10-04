@@ -455,8 +455,44 @@ async fn write_controls(
     target: &ReplyTarget<'_>,
     request: &TeamsRequest,
 ) -> Result<(), Report> {
-    let activity = controls::activity(request);
-    match request.control_activity_id.as_deref() {
+    let mut current = request.clone();
+    if !controls::should_show(&current) {
+        let Some(id) = current.control_activity_id.as_deref() else {
+            return Ok(());
+        };
+        if let Err(error) = target
+            .connector
+            .delete(target.service_url, target.conversation_id, id)
+            .await
+        {
+            tracing::debug!(%error, "Could not remove redundant response controls");
+            // At least remove the duplicate button if deleting its card fails.
+            return target
+                .connector
+                .update(
+                    target.service_url,
+                    target.conversation_id,
+                    id,
+                    &controls::activity(&current),
+                )
+                .await;
+        }
+        host.clear_control_card(transaction, current.id, id).await?;
+        // An edit or a new generation can arrive during the DELETE. Read it
+        // again under the card lock so its current actions are preserved.
+        let Some(latest) = host
+            .locked_request_snapshot(transaction, current.id)
+            .await?
+        else {
+            return Ok(());
+        };
+        if !controls::should_show(&latest) {
+            return Ok(());
+        }
+        current = latest;
+    }
+    let activity = controls::activity(&current);
+    match current.control_activity_id.as_deref() {
         Some(id) => {
             target
                 .connector
@@ -464,7 +500,7 @@ async fn write_controls(
                 .await
         }
         None => match target.send(&activity).await {
-            Ok(Some(id)) => host.record_control_card(transaction, request.id, &id).await,
+            Ok(Some(id)) => host.record_control_card(transaction, current.id, &id).await,
             Ok(None) => Ok(()),
             Err(error) => Err(error),
         },
@@ -478,41 +514,7 @@ async fn settle_controls(
     state: &str,
 ) -> Result<(), Report> {
     host.finish_request(request, state).await?;
-    let transaction = host.lock_request_controls(request.id).await?;
-    let Some(current) = host
-        .locked_request_snapshot(&transaction, request.id)
-        .await?
-    else {
-        return Ok(());
-    };
-    if current.state == "completed" && current.pending_edit.is_none() {
-        if let Some(id) = current.control_activity_id.as_deref() {
-            if let Err(error) = target
-                .connector
-                .delete(target.service_url, target.conversation_id, id)
-                .await
-            {
-                tracing::debug!(%error, "Could not remove the completed response control");
-                write_controls(host, &transaction, target, &current).await?;
-            } else {
-                host.clear_control_card(&transaction, request.id, id)
-                    .await?;
-                // An edit may have arrived while the DELETE was in flight.
-                // Its handler waits on the same card lock; restore its button.
-                if let Some(latest) = host
-                    .locked_request_snapshot(&transaction, request.id)
-                    .await?
-                    && (latest.pending_edit.is_some() || latest.run_id != current.run_id)
-                {
-                    write_controls(host, &transaction, target, &latest).await?;
-                }
-            }
-        }
-    } else {
-        write_controls(host, &transaction, target, &current).await?;
-    }
-    transaction.commit().await?;
-    Ok(())
+    update_controls_locked(host, target, request.id).await
 }
 
 fn stream_for<'a>(
@@ -927,7 +929,7 @@ async fn render_generation(
                     generation = Some((chat_id, message_id));
                     if let Some(current) = &request {
                         let updated = host.record_generation(current, message_id).await?;
-                        request = Some(updated);
+                        request = Some(host.record_native_stop(&updated, stream.native_stop_available()).await?);
                     }
                     // Stop may arrive on the opening informative chunk before
                     // the backend has announced its saved assistant ID.
@@ -959,6 +961,17 @@ async fn render_generation(
             }
             // Drain terminal events before offering Retry: tools and their
             // final effects may still be persisting after cancellation.
+        }
+        if !stop_requested
+            && generation.is_some()
+            && let Some(current) = &request
+            && current.native_stop_available != stream.native_stop_available()
+        {
+            let updated = host
+                .record_native_stop(current, stream.native_stop_available())
+                .await?;
+            update_controls(host, target, &updated).await;
+            request = Some(updated);
         }
     }
 

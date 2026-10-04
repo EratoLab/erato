@@ -35,12 +35,12 @@ pub struct ActivityError {
 
 impl ActivityError {
     pub fn stream_cancelled(&self) -> bool {
+        // The documentation uses US spelling; the live Teams service also
+        // returns "cancelled". Both mean Stop, never a delivery fallback.
+        let message = self.message.to_ascii_lowercase();
         self.status == reqwest::StatusCode::FORBIDDEN
             && self.code.as_deref() == Some("ContentStreamNotAllowed")
-            && self
-                .message
-                .to_ascii_lowercase()
-                .contains("canceled by user")
+            && (message.contains("canceled by user") || message.contains("cancelled by user"))
     }
 
     async fn from_response(response: reqwest::Response) -> Self {
@@ -354,7 +354,29 @@ fn encode(segment: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::encode;
+    use super::{ActivityError, encode};
+
+    #[test]
+    fn recognizes_both_live_stop_spellings_without_treating_other_stream_errors_as_stop() {
+        let mut error = ActivityError {
+            status: reqwest::StatusCode::FORBIDDEN,
+            code: Some("ContentStreamNotAllowed".into()),
+            message: String::new(),
+            retry_after: None,
+        };
+        for message in [
+            "Content stream was canceled by user.",
+            "Content stream was cancelled by user.",
+        ] {
+            error.message = message.into();
+            assert!(error.stream_cancelled());
+        }
+        error.message = "Content stream finished due to exceeded streaming time.".into();
+        assert!(!error.stream_cancelled());
+        error.message = "Content stream was cancelled by user.".into();
+        error.status = reqwest::StatusCode::BAD_REQUEST;
+        assert!(!error.stream_cancelled());
+    }
 
     #[test]
     fn encodes_teams_conversation_ids_as_one_path_segment() {

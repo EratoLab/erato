@@ -20,6 +20,7 @@ pub struct TeamsRequest {
     pub control_activity_id: Option<String>,
     pub state: String,
     pub tools_started: bool,
+    pub native_stop_available: bool,
     pub pending_edit: Option<String>,
     pub action_token: Option<Uuid>,
     pub action_kind: Option<String>,
@@ -176,6 +177,19 @@ impl Host {
             "UPDATE ms_teams_requests SET assistant_message_id=$2, state='running', updated_at=now() WHERE id=$1 AND run_id=$3 RETURNING *",
             vec![request.id.into(), message_id.into(), request.run_id.into()],
         ).await?.ok_or_else(|| eyre!("Teams request disappeared"))
+    }
+
+    /// Persist the delivery mode so edit callbacks on any replica can avoid
+    /// adding a second Stop button beside Teams' native one.
+    pub async fn record_native_stop(
+        &self,
+        request: &TeamsRequest,
+        available: bool,
+    ) -> Result<TeamsRequest, Report> {
+        self.request_query(
+            "UPDATE ms_teams_requests SET native_stop_available=$3 WHERE id=$1 AND run_id=$2 RETURNING *",
+            vec![request.id.into(), request.run_id.into(), available.into()],
+        ).await?.ok_or_else(|| eyre!("Teams request disappeared or was replaced"))
     }
 
     pub async fn record_control_card(

@@ -140,6 +140,11 @@ impl<'a> StreamingReply<'a> {
         self.cancelled
     }
 
+    /// Teams owns the Stop button while an accepted native stream is open.
+    pub fn native_stop_available(&self) -> bool {
+        self.native && self.stream_id.is_some() && !self.cancelled
+    }
+
     /// Before Erato accepts a generation, personal chats use typing instead
     /// of opening a second native stream if the previous turn is still busy.
     pub async fn preparing(&mut self, text: &str) {
@@ -323,6 +328,7 @@ impl<'a> StreamingReply<'a> {
     fn handle_error(&mut self, error: &eyre::Report) -> Failure {
         if let Some(error) = error.downcast_ref::<ActivityError>() {
             if error.stream_cancelled() {
+                tracing::debug!("Teams native stream stopped by user");
                 self.cancelled = true;
                 return Failure::Cancelled;
             }
