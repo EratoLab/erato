@@ -35,12 +35,12 @@ pub struct ActivityError {
 
 impl ActivityError {
     pub fn stream_cancelled(&self) -> bool {
+        // The documentation uses US spelling; the live Teams service also
+        // returns "cancelled". Both mean Stop, never a delivery fallback.
+        let message = self.message.to_ascii_lowercase();
         self.status == reqwest::StatusCode::FORBIDDEN
             && self.code.as_deref() == Some("ContentStreamNotAllowed")
-            && self
-                .message
-                .to_ascii_lowercase()
-                .contains("canceled by user")
+            && (message.contains("canceled by user") || message.contains("cancelled by user"))
     }
 
     async fn from_response(response: reqwest::Response) -> Self {
@@ -194,12 +194,7 @@ impl Connector {
         reply_to_id: &str,
         activity: &Value,
     ) -> Result<Option<String>, Report> {
-        let url = format!(
-            "{}/v3/conversations/{}/activities/{}",
-            service_url.trim_end_matches('/'),
-            encode(conversation_id),
-            encode(reply_to_id)
-        );
+        let url = activity_url(service_url, conversation_id, reply_to_id);
         self.post_activity(url, activity).await
     }
 
@@ -211,12 +206,7 @@ impl Connector {
         activity_id: &str,
         activity: &Value,
     ) -> Result<(), Report> {
-        let url = format!(
-            "{}/v3/conversations/{}/activities/{}",
-            service_url.trim_end_matches('/'),
-            encode(conversation_id),
-            encode(activity_id)
-        );
+        let url = activity_url(service_url, conversation_id, activity_id);
         let token = self.app_token().await?;
         let response = self
             .http
@@ -227,6 +217,26 @@ impl Connector {
             .send()
             .await?;
         if !response.status().is_success() {
+            return Err(ActivityError::from_response(response).await.into());
+        }
+        Ok(())
+    }
+
+    /// Remove a temporary control activity which the bot sent.
+    pub async fn delete(
+        &self,
+        service_url: &str,
+        conversation_id: &str,
+        activity_id: &str,
+    ) -> Result<(), Report> {
+        let url = activity_url(service_url, conversation_id, activity_id);
+        let response = self
+            .http
+            .delete(url)
+            .bearer_auth(self.app_token().await?)
+            .send()
+            .await?;
+        if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
             return Err(ActivityError::from_response(response).await.into());
         }
         Ok(())
@@ -323,13 +333,44 @@ pub async fn read_limited(
     Ok(bytes)
 }
 
+fn activity_url(service_url: &str, conversation_id: &str, activity_id: &str) -> String {
+    format!(
+        "{}/v3/conversations/{}/activities/{}",
+        service_url.trim_end_matches('/'),
+        encode(conversation_id),
+        encode(activity_id)
+    )
+}
+
 fn encode(segment: &str) -> String {
     utf8_percent_encode(segment, PATH_SEGMENT).to_string()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::encode;
+    use super::{ActivityError, encode};
+
+    #[test]
+    fn recognizes_both_live_stop_spellings_without_treating_other_stream_errors_as_stop() {
+        let mut error = ActivityError {
+            status: reqwest::StatusCode::FORBIDDEN,
+            code: Some("ContentStreamNotAllowed".into()),
+            message: String::new(),
+            retry_after: None,
+        };
+        for message in [
+            "Content stream was canceled by user.",
+            "Content stream was cancelled by user.",
+        ] {
+            error.message = message.into();
+            assert!(error.stream_cancelled());
+        }
+        error.message = "Content stream finished due to exceeded streaming time.".into();
+        assert!(!error.stream_cancelled());
+        error.message = "Content stream was cancelled by user.".into();
+        error.status = reqwest::StatusCode::BAD_REQUEST;
+        assert!(!error.stream_cancelled());
+    }
 
     #[test]
     fn encodes_teams_conversation_ids_as_one_path_segment() {

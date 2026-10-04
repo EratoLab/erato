@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 5rfytVX4hncnwi8X4KkhATJBYwa5nTQQ7V7VKqzIN8L3rDliow8BZGoQUdlfpE3
+\restrict f3dAmDth31QxgsPYm4V7Pi3ISjDsEguuE7CzWkFLyzOhqPJ8O8v6q4DIHia6GD5
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -512,6 +512,39 @@ CREATE TABLE public.ms_teams_pending_sign_ins (
 
 
 --
+-- Name: ms_teams_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ms_teams_requests (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    conversation_id text NOT NULL,
+    source_activity_id text NOT NULL,
+    user_id uuid NOT NULL,
+    chat_id uuid NOT NULL,
+    user_message_id uuid,
+    assistant_message_id uuid,
+    control_activity_id text,
+    state text DEFAULT 'preparing'::text NOT NULL,
+    tools_started boolean DEFAULT false NOT NULL,
+    native_stop_available boolean DEFAULT false NOT NULL,
+    pending_edit text,
+    last_edit_at timestamp with time zone,
+    action_token uuid,
+    action_kind text,
+    action_expires_at timestamp with time zone,
+    run_id uuid DEFAULT public.uuidv7() NOT NULL,
+    claimed_action_token uuid,
+    controls_version bigint DEFAULT 0 NOT NULL,
+    controls_lease_owner uuid,
+    controls_lease_until timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ms_teams_requests_action_kind_check CHECK ((action_kind = ANY (ARRAY['retry'::text, 'edit'::text]))),
+    CONSTRAINT ms_teams_requests_state_check CHECK ((state = ANY (ARRAY['preparing'::text, 'running'::text, 'stopping'::text, 'stopped'::text, 'failed'::text, 'completed'::text])))
+);
+
+
+--
 -- Name: ms_teams_token_exchanges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -675,6 +708,8 @@ CREATE TABLE public.user_preferences (
     starting_assistant_id uuid,
     starting_assistant_cleared boolean DEFAULT false NOT NULL,
     client_tool_file_approval text,
+    client_tool_decisions jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT user_preferences_client_tool_decisions_check CHECK ((jsonb_typeof(client_tool_decisions) = 'object'::text)),
     CONSTRAINT user_preferences_client_tool_file_approval_check CHECK ((client_tool_file_approval = ANY (ARRAY['never_allow'::text, 'ask'::text, 'always_allow'::text]))),
     CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
     CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND ((starting_hub_assistant_id IS NOT NULL) OR (starting_assistant_id IS NOT NULL)))))
@@ -933,6 +968,22 @@ ALTER TABLE ONLY public.ms_teams_pending_sign_ins
 
 ALTER TABLE ONLY public.ms_teams_pending_sign_ins
     ADD CONSTRAINT ms_teams_pending_sign_ins_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ms_teams_requests ms_teams_requests_conversation_id_source_activity_id_user_i_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_requests
+    ADD CONSTRAINT ms_teams_requests_conversation_id_source_activity_id_user_i_key UNIQUE (conversation_id, source_activity_id, user_id);
+
+
+--
+-- Name: ms_teams_requests ms_teams_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_requests
+    ADD CONSTRAINT ms_teams_requests_pkey PRIMARY KEY (id);
 
 
 --
@@ -1370,6 +1421,34 @@ CREATE INDEX ms_teams_pending_sign_ins_scope ON public.ms_teams_pending_sign_ins
 
 
 --
+-- Name: ms_teams_requests_assistant_message; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ms_teams_requests_assistant_message ON public.ms_teams_requests USING btree (assistant_message_id) WHERE (assistant_message_id IS NOT NULL);
+
+
+--
+-- Name: ms_teams_requests_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ms_teams_requests_chat ON public.ms_teams_requests USING btree (chat_id);
+
+
+--
+-- Name: ms_teams_requests_user_conversation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ms_teams_requests_user_conversation ON public.ms_teams_requests USING btree (user_id, conversation_id, created_at DESC);
+
+
+--
+-- Name: ms_teams_requests_user_message; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ms_teams_requests_user_message ON public.ms_teams_requests USING btree (user_message_id) WHERE (user_message_id IS NOT NULL);
+
+
+--
 -- Name: runtime_configuration_source_service_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1521,6 +1600,13 @@ CREATE TRIGGER on_update_set_updated_columns_mcp_server_oauth_credentials BEFORE
 --
 
 CREATE TRIGGER on_update_set_updated_columns_message_feedbacks BEFORE UPDATE ON public.message_feedbacks FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: ms_teams_requests on_update_set_updated_columns_ms_teams_requests; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_ms_teams_requests BEFORE UPDATE ON public.ms_teams_requests FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
 
 
 --
@@ -1822,6 +1908,38 @@ ALTER TABLE ONLY public.ms_teams_conversations
 
 
 --
+-- Name: ms_teams_requests ms_teams_requests_assistant_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_requests
+    ADD CONSTRAINT ms_teams_requests_assistant_message_id_fkey FOREIGN KEY (assistant_message_id) REFERENCES public.messages(id) ON DELETE SET NULL;
+
+
+--
+-- Name: ms_teams_requests ms_teams_requests_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_requests
+    ADD CONSTRAINT ms_teams_requests_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ms_teams_requests ms_teams_requests_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_requests
+    ADD CONSTRAINT ms_teams_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ms_teams_requests ms_teams_requests_user_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ms_teams_requests
+    ADD CONSTRAINT ms_teams_requests_user_message_id_fkey FOREIGN KEY (user_message_id) REFERENCES public.messages(id) ON DELETE SET NULL;
+
+
+--
 -- Name: temp_chat_generation_commands temp_chat_generation_commands_generation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1881,5 +1999,5 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 5rfytVX4hncnwi8X4KkhATJBYwa5nTQQ7V7VKqzIN8L3rDliow8BZGoQUdlfpE3
+\unrestrict f3dAmDth31QxgsPYm4V7Pi3ISjDsEguuE7CzWkFLyzOhqPJ8O8v6q4DIHia6GD5
 

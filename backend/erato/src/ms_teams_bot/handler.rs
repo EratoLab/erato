@@ -7,8 +7,11 @@
 use super::TeamsBot;
 use super::activity::{Activity, ConversationKind, IncomingFile, split_channel_thread};
 use super::cards::{self, ApprovalSubmit};
+use super::controls::{self, ControlCommand};
 use super::graph::{Graph, GraphIdentity, context_markdown};
-use super::host::{Completion, GenerationUpdate, Host, Session, StartError};
+use super::host::{
+    ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TeamsRequest,
+};
 use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply, WORKING_STATUS};
 use super::user_token::sign_in_activity;
@@ -17,14 +20,20 @@ use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
 use std::sync::Arc;
-#[cfg(test)]
 use std::time::Duration;
 use tokio::sync::mpsc;
 
 const NEW_CHAT_COMMANDS: [&str; 3] = ["/new", "new chat", "neuer chat"];
 const CONTEXT_FILE_NAME: &str = "teams-conversation-context.md";
 const PREPARING_STATUS: &str = "Preparing your request…";
+const STILL_FINISHING: &str =
+    "The previous response is still finishing. Please try this button again in a moment.";
+/// Bounds how long one control delivery can hold the card lease.
+const CONTROL_DELIVERY_TIMEOUT: Duration = Duration::from_secs(20);
+const MAX_CONTROL_RENDERS: usize = 3;
 
+#[cfg(test)]
+mod generation_tests;
 #[cfg(test)]
 mod sign_in_tests;
 
@@ -61,6 +70,13 @@ async fn process_message(
     if let Some(submit) = activity.value.as_ref().and_then(ApprovalSubmit::from_value) {
         return on_approval(bot, host, activity, target, submit, allow_sign_in).await;
     }
+    if let Some(submit) = activity
+        .value
+        .as_ref()
+        .and_then(controls::Submit::from_value)
+    {
+        return on_control(bot, host, activity, target, submit, allow_sign_in).await;
+    }
 
     let text = activity.text_without_bot_mention();
     let files = activity.incoming_files();
@@ -95,19 +111,58 @@ async fn process_message(
         return Ok(());
     }
 
+    if text.eq_ignore_ascii_case("/stop") {
+        let active = match row.current_chat_id {
+            Some(chat_id) => {
+                host.active_request(&user.session, conversation_id, chat_id)
+                    .await?
+            }
+            None => None,
+        };
+        if let Some(request) = active
+            && let Some(message_id) = request.assistant_message_id
+            && host
+                .stop_request(&user.session, &request, message_id)
+                .await?
+        {
+            update_controls(host, target, request.id).await;
+        } else {
+            target
+                .send_text("There is no active response to stop in this chat.")
+                .await?;
+        }
+        return Ok(());
+    }
+
+    // Resolve the request before displaying progress so a duplicate Teams
+    // delivery cannot leave a second Working bubble behind.
+    let (chat_id, _) = host
+        .ensure_chat(&user.session, &row, bot.settings.assistant_id)
+        .await?;
+    let Some(source_id) = activity.id.as_deref() else {
+        return target
+            .send_text("I could not identify this message. Please send it again.")
+            .await;
+    };
+    let Some(request) = host
+        .remember_request(&user.session, conversation_id, source_id, chat_id)
+        .await?
+    else {
+        return Ok(());
+    };
+
     let mut stream = stream_for(bot, target, kind);
     stream.preparing(PREPARING_STATUS).await;
     let prepared = async {
-        let (chat_id, _) = while_working(
-            &mut stream,
-            host.ensure_chat(&user.session, &row, bot.settings.assistant_id),
-        )
-        .await?;
-
         let mut file_ids = Vec::new();
         for file in files {
-            stream.preparing("Reading attachments…").await;
-            match while_working(&mut stream, intake_file(bot, host, &user, chat_id, &file)).await {
+            match stream
+                .during(
+                    "Reading attachments…",
+                    intake_file(bot, host, &user, chat_id, &file),
+                )
+                .await
+            {
                 Ok(file_id) => file_ids.push(file_id),
                 Err(error) => {
                     tracing::warn!(%error, "Teams attachment could not be processed");
@@ -121,12 +176,12 @@ async fn process_message(
             }
         }
         if !kind.is_personal() && bot.settings.context_message_count > 0 {
-            stream.preparing("Reading the conversation…").await;
-            match while_working(
-                &mut stream,
-                conversation_context(bot, host, activity, &user, chat_id),
-            )
-            .await
+            match stream
+                .during(
+                    "Reading the conversation…",
+                    conversation_context(bot, host, activity, &user, chat_id),
+                )
+                .await
             {
                 Ok(Some(file_id)) => file_ids.push(file_id),
                 Ok(None) => {}
@@ -141,24 +196,32 @@ async fn process_message(
         } else {
             text
         };
-        stream.preparing(PREPARING_STATUS).await;
         Ok::<_, Report>(
-            while_working(
-                &mut stream,
-                host.submit(&user.session, chat_id, message, file_ids),
-            )
-            .await,
+            stream
+                .during(
+                    PREPARING_STATUS,
+                    host.submit(&user.session, chat_id, message, file_ids),
+                )
+                .await,
         )
     }
     .await;
     match prepared {
-        Ok(Ok(updates)) => render_generation(bot, host, target, updates, stream).await,
-        Ok(Err(error)) => stream.finish(&start_error_text(error)).await,
+        Ok(Ok(updates)) => {
+            render_generation(bot, host, target, updates, stream, Some(request)).await
+        }
+        Ok(Err(error)) => {
+            let finished = stream.finish(&start_error_text(error)).await;
+            record_outcome(host, &request, RequestState::Failed).await;
+            finished
+        }
         Err(error) => {
             tracing::error!(%error, "Teams request preparation failed");
-            stream
+            let finished = stream
                 .finish("Sorry, something went wrong while preparing your message.")
-                .await
+                .await;
+            record_outcome(host, &request, RequestState::Failed).await;
+            finished
         }
     }
 }
@@ -236,7 +299,266 @@ async fn on_approval(
         }
     }
     let stream = stream_for(bot, target, activity.conversation_kind());
-    render_generation(bot, host, target, updates, stream).await
+    let request = host.request_for_assistant(message_id).await?;
+    render_generation(bot, host, target, updates, stream, request).await
+}
+
+/// An edit is only a proposal. It never starts a generation or repeats tools.
+pub(super) async fn on_message_edit(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
+    let Some(target) = reply_target(&bot, &activity) else {
+        return;
+    };
+    if let Err(error) = offer_edited_question(&bot, &host, &activity, &target).await {
+        tracing::warn!(%error, "Teams edited question could not be offered");
+    }
+}
+
+async fn offer_edited_question(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+) -> Result<(), Report> {
+    let (Some(source_id), Some(edited_at), Some(conversation)) = (
+        activity.id.as_deref(),
+        activity.timestamp,
+        activity.conversation_id(),
+    ) else {
+        return Ok(());
+    };
+    let Some(user) = authenticate(bot, host, activity, target, false).await? else {
+        return Ok(());
+    };
+    let Some(request) = host
+        .request_for_activity(&user.session, conversation, source_id)
+        .await?
+    else {
+        return if activity.conversation_kind().is_personal() {
+            target.send_text("That edit was saved in Teams. I can regenerate questions sent after this update; please send this question again or edit it in Erato.").await
+        } else {
+            Ok(())
+        };
+    };
+    if !host.request_is_current(&user.session, &request).await? {
+        return target.send_text("That edit was saved in Teams. Only the latest question can be regenerated here; open Erato to edit an earlier turn.").await;
+    }
+    let text = activity.text_without_bot_mention();
+    if text.trim().is_empty() {
+        return Ok(());
+    }
+    if let Some(updated) = host.propose_edit(request.id, &text, edited_at).await? {
+        update_controls(host, target, updated.id).await;
+    }
+    Ok(())
+}
+
+async fn on_control(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    submit: controls::Submit,
+    allow_sign_in: bool,
+) -> Result<(), Report> {
+    let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
+        return Ok(());
+    };
+    let Some(request) = host
+        .request_for_user(
+            &user.session,
+            activity.conversation_id().unwrap_or_default(),
+            submit.request_id,
+        )
+        .await?
+    else {
+        return target
+            .send_text("This control is no longer available for you in this chat.")
+            .await;
+    };
+    let target = &ReplyTarget {
+        connector: target.connector,
+        service_url: target.service_url,
+        conversation_id: target.conversation_id,
+        reply_to_id: (!activity.conversation_kind().is_personal())
+            .then_some(request.source_activity_id.as_str()),
+        mention: target.mention.clone(),
+    };
+    let kind = match submit.command {
+        ControlCommand::Stop => {
+            return stop_from_card(host, &user.session, target, &request, submit.message_id).await;
+        }
+        ControlCommand::Retry => ActionKind::Retry,
+        ControlCommand::Edit => ActionKind::Edit,
+    };
+    let Some(token) = submit.token else {
+        return Ok(());
+    };
+    if request.running() {
+        return target.send_text("Please stop the current response or wait for it to finish, then use the latest card.").await;
+    }
+    // A claim moves the run ID, which a renderer still delivering in this chat
+    // (such as an approval continuation) relies on.
+    if host.generation_active(request.chat_id).await {
+        return target.send_text(STILL_FINISHING).await;
+    }
+    let Some(claimed) = host.claim_request_action(&request, token, kind).await? else {
+        return target.send_text("This action was already used, expired, or replaced by a newer edit. Use the latest card.").await;
+    };
+    match host.revise_request(&user.session, &claimed, kind).await {
+        Ok(updates) => {
+            // The revision runs now; failing bookkeeping must not abandon it.
+            let current = match host.reset_request_action(&claimed).await {
+                Ok(current) => current,
+                Err(error) => {
+                    tracing::warn!(%error, "Teams revision state could not be reset");
+                    Some(claimed)
+                }
+            };
+            let stream = stream_for(bot, target, activity.conversation_kind());
+            render_generation(bot, host, target, updates, stream, current).await
+        }
+        Err(error @ (StartError::Busy | StartError::Internal)) => {
+            host.restore_request_action(&claimed, token, &request)
+                .await?;
+            let text = match error {
+                StartError::Busy => STILL_FINISHING,
+                _ => "Something went wrong while starting this. Please try the button again.",
+            };
+            target.send_text(text).await
+        }
+        Err(error) => {
+            host.reject_request_action(&claimed, &request).await?;
+            update_controls(host, target, request.id).await;
+            reply_start_error(target, error).await
+        }
+    }
+}
+
+async fn stop_from_card(
+    host: &Host,
+    session: &Session,
+    target: &ReplyTarget<'_>,
+    request: &TeamsRequest,
+    message_id: Option<Uuid>,
+) -> Result<(), Report> {
+    let stopped = match message_id {
+        Some(message_id) => host.stop_request(session, request, message_id).await?,
+        None => false,
+    };
+    if stopped {
+        update_controls(host, target, request.id).await;
+        return Ok(());
+    }
+    if request.running() && message_id == request.assistant_message_id {
+        host.expire_request_controls(request).await?;
+        update_controls(host, target, request.id).await;
+    }
+    target
+        .send_text("This response has already finished or was replaced. There is nothing to stop.")
+        .await
+}
+
+async fn update_controls(host: &Host, target: &ReplyTarget<'_>, request_id: Uuid) {
+    if let Err(error) = sync_controls(host, target, request_id).await {
+        tracing::warn!(%error, "Teams response control could not be delivered; /stop remains available");
+    }
+}
+
+/// Deliver the latest control state without holding a database transaction
+/// across Connector calls. Concurrent callers only bump the version; the
+/// lease holder keeps rendering until the version it delivered is the latest.
+async fn sync_controls(
+    host: &Host,
+    target: &ReplyTarget<'_>,
+    request_id: Uuid,
+) -> Result<(), Report> {
+    let owner = Uuid::new_v4();
+    let Some(mut current) = host.claim_controls(request_id, owner).await? else {
+        return Ok(());
+    };
+    let mut renders = 0;
+    loop {
+        renders += 1;
+        let shown = current.control_activity_id.clone();
+        let delivered =
+            tokio::time::timeout(CONTROL_DELIVERY_TIMEOUT, deliver_controls(target, &current))
+                .await
+                .unwrap_or_else(|_| Err(eyre!("Teams response control delivery timed out")));
+        let (card, failure) = match delivered {
+            Ok(card) => (card, None),
+            Err(error) => (shown, Some(error)),
+        };
+        let give_up = failure.is_some() || renders >= MAX_CONTROL_RENDERS;
+        let next = host
+            .release_controls(&current, owner, card.as_deref(), give_up)
+            .await?;
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        match next {
+            Some(next) => current = next,
+            None => return Ok(()),
+        }
+    }
+}
+
+/// Make the control card match `request`; returns the card now showing it.
+async fn deliver_controls(
+    target: &ReplyTarget<'_>,
+    request: &TeamsRequest,
+) -> Result<Option<String>, Report> {
+    let shown = request.control_activity_id.as_deref();
+    if !controls::should_show(request) {
+        let Some(id) = shown else {
+            return Ok(None);
+        };
+        if let Err(error) = target
+            .connector
+            .delete(target.service_url, target.conversation_id, id)
+            .await
+        {
+            tracing::debug!(%error, "Could not remove redundant response controls");
+            // At least remove the duplicate button if deleting its card fails.
+            target.update(id, controls::activity(request)).await?;
+            return Ok(Some(id.to_string()));
+        }
+        return Ok(None);
+    }
+    let activity = controls::activity(request);
+    match shown {
+        Some(id) => {
+            target.update(id, activity).await?;
+            Ok(Some(id.to_string()))
+        }
+        None => target.send(&activity).await,
+    }
+}
+
+/// Record how the request ended. Delivery already happened, so failures are
+/// only logged; `None` also means a newer run took the request over.
+async fn record_outcome(
+    host: &Host,
+    request: &TeamsRequest,
+    state: RequestState,
+) -> Option<TeamsRequest> {
+    match host.finish_request(request, state).await {
+        Ok(updated) => updated,
+        Err(error) => {
+            tracing::warn!(%error, "Teams request outcome could not be recorded");
+            None
+        }
+    }
+}
+
+async fn settle_controls(
+    host: &Host,
+    target: &ReplyTarget<'_>,
+    request: &TeamsRequest,
+    state: RequestState,
+) {
+    if record_outcome(host, request, state).await.is_some() {
+        update_controls(host, target, request.id).await;
+    }
 }
 
 fn stream_for<'a>(
@@ -629,6 +951,7 @@ async fn render_generation(
     target: &ReplyTarget<'_>,
     mut updates: mpsc::Receiver<GenerationUpdate>,
     mut stream: StreamingReply<'_>,
+    mut request: Option<TeamsRequest>,
 ) -> Result<(), Report> {
     stream.informative(WORKING_STATUS).await;
     let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
@@ -636,30 +959,71 @@ async fn render_generation(
     let mut generation = None;
     let mut completion: Option<Completion> = None;
     let mut failure: Option<String> = None;
+    let mut stop_requested = false;
+    let mut native_stop_recorded = None;
     loop {
         tokio::select! {
-            update = updates.recv() => match update {
-                Some(GenerationUpdate::Started { chat_id, message_id }) => {
-                    generation = Some((chat_id, message_id));
+            update = updates.recv() => {
+                let Some(update) = update else {
+                    break;
+                };
+                host.track_update(&mut request, &update, stream.native_stop_available()).await;
+                match update {
+                    GenerationUpdate::Started { chat_id, message_id } => {
+                        generation = Some((chat_id, message_id));
+                        native_stop_recorded = Some(stream.native_stop_available());
+                        // Stop may arrive on the opening informative chunk before
+                        // the backend has announced its saved assistant ID.
+                        if stop_requested || stream.is_cancelled() {
+                            stop_requested = true;
+                            host.stop_generation(chat_id, message_id).await;
+                            host.mark_request_stopping(&mut request).await;
+                        }
+                        if let Some(current) = &request {
+                            update_controls(host, target, current.id).await;
+                        }
+                    }
+                    GenerationUpdate::Text(text) => {
+                        if !stop_requested {
+                            stream.update(&text).await;
+                        }
+                    }
+                    GenerationUpdate::Status(status) => stream.informative(&status).await,
+                    GenerationUpdate::Completed(done) => completion = Some(done),
+                    GenerationUpdate::Failed(message) => failure = Some(message),
+                    GenerationUpdate::UserMessageSaved(_) | GenerationUpdate::ToolStarted => {}
                 }
-                Some(GenerationUpdate::Text(text)) => stream.update(&text).await,
-                Some(GenerationUpdate::Status(status)) => {
-                    stream.informative(&status).await;
-                }
-                Some(GenerationUpdate::Completed(done)) => completion = Some(done),
-                Some(GenerationUpdate::Failed(message)) => failure = Some(message),
-                None => break,
-            },
+            }
             _ = timer.tick() => stream.flush().await,
         }
-        // A Stop can arrive on the opening status, before the backend has
-        // announced its message; keep reading until it does.
-        if stream.is_cancelled()
-            && let Some((chat_id, message_id)) = generation
-        {
-            host.stop_generation(chat_id, message_id).await;
-            return Ok(());
+        if stream.is_cancelled() && !stop_requested {
+            stop_requested = true;
+            if let Some((chat_id, message_id)) = generation {
+                host.stop_generation(chat_id, message_id).await;
+            }
+            host.mark_request_stopping(&mut request).await;
+            if let Some(current) = &request {
+                update_controls(host, target, current.id).await;
+            }
+            // Drain terminal events before offering Retry: tools and their
+            // final effects may still be persisting after cancellation.
         }
+        let native_stop = stream.native_stop_available();
+        if !stop_requested && native_stop_recorded.is_some_and(|recorded| recorded != native_stop) {
+            native_stop_recorded = Some(native_stop);
+            host.track_native_stop(&mut request, native_stop).await;
+            if let Some(current) = &request {
+                update_controls(host, target, current.id).await;
+            }
+        }
+    }
+
+    if stop_requested || host.stop_was_requested(request.as_ref()).await {
+        let finished = stream.finish_stopped().await;
+        if let Some(request) = &request {
+            settle_controls(host, target, request, RequestState::Stopped).await;
+        }
+        return finished;
     }
 
     if failure.is_some() || completion.is_none() {
@@ -667,43 +1031,41 @@ async fn render_generation(
             Some(message) => format!("Sorry, something went wrong: {message}"),
             None => "Sorry, I did not get an answer this time.".to_string(),
         };
-        return stream.finish(&text).await;
+        let finished = stream.finish(&text).await;
+        if let Some(request) = &request {
+            settle_controls(host, target, request, RequestState::Failed).await;
+        }
+        return finished;
     }
     let completion = completion.expect("completion checked above");
     let link = render::chat_link(
         bot.settings.public_base_url.as_deref(),
         &completion.chat_id.to_string(),
     );
-    stream
+    let delivered = stream
         .finish_with_details(
             &completion_text(&completion, link.as_deref()),
             &completion.earlier_text,
         )
-        .await?;
+        .await;
     if stream.is_cancelled() {
-        return Ok(());
-    }
-    match &completion.approvals {
-        Some(set) => send_approval_card(target, set).await,
-        None => Ok(()),
-    }
-}
-
-/// Keep preparation visible and enforce stream deadlines even if a download
-/// or backend operation has not produced any events yet.
-async fn while_working<T>(
-    stream: &mut StreamingReply<'_>,
-    work: impl std::future::Future<Output = T>,
-) -> T {
-    tokio::pin!(work);
-    let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
-    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    loop {
-        tokio::select! {
-            result = &mut work => return result,
-            _ = timer.tick() => stream.flush().await,
+        if let Some((chat_id, message_id)) = generation {
+            host.stop_generation(chat_id, message_id).await;
         }
+        let stopped = stream.finish_stopped().await;
+        if let Some(request) = &request {
+            settle_controls(host, target, request, RequestState::Stopped).await;
+        }
+        return delivered.and(stopped);
     }
+    let approvals = match (&delivered, &completion.approvals) {
+        (Ok(()), Some(set)) => send_approval_card(target, set).await,
+        _ => Ok(()),
+    };
+    if let Some(request) = &request {
+        settle_controls(host, target, request, RequestState::Completed).await;
+    }
+    delivered.and(approvals)
 }
 
 pub(super) fn completion_text(completion: &Completion, chat_link: Option<&str>) -> String {
@@ -750,6 +1112,9 @@ fn start_error_text(error: StartError) -> String {
         StartError::Rejected(message) => format!("I could not start this request: {message}"),
         StartError::DecisionsMismatch | StartError::AlreadyDecided => {
             "This approval is not open anymore.".to_string()
+        }
+        StartError::Internal => {
+            "Something went wrong while starting this request. Please try again.".to_string()
         }
     }
 }

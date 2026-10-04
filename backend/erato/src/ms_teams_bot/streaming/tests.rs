@@ -334,25 +334,62 @@ async fn throttling_retains_the_latest_status_and_reuses_the_sequence() {
 
 #[tokio::test]
 async fn user_stop_never_creates_a_fallback_or_final_answer() {
+    for message in [
+        "Content stream was canceled by user.",
+        "Content stream was cancelled by user.",
+    ] {
+        let h = Harness::new().await;
+        let target = h.target();
+        let mut reply = StreamingReply::new(&target, true);
+        reply.update("Hello").await;
+        h.fail_next(StatusCode::FORBIDDEN, "ContentStreamNotAllowed", message);
+        ready(&mut reply);
+        reply.update("Hello world").await;
+        assert!(reply.is_cancelled());
+        ready(&mut reply);
+        reply
+            .finish_with_details("Hello world, finished", "Earlier finding")
+            .await
+            .unwrap();
+        reply.flush().await;
+        reply.finish_stopped().await.unwrap();
+        assert!(reply.is_cancelled());
+        assert!(!reply.native_stop_available());
+        assert_eq!(h.requests().len(), 2);
+    }
+}
+
+#[tokio::test]
+async fn native_stop_exists_only_until_the_stream_switches_to_editable_progress() {
     let h = Harness::new().await;
     let target = h.target();
     let mut reply = StreamingReply::new(&target, true);
-    reply.update("Hello").await;
-    h.fail_next(
-        StatusCode::FORBIDDEN,
-        "ContentStreamNotAllowed",
-        "Content stream was canceled by user.",
+    assert!(!reply.native_stop_available());
+    reply.update("I am checking…").await;
+    assert!(reply.native_stop_available());
+    ready(&mut reply);
+    reply.informative("Reading the file…").await;
+    assert!(!reply.native_stop_available());
+    assert_eq!(
+        h.requests().last().unwrap().2["entities"][0]["streamType"],
+        "final"
     );
+}
+
+#[tokio::test]
+async fn custom_stop_settles_editable_progress_with_partial_answer() {
+    let h = Harness::new().await;
+    let target = h.target();
+    let mut reply = StreamingReply::new(&target, false);
+    reply.update("Partial answer").await;
     ready(&mut reply);
-    reply.update("Hello world").await;
-    assert!(reply.is_cancelled());
-    ready(&mut reply);
-    reply
-        .finish_with_details("Hello world, finished", "Earlier finding")
-        .await
-        .unwrap();
-    reply.flush().await;
-    assert_eq!(h.requests().len(), 2);
+    reply.finish_stopped().await.unwrap();
+    let requests = h.requests();
+    assert_eq!(requests.last().unwrap().0, Method::PUT);
+    assert_eq!(
+        requests.last().unwrap().2["text"],
+        "**Stopped.**\n\nPartial answer"
+    );
 }
 
 #[tokio::test]

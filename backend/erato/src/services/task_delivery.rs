@@ -35,6 +35,7 @@ use crate::models::message::ProvenanceRunMode;
 use crate::policy::engine::PolicyEngine;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::server::api::v1beta::message_streaming::release_unstarted_lease;
 use crate::services::background_tasks::{Takeover, TaskOutcome};
 use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
 use crate::state::AppState;
@@ -869,7 +870,7 @@ pub async fn deliver_task_result(
         )
         .await;
         lease_guard.disarm();
-        release_lease(app_state, &task, origin_chat_id).await;
+        release_unstarted_lease(app_state, &task, origin_chat_id).await;
         return DeliveryOutcome::Closed;
     }
 
@@ -887,7 +888,7 @@ pub async fn deliver_task_result(
             Err(error) => {
                 tracing::warn!(%error, %origin_chat_id, "Failed to open the delivery transaction");
                 lease_guard.disarm();
-                release_lease(app_state, &task, origin_chat_id).await;
+                release_unstarted_lease(app_state, &task, origin_chat_id).await;
                 release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
                 return DeliveryOutcome::Deferred;
             }
@@ -920,7 +921,7 @@ pub async fn deliver_task_result(
             Err(error) => {
                 tracing::warn!(%error, %origin_chat_id, "The delivery duplicate probe failed");
                 lease_guard.disarm();
-                release_lease(app_state, &task, origin_chat_id).await;
+                release_unstarted_lease(app_state, &task, origin_chat_id).await;
                 release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
                 return DeliveryOutcome::Deferred;
             }
@@ -935,7 +936,7 @@ pub async fn deliver_task_result(
                     Ok(Some(row)) => (row, false),
                     _ => {
                         lease_guard.disarm();
-                        release_lease(app_state, &task, origin_chat_id).await;
+                        release_unstarted_lease(app_state, &task, origin_chat_id).await;
                         release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
                         return DeliveryOutcome::Deferred;
                     }
@@ -974,7 +975,7 @@ pub async fn deliver_task_result(
                     Err(error) => {
                         tracing::warn!(%error, %origin_chat_id, "Failed to resolve the origin's active thread tip");
                         lease_guard.disarm();
-                        release_lease(app_state, &task, origin_chat_id).await;
+                        release_unstarted_lease(app_state, &task, origin_chat_id).await;
                         release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
                         return DeliveryOutcome::Deferred;
                     }
@@ -1022,7 +1023,7 @@ pub async fn deliver_task_result(
                     Err(error) => {
                         tracing::warn!(%error, %origin_chat_id, "Failed to append a delivered task result");
                         lease_guard.disarm();
-                        release_lease(app_state, &task, origin_chat_id).await;
+                        release_unstarted_lease(app_state, &task, origin_chat_id).await;
                         release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
                         return DeliveryOutcome::Deferred;
                     }
@@ -1055,14 +1056,14 @@ pub async fn deliver_task_result(
             );
             let _ = txn.rollback().await;
             lease_guard.disarm();
-            release_lease(app_state, &task, origin_chat_id).await;
+            release_unstarted_lease(app_state, &task, origin_chat_id).await;
             return DeliveryOutcome::Skipped;
         }
 
         if let Err(error) = txn.commit().await {
             tracing::warn!(%error, %origin_chat_id, "Failed to commit the delivery transaction");
             lease_guard.disarm();
-            release_lease(app_state, &task, origin_chat_id).await;
+            release_unstarted_lease(app_state, &task, origin_chat_id).await;
             release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
             return DeliveryOutcome::Deferred;
         }
@@ -1091,7 +1092,7 @@ pub async fn deliver_task_result(
     //    composes it through history.
     if scheduling == erato_config::config::TaskScheduling::Silent {
         lease_guard.disarm();
-        release_lease(app_state, &task, origin_chat_id).await;
+        release_unstarted_lease(app_state, &task, origin_chat_id).await;
         return DeliveryOutcome::Delivered;
     }
 
@@ -1190,25 +1191,6 @@ async fn release_pending(
     {
         tracing::warn!(%child_chat_id, "Could not release a task result claim back to pending");
     }
-}
-
-/// Release the origin's lease through the lifecycle rather than by hand.
-///
-/// That is what gives the identity-gated `remove_task` **and** the closing
-/// frame for anyone attached to this lease; a hand-rolled `mark_completed` plus
-/// `remove_task` would silently drop the frame.
-async fn release_lease(
-    app_state: &AppState,
-    task: &std::sync::Arc<crate::services::background_tasks::StreamingTask>,
-    origin_chat_id: Uuid,
-) {
-    let _ = crate::server::api::v1beta::message_streaming::with_generation_task_lifecycle(
-        &app_state.background_tasks,
-        task,
-        origin_chat_id,
-        async { Ok(()) },
-    )
-    .await;
 }
 
 /// The child's own answer, bounded, for the delivered content part.

@@ -5,7 +5,10 @@
 //! protocol side stays independent and could move into its own crate.
 
 mod progress;
+mod requests;
 mod sign_in;
+
+pub use requests::{ActionKind, RequestState, TeamsRequest};
 
 use super::activity::ConversationKind;
 use super::cards::{ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet};
@@ -37,6 +40,9 @@ use tokio::sync::{broadcast, mpsc};
 /// Progress of one generation, as the handler renders it.
 #[derive(Debug, Clone)]
 pub enum GenerationUpdate {
+    UserMessageSaved(Uuid),
+    /// A tool was proposed; retries must not replay potentially completed work.
+    ToolStarted,
     Started {
         chat_id: Uuid,
         message_id: Uuid,
@@ -72,12 +78,24 @@ pub enum StartError {
     DecisionsMismatch,
     /// Every approval of the message was already decided.
     AlreadyDecided,
+    /// Erato could not start it for a transient reason; the details are logged.
+    Internal,
+}
+
+impl StartError {
+    pub(crate) fn internal(context: &'static str, error: impl std::fmt::Display) -> Self {
+        tracing::warn!(%error, context, "Teams request could not start");
+        StartError::Internal
+    }
 }
 
 impl From<StreamRouteError> for StartError {
     fn from(error: StreamRouteError) -> Self {
         match error {
             StreamRouteError::GenerationRunning(_) => StartError::Busy,
+            StreamRouteError::PlainText(status, message) if status.is_server_error() => {
+                StartError::internal("start the generation", message)
+            }
             StreamRouteError::PlainText(_, message) => StartError::Rejected(message),
             StreamRouteError::DecisionsMismatch(_) => StartError::DecisionsMismatch,
             StreamRouteError::AlreadyContinued(_) => StartError::AlreadyDecided,
@@ -416,7 +434,7 @@ impl Host {
         let previous_message_id =
             crate::models::message::get_active_thread_tip(&self.app_state.db, &chat_id)
                 .await
-                .map_err(|error| StartError::Rejected(error.to_string()))?
+                .map_err(|error| StartError::internal("find the latest message", error))?
                 .map(|message| message.id);
         let request =
             MessageSubmitRequest::for_integration(chat_id, previous_message_id, text, file_ids);
@@ -566,8 +584,21 @@ fn translate(
         let mut progress = progress::Progress::default();
         let mut announced_message = None;
         let mut last_status = None;
+        let mut tool_announced = false;
         loop {
             let event = events.recv().await;
+            if matches!(
+                &event,
+                Ok(StreamingEvent::ToolCallProposed { .. }
+                    | StreamingEvent::ToolCallUpdate { .. }
+                    | StreamingEvent::ClientToolCall { .. })
+            ) && !tool_announced
+            {
+                tool_announced = true;
+                if tx.send(GenerationUpdate::ToolStarted).await.is_err() {
+                    break;
+                }
+            }
             // Continuations can begin with deltas instead of a Started event.
             // Remember their exact message too, for the native Stop button.
             let message_id = match &event {
@@ -623,6 +654,9 @@ fn translate(
                 }
             }
             let update = match event {
+                Ok(StreamingEvent::UserMessageSaved { message_id, .. }) => {
+                    GenerationUpdate::UserMessageSaved(message_id)
+                }
                 Ok(StreamingEvent::AssistantMessageStarted { .. }) => {
                     GenerationUpdate::Status(WORKING_STATUS.into())
                 }
@@ -823,6 +857,24 @@ mod tests {
     use super::*;
     use crate::models::message::{ContentPartToolApprovalRequest, ToolApprovalAnnotations};
 
+    #[test]
+    fn server_failures_become_retryable_without_their_details() {
+        assert!(matches!(
+            StartError::from(StreamRouteError::PlainText(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load chat for regeneration: connection reset".into(),
+            )),
+            StartError::Internal
+        ));
+        assert!(matches!(
+            StartError::from(StreamRouteError::PlainText(
+                axum::http::StatusCode::CONFLICT,
+                "This question is no longer the latest question in this chat.".into(),
+            )),
+            StartError::Rejected(reason) if reason.contains("latest question")
+        ));
+    }
+
     #[tokio::test]
     async fn translates_thinking_and_tool_progress_including_continuations() {
         let chat_id = Uuid::new_v4();
@@ -879,6 +931,10 @@ mod tests {
         assert!(
             matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s == "Thinking…")
         );
+        assert!(matches!(
+            updates.recv().await,
+            Some(GenerationUpdate::ToolStarted)
+        ));
         assert!(
             matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s.contains("Reading page (2/3)"))
         );

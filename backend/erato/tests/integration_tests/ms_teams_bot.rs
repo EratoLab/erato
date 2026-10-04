@@ -1,5 +1,6 @@
 //! Teams bot integration tests: the Erato side of a Teams conversation.
 
+mod revisions;
 mod sign_in;
 
 use crate::test_utils::{MockLlmConfig, setup_mock_llm_server};
@@ -36,7 +37,10 @@ async fn completion(mut updates: mpsc::Receiver<GenerationUpdate>) -> (Completio
             GenerationUpdate::Text(_) => text_updates += 1,
             GenerationUpdate::Completed(done) => completion = Some(done),
             GenerationUpdate::Failed(error) => panic!("generation failed: {error}"),
-            GenerationUpdate::Started { .. } | GenerationUpdate::Status(_) => {}
+            GenerationUpdate::Started { .. }
+            | GenerationUpdate::Status(_)
+            | GenerationUpdate::UserMessageSaved(_)
+            | GenerationUpdate::ToolStarted => {}
         }
     }
     (completion.expect("generation completed"), text_updates)

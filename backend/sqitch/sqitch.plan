@@ -57,3 +57,4 @@
 0054_add_chat_created_via [0053_add_ms_teams_bot] 2026-09-29T12:00:00Z bdart <dfiebig@bdart.de> # Record which surface created each chat
 0055_add_client_tool_decisions [0054_add_chat_created_via] 2026-09-28T16:30:00Z Claude Opus 5.5 <noreply@anthropic.com> # Per-tool client tool decisions in user preferences
 0056_add_ms_teams_pending_sign_ins [0055_add_client_tool_decisions] 2026-10-02T17:10:41Z Daniel Fiebig <daniel@Mac.localdomain> # Resume Teams messages after OAuth sign-in
+0057_add_ms_teams_requests [0056_add_ms_teams_pending_sign_ins] 2026-10-04T12:00:00Z Codex <codex@openai.com> # Durable Teams cancellation, retry and edited prompt controls

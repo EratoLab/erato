@@ -140,6 +140,11 @@ impl<'a> StreamingReply<'a> {
         self.cancelled
     }
 
+    /// Teams owns the Stop button while an accepted native stream is open.
+    pub fn native_stop_available(&self) -> bool {
+        self.native && self.stream_id.is_some() && !self.cancelled
+    }
+
     /// Before Erato accepts a generation, personal chats use typing instead
     /// of opening a second native stream if the previous turn is still busy.
     pub async fn preparing(&mut self, text: &str) {
@@ -147,6 +152,24 @@ impl<'a> StreamingReply<'a> {
             self.status = Some(short_status(text));
         }
         self.flush().await;
+    }
+
+    /// Keep preparation visible while work is pending, including quiet I/O.
+    pub async fn during<T>(
+        &mut self,
+        status: &str,
+        work: impl std::future::Future<Output = T>,
+    ) -> T {
+        self.preparing(status).await;
+        tokio::pin!(work);
+        let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                result = &mut work => return result,
+                _ = timer.tick() => self.flush().await,
+            }
+        }
     }
 
     pub async fn informative(&mut self, text: &str) {
@@ -323,6 +346,7 @@ impl<'a> StreamingReply<'a> {
     fn handle_error(&mut self, error: &eyre::Report) -> Failure {
         if let Some(error) = error.downcast_ref::<ActivityError>() {
             if error.stream_cancelled() {
+                tracing::debug!("Teams native stream stopped by user");
                 self.cancelled = true;
                 return Failure::Cancelled;
             }
@@ -367,6 +391,21 @@ impl<'a> StreamingReply<'a> {
     /// Replace progress with final content, including errors and approvals.
     pub async fn finish(&mut self, final_text: &str) -> eyre::Result<()> {
         self.finish_with_details(final_text, "").await
+    }
+
+    /// Native Stop freezes the streamed answer in Teams; only our separate
+    /// control card can show its terminal state. Custom cancellation can still
+    /// settle an editable reply or a native stream which remains open.
+    pub async fn finish_stopped(&mut self) -> eyre::Result<()> {
+        if self.cancelled {
+            return Ok(());
+        }
+        let text = if self.text.trim().is_empty() {
+            "**Stopped.**".to_string()
+        } else {
+            format!("**Stopped.**\n\n{}", self.text)
+        };
+        self.finish(&text).await
     }
 
     pub async fn finish_with_details(
