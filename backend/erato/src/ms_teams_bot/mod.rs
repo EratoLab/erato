@@ -15,6 +15,7 @@
 pub mod activity;
 pub mod cards;
 pub mod connector;
+mod controls;
 pub mod graph;
 mod handler;
 pub mod host;
@@ -154,6 +155,17 @@ pub async fn messages_route(
     match activity.kind.as_str() {
         "message" => {
             tokio::spawn(handler::on_message(bot, host, activity));
+            StatusCode::OK.into_response()
+        }
+        "messageUpdate"
+            if activity
+                .channel_data
+                .as_ref()
+                .and_then(|data| data.get("eventType"))
+                .and_then(serde_json::Value::as_str)
+                == Some("editMessage") =>
+        {
+            tokio::spawn(handler::on_message_edit(bot, host, activity));
             StatusCode::OK.into_response()
         }
         "invoke" => {

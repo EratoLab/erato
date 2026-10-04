@@ -232,6 +232,31 @@ impl Connector {
         Ok(())
     }
 
+    /// Remove a temporary control activity which the bot sent.
+    pub async fn delete(
+        &self,
+        service_url: &str,
+        conversation_id: &str,
+        activity_id: &str,
+    ) -> Result<(), Report> {
+        let url = format!(
+            "{}/v3/conversations/{}/activities/{}",
+            service_url.trim_end_matches('/'),
+            encode(conversation_id),
+            encode(activity_id)
+        );
+        let response = self
+            .http
+            .delete(url)
+            .bearer_auth(self.app_token().await?)
+            .send()
+            .await?;
+        if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
+            return Err(ActivityError::from_response(response).await.into());
+        }
+        Ok(())
+    }
+
     /// Open (or reuse) the personal chat between the bot and a user; returns
     /// its conversation ID. Used to move sign-in out of group conversations.
     pub async fn create_personal_conversation(

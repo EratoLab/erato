@@ -352,7 +352,25 @@ async fn user_stop_never_creates_a_fallback_or_final_answer() {
         .await
         .unwrap();
     reply.flush().await;
+    reply.finish_stopped().await.unwrap();
+    assert!(reply.is_cancelled());
     assert_eq!(h.requests().len(), 2);
+}
+
+#[tokio::test]
+async fn custom_stop_settles_editable_progress_with_partial_answer() {
+    let h = Harness::new().await;
+    let target = h.target();
+    let mut reply = StreamingReply::new(&target, false);
+    reply.update("Partial answer").await;
+    ready(&mut reply);
+    reply.finish_stopped().await.unwrap();
+    let requests = h.requests();
+    assert_eq!(requests.last().unwrap().0, Method::PUT);
+    assert_eq!(
+        requests.last().unwrap().2["text"],
+        "**Stopped.**\n\nPartial answer"
+    );
 }
 
 #[tokio::test]

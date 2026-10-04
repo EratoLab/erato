@@ -369,6 +369,21 @@ impl<'a> StreamingReply<'a> {
         self.finish_with_details(final_text, "").await
     }
 
+    /// Native Stop freezes the streamed answer in Teams; only our separate
+    /// control card can show its terminal state. Custom cancellation can still
+    /// settle an editable reply or a native stream which remains open.
+    pub async fn finish_stopped(&mut self) -> eyre::Result<()> {
+        if self.cancelled {
+            return Ok(());
+        }
+        let text = if self.text.trim().is_empty() {
+            "**Stopped.**".to_string()
+        } else {
+            format!("**Stopped.**\n\n{}", self.text)
+        };
+        self.finish(&text).await
+    }
+
     pub async fn finish_with_details(
         &mut self,
         text: &str,

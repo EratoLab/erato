@@ -5,7 +5,10 @@
 //! protocol side stays independent and could move into its own crate.
 
 mod progress;
+mod requests;
 mod sign_in;
+
+pub use requests::TeamsRequest;
 
 use super::activity::ConversationKind;
 use super::cards::{ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet};
@@ -37,6 +40,9 @@ use tokio::sync::{broadcast, mpsc};
 /// Progress of one generation, as the handler renders it.
 #[derive(Debug, Clone)]
 pub enum GenerationUpdate {
+    UserMessageSaved(Uuid),
+    /// A tool was proposed; retries must not replay potentially completed work.
+    ToolStarted,
     Started {
         chat_id: Uuid,
         message_id: Uuid,
@@ -566,8 +572,21 @@ fn translate(
         let mut progress = progress::Progress::default();
         let mut announced_message = None;
         let mut last_status = None;
+        let mut tool_announced = false;
         loop {
             let event = events.recv().await;
+            if matches!(
+                &event,
+                Ok(StreamingEvent::ToolCallProposed { .. }
+                    | StreamingEvent::ToolCallUpdate { .. }
+                    | StreamingEvent::ClientToolCall { .. })
+            ) && !tool_announced
+            {
+                tool_announced = true;
+                if tx.send(GenerationUpdate::ToolStarted).await.is_err() {
+                    break;
+                }
+            }
             // Continuations can begin with deltas instead of a Started event.
             // Remember their exact message too, for the native Stop button.
             let message_id = match &event {
@@ -623,6 +642,9 @@ fn translate(
                 }
             }
             let update = match event {
+                Ok(StreamingEvent::UserMessageSaved { message_id, .. }) => {
+                    GenerationUpdate::UserMessageSaved(message_id)
+                }
                 Ok(StreamingEvent::AssistantMessageStarted { .. }) => {
                     GenerationUpdate::Status(WORKING_STATUS.into())
                 }
@@ -879,6 +901,10 @@ mod tests {
         assert!(
             matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s == "Thinking…")
         );
+        assert!(matches!(
+            updates.recv().await,
+            Some(GenerationUpdate::ToolStarted)
+        ));
         assert!(
             matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s.contains("Reading page (2/3)"))
         );

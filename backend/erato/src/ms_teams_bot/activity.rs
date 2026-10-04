@@ -15,6 +15,8 @@ pub struct Activity {
     #[serde(default)]
     pub id: Option<String>,
     #[serde(default)]
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
     pub text: Option<String>,

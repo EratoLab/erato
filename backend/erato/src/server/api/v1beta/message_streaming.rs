@@ -1978,6 +1978,20 @@ pub struct RegenerateMessageRequest {
     delegation_run_mode: Option<DelegationRunMode>,
 }
 
+impl RegenerateMessageRequest {
+    /// Reuse the original turn's model and context when an integration retries it.
+    pub(crate) fn for_integration(current_message_id: Uuid) -> Self {
+        Self {
+            current_message_id,
+            chat_provider_id: None,
+            selected_facet_ids: Vec::new(),
+            action_facet: None,
+            mentioned_assistant_ids: None,
+            delegation_run_mode: None,
+        }
+    }
+}
+
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
 #[allow(clippy::large_enum_variant)]
@@ -2123,6 +2137,26 @@ pub struct EditMessageRequest {
     #[serde(default)]
     #[schema(nullable = false)]
     delegation_run_mode: Option<DelegationRunMode>,
+}
+
+impl EditMessageRequest {
+    /// Replace a user turn while preserving the backend's normal branch semantics.
+    pub(crate) fn for_integration(
+        message_id: Uuid,
+        replace_user_message: String,
+        replace_input_files_ids: Vec<Uuid>,
+    ) -> Self {
+        Self {
+            message_id,
+            replace_user_message,
+            replace_input_files_ids,
+            chat_provider_id: None,
+            selected_facet_ids: Vec::new(),
+            action_facet: None,
+            mentioned_assistant_ids: None,
+            delegation_run_mode: None,
+        }
+    }
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -3089,9 +3123,9 @@ pub(crate) async fn settle_tail_deliveries(
 /// share: a cleanup guard around the run, the failure frame, the closing stream
 /// end, and the terminal outcome on the chat's generation lease. The edit,
 /// regenerate and continue paths run their own tail instead — each owns its
-/// request's response channel and forwards a failure over that. The continue
-/// tail also broadcasts the failure frame and stream end, because the Teams
-/// bot and resumestream follow a continuation through the broadcast.
+/// request's response channel and forwards a failure over that. Those tails
+/// also broadcast the failure frame and stream end, because integrations and
+/// resumestream follow those generations through the task broadcast.
 ///
 /// A failure is captured even where the caller absorbs it: delegation turns a
 /// failed child into a `failed` envelope the parent recovers from in prose, and
@@ -13784,6 +13818,166 @@ pub(crate) async fn run_message_submit_task(
     .await
 }
 
+/// Teams cards are valid only for the current answer. Recheck after taking an
+/// exclusive lease so a question that arrived during validation wins over an
+/// old card. Web keeps its existing branch-selection and admission behavior.
+async fn acquire_revision_generation_lease(
+    app_state: &AppState,
+    chat_id: Uuid,
+    expected_tip: Option<Uuid>,
+) -> Result<
+    (
+        tokio::sync::broadcast::Receiver<StreamingEvent>,
+        Arc<StreamingTask>,
+    ),
+    StreamRouteError,
+> {
+    let Some(expected_tip) = expected_tip else {
+        return acquire_user_generation_lease(app_state, chat_id, Uuid::new_v4()).await;
+    };
+    let (events, task) = app_state
+        .background_tasks
+        .try_start_task(
+            chat_id,
+            Uuid::new_v4(),
+            Takeover::TakeParked,
+            app_state.config.generation_status.stale_after_secs,
+        )
+        .await
+        .map_err(|held| {
+            StreamRouteError::GenerationRunning(Box::new(GenerationRunningError {
+                code: "generation_running".to_string(),
+                chat_id,
+                initiator: "user".to_string(),
+                started_at: held.started_at,
+            }))
+        })?;
+    let mut lease_guard = TaskCleanupGuard::new(
+        app_state.background_tasks.clone(),
+        chat_id,
+        task.generation_id,
+    );
+    let validation = match crate::models::message::get_active_thread_tip(&app_state.db, &chat_id)
+        .await
+    {
+        Ok(Some(tip)) if tip.id == expected_tip => Ok(()),
+        Ok(_) => Err((
+            axum::http::StatusCode::CONFLICT,
+            "This question is no longer the latest question in this chat.".to_string(),
+        )),
+        Err(error) => {
+            tracing::warn!(%error, %chat_id, "Failed to validate the latest question for a revision");
+            Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Could not check the latest question in this chat.".to_string(),
+            ))
+        }
+    };
+    if let Err(error) = validation {
+        // Close resumestream subscribers and release this exact lease before
+        // returning. No generation or branch write has started yet.
+        lease_guard.disarm();
+        let _ =
+            with_generation_task_lifecycle(&app_state.background_tasks, &task, chat_id, async {
+                Ok(())
+            })
+            .await;
+        return Err(error.into());
+    }
+    lease_guard.disarm();
+    Ok((events, task))
+}
+
+/// Revisions keep a request-scoped SSE sink for Web as well as the task feed
+/// used by integrations and resumestream. Every exit must close both feeds.
+async fn finish_revision_broadcast(task: &Arc<StreamingTask>, generation_failed: bool) {
+    // Preparation may fail before an assistant exists. Preserve a detailed
+    // generation failure when one was already emitted; otherwise report it here.
+    if generation_failed
+        && !task
+            .get_event_history()
+            .await
+            .iter()
+            .any(|event| matches!(event, StreamingEvent::Error { .. }))
+    {
+        send_background_event(
+            task,
+            StreamingEvent::Error {
+                error: generation_failure_error_value(),
+            },
+            "broadcast revision failure",
+        )
+        .await;
+    }
+    send_background_event(
+        task,
+        StreamingEvent::StreamEnd,
+        "broadcast revision stream end",
+    )
+    .await;
+}
+
+#[cfg(test)]
+mod revision_broadcast_tests {
+    use super::*;
+    use crate::config::GenerationStatusConfig;
+
+    #[tokio::test]
+    async fn preparation_failure_closes_integration_feed_with_error() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
+        let (mut events, task) = manager.start_task(Uuid::new_v4(), Uuid::new_v4()).await;
+
+        finish_revision_broadcast(&task, true).await;
+
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            StreamingEvent::Error { .. }
+        ));
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            StreamingEvent::StreamEnd
+        ));
+        assert_eq!(task.derive_outcome(false), TaskOutcome::Errored);
+    }
+
+    #[tokio::test]
+    async fn completion_closes_integration_feed_without_error() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
+        let (mut events, task) = manager.start_task(Uuid::new_v4(), Uuid::new_v4()).await;
+
+        finish_revision_broadcast(&task, false).await;
+
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            StreamingEvent::StreamEnd
+        ));
+        assert!(events.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn terminal_failure_preserves_existing_structured_error() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
+        let (mut events, task) = manager.start_task(Uuid::new_v4(), Uuid::new_v4()).await;
+        let detail = json!({"message_id": task.message_id(), "error": "provider unavailable"});
+        task.send_event(StreamingEvent::Error {
+            error: Some(detail.clone()),
+        })
+        .await
+        .unwrap();
+
+        finish_revision_broadcast(&task, true).await;
+
+        assert!(
+            matches!(events.try_recv().unwrap(), StreamingEvent::Error { error: Some(error) } if error == detail)
+        );
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            StreamingEvent::StreamEnd
+        ));
+        assert!(events.try_recv().is_err());
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/me/messages/regeneratestream",
@@ -13807,13 +14001,52 @@ pub async fn regenerate_message_sse(
     headers: HeaderMap,
     Json(request): Json<RegenerateMessageRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
+    let StartedGeneration {
+        client_stream_guard,
+        ..
+    } = start_regeneration(
+        &app_state,
+        &policy,
+        &me_user,
+        generation_request_context_from_headers(&headers),
+        request,
+        Some(tx),
+        None,
+    )
+    .await?;
+
+    let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);
+    let event_stream = futures::StreamExt::inspect(receiver_stream, move |_| {
+        let _ = &client_stream_guard;
+    });
+    Ok(Sse::new(event_stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    ))
+}
+
+/// Start a revision using the same authorization, lease, and branch rules as Web.
+/// Integrations consume the task broadcast and pass no request-scoped SSE sink.
+pub(crate) async fn start_regeneration(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    generation_request_context: GenerationRequestContext,
+    request: RegenerateMessageRequest,
+    tx: Option<Sender<Result<Event, Report>>>,
+    expected_tip: Option<Uuid>,
+) -> Result<StartedGeneration, StreamRouteError> {
+    let app_state = app_state.clone();
+    let policy = policy.clone();
+    let me_user = me_user.clone();
     // Validate request parameters
     let validation_result =
         validate_regenerate_request(&app_state, &policy, &me_user, &request.current_message_id)
             .await?;
 
     // Validate action facet before spawning background task (returns HTTP 400 on failure)
-    let generation_request_context = generation_request_context_from_headers(&headers);
     let platform = generation_request_context
         .platform
         .as_deref()
@@ -13896,10 +14129,10 @@ pub async fn regenerate_message_sse(
         &app_state.config.delegation,
     );
 
-    // Create a channel for sending events
-    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
-    let (_abort_rx, task) =
-        acquire_user_generation_lease(&app_state, chat.id, Uuid::new_v4()).await?;
+    let tx = tx.unwrap_or_else(detached_generation_event_sink);
+    let (events, task) =
+        acquire_revision_generation_lease(&app_state, chat.id, expected_tip).await?;
+    let client_stream_guard = task.client_stream_guard();
 
     // Move validated messages into the task
     let previous_message = validation_result.previous_message;
@@ -14087,6 +14320,15 @@ pub async fn regenerate_message_sse(
                 tracing::warn!(%error, "Failed to reconcile deliveries after a regenerate");
             }
 
+            // Publish the real ID before controls or client tools can route to it.
+            task_for_stream.set_message_id(initial_assistant_message.id);
+            task_for_stream
+                .send_event(StreamingEvent::AssistantMessageStarted {
+                    message_id: initial_assistant_message.id,
+                })
+                .await
+                .map_err(Report::msg)?;
+
             let assistant_started_event: RegenerateMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseAssistantMessageStarted {
                     message_id: initial_assistant_message.id,
@@ -14214,6 +14456,7 @@ pub async fn regenerate_message_sse(
             log_and_capture_error("regenerate message background task", &error);
         }
 
+        finish_revision_broadcast(&task_for_stream, generation_failed).await;
         let outcome = task_for_stream.derive_outcome(generation_failed);
         task_for_stream.mark_completed();
         cleanup_guard.disarm();
@@ -14233,14 +14476,11 @@ pub async fn regenerate_message_sse(
         .await;
     });
 
-    // Convert the receiver into a stream and return it
-    let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);
-
-    Ok(Sse::new(receiver_stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    ))
+    Ok(StartedGeneration {
+        chat_id: chat_id_for_cleanup,
+        events,
+        client_stream_guard,
+    })
 }
 
 #[utoipa::path(
@@ -14266,6 +14506,46 @@ pub async fn edit_message_sse(
     headers: HeaderMap,
     Json(request): Json<EditMessageRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
+    let StartedGeneration {
+        client_stream_guard,
+        ..
+    } = start_edit(
+        &app_state,
+        &policy,
+        &me_user,
+        generation_request_context_from_headers(&headers),
+        request,
+        Some(tx),
+        None,
+    )
+    .await?;
+
+    let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);
+    let event_stream = futures::StreamExt::inspect(receiver_stream, move |_| {
+        let _ = &client_stream_guard;
+    });
+    Ok(Sse::new(event_stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    ))
+}
+
+/// Start a revision using the same authorization, lease, and branch rules as Web.
+/// Integrations consume the task broadcast and pass no request-scoped SSE sink.
+pub(crate) async fn start_edit(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    generation_request_context: GenerationRequestContext,
+    request: EditMessageRequest,
+    tx: Option<Sender<Result<Event, Report>>>,
+    expected_tip: Option<Uuid>,
+) -> Result<StartedGeneration, StreamRouteError> {
+    let app_state = app_state.clone();
+    let policy = policy.clone();
+    let me_user = me_user.clone();
     // Validate request parameters
     let message_to_edit =
         validate_edit_request(&app_state, &policy, &me_user, &request.message_id).await?;
@@ -14278,7 +14558,6 @@ pub async fn edit_message_sse(
     .await?;
 
     // Validate action facet before spawning background task (returns HTTP 400 on failure)
-    let generation_request_context = generation_request_context_from_headers(&headers);
     let platform = generation_request_context
         .platform
         .as_deref()
@@ -14363,10 +14642,10 @@ pub async fn edit_message_sse(
         }
     };
 
-    // Create a channel for sending events
-    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
-    let (_abort_rx, task) =
-        acquire_user_generation_lease(&app_state, chat.id, Uuid::new_v4()).await?;
+    let tx = tx.unwrap_or_else(detached_generation_event_sink);
+    let (events, task) =
+        acquire_revision_generation_lease(&app_state, chat.id, expected_tip).await?;
+    let client_stream_guard = task.client_stream_guard();
 
     // Move request data into the task
     let replace_user_message = request.replace_user_message;
@@ -14493,6 +14772,14 @@ pub async fn edit_message_sse(
                 .wrap_err("Failed to convert saved edited user message")?
                 .with_mentioned_assistants(&app_state.db, &saved_user_message)
                 .await;
+
+            task_for_stream
+                .send_event(StreamingEvent::UserMessageSaved {
+                    message_id: saved_user_message.id,
+                    message: saved_user_message_wrapped.clone(),
+                })
+                .await
+                .map_err(Report::msg)?;
 
             let user_message_saved: EditMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseUserMessageSaved {
@@ -14632,6 +14919,15 @@ pub async fn edit_message_sse(
                 tracing::warn!(%error, "Failed to reconcile deliveries after a edit");
             }
 
+            // Publish the real ID before controls or client tools can route to it.
+            task_for_stream.set_message_id(initial_assistant_message.id);
+            task_for_stream
+                .send_event(StreamingEvent::AssistantMessageStarted {
+                    message_id: initial_assistant_message.id,
+                })
+                .await
+                .map_err(Report::msg)?;
+
             let assistant_started_event: EditMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseAssistantMessageStarted {
                     message_id: initial_assistant_message.id,
@@ -14759,6 +15055,7 @@ pub async fn edit_message_sse(
             log_and_capture_error("edit message background task", &error);
         }
 
+        finish_revision_broadcast(&task_for_stream, generation_failed).await;
         let outcome = task_for_stream.derive_outcome(generation_failed);
         task_for_stream.mark_completed();
         cleanup_guard.disarm();
@@ -14778,14 +15075,11 @@ pub async fn edit_message_sse(
         .await;
     });
 
-    // Convert the receiver into a stream and return it
-    let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);
-
-    Ok(Sse::new(receiver_stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    ))
+    Ok(StartedGeneration {
+        chat_id: chat_id_for_cleanup,
+        events,
+        client_stream_guard,
+    })
 }
 
 #[utoipa::path(
