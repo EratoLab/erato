@@ -285,6 +285,16 @@ async fn rejected_details_card_keeps_the_answer_settled_and_preserves_earlier_te
 }
 
 #[tokio::test]
+async fn a_failed_new_post_is_not_sent_again() {
+    let h = Harness::new().await;
+    h.fail_next(StatusCode::BAD_GATEWAY, "BadGateway", "Upstream timed out");
+    let target = h.target();
+    let mut reply = StreamingReply::new(&target, false);
+    assert!(reply.finish("Answer").await.is_err());
+    assert_eq!(h.requests().len(), 1);
+}
+
+#[tokio::test]
 async fn silent_long_tool_closes_before_the_deadline_and_remains_editable() {
     let h = Harness::new().await;
     let target = h.target();

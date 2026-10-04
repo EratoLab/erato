@@ -10,7 +10,7 @@ use super::cards::{self, ApprovalSubmit};
 use super::graph::{Graph, GraphIdentity, context_markdown};
 use super::host::{Completion, GenerationUpdate, Host, Session, StartError};
 use super::render::{self, Mention};
-use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply};
+use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply, WORKING_STATUS};
 use super::user_token::sign_in_activity;
 use axum::http::StatusCode;
 use eyre::{Report, eyre};
@@ -23,6 +23,7 @@ use tokio::sync::mpsc;
 
 const NEW_CHAT_COMMANDS: [&str; 3] = ["/new", "new chat", "neuer chat"];
 const CONTEXT_FILE_NAME: &str = "teams-conversation-context.md";
+const PREPARING_STATUS: &str = "Preparing your request…";
 
 #[cfg(test)]
 mod sign_in_tests;
@@ -94,8 +95,8 @@ async fn process_message(
         return Ok(());
     }
 
-    let mut stream = StreamingReply::new(target, kind.is_personal() && bot.settings.streaming);
-    stream.preparing("Preparing your request…").await;
+    let mut stream = stream_for(bot, target, kind);
+    stream.preparing(PREPARING_STATUS).await;
     let prepared = async {
         let (chat_id, _) = while_working(
             &mut stream,
@@ -140,7 +141,7 @@ async fn process_message(
         } else {
             text
         };
-        stream.preparing("Preparing your request…").await;
+        stream.preparing(PREPARING_STATUS).await;
         Ok::<_, Report>(
             while_working(
                 &mut stream,
@@ -213,11 +214,7 @@ async fn on_approval(
         Err(error) => return reply_start_error(target, error).await,
     };
     // Replace the card so it cannot be answered twice.
-    if let (Some(card_activity_id), Some(conversation_id), Some(service_url)) = (
-        activity.reply_to_id.as_deref(),
-        activity.conversation_id(),
-        activity.service_url.as_deref(),
-    ) {
+    if let Some(card_activity_id) = activity.reply_to_id.as_deref() {
         let named: Vec<(String, cards::ApprovalChoice)> = decisions
             .iter()
             .enumerate()
@@ -233,21 +230,21 @@ async fn on_approval(
         let decided_by = user.identity.display_name.as_deref().unwrap_or("you");
         let card = cards::decided_card(&named, decided_by);
         let summary = cards::decided_summary(&named, decided_by);
-        let mut update = render::card_message(card, &summary);
-        update["id"] = json!(card_activity_id);
-        if let Err(error) = bot
-            .connector
-            .update(service_url, conversation_id, card_activity_id, &update)
-            .await
-        {
+        let update = render::card_message(card, &summary);
+        if let Err(error) = target.update(card_activity_id, update).await {
             tracing::debug!(%error, "Could not replace the decided approval card");
         }
     }
-    let stream = StreamingReply::new(
-        target,
-        activity.conversation_kind().is_personal() && bot.settings.streaming,
-    );
+    let stream = stream_for(bot, target, activity.conversation_kind());
     render_generation(bot, host, target, updates, stream).await
+}
+
+fn stream_for<'a>(
+    bot: &TeamsBot,
+    target: &'a ReplyTarget<'a>,
+    kind: ConversationKind,
+) -> StreamingReply<'a> {
+    StreamingReply::new(target, kind.is_personal() && bot.settings.streaming)
 }
 
 /// Resolve the Erato user and their Graph token; tells the user what to do
@@ -633,7 +630,7 @@ async fn render_generation(
     mut updates: mpsc::Receiver<GenerationUpdate>,
     mut stream: StreamingReply<'_>,
 ) -> Result<(), Report> {
-    stream.informative("Working on your request…").await;
+    stream.informative(WORKING_STATUS).await;
     let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut generation = None;
@@ -655,10 +652,12 @@ async fn render_generation(
             },
             _ = timer.tick() => stream.flush().await,
         }
-        if stream.is_cancelled() {
-            if let Some((chat_id, message_id)) = generation {
-                host.stop_generation(chat_id, message_id).await;
-            }
+        // A Stop can arrive on the opening status, before the backend has
+        // announced its message; keep reading until it does.
+        if stream.is_cancelled()
+            && let Some((chat_id, message_id)) = generation
+        {
+            host.stop_generation(chat_id, message_id).await;
             return Ok(());
         }
     }

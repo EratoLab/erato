@@ -53,6 +53,16 @@ pub enum ApprovalChoice {
     Withdraw,
 }
 
+impl ApprovalChoice {
+    fn past_tense(self) -> &'static str {
+        match self {
+            ApprovalChoice::Approve => "approved",
+            ApprovalChoice::Reject => "denied",
+            ApprovalChoice::Withdraw => "stopped",
+        }
+    }
+}
+
 /// The data an approval card submits: the button's data plus the card's
 /// per-item inputs (`d0`, `d1`, …), which Teams merges in as top-level keys.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -94,15 +104,20 @@ impl ApprovalSubmit {
     }
 }
 
-pub fn approval_card(set: &PendingApprovalSet) -> Value {
+fn heading(set: &PendingApprovalSet) -> String {
     let count = set.items.len();
-    let heading = match set.kind {
+    match set.kind {
         ApprovalKind::McpTool if count == 1 => "Approval needed".to_string(),
         ApprovalKind::McpTool => format!("{count} tool calls need approval"),
         ApprovalKind::TaskPlan => format!("Erato wants to start {count} task(s)"),
         ApprovalKind::DelegatedTask => "Sub-tasks are waiting for approval".to_string(),
         ApprovalKind::ToolCallLimit => "Tool-call limit reached".to_string(),
-    };
+    }
+}
+
+pub fn approval_card(set: &PendingApprovalSet) -> Value {
+    let count = set.items.len();
+    let heading = heading(set);
     let item_budget = (MAX_INPUT_PREVIEW_CHARS / count.max(1)).min(MAX_ITEM_PREVIEW_CHARS);
     let mut body = vec![json!({
         "type": "TextBlock", "text": heading, "weight": "Bolder", "size": "Medium", "wrap": true,
@@ -196,39 +211,33 @@ pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str) ->
     let body = decisions
         .iter()
         .map(|(tool_name, choice)| {
-            let verb = match choice {
-                ApprovalChoice::Approve => "approved",
-                ApprovalChoice::Reject => "denied",
-                ApprovalChoice::Withdraw => "stopped",
-            };
             json!({"type": "TextBlock", "wrap": true,
-                   "text": format!("**{tool_name}** was {verb} by {decided_by}.")})
+                   "text": format!("**{tool_name}** was {} by {decided_by}.", choice.past_tense())})
         })
         .collect();
     adaptive_card(body, Vec::new())
 }
 
+/// Notification and preview text: the card heading, plus what the card body
+/// would otherwise have said. A task plan's items are all `delegate_task`, so
+/// only tool approvals name their tool.
 pub fn approval_summary(set: &PendingApprovalSet) -> String {
-    if set.kind == ApprovalKind::ToolCallLimit {
-        return "Tool-call limit reached. Choose whether to continue, answer now, or stop.".into();
-    }
-    match set.items.as_slice() {
-        [item] => format!("Approval needed to run {}.", item.tool_name),
-        items => format!("{} tool calls need approval.", items.len()),
+    match (set.kind, set.items.as_slice()) {
+        (ApprovalKind::ToolCallLimit, _) => format!(
+            "{}. Choose whether to continue, answer now, or stop.",
+            heading(set)
+        ),
+        (ApprovalKind::McpTool | ApprovalKind::DelegatedTask, [item]) => {
+            format!("Approval needed to run {}.", item.tool_name)
+        }
+        _ => format!("{}.", heading(set)),
     }
 }
 
 pub fn decided_summary(decisions: &[(String, ApprovalChoice)], decided_by: &str) -> String {
     decisions
         .iter()
-        .map(|(name, choice)| {
-            let verb = match choice {
-                ApprovalChoice::Approve => "approved",
-                ApprovalChoice::Reject => "denied",
-                ApprovalChoice::Withdraw => "stopped",
-            };
-            format!("{name} was {verb} by {decided_by}.")
-        })
+        .map(|(name, choice)| format!("{name} was {} by {decided_by}.", choice.past_tense()))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -246,7 +255,7 @@ fn preview(input: &Value, max_chars: usize) -> String {
     }
 }
 
-fn adaptive_card(body: Vec<Value>, actions: Vec<Value>) -> Value {
+pub(super) fn adaptive_card(body: Vec<Value>, actions: Vec<Value>) -> Value {
     json!({
         "contentType": "application/vnd.microsoft.card.adaptive",
         "content": {
@@ -288,6 +297,12 @@ mod tests {
             value[key] = input.clone();
         }
         value
+    }
+
+    #[test]
+    fn summaries_follow_the_card_heading() {
+        assert_eq!(approval_summary(&set(1)), "Approval needed to run tool_0.");
+        assert_eq!(approval_summary(&set(3)), "Erato wants to start 3 task(s).");
     }
 
     #[test]

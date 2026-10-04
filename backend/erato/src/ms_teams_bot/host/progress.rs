@@ -2,6 +2,9 @@
 //! tools until each finishes. Never put tool inputs/outputs in the status.
 
 use crate::services::background_tasks::ToolCallStatus;
+use crate::services::display_text::{
+    MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
+};
 use std::collections::BTreeMap;
 
 #[derive(Default)]
@@ -24,7 +27,8 @@ impl Progress {
         progress: Option<f64>,
         total: Option<f64>,
     ) -> String {
-        let name = name.replace('_', " ");
+        // MCP servers author tool names and progress text; show them inert.
+        let name = sanitize_display_text(name, MAX_DISPLAY_NAME_CHARS).text;
         let label = match status {
             ToolCallStatus::Preparing => format!("Preparing {name}…"),
             ToolCallStatus::InProgress => format!("Using {name}…"),
@@ -35,7 +39,9 @@ impl Progress {
             self.active.remove(&id);
             return self.current().unwrap_or(label);
         }
-        let mut label = match message.map(str::trim).filter(|message| !message.is_empty()) {
+        let message = message
+            .map(|message| sanitize_display_text(message, MAX_DISPLAY_DESCRIPTION_CHARS).text);
+        let mut label = match message.filter(|message| !message.is_empty()) {
             Some(message) => format!("{label} {message}"),
             None => label,
         };
@@ -74,7 +80,7 @@ mod tests {
             Some(2.0),
             Some(5.0),
         );
-        assert!(status.contains("Preparing search docs"));
+        assert!(status.contains("Preparing search_docs"));
         assert!(status.contains("Reading files (2/5)"));
         let status = progress.tool(
             "a".into(),
@@ -84,8 +90,8 @@ mod tests {
             None,
             None,
         );
-        assert!(!status.contains("search docs"));
-        assert!(status.contains("read files"));
+        assert!(!status.contains("search_docs"));
+        assert!(status.contains("read_files"));
         let status = progress.tool(
             "b".into(),
             "read_files",

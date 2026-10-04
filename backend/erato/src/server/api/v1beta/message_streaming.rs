@@ -13586,6 +13586,8 @@ pub(crate) async fn run_generation_after_user_message(
     .await
     .wrap_err("Failed to submit initial assistant message")?;
 
+    // A stop issued on this event must find the real id, not the placeholder.
+    task.set_message_id(initial_assistant_message.id);
     // Emit AssistantMessageStarted event
     task.send_event(StreamingEvent::AssistantMessageStarted {
         message_id: initial_assistant_message.id,
@@ -14851,16 +14853,14 @@ pub async fn abort_message_stream(
     } else {
         false
     };
-    if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
-        task.request_abort();
-    } else if let Some((generation_id, _)) = app_state
+    if let Some(generation) = app_state
         .background_tasks
-        .get_shared_generation(&request.chat_id)
+        .active_generation(&request.chat_id)
         .await
     {
         app_state
             .background_tasks
-            .enqueue_abort(generation_id)
+            .abort_generation(&generation)
             .await
             .map_err(|error| {
                 (

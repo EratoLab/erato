@@ -11,6 +11,7 @@ const MIN_UPDATE_INTERVAL: Duration = Duration::from_millis(1_500);
 const MAX_STREAM_DURATION: Duration = Duration::from_secs(100);
 const MAX_STATUS_BYTES: usize = 900;
 pub const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
+pub const WORKING_STATUS: &str = "Working on your request…";
 
 pub struct ReplyTarget<'a> {
     pub connector: &'a Connector,
@@ -43,11 +44,13 @@ impl ReplyTarget<'_> {
     }
 
     pub async fn send_text(&self, text: &str) -> eyre::Result<()> {
-        for (index, chunk) in render::split_for_teams(text, MAX_MESSAGE_CHARS)
-            .iter()
-            .enumerate()
-        {
-            let mention = if index == 0 {
+        self.send_chunks(&render::split_for_teams(text, MAX_MESSAGE_CHARS), true)
+            .await
+    }
+
+    async fn send_chunks(&self, chunks: &[String], mention_first: bool) -> eyre::Result<()> {
+        for (index, chunk) in chunks.iter().enumerate() {
+            let mention = if mention_first && index == 0 {
                 self.mention.as_ref()
             } else {
                 None
@@ -56,6 +59,40 @@ impl ReplyTarget<'_> {
         }
         Ok(())
     }
+
+    /// Replace an activity the bot sent earlier in this conversation.
+    pub async fn update(&self, activity_id: &str, mut activity: Value) -> eyre::Result<()> {
+        activity["id"] = json!(activity_id);
+        self.connector
+            .update(
+                self.service_url,
+                self.conversation_id,
+                activity_id,
+                &activity,
+            )
+            .await
+    }
+}
+
+enum Failure {
+    /// The user stopped the native stream.
+    Cancelled,
+    /// Retry once `next_update` passes; never fall back to a new message.
+    Throttled,
+    Fatal,
+}
+
+#[derive(Clone, Copy)]
+enum Op<'x> {
+    Send(&'x Value),
+    Write(&'x str),
+}
+
+enum Outcome {
+    Sent,
+    Cancelled,
+    Throttled,
+    Failed(eyre::Report),
 }
 
 pub struct StreamingReply<'a> {
@@ -182,7 +219,7 @@ impl<'a> StreamingReply<'a> {
                     );
                 }
                 Err(error) => {
-                    if !self.handle_error(&error) {
+                    if let Failure::Fatal = self.handle_error(&error) {
                         if self.stream_id.is_none() {
                             self.native = false;
                         } else {
@@ -254,16 +291,14 @@ impl<'a> StreamingReply<'a> {
             return;
         }
         let text = if self.streamed_text.is_empty() {
-            self.rendered
-                .as_deref()
-                .unwrap_or("Working on your request…")
+            self.rendered.as_deref().unwrap_or(WORKING_STATUS)
         } else {
             &self.streamed_text
         };
         let activity = self.stream_activity("final", text);
         self.next_update = Instant::now() + MIN_UPDATE_INTERVAL;
         if let Err(error) = self.target.send(&activity).await
-            && self.handle_error(&error)
+            && !matches!(self.handle_error(&error), Failure::Fatal)
         {
             return;
         }
@@ -274,20 +309,9 @@ impl<'a> StreamingReply<'a> {
     }
 
     async fn write_message(&mut self, text: &str) -> eyre::Result<()> {
-        let mut activity = render::message(text, self.target.mention.as_ref());
+        let activity = render::message(text, self.target.mention.as_ref());
         match &self.message_id {
-            Some(id) => {
-                activity["id"] = json!(id);
-                self.target
-                    .connector
-                    .update(
-                        self.target.service_url,
-                        self.target.conversation_id,
-                        id,
-                        &activity,
-                    )
-                    .await
-            }
+            Some(id) => self.target.update(id, activity).await,
             None => {
                 self.message_id = self.target.send(&activity).await?;
                 self.updates_disabled = self.message_id.is_none();
@@ -296,12 +320,11 @@ impl<'a> StreamingReply<'a> {
         }
     }
 
-    /// True means do not fall back to a new message (stop or throttling).
-    fn handle_error(&mut self, error: &eyre::Report) -> bool {
+    fn handle_error(&mut self, error: &eyre::Report) -> Failure {
         if let Some(error) = error.downcast_ref::<ActivityError>() {
             if error.stream_cancelled() {
                 self.cancelled = true;
-                return true;
+                return Failure::Cancelled;
             }
             if error.status == reqwest::StatusCode::TOO_MANY_REQUESTS {
                 self.next_update = Instant::now()
@@ -309,15 +332,36 @@ impl<'a> StreamingReply<'a> {
                         .retry_after
                         .unwrap_or(Duration::from_secs(2))
                         .max(MIN_UPDATE_INTERVAL);
-                return true;
+                return Failure::Throttled;
             }
         }
         tracing::warn!(%error, "Teams progress update failed");
-        false
+        Failure::Fatal
     }
 
     async fn wait_ready(&self) {
         tokio::time::sleep_until(self.next_update).await;
+    }
+
+    /// Final deliveries get up to three throttled attempts.
+    async fn deliver(&mut self, op: Op<'_>) -> Outcome {
+        for _ in 0..3 {
+            self.wait_ready().await;
+            self.next_update = Instant::now() + MIN_UPDATE_INTERVAL;
+            let result = match op {
+                Op::Send(activity) => self.target.send(activity).await.map(|_| ()),
+                Op::Write(text) => self.write_message(text).await,
+            };
+            let Err(error) = result else {
+                return Outcome::Sent;
+            };
+            match self.handle_error(&error) {
+                Failure::Cancelled => return Outcome::Cancelled,
+                Failure::Throttled => {}
+                Failure::Fatal => return Outcome::Failed(error),
+            }
+        }
+        Outcome::Throttled
     }
 
     /// Replace progress with final content, including errors and approvals.
@@ -338,29 +382,17 @@ impl<'a> StreamingReply<'a> {
         if !self.cancelled
             && let Some(attachment) = attachment
         {
-            let summary = format!("Earlier steps: {}", short_status(earlier_text));
+            let summary = format!("{}: {}", render::EARLIER_STEPS, short_status(earlier_text));
             let activity = render::card_message(attachment, &summary);
-            for _ in 0..3 {
-                self.wait_ready().await;
-                self.next_update = Instant::now() + MIN_UPDATE_INTERVAL;
-                match self.target.send(&activity).await {
-                    Ok(_) => return Ok(()),
-                    Err(error) => {
-                        let retry = self.handle_error(&error);
-                        if self.cancelled {
-                            return Ok(());
-                        }
-                        if !retry {
-                            break;
-                        }
-                    }
-                }
+            match self.deliver(Op::Send(&activity)).await {
+                Outcome::Sent | Outcome::Cancelled => return Ok(()),
+                Outcome::Throttled | Outcome::Failed(_) => {}
             }
             // A card failure must never resend the answer or leave progress
             // showing. Preserve the earlier text as a separate text message.
             self.wait_ready().await;
             self.target
-                .send_text(&format!("**Earlier steps**\n\n{earlier_text}"))
+                .send_text(&render::earlier_steps_markdown(earlier_text))
                 .await?;
         }
         Ok(())
@@ -384,19 +416,17 @@ impl<'a> StreamingReply<'a> {
                             self.message_id = self.stream_id.take();
                             self.native = false;
                             tracing::debug!("Finalized Teams answer");
-                            return self.send_remaining(&chunks).await;
+                            return self.target.send_chunks(&chunks[1..], false).await;
                         }
-                        Err(error) => {
-                            if self.handle_error(&error) {
-                                if self.cancelled {
-                                    return Ok(());
-                                }
-                                continue;
+                        Err(error) => match self.handle_error(&error) {
+                            Failure::Cancelled => return Ok(()),
+                            Failure::Throttled => continue,
+                            Failure::Fatal => {
+                                self.message_id = self.stream_id.take();
+                                self.native = false;
+                                break;
                             }
-                            self.message_id = self.stream_id.take();
-                            self.native = false;
-                            break;
-                        }
+                        },
                     }
                 } else {
                     self.close_native().await;
@@ -414,36 +444,20 @@ impl<'a> StreamingReply<'a> {
                 ));
             }
         }
-        for _ in 0..3 {
-            self.wait_ready().await;
-            self.next_update = Instant::now() + MIN_UPDATE_INTERVAL;
-            match self.write_message(&chunks[0]).await {
-                Ok(()) => {
-                    tracing::debug!("Finalized Teams answer");
-                    return self.send_remaining(&chunks).await;
-                }
-                Err(error) => {
-                    let retry = self.handle_error(&error);
-                    if self.cancelled {
-                        return Ok(());
-                    }
-                    if !retry {
-                        break;
-                    }
-                }
+        let editing = self.message_id.is_some();
+        match self.deliver(Op::Write(&chunks[0])).await {
+            Outcome::Sent => {
+                tracing::debug!("Finalized Teams answer");
+                return self.target.send_chunks(&chunks[1..], false).await;
             }
+            Outcome::Cancelled => return Ok(()),
+            // A failed edit falls back to a new message. A failed post may
+            // still have been delivered; posting again could duplicate it.
+            Outcome::Failed(error) if !editing => return Err(error),
+            Outcome::Throttled | Outcome::Failed(_) => {}
         }
         self.wait_ready().await;
-        let activity = render::message(&chunks[0], self.target.mention.as_ref());
-        self.target.send(&activity).await?;
-        self.send_remaining(&chunks).await
-    }
-
-    async fn send_remaining(&self, chunks: &[String]) -> eyre::Result<()> {
-        for chunk in &chunks[1..] {
-            self.target.send(&render::message(chunk, None)).await?;
-        }
-        Ok(())
+        self.target.send_text(final_text).await
     }
 }
 

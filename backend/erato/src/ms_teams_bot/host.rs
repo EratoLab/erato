@@ -10,6 +10,7 @@ mod sign_in;
 use super::activity::ConversationKind;
 use super::cards::{ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet};
 use super::graph::{GraphIdentity, SharedItem};
+use super::streaming::WORKING_STATUS;
 use crate::db::entity::prelude::{Chats, Messages, MsTeamsConversations, MsTeamsTokenExchanges};
 use crate::db::entity::{ms_teams_conversations, ms_teams_token_exchanges, users};
 use crate::models::message::{
@@ -24,7 +25,7 @@ use crate::server::api::v1beta::message_streaming::{
     ContinueStreamRequest, MessageSubmitRequest, StreamRouteError, ToolApprovalDecision,
     detached_generation_event_sink, start_continuation, start_message_submit,
 };
-use crate::services::background_tasks::{ClientStreamGuard, StreamingEvent};
+use crate::services::background_tasks::{ClientStreamGuard, StreamingEvent, ToolCallStatus};
 use crate::state::AppState;
 use eyre::{Report, WrapErr, eyre};
 use sea_orm::prelude::*;
@@ -117,21 +118,10 @@ impl Host {
     /// Stop only the generation which produced this Teams stream. A later
     /// generation in the same chat must not be affected by a late Stop result.
     pub async fn stop_generation(&self, chat_id: Uuid, message_id: Uuid) {
-        if let Some(task) = self.app_state.background_tasks.get_task(&chat_id).await {
-            if task.message_id() == message_id {
-                task.request_abort();
-            }
-        } else if let Some((generation_id, active_message_id)) = self
-            .app_state
-            .background_tasks
-            .get_shared_generation(&chat_id)
-            .await
-            && active_message_id == Some(message_id)
-            && let Err(error) = self
-                .app_state
-                .background_tasks
-                .enqueue_abort(generation_id)
-                .await
+        let tasks = &self.app_state.background_tasks;
+        if let Some(generation) = tasks.active_generation(&chat_id).await
+            && generation.message_id() == Some(message_id)
+            && let Err(error) = tasks.abort_generation(&generation).await
         {
             tracing::warn!(%error, "Could not stop the Teams generation");
         }
@@ -634,7 +624,7 @@ fn translate(
             }
             let update = match event {
                 Ok(StreamingEvent::AssistantMessageStarted { .. }) => {
-                    GenerationUpdate::Status("Working on your request…".into())
+                    GenerationUpdate::Status(WORKING_STATUS.into())
                 }
                 Ok(StreamingEvent::ReasoningDelta { .. }) => GenerationUpdate::Status(
                     progress.current().unwrap_or_else(|| "Thinking…".into()),
@@ -661,7 +651,7 @@ fn translate(
                 }) => GenerationUpdate::Status(progress.tool(
                     tool_call_id,
                     &tool_name,
-                    crate::services::background_tasks::ToolCallStatus::Preparing,
+                    ToolCallStatus::Preparing,
                     None,
                     None,
                     None,
@@ -835,7 +825,6 @@ mod tests {
 
     #[tokio::test]
     async fn translates_thinking_and_tool_progress_including_continuations() {
-        use crate::services::background_tasks::ToolCallStatus;
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
         let (sender, receiver) = broadcast::channel(16);
@@ -894,7 +883,7 @@ mod tests {
             matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s.contains("Reading page (2/3)"))
         );
         assert!(
-            matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s.contains("Finished read file"))
+            matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s.contains("Finished read_file"))
         );
         assert!(matches!(updates.recv().await, Some(GenerationUpdate::Text(s)) if s == "Answer"));
         assert!(updates.recv().await.is_none());
@@ -983,7 +972,6 @@ mod tests {
 
     #[tokio::test]
     async fn tool_boundary_replaces_narration_and_late_progress_keeps_the_answer() {
-        use crate::services::background_tasks::ToolCallStatus;
         let message_id = Uuid::new_v4();
         let (sender, receiver) = broadcast::channel(16);
         let mut updates = translate(Uuid::new_v4(), receiver, None);

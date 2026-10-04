@@ -1,9 +1,14 @@
 //! Turning answers into Teams message activities.
 
+use super::cards;
 use serde_json::{Value, json};
 
 /// Teams rejects messages above roughly 28 KB; stay well below it.
 pub const MAX_MESSAGE_CHARS: usize = 20_000;
+/// Serialized size of the details card, leaving room below the same limit
+/// for the activity's metadata and summary.
+const MAX_DETAILS_CARD_BYTES: usize = 24_000;
+pub const EARLIER_STEPS: &str = "Earlier steps";
 
 /// A markdown message activity. In group chats and channels the requester is
 /// @mentioned so the answer is attributable in a busy thread.
@@ -30,11 +35,6 @@ pub fn typing() -> Value {
     json!({"type": "typing"})
 }
 
-pub fn with_attachment(mut activity: Value, attachment: Value) -> Value {
-    activity["attachments"] = json!([attachment]);
-    activity
-}
-
 /// Card-only activities can be updated in place. Adding top-level text would
 /// make Teams expand this into multiple activities, which cannot share a PUT.
 pub fn card_message(attachment: Value, summary: &str) -> Value {
@@ -48,31 +48,31 @@ pub fn answer_with_details(text: &str, earlier_text: &str) -> (String, Option<Va
     if earlier_text.trim().is_empty() {
         return (text.to_string(), None);
     }
-    let attachment = json!({
-        "contentType": "application/vnd.microsoft.card.adaptive",
-        "content": {
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "type": "AdaptiveCard", "version": "1.4",
-            "fallbackText": format!("Earlier steps:\n\n{earlier_text}"),
-            "actions": [{
-                "type": "Action.ShowCard", "title": "Earlier steps",
-                "card": {
-                    "type": "AdaptiveCard",
-                    "body": [{"type": "TextBlock", "text": earlier_text, "wrap": true}],
-                },
-            }],
-        },
-    });
+    let mut attachment = cards::adaptive_card(
+        Vec::new(),
+        vec![json!({
+            "type": "Action.ShowCard", "title": EARLIER_STEPS,
+            "card": {
+                "type": "AdaptiveCard",
+                "body": [{"type": "TextBlock", "text": earlier_text, "wrap": true}],
+            },
+        })],
+    );
+    attachment["content"]["fallbackText"] = json!(format!("{EARLIER_STEPS}:\n\n{earlier_text}"));
     // The card is sent separately from the answer. Include JSON escaping and
-    // fallback text in its budget, leaving room for metadata and summary.
-    if serde_json::to_vec(&attachment).is_ok_and(|bytes| bytes.len() <= 24_000) {
+    // fallback text in its budget.
+    if serde_json::to_vec(&attachment).is_ok_and(|bytes| bytes.len() <= MAX_DETAILS_CARD_BYTES) {
         (text.to_string(), Some(attachment))
     } else {
         (
-            format!("{text}\n\n---\n\n**Earlier steps**\n\n{earlier_text}"),
+            format!("{text}\n\n---\n\n{}", earlier_steps_markdown(earlier_text)),
             None,
         )
     }
+}
+
+pub fn earlier_steps_markdown(earlier_text: &str) -> String {
+    format!("**{EARLIER_STEPS}**\n\n{earlier_text}")
 }
 
 #[derive(Debug, Clone)]

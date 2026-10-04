@@ -203,7 +203,7 @@ impl Connector {
         self.post_activity(url, activity).await
     }
 
-    /// Replace an activity the bot sent earlier (used for decided approval cards).
+    /// Replace an activity the bot sent earlier.
     pub async fn update(
         &self,
         service_url: &str,
