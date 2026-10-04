@@ -718,6 +718,31 @@ impl BackgroundTaskManager {
         ))
     }
 
+    /// This replica's task for the chat, else a generation leased elsewhere.
+    pub async fn active_generation(&self, chat_id: &Uuid) -> Option<ActiveGeneration> {
+        if let Some(task) = self.get_task(chat_id).await {
+            return Some(ActiveGeneration::Local(task));
+        }
+        self.get_shared_generation(chat_id)
+            .await
+            .map(|(generation_id, message_id)| ActiveGeneration::Shared {
+                generation_id,
+                message_id,
+            })
+    }
+
+    pub async fn abort_generation(&self, generation: &ActiveGeneration) -> Result<(), String> {
+        match generation {
+            ActiveGeneration::Local(task) => {
+                task.request_abort();
+                Ok(())
+            }
+            ActiveGeneration::Shared { generation_id, .. } => {
+                self.enqueue_abort(*generation_id).await
+            }
+        }
+    }
+
     /// Read persisted events after the given global event id.
     pub async fn get_shared_events(
         &self,
@@ -1113,6 +1138,23 @@ impl BackgroundTaskManager {
             .await
             .map_err(|err| err.to_string())?;
         Ok(result.rows_affected())
+    }
+}
+
+pub enum ActiveGeneration {
+    Local(Arc<StreamingTask>),
+    Shared {
+        generation_id: Uuid,
+        message_id: Option<Uuid>,
+    },
+}
+
+impl ActiveGeneration {
+    pub fn message_id(&self) -> Option<Uuid> {
+        match self {
+            Self::Local(task) => Some(task.message_id()),
+            Self::Shared { message_id, .. } => *message_id,
+        }
     }
 }
 
