@@ -36,7 +36,7 @@ async fn completion(mut updates: mpsc::Receiver<GenerationUpdate>) -> (Completio
             GenerationUpdate::Text(_) => text_updates += 1,
             GenerationUpdate::Completed(done) => completion = Some(done),
             GenerationUpdate::Failed(error) => panic!("generation failed: {error}"),
-            GenerationUpdate::Tool(_) => {}
+            GenerationUpdate::Started { .. } | GenerationUpdate::Status(_) => {}
         }
     }
     (completion.expect("generation completed"), text_updates)

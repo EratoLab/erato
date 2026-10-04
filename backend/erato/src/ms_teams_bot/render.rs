@@ -35,6 +35,46 @@ pub fn with_attachment(mut activity: Value, attachment: Value) -> Value {
     activity
 }
 
+/// Card-only activities can be updated in place. Adding top-level text would
+/// make Teams expand this into multiple activities, which cannot share a PUT.
+pub fn card_message(attachment: Value, summary: &str) -> Value {
+    json!({"type": "message", "summary": summary, "attachments": [attachment]})
+}
+
+/// Disclose earlier assistant text without mixing it into the final answer.
+/// Large details stay in normal text chunks instead of overflowing a card or
+/// silently truncating potentially useful content.
+pub fn answer_with_details(text: &str, earlier_text: &str) -> (String, Option<Value>) {
+    if earlier_text.trim().is_empty() {
+        return (text.to_string(), None);
+    }
+    let attachment = json!({
+        "contentType": "application/vnd.microsoft.card.adaptive",
+        "content": {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard", "version": "1.4",
+            "fallbackText": format!("Earlier steps:\n\n{earlier_text}"),
+            "actions": [{
+                "type": "Action.ShowCard", "title": "Earlier steps",
+                "card": {
+                    "type": "AdaptiveCard",
+                    "body": [{"type": "TextBlock", "text": earlier_text, "wrap": true}],
+                },
+            }],
+        },
+    });
+    // The card is sent separately from the answer. Include JSON escaping and
+    // fallback text in its budget, leaving room for metadata and summary.
+    if serde_json::to_vec(&attachment).is_ok_and(|bytes| bytes.len() <= 24_000) {
+        (text.to_string(), Some(attachment))
+    } else {
+        (
+            format!("{text}\n\n---\n\n**Earlier steps**\n\n{earlier_text}"),
+            None,
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Mention {
     pub id: String,
@@ -104,5 +144,18 @@ mod tests {
         );
         assert_eq!(activity["text"], "<at>Alice</at> done");
         assert_eq!(activity["entities"][0]["mentioned"]["id"], "29:alice");
+    }
+
+    #[test]
+    fn oversized_details_are_preserved_as_separate_text_instead_of_truncated() {
+        let earlier = "Useful earlier finding 界".repeat(2_000);
+        let (text, attachment) = answer_with_details("Final answer", &earlier);
+        assert!(attachment.is_none());
+        assert!(text.starts_with("Final answer\n\n---\n\n**Earlier steps**"));
+        assert!(text.ends_with(&earlier));
+        assert_eq!(
+            answer_with_details("Plain answer", ""),
+            ("Plain answer".into(), None)
+        );
     }
 }

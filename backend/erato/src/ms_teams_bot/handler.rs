@@ -10,18 +10,18 @@ use super::cards::{self, ApprovalSubmit};
 use super::graph::{Graph, GraphIdentity, context_markdown};
 use super::host::{Completion, GenerationUpdate, Host, Session, StartError};
 use super::render::{self, Mention};
-use super::streaming::{ReplyTarget, StreamingReply};
+use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply};
 use super::user_token::sign_in_activity;
 use axum::http::StatusCode;
 use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
 use std::sync::Arc;
+#[cfg(test)]
 use std::time::Duration;
 use tokio::sync::mpsc;
 
 const NEW_CHAT_COMMANDS: [&str; 3] = ["/new", "new chat", "neuer chat"];
-const TYPING_INTERVAL: Duration = Duration::from_secs(4);
 const CONTEXT_FILE_NAME: &str = "teams-conversation-context.md";
 
 #[cfg(test)]
@@ -94,43 +94,71 @@ async fn process_message(
         return Ok(());
     }
 
-    let (chat_id, _) = host
-        .ensure_chat(&user.session, &row, bot.settings.assistant_id)
+    let mut stream = StreamingReply::new(target, kind.is_personal() && bot.settings.streaming);
+    stream.preparing("Preparing your request…").await;
+    let prepared = async {
+        let (chat_id, _) = while_working(
+            &mut stream,
+            host.ensure_chat(&user.session, &row, bot.settings.assistant_id),
+        )
         .await?;
 
-    let mut file_ids = Vec::new();
-    for file in files {
-        match intake_file(bot, host, &user, chat_id, &file).await {
-            Ok(file_id) => file_ids.push(file_id),
-            Err(error) => {
-                tracing::warn!(%error, "Teams attachment could not be processed");
-                target
-                    .send_text(&format!(
-                        "I could not read the attachment \"{}\"; continuing without it.",
-                        file_name(&file)
-                    ))
-                    .await?;
+        let mut file_ids = Vec::new();
+        for file in files {
+            stream.preparing("Reading attachments…").await;
+            match while_working(&mut stream, intake_file(bot, host, &user, chat_id, &file)).await {
+                Ok(file_id) => file_ids.push(file_id),
+                Err(error) => {
+                    tracing::warn!(%error, "Teams attachment could not be processed");
+                    target
+                        .send_text(&format!(
+                            "I could not read the attachment \"{}\"; continuing without it.",
+                            file_name(&file)
+                        ))
+                        .await?;
+                }
             }
         }
-    }
-    if !kind.is_personal() && bot.settings.context_message_count > 0 {
-        match conversation_context(bot, host, activity, &user, chat_id).await {
-            Ok(Some(file_id)) => file_ids.push(file_id),
-            Ok(None) => {}
-            // Missing consent for Chat.Read/ChannelMessage.Read.All only costs
-            // the context, not the answer.
-            Err(error) => tracing::warn!(%error, "Teams conversation context unavailable"),
+        if !kind.is_personal() && bot.settings.context_message_count > 0 {
+            stream.preparing("Reading the conversation…").await;
+            match while_working(
+                &mut stream,
+                conversation_context(bot, host, activity, &user, chat_id),
+            )
+            .await
+            {
+                Ok(Some(file_id)) => file_ids.push(file_id),
+                Ok(None) => {}
+                // Missing consent for Chat.Read/ChannelMessage.Read.All only costs
+                // the context, not the answer.
+                Err(error) => tracing::warn!(%error, "Teams conversation context unavailable"),
+            }
         }
-    }
 
-    let message = if text.is_empty() {
-        "Please take a look at the attached file(s).".to_string()
-    } else {
-        text
-    };
-    match host.submit(&user.session, chat_id, message, file_ids).await {
-        Ok(updates) => render_generation(bot, target, kind, updates).await,
-        Err(error) => reply_start_error(target, error).await,
+        let message = if text.is_empty() {
+            "Please take a look at the attached file(s).".to_string()
+        } else {
+            text
+        };
+        stream.preparing("Preparing your request…").await;
+        Ok::<_, Report>(
+            while_working(
+                &mut stream,
+                host.submit(&user.session, chat_id, message, file_ids),
+            )
+            .await,
+        )
+    }
+    .await;
+    match prepared {
+        Ok(Ok(updates)) => render_generation(bot, host, target, updates, stream).await,
+        Ok(Err(error)) => stream.finish(&start_error_text(error)).await,
+        Err(error) => {
+            tracing::error!(%error, "Teams request preparation failed");
+            stream
+                .finish("Sorry, something went wrong while preparing your message.")
+                .await
+        }
     }
 }
 
@@ -204,7 +232,9 @@ async fn on_approval(
             .collect();
         let decided_by = user.identity.display_name.as_deref().unwrap_or("you");
         let card = cards::decided_card(&named, decided_by);
-        let update = json!({"type": "message", "id": card_activity_id, "attachments": [card]});
+        let summary = cards::decided_summary(&named, decided_by);
+        let mut update = render::card_message(card, &summary);
+        update["id"] = json!(card_activity_id);
         if let Err(error) = bot
             .connector
             .update(service_url, conversation_id, card_activity_id, &update)
@@ -213,7 +243,11 @@ async fn on_approval(
             tracing::debug!(%error, "Could not replace the decided approval card");
         }
     }
-    render_generation(bot, target, activity.conversation_kind(), updates).await
+    let stream = StreamingReply::new(
+        target,
+        activity.conversation_kind().is_personal() && bot.settings.streaming,
+    );
+    render_generation(bot, host, target, updates, stream).await
 }
 
 /// Resolve the Erato user and their Graph token; tells the user what to do
@@ -590,60 +624,97 @@ async fn conversation_context(
     Ok(Some(file_id))
 }
 
-/// Stream (personal chats) or type-then-send (elsewhere) a generation, then
+/// Stream or edit one progress reply, then
 /// post approval cards for any tool calls it stopped on.
 async fn render_generation(
     bot: &TeamsBot,
+    host: &Host,
     target: &ReplyTarget<'_>,
-    kind: ConversationKind,
     mut updates: mpsc::Receiver<GenerationUpdate>,
+    mut stream: StreamingReply<'_>,
 ) -> Result<(), Report> {
-    let streaming_enabled = kind.is_personal() && bot.settings.streaming;
-    let mut stream = StreamingReply::new(target, streaming_enabled);
-    let mut typing = tokio::time::interval(TYPING_INTERVAL);
+    stream.informative("Working on your request…").await;
+    let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
+    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut generation = None;
     let mut completion: Option<Completion> = None;
     let mut failure: Option<String> = None;
     loop {
         tokio::select! {
             update = updates.recv() => match update {
+                Some(GenerationUpdate::Started { chat_id, message_id }) => {
+                    generation = Some((chat_id, message_id));
+                }
                 Some(GenerationUpdate::Text(text)) => stream.update(&text).await,
-                Some(GenerationUpdate::Tool(name)) => {
-                    stream.informative(&format!("Using {name}…")).await;
+                Some(GenerationUpdate::Status(status)) => {
+                    stream.informative(&status).await;
                 }
                 Some(GenerationUpdate::Completed(done)) => completion = Some(done),
                 Some(GenerationUpdate::Failed(message)) => failure = Some(message),
                 None => break,
             },
-            _ = typing.tick(), if !streaming_enabled => {
-                let _ = target.send(&render::typing()).await;
+            _ = timer.tick() => stream.flush().await,
+        }
+        if stream.is_cancelled() {
+            if let Some((chat_id, message_id)) = generation {
+                host.stop_generation(chat_id, message_id).await;
             }
+            return Ok(());
         }
     }
 
-    let Some(completion) = completion else {
+    if failure.is_some() || completion.is_none() {
         let text = match failure {
             Some(message) => format!("Sorry, something went wrong: {message}"),
             None => "Sorry, I did not get an answer this time.".to_string(),
         };
         return stream.finish(&text).await;
-    };
+    }
+    let completion = completion.expect("completion checked above");
     let link = render::chat_link(
         bot.settings.public_base_url.as_deref(),
         &completion.chat_id.to_string(),
     );
     stream
-        .finish(&completion_text(&completion, link.as_deref()))
+        .finish_with_details(
+            &completion_text(&completion, link.as_deref()),
+            &completion.earlier_text,
+        )
         .await?;
+    if stream.is_cancelled() {
+        return Ok(());
+    }
     match &completion.approvals {
         Some(set) => send_approval_card(target, set).await,
         None => Ok(()),
     }
 }
 
+/// Keep preparation visible and enforce stream deadlines even if a download
+/// or backend operation has not produced any events yet.
+async fn while_working<T>(
+    stream: &mut StreamingReply<'_>,
+    work: impl std::future::Future<Output = T>,
+) -> T {
+    tokio::pin!(work);
+    let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
+    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            result = &mut work => return result,
+            _ = timer.tick() => stream.flush().await,
+        }
+    }
+}
+
 pub(super) fn completion_text(completion: &Completion, chat_link: Option<&str>) -> String {
     let mut text = completion.text.clone();
-    if text.is_empty() && completion.approvals.is_some() {
-        text = "I need your approval before I continue.".to_string();
+    if completion.approvals.is_some() {
+        text = if text.is_empty() {
+            "I need your approval before I continue.".to_string()
+        } else {
+            format!("{text}\n\n**Approval needed to continue.**")
+        };
     }
     if completion.needs_client {
         let open = match chat_link {
@@ -665,20 +736,23 @@ async fn send_approval_card(
 ) -> Result<(), Report> {
     let card = cards::approval_card(set);
     target
-        .send(&json!({"type": "message", "attachments": [card]}))
+        .send(&render::card_message(card, &cards::approval_summary(set)))
         .await?;
     Ok(())
 }
 
 async fn reply_start_error(target: &ReplyTarget<'_>, error: StartError) -> Result<(), Report> {
-    let text = match error {
+    target.send_text(&start_error_text(error)).await
+}
+
+fn start_error_text(error: StartError) -> String {
+    match error {
         StartError::Busy => "I'm still working on your previous message.".to_string(),
         StartError::Rejected(message) => format!("I could not start this request: {message}"),
         StartError::DecisionsMismatch | StartError::AlreadyDecided => {
             "This approval is not open anymore.".to_string()
         }
-    };
-    target.send_text(&text).await
+    }
 }
 
 /// Push the answer of a background task reaction into every Teams
@@ -712,7 +786,10 @@ pub(super) async fn deliver_proactive(
             reply_to_id: None,
             mention: None,
         };
-        target.send_text(&text).await?;
+        let mut reply = StreamingReply::new(&target, false);
+        reply
+            .finish_with_details(&text, &completion.earlier_text)
+            .await?;
         if let Some(set) = &completion.approvals {
             send_approval_card(&target, set).await?;
         }
@@ -779,6 +856,7 @@ mod tests {
             chat_id: Uuid::nil(),
             message_id: Uuid::nil(),
             text: text.to_string(),
+            earlier_text: String::new(),
             approvals: None,
             needs_client: false,
         }

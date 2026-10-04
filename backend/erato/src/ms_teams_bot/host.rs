@@ -4,6 +4,7 @@
 //! back as bot-level types ([`GenerationUpdate`], [`Completion`]), so the
 //! protocol side stays independent and could move into its own crate.
 
+mod progress;
 mod sign_in;
 
 use super::activity::ConversationKind;
@@ -35,10 +36,14 @@ use tokio::sync::{broadcast, mpsc};
 /// Progress of one generation, as the handler renders it.
 #[derive(Debug, Clone)]
 pub enum GenerationUpdate {
+    Started {
+        chat_id: Uuid,
+        message_id: Uuid,
+    },
     /// The answer text so far (complete, not a delta).
     Text(String),
-    /// The model started a tool call.
-    Tool(String),
+    /// User-facing phase or tool progress, without arguments or raw reasoning.
+    Status(String),
     Completed(Completion),
     Failed(String),
 }
@@ -48,6 +53,8 @@ pub struct Completion {
     pub chat_id: Uuid,
     pub message_id: Uuid,
     pub text: String,
+    /// Text before the last tool step, kept separately from the answer.
+    pub earlier_text: String,
     /// The open tool approvals the turn stopped on, answered together.
     pub approvals: Option<PendingApprovalSet>,
     /// The turn stopped on a client tool, which only the web app can run.
@@ -105,6 +112,29 @@ pub struct Host {
 impl Host {
     pub fn new(app_state: AppState) -> Self {
         Self { app_state }
+    }
+
+    /// Stop only the generation which produced this Teams stream. A later
+    /// generation in the same chat must not be affected by a late Stop result.
+    pub async fn stop_generation(&self, chat_id: Uuid, message_id: Uuid) {
+        if let Some(task) = self.app_state.background_tasks.get_task(&chat_id).await {
+            if task.message_id() == message_id {
+                task.request_abort();
+            }
+        } else if let Some((generation_id, active_message_id)) = self
+            .app_state
+            .background_tasks
+            .get_shared_generation(&chat_id)
+            .await
+            && active_message_id == Some(message_id)
+            && let Err(error) = self
+                .app_state
+                .background_tasks
+                .enqueue_abort(generation_id)
+                .await
+        {
+            tracing::warn!(%error, "Could not stop the Teams generation");
+        }
     }
 
     pub fn sharepoint_enabled(&self) -> bool {
@@ -541,19 +571,81 @@ fn translate(
     tokio::spawn(async move {
         let _guard = guard;
         let mut text = String::new();
-        let mut text_message: Option<Uuid> = None;
         let mut text_index: Option<usize> = None;
+        let mut tool_index: Option<usize> = None;
+        let mut progress = progress::Progress::default();
+        let mut announced_message = None;
+        let mut last_status = None;
         loop {
-            let update = match events.recv().await {
+            let event = events.recv().await;
+            // Continuations can begin with deltas instead of a Started event.
+            // Remember their exact message too, for the native Stop button.
+            let message_id = match &event {
+                Ok(
+                    StreamingEvent::AssistantMessageStarted { message_id }
+                    | StreamingEvent::TextDelta { message_id, .. }
+                    | StreamingEvent::ReasoningDelta { message_id, .. }
+                    | StreamingEvent::ToolCallProposed { message_id, .. }
+                    | StreamingEvent::ToolCallUpdate { message_id, .. }
+                    | StreamingEvent::ClientToolCall { message_id, .. },
+                ) => Some(*message_id),
+                _ => None,
+            };
+            if let Some(message_id) = message_id
+                && announced_message != Some(message_id)
+            {
+                text.clear();
+                text_index = None;
+                tool_index = None;
+                announced_message = Some(message_id);
+                if tx
+                    .send(GenerationUpdate::Started {
+                        chat_id,
+                        message_id,
+                    })
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            // A tool boundary separates earlier narration from the answer
+            // that follows it. Late updates from an older parallel tool must
+            // not erase newer answer text.
+            if let Ok(
+                StreamingEvent::ToolCallProposed { content_index, .. }
+                | StreamingEvent::ToolCallUpdate { content_index, .. }
+                | StreamingEvent::ClientToolCall { content_index, .. },
+            ) = &event
+                && tool_index.is_none_or(|index| *content_index > index)
+            {
+                tool_index = Some(*content_index);
+                if text_index.is_some_and(|index| index < *content_index) {
+                    text.clear();
+                    text_index = None;
+                    if tx
+                        .send(GenerationUpdate::Text(String::new()))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+            let update = match event {
+                Ok(StreamingEvent::AssistantMessageStarted { .. }) => {
+                    GenerationUpdate::Status("Working on your request…".into())
+                }
+                Ok(StreamingEvent::ReasoningDelta { .. }) => GenerationUpdate::Status(
+                    progress.current().unwrap_or_else(|| "Thinking…".into()),
+                ),
                 Ok(StreamingEvent::TextDelta {
-                    message_id,
                     content_index,
                     new_text,
+                    ..
                 }) => {
-                    if text_message != Some(message_id) {
-                        text.clear();
-                        text_message = Some(message_id);
-                        text_index = None;
+                    if tool_index.is_some_and(|index| content_index <= index) {
+                        continue;
                     }
                     if text_index.is_some_and(|index| index != content_index) && !text.is_empty() {
                         text.push_str("\n\n");
@@ -562,8 +654,36 @@ fn translate(
                     text.push_str(&new_text);
                     GenerationUpdate::Text(text.clone())
                 }
-                Ok(StreamingEvent::ToolCallProposed { tool_name, .. }) => {
-                    GenerationUpdate::Tool(tool_name)
+                Ok(StreamingEvent::ToolCallProposed {
+                    tool_call_id,
+                    tool_name,
+                    ..
+                }) => GenerationUpdate::Status(progress.tool(
+                    tool_call_id,
+                    &tool_name,
+                    crate::services::background_tasks::ToolCallStatus::Preparing,
+                    None,
+                    None,
+                    None,
+                )),
+                Ok(StreamingEvent::ToolCallUpdate {
+                    tool_call_id,
+                    tool_name,
+                    status,
+                    progress_message,
+                    progress: completed,
+                    total,
+                    ..
+                }) => GenerationUpdate::Status(progress.tool(
+                    tool_call_id,
+                    &tool_name,
+                    status,
+                    progress_message.as_deref(),
+                    completed,
+                    total,
+                )),
+                Ok(StreamingEvent::ClientToolCall { .. }) => {
+                    GenerationUpdate::Status("This step needs the Erato app…".into())
                 }
                 Ok(StreamingEvent::AssistantMessageCompleted {
                     message_id,
@@ -583,7 +703,23 @@ fn translate(
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
             };
+            let active_tools = matches!(update, GenerationUpdate::Text(_))
+                .then(|| progress.current())
+                .flatten();
+            if let GenerationUpdate::Status(status) = &update {
+                if last_status.as_ref() == Some(status) {
+                    continue;
+                }
+                last_status = Some(status.clone());
+            } else {
+                last_status = None;
+            }
             if tx.send(update).await.is_err() {
+                break;
+            }
+            if let Some(status) = active_tools
+                && tx.send(GenerationUpdate::Status(status)).await.is_err()
+            {
                 break;
             }
         }
@@ -592,14 +728,7 @@ fn translate(
 }
 
 fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPart]) -> Completion {
-    let text = content
-        .iter()
-        .filter_map(|part| match part {
-            ContentPart::Text(text) if !text.text.trim().is_empty() => Some(text.text.trim()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    let (text, earlier_text) = answer_text(content);
     // A client tool runs on the user's device, never in Teams, so its approval
     // is left to the Erato app instead of a card whose approval could not run it.
     let client_tool_approval = matches!(
@@ -646,10 +775,46 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
         chat_id,
         message_id,
         text,
+        earlier_text,
         approvals,
         needs_client: client_tool_approval
             || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
     }
+}
+
+/// Keep all assistant text, but present text after the last tool step as the
+/// answer. Earlier text is disclosed separately, without guessing from its
+/// wording whether it is merely narration or contains useful information.
+fn answer_text(content: &[ContentPart]) -> (String, String) {
+    let boundary = content.iter().rposition(|part| {
+        matches!(
+            part,
+            ContentPart::ToolUse(_)
+                | ContentPart::ToolApprovalRequest(_)
+                | ContentPart::ToolApproval(_)
+                | ContentPart::ToolRejection(_)
+                | ContentPart::ClientToolPending(_)
+        )
+    });
+    let join = |parts: &[ContentPart]| {
+        parts
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::Text(text) if !text.text.trim().is_empty() => Some(text.text.trim()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    };
+    if let Some(index) = boundary {
+        let answer = join(&content[index + 1..]);
+        if !answer.is_empty() {
+            return (answer, join(&content[..index]));
+        }
+    }
+    // An approval pause or a tool-only completion may have no trailing answer.
+    // Keep the existing text visible instead of hiding the only explanation.
+    (join(content), String::new())
 }
 
 fn error_message(error: Option<&Value>) -> String {
@@ -667,6 +832,73 @@ fn error_message(error: Option<&Value>) -> String {
 mod tests {
     use super::*;
     use crate::models::message::{ContentPartToolApprovalRequest, ToolApprovalAnnotations};
+
+    #[tokio::test]
+    async fn translates_thinking_and_tool_progress_including_continuations() {
+        use crate::services::background_tasks::ToolCallStatus;
+        let chat_id = Uuid::new_v4();
+        let message_id = Uuid::new_v4();
+        let (sender, receiver) = broadcast::channel(16);
+        let mut updates = translate(chat_id, receiver, None);
+        // A continuation need not repeat AssistantMessageStarted.
+        sender
+            .send(StreamingEvent::ReasoningDelta {
+                message_id,
+                content_index: 0,
+                new_text: "private reasoning text".into(),
+            })
+            .unwrap();
+        sender
+            .send(StreamingEvent::ToolCallUpdate {
+                message_id,
+                content_index: 1,
+                tool_call_id: "call".into(),
+                tool_name: "read_file".into(),
+                input: None,
+                status: ToolCallStatus::InProgress,
+                progress_message: Some("Reading page".into()),
+                progress: Some(2.0),
+                total: Some(3.0),
+                output: None,
+            })
+            .unwrap();
+        sender
+            .send(StreamingEvent::ToolCallUpdate {
+                message_id,
+                content_index: 1,
+                tool_call_id: "call".into(),
+                tool_name: "read_file".into(),
+                input: None,
+                status: ToolCallStatus::Success,
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: None,
+            })
+            .unwrap();
+        sender
+            .send(StreamingEvent::TextDelta {
+                message_id,
+                content_index: 2,
+                new_text: "Answer".into(),
+            })
+            .unwrap();
+        sender.send(StreamingEvent::StreamEnd).unwrap();
+        assert!(
+            matches!(updates.recv().await, Some(GenerationUpdate::Started { chat_id: c, message_id: m }) if c == chat_id && m == message_id)
+        );
+        assert!(
+            matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s == "Thinking…")
+        );
+        assert!(
+            matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s.contains("Reading page (2/3)"))
+        );
+        assert!(
+            matches!(updates.recv().await, Some(GenerationUpdate::Status(s)) if s.contains("Finished read file"))
+        );
+        assert!(matches!(updates.recv().await, Some(GenerationUpdate::Text(s)) if s == "Answer"));
+        assert!(updates.recv().await.is_none());
+    }
 
     fn approval(kind: ToolApprovalKind) -> ContentPart {
         ContentPart::ToolApprovalRequest(ContentPartToolApprovalRequest {
@@ -711,5 +943,91 @@ mod tests {
         assert_eq!(approvals.kind, ApprovalKind::McpTool);
         assert_eq!(approvals.items.len(), 1);
         assert!(!completion.needs_client);
+    }
+
+    #[test]
+    fn answer_separates_earlier_text_without_discarding_it() {
+        use crate::models::message::{ContentPartText, ToolUse};
+        let text = |text: &str| ContentPart::Text(ContentPartText { text: text.into() });
+        let tool = ContentPart::ToolUse(ToolUse::default());
+        assert_eq!(
+            answer_text(&[text("Plain answer")]),
+            ("Plain answer".into(), "".into())
+        );
+        assert_eq!(
+            answer_text(&[
+                text("I will check."),
+                tool.clone(),
+                text("Useful intermediate finding"),
+                tool.clone(),
+                text("Final answer"),
+                text("More answer")
+            ]),
+            (
+                "Final answer\n\nMore answer".into(),
+                "I will check.\n\nUseful intermediate finding".into()
+            )
+        );
+        assert_eq!(
+            answer_text(&[text("Explanation before a tool-only ending"), tool]),
+            ("Explanation before a tool-only ending".into(), "".into())
+        );
+        assert_eq!(
+            answer_text(&[
+                text("Please approve this action"),
+                approval(ToolApprovalKind::McpTool)
+            ]),
+            ("Please approve this action".into(), "".into())
+        );
+    }
+
+    #[tokio::test]
+    async fn tool_boundary_replaces_narration_and_late_progress_keeps_the_answer() {
+        use crate::services::background_tasks::ToolCallStatus;
+        let message_id = Uuid::new_v4();
+        let (sender, receiver) = broadcast::channel(16);
+        let mut updates = translate(Uuid::new_v4(), receiver, None);
+        let text = |index, text: &str| StreamingEvent::TextDelta {
+            message_id,
+            content_index: index,
+            new_text: text.into(),
+        };
+        sender.send(text(0, "I am checking.")).unwrap();
+        sender
+            .send(StreamingEvent::ToolCallProposed {
+                message_id,
+                content_index: 1,
+                tool_call_id: "read".into(),
+                tool_name: "read_file".into(),
+                input: None,
+            })
+            .unwrap();
+        sender.send(text(2, "The result")).unwrap();
+        sender
+            .send(StreamingEvent::ToolCallUpdate {
+                message_id,
+                content_index: 1,
+                tool_call_id: "read".into(),
+                tool_name: "read_file".into(),
+                status: ToolCallStatus::Success,
+                input: None,
+                output: None,
+                progress_message: None,
+                progress: None,
+                total: None,
+            })
+            .unwrap();
+        sender.send(text(2, " is ready.")).unwrap();
+        sender.send(StreamingEvent::StreamEnd).unwrap();
+        let mut texts = Vec::new();
+        while let Some(update) = updates.recv().await {
+            if let GenerationUpdate::Text(text) = update {
+                texts.push(text);
+            }
+        }
+        assert_eq!(
+            texts,
+            ["I am checking.", "", "The result", "The result is ready."]
+        );
     }
 }

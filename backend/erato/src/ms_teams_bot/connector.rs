@@ -23,6 +23,62 @@ const BOT_TOKEN_DOWNLOAD_HOSTS: [&str; 4] = [
 /// Conversation and activity IDs carry `:`, `;`, `@` and `=`.
 const PATH_SEGMENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'.').remove(b'_');
 
+/// Preserve Connector errors so a user stopping a stream is not mistaken for
+/// a delivery failure, and throttled progress can honor Retry-After.
+#[derive(Debug)]
+pub struct ActivityError {
+    pub status: reqwest::StatusCode,
+    pub code: Option<String>,
+    pub message: String,
+    pub retry_after: Option<Duration>,
+}
+
+impl ActivityError {
+    pub fn stream_cancelled(&self) -> bool {
+        self.status == reqwest::StatusCode::FORBIDDEN
+            && self.code.as_deref() == Some("ContentStreamNotAllowed")
+            && self
+                .message
+                .to_ascii_lowercase()
+                .contains("canceled by user")
+    }
+
+    async fn from_response(response: reqwest::Response) -> Self {
+        let status = response.status();
+        let retry_after = response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(Duration::from_secs);
+        let bytes = response.bytes().await.unwrap_or_default();
+        let body: Value = serde_json::from_slice(&bytes).unwrap_or_default();
+        let error = body.get("error").unwrap_or(&body);
+        Self {
+            status,
+            code: error.get("code").and_then(Value::as_str).map(str::to_owned),
+            message: error
+                .get("message")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| String::from_utf8_lossy(&bytes).chars().take(300).collect()),
+            retry_after,
+        }
+    }
+}
+
+impl std::fmt::Display for ActivityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Bot Connector call failed with {}: {}",
+            self.status, self.message
+        )
+    }
+}
+
+impl std::error::Error for ActivityError {}
+
 #[derive(Deserialize)]
 struct TokenResponse {
     access_token: String,
@@ -171,7 +227,7 @@ impl Connector {
             .send()
             .await?;
         if !response.status().is_success() {
-            return Err(eyre!("activity update failed with {}", response.status()));
+            return Err(ActivityError::from_response(response).await.into());
         }
         Ok(())
     }
@@ -208,17 +264,10 @@ impl Connector {
             .body(serde_json::to_vec(body)?)
             .send()
             .await?;
-        let status = response.status();
-        let bytes = response.bytes().await?;
-        if !status.is_success() {
-            return Err(eyre!(
-                "Bot Connector call failed with {status}: {}",
-                String::from_utf8_lossy(&bytes)
-                    .chars()
-                    .take(300)
-                    .collect::<String>()
-            ));
+        if !response.status().is_success() {
+            return Err(ActivityError::from_response(response).await.into());
         }
+        let bytes = response.bytes().await?;
         if bytes.is_empty() {
             return Ok(None);
         }

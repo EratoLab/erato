@@ -208,6 +208,31 @@ pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str) ->
     adaptive_card(body, Vec::new())
 }
 
+pub fn approval_summary(set: &PendingApprovalSet) -> String {
+    if set.kind == ApprovalKind::ToolCallLimit {
+        return "Tool-call limit reached. Choose whether to continue, answer now, or stop.".into();
+    }
+    match set.items.as_slice() {
+        [item] => format!("Approval needed to run {}.", item.tool_name),
+        items => format!("{} tool calls need approval.", items.len()),
+    }
+}
+
+pub fn decided_summary(decisions: &[(String, ApprovalChoice)], decided_by: &str) -> String {
+    decisions
+        .iter()
+        .map(|(name, choice)| {
+            let verb = match choice {
+                ApprovalChoice::Approve => "approved",
+                ApprovalChoice::Reject => "denied",
+                ApprovalChoice::Withdraw => "stopped",
+            };
+            format!("{name} was {verb} by {decided_by}.")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn input_id(index: usize) -> String {
     format!("d{index}")
 }
