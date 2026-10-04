@@ -978,7 +978,8 @@ impl ApprovalPolicyServer {
     }
 
     #[tool(
-        description = "Publishes an approval policy fixture to an external destination",
+        description = "Runs a local approval demonstration and returns a confirmation. No data is published or sent to an external service.",
+        title = "Publish approval demo",
         annotations(
             read_only_hint = false,
             destructive_hint = false,

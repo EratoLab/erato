@@ -4751,6 +4751,16 @@
               }
             ]
           },
+          "display": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolDisplayMetadata"
+              }
+            ]
+          },
           "input": {
             "$ref": "#/components/schemas/Value"
           },
@@ -6281,6 +6291,16 @@
           "child_tool_call_id": {
             "type": "string"
           },
+          "display": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolDisplayMetadata"
+              }
+            ]
+          },
           "input": {
             "$ref": "#/components/schemas/Value"
           },
@@ -7117,6 +7137,16 @@
               "$ref": "#/components/schemas/ApprovalItem"
             },
             "description": "Every decision this stop covers. An `mcp_tool` stop carries one item\ndescribing the same call as the flat fields above; readers that branch\non `kind` first may use either."
+          },
+          "display": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolDisplayMetadata"
+              }
+            ]
           },
           "input": {
             "$ref": "#/components/schemas/Value"
@@ -11438,6 +11468,28 @@
           "success",
           "error"
         ]
+      },
+      "ToolDisplayMetadata": {
+        "type": "object",
+        "description": "Inert display text from the tool descriptor, captured when approval is\nrequested. Never used to select a tool, evaluate policy or execute a call.",
+        "required": [
+          "title",
+          "description_truncated"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description_truncated": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
       },
       "ToolUse": {
         "type": "object",

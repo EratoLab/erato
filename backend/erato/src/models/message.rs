@@ -394,6 +394,15 @@ pub struct ToolApprovalAnnotations {
     pub open_world_hint: bool,
 }
 
+/// Inert display text from the tool descriptor, captured when approval is
+/// requested. Never used to select a tool, evaluate policy or execute a call.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ToolDisplayMetadata {
+    pub title: String,
+    pub description: Option<String>,
+    pub description_truncated: bool,
+}
+
 /// Which surface a durable approval stop belongs to. `McpTool` is the
 /// default so rows written before the other kinds existed keep parsing.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -419,6 +428,8 @@ pub struct ChildApprovalRef {
     pub child_message_id: Uuid,
     pub child_tool_call_id: String,
     pub tool_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ToolDisplayMetadata>,
     pub mcp_server_id: String,
     pub input: JsonValue,
     pub annotations: ToolApprovalAnnotations,
@@ -433,6 +444,8 @@ pub struct ApprovalItem {
     pub approval_id: String,
     pub tool_call_id: String,
     pub tool_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ToolDisplayMetadata>,
     pub input: JsonValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child: Option<ChildApprovalRef>,
@@ -452,6 +465,8 @@ pub struct PendingToolCall {
 pub struct ContentPartToolApprovalRequest {
     pub tool_call_id: String,
     pub tool_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ToolDisplayMetadata>,
     pub mcp_server_id: String,
     pub input: JsonValue,
     pub annotations: ToolApprovalAnnotations,
@@ -485,6 +500,7 @@ impl ContentPartToolApprovalRequest {
             approval_id: self.tool_call_id.clone(),
             tool_call_id: self.tool_call_id.clone(),
             tool_name: self.tool_name.clone(),
+            display: self.display.clone(),
             input: self.input.clone(),
             child: None,
         }]

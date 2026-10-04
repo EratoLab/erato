@@ -28,6 +28,7 @@ import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { DelegatedTaskApprovalCard } from "./DelegatedTaskApprovalCard";
 import { OriginApprovalLink } from "./OriginApprovalLink";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
+import { ToolApprovalDescription } from "./ToolApprovalDescription";
 import { approvalItemsOf } from "./approvalItems";
 
 import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
@@ -521,7 +522,7 @@ export const McpToolApprovalCard = ({
           />
         )}
         <span className="text-sm font-medium text-theme-fg-primary">
-          {request.tool_name}
+          {request.display?.title ?? request.tool_name}
         </span>
         <span className="text-xs text-theme-fg-muted">
           {isClientTool
@@ -532,6 +533,13 @@ export const McpToolApprovalCard = ({
             : request.mcp_server_id}
         </span>
       </div>
+      {request.display?.title &&
+        request.display.title !== request.tool_name && (
+          <p className="mt-1 break-words text-xs text-theme-fg-muted">
+            {request.tool_name}
+          </p>
+        )}
+      <ToolApprovalDescription display={request.display} />
       <div className="mt-2 max-h-48 overflow-y-auto">
         <ToolCallInput input={request.input} />
       </div>

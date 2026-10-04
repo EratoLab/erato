@@ -16,8 +16,8 @@ use std::collections::HashMap;
 
 pub const APPROVAL_ACTION: &str = "erato_tool_approval";
 /// Total input preview budget per card; Teams rejects cards above ~28 KB.
-const MAX_INPUT_PREVIEW_CHARS: usize = 6_000;
-const MAX_ITEM_PREVIEW_CHARS: usize = 1_500;
+const MAX_INPUT_PREVIEW_BYTES: usize = 6_000;
+const MAX_ITEM_PREVIEW_BYTES: usize = 1_500;
 
 /// What the turn is waiting on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +34,22 @@ pub struct PendingApprovalItem {
     pub approval_id: String,
     /// The tool the decision is about (for delegated tasks: the child's call).
     pub tool_name: String,
+    pub display: Option<ToolDisplay>,
+    pub source: Option<String>,
     pub input: Value,
+}
+
+/// Display-only projection of the backend's descriptor snapshot.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolDisplay {
+    pub title: String,
+    pub description: Option<String>,
+}
+
+impl PendingApprovalItem {
+    fn display_name(&self) -> &str {
+        self.display.as_ref().map_or(&self.tool_name, |d| &d.title)
+    }
 }
 
 /// Every open decision of one parked assistant message.
@@ -70,7 +85,8 @@ pub struct ApprovalSubmit {
     pub action: String,
     pub message_id: String,
     pub approval_ids: Vec<String>,
-    /// Tool names in the order of `approval_ids`, for the decided card.
+    /// Display names in the order of `approval_ids`, only for the decided card.
+    /// Execution and authorization use the backend's recorded approval ids.
     #[serde(default)]
     pub tool_names: Vec<String>,
     /// Set by "Approve all" / "Deny all" (and the buttons of a single item).
@@ -118,7 +134,13 @@ fn heading(set: &PendingApprovalSet) -> String {
 pub fn approval_card(set: &PendingApprovalSet) -> Value {
     let count = set.items.len();
     let heading = heading(set);
-    let item_budget = (MAX_INPUT_PREVIEW_CHARS / count.max(1)).min(MAX_ITEM_PREVIEW_CHARS);
+    let item_budget = (MAX_INPUT_PREVIEW_BYTES / count.max(1)).min(MAX_ITEM_PREVIEW_BYTES);
+    // Display names also travel in each button's data for the decided card.
+    let names: Vec<String> = set
+        .items
+        .iter()
+        .map(|item| bounded_text(item.display_name(), 1_600 / count.max(1)))
+        .collect();
     let mut body = vec![json!({
         "type": "TextBlock", "text": heading, "weight": "Bolder", "size": "Medium", "wrap": true,
     })];
@@ -132,14 +154,23 @@ pub fn approval_card(set: &PendingApprovalSet) -> Value {
         .enumerate()
         .filter(|_| set.kind != ApprovalKind::ToolCallLimit)
     {
-        body.push(json!({
-            "type": "TextBlock", "wrap": true, "separator": index > 0,
-            "text": format!("Run the tool **{}**?", item.tool_name),
-        }));
-        body.push(json!({
-            "type": "TextBlock", "wrap": true, "fontType": "Monospace", "isSubtle": true,
-            "text": preview(&item.input, item_budget),
-        }));
+        let mut title = plain_text(&format!("Run {}?", names[index]));
+        title["separator"] = json!(index > 0);
+        title["inlines"][0]["weight"] = json!("Bolder");
+        body.push(title);
+        if let Some(source) = &item.source {
+            body.push(plain_text(&format!("{source} / {}", item.tool_name)));
+        } else if item.display_name() != item.tool_name {
+            body.push(plain_text(&item.tool_name));
+        }
+        if let Some(description) = item.display.as_ref().and_then(|d| d.description.as_deref()) {
+            body.push(plain_text(&bounded_text(description, 4_000 / count.max(1))));
+        }
+        if !item.input.as_object().is_some_and(|input| input.is_empty()) {
+            let mut input = plain_text(&preview(&item.input, item_budget));
+            input["inlines"][0]["fontType"] = json!("Monospace");
+            body.push(input);
+        }
         if count > 1 {
             body.push(json!({
                 "type": "Input.ChoiceSet",
@@ -160,7 +191,7 @@ pub fn approval_card(set: &PendingApprovalSet) -> Value {
             "action": APPROVAL_ACTION,
             "message_id": set.message_id,
             "approval_ids": set.items.iter().map(|item| &item.approval_id).collect::<Vec<_>>(),
-            "tool_names": set.items.iter().map(|item| &item.tool_name).collect::<Vec<_>>(),
+            "tool_names": names,
         });
         if let Some(all) = all {
             data["all"] = json!(all);
@@ -211,8 +242,10 @@ pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str) ->
     let body = decisions
         .iter()
         .map(|(tool_name, choice)| {
-            json!({"type": "TextBlock", "wrap": true,
-                   "text": format!("**{tool_name}** was {} by {decided_by}.", choice.past_tense())})
+            plain_text(&format!(
+                "{tool_name} was {} by {decided_by}.",
+                choice.past_tense()
+            ))
         })
         .collect();
     adaptive_card(body, Vec::new())
@@ -228,7 +261,7 @@ pub fn approval_summary(set: &PendingApprovalSet) -> String {
             heading(set)
         ),
         (ApprovalKind::McpTool | ApprovalKind::DelegatedTask, [item]) => {
-            format!("Approval needed to run {}.", item.tool_name)
+            format!("Approval needed to run {}.", item.display_name())
         }
         _ => format!("{}.", heading(set)),
     }
@@ -246,13 +279,24 @@ fn input_id(index: usize) -> String {
     format!("d{index}")
 }
 
-fn preview(input: &Value, max_chars: usize) -> String {
+fn preview(input: &Value, max_bytes: usize) -> String {
     let text = serde_json::to_string_pretty(input).unwrap_or_default();
-    if text.chars().count() > max_chars {
-        format!("{}…", text.chars().take(max_chars).collect::<String>())
+    bounded_text(&text, max_bytes)
+}
+
+fn bounded_text(text: &str, max_bytes: usize) -> String {
+    if text.len() > max_bytes {
+        let end = text.floor_char_boundary(max_bytes.saturating_sub('…'.len_utf8()));
+        format!("{}…", &text[..end])
     } else {
-        text
+        text.to_string()
     }
+}
+
+/// TextRun does not interpret Markdown. MCP descriptors and tool inputs
+/// must not be able to create links, images or misleading formatting.
+fn plain_text(text: &str) -> Value {
+    json!({"type": "RichTextBlock", "inlines": [{"type": "TextRun", "text": text}]})
 }
 
 pub(super) fn adaptive_card(body: Vec<Value>, actions: Vec<Value>) -> Value {
@@ -284,6 +328,8 @@ mod tests {
                 .map(|index| PendingApprovalItem {
                     approval_id: format!("plan:1:{index}"),
                     tool_name: format!("tool_{index}"),
+                    display: None,
+                    source: None,
                     input: json!({"n": index}),
                 })
                 .collect(),
@@ -354,6 +400,53 @@ mod tests {
             "an unanswered item is never filled in"
         );
         assert_eq!(approve_all.tool_names, vec!["tool_0", "tool_1"]);
+    }
+
+    #[test]
+    fn descriptor_text_is_inert_and_decisions_keep_the_approval_id() {
+        let mut approvals = set(1);
+        approvals.items[0].display = Some(ToolDisplay {
+            title: "Friendly [title](https://example.com)".into(),
+            description: Some("<b>Not markup</b>".into()),
+        });
+        approvals.items[0].source = Some("new_server".into());
+        approvals.items[0].input = json!({});
+        let card = approval_card(&approvals);
+        let body = card["content"]["body"].as_array().unwrap();
+        assert_eq!(body.len(), 4, "empty argument objects are omitted");
+        assert_eq!(body[1]["type"], "RichTextBlock");
+        assert_eq!(
+            body[1]["inlines"][0]["text"],
+            "Run Friendly [title](https://example.com)?"
+        );
+        assert_eq!(body[2]["inlines"][0]["text"], "new_server / tool_0");
+        assert_eq!(body[3]["inlines"][0]["text"], "<b>Not markup</b>");
+        let submit = ApprovalSubmit::from_value(&submitted(&card, 0, json!({}))).unwrap();
+        assert_eq!(
+            submit.decisions().unwrap(),
+            vec![("plan:1:0".into(), ApprovalChoice::Approve)]
+        );
+        assert_eq!(
+            submit.tool_names,
+            vec!["Friendly [title](https://example.com)"]
+        );
+        assert!(approval_summary(&approvals).contains("Friendly [title]"));
+    }
+
+    #[test]
+    fn large_multibyte_descriptions_and_inputs_fit_the_card() {
+        let mut approvals = set(8);
+        for item in &mut approvals.items {
+            item.display = Some(ToolDisplay {
+                title: "😀".repeat(200),
+                description: Some("😀".repeat(4_000)),
+            });
+            item.input = json!({"text": "😀".repeat(5_000)});
+        }
+        let card = approval_card(&approvals);
+        assert!(serde_json::to_vec(&card).unwrap().len() < 28_000);
+        let submit = ApprovalSubmit::from_value(&submitted(&card, 1, json!({}))).unwrap();
+        assert_eq!(submit.decisions().unwrap().len(), 8);
     }
 
     #[test]

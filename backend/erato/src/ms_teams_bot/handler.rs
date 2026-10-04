@@ -1242,6 +1242,8 @@ mod tests {
             items: vec![PendingApprovalItem {
                 approval_id: "a".into(),
                 tool_name: "t".into(),
+                display: None,
+                source: None,
                 input: json!({}),
             }],
         });

@@ -3,9 +3,6 @@ use crate::distribution::runtime::McpAppState;
 use crate::models::user_tool_approval_setting::{UserToolDecision, decision_of};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
-use crate::services::display_text::{
-    MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
-};
 use crate::services::mcp_manager::McpRequestAuthContext;
 use crate::services::mcp_oauth::{
     CompleteOauthAuthorizationParams, complete_oauth_authorization, disconnect_oauth_authorization,
@@ -273,26 +270,11 @@ fn project_mcp_server_tool(
 ) -> McpServerTool {
     let verdict = evaluate_mcp_tool_approval(approval, tool);
     let name = tool.name.to_string();
-    let title = [
-        tool.title.as_deref(),
-        tool.annotations
-            .as_ref()
-            .and_then(|annotations| annotations.title.as_deref()),
-    ]
-    .into_iter()
-    .flatten()
-    .map(|candidate| sanitize_display_text(candidate, MAX_DISPLAY_NAME_CHARS).text)
-    .find(|candidate| !candidate.is_empty())
-    .unwrap_or_else(|| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text);
-    let description = tool
-        .description
-        .as_deref()
-        .map(|value| sanitize_display_text(value, MAX_DISPLAY_DESCRIPTION_CHARS))
-        .filter(|value| !value.text.is_empty());
+    let display = crate::services::tool_display::tool_display_metadata(tool);
     McpServerTool {
-        title,
-        description_truncated: description.as_ref().is_some_and(|value| value.truncated),
-        description: description.map(|value| value.text),
+        title: display.title,
+        description_truncated: display.description_truncated,
+        description: display.description,
         annotations: McpServerToolAnnotations {
             read_only_hint: verdict.annotations.read_only_hint,
             destructive_hint: verdict.annotations.destructive_hint,
@@ -595,6 +577,7 @@ fn oauth_callback_url(headers: &HeaderMap) -> Result<String, StatusCode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::display_text::MAX_DISPLAY_NAME_CHARS;
 
     fn tool_row(name: &str, title: &str) -> McpServerTool {
         McpServerTool {

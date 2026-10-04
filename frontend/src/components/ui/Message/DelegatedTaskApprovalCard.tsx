@@ -13,6 +13,7 @@ import {
   ApprovalBulkActions,
   stagedItemPresentation,
 } from "./ApprovalDecisionActions";
+import { ToolApprovalDescription } from "./ToolApprovalDescription";
 
 import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
 import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -69,12 +70,18 @@ const ParkedChildItem = ({
               className="size-4 shrink-0 text-theme-fg-secondary"
             />
             <span className="text-sm text-theme-fg-primary">
-              {child.tool_name}
+              {child.display?.title ?? child.tool_name}
             </span>
             <span className="text-xs text-theme-fg-muted">
               {child.mcp_server_id}
             </span>
           </div>
+          {child.display?.title && child.display.title !== child.tool_name && (
+            <p className="mt-1 break-words text-xs text-theme-fg-muted">
+              {child.tool_name}
+            </p>
+          )}
+          <ToolApprovalDescription display={child.display} />
           <div className="mt-2 max-h-48 overflow-y-auto">
             <ToolCallInput input={child.input} />
           </div>
