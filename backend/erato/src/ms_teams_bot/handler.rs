@@ -27,6 +27,8 @@ const CONTEXT_FILE_NAME: &str = "teams-conversation-context.md";
 const PREPARING_STATUS: &str = "Preparing your request…";
 
 #[cfg(test)]
+mod generation_tests;
+#[cfg(test)]
 mod sign_in_tests;
 
 struct UserContext {
@@ -143,8 +145,13 @@ async fn process_message(
     let prepared = async {
         let mut file_ids = Vec::new();
         for file in files {
-            stream.preparing("Reading attachments…").await;
-            match while_working(&mut stream, intake_file(bot, host, &user, chat_id, &file)).await {
+            match stream
+                .during(
+                    "Reading attachments…",
+                    intake_file(bot, host, &user, chat_id, &file),
+                )
+                .await
+            {
                 Ok(file_id) => file_ids.push(file_id),
                 Err(error) => {
                     tracing::warn!(%error, "Teams attachment could not be processed");
@@ -158,12 +165,12 @@ async fn process_message(
             }
         }
         if !kind.is_personal() && bot.settings.context_message_count > 0 {
-            stream.preparing("Reading the conversation…").await;
-            match while_working(
-                &mut stream,
-                conversation_context(bot, host, activity, &user, chat_id),
-            )
-            .await
+            match stream
+                .during(
+                    "Reading the conversation…",
+                    conversation_context(bot, host, activity, &user, chat_id),
+                )
+                .await
             {
                 Ok(Some(file_id)) => file_ids.push(file_id),
                 Ok(None) => {}
@@ -178,13 +185,13 @@ async fn process_message(
         } else {
             text
         };
-        stream.preparing(PREPARING_STATUS).await;
         Ok::<_, Report>(
-            while_working(
-                &mut stream,
-                host.submit(&user.session, chat_id, message, file_ids),
-            )
-            .await,
+            stream
+                .during(
+                    PREPARING_STATUS,
+                    host.submit(&user.session, chat_id, message, file_ids),
+                )
+                .await,
         )
     }
     .await;
@@ -406,10 +413,7 @@ async fn on_control(
         Ok(updates) => {
             host.reset_request_action(&claimed).await?;
             let current = host.request_snapshot(request.id).await?.unwrap_or(claimed);
-            let stream = StreamingReply::new(
-                target,
-                activity.conversation_kind().is_personal() && bot.settings.streaming,
-            );
+            let stream = stream_for(bot, target, activity.conversation_kind());
             render_generation(bot, host, target, updates, stream, Some(current)).await
         }
         Err(StartError::Busy) => {
@@ -467,15 +471,7 @@ async fn write_controls(
         {
             tracing::debug!(%error, "Could not remove redundant response controls");
             // At least remove the duplicate button if deleting its card fails.
-            return target
-                .connector
-                .update(
-                    target.service_url,
-                    target.conversation_id,
-                    id,
-                    &controls::activity(&current),
-                )
-                .await;
+            return target.update(id, controls::activity(&current)).await;
         }
         host.clear_control_card(transaction, current.id, id).await?;
         // An edit or a new generation can arrive during the DELETE. Read it
@@ -493,12 +489,7 @@ async fn write_controls(
     }
     let activity = controls::activity(&current);
     match current.control_activity_id.as_deref() {
-        Some(id) => {
-            target
-                .connector
-                .update(target.service_url, target.conversation_id, id, &activity)
-                .await
-        }
+        Some(id) => target.update(id, activity).await,
         None => match target.send(&activity).await {
             Ok(Some(id)) => host.record_control_card(transaction, current.id, &id).await,
             Ok(None) => Ok(()),
@@ -1027,23 +1018,6 @@ async fn render_generation(
     match &completion.approvals {
         Some(set) => send_approval_card(target, set).await,
         None => Ok(()),
-    }
-}
-
-/// Keep preparation visible and enforce stream deadlines even if a download
-/// or backend operation has not produced any events yet.
-async fn while_working<T>(
-    stream: &mut StreamingReply<'_>,
-    work: impl std::future::Future<Output = T>,
-) -> T {
-    tokio::pin!(work);
-    let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
-    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    loop {
-        tokio::select! {
-            result = &mut work => return result,
-            _ = timer.tick() => stream.flush().await,
-        }
     }
 }
 

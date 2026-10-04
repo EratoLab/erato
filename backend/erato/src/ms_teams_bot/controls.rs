@@ -44,7 +44,7 @@ pub fn activity(request: &TeamsRequest) -> Value {
         if request.state == "stopping" {
             "Stopping…"
         } else {
-            "Working on your request…"
+            super::streaming::WORKING_STATUS
         }
     } else if request.pending_edit.is_some() {
         "Your question was edited. Regenerate the answer using the updated question?"

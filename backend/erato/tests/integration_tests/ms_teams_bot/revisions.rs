@@ -148,15 +148,9 @@ async fn record_generation(
         while fixture
             .state
             .background_tasks
-            .get_task(&fixture.chat_id)
+            .active_generation(&fixture.chat_id)
             .await
             .is_some()
-            || fixture
-                .state
-                .background_tasks
-                .get_shared_generation(&fixture.chat_id)
-                .await
-                .is_some()
         {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }

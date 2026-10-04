@@ -364,20 +364,12 @@ impl Host {
         {
             return Ok(false);
         }
-        let active = if let Some(task) = self
+        let active = self
             .app_state
             .background_tasks
-            .get_task(&request.chat_id)
+            .active_generation(&request.chat_id)
             .await
-        {
-            task.message_id() == message_id
-        } else {
-            self.app_state
-                .background_tasks
-                .get_shared_generation(&request.chat_id)
-                .await
-                .is_some_and(|(_, active)| active == Some(message_id))
-        };
+            .is_some_and(|generation| generation.message_id() == Some(message_id));
         if !active {
             return Ok(false);
         }
@@ -447,15 +439,9 @@ impl Host {
         if self
             .app_state
             .background_tasks
-            .get_task(&request.chat_id)
+            .active_generation(&request.chat_id)
             .await
             .is_some()
-            || self
-                .app_state
-                .background_tasks
-                .get_shared_generation(&request.chat_id)
-                .await
-                .is_some()
         {
             return Err(StartError::Busy);
         }

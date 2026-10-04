@@ -154,6 +154,24 @@ impl<'a> StreamingReply<'a> {
         self.flush().await;
     }
 
+    /// Keep preparation visible while work is pending, including quiet I/O.
+    pub async fn during<T>(
+        &mut self,
+        status: &str,
+        work: impl std::future::Future<Output = T>,
+    ) -> T {
+        self.preparing(status).await;
+        tokio::pin!(work);
+        let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                result = &mut work => return result,
+                _ = timer.tick() => self.flush().await,
+            }
+        }
+    }
+
     pub async fn informative(&mut self, text: &str) {
         self.status = Some(short_status(text));
         self.flush().await;
