@@ -13,7 +13,7 @@ import {
   ApprovalBulkActions,
   stagedItemPresentation,
 } from "./ApprovalDecisionActions";
-import { ToolApprovalDescription } from "./ToolApprovalDescription";
+import { ApprovalToolHeading } from "./ApprovalToolHeading";
 
 import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
 import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -64,24 +64,20 @@ const ParkedChildItem = ({
       </p>
       {child ? (
         <>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <ResolvedIcon
-              iconId="simpleicons-modelcontextprotocol"
-              className="size-4 shrink-0 text-theme-fg-secondary"
-            />
-            <span className="text-sm text-theme-fg-primary">
-              {child.display?.title ?? child.tool_name}
-            </span>
-            <span className="text-xs text-theme-fg-muted">
-              {child.mcp_server_id}
-            </span>
-          </div>
-          {child.display?.title && child.display.title !== child.tool_name && (
-            <p className="mt-1 break-words text-xs text-theme-fg-muted">
-              {child.tool_name}
-            </p>
-          )}
-          <ToolApprovalDescription display={child.display} />
+          <ApprovalToolHeading
+            className="mt-1"
+            toolName={child.tool_name}
+            display={child.display}
+            icon={
+              <ResolvedIcon
+                iconId="simpleicons-modelcontextprotocol"
+                className="size-4 shrink-0 text-theme-fg-secondary"
+              />
+            }
+            source={child.mcp_server_id}
+            // The task brief above is this item's heading.
+            titleClassName="font-normal"
+          />
           <div className="mt-2 max-h-48 overflow-y-auto">
             <ToolCallInput input={child.input} />
           </div>

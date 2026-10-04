@@ -303,6 +303,7 @@ export type { ApprovalItemPart } from "@/components/ui/Message/approvalItems";
 export type { ApprovalRequestSummary } from "@/components/ui/Message/approvalItems";
 export type { ApprovalStopState } from "@/components/ui/Message/approvalItems";
 export type { StagedDecisions } from "@/components/ui/Message/approvalItems";
+export { ApprovalToolHeading } from "@/components/ui/Message/ApprovalToolHeading";
 export { ClientToolFileApprovals } from "@/components/ui/Message/ClientToolFileApproval";
 export { CollapsibleCodeBlock } from "@/components/ui/Message/CollapsibleCodeBlock";
 export type { CollapsibleCodeBlockProps } from "@/components/ui/Message/CollapsibleCodeBlock";
@@ -344,6 +345,8 @@ export { TeamsConversationView } from "@/components/ui/Teams/TeamsConversationVi
 export type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConversationView";
 export { JsonDisplay } from "@/components/ui/ToolCall/JsonDisplay";
 export type { JsonDisplayProps } from "@/components/ui/ToolCall/JsonDisplay";
+export { McpToolDescription } from "@/components/ui/ToolCall/McpToolDescription";
+export type { McpToolDescriptionProps } from "@/components/ui/ToolCall/McpToolDescription";
 export { ToolCallInput } from "@/components/ui/ToolCall/ToolCallInput";
 export type { ToolCallInputProps } from "@/components/ui/ToolCall/ToolCallInput";
 export { ToolCallOutput } from "@/components/ui/ToolCall/ToolCallOutput";

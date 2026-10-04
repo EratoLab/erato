@@ -797,15 +797,14 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
                             approval_id: item.approval_id,
                             tool_name: child.tool_name,
                             display: child.display.map(approval_display),
-                            source: Some(child.mcp_server_id),
+                            source: Some(child.mcp_server_id).filter(|id| !id.is_empty()),
                             input: child.input,
                         },
                         None => PendingApprovalItem {
                             approval_id: item.approval_id,
                             tool_name: item.tool_name,
                             display: item.display.map(approval_display),
-                            source: (!request.mcp_server_id.is_empty())
-                                .then(|| request.mcp_server_id.clone()),
+                            source: Some(request.mcp_server_id.clone()).filter(|id| !id.is_empty()),
                             input: item.input,
                         },
                     })

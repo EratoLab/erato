@@ -978,7 +978,7 @@ impl ApprovalPolicyServer {
     }
 
     #[tool(
-        description = "Runs a local approval demonstration and returns a confirmation. No data is published or sent to an external service.",
+        description = "Simulates publishing an approval demo to an external destination. It is declared open-world to exercise approval policies; nothing is actually sent.",
         title = "Publish approval demo",
         annotations(
             read_only_hint = false,

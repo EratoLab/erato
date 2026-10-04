@@ -399,6 +399,7 @@ pub struct ToolApprovalAnnotations {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ToolDisplayMetadata {
     pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub description_truncated: bool,
 }

@@ -281,8 +281,17 @@ describe("McpToolApprovalCard", () => {
         { continueToolApproval },
       ),
     );
-    expect(screen.getByText("Publish release notes")).toBeInTheDocument();
-    expect(screen.getByText(request.display.description)).toBeInTheDocument();
+    expect(screen.getByText("Publish release notes")).toHaveAttribute(
+      "dir",
+      "auto",
+    );
+    expect(screen.getByText(request.display.description)).toHaveAttribute(
+      "dir",
+      "auto",
+    );
+    expect(
+      screen.queryByText("Description shortened by Erato"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "notes" }),
     ).not.toBeInTheDocument();
@@ -326,7 +335,10 @@ describe("McpToolApprovalCard", () => {
     );
     expect(screen.getByText("Child tool title")).toBeInTheDocument();
     expect(
-      screen.getByText("A truncated child description…"),
+      screen.getByText("A truncated child description"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Description shortened by Erato"),
     ).toBeInTheDocument();
     expect(screen.getByText("publish_approval_probe")).toBeInTheDocument();
   });

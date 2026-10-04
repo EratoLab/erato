@@ -5,9 +5,9 @@ use serde_json::{Value, json};
 
 /// Teams rejects messages above roughly 28 KB; stay well below it.
 pub const MAX_MESSAGE_CHARS: usize = 20_000;
-/// Serialized size of the details card, leaving room below the same limit
-/// for the activity's metadata and summary.
-const MAX_DETAILS_CARD_BYTES: usize = 24_000;
+/// Serialized size of a card, leaving room below the same limit for the
+/// activity's metadata and summary.
+const MAX_CARD_BYTES: usize = 24_000;
 pub const EARLIER_STEPS: &str = "Earlier steps";
 
 /// A markdown message activity. In group chats and channels the requester is
@@ -61,7 +61,7 @@ pub fn answer_with_details(text: &str, earlier_text: &str) -> (String, Option<Va
     attachment["content"]["fallbackText"] = json!(format!("{EARLIER_STEPS}:\n\n{earlier_text}"));
     // The card is sent separately from the answer. Include JSON escaping and
     // fallback text in its budget.
-    if serde_json::to_vec(&attachment).is_ok_and(|bytes| bytes.len() <= MAX_DETAILS_CARD_BYTES) {
+    if card_fits(&attachment) {
         (text.to_string(), Some(attachment))
     } else {
         (
@@ -73,6 +73,21 @@ pub fn answer_with_details(text: &str, earlier_text: &str) -> (String, Option<Va
 
 pub fn earlier_steps_markdown(earlier_text: &str) -> String {
     format!("**{EARLIER_STEPS}**\n\n{earlier_text}")
+}
+
+/// Whether a card attachment, measured after JSON escaping, fits one activity.
+pub fn card_fits(card: &Value) -> bool {
+    serde_json::to_vec(card).is_ok_and(|bytes| bytes.len() <= MAX_CARD_BYTES)
+}
+
+/// Cut `text` to `max_bytes` on a character boundary, ending a cut with "…".
+pub fn bounded_text(text: &str, max_bytes: usize) -> String {
+    if text.len() > max_bytes {
+        let end = text.floor_char_boundary(max_bytes.saturating_sub('…'.len_utf8()));
+        format!("{}…", &text[..end])
+    } else {
+        text.to_string()
+    }
 }
 
 #[derive(Debug, Clone)]

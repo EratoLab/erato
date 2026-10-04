@@ -524,25 +524,18 @@ fn gate_mcp_tool_call(
     match effective_mcp_tool_state(config, &verdict, user_decision) {
         McpToolEffectiveState::Allow => ToolCallGate::Run,
         McpToolEffectiveState::Denied => refuse_denied_tool_call(tool_call),
-        McpToolEffectiveState::Ask => {
-            let mut gate = ask_for_tool_call(
-                tool_call,
-                ToolApprovalKind::McpTool,
-                server_id,
-                verdict.annotations.clone(),
-                match config.preset {
-                    McpToolApprovalPreset::Permissive => "permissive",
-                    McpToolApprovalPreset::Restrictive => "restrictive",
-                },
-                config.allow_always,
-            );
-            if let ToolCallGate::Ask(request) = &mut gate {
-                let display = crate::services::tool_display::tool_display_metadata(tool);
-                request.display = Some(display.clone());
-                request.approvals[0].display = Some(display);
-            }
-            gate
-        }
+        McpToolEffectiveState::Ask => ask_for_tool_call(
+            tool_call,
+            ToolApprovalKind::McpTool,
+            server_id,
+            Some(crate::services::tool_display::tool_display_metadata(tool)),
+            verdict.annotations.clone(),
+            match config.preset {
+                McpToolApprovalPreset::Permissive => "permissive",
+                McpToolApprovalPreset::Restrictive => "restrictive",
+            },
+            config.allow_always,
+        ),
     }
 }
 
@@ -559,6 +552,7 @@ fn ask_for_tool_call(
     tool_call: &genai::chat::ToolCall,
     kind: ToolApprovalKind,
     source_id: &str,
+    display: Option<crate::models::message::ToolDisplayMetadata>,
     annotations: crate::models::message::ToolApprovalAnnotations,
     preset: &str,
     allow_always: bool,
@@ -573,7 +567,7 @@ fn ask_for_tool_call(
     ToolCallGate::Ask(Box::new(ContentPartToolApprovalRequest {
         tool_call_id: tool_call.call_id.clone(),
         tool_name: display_name.text.clone(),
-        display: None,
+        display: display.clone(),
         mcp_server_id: source_id.to_string(),
         input: tool_call.fn_arguments.clone(),
         annotations,
@@ -587,7 +581,7 @@ fn ask_for_tool_call(
             approval_id: tool_call.call_id.clone(),
             tool_call_id: tool_call.call_id.clone(),
             tool_name: display_name.text,
-            display: None,
+            display,
             input: tool_call.fn_arguments.clone(),
             child: None,
         }],
@@ -615,6 +609,7 @@ fn gate_client_tool_call(
             tool_call,
             ToolApprovalKind::ClientTool,
             namespace,
+            None,
             // A client tool declares no MCP annotations; these are the
             // pessimistic defaults a card reads for a tool without any.
             crate::models::message::ToolApprovalAnnotations {
