@@ -25,6 +25,7 @@ import { FrontendRequestError } from "@/utils/errorReport";
 import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
+import { ApprovalToolHeading } from "./ApprovalToolHeading";
 import { DelegatedTaskApprovalCard } from "./DelegatedTaskApprovalCard";
 import { OriginApprovalLink } from "./OriginApprovalLink";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
@@ -511,27 +512,28 @@ export const McpToolApprovalCard = ({
       data-approval-kind={kind}
       className={APPROVAL_CARD_SHELL_CLASS}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        {isClientTool ? (
-          <ComputerIcon className="size-4 shrink-0 text-theme-fg-secondary" />
-        ) : (
-          <ResolvedIcon
-            iconId="simpleicons-modelcontextprotocol"
-            className="size-4 shrink-0 text-theme-fg-secondary"
-          />
-        )}
-        <span className="text-sm font-medium text-theme-fg-primary">
-          {request.tool_name}
-        </span>
-        <span className="text-xs text-theme-fg-muted">
-          {isClientTool
+      <ApprovalToolHeading
+        toolName={request.tool_name}
+        display={request.display}
+        icon={
+          isClientTool ? (
+            <ComputerIcon className="size-4 shrink-0 text-theme-fg-secondary" />
+          ) : (
+            <ResolvedIcon
+              iconId="simpleicons-modelcontextprotocol"
+              className="size-4 shrink-0 text-theme-fg-secondary"
+            />
+          )
+        }
+        source={
+          isClientTool
             ? t({
                 id: "clientToolApproval.thisDevice",
                 message: "This device",
               })
-            : request.mcp_server_id}
-        </span>
-      </div>
+            : request.mcp_server_id
+        }
+      />
       <div className="mt-2 max-h-48 overflow-y-auto">
         <ToolCallInput input={request.input} />
       </div>

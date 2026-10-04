@@ -282,12 +282,12 @@ async fn on_approval(
             .iter()
             .enumerate()
             .map(|(index, (_, choice))| {
-                let tool_name = submit
-                    .tool_names
+                let name = submit
+                    .display_names
                     .get(index)
                     .cloned()
                     .unwrap_or_else(|| "The tool".to_string());
-                (tool_name, *choice)
+                (name, *choice)
             })
             .collect();
         let decided_by = user.identity.display_name.as_deref().unwrap_or("you");
@@ -1242,6 +1242,8 @@ mod tests {
             items: vec![PendingApprovalItem {
                 approval_id: "a".into(),
                 tool_name: "t".into(),
+                display: None,
+                source: None,
                 input: json!({}),
             }],
         });

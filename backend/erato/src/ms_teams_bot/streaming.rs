@@ -501,15 +501,7 @@ impl<'a> StreamingReply<'a> {
 }
 
 fn short_status(text: &str) -> String {
-    let text = text.trim();
-    if text.len() <= MAX_STATUS_BYTES {
-        return text.to_string();
-    }
-    let mut end = MAX_STATUS_BYTES - '…'.len_utf8();
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    format!("{}…", &text[..end])
+    render::bounded_text(text.trim(), MAX_STATUS_BYTES)
 }
 
 #[cfg(test)]

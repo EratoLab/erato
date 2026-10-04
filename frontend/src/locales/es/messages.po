@@ -5493,7 +5493,7 @@ msgid "preferences.dialog.title"
 msgstr "Preferencias"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolRow.tsx
+#: src/components/ui/ToolCall/McpToolDescription.tsx
 msgid "preferences.dialog.tools.descriptionShortened"
 msgstr "Descripción acortada por Erato"
 

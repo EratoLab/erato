@@ -63,6 +63,7 @@ pub(crate) fn request(
         // repeated prompts and keeps the decision out of tool execution.
         tool_call_id: format!("tool-budget:{}", sea_orm::prelude::Uuid::new_v4()),
         tool_name: "Tool-call budget".to_string(),
+        display: None,
         mcp_server_id: String::new(),
         input: json!({"budget": budget}),
         annotations: ToolApprovalAnnotations {

@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { useId, useState } from "react";
 
 import { DisclosureChevron } from "../Controls/DisclosureChevron";
+import { McpToolDescription } from "../ToolCall";
 import { SettledInfoPill } from "../Trace/steps/ToolStatusPill";
 
 import type { McpServerTool } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -184,24 +185,14 @@ export function McpToolRow({
             </ul>
           </div>
         </div>
-        {hasDescription && isExpanded ? (
-          <div id={panelId} className="space-y-1 pl-6">
-            <div
-              dir="auto"
-              data-testid="mcp-tool-row-description"
-              className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs text-theme-fg-secondary [overflow-wrap:anywhere] [unicode-bidi:isolate]"
-            >
-              {tool.description}
-            </div>
-            {tool.description_truncated ? (
-              <p className="text-xs italic text-theme-fg-muted">
-                {t({
-                  id: "preferences.dialog.tools.descriptionShortened",
-                  message: "Description shortened by Erato",
-                })}
-              </p>
-            ) : null}
-          </div>
+        {tool.description && isExpanded ? (
+          <McpToolDescription
+            id={panelId}
+            className="pl-6"
+            description={tool.description}
+            truncated={tool.description_truncated}
+            data-testid="mcp-tool-row-description"
+          />
         ) : null}
       </div>
       {control !== undefined && control !== null ? (

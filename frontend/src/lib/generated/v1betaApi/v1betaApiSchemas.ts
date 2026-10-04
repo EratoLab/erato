@@ -134,6 +134,7 @@ export type ApprovalDecisionsError = {
 export type ApprovalItem = {
   approval_id: string;
   child?: null | ChildApprovalRef;
+  display?: null | ToolDisplayMetadata;
   input: Value;
   tool_call_id: string;
   tool_name: string;
@@ -1051,6 +1052,7 @@ export type ChildApprovalRef = {
    */
   child_message_id: string;
   child_tool_call_id: string;
+  display?: null | ToolDisplayMetadata;
   input: Value;
   mcp_server_id: string;
   preset: string;
@@ -1410,6 +1412,7 @@ export type ContentPartToolApprovalRequest = {
    * on `kind` first may use either.
    */
   approvals?: ApprovalItem[];
+  display?: null | ToolDisplayMetadata;
   input: Value;
   kind?: ToolApprovalKind;
   mcp_server_id: string;
@@ -3736,6 +3739,16 @@ export type ToolApprovalKind =
   | "client_tool";
 
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
+
+/**
+ * Inert display text from the tool descriptor, captured when approval is
+ * requested. Never used to select a tool, evaluate policy or execute a call.
+ */
+export type ToolDisplayMetadata = {
+  description?: string | null | undefined;
+  description_truncated: boolean;
+  title: string;
+};
 
 export type ToolUse = {
   /**

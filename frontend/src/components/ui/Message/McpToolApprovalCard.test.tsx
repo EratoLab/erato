@@ -260,6 +260,89 @@ describe("McpToolApprovalCard", () => {
     expect(screen.getByText(/"release"/)).toBeInTheDocument();
   });
 
+  it("uses the saved descriptor as plain text and submits the executable identity", async () => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    const request = {
+      ...approvalRequest,
+      display: {
+        title: "Publish release notes",
+        description: "Send [notes](https://example.com) <b>unchanged</b>",
+        description_truncated: false,
+      },
+    };
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={request}
+          resolution={null}
+        />,
+        "chat-1",
+        { continueToolApproval },
+      ),
+    );
+    expect(screen.getByText("Publish release notes")).toHaveAttribute(
+      "dir",
+      "auto",
+    );
+    expect(screen.getByText(request.display.description)).toHaveAttribute(
+      "dir",
+      "auto",
+    );
+    expect(
+      screen.queryByText("Description shortened by Erato"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "notes" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("publish_approval_probe")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: "publish_approval_probe",
+          toolCallId: "tool-call-1",
+          mcpServerId: "mock_mcp_approval",
+          toolInput: approvalRequest.input,
+          approvalIds: ["tool-call-1"],
+        }),
+      ),
+    );
+  });
+
+  it("renders the child's saved descriptor on a delegated approval", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...delegatedTaskRequest,
+          approvals: [
+            {
+              ...delegatedTaskRequest.approvals[0],
+              child: {
+                ...childApprovalRef,
+                display: {
+                  title: "Child tool title",
+                  description: "A truncated child description",
+                  description_truncated: true,
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("Child tool title")).toBeInTheDocument();
+    expect(
+      screen.getByText("A truncated child description"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Description shortened by Erato"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("publish_approval_probe")).toBeInTheDocument();
+  });
+
   it("resolves the card in place after a decision instead of navigating", async () => {
     const fetchMock = vi
       .fn()

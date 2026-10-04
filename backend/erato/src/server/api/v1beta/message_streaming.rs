@@ -528,6 +528,7 @@ fn gate_mcp_tool_call(
             tool_call,
             ToolApprovalKind::McpTool,
             server_id,
+            Some(crate::services::tool_display::tool_display_metadata(tool)),
             verdict.annotations.clone(),
             match config.preset {
                 McpToolApprovalPreset::Permissive => "permissive",
@@ -551,6 +552,7 @@ fn ask_for_tool_call(
     tool_call: &genai::chat::ToolCall,
     kind: ToolApprovalKind,
     source_id: &str,
+    display: Option<crate::models::message::ToolDisplayMetadata>,
     annotations: crate::models::message::ToolApprovalAnnotations,
     preset: &str,
     allow_always: bool,
@@ -565,6 +567,7 @@ fn ask_for_tool_call(
     ToolCallGate::Ask(Box::new(ContentPartToolApprovalRequest {
         tool_call_id: tool_call.call_id.clone(),
         tool_name: display_name.text.clone(),
+        display: display.clone(),
         mcp_server_id: source_id.to_string(),
         input: tool_call.fn_arguments.clone(),
         annotations,
@@ -578,6 +581,7 @@ fn ask_for_tool_call(
             approval_id: tool_call.call_id.clone(),
             tool_call_id: tool_call.call_id.clone(),
             tool_name: display_name.text,
+            display,
             input: tool_call.fn_arguments.clone(),
             child: None,
         }],
@@ -605,6 +609,7 @@ fn gate_client_tool_call(
             tool_call,
             ToolApprovalKind::ClientTool,
             namespace,
+            None,
             // A client tool declares no MCP annotations; these are the
             // pessimistic defaults a card reads for a tool without any.
             crate::models::message::ToolApprovalAnnotations {
@@ -4890,25 +4895,28 @@ fn delegated_task_approval_part(
             // The child parked on exactly one call - its gate stops the batch
             // at the first gated one - so the first item is that call.
             let gated = child.request.approval_items().into_iter().next();
-            let (child_tool_call_id, child_tool_name, child_input) = gated
-                .map(|item| (item.tool_call_id, item.tool_name, item.input))
+            let (child_tool_call_id, child_tool_name, child_input, child_display) = gated
+                .map(|item| (item.tool_call_id, item.tool_name, item.input, item.display))
                 .unwrap_or_else(|| {
                     (
                         child.request.tool_call_id.clone(),
                         child.request.tool_name.clone(),
                         child.request.input.clone(),
+                        child.request.display.clone(),
                     )
                 });
             ApprovalItem {
                 approval_id: child.tool_call.call_id.clone(),
                 tool_call_id: child.tool_call.call_id.clone(),
                 tool_name: child.tool_call.fn_name.clone(),
+                display: None,
                 input: child.tool_call.fn_arguments.clone(),
                 child: Some(crate::models::message::ChildApprovalRef {
                     child_chat_id: child.child_chat_id,
                     child_message_id: child.child_message_id,
                     child_tool_call_id,
                     tool_name: child_tool_name,
+                    display: child_display,
                     mcp_server_id: child.request.mcp_server_id.clone(),
                     input: child_input,
                     annotations: child.request.annotations.clone(),
@@ -4922,6 +4930,7 @@ fn delegated_task_approval_part(
     ContentPartToolApprovalRequest {
         tool_call_id: head.tool_call.call_id.clone(),
         tool_name: erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string(),
+        display: None,
         mcp_server_id: String::new(),
         input: head.tool_call.fn_arguments.clone(),
         annotations: head.request.annotations.clone(),
@@ -4953,6 +4962,7 @@ fn task_plan_approval_part(
             approval_id: format!("plan:{batch_id}:{position}"),
             tool_call_id: call.call_id.clone(),
             tool_name: call.fn_name.clone(),
+            display: None,
             input: call.fn_arguments.clone(),
             child: None,
         })
@@ -4961,6 +4971,7 @@ fn task_plan_approval_part(
     ContentPartToolApprovalRequest {
         tool_call_id: head.call_id.clone(),
         tool_name: erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string(),
+        display: None,
         mcp_server_id: String::new(),
         input: head.fn_arguments.clone(),
         // No MCP tool is being asked about, so there is nothing to annotate;
@@ -11091,11 +11102,73 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn approval_display_survives_storage_and_delegation_without_changing_identity() {
+        let config = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let call = ToolCall {
+            call_id: "arbitrary-call".into(),
+            fn_name: "new_mcp_tool".into(),
+            fn_arguments: json!({"destination": "test"}),
+            thought_signatures: None,
+        };
+        let mut tool = Tool::new("new_mcp_tool", "Explains this particular tool.", Map::new());
+        tool.title = Some("A friendly title".into());
+        let ToolCallGate::Ask(request) =
+            gate_mcp_tool_call(&config, "new_server", &tool, &call, None)
+        else {
+            panic!("expected approval");
+        };
+        let json = serde_json::to_value(&request).unwrap();
+        let restored: crate::models::message::ContentPartToolApprovalRequest =
+            serde_json::from_value(json.clone()).unwrap();
+        tool.title = Some("Changed after the request".into());
+        assert_eq!(restored.display.as_ref().unwrap().title, "A friendly title");
+        assert_eq!(restored.tool_name, "new_mcp_tool");
+        assert_eq!(restored.input, call.fn_arguments);
+        assert_eq!(restored.approval_items()[0].display, restored.display);
+        let delegated = super::delegated_task_approval_part(
+            &[super::ParkedChild {
+                tool_call: ToolCall {
+                    call_id: "parent-call".into(),
+                    fn_name: "delegate_task".into(),
+                    ..call
+                },
+                child_chat_id: Uuid::new_v4(),
+                child_message_id: Uuid::new_v4(),
+                request: restored.clone(),
+            }],
+            Vec::new(),
+            false,
+        );
+        let item = &delegated.approvals[0];
+        assert_eq!(item.approval_id, "parent-call");
+        let child = item.child.as_ref().unwrap();
+        assert_eq!(child.display, restored.display);
+        assert_eq!(child.tool_name, "new_mcp_tool");
+        assert_eq!(child.child_tool_call_id, "arbitrary-call");
+        assert_eq!(child.mcp_server_id, "new_server");
+
+        let mut legacy = json;
+        legacy.as_object_mut().unwrap().remove("display");
+        legacy.as_object_mut().unwrap().remove("approvals");
+        let mut legacy: crate::models::message::ContentPartToolApprovalRequest =
+            serde_json::from_value(legacy).unwrap();
+        assert!(legacy.approval_items()[0].display.is_none());
+        assert_eq!(legacy.approval_items()[0].tool_name, "new_mcp_tool");
+        legacy.display = restored.display;
+        assert_eq!(legacy.approval_items()[0].display, legacy.display);
+    }
+
     fn open_approval(approval_id: &str) -> ApprovalItem {
         ApprovalItem {
             approval_id: approval_id.to_string(),
             tool_call_id: approval_id.to_string(),
             tool_name: "publish".to_string(),
+            display: None,
             input: json!({}),
             child: None,
         }

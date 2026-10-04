@@ -27,6 +27,7 @@ export type ApprovalRequestSummary = {
   tool_call_id: string;
   tool_name: string;
   input: unknown;
+  display?: ApprovalItem["display"];
   approvals?: ApprovalItemPart[] | null;
 };
 
@@ -49,6 +50,7 @@ export const approvalItemsOf = (
           tool_call_id: request.tool_call_id,
           tool_name: request.tool_name,
           input: request.input,
+          ...(request.display ? { display: request.display } : {}),
           child: null,
         },
       ];

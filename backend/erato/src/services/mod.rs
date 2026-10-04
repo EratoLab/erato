@@ -8,6 +8,7 @@ pub mod delegation_trace;
 pub mod local_delegation;
 pub(crate) mod tool_arguments;
 pub(crate) mod tool_call_budget;
+pub mod tool_display;
 
 pub mod display_text;
 pub(crate) mod embedded_images;

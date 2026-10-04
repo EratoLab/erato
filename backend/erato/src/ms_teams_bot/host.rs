@@ -11,7 +11,9 @@ mod sign_in;
 pub use requests::{ActionKind, RequestState, TeamsRequest};
 
 use super::activity::ConversationKind;
-use super::cards::{ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet};
+use super::cards::{
+    ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet, ToolDisplay,
+};
 use super::graph::{GraphIdentity, SharedItem};
 use super::streaming::WORKING_STATUS;
 use crate::db::entity::prelude::{Chats, Messages, MsTeamsConversations, MsTeamsTokenExchanges};
@@ -751,6 +753,19 @@ fn translate(
     rx
 }
 
+fn approval_display(display: crate::models::message::ToolDisplayMetadata) -> ToolDisplay {
+    ToolDisplay {
+        title: display.title,
+        description: display.description.map(|text| {
+            if display.description_truncated {
+                format!("{text}…")
+            } else {
+                text
+            }
+        }),
+    }
+}
+
 fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPart]) -> Completion {
     let (text, earlier_text) = answer_text(content);
     // A client tool runs on the user's device, never in Teams, so its approval
@@ -781,11 +796,15 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
                         Some(child) => PendingApprovalItem {
                             approval_id: item.approval_id,
                             tool_name: child.tool_name,
+                            display: child.display.map(approval_display),
+                            source: Some(child.mcp_server_id).filter(|id| !id.is_empty()),
                             input: child.input,
                         },
                         None => PendingApprovalItem {
                             approval_id: item.approval_id,
                             tool_name: item.tool_name,
+                            display: item.display.map(approval_display),
+                            source: Some(request.mcp_server_id.clone()).filter(|id| !id.is_empty()),
                             input: item.input,
                         },
                     })
@@ -949,6 +968,7 @@ mod tests {
         ContentPart::ToolApprovalRequest(ContentPartToolApprovalRequest {
             tool_call_id: "call-1".to_string(),
             tool_name: "search_sidecar_index".to_string(),
+            display: None,
             mcp_server_id: "desktop".to_string(),
             input: json!({}),
             annotations: ToolApprovalAnnotations {
@@ -975,6 +995,32 @@ mod tests {
         );
         assert!(completion.approvals.is_none());
         assert!(completion.needs_client);
+    }
+
+    #[test]
+    fn approval_card_uses_the_saved_descriptor_and_source() {
+        let ContentPart::ToolApprovalRequest(mut request) = approval(ToolApprovalKind::McpTool)
+        else {
+            unreachable!()
+        };
+        request.display = Some(crate::models::message::ToolDisplayMetadata {
+            title: "Search desktop".into(),
+            description: Some("Description".into()),
+            description_truncated: true,
+        });
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[ContentPart::ToolApprovalRequest(request)],
+        );
+        let approvals = completion.approvals.unwrap();
+        let item = &approvals.items[0];
+        assert_eq!(item.approval_id, "call-1");
+        assert_eq!(item.tool_name, "search_sidecar_index");
+        assert_eq!(item.source.as_deref(), Some("desktop"));
+        let display = item.display.as_ref().unwrap();
+        assert_eq!(display.title, "Search desktop");
+        assert_eq!(display.description.as_deref(), Some("Description…"));
     }
 
     #[test]
