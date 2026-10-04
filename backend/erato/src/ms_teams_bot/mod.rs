@@ -14,6 +14,7 @@
 
 pub mod activity;
 pub mod cards;
+pub mod citations;
 pub mod connector;
 mod controls;
 pub mod graph;

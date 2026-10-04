@@ -1042,10 +1042,13 @@ async fn render_generation(
         bot.settings.public_base_url.as_deref(),
         &completion.chat_id.to_string(),
     );
+    let sources = citation_sources(host, &completion).await;
     let delivered = stream
-        .finish_with_details(
+        .finish_with_sources(
             &completion_text(&completion, link.as_deref()),
             &completion.earlier_text,
+            &sources,
+            bot.settings.public_base_url.as_deref(),
         )
         .await;
     if stream.is_cancelled() {
@@ -1066,6 +1069,20 @@ async fn render_generation(
         settle_controls(host, target, request, RequestState::Completed).await;
     }
     delivered.and(approvals)
+}
+
+async fn citation_sources(
+    host: &Host,
+    completion: &Completion,
+) -> Vec<super::citations::FileSource> {
+    match host.citation_sources(completion).await {
+        Ok(sources) => sources,
+        Err(error) => {
+            // Source enrichment must not turn a successful answer into a failure.
+            tracing::warn!(%error, "Could not resolve Teams file citations");
+            Vec::new()
+        }
+    }
 }
 
 pub(super) fn completion_text(completion: &Completion, chat_link: Option<&str>) -> String {
@@ -1142,6 +1159,7 @@ pub(super) async fn deliver_proactive(
         "**A background task finished.**\n\n{}",
         completion_text(&completion, link.as_deref())
     );
+    let sources = citation_sources(host, &completion).await;
     for conversation in conversations {
         let target = ReplyTarget {
             connector: &bot.connector,
@@ -1152,7 +1170,12 @@ pub(super) async fn deliver_proactive(
         };
         let mut reply = StreamingReply::new(&target, false);
         reply
-            .finish_with_details(&text, &completion.earlier_text)
+            .finish_with_sources(
+                &text,
+                &completion.earlier_text,
+                &sources,
+                bot.settings.public_base_url.as_deref(),
+            )
             .await?;
         if let Some(set) = &completion.approvals {
             send_approval_card(&target, set).await?;
