@@ -1,6 +1,7 @@
 //! Native personal-chat streaming with an editable reply for group/channel
 //! conversations, interleaved tools, and turns exceeding Teams' stream limit.
 
+use super::citations::{self, Citation, FileSource};
 use super::connector::{ActivityError, Connector};
 use super::render::{self, MAX_MESSAGE_CHARS};
 use serde_json::{Value, json};
@@ -44,18 +45,25 @@ impl ReplyTarget<'_> {
     }
 
     pub async fn send_text(&self, text: &str) -> eyre::Result<()> {
-        self.send_chunks(&render::split_for_teams(text, MAX_MESSAGE_CHARS), true)
+        self.send_chunks(&render::split_for_teams(text, MAX_MESSAGE_CHARS), true, &[])
             .await
     }
 
-    async fn send_chunks(&self, chunks: &[String], mention_first: bool) -> eyre::Result<()> {
+    async fn send_chunks(
+        &self,
+        chunks: &[String],
+        mention_first: bool,
+        citations: &[Citation],
+    ) -> eyre::Result<()> {
         for (index, chunk) in chunks.iter().enumerate() {
             let mention = if mention_first && index == 0 {
                 self.mention.as_ref()
             } else {
                 None
             };
-            self.send(&render::message(chunk, mention)).await?;
+            let mut activity = render::message(chunk, mention);
+            citations::attach(&mut activity, citations);
+            self.send(&activity).await?;
         }
         Ok(())
     }
@@ -113,6 +121,8 @@ pub struct StreamingReply<'a> {
     cancelled: bool,
     /// Without an activity ID, avoid posting a new message on every update.
     updates_disabled: bool,
+    /// Metadata for the final answer only; progress never claims sources.
+    citations: Vec<Citation>,
 }
 
 impl<'a> StreamingReply<'a> {
@@ -133,6 +143,7 @@ impl<'a> StreamingReply<'a> {
             rendered: None,
             cancelled: false,
             updates_disabled: false,
+            citations: Vec::new(),
         }
     }
 
@@ -298,11 +309,15 @@ impl<'a> StreamingReply<'a> {
             info["streamId"] = json!(id);
             channel_data["streamId"] = json!(id);
         }
-        json!({
+        let mut activity = json!({
             "type": if kind == "final" { "message" } else { "typing" },
             "textFormat": "markdown", "text": text,
             "entities": [info], "channelData": channel_data,
-        })
+        });
+        if kind == "final" {
+            citations::attach(&mut activity, &self.citations);
+        }
+        activity
     }
 
     /// Close before editing. A status must never replace answer text inside a
@@ -332,7 +347,8 @@ impl<'a> StreamingReply<'a> {
     }
 
     async fn write_message(&mut self, text: &str) -> eyre::Result<()> {
-        let activity = render::message(text, self.target.mention.as_ref());
+        let mut activity = render::message(text, self.target.mention.as_ref());
+        citations::attach(&mut activity, &self.citations);
         match &self.message_id {
             Some(id) => self.target.update(id, activity).await,
             None => {
@@ -413,6 +429,26 @@ impl<'a> StreamingReply<'a> {
         text: &str,
         earlier_text: &str,
     ) -> eyre::Result<()> {
+        self.citations.clear();
+        self.finish_details(text, earlier_text).await
+    }
+
+    pub async fn finish_with_sources(
+        &mut self,
+        text: &str,
+        earlier_text: &str,
+        sources: &[FileSource],
+        public_base_url: Option<&str>,
+    ) -> eyre::Result<()> {
+        let (text, citations) = citations::render(text, sources, public_base_url);
+        self.citations = citations;
+        // Details remain a separate card. Its links need ordinary HTTPS URLs,
+        // not citation markers whose metadata belongs to the answer activity.
+        let earlier_text = citations::details(earlier_text, sources, public_base_url);
+        self.finish_details(&text, &earlier_text).await
+    }
+
+    async fn finish_details(&mut self, text: &str, earlier_text: &str) -> eyre::Result<()> {
         let (text, attachment) = render::answer_with_details(text, earlier_text);
         // Teams expands text + card into multiple activities and rejects a
         // PUT containing both. Settle the existing text reply first, then
@@ -441,7 +477,7 @@ impl<'a> StreamingReply<'a> {
         if self.cancelled {
             return Ok(());
         }
-        let chunks = render::split_for_teams(final_text, MAX_MESSAGE_CHARS);
+        let chunks = citations::split(final_text, &self.citations, self.target.mention.as_ref());
         self.text = final_text.to_string();
         self.status = None;
         if self.stream_id.is_some() {
@@ -455,7 +491,10 @@ impl<'a> StreamingReply<'a> {
                             self.message_id = self.stream_id.take();
                             self.native = false;
                             tracing::debug!("Finalized Teams answer");
-                            return self.target.send_chunks(&chunks[1..], false).await;
+                            return self
+                                .target
+                                .send_chunks(&chunks[1..], false, &self.citations)
+                                .await;
                         }
                         Err(error) => match self.handle_error(&error) {
                             Failure::Cancelled => return Ok(()),
@@ -487,7 +526,10 @@ impl<'a> StreamingReply<'a> {
         match self.deliver(Op::Write(&chunks[0])).await {
             Outcome::Sent => {
                 tracing::debug!("Finalized Teams answer");
-                return self.target.send_chunks(&chunks[1..], false).await;
+                return self
+                    .target
+                    .send_chunks(&chunks[1..], false, &self.citations)
+                    .await;
             }
             Outcome::Cancelled => return Ok(()),
             // A failed edit falls back to a new message. A failed post may
@@ -496,7 +538,9 @@ impl<'a> StreamingReply<'a> {
             Outcome::Throttled | Outcome::Failed(_) => {}
         }
         self.wait_ready().await;
-        self.target.send_text(final_text).await
+        self.target
+            .send_chunks(&chunks, true, &self.citations)
+            .await
     }
 }
 

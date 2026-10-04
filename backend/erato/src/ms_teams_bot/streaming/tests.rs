@@ -426,12 +426,127 @@ async fn long_final_answer_keeps_all_chunks_and_replaces_the_progress_message() 
     assert_eq!(requests[1].0, Method::PUT);
     assert_eq!(requests[2].0, Method::POST);
     assert_eq!(
-        format!(
-            "{}{}",
-            requests[1].2["text"].as_str().unwrap(),
-            requests[2].2["text"].as_str().unwrap()
-        ),
+        requests[1..]
+            .iter()
+            .map(|(_, _, body)| body["text"].as_str().unwrap())
+            .collect::<String>(),
         answer
+    );
+    assert!(
+        requests[1..]
+            .iter()
+            .all(|(_, _, body)| serde_json::to_vec(body).unwrap().len() < 28_000)
+    );
+}
+
+fn citation_fixture() -> (String, Vec<FileSource>) {
+    let id = "b5b55034-adb0-45f1-a841-6f2906f52a3c";
+    (
+        format!("Result from [Report](erato-file://{id}#page=2)."),
+        vec![FileSource {
+            id: id.into(),
+            name: "Report.pdf".into(),
+        }],
+    )
+}
+
+fn assert_cited(body: &Value) {
+    assert_eq!(body["text"], "Result from Report [1].");
+    let root = body["entities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entity| entity["@type"] == "Message")
+        .unwrap();
+    assert_eq!(root["citation"][0]["appearance"]["name"], "Report.pdf");
+    assert_eq!(root["citation"][0]["appearance"]["abstract"], "Page 2");
+    assert!(
+        root["citation"][0]["appearance"]["url"]
+            .as_str()
+            .unwrap()
+            .ends_with("/preview#page=2")
+    );
+}
+
+#[tokio::test]
+async fn file_citations_survive_native_final_editable_final_and_rejected_edit_fallback() {
+    for (native, rejected_edit) in [(true, false), (false, false), (false, true)] {
+        let h = Harness::new().await;
+        let target = h.target();
+        let mut reply = StreamingReply::new(&target, native);
+        reply.informative("Working…").await;
+        if rejected_edit {
+            h.fail_next(StatusCode::BAD_REQUEST, "BadSyntax", "Cannot edit");
+        }
+        ready(&mut reply);
+        let (answer, sources) = citation_fixture();
+        reply
+            .finish_with_sources(
+                &answer,
+                "Earlier step",
+                &sources,
+                Some("https://erato.example"),
+            )
+            .await
+            .unwrap();
+        let requests = h.requests();
+        let (_, _, final_answer) = &requests[requests.len() - 2];
+        assert_cited(final_answer);
+        if native {
+            assert_eq!(final_answer["entities"][0]["streamType"], "final");
+        }
+        assert!(
+            requests.last().unwrap().2["attachments"].is_array(),
+            "details remain separate"
+        );
+        assert!(requests.last().unwrap().2.get("entities").is_none());
+    }
+}
+
+#[tokio::test]
+async fn citations_replace_already_streamed_file_links_in_the_same_activity() {
+    let h = Harness::new().await;
+    let target = h.target();
+    let mut reply = StreamingReply::new(&target, true);
+    let (answer, sources) = citation_fixture();
+    reply.update(&answer).await;
+    ready(&mut reply);
+    reply
+        .finish_with_sources(&answer, "", &sources, Some("https://erato.example"))
+        .await
+        .unwrap();
+    let requests = h.requests();
+    let (method, path, body) = requests.last().unwrap();
+    assert_eq!(*method, Method::PUT);
+    assert!(path.ends_with("/reply-1"));
+    assert_eq!(body["id"], "reply-1");
+    assert_cited(body);
+}
+
+#[tokio::test]
+async fn split_cited_answers_keep_metadata_on_the_chunk_containing_the_reference() {
+    let h = Harness::new().await;
+    let target = h.target();
+    let mut reply = StreamingReply::new(&target, false);
+    let (answer, sources) = citation_fixture();
+    let answer = format!("{}\n\n{answer}", "界".repeat(12_000));
+    reply
+        .finish_with_sources(&answer, "", &sources, Some("https://erato.example"))
+        .await
+        .unwrap();
+    let requests = h.requests();
+    assert!(requests.len() > 1);
+    let cited: Vec<_> = requests
+        .iter()
+        .filter(|(_, _, body)| body.get("entities").is_some())
+        .collect();
+    assert_eq!(cited.len(), 1);
+    assert!(cited[0].2["text"].as_str().unwrap().contains("Report [1]"));
+    assert_eq!(cited[0].2["entities"][0]["citation"][0]["position"], 1);
+    assert!(
+        requests
+            .iter()
+            .all(|(_, _, body)| serde_json::to_vec(body).unwrap().len() < 28_000)
     );
 }
 

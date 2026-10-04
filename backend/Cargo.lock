@@ -2815,6 +2815,7 @@ dependencies = [
  "ordered-multimap",
  "ort",
  "percent-encoding",
+ "pulldown-cmark",
  "ractor",
  "ractor_actors",
  "rand 0.9.4",

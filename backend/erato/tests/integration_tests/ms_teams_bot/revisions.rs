@@ -102,6 +102,70 @@ async fn fixture(pool: Pool<Postgres>) -> Fixture {
     }
 }
 
+/// Citation metadata must come from files already attached in this chat,
+/// including earlier turns, never an arbitrary file UUID supplied by the model.
+/// # Test Categories
+/// - `uses-db`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_file_citations_use_chat_input_inventory(pool: Pool<Postgres>) {
+    let f = fixture(pool).await;
+    let attached = f
+        .host
+        .store_file(
+            &f.session,
+            f.chat_id,
+            "attached.txt",
+            Some("text/plain"),
+            FILE_CONTENT.as_bytes().to_vec(),
+        )
+        .await
+        .unwrap();
+    let unattached = f
+        .host
+        .store_file(
+            &f.session,
+            f.chat_id,
+            "never-sent.txt",
+            Some("text/plain"),
+            FILE_CONTENT.as_bytes().to_vec(),
+        )
+        .await
+        .unwrap();
+    completion(
+        f.host
+            .submit(&f.session, f.chat_id, "Read this".into(), vec![attached])
+            .await
+            .unwrap(),
+    )
+    .await;
+    let (mut answer, _) = completion(
+        f.host
+            .submit(&f.session, f.chat_id, "Explain again".into(), vec![])
+            .await
+            .unwrap(),
+    )
+    .await;
+    answer.text = format!(
+        "[Attached](erato-file://{attached}), [Never sent](erato-file://{unattached}), [Invented](erato-file://{}).",
+        Uuid::new_v4()
+    );
+    let sources = f.host.citation_sources(&answer).await.unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].id, attached.to_string());
+    assert_eq!(sources[0].name, "attached.txt");
+    let (text, _) = erato::ms_teams_bot::citations::render(
+        &answer.text,
+        &sources,
+        Some("https://erato.example"),
+    );
+    assert_eq!(text, "Attached [1], Never sent, Invented.");
+    // Even a real file attached in the original chat cannot be resolved for a
+    // completion in a different chat merely because the assistant names it.
+    answer.chat_id = Uuid::new_v4();
+    assert!(f.host.citation_sources(&answer).await.unwrap().is_empty());
+}
+
 /// Capture the actual translated events and record them through the handler's
 /// own bookkeeping. A missing StreamEnd would leave this receiver open.
 async fn record_generation(

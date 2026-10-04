@@ -14,6 +14,7 @@ use super::activity::ConversationKind;
 use super::cards::{
     ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet, ToolDisplay,
 };
+use super::citations::{self, FileSource};
 use super::graph::{GraphIdentity, SharedItem};
 use super::streaming::WORKING_STATUS;
 use crate::db::entity::prelude::{Chats, Messages, MsTeamsConversations, MsTeamsTokenExchanges};
@@ -133,6 +134,53 @@ pub struct Host {
 impl Host {
     pub fn new(app_state: AppState) -> Self {
         Self { app_state }
+    }
+
+    /// Resolve file references only within the already-authorized answer's
+    /// chat, using the same input-file inventory as the Web messages response.
+    /// Never look up an arbitrary model-supplied UUID across other chats.
+    pub async fn citation_sources(
+        &self,
+        completion: &Completion,
+    ) -> Result<Vec<FileSource>, Report> {
+        use crate::db::entity::{file_uploads, messages};
+        let requested: std::collections::HashSet<Uuid> = citations::referenced_file_ids(&format!(
+            "{}\n\n{}",
+            completion.text, completion.earlier_text
+        ))
+        .into_iter()
+        .filter_map(|id| Uuid::parse_str(&id).ok())
+        .collect();
+        if requested.is_empty() {
+            return Ok(Vec::new());
+        }
+        let inputs = Messages::find()
+            .select_only()
+            .column(messages::Column::InputFileUploads)
+            .filter(messages::Column::ChatId.eq(completion.chat_id))
+            .into_tuple::<Option<Vec<Uuid>>>()
+            .all(&self.app_state.db)
+            .await?;
+        let ids: std::collections::HashSet<Uuid> = inputs
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|id| requested.contains(id))
+            .collect();
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let files = file_uploads::Entity::find()
+            .filter(file_uploads::Column::Id.is_in(ids))
+            .all(&self.app_state.db)
+            .await?;
+        Ok(files
+            .into_iter()
+            .map(|file| FileSource {
+                id: file.id.to_string(),
+                name: file.filename,
+            })
+            .collect())
     }
 
     /// Stop only the generation which produced this Teams stream. A later

@@ -2,7 +2,17 @@
 
 Erato answers in Microsoft Teams personal chats, group chats and channels. Chats started in Teams are ordinary Erato chats: they appear in the web app and the Teams tab, keep their history, and use the same assistants, models, policies, MCP tools and SharePoint integration as the web app.
 
-The code lives in `erato/src/ms_teams_bot/`. The protocol files (`activity`, `inbound_auth`, `connector`, `user_token`, `graph`, `cards`, `render`, `streaming`) do not depend on Erato. `handler` decides what to do with each activity, and `host` is the only file that calls Erato internals, which keeps the folder ready to become its own crate.
+The code lives in `erato/src/ms_teams_bot/`. The protocol files (`activity`, `inbound_auth`, `connector`, `user_token`, `graph`, `cards`, `citations`, `render`, `streaming`) do not depend on Erato. `handler` decides what to do with each activity, and `host` is the only file that calls Erato internals, which keeps the folder ready to become its own crate.
+
+## File citations
+
+Final answers convert `erato-file://` Markdown links, reference-style links, bare file URIs and simple file-only footnotes into native Teams numbered citations. Files are resolved from the chat's persisted input-file inventory, including earlier turns, rather than by looking up arbitrary model-supplied IDs. Unknown files remain plain text. Code examples and images are not treated as citations, and ordinary web links are unchanged. The raw Erato message is unchanged.
+
+Citation titles use stored filenames. With `integrations.ms_office.teams.bot.public_base_url` configured, source links point to the existing authenticated `/api/v1beta/files/{id}/preview` route, which checks the opening user's file access and SharePoint token as usual. Without that origin, citations still show their title but have no source-opening URL. No signed download URL or bot/Graph token is published. PDF `#page=N` references retain their page target; transcript `#msg=N` references display the message number in the popup, but the direct Markdown preview does not offer Web's rich transcript jump.
+
+Source metadata is added at finalization. When replacing streamed Markdown links changes the cumulative text, the native stream closes and the same message is edited using the existing fallback. Citations survive editable delivery, failed-edit fallback, proactive responses and long-answer splitting. Activity budgets account for UTF-8, JSON escaping and metadata. At most 20 distinct file/location citations are emitted per answer; additional sources remain ordinary authenticated links. Earlier steps uses ordinary source links in its separate card.
+
+This requires no manifest change. Arbitrary MCP resource provenance and generated follow-ups are separate work: [ERMAIN-843](https://linear.app/erato-labs/issue/ERMAIN-843), [ERMAIN-900](https://linear.app/erato-labs/issue/ERMAIN-900), and [ERMAIN-898](https://linear.app/erato-labs/issue/ERMAIN-898)/[ERMAIN-899](https://linear.app/erato-labs/issue/ERMAIN-899).
 
 ## Request flow
 
