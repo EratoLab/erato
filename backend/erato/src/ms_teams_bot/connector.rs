@@ -194,12 +194,7 @@ impl Connector {
         reply_to_id: &str,
         activity: &Value,
     ) -> Result<Option<String>, Report> {
-        let url = format!(
-            "{}/v3/conversations/{}/activities/{}",
-            service_url.trim_end_matches('/'),
-            encode(conversation_id),
-            encode(reply_to_id)
-        );
+        let url = activity_url(service_url, conversation_id, reply_to_id);
         self.post_activity(url, activity).await
     }
 
@@ -211,12 +206,7 @@ impl Connector {
         activity_id: &str,
         activity: &Value,
     ) -> Result<(), Report> {
-        let url = format!(
-            "{}/v3/conversations/{}/activities/{}",
-            service_url.trim_end_matches('/'),
-            encode(conversation_id),
-            encode(activity_id)
-        );
+        let url = activity_url(service_url, conversation_id, activity_id);
         let token = self.app_token().await?;
         let response = self
             .http
@@ -239,12 +229,7 @@ impl Connector {
         conversation_id: &str,
         activity_id: &str,
     ) -> Result<(), Report> {
-        let url = format!(
-            "{}/v3/conversations/{}/activities/{}",
-            service_url.trim_end_matches('/'),
-            encode(conversation_id),
-            encode(activity_id)
-        );
+        let url = activity_url(service_url, conversation_id, activity_id);
         let response = self
             .http
             .delete(url)
@@ -346,6 +331,15 @@ pub async fn read_limited(
         bytes.extend_from_slice(&chunk);
     }
     Ok(bytes)
+}
+
+fn activity_url(service_url: &str, conversation_id: &str, activity_id: &str) -> String {
+    format!(
+        "{}/v3/conversations/{}/activities/{}",
+        service_url.trim_end_matches('/'),
+        encode(conversation_id),
+        encode(activity_id)
+    )
 }
 
 fn encode(segment: &str) -> String {

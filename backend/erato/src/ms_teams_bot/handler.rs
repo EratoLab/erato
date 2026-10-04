@@ -7,9 +7,11 @@
 use super::TeamsBot;
 use super::activity::{Activity, ConversationKind, IncomingFile, split_channel_thread};
 use super::cards::{self, ApprovalSubmit};
-use super::controls;
+use super::controls::{self, ControlCommand};
 use super::graph::{Graph, GraphIdentity, context_markdown};
-use super::host::{Completion, GenerationUpdate, Host, Session, StartError, TeamsRequest};
+use super::host::{
+    ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TeamsRequest,
+};
 use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply, WORKING_STATUS};
 use super::user_token::sign_in_activity;
@@ -18,13 +20,17 @@ use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
 use std::sync::Arc;
-#[cfg(test)]
 use std::time::Duration;
 use tokio::sync::mpsc;
 
 const NEW_CHAT_COMMANDS: [&str; 3] = ["/new", "new chat", "neuer chat"];
 const CONTEXT_FILE_NAME: &str = "teams-conversation-context.md";
 const PREPARING_STATUS: &str = "Preparing your request…";
+const STILL_FINISHING: &str =
+    "The previous response is still finishing. Please try this button again in a moment.";
+/// Bounds how long one control delivery can hold the card lease.
+const CONTROL_DELIVERY_TIMEOUT: Duration = Duration::from_secs(20);
+const MAX_CONTROL_RENDERS: usize = 3;
 
 #[cfg(test)]
 mod generation_tests;
@@ -106,15 +112,20 @@ async fn process_message(
     }
 
     if text.eq_ignore_ascii_case("/stop") {
-        if let Some(request) = host.latest_request(&user.session, conversation_id).await?
+        let active = match row.current_chat_id {
+            Some(chat_id) => {
+                host.active_request(&user.session, conversation_id, chat_id)
+                    .await?
+            }
+            None => None,
+        };
+        if let Some(request) = active
             && let Some(message_id) = request.assistant_message_id
             && host
                 .stop_request(&user.session, &request, message_id)
                 .await?
         {
-            if let Some(current) = host.request_snapshot(request.id).await? {
-                update_controls(host, target, &current).await;
-            }
+            update_controls(host, target, request.id).await;
         } else {
             target
                 .send_text("There is no active response to stop in this chat.")
@@ -200,15 +211,17 @@ async fn process_message(
             render_generation(bot, host, target, updates, stream, Some(request)).await
         }
         Ok(Err(error)) => {
-            host.finish_request(&request, "failed").await?;
-            stream.finish(&start_error_text(error)).await
+            let finished = stream.finish(&start_error_text(error)).await;
+            record_outcome(host, &request, RequestState::Failed).await;
+            finished
         }
         Err(error) => {
             tracing::error!(%error, "Teams request preparation failed");
-            host.finish_request(&request, "failed").await?;
-            stream
+            let finished = stream
                 .finish("Sorry, something went wrong while preparing your message.")
-                .await
+                .await;
+            record_outcome(host, &request, RequestState::Failed).await;
+            finished
         }
     }
 }
@@ -334,7 +347,7 @@ async fn offer_edited_question(
         return Ok(());
     }
     if let Some(updated) = host.propose_edit(request.id, &text, edited_at).await? {
-        update_controls(host, target, &updated).await;
+        update_controls(host, target, updated.id).await;
     }
     Ok(())
 }
@@ -370,99 +383,134 @@ async fn on_control(
             .then_some(request.source_activity_id.as_str()),
         mention: target.mention.clone(),
     };
-    if submit.command == "stop" {
-        let stopped = match submit.message_id {
-            Some(message_id) => {
-                host.stop_request(&user.session, &request, message_id)
-                    .await?
-            }
-            None => false,
-        };
-        if stopped {
-            if let Some(current) = host.request_snapshot(request.id).await? {
-                update_controls(host, target, &current).await;
-            }
-            return Ok(());
+    let kind = match submit.command {
+        ControlCommand::Stop => {
+            return stop_from_card(host, &user.session, target, &request, submit.message_id).await;
         }
-        if request.running() && submit.message_id == request.assistant_message_id {
-            host.expire_request_controls(&request).await?;
-            update_controls(host, target, &request).await;
-        }
-        return target
-            .send_text(
-                "This response has already finished or was replaced. There is nothing to stop.",
-            )
-            .await;
-    }
+        ControlCommand::Retry => ActionKind::Retry,
+        ControlCommand::Edit => ActionKind::Edit,
+    };
     let Some(token) = submit.token else {
         return Ok(());
     };
     if request.running() {
         return target.send_text("Please stop the current response or wait for it to finish, then use the latest card.").await;
     }
-    let Some(claimed) = host
-        .claim_request_action(&request, token, &submit.command)
-        .await?
-    else {
+    // A claim moves the run ID, which a renderer still delivering in this chat
+    // (such as an approval continuation) relies on.
+    if host.generation_active(request.chat_id).await {
+        return target.send_text(STILL_FINISHING).await;
+    }
+    let Some(claimed) = host.claim_request_action(&request, token, kind).await? else {
         return target.send_text("This action was already used, expired, or replaced by a newer edit. Use the latest card.").await;
     };
-    match host
-        .revise_request(&user.session, &claimed, &submit.command)
-        .await
-    {
+    match host.revise_request(&user.session, &claimed, kind).await {
         Ok(updates) => {
-            host.reset_request_action(&claimed).await?;
-            let current = host.request_snapshot(request.id).await?.unwrap_or(claimed);
+            // The revision runs now; failing bookkeeping must not abandon it.
+            let current = match host.reset_request_action(&claimed).await {
+                Ok(current) => current,
+                Err(error) => {
+                    tracing::warn!(%error, "Teams revision state could not be reset");
+                    Some(claimed)
+                }
+            };
             let stream = stream_for(bot, target, activity.conversation_kind());
-            render_generation(bot, host, target, updates, stream, Some(current)).await
+            render_generation(bot, host, target, updates, stream, current).await
         }
-        Err(StartError::Busy) => {
-            host.restore_request_action(&claimed, token, &request.state)
+        Err(error @ (StartError::Busy | StartError::Internal)) => {
+            host.restore_request_action(&claimed, token, &request)
                 .await?;
-            target.send_text("The previous response is still stopping. Please try this button again in a moment.").await
+            let text = match error {
+                StartError::Busy => STILL_FINISHING,
+                _ => "Something went wrong while starting this. Please try the button again.",
+            };
+            target.send_text(text).await
         }
         Err(error) => {
-            host.reject_request_action(&claimed, &request.state).await?;
-            if let Some(current) = host.request_snapshot(request.id).await? {
-                update_controls(host, target, &current).await;
-            }
+            host.reject_request_action(&claimed, &request).await?;
+            update_controls(host, target, request.id).await;
             reply_start_error(target, error).await
         }
     }
 }
 
-async fn update_controls(host: &Host, target: &ReplyTarget<'_>, request: &TeamsRequest) {
-    if let Err(error) = update_controls_locked(host, target, request.id).await {
+async fn stop_from_card(
+    host: &Host,
+    session: &Session,
+    target: &ReplyTarget<'_>,
+    request: &TeamsRequest,
+    message_id: Option<Uuid>,
+) -> Result<(), Report> {
+    let stopped = match message_id {
+        Some(message_id) => host.stop_request(session, request, message_id).await?,
+        None => false,
+    };
+    if stopped {
+        update_controls(host, target, request.id).await;
+        return Ok(());
+    }
+    if request.running() && message_id == request.assistant_message_id {
+        host.expire_request_controls(request).await?;
+        update_controls(host, target, request.id).await;
+    }
+    target
+        .send_text("This response has already finished or was replaced. There is nothing to stop.")
+        .await
+}
+
+async fn update_controls(host: &Host, target: &ReplyTarget<'_>, request_id: Uuid) {
+    if let Err(error) = sync_controls(host, target, request_id).await {
         tracing::warn!(%error, "Teams response control could not be delivered; /stop remains available");
     }
 }
 
-async fn update_controls_locked(
+/// Deliver the latest control state without holding a database transaction
+/// across Connector calls. Concurrent callers only bump the version; the
+/// lease holder keeps rendering until the version it delivered is the latest.
+async fn sync_controls(
     host: &Host,
     target: &ReplyTarget<'_>,
     request_id: Uuid,
 ) -> Result<(), Report> {
-    let transaction = host.lock_request_controls(request_id).await?;
-    if let Some(current) = host
-        .locked_request_snapshot(&transaction, request_id)
-        .await?
-    {
-        write_controls(host, &transaction, target, &current).await?;
+    let owner = Uuid::new_v4();
+    let Some(mut current) = host.claim_controls(request_id, owner).await? else {
+        return Ok(());
+    };
+    let mut renders = 0;
+    loop {
+        renders += 1;
+        let shown = current.control_activity_id.clone();
+        let delivered =
+            tokio::time::timeout(CONTROL_DELIVERY_TIMEOUT, deliver_controls(target, &current))
+                .await
+                .unwrap_or_else(|_| Err(eyre!("Teams response control delivery timed out")));
+        let (card, failure) = match delivered {
+            Ok(card) => (card, None),
+            Err(error) => (shown, Some(error)),
+        };
+        let give_up = failure.is_some() || renders >= MAX_CONTROL_RENDERS;
+        let next = host
+            .release_controls(&current, owner, card.as_deref(), give_up)
+            .await?;
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        match next {
+            Some(next) => current = next,
+            None => return Ok(()),
+        }
     }
-    transaction.commit().await?;
-    Ok(())
 }
 
-async fn write_controls(
-    host: &Host,
-    transaction: &sea_orm::DatabaseTransaction,
+/// Make the control card match `request`; returns the card now showing it.
+async fn deliver_controls(
     target: &ReplyTarget<'_>,
     request: &TeamsRequest,
-) -> Result<(), Report> {
-    let mut current = request.clone();
-    if !controls::should_show(&current) {
-        let Some(id) = current.control_activity_id.as_deref() else {
-            return Ok(());
+) -> Result<Option<String>, Report> {
+    let shown = request.control_activity_id.as_deref();
+    if !controls::should_show(request) {
+        let Some(id) = shown else {
+            return Ok(None);
         };
         if let Err(error) = target
             .connector
@@ -471,30 +519,34 @@ async fn write_controls(
         {
             tracing::debug!(%error, "Could not remove redundant response controls");
             // At least remove the duplicate button if deleting its card fails.
-            return target.update(id, controls::activity(&current)).await;
+            target.update(id, controls::activity(request)).await?;
+            return Ok(Some(id.to_string()));
         }
-        host.clear_control_card(transaction, current.id, id).await?;
-        // An edit or a new generation can arrive during the DELETE. Read it
-        // again under the card lock so its current actions are preserved.
-        let Some(latest) = host
-            .locked_request_snapshot(transaction, current.id)
-            .await?
-        else {
-            return Ok(());
-        };
-        if !controls::should_show(&latest) {
-            return Ok(());
-        }
-        current = latest;
+        return Ok(None);
     }
-    let activity = controls::activity(&current);
-    match current.control_activity_id.as_deref() {
-        Some(id) => target.update(id, activity).await,
-        None => match target.send(&activity).await {
-            Ok(Some(id)) => host.record_control_card(transaction, current.id, &id).await,
-            Ok(None) => Ok(()),
-            Err(error) => Err(error),
-        },
+    let activity = controls::activity(request);
+    match shown {
+        Some(id) => {
+            target.update(id, activity).await?;
+            Ok(Some(id.to_string()))
+        }
+        None => target.send(&activity).await,
+    }
+}
+
+/// Record how the request ended. Delivery already happened, so failures are
+/// only logged; `None` also means a newer run took the request over.
+async fn record_outcome(
+    host: &Host,
+    request: &TeamsRequest,
+    state: RequestState,
+) -> Option<TeamsRequest> {
+    match host.finish_request(request, state).await {
+        Ok(updated) => updated,
+        Err(error) => {
+            tracing::warn!(%error, "Teams request outcome could not be recorded");
+            None
+        }
     }
 }
 
@@ -502,10 +554,11 @@ async fn settle_controls(
     host: &Host,
     target: &ReplyTarget<'_>,
     request: &TeamsRequest,
-    state: &str,
-) -> Result<(), Report> {
-    host.finish_request(request, state).await?;
-    update_controls_locked(host, target, request.id).await
+    state: RequestState,
+) {
+    if record_outcome(host, request, state).await.is_some() {
+        update_controls(host, target, request.id).await;
+    }
 }
 
 fn stream_for<'a>(
@@ -907,38 +960,40 @@ async fn render_generation(
     let mut completion: Option<Completion> = None;
     let mut failure: Option<String> = None;
     let mut stop_requested = false;
+    let mut native_stop_recorded = None;
     loop {
         tokio::select! {
-            update = updates.recv() => match update {
-                Some(GenerationUpdate::UserMessageSaved(message_id)) => {
-                    if let Some(request) = &request { host.record_user_message(request, message_id).await?; }
-                }
-                Some(GenerationUpdate::ToolStarted) => {
-                    if let Some(request) = &request { host.record_tool_started(request).await?; }
-                }
-                Some(GenerationUpdate::Started { chat_id, message_id }) => {
-                    generation = Some((chat_id, message_id));
-                    if let Some(current) = &request {
-                        let updated = host.record_generation(current, message_id).await?;
-                        request = Some(host.record_native_stop(&updated, stream.native_stop_available()).await?);
+            update = updates.recv() => {
+                let Some(update) = update else {
+                    break;
+                };
+                host.track_update(&mut request, &update, stream.native_stop_available()).await;
+                match update {
+                    GenerationUpdate::Started { chat_id, message_id } => {
+                        generation = Some((chat_id, message_id));
+                        native_stop_recorded = Some(stream.native_stop_available());
+                        // Stop may arrive on the opening informative chunk before
+                        // the backend has announced its saved assistant ID.
+                        if stop_requested || stream.is_cancelled() {
+                            stop_requested = true;
+                            host.stop_generation(chat_id, message_id).await;
+                            host.mark_request_stopping(&mut request).await;
+                        }
+                        if let Some(current) = &request {
+                            update_controls(host, target, current.id).await;
+                        }
                     }
-                    // Stop may arrive on the opening informative chunk before
-                    // the backend has announced its saved assistant ID.
-                    if stop_requested || stream.is_cancelled() {
-                        stop_requested = true;
-                        host.stop_generation(chat_id, message_id).await;
-                        if let Some(current) = &request { host.mark_request_stopping(current).await?; }
+                    GenerationUpdate::Text(text) => {
+                        if !stop_requested {
+                            stream.update(&text).await;
+                        }
                     }
-                    if let Some(current) = &request { update_controls(host, target, current).await; }
+                    GenerationUpdate::Status(status) => stream.informative(&status).await,
+                    GenerationUpdate::Completed(done) => completion = Some(done),
+                    GenerationUpdate::Failed(message) => failure = Some(message),
+                    GenerationUpdate::UserMessageSaved(_) | GenerationUpdate::ToolStarted => {}
                 }
-                Some(GenerationUpdate::Text(text)) => if !stop_requested { stream.update(&text).await },
-                Some(GenerationUpdate::Status(status)) => {
-                    stream.informative(&status).await;
-                }
-                Some(GenerationUpdate::Completed(done)) => completion = Some(done),
-                Some(GenerationUpdate::Failed(message)) => failure = Some(message),
-                None => break,
-            },
+            }
             _ = timer.tick() => stream.flush().await,
         }
         if stream.is_cancelled() && !stop_requested {
@@ -946,38 +1001,29 @@ async fn render_generation(
             if let Some((chat_id, message_id)) = generation {
                 host.stop_generation(chat_id, message_id).await;
             }
-            if let Some(request) = &request {
-                host.mark_request_stopping(request).await?;
-                update_controls(host, target, request).await;
+            host.mark_request_stopping(&mut request).await;
+            if let Some(current) = &request {
+                update_controls(host, target, current.id).await;
             }
             // Drain terminal events before offering Retry: tools and their
             // final effects may still be persisting after cancellation.
         }
-        if !stop_requested
-            && generation.is_some()
-            && let Some(current) = &request
-            && current.native_stop_available != stream.native_stop_available()
-        {
-            let updated = host
-                .record_native_stop(current, stream.native_stop_available())
-                .await?;
-            update_controls(host, target, &updated).await;
-            request = Some(updated);
+        let native_stop = stream.native_stop_available();
+        if !stop_requested && native_stop_recorded.is_some_and(|recorded| recorded != native_stop) {
+            native_stop_recorded = Some(native_stop);
+            host.track_native_stop(&mut request, native_stop).await;
+            if let Some(current) = &request {
+                update_controls(host, target, current.id).await;
+            }
         }
     }
 
-    if stop_requested
-        || (if let Some(request) = &request {
-            host.request_was_stopped(request.id).await?
-        } else {
-            false
-        })
-    {
-        stream.finish_stopped().await?;
+    if stop_requested || host.stop_was_requested(request.as_ref()).await {
+        let finished = stream.finish_stopped().await;
         if let Some(request) = &request {
-            settle_controls(host, target, request, "stopped").await?;
+            settle_controls(host, target, request, RequestState::Stopped).await;
         }
-        return Ok(());
+        return finished;
     }
 
     if failure.is_some() || completion.is_none() {
@@ -985,40 +1031,41 @@ async fn render_generation(
             Some(message) => format!("Sorry, something went wrong: {message}"),
             None => "Sorry, I did not get an answer this time.".to_string(),
         };
-        stream.finish(&text).await?;
+        let finished = stream.finish(&text).await;
         if let Some(request) = &request {
-            settle_controls(host, target, request, "failed").await?;
+            settle_controls(host, target, request, RequestState::Failed).await;
         }
-        return Ok(());
+        return finished;
     }
     let completion = completion.expect("completion checked above");
     let link = render::chat_link(
         bot.settings.public_base_url.as_deref(),
         &completion.chat_id.to_string(),
     );
-    stream
+    let delivered = stream
         .finish_with_details(
             &completion_text(&completion, link.as_deref()),
             &completion.earlier_text,
         )
-        .await?;
+        .await;
     if stream.is_cancelled() {
         if let Some((chat_id, message_id)) = generation {
             host.stop_generation(chat_id, message_id).await;
         }
-        stream.finish_stopped().await?;
+        let stopped = stream.finish_stopped().await;
         if let Some(request) = &request {
-            settle_controls(host, target, request, "stopped").await?;
+            settle_controls(host, target, request, RequestState::Stopped).await;
         }
-        return Ok(());
+        return delivered.and(stopped);
     }
+    let approvals = match (&delivered, &completion.approvals) {
+        (Ok(()), Some(set)) => send_approval_card(target, set).await,
+        _ => Ok(()),
+    };
     if let Some(request) = &request {
-        settle_controls(host, target, request, "completed").await?;
+        settle_controls(host, target, request, RequestState::Completed).await;
     }
-    match &completion.approvals {
-        Some(set) => send_approval_card(target, set).await,
-        None => Ok(()),
-    }
+    delivered.and(approvals)
 }
 
 pub(super) fn completion_text(completion: &Completion, chat_link: Option<&str>) -> String {
@@ -1065,6 +1112,9 @@ fn start_error_text(error: StartError) -> String {
         StartError::Rejected(message) => format!("I could not start this request: {message}"),
         StartError::DecisionsMismatch | StartError::AlreadyDecided => {
             "This approval is not open anymore.".to_string()
+        }
+        StartError::Internal => {
+            "Something went wrong while starting this request. Please try again.".to_string()
         }
     }
 }

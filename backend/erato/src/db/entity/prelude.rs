@@ -16,6 +16,7 @@ pub use super::message_feedbacks::Entity as MessageFeedbacks;
 pub use super::messages::Entity as Messages;
 pub use super::ms_teams_conversations::Entity as MsTeamsConversations;
 pub use super::ms_teams_pending_sign_ins::Entity as MsTeamsPendingSignIns;
+pub use super::ms_teams_requests::Entity as MsTeamsRequests;
 pub use super::ms_teams_token_exchanges::Entity as MsTeamsTokenExchanges;
 pub use super::runtime_configuration::Entity as RuntimeConfiguration;
 pub use super::share_grants::Entity as ShareGrants;

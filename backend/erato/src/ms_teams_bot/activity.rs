@@ -14,7 +14,7 @@ pub struct Activity {
     pub kind: String,
     #[serde(default)]
     pub id: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_timestamp")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(default)]
     pub name: Option<String>,
@@ -154,6 +154,16 @@ impl Activity {
             .filter(|id| !id.is_empty())
     }
 
+    /// Teams reports a user's edited message as a `messageUpdate` with this
+    /// event; other updates (such as undelete) are not edits.
+    pub fn is_edit_message(&self) -> bool {
+        self.channel_data
+            .as_ref()
+            .and_then(|data| data.get("eventType"))
+            .and_then(Value::as_str)
+            == Some("editMessage")
+    }
+
     /// The Microsoft 365 group ID of the team a channel message belongs to.
     pub fn team_aad_group_id(&self) -> Option<&str> {
         self.channel_data
@@ -241,10 +251,45 @@ pub fn split_channel_thread(conversation_id: &str) -> (&str, Option<&str>) {
     }
 }
 
+/// A malformed timestamp only disables edit ordering; it must not reject the
+/// whole activity.
+fn lenient_timestamp<'de, D>(
+    deserializer: D,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<Value>::deserialize(deserializer)?
+        .as_ref()
+        .and_then(Value::as_str)
+        .and_then(|timestamp| timestamp.parse().ok()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn reads_edit_events_and_tolerates_malformed_timestamps() {
+        let edit = parse(json!({
+            "type": "messageUpdate",
+            "timestamp": "2022-10-28T17:19:39.4615413Z",
+            "channelData": {"eventType": "editMessage"}
+        }));
+        assert!(edit.is_edit_message());
+        assert_eq!(
+            edit.timestamp.unwrap().to_rfc3339(),
+            "2022-10-28T17:19:39.461541300+00:00"
+        );
+        let undelete = parse(json!({
+            "type": "messageUpdate",
+            "timestamp": "not a time",
+            "channelData": {"eventType": "undeleteMessage"}
+        }));
+        assert!(!undelete.is_edit_message());
+        assert!(undelete.timestamp.is_none());
+    }
 
     fn parse(value: Value) -> Activity {
         serde_json::from_value(value).expect("activity parses")

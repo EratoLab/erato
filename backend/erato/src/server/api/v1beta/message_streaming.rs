@@ -33,7 +33,7 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
     post_process_mcp_tool_result,
 };
 use crate::services::background_tasks::{
-    BackgroundTaskManager, ClientStreamGuard, StreamingEvent, StreamingTask, Takeover,
+    BackgroundTaskManager, ClientStreamGuard, LeaseHeld, StreamingEvent, StreamingTask, Takeover,
     TaskCleanupGuard, TaskOutcome, ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
@@ -2464,19 +2464,24 @@ async fn acquire_user_generation_lease(
             app_state.config.generation_status.stale_after_secs,
         )
         .await
-        .map_err(|held| {
-            StreamRouteError::GenerationRunning(Box::new(GenerationRunningError {
-                code: "generation_running".to_string(),
-                chat_id,
-                // Always "user" today, even when a delivery holds the lease:
-                // the chats row records no initiator, so this handler cannot
-                // tell the two apart. Reporting it honestly needs a column of
-                // its own on the shared-generation row; tracked as a follow-up
-                // rather than smuggled into the delivery change.
-                initiator: "user".to_string(),
-                started_at: held.started_at,
-            }))
-        })
+        .map_err(|held| lease_held_error(chat_id, held))
+}
+
+/// The typed 409 for a refused lease claim.
+fn lease_held_error(chat_id: Uuid, held: LeaseHeld) -> StreamRouteError {
+    StreamRouteError::GenerationRunning(Box::new(GenerationRunningError {
+        code: "generation_running".to_string(),
+        chat_id,
+        // Always "user" today, even when a delivery holds the lease: the chats
+        // row records no initiator, so this handler cannot tell the two apart.
+        // Reporting it honestly needs a column of its own on the
+        // shared-generation row; tracked as a follow-up rather than smuggled
+        // into the delivery change.
+        initiator: "user".to_string(),
+        // Already RFC 3339 on `LeaseHeld`; re-formatting it here would be a
+        // second opinion about the wire shape.
+        started_at: held.started_at,
+    }))
 }
 
 /// Take the chat's generation lease for a turn a delivered task result
@@ -2512,21 +2517,7 @@ async fn acquire_task_result_generation_lease(
             app_state.config.generation_status.stale_after_secs,
         )
         .await
-        .map_err(|held| {
-            StreamRouteError::GenerationRunning(Box::new(GenerationRunningError {
-                code: "generation_running".to_string(),
-                chat_id,
-                // The same honest-but-incomplete string the user helper
-                // reports: the chats row records no initiator, so this handler
-                // cannot tell a delivery's lease from a person's. Fixing that
-                // needs a column on the shared-generation row and belongs to
-                // the delivery change, not here.
-                initiator: "user".to_string(),
-                // Already RFC 3339 on `LeaseHeld`; re-formatting it here would
-                // be a second opinion about the wire shape.
-                started_at: held.started_at,
-            }))
-        })
+        .map_err(|held| lease_held_error(chat_id, held))
 }
 
 /// Deserialize a present field (including an explicit JSON `null`) as `Some`.
@@ -3116,6 +3107,21 @@ pub(crate) async fn settle_tail_deliveries(
         outcome,
         task.tool_budget_exhausted(),
     )
+    .await;
+}
+
+/// Release a lease whose generation never started. Going through the
+/// lifecycle rather than by hand is what gives the identity-gated
+/// `remove_task` **and** the closing frame for anyone attached to this lease; a
+/// hand-rolled `mark_completed` plus `remove_task` would silently drop the frame.
+pub(crate) async fn release_unstarted_lease(
+    app_state: &AppState,
+    task: &Arc<StreamingTask>,
+    chat_id: Uuid,
+) {
+    let _ = with_generation_task_lifecycle(&app_state.background_tasks, task, chat_id, async {
+        Ok(())
+    })
     .await;
 }
 
@@ -9461,8 +9467,10 @@ async fn stream_update_assistant_message_completion<
         message: updated_assistant_message_wrapped,
     }
     .into();
-    message_completed_event
-        .send_event_report(tx.clone())
+    // A browser that reconnected through resumestream already has the saved
+    // answer from the broadcast above; its closed request stream is not a
+    // failed generation.
+    send_generation_event(&message_completed_event, tx.clone())
         .in_current_span()
         .await?;
 
@@ -13818,9 +13826,17 @@ pub(crate) async fn run_message_submit_task(
     .await
 }
 
-/// Teams cards are valid only for the current answer. Recheck after taking an
-/// exclusive lease so a question that arrived during validation wins over an
-/// old card. Web keeps its existing branch-selection and admission behavior.
+/// Shown when a revision targets a question that is no longer the chat's latest.
+pub(crate) const STALE_REVISION_MESSAGE: &str =
+    "This question is no longer the latest question in this chat.";
+
+/// Teams cards are valid only for the current answer. Web keeps its existing
+/// branch-selection and admission behavior.
+///
+/// The tip is checked before the claim, because the claim may take over a
+/// parked approval and supersede its pending client operations; only the turn
+/// this revision replaces may lose those. It is checked again under the lease
+/// so a question that arrived meanwhile wins over an old card.
 async fn acquire_revision_generation_lease(
     app_state: &AppState,
     chat_id: Uuid,
@@ -13835,6 +13851,7 @@ async fn acquire_revision_generation_lease(
     let Some(expected_tip) = expected_tip else {
         return acquire_user_generation_lease(app_state, chat_id, Uuid::new_v4()).await;
     };
+    check_revision_tip(app_state, chat_id, expected_tip).await?;
     let (events, task) = app_state
         .background_tasks
         .try_start_task(
@@ -13844,48 +13861,44 @@ async fn acquire_revision_generation_lease(
             app_state.config.generation_status.stale_after_secs,
         )
         .await
-        .map_err(|held| {
-            StreamRouteError::GenerationRunning(Box::new(GenerationRunningError {
-                code: "generation_running".to_string(),
-                chat_id,
-                initiator: "user".to_string(),
-                started_at: held.started_at,
-            }))
-        })?;
+        .map_err(|held| lease_held_error(chat_id, held))?;
     let mut lease_guard = TaskCleanupGuard::new(
         app_state.background_tasks.clone(),
         chat_id,
         task.generation_id,
     );
-    let validation = match crate::models::message::get_active_thread_tip(&app_state.db, &chat_id)
-        .await
-    {
+    if let Err(error) = check_revision_tip(app_state, chat_id, expected_tip).await {
+        // Close resumestream subscribers and release this exact lease. No
+        // generation or branch write of this revision has started.
+        lease_guard.disarm();
+        release_unstarted_lease(app_state, &task, chat_id).await;
+        return Err(error);
+    }
+    lease_guard.disarm();
+    Ok((events, task))
+}
+
+async fn check_revision_tip(
+    app_state: &AppState,
+    chat_id: Uuid,
+    expected_tip: Uuid,
+) -> Result<(), StreamRouteError> {
+    match crate::models::message::get_active_thread_tip(&app_state.db, &chat_id).await {
         Ok(Some(tip)) if tip.id == expected_tip => Ok(()),
         Ok(_) => Err((
             axum::http::StatusCode::CONFLICT,
-            "This question is no longer the latest question in this chat.".to_string(),
-        )),
+            STALE_REVISION_MESSAGE.to_string(),
+        )
+            .into()),
         Err(error) => {
             tracing::warn!(%error, %chat_id, "Failed to validate the latest question for a revision");
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "Could not check the latest question in this chat.".to_string(),
-            ))
+            )
+                .into())
         }
-    };
-    if let Err(error) = validation {
-        // Close resumestream subscribers and release this exact lease before
-        // returning. No generation or branch write has started yet.
-        lease_guard.disarm();
-        let _ =
-            with_generation_task_lifecycle(&app_state.background_tasks, &task, chat_id, async {
-                Ok(())
-            })
-            .await;
-        return Err(error.into());
     }
-    lease_guard.disarm();
-    Ok((events, task))
 }
 
 /// Revisions keep a request-scoped SSE sink for Web as well as the task feed
@@ -13921,6 +13934,21 @@ async fn finish_revision_broadcast(task: &Arc<StreamingTask>, generation_failed:
 mod revision_broadcast_tests {
     use super::*;
     use crate::config::GenerationStatusConfig;
+
+    /// Revisions also send their completion through this helper: a browser that
+    /// reconnected through resumestream must not turn a saved answer into an
+    /// errored generation.
+    #[tokio::test]
+    async fn closed_request_stream_is_not_a_failed_generation() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(1);
+        drop(rx);
+        let started: RegenerateMessageStreamingResponseMessage =
+            MessageSubmitStreamingResponseAssistantMessageStarted {
+                message_id: Uuid::new_v4(),
+            }
+            .into();
+        send_generation_event(&started, tx).await.unwrap();
+    }
 
     #[tokio::test]
     async fn preparation_failure_closes_integration_feed_with_error() {
@@ -15767,13 +15795,7 @@ pub async fn react_to_task_result_sse(
         Ok(delivered) => delivered,
         Err(error) => {
             lease_guard.disarm();
-            let _ = with_generation_task_lifecycle(
-                &app_state.background_tasks,
-                &task,
-                chat_id,
-                async { Ok(()) },
-            )
-            .await;
+            release_unstarted_lease(&app_state, &task, chat_id).await;
             return Err(error);
         }
     };

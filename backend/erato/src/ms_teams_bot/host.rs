@@ -8,7 +8,7 @@ mod progress;
 mod requests;
 mod sign_in;
 
-pub use requests::TeamsRequest;
+pub use requests::{ActionKind, RequestState, TeamsRequest};
 
 use super::activity::ConversationKind;
 use super::cards::{ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet};
@@ -78,12 +78,24 @@ pub enum StartError {
     DecisionsMismatch,
     /// Every approval of the message was already decided.
     AlreadyDecided,
+    /// Erato could not start it for a transient reason; the details are logged.
+    Internal,
+}
+
+impl StartError {
+    pub(crate) fn internal(context: &'static str, error: impl std::fmt::Display) -> Self {
+        tracing::warn!(%error, context, "Teams request could not start");
+        StartError::Internal
+    }
 }
 
 impl From<StreamRouteError> for StartError {
     fn from(error: StreamRouteError) -> Self {
         match error {
             StreamRouteError::GenerationRunning(_) => StartError::Busy,
+            StreamRouteError::PlainText(status, message) if status.is_server_error() => {
+                StartError::internal("start the generation", message)
+            }
             StreamRouteError::PlainText(_, message) => StartError::Rejected(message),
             StreamRouteError::DecisionsMismatch(_) => StartError::DecisionsMismatch,
             StreamRouteError::AlreadyContinued(_) => StartError::AlreadyDecided,
@@ -422,7 +434,7 @@ impl Host {
         let previous_message_id =
             crate::models::message::get_active_thread_tip(&self.app_state.db, &chat_id)
                 .await
-                .map_err(|error| StartError::Rejected(error.to_string()))?
+                .map_err(|error| StartError::internal("find the latest message", error))?
                 .map(|message| message.id);
         let request =
             MessageSubmitRequest::for_integration(chat_id, previous_message_id, text, file_ids);
@@ -844,6 +856,24 @@ fn error_message(error: Option<&Value>) -> String {
 mod tests {
     use super::*;
     use crate::models::message::{ContentPartToolApprovalRequest, ToolApprovalAnnotations};
+
+    #[test]
+    fn server_failures_become_retryable_without_their_details() {
+        assert!(matches!(
+            StartError::from(StreamRouteError::PlainText(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load chat for regeneration: connection reset".into(),
+            )),
+            StartError::Internal
+        ));
+        assert!(matches!(
+            StartError::from(StreamRouteError::PlainText(
+                axum::http::StatusCode::CONFLICT,
+                "This question is no longer the latest question in this chat.".into(),
+            )),
+            StartError::Rejected(reason) if reason.contains("latest question")
+        ));
+    }
 
     #[tokio::test]
     async fn translates_thinking_and_tool_progress_including_continuations() {

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::test_utils::{build_openai_text_streaming_response, setup_mock_llm_server_with_mocks};
-use erato::ms_teams_bot::host::{Session, StartError, TeamsRequest};
+use erato::ms_teams_bot::host::{ActionKind, RequestState, Session, StartError, TeamsRequest};
 use erato::state::AppState;
 use mocktail::MockSet;
 use mocktail::server::MockServer;
@@ -102,8 +102,8 @@ async fn fixture(pool: Pool<Postgres>) -> Fixture {
     }
 }
 
-/// Capture the actual translated events and update the durable request mapping
-/// just as the handler does. A missing StreamEnd would leave this receiver open.
+/// Capture the actual translated events and record them through the handler's
+/// own bookkeeping. A missing StreamEnd would leave this receiver open.
 async fn record_generation(
     fixture: &Fixture,
     request: &TeamsRequest,
@@ -111,26 +111,16 @@ async fn record_generation(
 ) -> (TeamsRequest, Vec<GenerationUpdate>, Completion) {
     let mut recorded = Vec::new();
     let mut finished = None;
+    let mut tracked = Some(request.clone());
     tokio::time::timeout(Duration::from_secs(20), async {
         while let Some(update) = updates.recv().await {
+            fixture
+                .host
+                .track_update(&mut tracked, &update, false)
+                .await;
             match &update {
-                GenerationUpdate::UserMessageSaved(message_id) => {
-                    fixture
-                        .host
-                        .record_user_message(request, *message_id)
-                        .await
-                        .unwrap();
-                }
-                GenerationUpdate::Started {
-                    chat_id,
-                    message_id,
-                } => {
+                GenerationUpdate::Started { chat_id, .. } => {
                     assert_eq!(*chat_id, fixture.chat_id);
-                    fixture
-                        .host
-                        .record_generation(request, *message_id)
-                        .await
-                        .unwrap();
                 }
                 GenerationUpdate::Completed(done) => finished = Some(done.clone()),
                 GenerationUpdate::Failed(error) => panic!("revision generation failed: {error}"),
@@ -157,10 +147,12 @@ async fn record_generation(
     })
     .await
     .expect("completed generation releases its lease");
+    let tracked = tracked.expect("the run still owns its request");
     let request = fixture
         .host
-        .finish_request(request, "completed")
+        .finish_request(&tracked, RequestState::Completed)
         .await
+        .unwrap()
         .unwrap();
     assert_eq!(request.assistant_message_id, Some(finished.message_id));
     assert_eq!(finished.chat_id, fixture.chat_id);
@@ -237,7 +229,7 @@ async fn retry_and_edit_preserve_branch_semantics_files_and_stream_events(pool: 
 
     let retry = fixture
         .host
-        .revise_request(&fixture.session, &request, "retry")
+        .revise_request(&fixture.session, &request, ActionKind::Retry)
         .await
         .unwrap();
     let (request, retry_events, retried) = record_generation(&fixture, &request, retry).await;
@@ -265,7 +257,7 @@ async fn retry_and_edit_preserve_branch_semantics_files_and_stream_events(pool: 
         .unwrap();
     let edits = fixture
         .host
-        .revise_request(&fixture.session, &edit, "edit")
+        .revise_request(&fixture.session, &edit, ActionKind::Edit)
         .await
         .unwrap();
     let (request, edit_events, edited) = record_generation(&fixture, &request, edits).await;
@@ -365,7 +357,7 @@ async fn revisions_reject_foreign_users_and_superseded_questions(pool: Pool<Post
         .await
         .unwrap()
         .unwrap();
-    for kind in ["retry", "edit"] {
+    for kind in [ActionKind::Retry, ActionKind::Edit] {
         assert!(matches!(
             fixture
                 .host
@@ -392,7 +384,7 @@ async fn revisions_reject_foreign_users_and_superseded_questions(pool: Pool<Post
         .await
         .unwrap();
     completion(next).await;
-    for kind in ["retry", "edit"] {
+    for kind in [ActionKind::Retry, ActionKind::Edit] {
         assert!(matches!(
             fixture
                 .host
@@ -421,11 +413,9 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
     let fixture = fixture(pool).await;
     let (request, _) = initial_generation(&fixture, Vec::new()).await;
     assert!(!request.native_stop_available);
-    let request = fixture
-        .host
-        .record_native_stop(&request, true)
-        .await
-        .unwrap();
+    let mut tracked = Some(request);
+    fixture.host.track_native_stop(&mut tracked, true).await;
+    let request = tracked.unwrap();
     assert!(
         fixture
             .host
@@ -459,26 +449,42 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
     );
     let stopped = fixture
         .host
-        .finish_request(&request, "stopped")
+        .finish_request(&request, RequestState::Stopped)
         .await
+        .unwrap()
         .unwrap();
     let token = stopped.action_token.unwrap();
     let (one, two) = tokio::join!(
-        fixture.host.claim_request_action(&stopped, token, "retry"),
-        fixture.host.claim_request_action(&stopped, token, "retry"),
+        fixture
+            .host
+            .claim_request_action(&stopped, token, ActionKind::Retry),
+        fixture
+            .host
+            .claim_request_action(&stopped, token, ActionKind::Retry),
     );
     let claimed = match (one.unwrap(), two.unwrap()) {
         (Some(claimed), None) | (None, Some(claimed)) => claimed,
         _ => panic!("exactly one callback owns the action"),
     };
-    assert_eq!(claimed.state, "preparing");
+    assert_eq!(claimed.state, RequestState::Preparing);
     assert_ne!(claimed.run_id, stopped.run_id);
+    let mut old_renderer = Some(stopped.clone());
+    fixture
+        .host
+        .track_native_stop(&mut old_renderer, false)
+        .await;
+    assert!(
+        old_renderer.is_none(),
+        "an old renderer stops tracking a request a new run owns"
+    );
     assert!(
         fixture
             .host
-            .record_native_stop(&stopped, false)
+            .request_snapshot(request.id)
             .await
-            .is_err(),
+            .unwrap()
+            .unwrap()
+            .native_stop_available,
         "an old renderer cannot change a new run's Stop controls"
     );
     let now = chrono::Utc::now();
@@ -511,7 +517,7 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
     assert!(
         fixture
             .host
-            .claim_request_action(&edited, edited.action_token.unwrap(), "edit")
+            .claim_request_action(&edited, edited.action_token.unwrap(), ActionKind::Edit)
             .await
             .unwrap()
             .is_none(),
@@ -519,7 +525,7 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
     );
     fixture
         .host
-        .restore_request_action(&claimed, token, "stopped")
+        .restore_request_action(&claimed, token, &stopped)
         .await
         .unwrap();
     let ready = fixture
@@ -530,15 +536,20 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
         .unwrap();
     assert_eq!(ready.pending_edit.as_deref(), Some("Newest question"));
     assert_eq!(ready.action_token, edited.action_token);
+    assert_eq!(ready.state, RequestState::Stopped);
+    assert_eq!(
+        ready.run_id, stopped.run_id,
+        "a refused claim gives the earlier run its ID back"
+    );
     let next = fixture
         .host
-        .claim_request_action(&ready, ready.action_token.unwrap(), "edit")
+        .claim_request_action(&ready, ready.action_token.unwrap(), ActionKind::Edit)
         .await
         .unwrap()
         .unwrap();
     fixture
         .host
-        .restore_request_action(&claimed, token, "stopped")
+        .restore_request_action(&claimed, token, &stopped)
         .await
         .unwrap();
     let current = fixture
@@ -548,7 +559,7 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
         .unwrap()
         .unwrap();
     assert_eq!(current.run_id, next.run_id);
-    assert_eq!(current.state, "preparing");
+    assert_eq!(current.state, RequestState::Preparing);
     assert_eq!(
         current.action_token, None,
         "old claimant cannot revive its token"
@@ -556,19 +567,26 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
     assert!(
         fixture
             .host
-            .finish_request(&request, "completed")
+            .finish_request(&request, RequestState::Completed)
             .await
-            .is_err(),
+            .unwrap()
+            .is_none(),
         "old renderer cannot finalize a new run"
     );
-    assert!(
+    for update in [
+        GenerationUpdate::Started {
+            chat_id: fixture.chat_id,
+            message_id: request.assistant_message_id.unwrap(),
+        },
+        GenerationUpdate::ToolStarted,
+    ] {
+        let mut old_renderer = Some(request.clone());
         fixture
             .host
-            .record_generation(&request, request.assistant_message_id.unwrap())
-            .await
-            .is_err()
-    );
-    fixture.host.record_tool_started(&request).await.unwrap();
+            .track_update(&mut old_renderer, &update, false)
+            .await;
+        assert!(old_renderer.is_none());
+    }
     assert!(
         !fixture
             .host
@@ -578,7 +596,12 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
             .unwrap()
             .tools_started
     );
-    fixture.host.reset_request_action(&next).await.unwrap();
+    fixture
+        .host
+        .reset_request_action(&next)
+        .await
+        .unwrap()
+        .unwrap();
     let current = fixture
         .host
         .request_snapshot(request.id)
@@ -591,8 +614,9 @@ async fn request_actions_are_one_use_and_newer_edits_win(pool: Pool<Postgres>) {
     );
     let failed = fixture
         .host
-        .finish_request(&current, "failed")
+        .finish_request(&current, RequestState::Failed)
         .await
+        .unwrap()
         .unwrap();
     assert_eq!(failed.action_token, None);
 }
@@ -625,7 +649,7 @@ async fn retry_refuses_persisted_tool_effects_and_expired_actions(pool: Pool<Pos
     );
     let retry = fixture
         .host
-        .revise_request(&fixture.session, &request, "retry")
+        .revise_request(&fixture.session, &request, ActionKind::Retry)
         .await;
     assert!(
         matches!(&retry, Err(StartError::Rejected(message)) if message.contains("Tools may already have run")),
@@ -633,8 +657,9 @@ async fn retry_refuses_persisted_tool_effects_and_expired_actions(pool: Pool<Pos
     );
     let stopped = fixture
         .host
-        .finish_request(&request, "stopped")
+        .finish_request(&request, RequestState::Stopped)
         .await
+        .unwrap()
         .unwrap();
     fixture
         .state
@@ -649,7 +674,7 @@ async fn retry_refuses_persisted_tool_effects_and_expired_actions(pool: Pool<Pos
     assert!(
         fixture
             .host
-            .claim_request_action(&stopped, stopped.action_token.unwrap(), "retry")
+            .claim_request_action(&stopped, stopped.action_token.unwrap(), ActionKind::Retry)
             .await
             .unwrap()
             .is_none()
@@ -669,7 +694,7 @@ async fn retry_refuses_persisted_tool_effects_and_expired_actions(pool: Pool<Pos
             .unwrap()
             .unwrap()
             .state,
-        "stopped"
+        RequestState::Stopped
     );
 }
 
@@ -765,7 +790,7 @@ async fn newer_turn_during_revision_validation_rejects_without_leaking_lease(poo
     let (revision, ()) = tokio::join!(
         fixture
             .host
-            .revise_request(&fixture.session, &request, "retry"),
+            .revise_request(&fixture.session, &request, ActionKind::Retry),
         advance_thread,
     );
     assert!(
@@ -796,4 +821,113 @@ async fn newer_turn_during_revision_validation_rejects_without_leaking_lease(poo
         "rejected revision creates no branch or assistant row"
     );
     assert!(rows.iter().all(|row| row.is_message_in_active_thread));
+}
+
+/// A turn whose preparation failed after saving its question leaves that
+/// question as the latest message. Editing it must work, and Retry is not
+/// offered because there is no answer to regenerate.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn edit_regenerates_a_question_whose_preparation_failed(pool: Pool<Postgres>) {
+    use sea_orm::{ActiveValue::Set, IntoActiveModel};
+
+    let fixture = fixture(pool).await;
+    let (_, original) = initial_generation(&fixture, Vec::new()).await;
+    let template = Messages::find_by_id(original.message_id)
+        .one(&fixture.state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let failed_question = Uuid::new_v4();
+    let now = chrono::Utc::now().fixed_offset();
+    let mut question = template.into_active_model();
+    question.id = Set(failed_question);
+    question.previous_message_id = Set(Some(original.message_id));
+    question.sibling_message_id = Set(None);
+    question.created_at = Set(now);
+    question.updated_at = Set(now);
+    question.raw_message = Set(
+        json!({"role":"user", "content":[{"content_type":"text", "text":"Question that never got an answer"}]}),
+    );
+    Messages::insert(question)
+        .exec(&fixture.state.db)
+        .await
+        .unwrap();
+    let request = fixture
+        .host
+        .remember_request(
+            &fixture.session,
+            CONVERSATION,
+            "question-2",
+            fixture.chat_id,
+        )
+        .await
+        .unwrap();
+    let mut tracked = request;
+    fixture
+        .host
+        .track_update(
+            &mut tracked,
+            &GenerationUpdate::UserMessageSaved(failed_question),
+            false,
+        )
+        .await;
+    let failed = fixture
+        .host
+        .finish_request(&tracked.unwrap(), RequestState::Failed)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(failed.action_token, None, "nothing to retry yet");
+    assert!(matches!(
+        fixture
+            .host
+            .revise_request(&fixture.session, &failed, ActionKind::Retry)
+            .await,
+        Err(StartError::Rejected(reason)) if reason.contains("no saved answer")
+    ));
+
+    let proposed = fixture
+        .host
+        .propose_edit(failed.id, "Edited unanswered question", chrono::Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    let claimed = fixture
+        .host
+        .claim_request_action(&proposed, proposed.action_token.unwrap(), ActionKind::Edit)
+        .await
+        .unwrap()
+        .unwrap();
+    let updates = fixture
+        .host
+        .revise_request(&fixture.session, &claimed, ActionKind::Edit)
+        .await
+        .unwrap();
+    let running = fixture
+        .host
+        .reset_request_action(&claimed)
+        .await
+        .unwrap()
+        .unwrap();
+    let (request, _, answered) = record_generation(&fixture, &running, updates).await;
+    let edited_question = Messages::find_by_id(request.user_message_id.unwrap())
+        .one(&fixture.state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(edited_question.sibling_message_id, Some(failed_question));
+    assert_eq!(
+        edited_question.raw_message["content"][0]["text"],
+        "Edited unanswered question"
+    );
+    let answer = Messages::find_by_id(answered.message_id)
+        .one(&fixture.state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(answer.previous_message_id, Some(edited_question.id));
 }

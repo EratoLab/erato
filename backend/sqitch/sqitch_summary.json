@@ -56,8 +56,7 @@
     "deploy/0054_add_chat_created_via.sql",
     "deploy/0055_add_client_tool_decisions.sql",
     "deploy/0056_add_ms_teams_pending_sign_ins.sql",
-    "deploy/0057_add_ms_teams_requests.sql",
-    "deploy/0058_add_ms_teams_native_stop.sql"
+    "deploy/0057_add_ms_teams_requests.sql"
   ],
-  "latest_change": "22c42637c8edfebc97c3609ab3d5ddbedb8bf737"
+  "latest_change": "1eaae71e8325fb1814ac8917d92aa4fa6e95c0f1"
 }

@@ -4,9 +4,6 @@ use super::*;
 use crate::config::AppConfig;
 use crate::db::entity::prelude::Messages;
 use crate::models::user::get_or_create_user;
-use crate::ms_teams_bot::{
-    TeamsBotSettings, connector::Connector, inbound_auth::InboundAuth, user_token::UserTokenClient,
-};
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -21,11 +18,18 @@ use std::sync::Mutex;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../sqitch/deploy");
 
-/// # Test Categories
-/// - `uses-db`
-/// - `uses-mocked-llm`
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sqlx::PgPool) {
+struct Harness {
+    outgoing: Arc<Mutex<Vec<Value>>>,
+    base: String,
+    server: tokio::task::JoinHandle<()>,
+    state: AppState,
+    host: Host,
+    session: Session,
+    chat_id: Uuid,
+}
+
+/// A personal Teams chat whose model streams until it is cancelled.
+async fn harness(pool: sqlx::PgPool) -> Harness {
     let outgoing = Arc::new(Mutex::new(Vec::<Value>::new()));
     let routes = Router::new()
         .route(
@@ -120,6 +124,31 @@ async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sq
         .await
         .unwrap();
     let (chat_id, _) = host.ensure_chat(&session, &row, None).await.unwrap();
+    Harness {
+        outgoing,
+        base,
+        server,
+        state,
+        host,
+        session,
+        chat_id,
+    }
+}
+
+/// # Test Categories
+/// - `uses-db`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sqlx::PgPool) {
+    let Harness {
+        outgoing,
+        base,
+        server,
+        state,
+        host,
+        session,
+        chat_id,
+    } = harness(pool).await;
     let request = host
         .remember_request(&session, "conversation", "question", chat_id)
         .await
@@ -156,20 +185,7 @@ async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sq
                 .expect("renderer must drain the aborted generation");
         }
     });
-    let bot = TeamsBot {
-        settings: TeamsBotSettings {
-            tenant_id: "tenant".into(),
-            public_base_url: None,
-            assistant_id: None,
-            context_message_count: 0,
-            streaming: true,
-            security_groups_only: false,
-        },
-        inbound: InboundAuth::with_static_keys("bot".into(), Vec::new()),
-        connector: Connector::with_test_token(reqwest::Client::new()),
-        user_tokens: UserTokenClient::new(&base, "graph-sso".into(), "bot".into()),
-        identities: moka::future::Cache::new(10),
-    };
+    let bot = TeamsBot::for_test(&base, true);
     let target = ReplyTarget {
         connector: &bot.connector,
         service_url: &base,
@@ -196,8 +212,8 @@ async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sq
         .expect("renderer must drain a terminal backend event after Stop")
         .unwrap();
     let stopped = host.request_snapshot(request.id).await.unwrap().unwrap();
-    assert_eq!(stopped.state, "stopped");
-    assert_eq!(stopped.action_kind.as_deref(), Some("retry"));
+    assert_eq!(stopped.state, RequestState::Stopped);
+    assert_eq!(stopped.action_kind, Some(ActionKind::Retry));
     let message = Messages::find_by_id(stopped.assistant_message_id.unwrap())
         .one(&state.db)
         .await
@@ -253,4 +269,65 @@ async fn connector_reply(
     } else {
         (StatusCode::OK, Json(json!({"id":"controls"})))
     }
+}
+
+/// A newer message that was refused or failed must not hide the generation
+/// that is still running from `/stop`.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn stop_command_finds_the_running_request_behind_a_newer_failure(pool: sqlx::PgPool) {
+    let harness = harness(pool).await;
+    let (host, session, chat_id) = (&harness.host, &harness.session, harness.chat_id);
+    let running = host
+        .remember_request(session, "conversation", "question-1", chat_id)
+        .await
+        .unwrap();
+    let mut updates = host
+        .submit(session, chat_id, "Keep explaining DNS".into(), Vec::new())
+        .await
+        .unwrap();
+    let mut tracked = running;
+    while let Some(update) = updates.recv().await {
+        host.track_update(&mut tracked, &update, false).await;
+        if matches!(update, GenerationUpdate::Started { .. }) {
+            break;
+        }
+    }
+    let running = tracked.expect("the running request is tracked");
+    let newer = host
+        .remember_request(session, "conversation", "question-2", chat_id)
+        .await
+        .unwrap()
+        .unwrap();
+    host.finish_request(&newer, RequestState::Failed)
+        .await
+        .unwrap();
+
+    let active = host
+        .active_request(session, "conversation", chat_id)
+        .await
+        .unwrap()
+        .expect("/stop resolves the running generation");
+    assert_eq!(active.id, running.id);
+    assert!(
+        host.active_request(session, "another-conversation", chat_id)
+            .await
+            .unwrap()
+            .is_none(),
+        "another conversation cannot stop it"
+    );
+    assert!(
+        host.stop_request(session, &active, active.assistant_message_id.unwrap())
+            .await
+            .unwrap()
+    );
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while updates.recv().await.is_some() {}
+    })
+    .await
+    .expect("the stopped generation ends");
+    harness.server.abort();
 }

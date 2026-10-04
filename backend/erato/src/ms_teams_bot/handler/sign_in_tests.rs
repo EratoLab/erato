@@ -4,9 +4,6 @@
 use super::*;
 use crate::config::AppConfig;
 use crate::models::user::{get_or_create_user, record_entra_object_id};
-use crate::ms_teams_bot::{
-    TeamsBotSettings, connector::Connector, inbound_auth::InboundAuth, user_token::UserTokenClient,
-};
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -107,21 +104,7 @@ async fn handlers_resume_sso_and_interactive_sign_in_without_duplicate_replies(p
         .unwrap();
     record_entra_object_id(&state.db, &user, OID).await.unwrap();
     let host = Host::new(state);
-    let http = reqwest::Client::new();
-    let bot = Arc::new(TeamsBot {
-        settings: TeamsBotSettings {
-            tenant_id: "tenant".into(),
-            public_base_url: None,
-            assistant_id: None,
-            context_message_count: 0,
-            streaming: false,
-            security_groups_only: false,
-        },
-        inbound: InboundAuth::with_static_keys("bot".into(), Vec::new()),
-        connector: Connector::with_test_token(http),
-        user_tokens: UserTokenClient::new(&base, "graph-sso".into(), "bot".into()),
-        identities: moka::future::Cache::new(10),
-    });
+    let bot = Arc::new(TeamsBot::for_test(&base, false));
     bot.identities
         .insert(
             OID.into(),

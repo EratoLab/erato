@@ -123,6 +123,27 @@ impl TeamsBot {
     }
 }
 
+#[cfg(test)]
+impl TeamsBot {
+    /// A bot whose token service and Connector are local test servers.
+    pub(crate) fn for_test(base: &str, streaming: bool) -> Self {
+        Self {
+            settings: TeamsBotSettings {
+                tenant_id: "tenant".into(),
+                public_base_url: None,
+                assistant_id: None,
+                context_message_count: 0,
+                streaming,
+                security_groups_only: false,
+            },
+            inbound: InboundAuth::with_static_keys("bot".into(), Vec::new()),
+            connector: Connector::with_test_token(reqwest::Client::new()),
+            user_tokens: UserTokenClient::new(base, "graph-sso".into(), "bot".into()),
+            identities: moka::future::Cache::new(10),
+        }
+    }
+}
+
 /// `POST /api/integrations/ms_teams/messages`: the Azure Bot messaging endpoint.
 ///
 /// Outside oauth2-proxy and the user middleware; authenticated by the Bot
@@ -157,14 +178,7 @@ pub async fn messages_route(
             tokio::spawn(handler::on_message(bot, host, activity));
             StatusCode::OK.into_response()
         }
-        "messageUpdate"
-            if activity
-                .channel_data
-                .as_ref()
-                .and_then(|data| data.get("eventType"))
-                .and_then(serde_json::Value::as_str)
-                == Some("editMessage") =>
-        {
+        "messageUpdate" if activity.is_edit_message() => {
             tokio::spawn(handler::on_message_edit(bot, host, activity));
             StatusCode::OK.into_response()
         }
