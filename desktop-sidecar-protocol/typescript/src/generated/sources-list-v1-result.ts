@@ -24,6 +24,25 @@ export interface SourceDescriptor {
    * Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.
    */
   product_variant?: string;
+  /**
+   * Teams sources only: the signed-in Teams identity (one tenant as one user) that this source indexes. Several identities can share one Teams cache, including guest identities of the same person in other tenants. Older sidecars and other source kinds omit it.
+   */
+  account?: {
+    tenantId: string;
+    userId: string;
+    displayName?: string | null;
+    /**
+     * Lowercase address identifying the person across tenants and mail; a guest identity carries its home address.
+     */
+    email?: string | null;
+    userPrincipalName?: string | null;
+    tenantName?: string | null;
+    /**
+     * Member or Guest, as reported by Teams.
+     */
+    userType?: string | null;
+    [k: string]: unknown;
+  };
   locator: {
     [k: string]: unknown;
   };
