@@ -174,7 +174,8 @@ impl TeamsBot {
     }
 
     /// For the setup page: replicas share activity through the database;
-    /// this one also checks the credential, rate limited.
+    /// this one also checks the credential, rate limited. Once activity was
+    /// seen, it is remembered, so later calls need no query.
     pub async fn setup_status(&self, host: &Host) -> SetupStatus {
         let activity_received = self.activity_received.load(Ordering::Relaxed)
             || host
@@ -184,6 +185,9 @@ impl TeamsBot {
                     tracing::warn!(%error, "Could not read recorded Teams activity");
                     false
                 });
+        if activity_received {
+            self.activity_received.store(true, Ordering::Relaxed);
+        }
         SetupStatus {
             activity_received,
             credential: self.connector.check_credential().await,
