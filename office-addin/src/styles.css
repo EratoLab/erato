@@ -293,6 +293,22 @@ body {
   border-color: #b91c1c;
 }
 
+.office-setup-prerequisites,
+.office-setup-bot-status {
+  padding: 12px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #1e293b;
+  line-height: 1.6;
+}
+
+.office-setup-prerequisites ul,
+.office-setup-bot-status ul {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
 .office-setup-helper summary {
   cursor: pointer;
   font-weight: 600;

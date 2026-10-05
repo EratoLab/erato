@@ -106,6 +106,18 @@ spec:
             - name: LOGGING__FORMAT
               value: json
             {{- end }}
+            {{- with .Values.msTeamsBot.appPassword.existingSecret }}
+            {{- if .name }}
+            {{- if not .key }}
+            {{- fail "msTeamsBot.appPassword.existingSecret.key is required when its name is set" }}
+            {{- end }}
+            - name: INTEGRATIONS__MS_OFFICE__TEAMS__BOT__APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .name | quote }}
+                  key: {{ .key | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.backend.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.backend.extraEnvVars "context" $) | nindent 12 }}
             {{- end }}

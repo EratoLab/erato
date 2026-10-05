@@ -237,15 +237,14 @@ chat_provider_ids = ["test-token-limit"]
 # # and the backend checks the Bot Connector's signed token itself.
 # [integrations.ms_office.teams.bot]
 # enabled = true
-# app_id = "<bot Entra app ID>"
-# app_password = "<bot client secret>"
-# tenant_id = "<tenant ID>"
-# oauth_connection_name = "graph"   # Azure Bot OAuth connection with the web login's Graph scopes
-# token_service_url = "https://europe.token.botframework.com"
-# public_base_url = "https://erato.example.com"
-# # Optional: silent SSO; must equal the OAuth connection's token exchange URL.
-# # sso_app_id = "<bot Entra app ID>"
-# # sso_resource = "api://botid-<bot Entra app ID>"
+# app_password = "<client secret of the add-in's app registration, e.g. oauth2-proxy's>"
+# # Defaults: app_id and sso_app_id = add-in msal_client_id, tenant_id from a
+# # tenant-specific msal_authority, oauth_connection_name = "graph-sso",
+# # sso_resource = api://<host>/botid-<app_id>. Set them only to differ.
+# # tenant_id = "<tenant ID>"
+# # messaging_endpoint = "https://teams-bot.example.com"   # public host in front of an internal-only deployment
+# # public_base_url = "https://erato.example.com"          # address users open Erato at, for links
+# # token_service_url = "https://europe.token.botframework.com"
 # # assistant_id = "<assistant UUID new Teams chats are bound to>"
 # # context_message_count = 20
 

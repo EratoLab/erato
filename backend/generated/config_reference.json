@@ -879,6 +879,7 @@
   "integrations.ms_office.teams.bot.assistant_id": {},
   "integrations.ms_office.teams.bot.context_message_count": {},
   "integrations.ms_office.teams.bot.enabled": {},
+  "integrations.ms_office.teams.bot.messaging_endpoint": {},
   "integrations.ms_office.teams.bot.oauth_connection_name": {},
   "integrations.ms_office.teams.bot.public_base_url": {},
   "integrations.ms_office.teams.bot.security_groups_only": {},

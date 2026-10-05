@@ -2809,31 +2809,36 @@ Set `version` to a three-part numeric package version such as `1.0.1` when updat
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.oauth_connection_name */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.token_service_url */}
 
-Conversational Teams bot for personal chats, group chats and channels. When enabled, the backend accepts Bot Framework activities at `/api/integrations/ms_teams/messages`; point the Azure Bot resource's messaging endpoint there and route that exact path to the backend around oauth2-proxy (Helm chart: `msTeamsBot.directRoute`). A `skip_auth_regex` exemption does not work, because oauth2-proxy strips the `Authorization` header on every route. The endpoint verifies the Bot Connector's signed token itself and only accepts activities from `tenant_id`.
+Conversational Teams bot for personal chats, group chats and channels. When enabled, the backend accepts Bot Framework activities at `/api/integrations/ms_teams/messages`; route that exact path to the backend around oauth2-proxy (Helm chart: `msTeamsBot.directRoute`, or `msTeamsBot.publicIngress` for a separate public hostname). A `skip_auth_regex` exemption does not work, because oauth2-proxy strips the `Authorization` header on every route. The endpoint verifies the Bot Connector's signed token before reading the request, accepts only the Teams channel, and only activities from `tenant_id`.
 
-- `app_id`, `app_password`: the bot's Entra application (single tenant) and its client secret.
-- `tenant_id`: the deployment's Entra tenant.
-- `oauth_connection_name`: the Azure Bot OAuth connection that yields the user's delegated Microsoft Graph token. Give it the Graph scopes the web login uses, plus: `User.Read` and `GroupMember.Read.All` (identity and group-based policies), `Files.Read.All`/`Sites.Read.All` (files shared in group chats and channels), `Chat.Read` and `ChannelMessage.Read.All` (conversation context).
+Enabling the bot needs no values that only exist after its Azure setup. The setup page's Cloud Shell helper creates the Azure Bot and OAuth connection for the values Erato uses:
+
+- `app_id`: the bot's Entra application (single tenant). Defaults to `integrations.ms_office.addin.msal_client_id`, the app registration the add-ins and usually the web login already use.
+- `app_password`: that application's client secret. With the default `app_id`, the secret oauth2-proxy already uses; the Helm chart passes it with `msTeamsBot.appPassword.existingSecret`.
+- `tenant_id`: the deployment's Entra tenant. Defaults to the tenant in a tenant-specific `integrations.ms_office.addin.msal_authority`; required otherwise.
+- `oauth_connection_name`: the Azure Bot OAuth connection that yields the user's delegated Microsoft Graph token. Defaults to `graph-sso`, which the helper creates with the Graph scopes the web login uses, plus: `User.Read` and `GroupMember.Read.All` (identity and group-based policies), `Files.Read.All`/`Sites.Read.All` (files shared in group chats and channels), `Chat.Read` and `ChannelMessage.Read.All` (conversation context).
 - `token_service_url`: the Bot Framework token service; regional bots use for example `https://europe.token.botframework.com`.
 
 Users are recognized by their Entra object ID, which Erato records on every web or Teams tab login; people who have never opened Erato are asked to do so once. Chats started in Teams are regular Erato chats, visible in the web app.
 
 When `integrations.ms_office.teams.enabled` is also set, the rendered Teams app contains the bot next to the tab. See the [Microsoft Teams bot guide](./integrations/ms_teams) for the Azure setup.
 
-**Default values:** disabled; `token_service_url` is `"https://token.botframework.com"`.
+**Default values:** disabled; `app_id` from the add-in's `msal_client_id`; `tenant_id` from a tenant-specific `msal_authority`; `oauth_connection_name` is `"graph-sso"`; `token_service_url` is `"https://token.botframework.com"`.
 
 ##### `integrations.ms_office.teams.bot` (optional behavior)
 
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_app_id */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_resource */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.public_base_url */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.messaging_endpoint */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.assistant_id */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.context_message_count */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.streaming */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.security_groups_only */}
 
-- `sso_app_id`, `sso_resource`: set both to sign users in silently. The rendered manifest's `webApplicationInfo` then points at this app and resource, which must equal the OAuth connection's token exchange URL (typically `api://botid-<app_id>`). Without them, users confirm sign-in once with a button. Verify that the Teams tab still signs in when overriding them.
-- `public_base_url`: HTTPS origin used for links from Teams back to Erato chats.
+- `sso_app_id`, `sso_resource`: Teams single sign-on. The rendered manifest's `webApplicationInfo` points at this app and resource, which must equal the OAuth connection's token exchange URL and end with `botid-<app_id>`. They default to the add-in's `msal_client_id` and `api://<host>/botid-<app_id>`, with the host the Teams package is downloaded from, which is what the setup helper configures. Override them only for an existing setup with other values.
+- `public_base_url`: address users open Erato at, used for links in bot messages (chat links, citations). An internal host is fine, because users open these links in their own browser.
+- `messaging_endpoint`: public URL the Azure Bot sends messages to, when it differs from the address the setup page is opened at, for example a public hostname in front of an internal-only deployment. An HTTPS origin or the full `https://<host>/api/integrations/ms_teams/messages` URL; the setup page and its helper use it.
 - `assistant_id`: assistant that new Teams chats are bound to.
 - `context_message_count`: preceding group chat or channel thread messages attached as context when the bot is mentioned (`0` disables). Default `20`.
 - `streaming`: stream answers in personal chats. Default `true`.

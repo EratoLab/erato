@@ -104,7 +104,7 @@ impl TeamsAppDistribution {
         document["webApplicationInfo"]["resource"] = json!(format!("api://{client_id}"));
         document["webApplicationInfo"]["nestedAppAuthInfo"][0]["redirectUri"] =
             json!(format!("brk-multihub://{authority}"));
-        apply_bot(&mut document, app, host);
+        apply_bot(&mut document, app, host, &authority);
 
         validate_manifest(&document, app)?;
         serde_json::to_vec_pretty(&document).wrap_err("failed to serialize rendered Teams manifest")
@@ -189,7 +189,7 @@ fn release_version() -> String {
 const BOT_SCOPES: [&str; 3] = ["personal", "team", "groupChat"];
 
 /// Add the conversational bot to the same Teams app as the tab, when enabled.
-fn apply_bot(document: &mut Value, app: &MsOfficeTeamsAppConfig, host: &str) {
+fn apply_bot(document: &mut Value, app: &MsOfficeTeamsAppConfig, host: &str, authority: &str) {
     let bot = &app.bot;
     let Some(bot_app_id) = bot.app_id.as_deref().filter(|_| bot.enabled) else {
         return;
@@ -208,11 +208,14 @@ fn apply_bot(document: &mut Value, app: &MsOfficeTeamsAppConfig, host: &str) {
     document["supportsChannelFeatures"] = json!("tier1");
     // The sign-in button opens the Bot Framework token service.
     document["validDomains"] = json!([host, "token.botframework.com"]);
-    if let (Some(sso_app_id), Some(sso_resource)) =
-        (bot.sso_app_id.as_deref(), bot.sso_resource.as_deref())
-    {
+    // Teams single sign-on: the bot's Application ID URI, derived for the host
+    // the package is downloaded from unless configured. The setup page and
+    // its Cloud Shell helper derive the same value.
+    if let Some(sso_app_id) = bot.sso_app_id.as_deref() {
         document["webApplicationInfo"]["id"] = json!(sso_app_id.trim());
-        document["webApplicationInfo"]["resource"] = json!(sso_resource.trim());
+    }
+    if let Some(sso_resource) = bot.sso_resource_for_host(authority) {
+        document["webApplicationInfo"]["resource"] = json!(sso_resource);
     }
 }
 
@@ -348,6 +351,31 @@ mod tests {
         assert_eq!(
             manifest["webApplicationInfo"]["nestedAppAuthInfo"][0]["redirectUri"],
             "brk-multihub://erato.example.com"
+        );
+    }
+
+    #[test]
+    fn derives_the_sso_resource_from_the_download_host() {
+        let mut app = MsOfficeTeamsAppConfig::default();
+        app.bot.enabled = true;
+        app.bot.app_id = Some("11111111-2222-3333-4444-555555555555".to_string());
+        let manifest = render(&app);
+        assert_eq!(
+            manifest["webApplicationInfo"]["id"],
+            "06d98d69-523a-4c2e-893d-44bd98226b31"
+        );
+        assert_eq!(
+            manifest["webApplicationInfo"]["resource"],
+            "api://erato.example.com/botid-11111111-2222-3333-4444-555555555555"
+        );
+
+        let bytes = distribution()
+            .render_manifest("https://erato.example.com:8443", &app, &addin())
+            .expect("manifest renders");
+        let manifest: Value = serde_json::from_slice(&bytes).expect("manifest is JSON");
+        assert_eq!(
+            manifest["webApplicationInfo"]["resource"],
+            "api://erato.example.com:8443/botid-11111111-2222-3333-4444-555555555555"
         );
     }
 

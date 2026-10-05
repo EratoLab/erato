@@ -186,6 +186,29 @@ tests:
           content:
             name: LOGGING__FORMAT
 
+  - it: should pass an existing secret as the Teams bot app password
+    set:
+      msTeamsBot.appPassword.existingSecret.name: erato-secrets
+      msTeamsBot.appPassword.existingSecret.key: OAUTH2_PROXY_CLIENT_SECRET
+    template: backend-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INTEGRATIONS__MS_OFFICE__TEAMS__BOT__APP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: erato-secrets
+                key: OAUTH2_PROXY_CLIENT_SECRET
+
+  - it: should require a key for the Teams bot app password secret
+    set:
+      msTeamsBot.appPassword.existingSecret.name: erato-secrets
+    template: backend-deployment.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: msTeamsBot.appPassword.existingSecret.key is required when its name is set
+
   - it: should add envFrom when extraEnvVarsCM is set
     set:
       backend.extraEnvVarsCM: erato-config-cm

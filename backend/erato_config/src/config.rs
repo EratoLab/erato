@@ -1199,6 +1199,7 @@ impl AppConfig {
         }
 
         // Validate MS Office configuration
+        config.integrations.ms_office.apply_defaults();
         if let Err(e) = config.integrations.ms_office.validate() {
             panic!("Invalid Microsoft Office integration configuration: {}", e);
         }
@@ -5394,6 +5395,35 @@ pub struct MsOfficeConfig {
 }
 
 impl MsOfficeConfig {
+    /// Fill in Teams bot settings that follow from the add-in registration, so
+    /// enabling the bot needs no values that only exist after its setup.
+    /// Explicit settings always win.
+    pub fn apply_defaults(&mut self) {
+        let bot = &mut self.teams.bot;
+        if !bot.enabled {
+            return;
+        }
+        let msal_client_id = self
+            .addin
+            .msal_client_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        if bot.app_id.is_none() {
+            bot.app_id = msal_client_id.clone();
+        }
+        if bot.sso_app_id.is_none() {
+            bot.sso_app_id = msal_client_id;
+        }
+        if bot.tenant_id.is_none() {
+            bot.tenant_id = entra_authority_tenant(&self.addin.msal_authority);
+        }
+        if bot.oauth_connection_name.is_none() {
+            bot.oauth_connection_name = Some(DEFAULT_TEAMS_BOT_OAUTH_CONNECTION_NAME.to_string());
+        }
+    }
+
     pub fn validate(&self) -> Result<(), Report> {
         if let Some(endpoint) = self.ews_api_endpoint.as_deref() {
             let trimmed_endpoint = endpoint.trim();
@@ -5493,17 +5523,23 @@ pub struct TeamsBotConfig {
     #[serde(default)]
     pub enabled: bool,
     // Microsoft Entra application (client) ID of the Azure Bot resource.
+    // Defaults to `integrations.ms_office.addin.msal_client_id`: the bot uses the
+    // deployment's existing app registration.
     #[serde(default)]
     pub app_id: Option<String>,
-    // Client secret of the bot's Entra application.
+    // Client secret of the bot's Entra application. With the default `app_id`
+    // this is the secret the web login (oauth2-proxy) already uses.
     #[serde(default)]
     pub app_password: Option<SecretConfigString>,
     // Entra tenant ID of this deployment. Used as the token authority for the
     // single-tenant bot, and every incoming activity must originate from it.
+    // Defaults to the tenant of `integrations.ms_office.addin.msal_authority`
+    // when that names one.
     #[serde(default)]
     pub tenant_id: Option<String>,
     // Name of the Azure Bot OAuth connection that yields the user's Microsoft
     // Graph token (the same delegated scopes the web login uses).
+    // Defaults to `graph-sso`, the name the setup helper creates.
     #[serde(default)]
     pub oauth_connection_name: Option<String>,
     // Bot Framework token service endpoint. Regional deployments use for example
@@ -5511,19 +5547,28 @@ pub struct TeamsBotConfig {
     // Defaults to `https://token.botframework.com`.
     #[serde(default = "default_teams_bot_token_service_url")]
     pub token_service_url: String,
-    // Optional Entra app ID for Teams single sign-on. When set together with
-    // `sso_resource`, the rendered Teams manifest's `webApplicationInfo` points
-    // at it so Teams can sign users in silently. Without it, users confirm
-    // sign-in once with a button.
+    // Entra app ID for Teams single sign-on, rendered into the Teams manifest's
+    // `webApplicationInfo.id`. Defaults to `integrations.ms_office.addin.msal_client_id`.
     #[serde(default)]
     pub sso_app_id: Option<String>,
-    // Application ID URI for Teams single sign-on, for example
-    // `api://botid-<app_id>`. Must equal the OAuth connection's token exchange URL.
+    // Application ID URI for Teams single sign-on. Must equal the OAuth
+    // connection's token exchange URL and end with `botid-<app_id>`. Defaults to
+    // `api://<host>/botid-<app_id>`, with the host the Teams package is
+    // downloaded from.
     #[serde(default)]
     pub sso_resource: Option<String>,
-    // Public HTTPS origin of this deployment, used for links from Teams to Erato.
+    // Address users open Erato at, used for links in bot messages (chat links,
+    // citations). An internal host is fine: users open these links in their own
+    // browser. Unrelated to `messaging_endpoint`.
     #[serde(default)]
     pub public_base_url: Option<String>,
+    // URL the Azure Bot sends messages to, when it differs from the address the
+    // setup page is opened at, for example a public hostname in front of an
+    // internal-only deployment. Either an HTTPS origin or the full
+    // `https://<host>/api/integrations/ms_teams/messages` URL. Only used by the
+    // setup page and its Cloud Shell helper.
+    #[serde(default)]
+    pub messaging_endpoint: Option<String>,
     // Optional assistant ID that new Teams chats are bound to.
     #[serde(default)]
     pub assistant_id: Option<String>,
@@ -5555,6 +5600,7 @@ impl Default for TeamsBotConfig {
             sso_app_id: None,
             sso_resource: None,
             public_base_url: None,
+            messaging_endpoint: None,
             assistant_id: None,
             context_message_count: default_teams_bot_context_message_count(),
             streaming: true,
@@ -5571,18 +5617,35 @@ fn default_teams_bot_context_message_count() -> u32 {
     20
 }
 
+/// Path of the Teams bot messaging endpoint on an Erato deployment.
+pub const TEAMS_BOT_MESSAGES_PATH: &str = "/api/integrations/ms_teams/messages";
+/// OAuth connection name the setup helper creates on the Azure Bot.
+pub const DEFAULT_TEAMS_BOT_OAUTH_CONNECTION_NAME: &str = "graph-sso";
+
 impl TeamsBotConfig {
     pub fn validate(&self) -> Result<(), Report> {
         if !self.enabled {
             return Ok(());
         }
-        for (key, value) in [("app_id", &self.app_id), ("tenant_id", &self.tenant_id)] {
+        let guid_hints = [
+            (
+                "app_id",
+                &self.app_id,
+                "set it or `integrations.ms_office.addin.msal_client_id`",
+            ),
+            (
+                "tenant_id",
+                &self.tenant_id,
+                "set it or use a tenant-specific `integrations.ms_office.addin.msal_authority`",
+            ),
+        ];
+        for (key, value, hint) in guid_hints {
             if !value
                 .as_deref()
                 .is_some_and(|value| is_ms_office_guid(value.trim()))
             {
                 return Err(eyre!(
-                    "Teams bot `{key}` must be a GUID when the bot is enabled."
+                    "Teams bot `{key}` must be a GUID when the bot is enabled; {hint}."
                 ));
             }
         }
@@ -5607,6 +5670,7 @@ impl TeamsBotConfig {
         for (key, value) in [
             ("token_service_url", Some(self.token_service_url.as_str())),
             ("public_base_url", self.public_base_url.as_deref()),
+            ("messaging_endpoint", self.messaging_endpoint.as_deref()),
         ] {
             let Some(value) = value else { continue };
             let url = url::Url::parse(value)
@@ -5615,20 +5679,29 @@ impl TeamsBotConfig {
                 return Err(eyre!("Teams bot `{key}` must use https."));
             }
         }
-        match (self.sso_app_id.as_deref(), self.sso_resource.as_deref()) {
-            (None, None) => {}
-            (Some(app_id), Some(resource)) => {
-                if !is_ms_office_guid(app_id.trim()) {
-                    return Err(eyre!("Teams bot `sso_app_id` must be a GUID."));
-                }
-                if !resource.starts_with("api://") {
-                    return Err(eyre!("Teams bot `sso_resource` must start with `api://`."));
-                }
+        if self.messaging_endpoint.is_some() && self.messaging_endpoint_url().is_none() {
+            return Err(eyre!(
+                "Teams bot `messaging_endpoint` must be an HTTPS origin or end with `{TEAMS_BOT_MESSAGES_PATH}`, without query or fragment."
+            ));
+        }
+        if let Some(app_id) = self.sso_app_id.as_deref()
+            && !is_ms_office_guid(app_id.trim())
+        {
+            return Err(eyre!("Teams bot `sso_app_id` must be a GUID."));
+        }
+        if let Some(resource) = self.sso_resource.as_deref() {
+            if !resource.starts_with("api://") {
+                return Err(eyre!("Teams bot `sso_resource` must start with `api://`."));
             }
-            _ => {
-                return Err(eyre!(
-                    "Teams bot `sso_app_id` and `sso_resource` must be configured together."
-                ));
+            let suffix = format!(
+                "botid-{}",
+                self.app_id.as_deref().unwrap_or_default().trim()
+            )
+            .to_ascii_lowercase();
+            if !resource.trim().to_ascii_lowercase().ends_with(&suffix) {
+                tracing::warn!(
+                    "Teams bot `sso_resource` does not end with `{suffix}`. Teams matches this suffix against the messaging bot and stays silent on a mismatch."
+                );
             }
         }
         if let Some(assistant_id) = self.assistant_id.as_deref()
@@ -5638,6 +5711,46 @@ impl TeamsBotConfig {
         }
         Ok(())
     }
+
+    /// Full messaging endpoint URL from `messaging_endpoint`, which may be an
+    /// origin or already the full URL. `None` when unset or invalid.
+    pub fn messaging_endpoint_url(&self) -> Option<String> {
+        let url = url::Url::parse(self.messaging_endpoint.as_deref()?.trim()).ok()?;
+        if url.scheme() != "https"
+            || url.host_str().is_none()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !url.username().is_empty()
+        {
+            return None;
+        }
+        let origin = url.origin().ascii_serialization();
+        match url.path().trim_end_matches('/') {
+            "" => Some(format!("{origin}{TEAMS_BOT_MESSAGES_PATH}")),
+            TEAMS_BOT_MESSAGES_PATH => Some(format!("{origin}{TEAMS_BOT_MESSAGES_PATH}")),
+            _ => None,
+        }
+    }
+
+    /// The Application ID URI for Teams single sign-on on `host` (the
+    /// authority the Teams package is downloaded from): `sso_resource`, or
+    /// `api://<host>/botid-<app_id>`.
+    pub fn sso_resource_for_host(&self, host: &str) -> Option<String> {
+        if let Some(resource) = self.sso_resource.as_deref() {
+            return Some(resource.trim().to_string());
+        }
+        let app_id = self.app_id.as_deref()?.trim();
+        Some(format!("api://{host}/botid-{app_id}"))
+    }
+}
+
+/// The tenant an Entra authority URL names, for example
+/// `https://login.microsoftonline.com/<tenant>/v2.0`. `None` for multi-tenant
+/// authorities such as `common` or `organizations`.
+fn entra_authority_tenant(authority: &str) -> Option<String> {
+    let url = url::Url::parse(authority.trim()).ok()?;
+    let tenant = url.path_segments()?.next()?;
+    is_ms_office_guid(tenant).then(|| tenant.to_ascii_lowercase())
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
@@ -5774,6 +5887,126 @@ impl MsOfficeTeamsManifestConfig {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod teams_bot_config_tests {
+    use super::{MsOfficeConfig, TeamsBotConfig};
+
+    const CLIENT_ID: &str = "11111111-2222-3333-4444-555555555555";
+    const TENANT_ID: &str = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+    fn office(authority: &str) -> MsOfficeConfig {
+        let mut config = MsOfficeConfig::default();
+        config.addin.msal_client_id = Some(CLIENT_ID.to_string());
+        config.addin.msal_authority = authority.to_string();
+        config.teams.bot.enabled = true;
+        config.teams.bot.app_password = Some("secret".into());
+        config
+    }
+
+    #[test]
+    fn enabling_the_bot_derives_ids_from_the_addin_registration() {
+        let mut config = office(&format!(
+            "https://login.microsoftonline.com/{TENANT_ID}/v2.0"
+        ));
+        config.apply_defaults();
+        let bot = &config.teams.bot;
+        assert_eq!(bot.app_id.as_deref(), Some(CLIENT_ID));
+        assert_eq!(bot.sso_app_id.as_deref(), Some(CLIENT_ID));
+        assert_eq!(bot.tenant_id.as_deref(), Some(TENANT_ID));
+        assert_eq!(bot.oauth_connection_name.as_deref(), Some("graph-sso"));
+        assert!(bot.sso_resource.is_none());
+        bot.validate().expect("enabled with only a secret is valid");
+    }
+
+    #[test]
+    fn explicit_settings_win_and_a_multi_tenant_authority_needs_a_tenant() {
+        let mut config = office("https://login.microsoftonline.com/common");
+        config.teams.bot.app_id = Some(TENANT_ID.to_string());
+        config.teams.bot.oauth_connection_name = Some("graph".to_string());
+        config.apply_defaults();
+        let bot = &config.teams.bot;
+        assert_eq!(bot.app_id.as_deref(), Some(TENANT_ID));
+        assert_eq!(bot.oauth_connection_name.as_deref(), Some("graph"));
+        assert!(bot.tenant_id.is_none());
+        let error = bot.validate().expect_err("tenant is required").to_string();
+        assert!(error.contains("tenant_id"), "{error}");
+    }
+
+    #[test]
+    fn disabled_bot_gets_no_defaults() {
+        let mut config = office("https://login.microsoftonline.com/common");
+        config.teams.bot.enabled = false;
+        config.apply_defaults();
+        let bot = &config.teams.bot;
+        assert!(bot.app_id.is_none() && bot.sso_app_id.is_none());
+        assert!(bot.tenant_id.is_none() && bot.oauth_connection_name.is_none());
+    }
+
+    #[test]
+    fn normalizes_the_messaging_endpoint() {
+        let endpoint = |value: &str| TeamsBotConfig {
+            messaging_endpoint: Some(value.to_string()),
+            ..TeamsBotConfig::default()
+        };
+        let full = "https://bot.example.com/api/integrations/ms_teams/messages";
+        let with_slash = format!("{full}/");
+        for value in [
+            "https://bot.example.com",
+            "https://bot.example.com/",
+            full,
+            with_slash.as_str(),
+        ] {
+            assert_eq!(
+                endpoint(value).messaging_endpoint_url().as_deref(),
+                Some(full),
+                "{value}"
+            );
+        }
+        for value in [
+            "http://bot.example.com",
+            "https://bot.example.com/other",
+            "https://bot.example.com/?a=1",
+            "https://user@bot.example.com",
+        ] {
+            assert!(
+                endpoint(value).messaging_endpoint_url().is_none(),
+                "{value}"
+            );
+        }
+        assert!(TeamsBotConfig::default().messaging_endpoint_url().is_none());
+    }
+
+    #[test]
+    fn rejects_an_invalid_messaging_endpoint() {
+        let mut config = office(&format!("https://login.microsoftonline.com/{TENANT_ID}"));
+        config.teams.bot.messaging_endpoint = Some("https://bot.example.com/elsewhere".to_string());
+        config.apply_defaults();
+        assert!(config.teams.bot.validate().is_err());
+    }
+
+    #[test]
+    fn derives_the_sso_resource_for_the_download_host() {
+        let bot = TeamsBotConfig {
+            app_id: Some(CLIENT_ID.to_string()),
+            ..TeamsBotConfig::default()
+        };
+        assert_eq!(
+            bot.sso_resource_for_host("erato.example.com").as_deref(),
+            Some(format!("api://erato.example.com/botid-{CLIENT_ID}").as_str())
+        );
+        let configured = TeamsBotConfig {
+            sso_resource: Some(format!("api://botid-{CLIENT_ID}")),
+            ..bot
+        };
+        assert_eq!(
+            configured
+                .sso_resource_for_host("erato.example.com")
+                .as_deref(),
+            Some(format!("api://botid-{CLIENT_ID}").as_str())
+        );
     }
 }
 

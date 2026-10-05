@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test Teams bot public ingress
+minimumVersion: 1.0.1
+templates:
+  - ms-teams-bot-public-ingress.yaml
+tests:
+  - it: should not render by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should expose only the messaging endpoint on the public host
+    set:
+      msTeamsBot.publicIngress.enabled: true
+      msTeamsBot.publicIngress.host: teams-bot.example.com
+      msTeamsBot.publicIngress.tls.enabled: true
+      msTeamsBot.publicIngress.tls.secretName: teams-bot-tls
+      msTeamsBot.publicIngress.annotations:
+        nginx.ingress.kubernetes.io/proxy-body-size: 256k
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-ms-teams-bot-ingress
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]
+          value: 256k
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: teams-bot.example.com
+      - equal:
+          path: spec.tls[0].secretName
+          value: teams-bot-tls
+      - equal:
+          path: spec.rules[0].host
+          value: teams-bot.example.com
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 1
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /api/integrations/ms_teams/messages
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Exact
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3130
+
+  - it: should use its own ingress class when set
+    set:
+      msTeamsBot.publicIngress.enabled: true
+      msTeamsBot.publicIngress.host: teams-bot.example.com
+      msTeamsBot.publicIngress.className: nginx-public
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx-public
+      - notExists:
+          path: spec.tls
+
+  - it: should require a host
+    set:
+      msTeamsBot.publicIngress.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: msTeamsBot.publicIngress.host is required when msTeamsBot.publicIngress.enabled is true

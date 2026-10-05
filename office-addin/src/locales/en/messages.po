@@ -1290,6 +1290,11 @@ msgstr "Switch to start view"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.adminRoles"
+msgstr "Admin roles: permission to create resources in the bot’s resource group (and to register the Microsoft.BotService provider if the subscription never used it), Cloud Application Administrator for the app registration and consent, and Teams Administrator for the package upload."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.applyHelp"
 msgstr "After reviewing the preview, run the apply command. Cloud Shell will show the target and changes and ask for confirmation before making them."
 
@@ -1340,8 +1345,18 @@ msgstr "Bot messaging app"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.changesHelp"
-msgstr "Setup extends the existing add-in authentication app with Teams SSO settings and delegated Microsoft Graph permissions. It creates a separate OAuth connection and a dedicated credential valid for up to one year, subject to tenant policy. Existing bot identity, redirects, permissions and credentials are preserved."
+msgid "officeAddin.teams.bot.setup.botName"
+msgstr "Bot name"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.botTargetHelp"
+msgstr "To create the Azure Bot, enter an existing resource group and a name for the new bot. Leave both empty if a bot for this deployment already exists in the subscription."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.changesHelp"
+#~ msgstr "Setup extends the existing add-in authentication app with Teams SSO settings and delegated Microsoft Graph permissions. It creates a separate OAuth connection and a dedicated credential valid for up to one year, subject to tenant policy. Existing bot identity, redirects, permissions and credentials are preserved."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1365,8 +1380,8 @@ msgstr "Clipboard access is unavailable. Select and copy the command above."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.cloudIntro"
-msgstr "Set up single sign-on so people can use the bot with their Microsoft 365 account. Run the setup in your browser with Azure Cloud Shell and your own admin account."
+#~ msgid "officeAddin.teams.bot.setup.cloudIntro"
+#~ msgstr "Set up single sign-on so people can use the bot with their Microsoft 365 account. Run the setup in your browser with Azure Cloud Shell and your own admin account."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1375,13 +1390,18 @@ msgstr "Azure settings have not been checked. The first command checks them with
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.cloudSupport"
+msgstr "The helper supports public Azure and the global Bot Framework token service."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 #~ msgid "officeAddin.teams.bot.setup.connectionDetails"
 #~ msgstr "Enable the Microsoft Teams channel. Add a separate Azure Active Directory v2 OAuth connection using the authentication app above, a dedicated client secret, your tenant ID and the guide’s Graph scopes. Set its Token Exchange URL to the Application ID URI above, then use Test Connection."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.connectionHelp"
-msgstr "Check the current name in Azure Bot Configuration. The new connection defaults to graph-sso. Choose a different name if that connection already exists with different settings."
+#~ msgid "officeAddin.teams.bot.setup.connectionHelp"
+#~ msgstr "Check the current name in Azure Bot Configuration. The new connection defaults to graph-sso. Choose a different name if that connection already exists with different settings."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1465,13 +1485,18 @@ msgstr "Settings for your Erato administrator"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.endpointFromPage"
+msgstr "This is the address this page was opened at. If Azure cannot reach it, ask your Erato administrator to configure the public messaging endpoint."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 #~ msgid "officeAddin.teams.bot.setup.endpointInstruction"
 #~ msgstr "Under Configuration, set the messaging endpoint:"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.endpointLabel"
-msgstr "Messaging endpoint"
+#~ msgid "officeAddin.teams.bot.setup.endpointLabel"
+#~ msgstr "Messaging endpoint"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1495,13 +1520,33 @@ msgstr "Test a personal bot chat in Teams desktop and web, then the Teams tab an
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.finishHelp"
-msgstr "Grant any missing tenant admin consent, then use Test Connection in Azure Bot Configuration. Have your Erato administrator apply the settings below, increase the Teams package version and deploy. Download the new Teams package from this page and upload it as an update to the existing app."
+#~ msgid "officeAddin.teams.bot.setup.finishHelp"
+#~ msgstr "Grant any missing tenant admin consent, then use Test Connection in Azure Bot Configuration. Have your Erato administrator apply the settings below, increase the Teams package version and deploy. Download the new Teams package from this page and upload it as an update to the existing app."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.finishTitle"
-msgstr "Finish setup in Erato and Teams"
+#~ msgid "officeAddin.teams.bot.setup.finishTitle"
+#~ msgstr "Finish setup in Erato and Teams"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.guidedChangesHelp"
+msgstr "Setup creates a free single-tenant Azure Bot for the existing app registration, or updates the endpoint and Teams channel of the existing one. It extends the app with Teams SSO settings and delegated Microsoft Graph permissions, creates a separate OAuth connection with a dedicated credential valid for up to one year, and grants tenant-wide consent. Existing bot identity, redirects, permissions and credentials are preserved."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.guidedConnectionHelp"
+msgstr "The SSO connection name is the one this Erato deployment uses. Only an existing bot set up before may have a current connection to preserve; check its name in Azure Bot Configuration."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.guidedIntro"
+msgstr "Set up the bot with your own admin account in Azure Cloud Shell. One command creates or updates the Azure Bot, its Teams channel, single sign-on and the OAuth connection. Erato needs no further changes."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.guidedPermissionsHelp"
+msgstr "Checking requires read access to the subscription’s Azure Bots, the Entra app and consent records. Applying requires permission to create or update the Azure Bot in the resource group, to update the app and add a credential, and, for tenant-wide consent, the Cloud Application Administrator role."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1528,6 +1573,11 @@ msgstr "Finish setup in Erato and Teams"
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.helperVersion"
 msgstr "PowerShell helper version {0}. No local installation or file upload is needed."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.invalidBotTarget"
+msgstr "Enter both a resource group and a bot name. Bot names use 2–63 letters, digits, dots, hyphens or underscores."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1561,13 +1611,18 @@ msgstr "Open Azure Cloud Shell"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.outboundAccess"
+msgstr "Outbound HTTPS from Erato to login.microsoftonline.com, login.botframework.com, *.botframework.com and smba.trafficmanager.net."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 #~ msgid "officeAddin.teams.bot.setup.packageOnly"
 #~ msgstr "These values come from this deployment’s Teams package. Azure settings and the package installed in Teams have not been checked."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.permissionsHelp"
-msgstr "Checking requires read access to the Azure Bot, Entra app and consent records. Applying requires permission to update that app, add a credential and create a Bot OAuth connection. Tenant admin consent is a separate step."
+#~ msgid "officeAddin.teams.bot.setup.permissionsHelp"
+#~ msgstr "Checking requires read access to the Azure Bot, Entra app and consent records. Applying requires permission to update that app, add a credential and create a Bot OAuth connection. Tenant admin consent is a separate step."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1581,6 +1636,11 @@ msgstr "Permissions and changes to review"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.prerequisitesTitle"
+msgstr "Before you start"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.previewApplyTitle"
 msgstr "Preview and apply changes"
 
@@ -1591,8 +1651,23 @@ msgstr "Preview the exact proposed changes. This command uses -WhatIf and does n
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.requirements"
-msgstr "An existing single-tenant Azure Bot must already have its messaging endpoint and Teams channel configured. This helper supports public Azure and the global Bot Framework token service."
+msgid "officeAddin.teams.bot.setup.publicEndpoint"
+msgstr "Microsoft’s cloud delivers every Teams message to the messaging endpoint below, so it must be reachable from the internet over HTTPS with a certificate from a publicly trusted CA. For an internal-only deployment, publish only this path, for example through a reverse proxy, a web application firewall or Azure Application Gateway. Erato verifies Microsoft’s signature on every message."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.refreshStatus"
+msgstr "Refresh status"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.requirements"
+#~ msgstr "An existing single-tenant Azure Bot must already have its messaging endpoint and Teams channel configured. This helper supports public Azure and the global Bot Framework token service."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.resourceGroup"
+msgstr "Resource group"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1616,6 +1691,11 @@ msgstr "Review the results and apply when ready"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.settingsDifferHelp"
+msgstr "Erato uses different values than the ones chosen here. Before testing, your Erato administrator must apply these settings and deploy."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.sourceLabel"
 msgstr "PowerShell source"
 
@@ -1631,13 +1711,43 @@ msgstr "New SSO connection name"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusCredentialAccepted"
+msgstr "Entra accepted Erato’s bot credential."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusCredentialRejected"
+msgstr "Entra rejected Erato’s bot credential. Ask your Erato administrator to check the bot’s app password."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusCredentialUnknown"
+msgstr "Erato has not replied yet, so its bot credential is untested."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusNotReceived"
+msgstr "No Teams message has arrived yet. Check the messaging endpoint and the Teams channel if a message was sent."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusReceived"
+msgstr "A Teams message from this tenant arrived."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusTitle"
+msgstr "What Erato has seen since its last start"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.subscriptionId"
 msgstr "Subscription ID"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.targetHelp"
-msgstr "Use the tenant and subscription that contain this deployment’s Azure Bot. Find both IDs on the subscription’s Overview page in Azure Portal."
+#~ msgid "officeAddin.teams.bot.setup.targetHelp"
+#~ msgstr "Use the tenant and subscription that contain this deployment’s Azure Bot. Find both IDs on the subscription’s Overview page in Azure Portal."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1651,13 +1761,28 @@ msgstr "Tenant ID"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.tenantSubscriptionHelp"
+msgstr "The tenant is this deployment’s Microsoft 365 tenant. Find the subscription ID on the subscription’s Overview page in Azure Portal."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.title"
 msgstr "Teams bot"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.uploadHelp"
+msgstr "Download the Teams package below and upload it in the Teams admin center, as an update if the Erato app is already installed. Install or pin it with an app setup policy so people need not accept the update. Then send the bot a message in Teams."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 #~ msgid "officeAddin.teams.bot.setup.uploadHelper"
 #~ msgstr "Choose Bash in Cloud Shell. Select the bot’s tenant and subscription, then use Manage files → Upload to upload erato-teams-setup.sh. Run the read-only check:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.uploadTitle"
+msgstr "Upload the Teams package and test"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

@@ -35,10 +35,17 @@ it("PowerShell passes deployment data literally and refuses tampered downloads",
       subscription,
       "graph",
       "graph-sso",
+      "check",
+      {
+        messagingEndpoint:
+          "https://bot.example.com/api/integrations/ms_teams/messages",
+        resourceGroup: "rg-(customer)",
+        botName: "erato.teams-bot",
+      },
     );
     writeFileSync(
       join(directory, "fixture.ps1"),
-      "param($TenantId,$SubscriptionId,$BaseUrl,$BotAppId,$AuthAppId,$SsoResource,$CurrentConnection,$ConnectionName)\n$PSBoundParameters | ConvertTo-Json\n",
+      "param($TenantId,$SubscriptionId,$BaseUrl,$MessagingEndpoint,$BotAppId,$AuthAppId,$SsoResource,$CurrentConnection,$ConnectionName,$ResourceGroup,$BotName)\n$PSBoundParameters | ConvertTo-Json\n",
     );
     const harness = (hash: string) =>
       `function Join-Path { param($Path,$ChildPath); [IO.Path]::Combine((Get-Location).Path,$ChildPath) }\nfunction Invoke-WebRequest { param($Uri,$OutFile); Copy-Item './fixture.ps1' $OutFile }\nfunction Get-FileHash { param($Path,$Algorithm); @{Hash='${hash}'} }\n${input}`;
@@ -57,6 +64,10 @@ it("PowerShell passes deployment data literally and refuses tampered downloads",
       BotAppId: botId,
       AuthAppId: authAppId,
       SsoResource: maliciousResource,
+      MessagingEndpoint:
+        "https://bot.example.com/api/integrations/ms_teams/messages",
+      ResourceGroup: "rg-(customer)",
+      BotName: "erato.teams-bot",
     });
     writeFileSync(path, harness("incorrect"));
     await expect(runPowerShell("pwsh", args, options)).rejects.toThrow(
