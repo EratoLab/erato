@@ -5358,18 +5358,109 @@ async fn launch_prepared_task<'a>(
     }
 }
 
+// Submit, edit and regenerate use the same wire format for generation events.
+// Keep this large async loop concrete so LLVM only optimizes one response type.
+type GenerationStreamingMessage = MessageSubmitStreamingResponseMessage;
+
+#[cfg(test)]
+mod generation_event_wire_format_tests {
+    use super::*;
+
+    fn assert_same_wire_format<T>(tag: &str, make: impl Fn() -> T)
+    where
+        GenerationStreamingMessage: From<T>,
+        RegenerateMessageStreamingResponseMessage: From<T>,
+        EditMessageStreamingResponseMessage: From<T>,
+    {
+        let generation = GenerationStreamingMessage::from(make());
+        let regenerate = RegenerateMessageStreamingResponseMessage::from(make());
+        let edit = EditMessageStreamingResponseMessage::from(make());
+        assert_eq!(generation.tag(), tag);
+        assert_eq!(regenerate.tag(), tag);
+        assert_eq!(edit.tag(), tag);
+        let data = generation.data_json().unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&data).unwrap()["message_type"],
+            tag
+        );
+        assert_eq!(data, regenerate.data_json().unwrap());
+        assert_eq!(data, edit.data_json().unwrap());
+    }
+
+    #[test]
+    fn generation_events_match_submit_edit_and_regenerate_contracts() {
+        let message_id = Uuid::nil();
+        assert_same_wire_format("text_delta", || {
+            MessageSubmitStreamingResponseMessageTextDelta {
+                message_id,
+                content_index: 1,
+                new_text: "Hello".into(),
+            }
+        });
+        assert_same_wire_format("reasoning_delta", || {
+            MessageSubmitStreamingResponseMessageReasoningDelta {
+                message_id,
+                content_index: 2,
+                new_text: "Thinking".into(),
+            }
+        });
+        for input in [None, Some(json!({ "query": "example" }))] {
+            assert_same_wire_format("tool_call_proposed", || {
+                MessageSubmitStreamingResponseToolCallProposed {
+                    message_id,
+                    content_index: 3,
+                    tool_call_id: "call-1".into(),
+                    tool_name: "search".into(),
+                    input: input.clone(),
+                }
+            });
+            assert_same_wire_format("client_tool_call", || {
+                MessageSubmitStreamingResponseClientToolCall {
+                    message_id,
+                    content_index: 3,
+                    tool_call_id: "call-1".into(),
+                    tool_name: "search".into(),
+                    input: input.clone(),
+                }
+            });
+        }
+        for status in [
+            ToolCallStatus::Preparing,
+            ToolCallStatus::InProgress,
+            ToolCallStatus::Success,
+            ToolCallStatus::Error,
+        ] {
+            for with_progress in [false, true] {
+                assert_same_wire_format("tool_call_update", || {
+                    MessageSubmitStreamingResponseToolCallUpdate {
+                        message_id,
+                        content_index: 3,
+                        tool_call_id: "call-1".into(),
+                        tool_name: "search".into(),
+                        input: Some(json!({ "query": "example" })),
+                        status: status.clone(),
+                        progress_message: with_progress.then(|| "Searching".into()),
+                        progress: with_progress.then_some(1.0),
+                        total: with_progress.then_some(2.0),
+                        output: Some(json!({ "results": [] })),
+                    }
+                });
+            }
+        }
+        for message_id in [None, Some(message_id)] {
+            assert_same_wire_format("error", || MessageSubmitStreamingResponseError {
+                message_id,
+                error: GenerationErrorType::InternalError {
+                    error_description: "Generation failed".into(),
+                },
+            });
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
-async fn stream_generate_chat_completion<
-    'a,
-    MSG: SendAsSseEvent
-        + From<MessageSubmitStreamingResponseMessageTextDelta>
-        + From<MessageSubmitStreamingResponseMessageReasoningDelta>
-        + From<MessageSubmitStreamingResponseToolCallProposed>
-        + From<MessageSubmitStreamingResponseToolCallUpdate>
-        + From<MessageSubmitStreamingResponseClientToolCall>
-        + From<MessageSubmitStreamingResponseError>,
->(
+async fn stream_generate_chat_completion<'a>(
     tx: Sender<Result<Event, Report>>,
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -5846,7 +5937,7 @@ async fn stream_generate_chat_completion<
                 let Some(Some(settled)) = futures::FutureExt::now_or_never(in_flight.next()) else {
                     break;
                 };
-                match settle_or_park_delegation_slot::<MSG>(
+                match settle_or_park_delegation_slot::<GenerationStreamingMessage>(
                     settled,
                     &mut parked_children,
                     &mut current_message_content,
@@ -6049,7 +6140,7 @@ async fn stream_generate_chat_completion<
                 tool_call_started_at
                     .insert(unfinished_tool_call.call_id.clone(), tool_call_start_time);
                 if was_preparing {
-                    send_tool_generation_update::<MSG>(
+                    send_tool_generation_update::<GenerationStreamingMessage>(
                         assistant_message_id,
                         tool_index,
                         &unfinished_tool_call,
@@ -6082,7 +6173,7 @@ async fn stream_generate_chat_completion<
                         )
                         .await;
                     }
-                    let message: MSG = proposed_call.into();
+                    let message: GenerationStreamingMessage = proposed_call.into();
                     send_generation_event(&message, tx.clone()).await?;
                 }
             }
@@ -6257,7 +6348,7 @@ async fn stream_generate_chat_completion<
                 if let Some(image) = image {
                     retrieved_images.push(image);
                 }
-                send_tool_generation_update::<MSG>(
+                send_tool_generation_update::<GenerationStreamingMessage>(
                     assistant_message_id,
                     tool_index,
                     &unfinished_tool_call,
@@ -6409,7 +6500,7 @@ async fn stream_generate_chat_completion<
                     )
                     .await;
                 }
-                let message: MSG = update_event.into();
+                let message: GenerationStreamingMessage = update_event.into();
                 send_generation_event(&message, tx.clone()).await?;
                 upsert_tool_use(
                     &mut current_message_content,
@@ -6487,7 +6578,7 @@ async fn stream_generate_chat_completion<
                         Err(error) => {
                             // Refused before anything was reserved, so the
                             // refusal simply takes the next index.
-                            let response = settle_delegation_slot::<MSG>(
+                            let response = settle_delegation_slot::<GenerationStreamingMessage>(
                                 Err(error),
                                 &unfinished_tool_call,
                                 None,
@@ -6570,7 +6661,7 @@ async fn stream_generate_chat_completion<
                         _ => queued_tasks.push_back(pending),
                     }
                     if let Some(output) = announced {
-                        announce_reserved_task_slot::<MSG>(
+                        announce_reserved_task_slot::<GenerationStreamingMessage>(
                             &unfinished_tool_call,
                             slot,
                             output,
@@ -6612,7 +6703,7 @@ async fn stream_generate_chat_completion<
                     }
                     None => Err("Delegation is not available for this request.".to_string()),
                 };
-                let response = settle_delegation_slot::<MSG>(
+                let response = settle_delegation_slot::<GenerationStreamingMessage>(
                     outcome,
                     &unfinished_tool_call,
                     None,
@@ -6921,7 +7012,7 @@ async fn stream_generate_chat_completion<
                             tool_name: tool_name.clone(),
                             input: Some(tool_input.clone()),
                         };
-                        let call_message: MSG = call_event.into();
+                        let call_message: GenerationStreamingMessage = call_event.into();
                         // Best-effort on the typed stream: the client is, by design,
                         // away executing the tool and POSTing to a separate endpoint
                         // during the park, so a dropped SSE connection here must NOT
@@ -7171,7 +7262,7 @@ async fn stream_generate_chat_completion<
                     total: None,
                     output: Some(output_value.clone()),
                 };
-                let update_message: MSG = update_event.into();
+                let update_message: GenerationStreamingMessage = update_event.into();
                 // Best-effort (see the call event above): a dropped SSE
                 // connection after the park must not abort the turn — the result
                 // is already recorded to history (broadcast) and persisted below.
@@ -7369,7 +7460,7 @@ async fn stream_generate_chat_completion<
                 &mcp_auth_context,
                 Some(progress_tx),
             );
-            let tool_call_result = await_mcp_tool_with_progress::<MSG>(
+            let tool_call_result = await_mcp_tool_with_progress::<GenerationStreamingMessage>(
                 call,
                 progress_rx,
                 MessageSubmitStreamingResponseToolCallUpdate {
@@ -7505,7 +7596,7 @@ async fn stream_generate_chat_completion<
                             .await;
                         }
 
-                        let message: MSG = error_event.into();
+                        let message: GenerationStreamingMessage = error_event.into();
                         send_generation_event(&message, tx.clone()).await?;
                         let generation_metadata = build_generation_metadata(
                             total_prompt_tokens,
@@ -7590,7 +7681,7 @@ async fn stream_generate_chat_completion<
                                 )
                                 .await;
                             }
-                            let message: MSG = update_event.into();
+                            let message: GenerationStreamingMessage = update_event.into();
                             send_generation_event(&message, tx.clone()).await?;
                             let tool_call_started = tool_call_started_at
                                 .remove(&unfinished_tool_call.call_id)
@@ -7674,7 +7765,7 @@ async fn stream_generate_chat_completion<
                             )
                             .await;
                         }
-                        let message: MSG = proposed_call.into();
+                        let message: GenerationStreamingMessage = proposed_call.into();
                         send_generation_event(&message, tx.clone()).await?;
                     }
                     // Add to current message content
@@ -7751,7 +7842,7 @@ async fn stream_generate_chat_completion<
                         )
                         .await;
                     }
-                    let message: MSG = update_event.into();
+                    let message: GenerationStreamingMessage = update_event.into();
                     send_generation_event(&message, tx.clone()).await?;
                     let tool_call_started = tool_call_started_at
                         .remove(&unfinished_tool_call.call_id)
@@ -7827,7 +7918,7 @@ async fn stream_generate_chat_completion<
                 // child at all — that absence is how a reader tells it from a
                 // run that was cancelled partway.
                 while let Some(pending) = queued_tasks.pop_front() {
-                    let response = settle_delegation_slot::<MSG>(
+                    let response = settle_delegation_slot::<GenerationStreamingMessage>(
                         Ok(
                             crate::services::delegation::DelegationDispatchOutcome::NeverStarted {
                                 reason:
@@ -7878,7 +7969,7 @@ async fn stream_generate_chat_completion<
                 // the next pass, which is only reachable while aborting.
                 continue;
             };
-            if let Some(response) = settle_or_park_delegation_slot::<MSG>(
+            if let Some(response) = settle_or_park_delegation_slot::<GenerationStreamingMessage>(
                 settled,
                 &mut parked_children,
                 &mut current_message_content,
@@ -7931,7 +8022,7 @@ async fn stream_generate_chat_completion<
                     {
                         part.output = Some(output.clone());
                     }
-                    announce_reserved_task_slot::<MSG>(
+                    announce_reserved_task_slot::<GenerationStreamingMessage>(
                         &announce_call,
                         slot,
                         output,
@@ -8189,7 +8280,7 @@ async fn stream_generate_chat_completion<
                     )
                     .await;
                 }
-                let message: MSG = update_event.into();
+                let message: GenerationStreamingMessage = update_event.into();
                 send_generation_event(&message, tx.clone()).await?;
                 upsert_tool_use(
                     &mut current_message_content,
@@ -8311,7 +8402,7 @@ async fn stream_generate_chat_completion<
                     .await;
                 }
 
-                let message: MSG = error_event.into();
+                let message: GenerationStreamingMessage = error_event.into();
                 send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,
@@ -8414,7 +8505,7 @@ async fn stream_generate_chat_completion<
                     .await;
                 }
 
-                let message: MSG = error_event.into();
+                let message: GenerationStreamingMessage = error_event.into();
                 send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,
@@ -8632,7 +8723,7 @@ async fn stream_generate_chat_completion<
                                 .await;
                             }
 
-                            let message: MSG = error_event.into();
+                            let message: GenerationStreamingMessage = error_event.into();
                             send_generation_event(&message, tx.clone()).await?;
                             let generation_metadata = build_generation_metadata(
                                 total_prompt_tokens,
@@ -8672,7 +8763,7 @@ async fn stream_generate_chat_completion<
                             )
                             .await;
                         }
-                        let message: MSG = delta.into();
+                        let message: GenerationStreamingMessage = delta.into();
                         send_generation_event(&message, tx.clone()).await?;
                     }
                     ChatStreamEvent::ReasoningChunk(StreamChunk { content }) => {
@@ -8706,7 +8797,7 @@ async fn stream_generate_chat_completion<
                             )
                             .await;
                         }
-                        let message: MSG = delta.into();
+                        let message: GenerationStreamingMessage = delta.into();
                         send_generation_event(&message, tx.clone()).await?;
                     }
                     ChatStreamEvent::ToolCallChunk(chunk) => {
@@ -8732,21 +8823,22 @@ async fn stream_generate_chat_completion<
                                     )
                                     .await;
                                 }
-                                let message: MSG = MessageSubmitStreamingResponseToolCallProposed {
-                                    message_id: assistant_message_id,
-                                    content_index: progress.index,
-                                    tool_call_id: chunk.tool_call.call_id.clone(),
-                                    tool_name: chunk.tool_call.fn_name.clone(),
-                                    input: None,
-                                }
-                                .into();
+                                let message: GenerationStreamingMessage =
+                                    MessageSubmitStreamingResponseToolCallProposed {
+                                        message_id: assistant_message_id,
+                                        content_index: progress.index,
+                                        tool_call_id: chunk.tool_call.call_id.clone(),
+                                        tool_name: chunk.tool_call.fn_name.clone(),
+                                        input: None,
+                                    }
+                                    .into();
                                 send_generation_event(&message, tx.clone()).await?;
                             }
                             let preview_call = genai::chat::ToolCall {
                                 fn_arguments: progress.preview,
                                 ..chunk.tool_call
                             };
-                            send_tool_generation_update::<MSG>(
+                            send_tool_generation_update::<GenerationStreamingMessage>(
                                 assistant_message_id,
                                 progress.index,
                                 &preview_call,
@@ -8842,7 +8934,7 @@ async fn stream_generate_chat_completion<
                         .await;
                     }
 
-                    let message: MSG = error_event.into();
+                    let message: GenerationStreamingMessage = error_event.into();
                     send_generation_event(&message, tx.clone()).await?;
                     let generation_metadata = build_generation_metadata(
                         total_prompt_tokens,
@@ -8930,7 +9022,7 @@ async fn stream_generate_chat_completion<
                     )
                     .await;
                 }
-                let message: MSG = delta.into();
+                let message: GenerationStreamingMessage = delta.into();
                 send_generation_event(&message, tx.clone()).await?;
             }
 
@@ -9334,7 +9426,7 @@ async fn stream_generate_chat_completion<
                     .await;
                 }
 
-                let message: MSG = error_event.into();
+                let message: GenerationStreamingMessage = error_event.into();
                 send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,
@@ -13731,7 +13823,7 @@ pub(crate) async fn run_generation_after_user_message(
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
     };
-    let generation_task = stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
+    let generation_task = stream_generate_chat_completion(
         temp_tx2.clone(),
         app_state,
         policy,
@@ -14448,53 +14540,52 @@ pub(crate) async fn start_regeneration(
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
             };
-            let generation_result =
-                stream_generate_chat_completion::<RegenerateMessageStreamingResponseMessage>(
-                    tx.clone(),
-                    &app_state,
-                    &policy,
-                    &subject,
-                    chat_request,
-                    langfuse_trace_enrichment,
-                    chat_options,
-                    initial_assistant_message.id,
-                    me_user.id.clone(),
-                    chat.id,
-                    Some(chat_provider_id.as_str()),
-                    &me_user.groups,
-                    mcp_auth_context,
-                    mcp_servers_unavailable,
-                    mcp_servers_needing_auth,
-                    mcp_servers_disabled_by_user,
-                    mcp_tools_disabled_by_user,
-                    allowed_tool_names,
-                    available_mcp_tools,
-                    offered_client_tools,
-                    &chat_provider_headers_context,
-                    Some(&task_for_stream),
-                    chat.assistant_id,
-                    vec![],
-                    crate::models::chat::chat_is_delegated_run(&chat),
-                    crate::services::delegation::child_may_park_on_approval(
-                        &chat,
-                        &app_state.config.delegation,
-                    ),
-                    Some(DelegationDispatchContext {
-                        request_context: generation_request_context.clone(),
-                        me_user: &me_user,
-                        targets: &delegation_targets,
-                        offered_file_ids: &delegation_offered_file_ids,
-                        origin_chat: &chat,
-                        origin_user_message_id: previous_message.id,
-                        run_mode: effective_delegation_run_mode,
-                        background_dispatches: std::sync::atomic::AtomicUsize::new(0),
-                        task_scope: task_offer_scope.clone(),
-                        tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
-                    }),
-                    task_tool_budgets_for_chat(&chat),
-                    None,
-                )
-                .await;
+            let generation_result = stream_generate_chat_completion(
+                tx.clone(),
+                &app_state,
+                &policy,
+                &subject,
+                chat_request,
+                langfuse_trace_enrichment,
+                chat_options,
+                initial_assistant_message.id,
+                me_user.id.clone(),
+                chat.id,
+                Some(chat_provider_id.as_str()),
+                &me_user.groups,
+                mcp_auth_context,
+                mcp_servers_unavailable,
+                mcp_servers_needing_auth,
+                mcp_servers_disabled_by_user,
+                mcp_tools_disabled_by_user,
+                allowed_tool_names,
+                available_mcp_tools,
+                offered_client_tools,
+                &chat_provider_headers_context,
+                Some(&task_for_stream),
+                chat.assistant_id,
+                vec![],
+                crate::models::chat::chat_is_delegated_run(&chat),
+                crate::services::delegation::child_may_park_on_approval(
+                    &chat,
+                    &app_state.config.delegation,
+                ),
+                Some(DelegationDispatchContext {
+                    request_context: generation_request_context.clone(),
+                    me_user: &me_user,
+                    targets: &delegation_targets,
+                    offered_file_ids: &delegation_offered_file_ids,
+                    origin_chat: &chat,
+                    origin_user_message_id: previous_message.id,
+                    run_mode: effective_delegation_run_mode,
+                    background_dispatches: std::sync::atomic::AtomicUsize::new(0),
+                    task_scope: task_offer_scope.clone(),
+                    tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+                }),
+                task_tool_budgets_for_chat(&chat),
+                None,
+            )
+            .await;
             let (end_content, generation_metadata) = match generation_result {
                 Ok(result) => result,
                 Err(error) => {
@@ -15047,53 +15138,52 @@ pub(crate) async fn start_edit(
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
             };
-            let generation_result =
-                stream_generate_chat_completion::<EditMessageStreamingResponseMessage>(
-                    tx.clone(),
-                    &app_state,
-                    &policy,
-                    &subject,
-                    chat_request,
-                    langfuse_trace_enrichment,
-                    chat_options,
-                    initial_assistant_message.id,
-                    me_user.id.clone(),
-                    chat.id,
-                    Some(chat_provider_id.as_str()),
-                    &me_user.groups,
-                    mcp_auth_context,
-                    mcp_servers_unavailable,
-                    mcp_servers_needing_auth,
-                    mcp_servers_disabled_by_user,
-                    mcp_tools_disabled_by_user,
-                    allowed_tool_names,
-                    available_mcp_tools,
-                    offered_client_tools,
-                    &chat_provider_headers_context,
-                    Some(&task_for_stream),
-                    chat.assistant_id,
-                    vec![],
-                    crate::models::chat::chat_is_delegated_run(&chat),
-                    crate::services::delegation::child_may_park_on_approval(
-                        &chat,
-                        &app_state.config.delegation,
-                    ),
-                    Some(DelegationDispatchContext {
-                        request_context: generation_request_context.clone(),
-                        me_user: &me_user,
-                        targets: &delegation_targets,
-                        offered_file_ids: &delegation_offered_file_ids,
-                        origin_chat: &chat,
-                        origin_user_message_id: saved_user_message.id,
-                        run_mode: effective_delegation_run_mode,
-                        background_dispatches: std::sync::atomic::AtomicUsize::new(0),
-                        task_scope: task_offer_scope.clone(),
-                        tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
-                    }),
-                    task_tool_budgets_for_chat(&chat),
-                    None,
-                )
-                .await;
+            let generation_result = stream_generate_chat_completion(
+                tx.clone(),
+                &app_state,
+                &policy,
+                &subject,
+                chat_request,
+                langfuse_trace_enrichment,
+                chat_options,
+                initial_assistant_message.id,
+                me_user.id.clone(),
+                chat.id,
+                Some(chat_provider_id.as_str()),
+                &me_user.groups,
+                mcp_auth_context,
+                mcp_servers_unavailable,
+                mcp_servers_needing_auth,
+                mcp_servers_disabled_by_user,
+                mcp_tools_disabled_by_user,
+                allowed_tool_names,
+                available_mcp_tools,
+                offered_client_tools,
+                &chat_provider_headers_context,
+                Some(&task_for_stream),
+                chat.assistant_id,
+                vec![],
+                crate::models::chat::chat_is_delegated_run(&chat),
+                crate::services::delegation::child_may_park_on_approval(
+                    &chat,
+                    &app_state.config.delegation,
+                ),
+                Some(DelegationDispatchContext {
+                    request_context: generation_request_context.clone(),
+                    me_user: &me_user,
+                    targets: &delegation_targets,
+                    offered_file_ids: &delegation_offered_file_ids,
+                    origin_chat: &chat,
+                    origin_user_message_id: saved_user_message.id,
+                    run_mode: effective_delegation_run_mode,
+                    background_dispatches: std::sync::atomic::AtomicUsize::new(0),
+                    task_scope: task_offer_scope.clone(),
+                    tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+                }),
+                task_tool_budgets_for_chat(&chat),
+                None,
+            )
+            .await;
             let (end_content, generation_metadata) = match generation_result {
                 Ok(result) => result,
                 Err(error) => {
@@ -18316,43 +18406,42 @@ async fn resume_parked_generation(
             task_scope: task_offer_scope,
             tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
         });
-    let (end_content, generation_metadata) =
-        stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
-            tx.clone(),
-            app_state,
-            policy,
-            &me_user.to_subject(),
-            chat_request,
-            LangfuseTraceEnrichment::default(),
-            chat_options,
-            message.id,
-            me_user.id.clone(),
-            chat.id,
-            Some(&chat_provider_id),
-            &me_user.groups,
-            mcp_auth_context,
-            mcp_servers_unavailable,
-            mcp_servers_needing_auth,
-            mcp_servers_disabled_by_user,
-            mcp_tools_disabled_by_user,
-            allowed_tool_names,
-            available_mcp_tools,
-            offered_client_tools,
-            &headers_context,
-            Some(task),
-            chat.assistant_id,
-            parsed.content,
-            is_delegated_run,
-            crate::services::delegation::child_may_park_on_approval(
-                &chat,
-                &app_state.config.delegation,
-            ),
-            delegation,
-            // The same logical turn retains its consumption across stops.
-            task_tool_budgets_for_chat(&chat),
-            resume,
-        )
-        .await?;
+    let (end_content, generation_metadata) = stream_generate_chat_completion(
+        tx.clone(),
+        app_state,
+        policy,
+        &me_user.to_subject(),
+        chat_request,
+        LangfuseTraceEnrichment::default(),
+        chat_options,
+        message.id,
+        me_user.id.clone(),
+        chat.id,
+        Some(&chat_provider_id),
+        &me_user.groups,
+        mcp_auth_context,
+        mcp_servers_unavailable,
+        mcp_servers_needing_auth,
+        mcp_servers_disabled_by_user,
+        mcp_tools_disabled_by_user,
+        allowed_tool_names,
+        available_mcp_tools,
+        offered_client_tools,
+        &headers_context,
+        Some(task),
+        chat.assistant_id,
+        parsed.content,
+        is_delegated_run,
+        crate::services::delegation::child_may_park_on_approval(
+            &chat,
+            &app_state.config.delegation,
+        ),
+        delegation,
+        // The same logical turn retains its consumption across stops.
+        task_tool_budgets_for_chat(&chat),
+        resume,
+    )
+    .await?;
     // Written even when the generation reported no metadata of its own, and
     // before the content: this is what releases the claim taken above, and a
     // claim left behind on an answered turn would readmit it to the crash

@@ -20,6 +20,8 @@ html-to-markdown-rs.opt-level = 3
 xberg.opt-level = 3
 
 [profile.release]
-# Better stack traces in production deployments
-debug = "full"
-split-debuginfo = "packed"
+# Preserve qualified names, inline frames and source locations in backtraces
+# without generating type and local-variable information for a debugger.
+debug = "limited"
+# The runtime image ships only the executable; keep its debug information inside it.
+split-debuginfo = "off"
