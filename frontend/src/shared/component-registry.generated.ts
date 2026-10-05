@@ -143,6 +143,8 @@ export type { AttachmentTileVariant } from "@/components/ui/FileUpload/Attachmen
 export { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
 export type { AttachmentTileItem } from "@/components/ui/FileUpload/AttachmentTileList";
 export type { AttachmentTileListProps } from "@/components/ui/FileUpload/AttachmentTileList";
+export { AudioTranscriptExcerpt } from "@/components/ui/FileUpload/AudioTranscriptExcerpt";
+export type { AudioTranscriptExcerptProps } from "@/components/ui/FileUpload/AudioTranscriptExcerpt";
 export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";

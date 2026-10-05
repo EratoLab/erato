@@ -3146,6 +3146,21 @@ msgid "feedback.view.title"
 msgstr "Twoja opinia"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/AudioPreview.tsx
+msgid "filePreview.audioLoading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/AudioPreview.tsx
+msgid "filePreview.audioPlayerLabel"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/AudioPreview.tsx
+msgid "filePreview.audioPreviewUnavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/DocxPreview.tsx
 msgid "filePreview.docxEmpty"
 msgstr "Podgląd dokumentu jest pusty."
@@ -7977,9 +7992,14 @@ msgstr ""
 msgid "Show details"
 msgstr "Pokaż szczegóły"
 
+#: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
 #: src/components/ui/Message/CollapsibleCodeBlock.tsx
 msgid "Show less"
 msgstr "Pokaż mniej"
+
+#: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
+msgid "Show more"
+msgstr ""
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Show tool calls"
@@ -8263,6 +8283,7 @@ msgid "Transcribing"
 msgstr "Transkrybowanie"
 
 #: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
 msgid "Transcript"
 msgstr ""
 

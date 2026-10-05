@@ -233,6 +233,7 @@ export const DEFAULT_STUBS = {
     role: "assistant",
     userDisplayName: "",
     isEmpty: false,
+    isAttachmentOnly: false,
     attachmentIds: [],
     filesById: {},
     relatedFiles: [],

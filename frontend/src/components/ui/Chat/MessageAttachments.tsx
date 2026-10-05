@@ -2,7 +2,11 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
-import { getFilePreviewUrl } from "@/components/ui/FileUpload/FilePreviewBase";
+import { AudioTranscriptExcerpt } from "@/components/ui/FileUpload/AudioTranscriptExcerpt";
+import {
+  getFileName,
+  getFilePreviewUrl,
+} from "@/components/ui/FileUpload/FilePreviewBase";
 import { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import { getFileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
@@ -37,6 +41,25 @@ export interface MessageAttachmentFiles {
   relatedFiles: readonly FileUploadItem[];
   /** Set only where a Teams transcript claims the files shared inside it. */
   teamsGrouping: TeamsSentAttachmentGrouping | null;
+}
+
+/**
+ * The model reads the transcript from the upload itself, not from the message
+ * text, so this is the only place a sent recording's words can be shown.
+ */
+function completedAudioTranscript(file: FileUploadItem): string | undefined {
+  const transcription = file.audio_transcription;
+  if (transcription?.status?.toLowerCase() !== "completed") {
+    return undefined;
+  }
+  // The generated schema types `transcript` as always empty.
+  const transcript = (
+    transcription.transcript as string | null | undefined
+  )?.trim();
+  if (!transcript) {
+    return undefined;
+  }
+  return transcript;
 }
 
 /**
@@ -99,6 +122,7 @@ const useAttachmentTiles = (
             id: fileId,
             file: displayName ? { ...file, displayName } : file,
             previewUrl: getFilePreviewUrl(file),
+            transcript: completedAudioTranscript(file),
           },
         ];
       }),
@@ -189,17 +213,35 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
     );
   }
 
-  return (
+  const transcribed = items.filter((item) => item.transcript);
+  const tileList = (
     <AttachmentTileList
       items={items}
       size="medium"
       expandable
-      className="mt-2"
+      className={transcribed.length > 0 ? undefined : "mt-2"}
       onActivate={
         onFilePreview
           ? (item) => onFilePreview(item.file as FileUploadItem, relatedFiles)
           : undefined
       }
     />
+  );
+
+  if (transcribed.length === 0) {
+    return tileList;
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      {tileList}
+      {transcribed.map((item) => (
+        <AudioTranscriptExcerpt
+          key={item.id}
+          transcript={item.transcript ?? ""}
+          label={transcribed.length > 1 ? getFileName(item.file) : undefined}
+        />
+      ))}
+    </div>
   );
 };
