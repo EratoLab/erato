@@ -5429,7 +5429,8 @@ impl MsOfficeConfig {
             bot.oauth_connection_name = Some(DEFAULT_TEAMS_BOT_OAUTH_CONNECTION_NAME.to_string());
             derived.push("oauth_connection_name");
         }
-        // Operators upgrading an existing bot should see what Erato now fills in.
+        // Operators upgrading an existing bot should see what Erato now fills
+        // in. Names only: the values are on /office-addin/teams/bot-setup.json.
         let sso = match (bot.sso_enabled, bot.sso_resource.is_some()) {
             (false, _) => "single sign-on disabled",
             (true, true) => "single sign-on with the configured sso_resource",
@@ -5437,16 +5438,13 @@ impl MsOfficeConfig {
                 "single sign-on with sso_resource api://<host>/botid-<app_id> per download host"
             }
         };
+        let derived = if derived.is_empty() {
+            "none".to_string()
+        } else {
+            derived.join(", ")
+        };
         startup_log::info_preinit(format!(
-            "Teams bot: app_id={}, tenant_id={}, oauth_connection_name={}, {sso}; derived from defaults: {}.",
-            bot.app_id.as_deref().unwrap_or("<unset>"),
-            bot.tenant_id.as_deref().unwrap_or("<unset>"),
-            bot.oauth_connection_name.as_deref().unwrap_or("<unset>"),
-            if derived.is_empty() {
-                "none".to_string()
-            } else {
-                derived.join(", ")
-            },
+            "Teams bot: {sso}; settings filled in from defaults: {derived}."
         ));
     }
 
@@ -5733,9 +5731,10 @@ impl TeamsBotConfig {
             )
             .to_ascii_lowercase();
             if !resource.trim().to_ascii_lowercase().ends_with(&suffix) {
-                startup_log::warn_preinit(format!(
-                    "Teams bot `sso_resource` does not end with `{suffix}`. Teams matches this suffix against the messaging bot and stays silent on a mismatch."
-                ));
+                startup_log::warn_preinit(
+                    "Teams bot `sso_resource` does not end with `botid-<app_id>`. Teams matches this suffix against the messaging bot and stays silent on a mismatch."
+                        .to_string(),
+                );
             }
         }
         if let Some(assistant_id) = self.assistant_id.as_deref()

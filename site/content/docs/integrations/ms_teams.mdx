@@ -44,7 +44,7 @@ tenant_id = "TENANT_ID"
 messaging_endpoint = "https://teams-bot.example.com"
 ```
 
-Everything else has defaults: `app_id` and `sso_app_id` come from the add-in's `msal_client_id`, `oauth_connection_name` is `graph-sso`, and `sso_resource` is `api://<host>/botid-<app_id>` for the host the Teams package is downloaded from. Explicit values still win. Erato logs the values it uses at startup.
+Everything else has defaults: `app_id` and `sso_app_id` come from the add-in's `msal_client_id`, `oauth_connection_name` is `graph-sso`, and `sso_resource` is `api://<host>/botid-<app_id>` for the host the Teams package is downloaded from. Explicit values still win. Erato logs at startup which settings it filled in; the setup page shows their values.
 
 **Upgrading an existing bot without single sign-on:** single sign-on is now on by default, so the Teams package rendered after the upgrade points `webApplicationInfo` at the derived `sso_resource`. The installed package changes only when you upload a new one; users then accept the update, and the OAuth connection must have that token exchange URL. Run the guided setup before uploading, or set `sso_enabled = false` to keep the package as it was.
 
