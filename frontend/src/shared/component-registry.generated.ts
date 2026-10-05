@@ -121,6 +121,7 @@ export { LoadingIndicator } from "@/components/ui/Feedback/LoadingIndicator";
 export type { LoadingState } from "@/components/ui/Feedback/LoadingIndicator";
 export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 export type { SpinnerIconProps } from "@/components/ui/Feedback/SpinnerIcon";
+export { AudioPreview } from "@/components/ui/FilePreview/AudioPreview";
 export { EmlPreview } from "@/components/ui/FilePreview/EmlPreview";
 export { FilePreviewContent } from "@/components/ui/FilePreview/FilePreviewContent";
 export { resolvePreviewKind } from "@/components/ui/FilePreview/FilePreviewContent";
