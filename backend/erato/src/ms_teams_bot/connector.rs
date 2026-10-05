@@ -35,6 +35,9 @@ const ATTACHMENT_DOWNLOAD_HOSTS: [&str; 5] = [
     ".sharepoint.com",
 ];
 const MAX_DOWNLOAD_REDIRECTS: usize = 5;
+/// The setup status checks the credential on demand from a public route, so
+/// at most one token request per interval.
+const CREDENTIAL_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 /// Conversation and activity IDs carry `:`, `;`, `@` and `=`.
 const PATH_SEGMENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'.').remove(b'_');
 
@@ -108,12 +111,33 @@ struct ResourceResponse {
 
 /// Whether Entra last accepted the bot's credential, shown on the setup page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum CredentialState {
-    /// No token was requested yet: nothing was sent since the start.
+    /// No token was requested yet.
     Unknown,
     Accepted,
+    /// Wrong or expired secret.
     Rejected,
+    /// Entra does not know the app in this tenant: wrong app or tenant ID,
+    /// or the app registration has no service principal yet.
+    AppNotInTenant,
+}
+
+impl CredentialState {
+    /// Classify a failed token response by Entra's `error_codes`.
+    fn from_token_error(body: &[u8]) -> Self {
+        let codes = serde_json::from_slice::<Value>(body)
+            .ok()
+            .and_then(|body| body.get("error_codes").cloned())
+            .and_then(|codes| serde_json::from_value::<Vec<u64>>(codes).ok())
+            .unwrap_or_default();
+        // AADSTS7000229: no service principal; AADSTS700016: app not found.
+        if codes.iter().any(|code| matches!(code, 7_000_229 | 700_016)) {
+            Self::AppNotInTenant
+        } else {
+            Self::Rejected
+        }
+    }
 }
 
 pub struct Connector {
@@ -125,6 +149,7 @@ pub struct Connector {
     tenant_id: String,
     token: Mutex<Option<(String, Instant)>>,
     credential: AtomicU8,
+    next_credential_check: Mutex<Option<Instant>>,
 }
 
 impl Connector {
@@ -143,13 +168,34 @@ impl Connector {
             tenant_id,
             token: Mutex::new(None),
             credential: AtomicU8::new(CredentialState::Unknown as u8),
+            next_credential_check: Mutex::new(None),
         }
+    }
+
+    /// Whether Entra accepts the bot's credential, requesting a token when
+    /// none is cached, at most once per [`CREDENTIAL_CHECK_INTERVAL`]. Works
+    /// before the Azure Bot exists: the token only needs the app registration.
+    pub async fn check_credential(&self) -> CredentialState {
+        {
+            let mut next = self.next_credential_check.lock().await;
+            if next.is_some_and(|at| Instant::now() < at) {
+                return self.credential_state();
+            }
+            *next = Some(Instant::now() + CREDENTIAL_CHECK_INTERVAL);
+        }
+        if let Err(error) = self.app_token().await {
+            tracing::warn!(%error, "Teams bot credential check failed");
+        }
+        self.credential_state()
     }
 
     pub fn credential_state(&self) -> CredentialState {
         match self.credential.load(Ordering::Relaxed) {
             value if value == CredentialState::Accepted as u8 => CredentialState::Accepted,
             value if value == CredentialState::Rejected as u8 => CredentialState::Rejected,
+            value if value == CredentialState::AppNotInTenant as u8 => {
+                CredentialState::AppNotInTenant
+            }
             _ => CredentialState::Unknown,
         }
     }
@@ -181,6 +227,8 @@ impl Connector {
         if let Some((token, valid_until)) = cached.as_ref()
             && Instant::now() < *valid_until
         {
+            self.credential
+                .store(CredentialState::Accepted as u8, Ordering::Relaxed);
             return Ok(token.clone());
         }
         let url = format!(
@@ -207,8 +255,8 @@ impl Connector {
         let body = response.bytes().await?;
         if !status.is_success() {
             if status.is_client_error() {
-                self.credential
-                    .store(CredentialState::Rejected as u8, Ordering::Relaxed);
+                let state = CredentialState::from_token_error(&body);
+                self.credential.store(state as u8, Ordering::Relaxed);
             }
             // The body may echo request details; log the status only.
             return Err(eyre!("bot token request failed with {status}"));
@@ -439,6 +487,33 @@ mod tests {
         ATTACHMENT_DOWNLOAD_HOSTS, ActivityError, BOT_TOKEN_DOWNLOAD_HOSTS, download_url_allowed,
         encode, host_in,
     };
+
+    #[test]
+    fn classifies_token_errors_by_entra_code() {
+        use super::CredentialState;
+        let error = |codes: &str| {
+            CredentialState::from_token_error(
+                format!(r#"{{"error":"invalid_client","error_codes":{codes}}}"#).as_bytes(),
+            )
+        };
+        assert_eq!(error("[7000215]"), CredentialState::Rejected);
+        assert_eq!(error("[7000222]"), CredentialState::Rejected);
+        assert_eq!(error("[7000229]"), CredentialState::AppNotInTenant);
+        assert_eq!(error("[700016]"), CredentialState::AppNotInTenant);
+        assert_eq!(
+            CredentialState::from_token_error(b"not json"),
+            CredentialState::Rejected
+        );
+    }
+
+    #[tokio::test]
+    async fn credential_check_uses_the_cached_token_without_a_request() {
+        let connector = super::Connector::with_test_token(reqwest::Client::new());
+        assert_eq!(
+            connector.check_credential().await,
+            super::CredentialState::Accepted
+        );
+    }
 
     #[test]
     fn matches_exact_hosts_exactly_and_dotted_entries_as_domains() {

@@ -284,6 +284,37 @@ fn build_approval_card(set: &PendingApprovalSet, detail: Detail) -> Value {
     adaptive_card(body, actions)
 }
 
+/// Sent when the bot joins someone's personal chat, so the first thing they
+/// see is how to start rather than an error on their first question.
+pub fn welcome_card(
+    app_name: &str,
+    known_user: bool,
+    tab_name: Option<&str>,
+    open_url: Option<&str>,
+) -> Value {
+    let mut body = vec![plain_text(
+        &format!(
+            "Hi, I'm {app_name}. Ask me anything here, attach files, or @mention me in group chats and channels. Send /new to start a fresh chat."
+        ),
+        json!({}),
+    )];
+    if !known_user {
+        let where_to = match tab_name {
+            Some(tab) => format!("Open the {tab} tab at the top of this chat once"),
+            None => format!("Open {app_name} once"),
+        };
+        body.push(plain_text(
+            &format!("{where_to} so I know your account, then send me your first question."),
+            json!({}),
+        ));
+    }
+    let actions = open_url
+        .map(|url| json!({"type": "Action.OpenUrl", "title": format!("Open {app_name}"), "url": url}))
+        .into_iter()
+        .collect();
+    adaptive_card(body, actions)
+}
+
 /// What replaces the card once decided, so it cannot be answered twice.
 pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str) -> Value {
     let body = decisions
@@ -356,6 +387,26 @@ pub(super) fn adaptive_card(body: Vec<Value>, actions: Vec<Value>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn welcome_card_tells_unknown_users_where_to_sign_in_first() {
+        let card = welcome_card(
+            "Hugo",
+            false,
+            Some("Hugo"),
+            Some("https://hugo.example.com"),
+        );
+        let text = card.to_string();
+        assert!(text.contains("Hi, I'm Hugo."));
+        assert!(text.contains("Open the Hugo tab at the top of this chat once"));
+        assert_eq!(
+            card["content"]["actions"][0]["url"],
+            "https://hugo.example.com"
+        );
+        let known = welcome_card("Hugo", true, Some("Hugo"), None);
+        assert!(!known.to_string().contains("so I know your account"));
+        assert_eq!(known["content"]["actions"], json!([]));
+    }
 
     fn set(count: usize) -> PendingApprovalSet {
         PendingApprovalSet {

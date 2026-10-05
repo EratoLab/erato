@@ -28,6 +28,10 @@ const EXCHANGE_LIMIT_ACCESS_DOCS_URL =
 const SHAREPOINT_CATALOG_DOCS_URL =
   "https://learn.microsoft.com/en-us/office/dev/add-ins/publish/publish-task-pane-and-content-add-ins-to-an-add-in-catalog";
 const TEAMS_BOT_DOCS_URL = "https://erato.chat/docs/integrations/ms_teams";
+const TEAMS_ADMIN_MANAGE_APPS_URL =
+  "https://admin.teams.microsoft.com/policies/manage-apps";
+const TEAMS_ADMIN_SETUP_POLICIES_URL =
+  "https://admin.teams.microsoft.com/policies/app-setup";
 
 type OfficeProduct = "outlook" | "teams" | "word" | "excel" | "powerpoint";
 type ExchangeSetup = "exchange-online" | "exchange-server";
@@ -556,13 +560,13 @@ function WordInstructions({ spaRedirectUri }: { spaRedirectUri: string }) {
 function TeamsInstructions({ bot }: { bot: TeamsBotSetup | null }) {
   return (
     <>
-      <TeamsAppInstructions />
+      <TeamsAppInstructions hasBot={!!bot} />
       {bot ? <TeamsBotInstructions bot={bot} /> : null}
     </>
   );
 }
 
-function TeamsAppInstructions() {
+function TeamsAppInstructions({ hasBot }: { hasBot: boolean }) {
   return (
     <ol className="office-setup-steps">
       <li>
@@ -578,6 +582,15 @@ function TeamsAppInstructions() {
           the app type and upload the ZIP.
         </Trans>
       </li>
+      {hasBot && (
+        <li>
+          <Trans id="officeAddin.teams.setup.botPackageInstruction">
+            This package also contains the Teams bot. Upload it after the bot
+            setup below, and deploy it to its users there: deployed apps are
+            installed and updated without asking them.
+          </Trans>
+        </li>
+      )}
       <li>
         <Trans id="officeAddin.teams.setup.authInstruction">
           Ensure the Entra app registration has the Teams NAA broker redirect
@@ -626,6 +639,10 @@ function TeamsBotInstructions({ bot }: { bot: TeamsBotSetup }) {
   const [botName, setBotName] = useState("");
   const [currentConnection, setCurrentConnection] = useState("graph");
   const [ssoConnection, setSsoConnection] = useState("graph-sso");
+  // Errors appear once a field was left, not while typing an ID.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (field: string) => () =>
+    setTouched((value) => ({ ...value, [field]: true }));
   // Prefill what the deployment already knows, without overwriting edits.
   useEffect(() => {
     if (!info) return;
@@ -643,10 +660,18 @@ function TeamsBotInstructions({ bot }: { bot: TeamsBotSetup }) {
     currentConnection.toLowerCase() !== ssoConnection.toLowerCase();
   const validIdentity =
     !!bot.authAppId && validGuid(bot.authAppId) && validGuid(bot.botId);
+  const tenantInvalid = !!tenantId && !validGuid(tenantId);
+  const subscriptionInvalid = !!subscriptionId && !validGuid(subscriptionId);
+  const showTargetError =
+    (!!touched.tenant && tenantInvalid) ||
+    (!!touched.subscription && subscriptionInvalid);
   const botTargetEntered = !!resourceGroup || !!botName;
-  const validBotTarget =
-    !botTargetEntered ||
-    (validResourceGroupName(resourceGroup) && validBotName(botName));
+  const resourceGroupInvalid =
+    botTargetEntered && !validResourceGroupName(resourceGroup);
+  const botNameInvalid = botTargetEntered && !validBotName(botName);
+  const validBotTarget = !resourceGroupInvalid && !botNameInvalid;
+  const showBotTargetError =
+    (!!touched.resourceGroup || !!touched.botName) && !validBotTarget;
   const ready =
     validIdentity &&
     validGuid(tenantId) &&
@@ -656,11 +681,13 @@ function TeamsBotInstructions({ bot }: { bot: TeamsBotSetup }) {
   const ssoResource = proposedSsoResource(bot, window.location.origin);
   // Erato derives these values itself; only a different choice here needs a
   // configuration change on the Erato side.
+  const ssoOff = info !== null && !info.ssoEnabled;
   const eratoSettingsDiffer =
     !info ||
+    ssoOff ||
     info.connectionName !== ssoConnection ||
     (info.ssoResource !== null && info.ssoResource !== ssoResource);
-  const config = `# Merge into [integrations.ms_office.teams.bot]
+  const config = `# Merge into [integrations.ms_office.teams.bot]${ssoOff ? "\nsso_enabled = true" : ""}
 oauth_connection_name = ${JSON.stringify(ssoConnection)}
 sso_app_id = ${JSON.stringify(bot.authAppId ?? "<authentication app ID>")}
 sso_resource = ${JSON.stringify(ssoResource)}`;
@@ -695,9 +722,9 @@ sso_resource = ${JSON.stringify(ssoResource)}`;
         </Trans>
       </p>
       <p className="office-setup-copy">
-        <Trans id="officeAddin.teams.bot.setup.cloudStatus">
-          Azure settings have not been checked. The first command checks them
-          without making changes.
+        <Trans id="officeAddin.teams.bot.setup.checkFirst">
+          The first command only reads Azure and Entra; nothing changes until
+          you run the apply command.
         </Trans>
       </p>
       {!validIdentity && (
@@ -733,9 +760,15 @@ sso_resource = ${JSON.stringify(ssoResource)}`;
                 id="teams-tenant-id"
                 value={tenantId}
                 onChange={(event) => setTenantId(event.target.value.trim())}
+                onBlur={touch("tenant")}
                 spellCheck={false}
                 autoComplete="off"
-                aria-invalid={!!tenantId && !validGuid(tenantId)}
+                aria-invalid={!!touched.tenant && tenantInvalid}
+                aria-describedby={
+                  touched.tenant && tenantInvalid
+                    ? "teams-target-error"
+                    : undefined
+                }
               />
             </label>
             <label
@@ -751,15 +784,20 @@ sso_resource = ${JSON.stringify(ssoResource)}`;
                 onChange={(event) =>
                   setSubscriptionId(event.target.value.trim())
                 }
+                onBlur={touch("subscription")}
                 spellCheck={false}
                 autoComplete="off"
-                aria-invalid={!!subscriptionId && !validGuid(subscriptionId)}
+                aria-invalid={!!touched.subscription && subscriptionInvalid}
+                aria-describedby={
+                  touched.subscription && subscriptionInvalid
+                    ? "teams-target-error"
+                    : undefined
+                }
               />
             </label>
           </div>
-          {((tenantId && !validGuid(tenantId)) ||
-            (subscriptionId && !validGuid(subscriptionId))) && (
-            <p role="alert">
+          {showTargetError && (
+            <p role="alert" id="teams-target-error">
               <Trans id="officeAddin.teams.bot.setup.invalidTarget">
                 Enter complete IDs in the form
                 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
@@ -787,9 +825,13 @@ sso_resource = ${JSON.stringify(ssoResource)}`;
                 onChange={(event) =>
                   setResourceGroup(event.target.value.trim())
                 }
+                onBlur={touch("resourceGroup")}
                 spellCheck={false}
                 autoComplete="off"
-                aria-invalid={!validBotTarget}
+                aria-invalid={showBotTargetError && resourceGroupInvalid}
+                aria-describedby={
+                  showBotTargetError ? "teams-bot-target-error" : undefined
+                }
               />
             </label>
             <label className="office-setup-field" htmlFor="teams-bot-name">
@@ -798,14 +840,18 @@ sso_resource = ${JSON.stringify(ssoResource)}`;
                 id="teams-bot-name"
                 value={botName}
                 onChange={(event) => setBotName(event.target.value.trim())}
+                onBlur={touch("botName")}
                 spellCheck={false}
                 autoComplete="off"
-                aria-invalid={!validBotTarget}
+                aria-invalid={showBotTargetError && botNameInvalid}
+                aria-describedby={
+                  showBotTargetError ? "teams-bot-target-error" : undefined
+                }
               />
             </label>
           </div>
-          {!validBotTarget && (
-            <p role="alert">
+          {showBotTargetError && (
+            <p role="alert" id="teams-bot-target-error">
               <Trans id="officeAddin.teams.bot.setup.invalidBotTarget">
                 Enter both a resource group and a bot name. Bot names use 2–63
                 letters, digits, dots, hyphens or underscores.
@@ -858,7 +904,12 @@ sso_resource = ${JSON.stringify(ssoResource)}`;
                 Deployment details and connection names
               </Trans>
             </summary>
-            <p>{window.location.origin}</p>
+            <p>
+              <Trans id="officeAddin.teams.bot.setup.deploymentAddress">
+                Deployment address
+              </Trans>
+            </p>
+            <CopyableCodeField content={window.location.origin} />
             <p>
               <Trans id="officeAddin.teams.bot.setup.botIdentity">
                 Bot messaging app
@@ -1075,13 +1126,48 @@ sso_resource = ${JSON.stringify(ssoResource)}`;
             </Trans>
           </strong>
           <p>
-            <Trans id="officeAddin.teams.bot.setup.uploadHelp">
-              Download the Teams package below and upload it in the Teams admin
-              center, as an update if the Erato app is already installed.
-              Install or pin it with an app setup policy so people need not
-              accept the update. Then send the bot a message in Teams.
+            <Trans id="officeAddin.teams.bot.setup.uploadDeployHelp">
+              Download the Teams package below. In Microsoft 365 admin center,
+              open Settings, Integrated apps, upload it as a Teams app (or
+              update the existing Erato app) and deploy it to its users:
+              deployed apps are installed and updated without asking them.
+              Alternatively, upload it in Teams admin center and install it with
+              an app setup policy. Then send the bot a message in Teams; it
+              greets people when it is installed for them.
             </Trans>
           </p>
+          <div className="office-setup-actions">
+            <a
+              href={INTEGRATED_APPS_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="office-setup-link"
+            >
+              <Trans id="officeAddin.teams.bot.setup.integratedAppsLink">
+                Integrated apps
+              </Trans>
+            </a>
+            <a
+              href={TEAMS_ADMIN_MANAGE_APPS_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="office-setup-link"
+            >
+              <Trans id="officeAddin.teams.bot.setup.manageAppsLink">
+                Teams admin center: Manage apps
+              </Trans>
+            </a>
+            <a
+              href={TEAMS_ADMIN_SETUP_POLICIES_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="office-setup-link"
+            >
+              <Trans id="officeAddin.teams.bot.setup.setupPoliciesLink">
+                Teams admin center: Setup policies
+              </Trans>
+            </a>
+          </div>
           {info && (
             <TeamsBotStatus
               info={info}
@@ -1097,11 +1183,26 @@ sso_resource = ${JSON.stringify(ssoResource)}`;
                 </Trans>
               </summary>
               <p>
-                <Trans id="officeAddin.teams.bot.setup.settingsDifferHelp">
-                  Erato uses different values than the ones chosen here. Before
-                  testing, your Erato administrator must apply these settings
-                  and deploy.
-                </Trans>
+                {!info ? (
+                  <Trans id="officeAddin.teams.bot.setup.settingsUnreadable">
+                    This page could not read the deployment’s Teams bot
+                    settings. If Erato uses other values than the ones chosen
+                    here, your Erato administrator applies these settings and
+                    deploys.
+                  </Trans>
+                ) : ssoOff ? (
+                  <Trans id="officeAddin.teams.bot.setup.ssoDisabledHelp">
+                    Single sign-on is turned off in this deployment. After the
+                    setup, your Erato administrator applies these settings and
+                    deploys.
+                  </Trans>
+                ) : (
+                  <Trans id="officeAddin.teams.bot.setup.settingsDifferHelp">
+                    Erato uses different values than the ones chosen here.
+                    Before testing, your Erato administrator must apply these
+                    settings and deploy.
+                  </Trans>
+                )}
               </p>
               <CopyableCodeField content={config} />
             </details>
@@ -1168,19 +1269,20 @@ function TeamsBotPrerequisites({
           )}
         </li>
         <li>
-          <Trans id="officeAddin.teams.bot.setup.adminRoles">
+          <Trans id="officeAddin.teams.bot.setup.adminRolesUpload">
             Admin roles: permission to create resources in the bot’s resource
             group (and to register the Microsoft.BotService provider if the
             subscription never used it), Cloud Application Administrator for the
-            app registration and consent, and Teams Administrator for the
-            package upload.
+            app registration and consent, and for the package either Global
+            Administrator (Integrated apps) or Teams Administrator (Teams admin
+            center).
           </Trans>
         </li>
         <li>
-          <Trans id="officeAddin.teams.bot.setup.outboundAccess">
+          <Trans id="officeAddin.teams.bot.setup.outboundHosts">
             Outbound HTTPS from Erato to login.microsoftonline.com,
-            login.botframework.com, *.botframework.com and
-            smba.trafficmanager.net.
+            login.botframework.com, *.botframework.com, smba.trafficmanager.net,
+            graph.microsoft.com and *.sharepoint.com (files people attach).
           </Trans>
         </li>
       </ul>
@@ -1201,8 +1303,8 @@ function TeamsBotStatus({
   return (
     <div className="office-setup-bot-status" aria-live="polite">
       <strong>
-        <Trans id="officeAddin.teams.bot.setup.statusTitle">
-          What Erato has seen since its last start
+        <Trans id="officeAddin.teams.bot.setup.statusTitleChecked">
+          What Erato sees
         </Trans>
       </strong>
       <ul>
@@ -1212,9 +1314,9 @@ function TeamsBotStatus({
               A Teams message from this tenant arrived.
             </Trans>
           ) : (
-            <Trans id="officeAddin.teams.bot.setup.statusNotReceived">
-              No Teams message has arrived yet. Check the messaging endpoint and
-              the Teams channel if a message was sent.
+            <Trans id="officeAddin.teams.bot.setup.statusNotReceivedYet">
+              No Teams message has reached Erato yet. If one was sent, check the
+              public messaging endpoint and the Teams channel.
             </Trans>
           )}
         </li>
@@ -1228,9 +1330,16 @@ function TeamsBotStatus({
               Entra rejected Erato’s bot credential. Ask your Erato
               administrator to check the bot’s app password.
             </Trans>
+          ) : credential === "app_not_in_tenant" ? (
+            <Trans id="officeAddin.teams.bot.setup.statusCredentialAppMissing">
+              Entra does not find Erato’s bot app in this tenant. Ask your Erato
+              administrator to check the bot’s app ID and tenant; the app also
+              needs its enterprise application, which the first sign-in creates.
+            </Trans>
           ) : (
-            <Trans id="officeAddin.teams.bot.setup.statusCredentialUnknown">
-              Erato has not replied yet, so its bot credential is untested.
+            <Trans id="officeAddin.teams.bot.setup.statusCredentialUnreachable">
+              Erato could not check its bot credential with Microsoft Entra.
+              Check outbound access to login.microsoftonline.com.
             </Trans>
           )}
         </li>
@@ -1269,6 +1378,7 @@ function TeamsSetupCommand({
       await navigator.clipboard.writeText(command);
       setCopied(true);
       setCopyFailed(false);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopyFailed(true);
     }
@@ -1285,6 +1395,14 @@ function TeamsSetupCommand({
           ? t({ id: "officeAddin.setup.copied", message: "Copied!" })
           : label}
       </button>
+      <span className="office-setup-visually-hidden" aria-live="polite">
+        {copied
+          ? t({
+              id: "officeAddin.teams.bot.setup.commandCopied",
+              message: "Command copied to the clipboard.",
+            })
+          : ""}
+      </span>
       {command && (
         <details className="office-setup-helper" open={copyFailed || undefined}>
           <summary>

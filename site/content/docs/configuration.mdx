@@ -2827,6 +2827,7 @@ When `integrations.ms_office.teams.enabled` is also set, the rendered Teams app 
 
 ##### `integrations.ms_office.teams.bot` (optional behavior)
 
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_enabled */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_app_id */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_resource */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.public_base_url */}
@@ -2836,6 +2837,7 @@ When `integrations.ms_office.teams.enabled` is also set, the rendered Teams app 
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.streaming */}
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.security_groups_only */}
 
+- `sso_enabled`: Teams single sign-on, default `true`. Set `false` only to keep an existing bot without single sign-on, and its Teams package, unchanged: the guided setup always configures it.
 - `sso_app_id`, `sso_resource`: Teams single sign-on. The rendered manifest's `webApplicationInfo` points at this app and resource, which must equal the OAuth connection's token exchange URL and end with `botid-<app_id>`. They default to the add-in's `msal_client_id` and `api://<host>/botid-<app_id>`, with the host the Teams package is downloaded from, which is what the setup helper configures. Override them only for an existing setup with other values.
 - `public_base_url`: address users open Erato at, used for links in bot messages (chat links, citations). An internal host is fine, because users open these links in their own browser.
 - `messaging_endpoint`: public URL the Azure Bot sends messages to, when it differs from the address the setup page is opened at, for example a public hostname in front of an internal-only deployment. An HTTPS origin or the full `https://<host>/api/integrations/ms_teams/messages` URL; the setup page and its helper use it.

@@ -20,8 +20,8 @@ Users are recognized by their Entra object ID, which Erato records whenever they
 - Erato signs users in with Microsoft Entra ID.
 - The [Teams app](../configuration#integrationsms_officeteamsenabled) (`integrations.ms_office.teams`) is enabled, so the bot can be shipped in the same app package as the tab.
 - **A messaging endpoint that Microsoft's cloud can reach.** Add-ins and the Teams tab are loaded by the Outlook or Teams client on the user's device, so they work on an internal-only host. The bot works the other way round: Teams hands every message to Azure Bot Service, which posts it to `https://<host>/api/integrations/ms_teams/messages`, server to server. That path therefore needs a public hostname with a certificate from a publicly trusted CA, and TLS 1.2 must stay enabled. For an internal-only deployment, publish only this path, for example through a reverse proxy or web application firewall in a DMZ, or Azure Application Gateway over an existing ExpressRoute or VPN connection. Teams has no mode in which the bot fetches messages itself. See [Security and network](#security-and-network).
-- Outbound HTTPS from Erato to `login.microsoftonline.com`, `login.botframework.com`, `*.botframework.com` and `smba.trafficmanager.net`.
-- A customer administrator who can create resources in an Azure resource group (and register the `Microsoft.BotService` provider if the subscription never used it), update the Entra app registration and grant consent (Cloud Application Administrator), and upload Teams apps (Teams Administrator).
+- Outbound HTTPS from Erato to `login.microsoftonline.com`, `login.botframework.com`, `*.botframework.com`, `smba.trafficmanager.net`, `graph.microsoft.com` (identity and groups) and `*.sharepoint.com` (files people attach).
+- A customer administrator who can create resources in an Azure resource group (and register the `Microsoft.BotService` provider if the subscription never used it), update the Entra app registration and grant consent (Cloud Application Administrator), and deploy the Teams package: Global Administrator in Microsoft 365 admin center's Integrated apps, or Teams Administrator in Teams admin center.
 
 ## Setup
 
@@ -44,7 +44,9 @@ tenant_id = "TENANT_ID"
 messaging_endpoint = "https://teams-bot.example.com"
 ```
 
-Everything else has defaults: `app_id` and `sso_app_id` come from the add-in's `msal_client_id`, `oauth_connection_name` is `graph-sso`, and `sso_resource` is `api://<host>/botid-<app_id>` for the host the Teams package is downloaded from. Explicit values still win; existing bot deployments keep working unchanged.
+Everything else has defaults: `app_id` and `sso_app_id` come from the add-in's `msal_client_id`, `oauth_connection_name` is `graph-sso`, and `sso_resource` is `api://<host>/botid-<app_id>` for the host the Teams package is downloaded from. Explicit values still win. Erato logs the values it uses at startup.
+
+**Upgrading an existing bot without single sign-on:** single sign-on is now on by default, so the Teams package rendered after the upgrade points `webApplicationInfo` at the derived `sso_resource`. The installed package changes only when you upload a new one; users then accept the update, and the OAuth connection must have that token exchange URL. Run the guided setup before uploading, or set `sso_enabled = false` to keep the package as it was.
 
 The bot authenticates to Microsoft with its app registration's client secret (`app_password`). With the default `app_id`, that is the secret oauth2-proxy already uses for the web login; no new credential is needed. With the Helm chart:
 
@@ -99,7 +101,7 @@ On the deployment's **Teams** setup page:
 
 Without a resource group and bot name, the helper finds the existing bot for the app registration within the selected subscription; it does not search other subscriptions or switch tenants. If several bots use that app ID, enter the resource group and bot name to select one. **Deployment details and connection names** lists the identifiers. An existing bot configured before this guided setup may have a `graph` connection; the helper keeps it and creates `graph-sso` next to it.
 
-The dedicated OAuth credential has a 365-day lifetime, subject to tenant policy. Record its reported key ID and expiry, and rerun the helper before it expires; secret values are never printed. If apply fails after a partial change, the helper identifies the added credential when available. Inspect the connection and credential before retrying. Process environments sharing an app registration sequentially.
+The check also reads the tenant's app management policies and reports them before any change: a cap on secret lifetime (the dedicated OAuth credential then gets that lifetime instead of 365 days), a policy that blocks new client secrets on the app (Apply stops before writing), and Entra's restriction on Application ID URIs, which exempts apps that issue v2 access tokens: Apply saves that setting on its own before adding the URI. Reading the policies needs `Policy.Read.All`; without it the check says so and Apply still runs. Errors name the step that failed. Record the credential's reported key ID and expiry, and rerun the helper before it expires; secret values are never printed. If apply fails after a partial change, the helper identifies the added credential when available. Inspect the connection and credential before retrying. Process environments sharing an app registration sequentially.
 
 For local administration, the same reviewed script runs with PowerShell 7.2+ and Azure CLI. Browser-based Cloud Shell is the default path. `-Json` produces a sanitized support report. Exit `0` means checks pass, `1` means settings such as admin consent remain, and `2` means the operation stopped or failed. An apply can complete its writes and still exit `1` because consent remains outstanding. The helper never deploys Erato or installs a Teams package.
 
@@ -108,9 +110,9 @@ References: [Cloud Shell overview](https://learn.microsoft.com/en-us/azure/cloud
 
 ### 3. Upload the Teams package and test
 
-1. On the setup page, download the Teams package and upload it in the Teams admin center, as an update to the existing app if the tab is already installed. Adding a bot or changing single sign-on requires users to accept an update; install or pin the app with an app setup policy to update it without asking.
-2. Open the Erato web app or Teams tab once with the test user, so Erato knows their Entra object ID. Then send the bot a message in a personal chat.
-3. The setup page's status shows whether Erato received the message and whether Entra accepted Erato's bot credential (as seen by the instance that serves the page since its last start). Select **Refresh status** after sending.
+1. On the setup page, download the Teams package. In Microsoft 365 admin center, **Settings → Integrated apps**, upload it as a Teams app (or update the existing Erato app) and deploy it to its users: deployed apps are installed for them and update without asking. Alternatively, upload it in Teams admin center and install it with an app setup policy. Adding a bot or changing single sign-on otherwise requires every user to accept an update.
+2. When the app is installed for someone, the bot greets them in their personal chat. Users Erato does not know yet are asked to open the Erato tab (or the web app, with `public_base_url`) once, so Erato records their Entra object ID. Send the bot a message.
+3. The setup page's status shows whether a Teams message reached Erato (recorded in the database, so on any replica) and whether Microsoft Entra accepts Erato's bot credential. The credential check works right after the Erato deploy, before any Azure Bot exists, and asks Entra at most once a minute per instance. It distinguishes a rejected secret, an app Entra does not find in the tenant, and Entra being unreachable. Select **Refresh status** after sending.
 4. Verify that sign-in completes without selecting **Sign in**, subject to the tenant's consent and Conditional Access requirements. Also test the Teams web client, the tab and the other Office add-ins, then an @mention in a group chat or channel and a file.
 
 ## Security and network
@@ -120,7 +122,15 @@ The messaging endpoint is the only Erato route that must be reachable from the i
 1. **Erato (the real gate).** Before reading the request body, Erato verifies the Bot Connector token: RS256 signature from Microsoft's Bot Framework key set, a key endorsed for Teams, issuer `https://api.botframework.com`, audience equal to the bot's app ID, and its validity period with five minutes of clock skew. Only then does it read at most 256 KB, and the activity must come from the Teams channel, match the token's `serviceurl`, and belong to `tenant_id`. Signing keys are refreshed at most once a minute, and known keys stay valid if Microsoft is unreachable, so forged tokens cannot make Erato flood Microsoft's endpoints. Attachments are only downloaded over HTTPS from Teams and SharePoint hosts, re-checked on every redirect. Rejections are logged with their reason, never with the token. Users must be known to Erato, and their data is accessed with their own Teams sign-in.
 2. **Edge.** Route only `/api/integrations/ms_teams/messages`, preferably on a separate hostname (`msTeamsBot.publicIngress`); everything else on that host returns 404. Limit request bodies to about 256 KB, keep TLS 1.2 enabled, and apply an overall rate limit rather than a per-IP one, because Microsoft's sending addresses are shared. An IP allowlist based on the service tag is unsupported and can break without notice; use it in monitoring mode at most. A web application firewall should use a policy for this path only: known false positives are CRS rules 920300 and 931130, and the SQL injection and XSS rules trip on message text such as pasted code. Never log the `Authorization` header: a captured token can be replayed until it expires.
 3. **Cluster.** The network policy lets only the ingress controller reach the backend port; only the exact messaging path bypasses oauth2-proxy.
-4. **Microsoft 365 and Azure.** Teams app permission policies decide who can use the bot. Remove channels the deployment does not use, such as Web Chat, which new Azure Bots get by default. Do not delete the Azure Bot while keeping the app registration: only one bot can use an app ID.
+4. **Microsoft 365 and Azure.** Teams app permission policies decide who can use the bot. New Azure Bots get the Web Chat and Direct Line channels enabled; Erato refuses their activities, and you can remove them. Do not delete the Azure Bot while keeping the app registration: only one bot can use an app ID.
+
+To verify the gate from outside, without a token, both requests must fail:
+
+```sh
+curl -i -X POST https://<public host>/api/integrations/ms_teams/messages \
+  -H 'Content-Type: application/json' -d '{}'   # 401 Unauthorized
+curl -i https://<public host>/api/integrations/ms_teams/messages   # 405 Method Not Allowed
+```
 
 ## Manual setup
 
@@ -328,6 +338,7 @@ using it; remove only additions whose consumers you have checked.
 | `tenant_id`             | string  | tenant of a tenant-specific `msal_authority` | Entra tenant whose activities are accepted                                                 |
 | `oauth_connection_name` | string  | `"graph-sso"`                      | Azure Bot OAuth connection that yields the user's Graph token                                        |
 | `token_service_url`     | string  | `"https://token.botframework.com"` | Bot Framework token service                                                                          |
+| `sso_enabled`           | boolean | `true`                             | Teams single sign-on; `false` keeps an existing bot without SSO and its manifest unchanged          |
 | `sso_app_id`            | string  | add-in `msal_client_id`            | App ID for silent sign-in, rendered into `webApplicationInfo.id`                                     |
 | `sso_resource`          | string  | `api://<host>/botid-<app_id>`      | Token exchange URL for silent sign-in; `<host>` is where the Teams package is downloaded from       |
 | `public_base_url`       | string  |                                    | Address users open Erato at, for links in bot messages; an internal host is fine                     |

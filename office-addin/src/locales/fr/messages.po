@@ -1290,7 +1290,12 @@ msgstr "Passer à la vue de démarrage"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.adminRoles"
+#~ msgid "officeAddin.teams.bot.setup.adminRoles"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.adminRolesUpload"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1365,6 +1370,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.checkFirst"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.checkHelp"
 msgstr ""
 
@@ -1385,12 +1395,17 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.cloudStatus"
-msgstr ""
+#~ msgid "officeAddin.teams.bot.setup.cloudStatus"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.cloudSupport"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.commandCopied"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1457,6 +1472,11 @@ msgstr ""
 #: src/pages/AddinSetupPage.tsx
 #~ msgid "officeAddin.teams.bot.setup.deployInstructions"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.deploymentAddress"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -1576,6 +1596,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.integratedAppsLink"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.invalidBotTarget"
 msgstr ""
 
@@ -1596,6 +1621,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.manageAppsLink"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.manualGuide"
 msgstr ""
 
@@ -1611,7 +1641,12 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.outboundAccess"
+#~ msgid "officeAddin.teams.bot.setup.outboundAccess"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.outboundHosts"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1696,12 +1731,27 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.settingsUnreadable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.setupPoliciesLink"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.sourceLabel"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.ssoConnectionName"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.ssoDisabledHelp"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1716,17 +1766,32 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusCredentialAppMissing"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.bot.setup.statusCredentialRejected"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.statusCredentialUnknown"
+#~ msgid "officeAddin.teams.bot.setup.statusCredentialUnknown"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusCredentialUnreachable"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.statusNotReceived"
+#~ msgid "officeAddin.teams.bot.setup.statusNotReceived"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusNotReceivedYet"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1736,7 +1801,12 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.statusTitle"
+#~ msgid "officeAddin.teams.bot.setup.statusTitle"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.bot.setup.statusTitleChecked"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -1771,8 +1841,13 @@ msgstr "Bot Teams"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.teams.bot.setup.uploadHelp"
+msgid "officeAddin.teams.bot.setup.uploadDeployHelp"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.teams.bot.setup.uploadHelp"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -2173,6 +2248,11 @@ msgstr "Conversation Teams"
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.teams.setup.authInstruction"
 msgstr "Vérifiez que l’inscription de l’application Entra contient l’URI de redirection du courtier NAA Teams pour ce déploiement : brk-multihub://{0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.teams.setup.botPackageInstruction"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

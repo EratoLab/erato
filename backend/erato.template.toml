@@ -243,6 +243,7 @@ chat_provider_ids = ["test-token-limit"]
 # # sso_resource = api://<host>/botid-<app_id>. Set them only to differ.
 # # tenant_id = "<tenant ID>"
 # # messaging_endpoint = "https://teams-bot.example.com"   # public host in front of an internal-only deployment
+# # sso_enabled = false   # only to keep an existing bot without single sign-on unchanged
 # # public_base_url = "https://erato.example.com"          # address users open Erato at, for links
 # # token_service_url = "https://europe.token.botframework.com"
 # # assistant_id = "<assistant UUID new Teams chats are bound to>"

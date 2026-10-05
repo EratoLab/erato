@@ -92,6 +92,10 @@ msTeamsBot:
     # -- IngressClass for the public Ingress, for example a controller in a DMZ. Defaults to `ingress.className`.
     className: ""
     # -- Annotations for the public Ingress, for example rate limits or a body size limit of about 256 KB
+    # Example (ingress-nginx):
+    # annotations:
+    #   nginx.ingress.kubernetes.io/proxy-body-size: 256k
+    #   nginx.ingress.kubernetes.io/limit-rps: "20"
     annotations: {}
     tls:
       # -- Enable TLS for the public hostname. Azure Bot Service requires a certificate from a publicly trusted CA.

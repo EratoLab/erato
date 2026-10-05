@@ -584,14 +584,7 @@ async fn authenticate(
         return Ok(None);
     };
     let Some(user) = host.find_user(entra_object_id).await? else {
-        let hint = match bot.settings.public_base_url.as_deref() {
-            Some(base) => format!("Please open [Erato]({base}) once, then message me again."),
-            None => "Please open Erato (or the Erato tab in Teams) once, then message me again."
-                .to_string(),
-        };
-        target
-            .send_text(&format!("I don't know you in Erato yet. {hint}"))
-            .await?;
+        target.send_text(&unknown_user_text(bot)).await?;
         return Ok(None);
     };
     let graph_token = bot
@@ -1182,6 +1175,47 @@ pub(super) async fn deliver_proactive(
         }
     }
     Ok(())
+}
+
+/// Users are recognized once they opened Erato (web app or tab); say where.
+fn unknown_user_text(bot: &TeamsBot) -> String {
+    let settings = &bot.settings;
+    let name = &settings.app_name;
+    let place = match (
+        settings.public_base_url.as_deref(),
+        settings.tab_name.as_deref(),
+    ) {
+        (Some(base), Some(tab)) => {
+            format!("the {tab} tab at the top of this chat or [{name}]({base})")
+        }
+        (Some(base), None) => format!("[{name}]({base})"),
+        (None, Some(tab)) => format!("the {tab} tab at the top of this chat"),
+        (None, None) => name.clone(),
+    };
+    format!("I don't know you in {name} yet. Please open {place} once, then message me again.")
+}
+
+/// Someone has the bot in a personal chat for the first time: greet them and,
+/// if Erato does not know them yet, say what to do before the first question.
+pub(super) async fn on_bot_added(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
+    let Some(target) = reply_target(&bot, &activity) else {
+        return;
+    };
+    let known_user = match activity.from_aad_object_id() {
+        Some(object_id) => matches!(host.find_user(object_id).await, Ok(Some(_))),
+        None => false,
+    };
+    let settings = &bot.settings;
+    let card = cards::welcome_card(
+        &settings.app_name,
+        known_user,
+        settings.tab_name.as_deref(),
+        settings.public_base_url.as_deref(),
+    );
+    let summary = format!("Hi, I'm {}.", settings.app_name);
+    if let Err(error) = target.send(&render::card_message(card, &summary)).await {
+        tracing::warn!(%error, "Could not send the Teams welcome message");
+    }
 }
 
 fn reply_target<'a>(bot: &'a TeamsBot, activity: &'a Activity) -> Option<ReplyTarget<'a>> {

@@ -884,6 +884,7 @@
   "integrations.ms_office.teams.bot.public_base_url": {},
   "integrations.ms_office.teams.bot.security_groups_only": {},
   "integrations.ms_office.teams.bot.sso_app_id": {},
+  "integrations.ms_office.teams.bot.sso_enabled": {},
   "integrations.ms_office.teams.bot.sso_resource": {},
   "integrations.ms_office.teams.bot.streaming": {},
   "integrations.ms_office.teams.bot.tenant_id": {},

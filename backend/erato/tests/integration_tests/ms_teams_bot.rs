@@ -398,3 +398,37 @@ async fn test_approval_continuation_completes_in_teams(pool: Pool<Postgres>) {
     let (resumed, _) = completion(resumed).await;
     assert_eq!(resumed.chat_id, chat_id);
 }
+
+/// The setup page's "message received" status holds on every replica: it
+/// reads what the bot recorded in the database, not one process's memory.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_recorded_teams_activity_is_visible_to_every_replica(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    let host = Host::new(app_state.clone());
+    assert!(!host.teams_activity_recorded().await.expect("status"));
+
+    let user = get_or_create_user(&app_state.db, "https://issuer.example", "subject-1", None)
+        .await
+        .expect("user");
+    host.upsert_conversation(
+        "a:personal-1",
+        ConversationKind::Personal,
+        user.id,
+        "https://smba.example/",
+        "29:user",
+    )
+    .await
+    .expect("conversation");
+    // Another replica's host sees the same evidence.
+    let other_replica = Host::new(app_state.clone());
+    assert!(
+        other_replica
+            .teams_activity_recorded()
+            .await
+            .expect("status")
+    );
+}

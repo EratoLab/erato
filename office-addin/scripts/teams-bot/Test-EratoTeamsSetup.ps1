@@ -19,7 +19,7 @@ function Reset-Fixture {
     $settings.SsoResource = "api://erato.example.com/botid-$($base.BotAppId)"
     $script:calls = [Collections.Generic.List[object]]::new()
     $script:writes = [Collections.Generic.List[object]]::new()
-    $script:app = @{ id = 'app-object'; appId = $base.AuthAppId; displayName = 'Existing add-in'; signInAudience = 'AzureADMyOrg'
+    $script:app = @{ id = 'app-object'; appId = $base.AuthAppId; displayName = 'Existing add-in'; signInAudience = 'AzureADMyOrg'; createdDateTime = '2026-01-01T00:00:00Z'
         identifierUris = @('api://existing-app'); api = @{ requestedAccessTokenVersion = 1; oauth2PermissionScopes = @(@{ id = 'old-scope'; value = 'old'; isEnabled = $true }); preAuthorizedApplications = @(@{ appId = 'old-client'; delegatedPermissionIds = @('old-scope') }) }
         web = @{ redirectUris = @('https://existing.example.com/callback'); implicitGrantSettings = @{ enableIdTokenIssuance = $true }; redirectUriSettings = @('read-only-field') }
         spa = @{ redirectUris = @('brk-multihub://erato.example.com') }; requiredResourceAccess = @(@{ resourceAppId = 'other-api'; resourceAccess = @(@{ id = 'old-role'; type = 'Role' }) }) }
@@ -28,6 +28,8 @@ function Reset-Fixture {
     $script:bots = @{ 'customer-bot' = $script:bot }
     $script:grant = @{ id = 'grant-1'; consentType = 'AllPrincipals'; resourceId = 'graph-sp'; scope = $script:Scopes -join ' ' }
     $script:providerState = 'Registered'; $script:missingGroup = $false; $script:failConsentWrite = $false
+    $script:tenantPolicy = @{ isEnabled = $true; applicationRestrictions = @{ passwordCredentials = @(); identifierUris = @{} } }
+    $script:appPolicies = @(); $script:denyPolicy = $false; $script:uriPolicy = $false
     $script:connection = $null; $script:wrongTenant = $false; $script:denyConsent = $false; $script:failConnection = $false
     $script:duplicateBot = $false; $script:nextLink = $null; $script:scopePage = 0; $script:failPreauthorization = $false
     $script:failRepair = $false
@@ -94,10 +96,14 @@ function Invoke-EratoAz {
                 }
                 if ($script:failPreauthorization -and $client.appId -in $script:TeamsClients) { throw 'Azure request failed (RequestFailed).' }
             }
+            if ($script:uriPolicy -and $body.identifierUris -and $script:app.api.requestedAccessTokenVersion -ne 2) {
+                # Entra's identifier URI restriction exempts only v2-token apps.
+                if (@($body.identifierUris | Where-Object { $_ -cnotin $script:app.identifierUris }).Count) { throw 'Azure request failed (RequestFailed).' }
+            }
             foreach ($key in $body.Keys) { $script:app[$key] = $body[$key] }
             return @{}
         }
-        if ($url.EndsWith('/addPassword')) { return @{ keyId = 'credential-key-id'; secretText = 'DO-NOT-PRINT-THIS-SECRET' } }
+        if ($url.EndsWith('/addPassword')) { $script:secretEnd = $body.passwordCredential.endDateTime; return @{ keyId = 'credential-key-id'; secretText = 'DO-NOT-PRINT-THIS-SECRET' } }
         if ($method -eq 'PUT') {
             if ($script:failConnection) { throw 'Azure request failed (RequestFailed). Raw responses withheld.' }
             Assert-True ($body.properties.clientSecret -ceq 'DO-NOT-PRINT-THIS-SECRET') 'Credential must be passed to OAuth connection'
@@ -121,6 +127,11 @@ function Invoke-EratoAz {
         if ($script:staleReads -gt 0) { $script:staleReads--; return $script:staleConnection }
         if (-not $script:connection) { throw 'Azure request failed (NotFound).' }
         return $script:connection
+    }
+    if ($url -match '/appManagementPolicies' -or $url -match '/policies/defaultAppManagementPolicy') {
+        if ($script:denyPolicy) { throw 'Azure request failed (AccessDenied).' }
+        if ($url -match '/appManagementPolicies') { return @{ value = @($script:appPolicies) } }
+        return $script:tenantPolicy
     }
     if ($url -match '/applications\(appId=') { return $script:app }
     if ($url -match '/oauth2PermissionGrants') {
@@ -211,7 +222,7 @@ Test-Case 'wrong endpoint and missing Teams channel are corrected on the existin
 }
 Test-Case 'a bot can only be created when explicitly named' {
     $script:bots = @{}
-    Assert-Throws { Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json } 'Pass -ResourceGroup and -BotName to create one'
+    Assert-Throws { Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json } 'enter a resource group and bot name on the Erato setup page'
     Assert-True ($writes.Count -eq 0) 'Created a bot without an explicit name'
 }
 Test-Case 'creating a bot is previewed without writes' {
@@ -291,6 +302,53 @@ Test-Case 'human-readable preview lists bot, SSO and consent changes' {
         Assert-True ($text.Contains($expected)) "Preview does not mention: $expected"
     }
     Assert-True ($writes.Count -eq 0) 'Preview wrote to Azure'
+}
+Test-Case 'v2 tokens are saved alone before the Application ID URI' {
+    $script:uriPolicy = $true
+    $script:tenantPolicy.applicationRestrictions.identifierUris = @{ uriAdditionWithoutUniqueTenantIdentifier = @{ state = 'enabled'; excludeAppsReceivingV2Tokens = $true; restrictForAppsCreatedAfterDateTime = '0001-01-01T00:00:00Z' } }
+    # The scope already exists, so only the token version and URI are missing.
+    $app.api.oauth2PermissionScopes += @{ id = 'existing-sso-id'; value = 'access_as_user'; isEnabled = $true }
+    $preview = Invoke-EratoSetup -Settings $settings -WhatIf -Json
+    Assert-True (@($preview.checks | Where-Object { $_.name -eq 'Identifier URI policy' -and $_.status -eq 'INFO' }).Count -eq 1) 'URI policy not explained'
+    $report = Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json
+    Assert-True ($writes[0].body.Keys.Count -eq 1 -and $writes[0].body.api.requestedAccessTokenVersion -eq 2) 'v2 must be saved in its own first request'
+    Assert-True ($settings.SsoResource -in $app.identifierUris -and $report.exitCode -eq 0) 'URI was not added after v2'
+}
+Test-Case 'a secret lifetime policy shortens the OAuth credential' {
+    $script:tenantPolicy.applicationRestrictions.passwordCredentials = @(@{ restrictionType = 'passwordLifetime'; maxLifetime = 'P90D'; restrictForAppsCreatedAfterDateTime = '2020-01-01T00:00:00Z' })
+    $preview = Invoke-EratoSetup -Settings $settings -WhatIf -Json
+    Assert-True ($preview.plan.credentialLifetimeDays -eq 89) "Unexpected lifetime $($preview.plan.credentialLifetimeDays)"
+    Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json | Out-Null
+    $days = ([DateTime]$script:secretEnd - [DateTime]::UtcNow).TotalDays
+    Assert-True ($days -gt 88 -and $days -lt 90) "Credential lifetime $days exceeds the policy"
+}
+Test-Case 'a policy for older apps does not cap a newer one' {
+    $script:tenantPolicy.applicationRestrictions.passwordCredentials = @(@{ restrictionType = 'passwordLifetime'; maxLifetime = 'P30D'; restrictForAppsCreatedAfterDateTime = '2026-06-01T00:00:00Z' })
+    $preview = Invoke-EratoSetup -Settings $settings -WhatIf -Json
+    Assert-True ($preview.plan.credentialLifetimeDays -eq 365) 'Applied a restriction meant for newer apps'
+}
+Test-Case 'blocked client secrets stop before any write' {
+    $script:appPolicies = @(@{ isEnabled = $true; restrictions = @{ passwordCredentials = @(@{ restrictionType = 'passwordAddition'; restrictForAppsCreatedAfterDateTime = '2019-01-01T00:00:00Z' }) } })
+    $check = Invoke-EratoSetup -Settings $settings -Json
+    Assert-True ((@($check.checks | Where-Object name -eq 'Client secrets allowed')).status -eq 'MISSING') 'Blocked secrets not reported'
+    Assert-Throws { Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json } 'blocks new client secrets'
+    Assert-True ($writes.Count -eq 0) 'Wrote despite a blocked secret'
+}
+Test-Case 'unreadable policies are reported without blocking Apply' {
+    $script:denyPolicy = $true
+    $report = Invoke-EratoSetup -Settings $settings -Apply -Confirm:$false -Json
+    Assert-True ((@($report.checks | Where-Object name -eq 'App management policies')).status -eq 'INFO') 'Unreadable policies not reported'
+    Assert-True ($report.mode -eq 'Apply' -and $report.exitCode -eq 0) 'Unreadable policies blocked Apply'
+}
+Test-Case 'failures name the step that failed' {
+    $script:denyConsent = $true
+    Assert-Throws { Invoke-EratoSetup -Settings $settings -Json } 'AccessDenied'
+    Assert-True ($script:Step -eq 'reading admin consent') "Unexpected step: $script:Step"
+    function global:az { $global:LASTEXITCODE = 1; '403 Forbidden' }
+    try {
+        try { & $realAz -Arguments @('rest'); throw 'Expected CLI failure' }
+        catch { Assert-True ($_.Exception.Message -match 'while reading admin consent \(AccessDenied\)') "Step missing: $($_.Exception.Message)" }
+    } finally { Remove-Item function:global:az; $script:Step = $null }
 }
 Test-Case 'SkipConsent leaves consent to the administrator' {
     $script:grant.scope = 'openid'; $settings.SkipConsent = $true

@@ -5410,18 +5410,44 @@ impl MsOfficeConfig {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned);
-        if bot.app_id.is_none() {
+        let mut derived = Vec::new();
+        if bot.app_id.is_none() && msal_client_id.is_some() {
             bot.app_id = msal_client_id.clone();
+            derived.push("app_id");
         }
-        if bot.sso_app_id.is_none() {
+        if bot.sso_enabled && bot.sso_app_id.is_none() && msal_client_id.is_some() {
             bot.sso_app_id = msal_client_id;
+            derived.push("sso_app_id");
         }
         if bot.tenant_id.is_none() {
             bot.tenant_id = entra_authority_tenant(&self.addin.msal_authority);
+            if bot.tenant_id.is_some() {
+                derived.push("tenant_id");
+            }
         }
         if bot.oauth_connection_name.is_none() {
             bot.oauth_connection_name = Some(DEFAULT_TEAMS_BOT_OAUTH_CONNECTION_NAME.to_string());
+            derived.push("oauth_connection_name");
         }
+        // Operators upgrading an existing bot should see what Erato now fills in.
+        let sso = match (bot.sso_enabled, bot.sso_resource.is_some()) {
+            (false, _) => "single sign-on disabled",
+            (true, true) => "single sign-on with the configured sso_resource",
+            (true, false) => {
+                "single sign-on with sso_resource api://<host>/botid-<app_id> per download host"
+            }
+        };
+        startup_log::info_preinit(format!(
+            "Teams bot: app_id={}, tenant_id={}, oauth_connection_name={}, {sso}; derived from defaults: {}.",
+            bot.app_id.as_deref().unwrap_or("<unset>"),
+            bot.tenant_id.as_deref().unwrap_or("<unset>"),
+            bot.oauth_connection_name.as_deref().unwrap_or("<unset>"),
+            if derived.is_empty() {
+                "none".to_string()
+            } else {
+                derived.join(", ")
+            },
+        ));
     }
 
     pub fn validate(&self) -> Result<(), Report> {
@@ -5547,6 +5573,13 @@ pub struct TeamsBotConfig {
     // Defaults to `https://token.botframework.com`.
     #[serde(default = "default_teams_bot_token_service_url")]
     pub token_service_url: String,
+    // Whether Teams signs users in to the bot silently. The rendered manifest
+    // then points `webApplicationInfo` at the SSO app and resource below, which
+    // the setup helper configures. Set to `false` only to keep an existing bot
+    // without single sign-on, whose OAuth connection has no token exchange
+    // URL, unchanged. Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub sso_enabled: bool,
     // Entra app ID for Teams single sign-on, rendered into the Teams manifest's
     // `webApplicationInfo.id`. Defaults to `integrations.ms_office.addin.msal_client_id`.
     #[serde(default)]
@@ -5597,6 +5630,7 @@ impl Default for TeamsBotConfig {
             tenant_id: None,
             oauth_connection_name: None,
             token_service_url: default_teams_bot_token_service_url(),
+            sso_enabled: true,
             sso_app_id: None,
             sso_resource: None,
             public_base_url: None,
@@ -5699,9 +5733,9 @@ impl TeamsBotConfig {
             )
             .to_ascii_lowercase();
             if !resource.trim().to_ascii_lowercase().ends_with(&suffix) {
-                tracing::warn!(
+                startup_log::warn_preinit(format!(
                     "Teams bot `sso_resource` does not end with `{suffix}`. Teams matches this suffix against the messaging bot and stays silent on a mismatch."
-                );
+                ));
             }
         }
         if let Some(assistant_id) = self.assistant_id.as_deref()
@@ -5734,8 +5768,11 @@ impl TeamsBotConfig {
 
     /// The Application ID URI for Teams single sign-on on `host` (the
     /// authority the Teams package is downloaded from): `sso_resource`, or
-    /// `api://<host>/botid-<app_id>`.
+    /// `api://<host>/botid-<app_id>`. `None` without single sign-on.
     pub fn sso_resource_for_host(&self, host: &str) -> Option<String> {
+        if !self.sso_enabled {
+            return None;
+        }
         if let Some(resource) = self.sso_resource.as_deref() {
             return Some(resource.trim().to_string());
         }
@@ -5985,6 +6022,18 @@ mod teams_bot_config_tests {
         config.teams.bot.messaging_endpoint = Some("https://bot.example.com/elsewhere".to_string());
         config.apply_defaults();
         assert!(config.teams.bot.validate().is_err());
+    }
+
+    #[test]
+    fn disabled_single_sign_on_derives_no_sso_values() {
+        let mut config = office(&format!("https://login.microsoftonline.com/{TENANT_ID}"));
+        config.teams.bot.sso_enabled = false;
+        config.apply_defaults();
+        let bot = &config.teams.bot;
+        assert_eq!(bot.app_id.as_deref(), Some(CLIENT_ID));
+        assert!(bot.sso_app_id.is_none());
+        assert!(bot.sso_resource_for_host("erato.example.com").is_none());
+        bot.validate().expect("valid without single sign-on");
     }
 
     #[test]

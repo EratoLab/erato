@@ -210,13 +210,15 @@ fn apply_bot(document: &mut Value, app: &MsOfficeTeamsAppConfig, host: &str, aut
     document["validDomains"] = json!([host, "token.botframework.com"]);
     // Teams single sign-on: the bot's Application ID URI, derived for the host
     // the package is downloaded from unless configured. The setup page and
-    // its Cloud Shell helper derive the same value.
+    // its Cloud Shell helper derive the same value. Without single sign-on
+    // the tab's own `webApplicationInfo` stays.
+    let Some(sso_resource) = bot.sso_resource_for_host(authority) else {
+        return;
+    };
     if let Some(sso_app_id) = bot.sso_app_id.as_deref() {
         document["webApplicationInfo"]["id"] = json!(sso_app_id.trim());
     }
-    if let Some(sso_resource) = bot.sso_resource_for_host(authority) {
-        document["webApplicationInfo"]["resource"] = json!(sso_resource);
-    }
+    document["webApplicationInfo"]["resource"] = json!(sso_resource);
 }
 
 fn validate_manifest(document: &Value, app: &MsOfficeTeamsAppConfig) -> Result<()> {
@@ -376,6 +378,23 @@ mod tests {
         assert_eq!(
             manifest["webApplicationInfo"]["resource"],
             "api://erato.example.com:8443/botid-11111111-2222-3333-4444-555555555555"
+        );
+    }
+
+    #[test]
+    fn keeps_the_tab_resource_without_single_sign_on() {
+        let mut app = MsOfficeTeamsAppConfig::default();
+        app.bot.enabled = true;
+        app.bot.sso_enabled = false;
+        app.bot.app_id = Some("11111111-2222-3333-4444-555555555555".to_string());
+        let manifest = render(&app);
+        assert_eq!(
+            manifest["bots"][0]["botId"],
+            "11111111-2222-3333-4444-555555555555"
+        );
+        assert_eq!(
+            manifest["webApplicationInfo"]["resource"],
+            "api://06d98d69-523a-4c2e-893d-44bd98226b31"
         );
     }
 

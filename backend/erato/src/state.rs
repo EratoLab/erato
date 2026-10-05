@@ -310,7 +310,7 @@ impl AppState {
         )?;
 
         let ms_teams_bot =
-            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams.bot)?;
+            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams)?;
 
         Ok(Self {
             db,

@@ -156,6 +156,7 @@ describe("Teams bot setup info", () => {
     messagingEndpoint:
       "https://bot.example.com/api/integrations/ms_teams/messages",
     messagingEndpointConfigured: true,
+    ssoEnabled: true,
     status: { activityReceived: true, credential: "accepted" },
   };
 
@@ -165,6 +166,16 @@ describe("Teams bot setup info", () => {
       readTeamsBotSetupInfo({ ...info, status: { credential: "other" } })
         ?.status,
     ).toEqual({ activityReceived: false, credential: "unknown" });
+    expect(
+      readTeamsBotSetupInfo({
+        ...info,
+        ssoEnabled: false,
+        status: { credential: "app_not_in_tenant" },
+      }),
+    ).toMatchObject({
+      ssoEnabled: false,
+      status: { credential: "app_not_in_tenant" },
+    });
   });
 
   it("ignores missing or unsafe setup info", () => {

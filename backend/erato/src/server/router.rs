@@ -759,10 +759,13 @@ async fn teams_bot_setup(
         Ok(base_url) => base_url,
         Err(message) => return (StatusCode::BAD_REQUEST, message).into_response(),
     };
+    let status = bot
+        .setup_status(&crate::ms_teams_bot::host::Host::new(app_state.clone()))
+        .await;
     match crate::ms_teams_bot::SetupInfo::new(
         &app_state.config.integrations.ms_office.teams.bot,
         &base_url,
-        bot.setup_status(),
+        status,
     ) {
         Ok(info) => (
             [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],

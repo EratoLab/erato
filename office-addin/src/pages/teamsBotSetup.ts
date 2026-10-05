@@ -33,7 +33,11 @@ export function readTeamsBotSetup(manifest: unknown): TeamsBotSetup | null {
   };
 }
 
-export type TeamsBotCredentialState = "unknown" | "accepted" | "rejected";
+export type TeamsBotCredentialState =
+  | "unknown"
+  | "accepted"
+  | "rejected"
+  | "app_not_in_tenant";
 
 /** `/office-addin/teams/bot-setup.json`: what this deployment uses for the bot. */
 export type TeamsBotSetupInfo = {
@@ -45,6 +49,8 @@ export type TeamsBotSetupInfo = {
   messagingEndpoint: string;
   /** False when the endpoint is just the address the setup page was opened at. */
   messagingEndpointConfigured: boolean;
+  /** False when the deployment keeps a bot without single sign-on. */
+  ssoEnabled: boolean;
   status: {
     activityReceived: boolean;
     credential: TeamsBotCredentialState;
@@ -84,10 +90,13 @@ export function readTeamsBotSetupInfo(
     ssoResource: text("ssoResource"),
     messagingEndpoint,
     messagingEndpointConfigured: info.messagingEndpointConfigured === true,
+    ssoEnabled: info.ssoEnabled !== false,
     status: {
       activityReceived: info.status?.activityReceived === true,
       credential:
-        credential === "accepted" || credential === "rejected"
+        credential === "accepted" ||
+        credential === "rejected" ||
+        credential === "app_not_in_tenant"
           ? credential
           : "unknown",
     },

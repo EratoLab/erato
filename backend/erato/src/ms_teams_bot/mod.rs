@@ -33,7 +33,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use connector::{Connector, CredentialState};
-use erato_config::config::TeamsBotConfig;
+use erato_config::config::{MsOfficeTeamsAppConfig, TeamsBotConfig};
 use eyre::{Report, eyre};
 use graph::GraphIdentity;
 use host::Host;
@@ -57,6 +57,10 @@ const IDENTITY_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 
 pub struct TeamsBotSettings {
     pub tenant_id: String,
+    /// The Teams app's short name, as users see the bot.
+    pub app_name: String,
+    /// The personal tab's name, when the Teams app ships the tab.
+    pub tab_name: Option<String>,
     pub public_base_url: Option<String>,
     pub assistant_id: Option<Uuid>,
     pub context_message_count: u32,
@@ -92,10 +96,12 @@ pub struct SetupInfo {
     /// Whether `messaging_endpoint` comes from configuration rather than the
     /// address the setup page was opened at.
     pub messaging_endpoint_configured: bool,
+    pub sso_enabled: bool,
     pub status: SetupStatus,
 }
 
-/// Observed by this Erato instance since its start.
+/// What Erato has observed: activity across all instances, the credential
+/// as checked by the instance answering.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupStatus {
@@ -105,7 +111,8 @@ pub struct SetupStatus {
 
 impl TeamsBot {
     /// The bot runtime, or `None` when the bot is disabled.
-    pub fn from_config(config: &TeamsBotConfig) -> Result<Option<Arc<Self>>, Report> {
+    pub fn from_config(app: &MsOfficeTeamsAppConfig) -> Result<Option<Arc<Self>>, Report> {
+        let config = &app.bot;
         if !config.enabled {
             return Ok(None);
         }
@@ -134,6 +141,8 @@ impl TeamsBot {
         Ok(Some(Arc::new(Self {
             settings: TeamsBotSettings {
                 tenant_id: tenant_id.clone(),
+                app_name: app.manifest.short_name.clone(),
+                tab_name: app.enabled.then(|| app.manifest.tab_name.clone()),
                 public_base_url: config
                     .public_base_url
                     .as_deref()
@@ -164,10 +173,20 @@ impl TeamsBot {
         })))
     }
 
-    pub fn setup_status(&self) -> SetupStatus {
+    /// For the setup page: replicas share activity through the database;
+    /// this one also checks the credential, rate limited.
+    pub async fn setup_status(&self, host: &Host) -> SetupStatus {
+        let activity_received = self.activity_received.load(Ordering::Relaxed)
+            || host
+                .teams_activity_recorded()
+                .await
+                .unwrap_or_else(|error| {
+                    tracing::warn!(%error, "Could not read recorded Teams activity");
+                    false
+                });
         SetupStatus {
-            activity_received: self.activity_received.load(Ordering::Relaxed),
-            credential: self.connector.credential_state(),
+            activity_received,
+            credential: self.connector.check_credential().await,
         }
     }
 }
@@ -202,6 +221,7 @@ impl SetupInfo {
             connection_name: required(&config.oauth_connection_name, "oauth_connection_name")?,
             sso_resource: config.sso_resource_for_host(&authority),
             messaging_endpoint_configured: configured_endpoint.is_some(),
+            sso_enabled: config.sso_enabled,
             messaging_endpoint: configured_endpoint.unwrap_or_else(|| {
                 format!("{}{MESSAGES_ROUTE}", base.origin().ascii_serialization())
             }),
@@ -217,6 +237,8 @@ impl TeamsBot {
         Self {
             settings: TeamsBotSettings {
                 tenant_id: "tenant".into(),
+                app_name: "Erato".into(),
+                tab_name: Some("Erato".into()),
                 public_base_url: None,
                 assistant_id: None,
                 context_message_count: 0,
@@ -282,11 +304,15 @@ pub async fn messages_route(
             let (status, body) = handler::on_invoke(&bot, &host, &activity).await;
             (status, Json(body)).into_response()
         }
+        "conversationUpdate" if activity.bot_added_to_personal_chat() => {
+            tokio::spawn(handler::on_bot_added(bot, host, activity));
+            StatusCode::OK.into_response()
+        }
         "event" if activity.name.as_deref() == Some("tokens/response") => {
             tokio::spawn(handler::on_token_response(bot, host, activity));
             StatusCode::OK.into_response()
         }
-        // conversationUpdate, installationUpdate, messageReaction, …
+        // other conversationUpdates, installationUpdate, messageReaction, …
         _ => StatusCode::OK.into_response(),
     }
 }
@@ -343,6 +369,18 @@ mod setup_info_tests {
             activity_received: false,
             credential: CredentialState::Unknown,
         }
+    }
+
+    #[test]
+    fn reports_no_sso_resource_without_single_sign_on() {
+        let config = TeamsBotConfig {
+            sso_enabled: false,
+            ..config()
+        };
+        let info = SetupInfo::new(&config, "https://erato.internal.example", status())
+            .expect("setup info");
+        assert!(!info.sso_enabled);
+        assert!(info.sso_resource.is_none());
     }
 
     #[test]
