@@ -18,10 +18,12 @@ RUN cargo install --locked cargo-about --version 0.9.1 --features cli
 
 # Build application (only erato binary)
 COPY . .
+# Compress embedded debug information without stripping backtrace details.
+# Pass the linker option only to the final binary so dependencies stay cached.
 RUN if [ -n "$ERATO_FEATURES" ]; then \
-      cargo auditable build --release -p erato --bin erato --features "$ERATO_FEATURES"; \
+      cargo auditable rustc --release -p erato --bin erato --features "$ERATO_FEATURES" -- -C link-arg=-Wl,--compress-debug-sections=zlib; \
     else \
-      cargo auditable build --release -p erato --bin erato; \
+      cargo auditable rustc --release -p erato --bin erato -- -C link-arg=-Wl,--compress-debug-sections=zlib; \
     fi
 RUN mkdir -p /app/sbom && cargo about generate --manifest-path erato/Cargo.toml --config about.toml --locked about.hbs > /app/sbom/backend.txt
 
