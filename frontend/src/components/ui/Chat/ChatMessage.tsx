@@ -13,6 +13,7 @@ import { MessageErrorAlert } from "./MessageErrorAlert";
 import { messageAttachmentFileIds } from "./messageAttachmentFileIds";
 import { Avatar } from "../Feedback/Avatar";
 import { LoadingIndicator } from "../Feedback/LoadingIndicator";
+import { AudioTranscriptExcerpt } from "../FileUpload/AudioTranscriptExcerpt";
 import { ActionFacetContext } from "../Message/ActionFacetContext";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { ImageLightbox } from "../Message/ImageLightbox";
@@ -45,6 +46,8 @@ export interface ChatMessageHostComponents {
   LoadingIndicator: typeof LoadingIndicator;
   McpNotices: typeof McpNotices;
   ActionFacetContext: typeof ActionFacetContext;
+  /** For the `transcript` a recording's attachment item carries. */
+  AudioTranscriptExcerpt: typeof AudioTranscriptExcerpt;
 }
 
 export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
@@ -52,6 +55,7 @@ export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
   LoadingIndicator,
   McpNotices,
   ActionFacetContext,
+  AudioTranscriptExcerpt,
 };
 
 export interface ChatMessageProps {

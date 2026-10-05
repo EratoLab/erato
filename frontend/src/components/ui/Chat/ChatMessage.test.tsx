@@ -7,6 +7,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "./ChatMessage";
 import { McpNotices } from "./McpNotices";
+import { AudioTranscriptExcerpt } from "../FileUpload/AudioTranscriptExcerpt";
 import { ActionFacetContext } from "../Message/ActionFacetContext";
 
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
@@ -924,6 +925,9 @@ describe("ChatMessage", () => {
       expect(CHAT_MESSAGE_HOST_COMPONENTS.McpNotices).toBe(McpNotices);
       expect(CHAT_MESSAGE_HOST_COMPONENTS.ActionFacetContext).toBe(
         ActionFacetContext,
+      );
+      expect(CHAT_MESSAGE_HOST_COMPONENTS.AudioTranscriptExcerpt).toBe(
+        AudioTranscriptExcerpt,
       );
     });
   });
