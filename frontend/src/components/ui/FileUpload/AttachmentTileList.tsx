@@ -18,6 +18,8 @@ export interface AttachmentTileItem {
   file: FileResource;
   previewUrl?: string | null;
   labelOverride?: string;
+  /** A sent recording's completed transcript; tiles do not draw it. */
+  transcript?: string;
 }
 
 /** Mirrors the tile's own media test, so banding matches what each tile draws. */

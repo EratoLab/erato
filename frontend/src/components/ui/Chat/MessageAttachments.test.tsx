@@ -1,9 +1,11 @@
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { http, HttpResponse } from "msw";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { server } from "@/lib/mocks/server";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { MessageAttachments } from "./MessageAttachments";
@@ -51,6 +53,15 @@ const file = (
 
 const byId = (...files: FileUploadItem[]) =>
   Object.fromEntries(files.map((entry) => [entry.id, entry]));
+
+const recording = (
+  id: string,
+  audioTranscription: { status: string; transcript?: string | null },
+): FileUploadItem =>
+  ({
+    ...file(id, `${id}.wav`),
+    audio_transcription: audioTranscription,
+  }) as unknown as FileUploadItem;
 
 describe("MessageAttachments", () => {
   it("resolves attachments from the conversation's own file map", async () => {
@@ -268,5 +279,135 @@ describe("MessageAttachments", () => {
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  describe("audio transcripts", () => {
+    const layoutSpies: { mockRestore: () => void }[] = [];
+    afterEach(() => {
+      layoutSpies.splice(0).forEach((spy) => spy.mockRestore());
+    });
+
+    it("shows a recording's completed transcript under its tile", async () => {
+      const files = [
+        recording("memo", {
+          status: "completed",
+          transcript: "Okay, das ist ein Test.",
+        }),
+      ];
+
+      await renderWithProviders(
+        <MessageAttachments
+          fileIds={["memo"]}
+          filesById={byId(...files)}
+          relatedFiles={files}
+        />,
+      );
+
+      expect(screen.getByText("memo.wav")).toBeInTheDocument();
+      expect(screen.getByTestId("message-audio-transcript")).toHaveTextContent(
+        "Okay, das ist ein Test.",
+      );
+    });
+
+    it.each([
+      ["transcribing", "Okay, das"],
+      ["failed", null],
+      ["completed", "   "],
+    ])(
+      "shows no transcript for a %s transcription of %j",
+      async (status, transcript) => {
+        const files = [recording("memo", { status, transcript })];
+
+        await renderWithProviders(
+          <MessageAttachments
+            fileIds={["memo"]}
+            filesById={byId(...files)}
+            relatedFiles={files}
+          />,
+        );
+
+        expect(screen.getByText("memo.wav")).toBeInTheDocument();
+        expect(
+          screen.queryByTestId("message-audio-transcript"),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("names each recording when a message carries several", async () => {
+      const files = [
+        recording("first", { status: "completed", transcript: "One" }),
+        recording("second", { status: "completed", transcript: "Two" }),
+      ];
+
+      await renderWithProviders(
+        <MessageAttachments
+          fileIds={["first", "second"]}
+          filesById={byId(...files)}
+          relatedFiles={files}
+        />,
+      );
+
+      const excerpts = screen.getAllByTestId("message-audio-transcript");
+      expect(excerpts[0]).toHaveTextContent("first.wav");
+      expect(excerpts[1]).toHaveTextContent("second.wav");
+    });
+
+    it("shows the transcript of a file the conversation has not loaded yet", async () => {
+      // An optimistic message names its uploads before the chat refetches.
+      const memo = recording("memo", {
+        status: "completed",
+        transcript: "Fetched transcript",
+      });
+      server.use(
+        http.get("/api/v1beta/files/:fileId", () => HttpResponse.json(memo)),
+      );
+
+      await renderWithProviders(
+        <MessageAttachments
+          fileIds={["memo"]}
+          filesById={{}}
+          relatedFiles={[]}
+        />,
+      );
+
+      expect(
+        await screen.findByTestId("message-audio-transcript"),
+      ).toHaveTextContent("Fetched transcript");
+    });
+
+    it("clamps a long transcript until it is opened", async () => {
+      layoutSpies.push(
+        vi
+          .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+          .mockReturnValue(200),
+        vi
+          .spyOn(HTMLElement.prototype, "clientHeight", "get")
+          .mockReturnValue(60),
+      );
+      const files = [
+        recording("memo", {
+          status: "completed",
+          transcript: "A long recording. ".repeat(80),
+        }),
+      ];
+
+      await renderWithProviders(
+        <MessageAttachments
+          fileIds={["memo"]}
+          filesById={byId(...files)}
+          relatedFiles={files}
+        />,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Show more" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+      fireEvent.click(toggle);
+
+      expect(screen.getByRole("button", { name: "Show less" })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+    });
   });
 });

@@ -3146,6 +3146,21 @@ msgid "feedback.view.title"
 msgstr "Ihr Feedback"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/AudioPreview.tsx
+msgid "filePreview.audioLoading"
+msgstr "Aufnahme wird geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/AudioPreview.tsx
+msgid "filePreview.audioPlayerLabel"
+msgstr "{filename} abspielen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/AudioPreview.tsx
+msgid "filePreview.audioPreviewUnavailable"
+msgstr "Vorschau nicht verfügbar: Diese Aufnahme konnte nicht geladen werden."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/DocxPreview.tsx
 msgid "filePreview.docxEmpty"
 msgstr "Die Dokumentvorschau ist leer."
@@ -7977,9 +7992,14 @@ msgstr ""
 msgid "Show details"
 msgstr "Details anzeigen"
 
+#: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
 #: src/components/ui/Message/CollapsibleCodeBlock.tsx
 msgid "Show less"
 msgstr "Weniger anzeigen"
+
+#: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
+msgid "Show more"
+msgstr "Mehr anzeigen"
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Show tool calls"
@@ -8263,8 +8283,9 @@ msgid "Transcribing"
 msgstr "Transkribieren"
 
 #: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
 msgid "Transcript"
-msgstr ""
+msgstr "Transkript"
 
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Try Again"

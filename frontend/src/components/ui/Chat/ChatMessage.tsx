@@ -13,6 +13,7 @@ import { MessageErrorAlert } from "./MessageErrorAlert";
 import { messageAttachmentFileIds } from "./messageAttachmentFileIds";
 import { Avatar } from "../Feedback/Avatar";
 import { LoadingIndicator } from "../Feedback/LoadingIndicator";
+import { AudioTranscriptExcerpt } from "../FileUpload/AudioTranscriptExcerpt";
 import { ActionFacetContext } from "../Message/ActionFacetContext";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { ImageLightbox } from "../Message/ImageLightbox";
@@ -45,6 +46,8 @@ export interface ChatMessageHostComponents {
   LoadingIndicator: typeof LoadingIndicator;
   McpNotices: typeof McpNotices;
   ActionFacetContext: typeof ActionFacetContext;
+  /** For the `transcript` a recording's attachment item carries. */
+  AudioTranscriptExcerpt: typeof AudioTranscriptExcerpt;
 }
 
 export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
@@ -52,6 +55,7 @@ export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
   LoadingIndicator,
   McpNotices,
   ActionFacetContext,
+  AudioTranscriptExcerpt,
 };
 
 export interface ChatMessageProps {
@@ -98,6 +102,12 @@ export interface ChatMessageRendererState {
   userDisplayName: string;
   /** True when the host draws nothing at all for this message. */
   isEmpty: boolean;
+  /**
+   * True for a user message that is nothing but its attachments, such as a
+   * transcript-mode recording, which is sent with an empty text part. The host
+   * then draws no body, since a theme would tint it into an empty bubble.
+   */
+  isAttachmentOnly: boolean;
   /** Uploads plus, on the assistant side, the documents it generated. */
   attachmentIds: string[];
   /** Every file the conversation knows about, keyed by id. */
@@ -166,6 +176,10 @@ export const useChatMessageRenderer = ({
     () => Object.values(allFilesById),
     [allFilesById],
   );
+  const attachmentIds = messageAttachmentFileIds(message);
+  const hasOnlyBlankText = message.content.every(
+    (part) => part.content_type === "text" && part.text.trim() === "",
+  );
 
   return {
     isUser,
@@ -175,7 +189,13 @@ export const useChatMessageRenderer = ({
     // not; the openwebui kit draws an attachment-only user message instead.
     // The divergence is unresolved, so this reports what the host does.
     isEmpty: message.content.length === 0 && !message.loading && !message.error,
-    attachmentIds: messageAttachmentFileIds(message),
+    isAttachmentOnly:
+      isUser &&
+      hasOnlyBlankText &&
+      attachmentIds.length > 0 &&
+      !message.error &&
+      !message.action_facet_args,
+    attachmentIds,
     filesById,
     relatedFiles,
     contentProps: {
@@ -234,6 +254,7 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
     role,
     userDisplayName,
     isEmpty,
+    isAttachmentOnly,
     attachmentIds,
     filesById,
     relatedFiles,
@@ -297,61 +318,69 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
         </div>
       )}
 
-      <div
-        className="flex w-full"
-        style={messageContentRowStyle}
-        data-ui="message-body"
-      >
-        {showAvatar && (
-          <Avatar userProfile={userProfile} userOrAssistant={!!isUser} />
-        )}
-
-        <div className="min-w-0 flex-1 break-words">
-          <div className="flex items-start justify-between">
-            <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
-              {isUser ? (
-                (userDisplayNameOverride ??
-                userProfile?.name ?? (
-                  <Trans id="branding.user_form_of_address">You</Trans>
-                ))
-              ) : (
-                <Trans id="branding.assistant_name">Assistant</Trans>
-              )}
-            </div>
+      {isAttachmentOnly ? (
+        showTimestamp && (
+          <div className="z-10">
+            <Controls {...controlsProps} />
           </div>
-
-          <MessageErrorAlert message={message} />
-
-          {isUser && message.action_facet_args && (
-            <ActionFacetContext actionFacetArgs={message.action_facet_args} />
+        )
+      ) : (
+        <div
+          className="flex w-full"
+          style={messageContentRowStyle}
+          data-ui="message-body"
+        >
+          {showAvatar && (
+            <Avatar userProfile={userProfile} userOrAssistant={!!isUser} />
           )}
 
-          <MessageContent {...contentProps} />
+          <div className="min-w-0 flex-1 break-words">
+            <div className="flex items-start justify-between">
+              <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
+                {isUser ? (
+                  (userDisplayNameOverride ??
+                  userProfile?.name ?? (
+                    <Trans id="branding.user_form_of_address">You</Trans>
+                  ))
+                ) : (
+                  <Trans id="branding.assistant_name">Assistant</Trans>
+                )}
+              </div>
+            </div>
 
-          <McpNotices
-            message={message}
-            showConnect={!controlsContext.isSharedDialog}
-          />
+            <MessageErrorAlert message={message} />
 
-          {/* Display attached files if any — user messages render these
+            {isUser && message.action_facet_args && (
+              <ActionFacetContext actionFacetArgs={message.action_facet_args} />
+            )}
+
+            <MessageContent {...contentProps} />
+
+            <McpNotices
+              message={message}
+              showConnect={!controlsContext.isSharedDialog}
+            />
+
+            {/* Display attached files if any — user messages render these
               above the body instead, see the hoisted slot. */}
-          {!isUser && attachments}
+            {!isUser && attachments}
 
-          {message.loading && message.content.length === 0 && (
-            <div className="mt-2">
-              <LoadingIndicator
-                state={message.loading.state}
-                context={message.loading.context}
-              />
-            </div>
-          )}
-          {showTimestamp && (
-            <div className="z-10">
-              <Controls {...controlsProps} />
-            </div>
-          )}
+            {message.loading && message.content.length === 0 && (
+              <div className="mt-2">
+                <LoadingIndicator
+                  state={message.loading.state}
+                  context={message.loading.context}
+                />
+              </div>
+            )}
+            {showTimestamp && (
+              <div className="z-10">
+                <Controls {...controlsProps} />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Image lightbox - rendered via Portal to document.body */}
       <ImageLightbox

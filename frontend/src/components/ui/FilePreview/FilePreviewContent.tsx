@@ -5,6 +5,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 
+import { AudioPreview } from "./AudioPreview";
 import { EmlPreview } from "./EmlPreview";
 import { TeamsTranscriptPreview } from "./TeamsTranscriptPreview";
 
@@ -82,12 +83,28 @@ const IMAGE_EXTENSIONS = [
   "bmp",
 ] as const;
 
+// Matches the backend's audio file capability, which types them all `audio/*`.
+const AUDIO_EXTENSIONS = [
+  "mp3",
+  "m4a",
+  "wav",
+  "aac",
+  "flac",
+  "ogg",
+  "oga",
+  "opus",
+  "webm",
+  "mp4",
+] as const;
+
 function getExtension(filename: string): string {
   return filename.split(".").pop()?.toLowerCase() ?? "";
 }
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const IMAGE_MIME_PREFIX = "image/";
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const AUDIO_MIME_PREFIX = "audio/";
 const DOCX_MIME_TYPE =
   // eslint-disable-next-line lingui/no-unlocalized-strings
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -108,9 +125,14 @@ function isImageMime(mimeType: string | undefined): boolean {
   return mimeType?.startsWith(IMAGE_MIME_PREFIX) ?? false;
 }
 
+function isAudioMime(mimeType: string | undefined): boolean {
+  return mimeType?.startsWith(AUDIO_MIME_PREFIX) ?? false;
+}
+
 /** Which inline viewer draws a file; null when none can. */
 export type PreviewKind =
   | "image"
+  | "audio"
   | "pdf"
   | "eml"
   | "docx"
@@ -137,6 +159,12 @@ export function resolvePreviewKind(
     isImageMime(mimeType)
   ) {
     return "image";
+  }
+  if (
+    AUDIO_EXTENSIONS.includes(extension as (typeof AUDIO_EXTENSIONS)[number]) ||
+    isAudioMime(mimeType)
+  ) {
+    return "audio";
   }
   if (extension === "pdf" || mimeType === "application/pdf") return "pdf";
   if (extension === "eml" || mimeType === "message/rfc822") return "eml";
@@ -176,7 +204,7 @@ export interface FilePreviewContentProps {
 
 /**
  * Capability-routed renderer for a single previewable file. Picks the right
- * inline viewer (image, PDF, EML, …) from the filename and optional mime
+ * inline viewer (image, audio, PDF, EML, …) from the filename and optional mime
  * type. Used by the modal for top-level files and by EmlPreview for nested
  * email attachments — so clicking a PDF inside an email opens the same PDF
  * viewer as clicking a PDF at the top level.
@@ -197,6 +225,10 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
         className="mx-auto max-h-[75vh] max-w-full object-contain"
       />
     );
+  }
+
+  if (kind === "audio") {
+    return <AudioPreview filename={filename} url={url} mimeType={mimeType} />;
   }
 
   if (kind === "pdf") {

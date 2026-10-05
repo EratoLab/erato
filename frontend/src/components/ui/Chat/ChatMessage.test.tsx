@@ -7,6 +7,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "./ChatMessage";
 import { McpNotices } from "./McpNotices";
+import { AudioTranscriptExcerpt } from "../FileUpload/AudioTranscriptExcerpt";
 import { ActionFacetContext } from "../Message/ActionFacetContext";
 
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
@@ -228,6 +229,75 @@ describe("ChatMessage", () => {
       );
     },
   );
+
+  describe("attachment-only user messages", () => {
+    const renderUserMessage = async (overrides: Partial<UiChatMessage>) => {
+      const message: UiChatMessage = {
+        id: "msg_recording",
+        content: [{ content_type: "text", text: "" }],
+        role: "user",
+        sender: "user",
+        authorId: "user_1",
+        createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+        status: "complete",
+        input_files_ids: ["recording"],
+        ...overrides,
+      };
+
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+
+      render(
+        <I18nProvider i18n={i18n}>
+          <ChatMessage
+            message={message}
+            controls={() => <div data-testid="message-controls-probe" />}
+            controlsContext={{
+              currentUserId: "user_1",
+              dialogOwnerId: "user_1",
+              isSharedDialog: false,
+            }}
+            onMessageAction={async () => true}
+          />
+        </I18nProvider>,
+      );
+
+      return screen.getByTestId("message-user");
+    };
+
+    it.each(["", "  \n"])(
+      "draws no body for blank text %j beside attachments",
+      async (text) => {
+        const messageShell = await renderUserMessage({
+          content: [{ content_type: "text", text }],
+        });
+
+        // A theme tints the body, so an empty one reads as an empty bubble.
+        expect(
+          messageShell.querySelector('[data-ui="message-body"]'),
+        ).toBeNull();
+        expect(screen.getByTestId("attachments-stub")).toBeInTheDocument();
+        expect(
+          screen.getByTestId("message-controls-probe"),
+        ).toBeInTheDocument();
+      },
+    );
+
+    it("keeps the body when the send failed, so the error stays visible", async () => {
+      const messageShell = await renderUserMessage({
+        status: "error",
+        error: {
+          error_type: "provider_error",
+          error_description: "Provider returned diagnostic details",
+        },
+      });
+
+      expect(
+        messageShell.querySelector('[data-ui="message-body"]'),
+      ).not.toBeNull();
+    });
+  });
 
   it("renders generated documents as assistant attachments without duplicating images", async () => {
     const message: UiChatMessage = {
@@ -855,6 +925,9 @@ describe("ChatMessage", () => {
       expect(CHAT_MESSAGE_HOST_COMPONENTS.McpNotices).toBe(McpNotices);
       expect(CHAT_MESSAGE_HOST_COMPONENTS.ActionFacetContext).toBe(
         ActionFacetContext,
+      );
+      expect(CHAT_MESSAGE_HOST_COMPONENTS.AudioTranscriptExcerpt).toBe(
+        AudioTranscriptExcerpt,
       );
     });
   });
