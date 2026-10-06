@@ -258,9 +258,15 @@ function SidecarIndexingSettings({
                   summary={summary}
                   now={now}
                   busy={busy}
-                  canMoveUp={index > 0 && ordered[index - 1].editable}
+                  canMoveUp={
+                    index > 0 &&
+                    ordered[index - 1].editable &&
+                    ordered[index - 1].product === entry.product
+                  }
                   canMoveDown={
-                    index < ordered.length - 1 && ordered[index + 1].editable
+                    index < ordered.length - 1 &&
+                    ordered[index + 1].editable &&
+                    ordered[index + 1].product === entry.product
                   }
                   onMove={(direction) => move(index, direction)}
                   onToggle={(enabled) =>

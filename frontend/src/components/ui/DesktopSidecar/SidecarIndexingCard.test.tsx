@@ -584,24 +584,37 @@ describe("Teams and Outlook source controls", () => {
     });
   });
 
-  it("reorders Teams and Outlook together without changing their enablement", async () => {
+  it("keeps sources grouped by application and reorders only within one", async () => {
     renderSources();
-    fireEvent.click(
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("shared@example.com");
+    expect(rows[1]).toHaveTextContent("Microsoft Teams local cache (1)");
+    expect(
       screen.getByRole("button", {
         name: "Increase priority for Microsoft Teams local cache (1)",
       }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", {
+        name: "Decrease priority for shared@example.com",
+      }),
+    ).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Increase priority for Microsoft Teams local cache (2)",
+      }),
     );
-    expect(screen.getAllByRole("listitem")[0]).toHaveTextContent(
-      "Microsoft Teams local cache (1)",
+    expect(screen.getAllByRole("listitem")[1]).toHaveTextContent(
+      "Microsoft Teams local cache (2)",
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Save indexing settings" }),
     );
     await waitFor(() => expect(save).toHaveBeenCalledOnce());
     expect(save.mock.calls[0][0].indexing_sources).toEqual([
-      { source_id: teamsSourceIds[0], enabled: true, priority: 0 },
-      { source_id: sourceId, enabled: false, priority: 1 },
-      { source_id: teamsSourceIds[1], enabled: true, priority: 2 },
+      { source_id: sourceId, enabled: false, priority: 0 },
+      { source_id: teamsSourceIds[1], enabled: true, priority: 1 },
+      { source_id: teamsSourceIds[0], enabled: true, priority: 2 },
     ]);
   });
 
