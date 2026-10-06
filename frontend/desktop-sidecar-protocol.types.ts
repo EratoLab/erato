@@ -22,8 +22,23 @@ const source: SourceDescriptor = {
   providerExtension: { revision: 2 },
 };
 
+const teamsSource: SourceDescriptor = {
+  ...source,
+  sourceKind: "teams",
+  product: "teams",
+  product_variant: "teams_new",
+  account: {
+    tenantId: "tenant-1",
+    userId: "user-1",
+    email: "jane@home.example",
+    tenantName: "Contoso Ltd",
+    userType: "Guest",
+    accountExtension: { revision: 2 },
+  },
+};
+
 const response: SourcesListV1Result = {
-  sources: [source],
+  sources: [source, teamsSource],
   responseRevision: 2,
 };
 

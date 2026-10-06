@@ -36,6 +36,37 @@
       "type": "string",
       "minLength": 1
     },
+    "account": {
+      "description": "Teams sources only: the signed-in Teams identity (one tenant as one user) that this source indexes. Several identities can share one Teams cache, including guest identities of the same person in other tenants. Older sidecars and other source kinds omit it.",
+      "type": "object",
+      "properties": {
+        "tenantId": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": ["string", "null"]
+        },
+        "email": {
+          "type": ["string", "null"],
+          "description": "Lowercase address identifying the person across tenants and mail; a guest identity carries its home address."
+        },
+        "userPrincipalName": {
+          "type": ["string", "null"]
+        },
+        "tenantName": {
+          "type": ["string", "null"]
+        },
+        "userType": {
+          "type": ["string", "null"],
+          "description": "Member or Guest, as reported by Teams."
+        }
+      },
+      "required": ["tenantId", "userId"],
+      "additionalProperties": true
+    },
     "locator": {
       "type": "object",
       "additionalProperties": true

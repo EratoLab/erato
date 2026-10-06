@@ -22,8 +22,16 @@ export interface SearchQueryV1Result {
     kind: string;
     title: string | null;
     sender: string | null;
+    /**
+     * Lowercase sender address: the email sender, or the Teams sender's profile email when Teams cached one. Omitted when unknown.
+     */
+    senderEmail?: string | null;
     mailboxId: string | null;
     date: number | null;
+    /**
+     * Unix seconds of the last edit Teams reported for a Teams message. Reactions and read state are not edits. Omitted when the message was never edited.
+     */
+    editedAt?: number | null;
     mimeType: string | null;
     conversationKey: string | null;
     topLevelParent?: TopLevelParent;

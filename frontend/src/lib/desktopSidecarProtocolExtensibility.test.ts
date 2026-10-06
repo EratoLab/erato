@@ -12,6 +12,7 @@ import {
   validateLocalTasksStartV1Params,
   validateLocalTasksStatusV1Result,
   validateOutlookGetConversationV1Result,
+  validateSearchQueryV1Result,
   validateSourcesListV1Result,
 } from "../../../desktop-sidecar-protocol/typescript/src/generated/validators.mjs";
 import { DesktopSidecarClient } from "../../../desktop-sidecar-protocol/typescript/src/index.js";
@@ -84,6 +85,52 @@ describe("desktop sidecar protocol extensibility", () => {
         sources: [{ ...source, indexingEnabled: "yes" }],
       }),
     ).toBe(false);
+    const teamsSource = {
+      ...source,
+      sourceKind: "teams",
+      product: "teams",
+      product_variant: "teams_new",
+      displayName: "Contoso Ltd (jane@home.example)",
+      account: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        displayName: "Jane",
+        email: "jane@home.example",
+        userPrincipalName: "jane_home.example#EXT#@contoso.onmicrosoft.com",
+        tenantName: "Contoso Ltd",
+        userType: "Guest",
+        futureAccountField: true,
+      },
+    };
+    expect(validateSourcesListV1Result({ sources: [teamsSource] })).toBe(true);
+    expect(
+      validateSourcesListV1Result({
+        sources: [{ ...teamsSource, account: { tenantId: "tenant-1" } }],
+      }),
+    ).toBe(false);
+    const hit = {
+      documentId: "22222222-2222-4222-8222-222222222222",
+      chunkId: null,
+      score: 1,
+      kind: "teams_message",
+      title: null,
+      sender: "8:orgid:user-1",
+      senderEmail: "jane@home.example",
+      mailboxId: null,
+      date: 1800000000,
+      editedAt: 1800000100,
+      mimeType: null,
+      conversationKey: "19:chat@thread.v2",
+    };
+    const search = (hits: object[]) =>
+      validateSearchQueryV1Result({
+        hits,
+        elapsedMs: 1,
+        blocksRead: 0,
+        candidatesScored: 1,
+      });
+    expect(search([hit])).toBe(true);
+    expect(search([{ ...hit, editedAt: "yesterday" }])).toBe(false);
 
     const start = JSON.parse(
       await readFile(

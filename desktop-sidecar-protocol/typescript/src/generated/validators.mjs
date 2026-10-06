@@ -18276,7 +18276,7 @@ return errors === 0;
 }
 
 export const validateSearchQueryV1Result = validate75;
-const schema95 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json","title":"SearchQueryV1Result","type":"object","properties":{"hits":{"type":"array","items":{"type":"object","properties":{"documentId":{"type":"string"},"uri":{"description":"A URI identifying the document, ideally an externally retrievable URL.","type":"string","format":"uri","minLength":1},"external_ids":{"$ref":"../source/external-ids.schema.json"},"chunkId":{"type":["string","null"]},"score":{"type":"number"},"kind":{"type":"string"},"title":{"type":["string","null"]},"sender":{"type":["string","null"]},"mailboxId":{"type":["string","null"]},"date":{"type":["integer","null"]},"mimeType":{"type":["string","null"]},"conversationKey":{"type":["string","null"]},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["documentId","chunkId","score","kind","title","sender","mailboxId","date","mimeType","conversationKey"],"additionalProperties":true}},"elapsedMs":{"type":"integer","minimum":0},"blocksRead":{"type":"integer","minimum":0},"candidatesScored":{"type":"integer","minimum":0}},"required":["hits","elapsedMs","blocksRead","candidatesScored"],"additionalProperties":true};
+const schema95 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json","title":"SearchQueryV1Result","type":"object","properties":{"hits":{"type":"array","items":{"type":"object","properties":{"documentId":{"type":"string"},"uri":{"description":"A URI identifying the document, ideally an externally retrievable URL.","type":"string","format":"uri","minLength":1},"external_ids":{"$ref":"../source/external-ids.schema.json"},"chunkId":{"type":["string","null"]},"score":{"type":"number"},"kind":{"type":"string"},"title":{"type":["string","null"]},"sender":{"type":["string","null"]},"senderEmail":{"type":["string","null"],"description":"Lowercase sender address: the email sender, or the Teams sender's profile email when Teams cached one. Omitted when unknown."},"mailboxId":{"type":["string","null"]},"date":{"type":["integer","null"]},"editedAt":{"type":["integer","null"],"description":"Unix seconds of the last edit Teams reported for a Teams message. Reactions and read state are not edits. Omitted when the message was never edited."},"mimeType":{"type":["string","null"]},"conversationKey":{"type":["string","null"]},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["documentId","chunkId","score","kind","title","sender","mailboxId","date","mimeType","conversationKey"],"additionalProperties":true}},"elapsedMs":{"type":"integer","minimum":0},"blocksRead":{"type":"integer","minimum":0},"candidatesScored":{"type":"integer","minimum":0}},"required":["hits","elapsedMs","blocksRead","candidatesScored"],"additionalProperties":true};
 const formats66 = (value) => /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/)?[^\s]*$/i.test(value);
 const schema97 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/top-level-parent.schema.json","title":"TopLevelParent","description":"The outermost containing document, never a folder. External IDs belong to that parent, not to the attachment.","type":"object","properties":{"documentId":{"type":"string","format":"uuid","description":"Catalog UUID, when indexed; can be passed to sources.get_document.v1."},"external_ids":{"$ref":"./external-ids.schema.json"}},"required":["external_ids"],"additionalProperties":true};
 
@@ -18801,10 +18801,10 @@ vErrors.push(err30);
 errors++;
 }
 }
-if(data1.mailboxId !== undefined){
-let data13 = data1.mailboxId;
+if(data1.senderEmail !== undefined){
+let data13 = data1.senderEmail;
 if((typeof data13 !== "string") && (data13 !== null)){
-const err31 = {instancePath:instancePath+"/hits/" + i0+"/mailboxId",schemaPath:"#/properties/hits/items/properties/mailboxId/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.mailboxId.type},message:"must be string,null"};
+const err31 = {instancePath:instancePath+"/hits/" + i0+"/senderEmail",schemaPath:"#/properties/hits/items/properties/senderEmail/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.senderEmail.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -18814,10 +18814,10 @@ vErrors.push(err31);
 errors++;
 }
 }
-if(data1.date !== undefined){
-let data14 = data1.date;
-if((!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))) && (data14 !== null)){
-const err32 = {instancePath:instancePath+"/hits/" + i0+"/date",schemaPath:"#/properties/hits/items/properties/date/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.date.type},message:"must be integer,null"};
+if(data1.mailboxId !== undefined){
+let data14 = data1.mailboxId;
+if((typeof data14 !== "string") && (data14 !== null)){
+const err32 = {instancePath:instancePath+"/hits/" + i0+"/mailboxId",schemaPath:"#/properties/hits/items/properties/mailboxId/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.mailboxId.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -18827,10 +18827,10 @@ vErrors.push(err32);
 errors++;
 }
 }
-if(data1.mimeType !== undefined){
-let data15 = data1.mimeType;
-if((typeof data15 !== "string") && (data15 !== null)){
-const err33 = {instancePath:instancePath+"/hits/" + i0+"/mimeType",schemaPath:"#/properties/hits/items/properties/mimeType/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.mimeType.type},message:"must be string,null"};
+if(data1.date !== undefined){
+let data15 = data1.date;
+if((!(((typeof data15 == "number") && (!(data15 % 1) && !isNaN(data15))) && (isFinite(data15)))) && (data15 !== null)){
+const err33 = {instancePath:instancePath+"/hits/" + i0+"/date",schemaPath:"#/properties/hits/items/properties/date/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.date.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -18840,15 +18840,41 @@ vErrors.push(err33);
 errors++;
 }
 }
-if(data1.conversationKey !== undefined){
-let data16 = data1.conversationKey;
-if((typeof data16 !== "string") && (data16 !== null)){
-const err34 = {instancePath:instancePath+"/hits/" + i0+"/conversationKey",schemaPath:"#/properties/hits/items/properties/conversationKey/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.conversationKey.type},message:"must be string,null"};
+if(data1.editedAt !== undefined){
+let data16 = data1.editedAt;
+if((!(((typeof data16 == "number") && (!(data16 % 1) && !isNaN(data16))) && (isFinite(data16)))) && (data16 !== null)){
+const err34 = {instancePath:instancePath+"/hits/" + i0+"/editedAt",schemaPath:"#/properties/hits/items/properties/editedAt/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.editedAt.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err34];
 }
 else {
 vErrors.push(err34);
+}
+errors++;
+}
+}
+if(data1.mimeType !== undefined){
+let data17 = data1.mimeType;
+if((typeof data17 !== "string") && (data17 !== null)){
+const err35 = {instancePath:instancePath+"/hits/" + i0+"/mimeType",schemaPath:"#/properties/hits/items/properties/mimeType/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.mimeType.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err35];
+}
+else {
+vErrors.push(err35);
+}
+errors++;
+}
+}
+if(data1.conversationKey !== undefined){
+let data18 = data1.conversationKey;
+if((typeof data18 !== "string") && (data18 !== null)){
+const err36 = {instancePath:instancePath+"/hits/" + i0+"/conversationKey",schemaPath:"#/properties/hits/items/properties/conversationKey/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.conversationKey.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err36];
+}
+else {
+vErrors.push(err36);
 }
 errors++;
 }
@@ -18861,32 +18887,7 @@ errors = vErrors.length;
 }
 }
 else {
-const err35 = {instancePath:instancePath+"/hits/" + i0,schemaPath:"#/properties/hits/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err35];
-}
-else {
-vErrors.push(err35);
-}
-errors++;
-}
-}
-}
-else {
-const err36 = {instancePath:instancePath+"/hits",schemaPath:"#/properties/hits/type",keyword:"type",params:{type: "array"},message:"must be array"};
-if(vErrors === null){
-vErrors = [err36];
-}
-else {
-vErrors.push(err36);
-}
-errors++;
-}
-}
-if(data.elapsedMs !== undefined){
-let data18 = data.elapsedMs;
-if(!(((typeof data18 == "number") && (!(data18 % 1) && !isNaN(data18))) && (isFinite(data18)))){
-const err37 = {instancePath:instancePath+"/elapsedMs",schemaPath:"#/properties/elapsedMs/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+const err37 = {instancePath:instancePath+"/hits/" + i0,schemaPath:"#/properties/hits/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -18895,9 +18896,10 @@ vErrors.push(err37);
 }
 errors++;
 }
-if((typeof data18 == "number") && (isFinite(data18))){
-if(data18 < 0 || isNaN(data18)){
-const err38 = {instancePath:instancePath+"/elapsedMs",schemaPath:"#/properties/elapsedMs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+}
+else {
+const err38 = {instancePath:instancePath+"/hits",schemaPath:"#/properties/hits/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -18907,11 +18909,10 @@ vErrors.push(err38);
 errors++;
 }
 }
-}
-if(data.blocksRead !== undefined){
-let data19 = data.blocksRead;
-if(!(((typeof data19 == "number") && (!(data19 % 1) && !isNaN(data19))) && (isFinite(data19)))){
-const err39 = {instancePath:instancePath+"/blocksRead",schemaPath:"#/properties/blocksRead/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data.elapsedMs !== undefined){
+let data20 = data.elapsedMs;
+if(!(((typeof data20 == "number") && (!(data20 % 1) && !isNaN(data20))) && (isFinite(data20)))){
+const err39 = {instancePath:instancePath+"/elapsedMs",schemaPath:"#/properties/elapsedMs/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -18920,9 +18921,9 @@ vErrors.push(err39);
 }
 errors++;
 }
-if((typeof data19 == "number") && (isFinite(data19))){
-if(data19 < 0 || isNaN(data19)){
-const err40 = {instancePath:instancePath+"/blocksRead",schemaPath:"#/properties/blocksRead/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if((typeof data20 == "number") && (isFinite(data20))){
+if(data20 < 0 || isNaN(data20)){
+const err40 = {instancePath:instancePath+"/elapsedMs",schemaPath:"#/properties/elapsedMs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -18933,10 +18934,10 @@ errors++;
 }
 }
 }
-if(data.candidatesScored !== undefined){
-let data20 = data.candidatesScored;
-if(!(((typeof data20 == "number") && (!(data20 % 1) && !isNaN(data20))) && (isFinite(data20)))){
-const err41 = {instancePath:instancePath+"/candidatesScored",schemaPath:"#/properties/candidatesScored/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data.blocksRead !== undefined){
+let data21 = data.blocksRead;
+if(!(((typeof data21 == "number") && (!(data21 % 1) && !isNaN(data21))) && (isFinite(data21)))){
+const err41 = {instancePath:instancePath+"/blocksRead",schemaPath:"#/properties/blocksRead/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -18945,9 +18946,9 @@ vErrors.push(err41);
 }
 errors++;
 }
-if((typeof data20 == "number") && (isFinite(data20))){
-if(data20 < 0 || isNaN(data20)){
-const err42 = {instancePath:instancePath+"/candidatesScored",schemaPath:"#/properties/candidatesScored/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if((typeof data21 == "number") && (isFinite(data21))){
+if(data21 < 0 || isNaN(data21)){
+const err42 = {instancePath:instancePath+"/blocksRead",schemaPath:"#/properties/blocksRead/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -18958,14 +18959,39 @@ errors++;
 }
 }
 }
-}
-else {
-const err43 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data.candidatesScored !== undefined){
+let data22 = data.candidatesScored;
+if(!(((typeof data22 == "number") && (!(data22 % 1) && !isNaN(data22))) && (isFinite(data22)))){
+const err43 = {instancePath:instancePath+"/candidatesScored",schemaPath:"#/properties/candidatesScored/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err43];
 }
 else {
 vErrors.push(err43);
+}
+errors++;
+}
+if((typeof data22 == "number") && (isFinite(data22))){
+if(data22 < 0 || isNaN(data22)){
+const err44 = {instancePath:instancePath+"/candidatesScored",schemaPath:"#/properties/candidatesScored/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(vErrors === null){
+vErrors = [err44];
+}
+else {
+vErrors.push(err44);
+}
+errors++;
+}
+}
+}
+}
+else {
+const err45 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err45];
+}
+else {
+vErrors.push(err45);
 }
 errors++;
 }
@@ -27546,7 +27572,7 @@ return errors === 0;
 
 export const validateSourcesListV1Result = validate127;
 const schema168 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":true};
-const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"displayName":{"description":"Human-readable source name for direct presentation. Older sidecars may omit it.","type":"string","minLength":1,"maxLength":1024},"indexingEnabled":{"description":"Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.","type":"boolean"},"product":{"description":"Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"product_variant":{"description":"Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"locator":{"type":"object","additionalProperties":true},"enabled":{"description":"Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.","type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
+const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"displayName":{"description":"Human-readable source name for direct presentation. Older sidecars may omit it.","type":"string","minLength":1,"maxLength":1024},"indexingEnabled":{"description":"Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.","type":"boolean"},"product":{"description":"Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"product_variant":{"description":"Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"account":{"description":"Teams sources only: the signed-in Teams identity (one tenant as one user) that this source indexes. Several identities can share one Teams cache, including guest identities of the same person in other tenants. Older sidecars and other source kinds omit it.","type":"object","properties":{"tenantId":{"type":"string"},"userId":{"type":"string"},"displayName":{"type":["string","null"]},"email":{"type":["string","null"],"description":"Lowercase address identifying the person across tenants and mail; a guest identity carries its home address."},"userPrincipalName":{"type":["string","null"]},"tenantName":{"type":["string","null"]},"userType":{"type":["string","null"],"description":"Member or Guest, as reported by Teams."}},"required":["tenantId","userId"],"additionalProperties":true},"locator":{"type":"object","additionalProperties":true},"enabled":{"description":"Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.","type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
 
 function validate127(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json" */;
@@ -27832,12 +27858,11 @@ vErrors.push(err23);
 errors++;
 }
 }
-if(data1.locator !== undefined){
-let data9 = data1.locator;
+if(data1.account !== undefined){
+let data9 = data1.account;
 if(data9 && typeof data9 == "object" && !Array.isArray(data9)){
-}
-else {
-const err24 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data9.tenantId === undefined){
+const err24 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/required",keyword:"required",params:{missingProperty: "tenantId"},message:"must have required property '"+"tenantId"+"'"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -27846,10 +27871,8 @@ vErrors.push(err24);
 }
 errors++;
 }
-}
-if(data1.enabled !== undefined){
-if(typeof data1.enabled !== "boolean"){
-const err25 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data9.userId === undefined){
+const err25 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/required",keyword:"required",params:{missingProperty: "userId"},message:"must have required property '"+"userId"+"'"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -27858,11 +27881,9 @@ vErrors.push(err25);
 }
 errors++;
 }
-}
-if(data1.discoveryCursor !== undefined){
-let data11 = data1.discoveryCursor;
-if((!(data11 && typeof data11 == "object" && !Array.isArray(data11))) && (data11 !== null)){
-const err26 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
+if(data9.tenantId !== undefined){
+if(typeof data9.tenantId !== "string"){
+const err26 = {instancePath:instancePath+"/sources/" + i0+"/account/tenantId",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/tenantId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -27872,10 +27893,9 @@ vErrors.push(err26);
 errors++;
 }
 }
-if(data1.completedScanId !== undefined){
-let data12 = data1.completedScanId;
-if((typeof data12 !== "string") && (data12 !== null)){
-const err27 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
+if(data9.userId !== undefined){
+if(typeof data9.userId !== "string"){
+const err27 = {instancePath:instancePath+"/sources/" + i0+"/account/userId",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -27884,9 +27904,11 @@ vErrors.push(err27);
 }
 errors++;
 }
-if(typeof data12 === "string"){
-if(!(formats0.test(data12))){
-const err28 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+}
+if(data9.displayName !== undefined){
+let data12 = data9.displayName;
+if((typeof data12 !== "string") && (data12 !== null)){
+const err28 = {instancePath:instancePath+"/sources/" + i0+"/account/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/displayName/type",keyword:"type",params:{type: schema169.properties.account.properties.displayName.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -27896,11 +27918,10 @@ vErrors.push(err28);
 errors++;
 }
 }
-}
-if(data1.lastSuccessAt !== undefined){
-let data13 = data1.lastSuccessAt;
+if(data9.email !== undefined){
+let data13 = data9.email;
 if((typeof data13 !== "string") && (data13 !== null)){
-const err29 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
+const err29 = {instancePath:instancePath+"/sources/" + i0+"/account/email",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/email/type",keyword:"type",params:{type: schema169.properties.account.properties.email.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -27909,9 +27930,11 @@ vErrors.push(err29);
 }
 errors++;
 }
-if(typeof data13 === "string"){
-if(!(formats6.validate(data13))){
-const err30 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+}
+if(data9.userPrincipalName !== undefined){
+let data14 = data9.userPrincipalName;
+if((typeof data14 !== "string") && (data14 !== null)){
+const err30 = {instancePath:instancePath+"/sources/" + i0+"/account/userPrincipalName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userPrincipalName/type",keyword:"type",params:{type: schema169.properties.account.properties.userPrincipalName.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -27921,11 +27944,10 @@ vErrors.push(err30);
 errors++;
 }
 }
-}
-if(data1.lastErrorCode !== undefined){
-let data14 = data1.lastErrorCode;
-if((typeof data14 !== "string") && (data14 !== null)){
-const err31 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
+if(data9.tenantName !== undefined){
+let data15 = data9.tenantName;
+if((typeof data15 !== "string") && (data15 !== null)){
+const err31 = {instancePath:instancePath+"/sources/" + i0+"/account/tenantName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/tenantName/type",keyword:"type",params:{type: schema169.properties.account.properties.tenantName.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -27935,9 +27957,10 @@ vErrors.push(err31);
 errors++;
 }
 }
-}
-else {
-const err32 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data9.userType !== undefined){
+let data16 = data9.userType;
+if((typeof data16 !== "string") && (data16 !== null)){
+const err32 = {instancePath:instancePath+"/sources/" + i0+"/account/userType",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userType/type",keyword:"type",params:{type: schema169.properties.account.properties.userType.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -27949,7 +27972,7 @@ errors++;
 }
 }
 else {
-const err33 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+const err33 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -27959,14 +27982,141 @@ vErrors.push(err33);
 errors++;
 }
 }
+if(data1.locator !== undefined){
+let data17 = data1.locator;
+if(data17 && typeof data17 == "object" && !Array.isArray(data17)){
 }
 else {
-const err34 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err34 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err34];
 }
 else {
 vErrors.push(err34);
+}
+errors++;
+}
+}
+if(data1.enabled !== undefined){
+if(typeof data1.enabled !== "boolean"){
+const err35 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(vErrors === null){
+vErrors = [err35];
+}
+else {
+vErrors.push(err35);
+}
+errors++;
+}
+}
+if(data1.discoveryCursor !== undefined){
+let data19 = data1.discoveryCursor;
+if((!(data19 && typeof data19 == "object" && !Array.isArray(data19))) && (data19 !== null)){
+const err36 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
+if(vErrors === null){
+vErrors = [err36];
+}
+else {
+vErrors.push(err36);
+}
+errors++;
+}
+}
+if(data1.completedScanId !== undefined){
+let data20 = data1.completedScanId;
+if((typeof data20 !== "string") && (data20 !== null)){
+const err37 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err37];
+}
+else {
+vErrors.push(err37);
+}
+errors++;
+}
+if(typeof data20 === "string"){
+if(!(formats0.test(data20))){
+const err38 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+if(vErrors === null){
+vErrors = [err38];
+}
+else {
+vErrors.push(err38);
+}
+errors++;
+}
+}
+}
+if(data1.lastSuccessAt !== undefined){
+let data21 = data1.lastSuccessAt;
+if((typeof data21 !== "string") && (data21 !== null)){
+const err39 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err39];
+}
+else {
+vErrors.push(err39);
+}
+errors++;
+}
+if(typeof data21 === "string"){
+if(!(formats6.validate(data21))){
+const err40 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(vErrors === null){
+vErrors = [err40];
+}
+else {
+vErrors.push(err40);
+}
+errors++;
+}
+}
+}
+if(data1.lastErrorCode !== undefined){
+let data22 = data1.lastErrorCode;
+if((typeof data22 !== "string") && (data22 !== null)){
+const err41 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err41];
+}
+else {
+vErrors.push(err41);
+}
+errors++;
+}
+}
+}
+else {
+const err42 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err42];
+}
+else {
+vErrors.push(err42);
+}
+errors++;
+}
+}
+}
+else {
+const err43 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err43];
+}
+else {
+vErrors.push(err43);
+}
+errors++;
+}
+}
+}
+else {
+const err44 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err44];
+}
+else {
+vErrors.push(err44);
 }
 errors++;
 }
