@@ -32,6 +32,10 @@ export interface SearchQueryV1Result {
      * Unix seconds of the last edit Teams reported for a Teams message. Reactions and read state are not edits. Omitted when the message was never edited.
      */
     editedAt?: number | null;
+    /**
+     * True for a note the user wrote to themselves: a Teams "Chat with yourself" message, or an email from the mailbox owner addressed only to the owner. Omitted otherwise.
+     */
+    selfNote?: boolean;
     mimeType: string | null;
     conversationKey: string | null;
     topLevelParent?: TopLevelParent;

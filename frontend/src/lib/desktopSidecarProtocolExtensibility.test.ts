@@ -131,6 +131,10 @@ describe("desktop sidecar protocol extensibility", () => {
       });
     expect(search([hit])).toBe(true);
     expect(search([{ ...hit, editedAt: "yesterday" }])).toBe(false);
+    expect(
+      search([{ ...hit, conversationKey: "48:notes", selfNote: true }]),
+    ).toBe(true);
+    expect(search([{ ...hit, selfNote: "yes" }])).toBe(false);
 
     const start = JSON.parse(
       await readFile(
