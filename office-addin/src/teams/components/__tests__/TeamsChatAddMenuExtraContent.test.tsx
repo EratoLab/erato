@@ -5,26 +5,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TeamsChatAddMenuExtraContent } from "../TeamsChatAddMenuExtraContent";
 
 import type { TeamsChatFetcherUnavailableReason } from "../../hooks/useTeamsChatFetcher";
+import type { useFileCapabilitiesContext } from "@erato/frontend/library";
 
-interface TestCapability {
-  id: string;
-}
+type TestCapability = ReturnType<
+  typeof useFileCapabilitiesContext
+>["capabilities"][number];
 
 const state = vi.hoisted(() => ({
   unavailableReason: null as TeamsChatFetcherUnavailableReason | null,
-  capabilities: [] as { id: string }[],
+  capabilities: [] as TestCapability[],
+  isLoading: false,
+  error: null as Error | null,
   open: vi.fn(),
 }));
 
-// Two seams only: the capability lookup, which otherwise needs a provider.
+// Mock the provider lookup, retaining the real capability conversion.
 // `Row` and `PopoverSectionHeader` stay real — the row's element, its role and
 // its roving marker are what this suite asserts, and a stub would assert the
 // stub.
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getSupportedFileTypes: (capabilities: TestCapability[]) =>
-    capabilities.map((capability) => capability.id),
-  useFileCapabilitiesContext: () => ({ capabilities: state.capabilities }),
+  useFileCapabilitiesContext: () => ({
+    capabilities: state.capabilities,
+    isLoading: state.isLoading,
+    error: state.error,
+  }),
 }));
 vi.mock("../../hooks/useTeamsChatFetcher", () => ({
   useTeamsChatFetcher: () => ({
@@ -36,13 +41,28 @@ vi.mock("../../providers/TeamsChatPickerProvider", () => ({
   useTeamsChatPicker: () => ({ open: state.open }),
 }));
 
-const textCapability: TestCapability = { id: "text" };
+const textCapability: TestCapability = {
+  id: "text",
+  extensions: ["txt", "md"],
+  mime_types: ["text/plain"],
+  operations: ["extract_text"],
+  upload_allowed: true,
+};
+const unrestrictedCapability: TestCapability = {
+  id: "other",
+  extensions: ["*"],
+  mime_types: ["*/*"],
+  operations: [],
+  upload_allowed: true,
+};
 
 describe("TeamsChatAddMenuExtraContent", () => {
   beforeEach(() => {
     i18n.activate("en");
     state.unavailableReason = null;
     state.capabilities = [textCapability];
+    state.isLoading = false;
+    state.error = null;
     state.open.mockReset();
   });
   afterEach(cleanup);
@@ -129,18 +149,83 @@ describe("TeamsChatAddMenuExtraContent", () => {
     expect(screen.getByRole("menuitem")).toBeDisabled();
   });
 
-  it("explains itself instead of failing late when text uploads are unsupported", () => {
-    state.capabilities = [{ id: "pdf" }];
-    render(
-      <TeamsChatAddMenuExtraContent
-        onSelectFiles={onSelectFiles}
-        onClose={() => {}}
-      />,
-    );
+  it.each([[unrestrictedCapability], [unrestrictedCapability, textCapability]])(
+    "opens the picker for unrestricted uploads (%j)",
+    (...capabilities) => {
+      state.capabilities = capabilities;
+      const onClose = vi.fn();
+      render(
+        <TeamsChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={onClose}
+        />,
+      );
 
-    expect(screen.getByRole("menuitem")).toBeDisabled();
-    expect(
-      screen.getByText("This workspace can't accept text files"),
-    ).toBeInTheDocument();
-  });
+      const row = screen.getByRole("menuitem");
+      expect(row).toBeEnabled();
+      expect(
+        screen.queryByText("This workspace can't accept text files"),
+      ).not.toBeInTheDocument();
+      fireEvent.click(row);
+      expect(state.open).toHaveBeenCalledWith(onSelectFiles);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    { capabilities: [], isLoading: false, error: null },
+    { capabilities: [], isLoading: true, error: null },
+    { capabilities: [], isLoading: false, error: new Error("Failed") },
+    { capabilities: [textCapability], isLoading: true, error: null },
+    {
+      capabilities: [unrestrictedCapability],
+      isLoading: false,
+      error: new Error("Failed"),
+    },
+  ])(
+    "keeps unavailable capabilities disabled without a false warning (%j)",
+    (context) => {
+      Object.assign(state, context);
+      const onClose = vi.fn();
+      render(
+        <TeamsChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={onClose}
+        />,
+      );
+
+      const row = screen.getByRole("menuitem");
+      expect(row).toBeDisabled();
+      expect(
+        screen.queryByText("This workspace can't accept text files"),
+      ).not.toBeInTheDocument();
+      fireEvent.click(row);
+      expect(state.open).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [{ ...textCapability, id: "pdf" }],
+    [
+      { ...textCapability, upload_allowed: false },
+      { ...unrestrictedCapability, upload_allowed: false },
+    ],
+  ])(
+    "explains itself when text uploads are unsupported (%j)",
+    (...capabilities) => {
+      state.capabilities = capabilities;
+      render(
+        <TeamsChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={() => {}}
+        />,
+      );
+
+      expect(screen.getByRole("menuitem")).toBeDisabled();
+      expect(
+        screen.getByText("This workspace can't accept text files"),
+      ).toBeInTheDocument();
+    },
+  );
 });

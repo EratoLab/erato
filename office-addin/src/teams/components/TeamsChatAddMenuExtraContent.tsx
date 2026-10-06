@@ -24,7 +24,7 @@ export function TeamsChatAddMenuExtraContent({
   isProcessing = false,
 }: ChatAddMenuExtraContentProps) {
   const { unavailableReason } = useTeamsChatFetcher();
-  const { capabilities } = useFileCapabilitiesContext();
+  const { capabilities, isLoading, error } = useFileCapabilitiesContext();
   const { open } = useTeamsChatPicker();
 
   // No Graph on this session means no chats to offer; a row that can only
@@ -33,12 +33,19 @@ export function TeamsChatAddMenuExtraContent({
     return null;
   }
 
-  const supportsMarkdown = getSupportedFileTypes(capabilities).includes("text");
+  const capabilitiesReady = !isLoading && !error && capabilities.length > 0;
+  // An explicit wildcard permission allows transcripts too. The upload accept
+  // list represents this as [], which can also mean capability data is missing.
+  const supportsMarkdown =
+    capabilities.some(
+      (capability) => capability.id === "other" && capability.upload_allowed,
+    ) || getSupportedFileTypes(capabilities).includes("text");
   const isDisabled =
     disabled ||
     uploadDisabled ||
     isProcessing ||
     !onSelectFiles ||
+    !capabilitiesReady ||
     !supportsMarkdown;
 
   return (
@@ -70,7 +77,7 @@ export function TeamsChatAddMenuExtraContent({
             })}
           </div>
           <div className="truncate text-xs text-theme-fg-muted">
-            {supportsMarkdown
+            {!capabilitiesReady || supportsMarkdown
               ? t({
                   id: "officeAddin.teams.fileSource.chatsHint",
                   message: "Pick conversations or messages to attach",
