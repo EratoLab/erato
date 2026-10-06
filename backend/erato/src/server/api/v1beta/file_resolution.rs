@@ -2,6 +2,7 @@ use crate::db::entity::prelude::FileUploads;
 use crate::models::file_upload;
 use crate::models::message::{ContentPart, ContentPartText, GenerationInputMessages, InputMessage};
 use crate::server::api::v1beta::message_streaming::FileContent;
+use crate::services::file_context::{Attachment, Coverage, PlannedAttachment, plan_attachments};
 use crate::services::file_processing_cached::get_file_cached;
 use crate::services::file_storage::{SharepointContext, is_missing_permissions_error};
 use crate::services::prompt_composition::transforms::render_placeholder_template;
@@ -163,42 +164,6 @@ fn bounded_tool_file_text(text: &str, remaining_chars: &mut usize) -> (String, b
     (bounded, truncated)
 }
 
-/// Format an error message for files that cannot be retrieved
-pub(crate) fn format_file_error_message(
-    filename: &str,
-    file_id: Uuid,
-    is_parsing_error: bool,
-) -> String {
-    let mut content = String::new();
-    content.push_str("File:\n");
-    content.push_str(&format!("file name: {}\n", filename));
-    content.push_str(&format!("file_id: erato_file_id:{}\n", file_id));
-
-    if is_parsing_error {
-        content.push_str(
-            "No file contents available as the file was not parseable. This info should be returned to the user."
-        );
-    } else {
-        content.push_str(
-            "Unable to retrieve file contents due to an unknown error. Please contact support if this issue persists."
-        );
-    }
-
-    content
-}
-
-/// Format an error message for files that are inaccessible due to missing permissions.
-pub(crate) fn format_file_permission_error_message(filename: &str, file_id: Uuid) -> String {
-    let mut content = String::new();
-    content.push_str("File:\n");
-    content.push_str(&format!("file name: {}\n", filename));
-    content.push_str(&format!("file_id: erato_file_id:{}\n", file_id));
-    content.push_str(
-        "Unable to retrieve file contents because the current user does not have permission to access this file.",
-    );
-    content
-}
-
 /// Format successful file content with metadata header
 pub(crate) fn format_successful_file_content(filename: &str, file_id: Uuid, text: &str) -> String {
     let mut content = String::new();
@@ -213,58 +178,229 @@ pub(crate) fn format_successful_file_content(filename: &str, file_id: Uuid, text
     content
 }
 
-pub(crate) fn format_reference_only_file(filename: &str, file_id: Uuid) -> String {
-    format!(
-        "File:\nfile name: {filename}\nfile_id: erato_file_id:{file_id}\nFile bytes are attached. Erato could not extract text. A tool that accepts file references may access the bytes using erato-file://{file_id}."
-    )
-}
-
 /// Resolve TextFilePointer and ImageFilePointer content parts in generation input messages by extracting file contents JIT.
 /// This prevents storing duplicate file contents in the database.
-pub(crate) async fn resolve_file_pointers_in_generation_input(
+/// Virtual attachments participate in the same collective decision as history and assistant files.
+pub(crate) async fn resolve_and_plan_attachments(
     app_state: &AppState,
     generation_input_messages: GenerationInputMessages,
     access_token: Option<&str>,
-) -> Result<GenerationInputMessages, Report> {
-    // Build the context for Sharepoint (will be ignored by other providers)
-    let sharepoint_ctx = access_token.map(|token| SharepointContext {
-        access_token: token,
-    });
-
-    let mut resolved_messages = Vec::new();
-
-    for input_message in generation_input_messages.messages {
-        let resolved_contents = match input_message.content {
-            ContentPart::TextFilePointer(ref file_pointer) => {
-                let file_upload_id = file_pointer.file_upload_id;
-                vec![
-                    resolve_file_pointer(app_state, file_upload_id, false, sharepoint_ctx.as_ref())
-                        .await,
-                ]
-            }
-            ContentPart::ImageFilePointer(ref file_pointer) => {
-                let file_upload_id = file_pointer.file_upload_id;
-                vec![
-                    format_image_file_pointer_message(file_upload_id),
-                    resolve_file_pointer(app_state, file_upload_id, true, sharepoint_ctx.as_ref())
-                        .await,
-                ]
-            }
-            // Pass through other content parts unchanged
-            other => vec![other],
+    provider: &crate::config::ChatProviderConfig,
+    virtual_files: &[Attachment],
+) -> Result<(GenerationInputMessages, Vec<PlannedAttachment>), Report> {
+    let sharepoint_ctx = access_token.map(|access_token| SharepointContext { access_token });
+    let mut attachments = Vec::new();
+    for message in &generation_input_messages.messages {
+        let id = match &message.content {
+            ContentPart::TextFilePointer(p) => p.file_upload_id,
+            ContentPart::ImageFilePointer(p) => p.file_upload_id,
+            _ => continue,
         };
-
-        for content in resolved_contents {
-            resolved_messages.push(crate::models::message::InputMessage {
-                role: input_message.role.clone(),
-                content,
+        attachments.push(load_attachment(app_state, id, sharepoint_ctx.as_ref()).await);
+    }
+    attachments.extend_from_slice(virtual_files);
+    crate::services::file_context::estimate_native_images(&mut attachments, provider);
+    let plans = plan_attachments(
+        &attachments,
+        &app_state.config.file_context,
+        provider.model_capabilities.context_size_tokens,
+    )?;
+    let mut iter = plans.iter();
+    let mut messages = Vec::new();
+    for message in generation_input_messages.messages {
+        if matches!(
+            message.content,
+            ContentPart::TextFilePointer(_) | ContentPart::ImageFilePointer(_)
+        ) {
+            for content in &iter.next().expect("one plan per pointer").parts {
+                messages.push(InputMessage {
+                    role: message.role.clone(),
+                    content: content.clone(),
+                });
+            }
+        } else {
+            messages.push(message);
+        }
+    }
+    for plan in iter {
+        for content in &plan.parts {
+            messages.push(InputMessage {
+                role: crate::models::message::MessageRole::User,
+                content: content.clone(),
             });
         }
     }
+    Ok((GenerationInputMessages { messages }, plans))
+}
 
-    Ok(GenerationInputMessages {
-        messages: resolved_messages,
-    })
+pub(crate) async fn load_attachment(
+    app_state: &AppState,
+    id: Uuid,
+    sharepoint_ctx: Option<&SharepointContext<'_>>,
+) -> Attachment {
+    let mut attachment = Attachment {
+        id: id.to_string(),
+        filename: "Unknown".into(),
+        uri: Some(format!("erato-file://{id}")),
+        text: None,
+        csv_source: None,
+        image: None,
+        image_tokens: 0,
+        coverage: Coverage::Unavailable,
+        reason: "Unable to retrieve file contents.".into(),
+    };
+    let file = match FileUploads::find_by_id(id).one(&app_state.db).await {
+        Ok(Some(file)) => file,
+        _ => return attachment,
+    };
+    attachment.filename = file.filename.clone();
+    if let Some(reason) = file_upload::get_audio_transcription_blocking_reason(&file) {
+        attachment.reason = reason;
+        return attachment;
+    }
+    if let Some(transcript) = file_upload::get_audio_transcript_if_ready(&file) {
+        attachment.text = Some(transcript);
+        attachment.coverage = Coverage::Complete;
+        return attachment;
+    }
+    let Some(storage) = app_state
+        .file_storage_providers
+        .get(&file.file_storage_provider_id)
+    else {
+        return attachment;
+    };
+    let limits = &app_state.config.file_processor.limits;
+    let extension = file
+        .filename
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    // The raw-byte cache is separate from extraction. Partial artifacts are request-local
+    // and never populate the complete extraction cache.
+    let guarded = limits.max_input_bytes > 0
+        || limits.max_extracted_chars > 0
+        || limits.timeout_ms > 0
+        || extension == "csv"
+        || (limits.bounded_text_preview && matches!(extension.as_str(), "txt" | "md"));
+    if guarded {
+        let raw = async {
+            let key = crate::services::file_processing_cached::get_file_cache_key(
+                storage,
+                &id,
+                &file.file_storage_path,
+                sharepoint_ctx,
+            )
+            .await?;
+            crate::services::file_processing_cached::get_file_bytes_cached(
+                app_state,
+                &key,
+                storage,
+                &file.file_storage_path,
+                sharepoint_ctx,
+            )
+            .await
+        }
+        .await;
+        match raw {
+            Ok(bytes) => {
+                if !crate::models::message::is_image_file(&file.filename)
+                    && !infer::is_image(&bytes)
+                    && crate::services::file_context::prepare_eager_attachment(
+                        &mut attachment,
+                        &bytes,
+                        &app_state.config.file_context,
+                        &app_state.config.file_processor.limits,
+                    )
+                {
+                    return attachment;
+                }
+            }
+            Err(error) => {
+                attachment.reason = "Unable to retrieve file contents.".into();
+                tracing::warn!(file_id = %id, %error, "File bytes unavailable");
+                return attachment;
+            }
+        }
+    }
+    let extraction = get_file_cached(
+        app_state,
+        &id,
+        storage,
+        &file.file_storage_path,
+        &file.filename,
+        sharepoint_ctx,
+    );
+    // This bounds waiting, not blocking parser CPU/memory. The extractor may finish
+    // in the background; complete-cache entries remain complete.
+    let result = if limits.timeout_ms > 0 {
+        // Keep the cache operation and its concurrency permit alive until parsing
+        // actually finishes, even after this request stops waiting.
+        let state = app_state.clone();
+        let storage = storage.clone();
+        let path = file.file_storage_path.clone();
+        let filename = file.filename.clone();
+        let token = sharepoint_ctx.map(|ctx| ctx.access_token.to_string());
+        let task = tokio::spawn(async move {
+            let ctx = token
+                .as_deref()
+                .map(|access_token| SharepointContext { access_token });
+            get_file_cached(&state, &id, &storage, &path, &filename, ctx.as_ref()).await
+        });
+        match tokio::time::timeout(std::time::Duration::from_millis(limits.timeout_ms), task).await
+        {
+            Ok(result) => result
+                .unwrap_or_else(|error| Err(eyre::eyre!("File extraction task failed: {error}"))),
+            Err(_) => {
+                attachment.csv_source = None;
+                attachment.reason =
+                    "extraction_timeout: content was not extracted within the waiting budget"
+                        .into();
+                return attachment;
+            }
+        }
+    } else {
+        extraction.await
+    };
+    match result {
+        Ok(contents) => {
+            if let Some(image) = contents.as_base64_image() {
+                attachment.image = Some(ContentPart::Image(image));
+                // Native images are estimated separately from their metadata text.
+                attachment.image_tokens = 0;
+                attachment.coverage = Coverage::Complete;
+            } else if let FileContent::Text(text) = contents.content {
+                let retained: String = if limits.max_extracted_chars == 0 {
+                    text.clone()
+                } else {
+                    text.chars().take(limits.max_extracted_chars).collect()
+                };
+                attachment.coverage = if retained.len() == text.len() {
+                    Coverage::Complete
+                } else {
+                    Coverage::Partial
+                };
+                if attachment.coverage == Coverage::Partial {
+                    attachment.reason = "extracted_character_limit".into();
+                }
+                attachment.text = Some(retained);
+            } else {
+                attachment.reason = "Erato could not extract text from this file.".into();
+            }
+        }
+        Err(err) => {
+            attachment.csv_source = None;
+            attachment.reason = if is_missing_permissions_error(&err) {
+                "Unable to retrieve file contents because the current user does not have permission to access this file."
+            } else { "File extraction failed; no file contents are available." }.into();
+            tracing::warn!(file_id = %id, error = %err, "File extraction unavailable");
+        }
+    }
+    crate::services::file_context::limit_extracted_text(
+        &mut attachment,
+        limits.max_extracted_chars,
+    );
+    attachment
 }
 
 /// Sentinel tag wrapping a rendered per-turn directive in the user turn.
@@ -366,180 +502,6 @@ pub(crate) fn resolve_directive_markers_in_generation_input(
     }
 }
 
-fn format_image_file_pointer_message(file_upload_id: Uuid) -> ContentPart {
-    ContentPart::Text(ContentPartText {
-        text: format!("image_file_pointer: erato-file://{}", file_upload_id),
-    })
-}
-
-/// Helper function to resolve a file pointer (text or image) to its actual content
-async fn resolve_file_pointer(
-    app_state: &AppState,
-    file_upload_id: Uuid,
-    is_image_pointer: bool,
-    sharepoint_ctx: Option<&SharepointContext<'_>>,
-) -> ContentPart {
-    let file_upload_result = FileUploads::find_by_id(file_upload_id)
-        .one(&app_state.db)
-        .await;
-
-    match file_upload_result {
-        Ok(Some(file)) => {
-            let file_storage = app_state
-                .file_storage_providers
-                .get(&file.file_storage_provider_id);
-
-            if !is_image_pointer
-                && let Some(blocking_reason) =
-                    file_upload::get_audio_transcription_blocking_reason(&file)
-            {
-                tracing::warn!(
-                    "Using audio transcription placeholder for {}: {}",
-                    file_upload_id,
-                    blocking_reason
-                );
-                let content = format_file_error_message(&file.filename, file_upload_id, false);
-                return ContentPart::Text(ContentPartText { text: content });
-            }
-
-            if !is_image_pointer
-                && let Some(transcript) = file_upload::get_audio_transcript_if_ready(&file)
-            {
-                tracing::info!(
-                    "Using completed audio transcription for file pointer: {}",
-                    file_upload_id
-                );
-                let content =
-                    format_successful_file_content(&file.filename, file_upload_id, &transcript);
-                return ContentPart::Text(ContentPartText { text: content });
-            }
-
-            if let Some(file_storage) = file_storage {
-                match get_file_cached(
-                    app_state,
-                    &file_upload_id,
-                    file_storage,
-                    &file.file_storage_path,
-                    &file.filename,
-                    sharepoint_ctx,
-                )
-                .await
-                {
-                    Ok(file_contents) => match (&file_contents.content, is_image_pointer) {
-                        (FileContent::Text(text), false) => {
-                            tracing::debug!(
-                                "Successfully extracted text from file pointer {}: {} (text length: {})",
-                                file.filename,
-                                file_upload_id,
-                                text.len()
-                            );
-
-                            let content = format_successful_file_content(
-                                &file.filename,
-                                file_upload_id,
-                                text,
-                            );
-                            ContentPart::Text(ContentPartText { text: content })
-                        }
-                        (FileContent::Image { .. }, true) => {
-                            if let Some(image) = file_contents.as_base64_image() {
-                                tracing::debug!(
-                                    "Successfully encoded image: {} ({} bytes, {})",
-                                    file.filename,
-                                    image.base64_data.len(),
-                                    image.content_type
-                                );
-                                ContentPart::Image(image)
-                            } else {
-                                unreachable!(
-                                    "as_base64_image should always succeed for Image variant"
-                                )
-                            }
-                        }
-                        (FileContent::Text(_), true) => {
-                            tracing::warn!(
-                                "ImageFilePointer resolved to text file: {}",
-                                file_upload_id
-                            );
-                            let content =
-                                format_file_error_message(&file.filename, file_upload_id, false);
-                            ContentPart::Text(ContentPartText { text: content })
-                        }
-                        (FileContent::Image { .. }, false) => {
-                            tracing::warn!(
-                                "TextFilePointer resolved to image file: {}",
-                                file_upload_id
-                            );
-                            let content =
-                                format_file_error_message(&file.filename, file_upload_id, false);
-                            ContentPart::Text(ContentPartText { text: content })
-                        }
-                        (FileContent::ReferenceOnly, _) => ContentPart::Text(ContentPartText {
-                            text: format_reference_only_file(&file.filename, file_upload_id),
-                        }),
-                    },
-                    Err(err) => {
-                        if is_missing_permissions_error(&err) {
-                            tracing::warn!(
-                                "Failed to get file contents for {}: {} - missing permissions: {}, using permission placeholder text",
-                                file.filename,
-                                file_upload_id,
-                                err
-                            );
-                            let content = format_file_permission_error_message(
-                                &file.filename,
-                                file_upload_id,
-                            );
-                            return ContentPart::Text(ContentPartText { text: content });
-                        }
-
-                        let is_parsing_error =
-                            err.to_string().contains("parse") || err.to_string().contains("Parse");
-
-                        tracing::warn!(
-                            "Failed to get file contents for {}: {} - Error: {}, using placeholder text",
-                            file.filename,
-                            file_upload_id,
-                            err
-                        );
-                        let content = format_file_error_message(
-                            &file.filename,
-                            file_upload_id,
-                            is_parsing_error,
-                        );
-                        ContentPart::Text(ContentPartText { text: content })
-                    }
-                }
-            } else {
-                tracing::warn!(
-                    "File storage provider {} not found for file {}, using placeholder text",
-                    file.file_storage_provider_id,
-                    file_upload_id
-                );
-                let content = format_file_error_message(&file.filename, file_upload_id, false);
-                ContentPart::Text(ContentPartText { text: content })
-            }
-        }
-        Ok(None) => {
-            tracing::warn!(
-                "File upload {} referenced in file pointer not found, using placeholder text",
-                file_upload_id
-            );
-            let content = format_file_error_message("Unknown", file_upload_id, false);
-            ContentPart::Text(ContentPartText { text: content })
-        }
-        Err(err) => {
-            tracing::error!(
-                "Database error fetching file upload {}: {}, using placeholder text",
-                file_upload_id,
-                err
-            );
-            let content = format_file_error_message("Unknown", file_upload_id, false);
-            ContentPart::Text(ContentPartText { text: content })
-        }
-    }
-}
-
 #[cfg(test)]
 mod client_tool_file_tests {
     use super::bounded_tool_file_text;
@@ -617,4 +579,99 @@ mod recipient_context_tests {
             "Write an email in text."
         );
     }
+}
+
+/// Tracks only known planner output, so tool result text is never interpreted as a file.
+pub(crate) struct AttachmentSlot {
+    id: Uuid,
+    start: usize,
+    len: usize,
+}
+
+pub(crate) fn attachment_slots(
+    request: &genai::chat::ChatRequest,
+    plans: &[PlannedAttachment],
+) -> Vec<AttachmentSlot> {
+    let mut cursor = 0;
+    let mut slots = Vec::new();
+    for plan in plans {
+        let Ok(id) = plan.id.parse() else {
+            continue;
+        };
+        let Some(ContentPart::Text(text)) = plan.parts.first() else {
+            continue;
+        };
+        if let Some(offset) = request.messages[cursor..]
+            .iter()
+            .position(|m| m.content.first_text() == Some(text.text.as_str()))
+        {
+            let start = cursor + offset;
+            slots.push(AttachmentSlot {
+                id,
+                start,
+                len: plan.parts.len(),
+            });
+            cursor = start + plan.parts.len();
+        }
+    }
+    slots
+}
+
+pub(crate) async fn replan_tool_attachments(
+    app_state: &AppState,
+    request: &mut genai::chat::ChatRequest,
+    slots: &mut Vec<AttachmentSlot>,
+    new_ids: &[Uuid],
+    access_token: Option<&str>,
+    provider: &crate::config::ChatProviderConfig,
+) -> Result<(), Report> {
+    let ctx = access_token.map(|access_token| SharepointContext { access_token });
+    let mut files = Vec::new();
+    for id in slots.iter().map(|s| &s.id).chain(new_ids) {
+        files.push(load_attachment(app_state, *id, ctx.as_ref()).await);
+    }
+    crate::services::file_context::estimate_native_images(&mut files, provider);
+    let plans = plan_attachments(
+        &files,
+        &app_state.config.file_context,
+        provider.model_capabilities.context_size_tokens,
+    )?;
+    let mut shift: isize = 0;
+    for (slot, plan) in slots.iter_mut().zip(&plans) {
+        let start = slot
+            .start
+            .checked_add_signed(shift)
+            .expect("valid attachment offset");
+        let role = request.messages[start].role.clone();
+        let replacement: Vec<_> = plan
+            .parts
+            .iter()
+            .map(|part| genai::chat::ChatMessage {
+                role: role.clone(),
+                content: part.clone().into(),
+                options: None,
+            })
+            .collect();
+        let len = replacement.len();
+        request
+            .messages
+            .splice(start..start + slot.len, replacement);
+        shift += len as isize - slot.len as isize;
+        slot.start = start;
+        slot.len = len;
+    }
+    for (id, plan) in new_ids.iter().zip(plans.iter().skip(slots.len())) {
+        let start = request.messages.len();
+        request.messages.extend(
+            plan.parts
+                .iter()
+                .map(|part| genai::chat::ChatMessage::user(part.clone())),
+        );
+        slots.push(AttachmentSlot {
+            id: *id,
+            start,
+            len: plan.parts.len(),
+        });
+    }
+    Ok(())
 }

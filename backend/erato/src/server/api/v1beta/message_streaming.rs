@@ -24,9 +24,7 @@ use crate::models::user_tool_approval_setting::UserToolDecision;
 use crate::policy::engine::{PolicyEngine, authorize};
 use crate::policy::types::{Action, Resource, Subject};
 use crate::server::api::v1beta::ChatMessage;
-use crate::server::api::v1beta::file_resolution::{
-    resolve_directive_markers_in_generation_input, resolve_file_pointers_in_generation_input,
-};
+use crate::server::api::v1beta::file_resolution::resolve_directive_markers_in_generation_input;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming_file_extraction::{
     mcp_tool_processing_error_output, parse_content_filter_error_from_mcp_tool_result,
@@ -2810,6 +2808,7 @@ fn ensure_saved_assistant_content_for_abort(mut content: Vec<ContentPart>) -> Ve
 }
 
 pub struct PreparedChatRequest {
+    pub(crate) attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     // Our internal abstract structure of the message chain
     generation_input_messages: GenerationInputMessages,
     // Our internal abstract representation of generation parameters
@@ -3770,6 +3769,7 @@ fn prepare_chat_request<'a>(
             &message_repo,
             &file_resolver,
             &prompt_provider,
+            &[],
         )
         .await
     })
@@ -3788,6 +3788,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     message_repo: &impl MessageRepository,
     file_resolver: &impl FileResolver,
     prompt_provider: &impl PromptProvider,
+    virtual_files: &[crate::services::file_context::Attachment],
 ) -> Result<PreparedChatRequest, Report> {
     let mcp = app_state.mcp_state().await;
     // A task child is scoped by the facets its brief asked for. They are read
@@ -3930,12 +3931,15 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     .await?;
 
     // Resolve TextFilePointer to Text by extracting file contents JIT
-    let mut resolved_generation_input_messages = resolve_file_pointers_in_generation_input(
-        app_state,
-        generation_input_messages.clone(),
-        me_profile_input.access_token,
-    )
-    .await?;
+    let (mut resolved_generation_input_messages, mut attachment_plans) =
+        crate::server::api::v1beta::file_resolution::resolve_and_plan_attachments(
+            app_state,
+            generation_input_messages.clone(),
+            me_profile_input.access_token,
+            &chat_provider_config,
+            virtual_files,
+        )
+        .await?;
 
     let effective_model_settings = build_model_settings_for_facets(
         &chat_provider_config.model_settings,
@@ -3948,6 +3952,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &me_profile_input.subject,
         &generation_input_messages,
         &mut resolved_generation_input_messages,
+        &mut attachment_plans,
+        chat_provider_config.model_capabilities.context_size_tokens,
         me_profile_input.access_token,
         app_state
             .config
@@ -4326,6 +4332,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // Return the unresolved version for saving to DB (to avoid duplicating file contents)
     // The resolved version is already used in chat_request
     Ok(PreparedChatRequest {
+        attachment_plans,
         generation_input_messages,
         generation_parameters,
         generation_request_context,
@@ -5466,6 +5473,7 @@ async fn stream_generate_chat_completion<'a>(
     policy: &PolicyEngine,
     subject: &Subject,
     chat_request: ChatRequest,
+    attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     langfuse_trace_enrichment: LangfuseTraceEnrichment,
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
@@ -5624,6 +5632,9 @@ async fn stream_generate_chat_completion<'a>(
     let mut client_action_already_proposed = consumption.client_action_proposed;
 
     let mut current_message_content = initial_message_content;
+    let mut attachment_slots =
+        super::file_resolution::attachment_slots(&chat_request, &attachment_plans);
+    let mut planned_output_pointer_positions = HashSet::new();
     let mut current_turn_chat_request = chat_request.clone();
     let fallback_chat_provider_id = if chat_provider_id.is_none() {
         match app_state.config.determine_chat_provider(None, None) {
@@ -8337,6 +8348,36 @@ async fn stream_generate_chat_completion<'a>(
                 ),
                 options: None,
             });
+        }
+
+        let new_pointers: Vec<_> = current_message_content
+            .iter()
+            .enumerate()
+            .filter_map(|(position, part)| {
+                let id = match part {
+                    ContentPart::TextFilePointer(p) => p.file_upload_id,
+                    ContentPart::ImageFilePointer(p) => p.file_upload_id,
+                    _ => return None,
+                };
+                planned_output_pointer_positions
+                    .insert(position)
+                    .then_some(id)
+            })
+            .collect();
+        if !new_pointers.is_empty() {
+            super::file_resolution::replan_tool_attachments(
+                app_state,
+                &mut current_turn_chat_request,
+                &mut attachment_slots,
+                &new_pointers,
+                mcp_auth_context.access_token,
+                app_state.config.get_chat_provider(
+                    chat_provider_id
+                        .or(fallback_chat_provider_id)
+                        .unwrap_or("default"),
+                ),
+            )
+            .await?;
         }
 
         for image in retrieved_images {
@@ -13665,6 +13706,7 @@ pub(crate) async fn run_generation_after_user_message(
         suppress_task_offer: origin == GenerationOrigin::TaskResultDelivery,
     };
     let PreparedChatRequest {
+        attachment_plans,
         chat_request,
         chat_options,
         generation_input_messages,
@@ -13829,6 +13871,7 @@ pub(crate) async fn run_generation_after_user_message(
         policy,
         &subject,
         chat_request,
+        attachment_plans,
         langfuse_trace_enrichment,
         chat_options,
         initial_assistant_message.id,
@@ -14422,6 +14465,7 @@ pub(crate) async fn start_regeneration(
                 suppress_task_offer: false,
             };
             let PreparedChatRequest {
+                attachment_plans,
                 chat_request,
                 chat_options,
                 generation_input_messages,
@@ -14546,6 +14590,7 @@ pub(crate) async fn start_regeneration(
                 &policy,
                 &subject,
                 chat_request,
+                attachment_plans,
                 langfuse_trace_enrichment,
                 chat_options,
                 initial_assistant_message.id,
@@ -15020,6 +15065,7 @@ pub(crate) async fn start_edit(
                 suppress_task_offer: false,
             };
             let PreparedChatRequest {
+                attachment_plans,
                 chat_request,
                 chat_options,
                 generation_input_messages,
@@ -15144,6 +15190,7 @@ pub(crate) async fn start_edit(
                 &policy,
                 &subject,
                 chat_request,
+                attachment_plans,
                 langfuse_trace_enrichment,
                 chat_options,
                 initial_assistant_message.id,
@@ -18133,12 +18180,15 @@ async fn resume_parked_generation(
         return Err(eyre!("The original model is no longer authorized"));
     }
     let source_generation_input_messages = generation_input_messages.clone();
-    let mut generation_input_messages = resolve_file_pointers_in_generation_input(
-        app_state,
-        generation_input_messages,
-        me_user.access_token.as_deref(),
-    )
-    .await?;
+    let (mut generation_input_messages, mut attachment_plans) =
+        super::file_resolution::resolve_and_plan_attachments(
+            app_state,
+            generation_input_messages,
+            me_user.access_token.as_deref(),
+            app_state.config.get_chat_provider(&chat_provider_id),
+            &[],
+        )
+        .await?;
     let provider = app_state.config.get_chat_provider(&chat_provider_id);
     let compat_omit_strict = crate::services::prompt_composition::build_model_settings_for_facets(
         &provider.model_settings,
@@ -18152,6 +18202,8 @@ async fn resume_parked_generation(
         &me_user.to_subject(),
         &source_generation_input_messages,
         &mut generation_input_messages,
+        &mut attachment_plans,
+        provider.model_capabilities.context_size_tokens,
         me_user.access_token.as_deref(),
         app_state
             .config
@@ -18497,6 +18549,7 @@ async fn resume_parked_generation(
         policy,
         &me_user.to_subject(),
         chat_request,
+        attachment_plans,
         LangfuseTraceEnrichment::default(),
         chat_options,
         message.id,

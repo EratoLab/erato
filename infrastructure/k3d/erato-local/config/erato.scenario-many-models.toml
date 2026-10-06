@@ -1,6 +1,12 @@
 # Many models test scenario - provides a large model list for selector testing
 # This scenario is used to test model selector behavior with many models
 
+# Keep full attachments so token-limit tests can exceed the model context window.
+[file_context]
+max_inline_tokens_per_file = 0
+max_total_attachment_tokens = 0
+max_context_fraction = 0
+
 [guardrails.prompt_patterns.ignore_previous_instructions]
 type = "fixed"
 pattern = "ignore all previous instructions"

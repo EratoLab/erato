@@ -1474,6 +1474,8 @@ export type ContinueStreamRequest = {
   message_id: string;
 };
 
+export type Coverage = "complete" | "partial" | "unavailable";
+
 /**
  * Body of the `409` `continuestream` answers on a delegated child whose
  * request is currently being asked about in the chat that started it.
@@ -1880,7 +1882,9 @@ export type FileCapability = {
    * Operations that can be performed on matching files
    */
   operations: FileOperation[];
-  /** Whether this file type may be uploaded under the active deployment policy. */
+  /**
+   * Whether this file type may be uploaded under the active deployment policy.
+   */
   upload_allowed?: boolean;
 };
 
@@ -1944,7 +1948,9 @@ export type FileUploadResponse = {
    * The list of uploaded files with their IDs and filenames
    */
   files: FileUploadItem[];
-  /** Filenames skipped by the configured operation policy. */
+  /**
+   * Filenames skipped by the configured operation policy.
+   */
   rejected_files?: string[];
 };
 
@@ -2132,6 +2138,8 @@ export type HostContext = {
   identity: string;
   kind: string;
 };
+
+export type InclusionMode = "full" | "preview" | "reference_only";
 
 /**
  * Request to link an external file (SharePoint, Google Drive, etc.)
@@ -3610,14 +3618,25 @@ export type TokenUsageResponse = {
  * Token usage details for an individual file
  */
 export type TokenUsageResponseFileItem = {
+  coverage?: Coverage;
   /**
    * The original filename of the file
    */
   filename: string;
   /**
+   * @minimum 0
+   */
+  full_token_count?: number;
+  /**
    * The unique ID of the file
    */
   id: string;
+  /**
+   * @minimum 0
+   */
+  included_token_count?: number;
+  inclusion_mode?: InclusionMode;
+  reason?: string;
   /**
    * Number of tokens used for this file's content
    *

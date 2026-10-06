@@ -647,6 +647,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub file_processor: FileProcessorConfig,
 
+    /// Attachment inclusion budgets, independent of extraction and upload limits.
+    #[serde(default)]
+    pub file_context: FileContextConfig,
+
     // Generation status tracking (persisted per-chat generation state surfaced
     // in the chat list).
     #[serde(default)]
@@ -1420,6 +1424,11 @@ impl AppConfig {
         if let Err(e) = config.assistant_hub.validate() {
             panic!("Invalid assistant hub configuration: {}", e);
         }
+
+        config
+            .file_context
+            .validate()
+            .expect("Invalid file context configuration");
 
         // Validate file processor configuration
         if config.file_processor.processor != "parser-core"
@@ -5090,12 +5099,102 @@ impl Default for FileUploadsConfig {
     }
 }
 
+/// All numeric limits use zero to disable only that limit.
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
+#[serde(default)]
+pub struct FileContextConfig {
+    pub native_file_formats_bypass_limit: bool,
+    pub max_inline_tokens_per_file: usize,
+    pub max_total_attachment_tokens: usize,
+    pub max_context_fraction: f64,
+    pub max_preview_tokens_per_file: usize,
+    pub preview: FilePreviewConfig,
+}
+
+impl Default for FileContextConfig {
+    fn default() -> Self {
+        Self {
+            native_file_formats_bypass_limit: true,
+            max_inline_tokens_per_file: 16_000,
+            max_total_attachment_tokens: 0,
+            max_context_fraction: 0.25,
+            max_preview_tokens_per_file: 1_000,
+            preview: FilePreviewConfig::default(),
+        }
+    }
+}
+
+impl FileContextConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if !self.max_context_fraction.is_finite()
+            || !(0.0..=1.0).contains(&self.max_context_fraction)
+        {
+            eyre::bail!("file_context.max_context_fraction must be finite and between 0 and 1");
+        }
+        Ok(())
+    }
+
+    pub fn attachment_budget(&self, context_size: usize) -> Option<usize> {
+        let absolute =
+            (self.max_total_attachment_tokens > 0).then_some(self.max_total_attachment_tokens);
+        let fraction = (self.max_context_fraction > 0.0)
+            .then(|| (context_size as f64 * self.max_context_fraction).floor() as usize);
+        match (absolute, fraction) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(default)]
+pub struct FilePreviewConfig {
+    pub csv_max_sample_rows: usize,
+    pub csv_max_columns: usize,
+    #[serde(alias = "max_field_chars")]
+    pub csv_max_field_chars: usize,
+    pub text_max_chars: usize,
+}
+
+impl Default for FilePreviewConfig {
+    fn default() -> Self {
+        Self {
+            csv_max_sample_rows: 5,
+            csv_max_columns: 50,
+            csv_max_field_chars: 256,
+            text_max_chars: 0,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(default)]
+pub struct FileExtractionLimits {
+    pub max_input_bytes: usize,
+    pub max_extracted_chars: usize,
+    pub timeout_ms: u64,
+    pub bounded_text_preview: bool,
+}
+
+impl Default for FileExtractionLimits {
+    fn default() -> Self {
+        Self {
+            max_input_bytes: 0,
+            max_extracted_chars: 0,
+            timeout_ms: 0,
+            bounded_text_preview: true,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct FileProcessorConfig {
     /// File processor to use (currently only "kreuzberg" is supported)
     /// parser-core has been removed as it was unmaintained and yanked
     #[serde(default = "default_processor")]
     pub processor: String,
+    #[serde(default)]
+    pub limits: FileExtractionLimits,
 }
 
 fn default_processor() -> String {
@@ -5106,6 +5205,7 @@ impl Default for FileProcessorConfig {
     fn default() -> Self {
         Self {
             processor: default_processor(),
+            limits: FileExtractionLimits::default(),
         }
     }
 }

@@ -813,3 +813,24 @@ chat_provider_ids = ["test-token-limit"]
 # [facets.facets.plan.delegation.approval]
 # mode = "plan"
 # plan_min_tasks = 3
+
+# Adaptive attachment budgets (zero independently disables each numeric limit).
+[file_context]
+# Native LLM attachments (currently images) bypass per-file and aggregate budgets.
+native_file_formats_bypass_limit = true
+max_inline_tokens_per_file = 16000
+max_total_attachment_tokens = 0
+max_context_fraction = 0.25
+max_preview_tokens_per_file = 1000
+
+[file_context.preview]
+csv_max_sample_rows = 5
+csv_max_columns = 50
+csv_max_field_chars = 256
+text_max_chars = 0
+
+[file_processor.limits]
+max_input_bytes = 0
+max_extracted_chars = 0
+timeout_ms = 0
+bounded_text_preview = true

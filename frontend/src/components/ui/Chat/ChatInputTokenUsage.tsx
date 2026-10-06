@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { useEffect } from "react";
 
 import { useTokenUsageWithFiles } from "@/hooks/chat/useTokenUsageWithFiles";
@@ -73,21 +74,38 @@ export const ChatInputTokenUsage: React.FC<ChatInputTokenUsageProps> = ({
     }
   }, [exceedsLimit, onLimitExceeded]);
 
-  // Don't show anything if there's no estimation yet or if it's below threshold
-  if (
-    !tokenUsageEstimation ||
-    (!tokenUsageEstimation.isApproachingLimit &&
-      !tokenUsageEstimation.isCriticallyClose &&
-      !tokenUsageEstimation.exceedsLimit)
-  ) {
-    return null;
-  }
+  if (!tokenUsageEstimation) return null;
 
+  const fileDetails = tokenUsageEstimation.tokenUsage?.file_details ?? [];
   return (
-    <TokenUsageWarning
-      estimation={tokenUsageEstimation}
-      onDismiss={clearEstimation}
-      className={className}
-    />
+    <div className={className}>
+      {fileDetails.length > 0 && (
+        <ul className="text-xs text-theme-fg-secondary">
+          {fileDetails.map((file, index) => (
+            <li key={`${file.id}-${index}`}>
+              {file.filename}:{" "}
+              {file.inclusion_mode === "preview"
+                ? t({
+                    id: "chat.files.preview_included",
+                    message: "Preview included — some content is omitted",
+                  })
+                : file.inclusion_mode === "reference_only"
+                  ? t({
+                      id: "chat.files.reference_only",
+                      message: "Reference only — file contents are omitted",
+                    })
+                  : t({
+                      id: "chat.files.full_included",
+                      message: "Full content included",
+                    })}
+            </li>
+          ))}
+        </ul>
+      )}
+      <TokenUsageWarning
+        estimation={tokenUsageEstimation}
+        onDismiss={clearEstimation}
+      />
+    </div>
   );
 };

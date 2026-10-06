@@ -1591,6 +1591,21 @@ msgid "chat.fileDrop.overlay.label"
 msgstr "Upuść, aby przesłać"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputTokenUsage.tsx
+msgid "chat.files.full_included"
+msgstr "Uwzględniono pełną treść"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputTokenUsage.tsx
+msgid "chat.files.preview_included"
+msgstr "Uwzględniono podgląd — część treści pominięto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputTokenUsage.tsx
+msgid "chat.files.reference_only"
+msgstr "Tylko odwołanie — pominięto treść pliku"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
 msgid "chat.history.delegatedRuns"
 msgstr "Delegowane uruchomienia"
