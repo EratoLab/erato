@@ -17412,6 +17412,7 @@ pub(crate) async fn run_continuation(
     // One `mcp_tool` park is one server, recorded on the request itself: the
     // gate stops the batch at the first gated call, so every item here shares
     // `approval_request.mcp_server_id`.
+    let mut mcp_content_filter_error = None;
     for (approval_id, decision) in &mcp_decisions {
         let decision = *decision;
         let Some(item) = state
@@ -17490,6 +17491,7 @@ pub(crate) async fn run_continuation(
                 }));
         }
 
+        let mut file_content_parts = Vec::new();
         let tool_use = if !is_approved {
             ToolUse {
                 tool_call_id: item.tool_call_id.clone(),
@@ -17512,19 +17514,21 @@ pub(crate) async fn run_continuation(
                 fn_arguments: item.input.clone(),
                 thought_signatures: None,
             };
+            let output_schema = managed_tool.tool.output_schema.clone();
+            let started_at = now_timestamp();
             let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
-            let call = mcp.servers.call_tool_with_progress(
+            let dispatched_call = mcp.servers.call_tool_with_progress(
                 chat.id,
                 crate::services::mcp_manager::ManagedToolCall {
                     server_id: managed_tool.server_id,
-                    tool_call: call,
+                    tool_call: call.clone(),
                     tool: managed_tool.tool,
                 },
                 &mcp_auth_context,
                 Some(progress_tx),
             );
             let dispatched = await_mcp_tool_with_progress::<MessageSubmitStreamingResponseMessage>(
-                call,
+                dispatched_call,
                 progress_rx,
                 MessageSubmitStreamingResponseToolCallUpdate {
                     message_id: message.id,
@@ -17541,23 +17545,59 @@ pub(crate) async fn run_continuation(
                 Some(task),
                 tx.clone(),
             )
-            .await
-            .and_then(|result| serde_json::to_value(result).map_err(Report::from));
+            .await;
             // A call that failed, or that the user stopped, settles as an error like any
             // other, rather than abandoning the row half-settled (see `run_continuation`).
             match dispatched {
-                Ok(output) => ToolUse {
-                    tool_call_id: item.tool_call_id.clone(),
-                    status: MessageToolCallStatus::Success,
-                    tool_name: item.tool_name.clone(),
-                    input: Some(item.input.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(output),
-                    started_at: Some(now_timestamp()),
-                    ended_at: Some(now_timestamp()),
-                },
+                Ok(result) => {
+                    // Use the same schema-aware conversion as uninterrupted calls. Only
+                    // the converted value enters history, streaming, and model replay.
+                    let (status, output) = if let Some(error) =
+                        parse_content_filter_error_from_mcp_tool_result(&result)
+                    {
+                        let output = serde_json::to_value(&error)?;
+                        mcp_content_filter_error = Some(error);
+                        (MessageToolCallStatus::Error, Some(output))
+                    } else {
+                        match post_process_mcp_tool_result(
+                            app_state,
+                            policy,
+                            &me_user.to_subject(),
+                            chat.id,
+                            &call,
+                            output_schema.as_ref(),
+                            &result,
+                        )
+                        .await
+                        {
+                            Ok(processed) => {
+                                file_content_parts = processed.file_content_parts;
+                                // Like the normal path, non-filter MCP error payloads
+                                // are returned to the model for recovery.
+                                (MessageToolCallStatus::Success, processed.output_value)
+                            }
+                            Err(error) => (
+                                MessageToolCallStatus::Error,
+                                Some(mcp_tool_processing_error_output(
+                                    &result,
+                                    &format!("Failed to process MCP tool output: {error}"),
+                                )),
+                            ),
+                        }
+                    };
+                    ToolUse {
+                        tool_call_id: item.tool_call_id.clone(),
+                        status,
+                        tool_name: item.tool_name.clone(),
+                        input: Some(item.input.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output,
+                        started_at: Some(started_at),
+                        ended_at: Some(now_timestamp()),
+                    }
+                }
                 Err(error) => ToolUse {
                     tool_call_id: item.tool_call_id.clone(),
                     status: MessageToolCallStatus::Error,
@@ -17645,6 +17685,7 @@ pub(crate) async fn run_continuation(
         let event: MessageSubmitStreamingResponseMessage = update.into();
         send_generation_event(&event, tx.clone()).await?;
         parsed.content.push(ContentPart::ToolUse(tool_use));
+        parsed.content.extend(file_content_parts);
 
         // Per item, not once after the loop: a tool that ran must leave a record
         // even if the next item bails, or its side effect happened on a row that
@@ -17657,6 +17698,50 @@ pub(crate) async fn run_continuation(
             parsed.content.clone(),
         )
         .await?;
+    }
+
+    if let Some(error) = mcp_content_filter_error {
+        // All approval items have settled durably. A filtered result ends the
+        // generation, as in the normal path, without another model request.
+        let mut metadata = message
+            .generation_metadata
+            .as_ref()
+            .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
+            .unwrap_or_default();
+        metadata.error = Some(error.clone());
+        metadata.continuation_in_flight = None;
+        update_message_generation_metadata(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            metadata,
+        )
+        .await?;
+        let event =
+            MessageSubmitStreamingResponseMessage::Error(MessageSubmitStreamingResponseError {
+                message_id: Some(message.id),
+                error,
+            });
+        send_background_event(
+            task,
+            StreamingEvent::Error {
+                error: Some(serde_json::to_value(&event)?),
+            },
+            "broadcast continued MCP content-filter error",
+        )
+        .await;
+        send_generation_event(&event, tx.clone()).await?;
+        return stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+            tx,
+            task,
+            app_state,
+            policy,
+            parsed.content,
+            me_user,
+            message.id,
+        )
+        .await;
     }
 
     // A plan item names a call that was never made, so there is nothing to

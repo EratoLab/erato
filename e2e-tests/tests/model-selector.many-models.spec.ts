@@ -27,7 +27,7 @@ test(
 test.describe("Can chat with different models", () => {
   const modelChatTests = [
     {
-      modelName: "Gemini 2.5-flash",
+      modelName: "Gemini 3.5 Flash-Lite",
       prompt: "Please answer in one short sentence about the sun.",
       loadingTimeoutMs: 20000,
       tags: [TAG_CI],
