@@ -7270,6 +7270,14 @@
           }
         }
       },
+      "Coverage": {
+        "type": "string",
+        "enum": [
+          "complete",
+          "partial",
+          "unavailable"
+        ]
+      },
       "CoveredByParentError": {
         "type": "object",
         "description": "Body of the `409` `continuestream` answers on a delegated child whose\nrequest is currently being asked about in the chat that started it.\n\n`parent_message_id` is where the question actually is: the client follows it\nrather than telling the user their own chat is broken.",
@@ -8563,6 +8571,14 @@
           }
         },
         "additionalProperties": false
+      },
+      "InclusionMode": {
+        "type": "string",
+        "enum": [
+          "full",
+          "preview",
+          "reference_only"
+        ]
       },
       "LinkFileRequest": {
         "type": "object",
@@ -11321,13 +11337,30 @@
           "token_count"
         ],
         "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/Coverage"
+          },
           "filename": {
             "type": "string",
             "description": "The original filename of the file"
           },
+          "full_token_count": {
+            "type": "integer",
+            "minimum": 0
+          },
           "id": {
             "type": "string",
             "description": "The unique ID of the file"
+          },
+          "included_token_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inclusion_mode": {
+            "$ref": "#/components/schemas/InclusionMode"
+          },
+          "reason": {
+            "type": "string"
           },
           "token_count": {
             "type": "integer",

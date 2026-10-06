@@ -1885,6 +1885,113 @@ upload_allowed_if_supports = ["supported_operations"]
 # upload_allowed_if_supports = ["extract_text"]
 ```
 
+### `file_context`
+
+{/* erato_toml_config_key: file_context */}
+{/* erato_toml_config_key: file_context.native_file_formats_bypass_limit */}
+{/* erato_toml_config_key: file_context.max_inline_tokens_per_file */}
+{/* erato_toml_config_key: file_context.max_total_attachment_tokens */}
+{/* erato_toml_config_key: file_context.max_context_fraction */}
+{/* erato_toml_config_key: file_context.max_preview_tokens_per_file */}
+{/* erato_toml_config_key: file_context.preview */}
+{/* erato_toml_config_key: file_context.preview.csv_max_sample_rows */}
+{/* erato_toml_config_key: file_context.preview.csv_max_columns */}
+{/* erato_toml_config_key: file_context.preview.csv_max_field_chars */}
+{/* erato_toml_config_key: file_context.preview.text_max_chars */}
+
+Attachment inclusion is independent of tool availability. By default, files passed
+in their native format to the LLM (currently images) are included in full and bypass
+all attachment inclusion budgets, including their metadata. They do not consume
+the aggregate budget for other files and remain included when other files fall
+back to previews or references. Their token estimates still count toward overall
+request usage; model context limits still apply. Set
+`native_file_formats_bypass_limit = false` to apply attachment budgets to these
+files as well. Files without available native content do not receive this exemption.
+
+For files subject to budgets, files above the
+per-file full-inclusion limit become previews (or references when no preview is
+available). If the combined selected representations fit the attachment budget,
+they are retained. Otherwise every non-exempt attachment takes the preview path; if those
+representations still exceed the budget, every non-exempt attachment becomes a reference.
+References that exceed the budget produce an explicit attachment-budget error.
+The planner preserves conversation order and never selects a subset to fill space.
+
+The aggregate budget is the minimum of the enabled absolute limit and the enabled
+fraction of the configured model context window. Conversation text, system
+instructions, tool definitions and output reserves are not subtracted from this
+budget. Overall request estimates still count conversation and tool definitions.
+Changing non-file history alone does not change attachment inclusion.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `native_file_formats_bypass_limit` | `true` | Include native LLM attachments in full and exclude them from per-file and aggregate attachment budget checks. |
+| `max_inline_tokens_per_file` | `16000` | Full rendered cost per attachment, including metadata. |
+| `max_total_attachment_tokens` | `0` | Absolute aggregate attachment budget. |
+| `max_context_fraction` | `0.25` | Fraction of the model context window; finite number between 0 and 1. |
+| `max_preview_tokens_per_file` | `1000` | Per-preview cost including metadata. |
+| `preview.csv_max_sample_rows` | `5` | Complete sample records after the header. |
+| `preview.csv_max_columns` | `50` | Displayed columns; omitted columns are disclosed. |
+| `preview.csv_max_field_chars` | `256` | Characters per displayed CSV field; `max_field_chars` is an alias. |
+| `preview.text_max_chars` | `0` | Independent leading-text character cap. |
+
+Every numeric zero disables only that limit. Omitted keys use defaults. These
+initial defaults are tuning starting points, not measured workload optima.
+Preview limits never truncate a selected full representation. CSV previews use
+headers and complete records, including quoted multiline fields. Document excerpts
+retain available page/section markers. Previews do not make a summarization call
+or claim complete row counts. Original bytes remain available through file URIs;
+transient virtual files have no usable URI.
+
+#### Extraction guards
+
+{/* erato_toml_config_key: file_processor.limits */}
+{/* erato_toml_config_key: file_processor.limits.max_input_bytes */}
+{/* erato_toml_config_key: file_processor.limits.max_extracted_chars */}
+{/* erato_toml_config_key: file_processor.limits.timeout_ms */}
+{/* erato_toml_config_key: file_processor.limits.bounded_text_preview */}
+
+| Key under `file_processor.limits` | Default | Guarantee |
+| --- | --- | --- |
+| `max_input_bytes` | `0` | Refuse eager extraction above this byte size. Storage reads and original-byte caches remain subject to existing infrastructure limits. |
+| `max_extracted_chars` | `0` | Limit retained request text characters; not a bound on the document parser's peak allocations. |
+| `timeout_ms` | `0` | Limit extraction waiting time. Blocking document extraction may continue after the request stops waiting; this does not cancel parser CPU work. |
+| `bounded_text_preview` | `true` | Allow CSV/text early stopping when enabled inclusion limits establish that full inclusion is impossible. |
+
+All numeric extraction guards are initially disabled. Configure them explicitly
+for your deployment. Partial extraction is marked separately from extraction
+failure and is never labeled full. Request-local partial artifacts never populate
+the complete extraction cache. Existing cache sizes and
+`caches.file_processing_parallelism` remain applicable. Upload acceptance and
+upload size restrictions are separate from these settings.
+
+#### Disable every introduced limit
+
+```toml
+[file_context]
+max_inline_tokens_per_file = 0
+max_total_attachment_tokens = 0
+max_context_fraction = 0
+max_preview_tokens_per_file = 0
+
+[file_context.preview]
+csv_max_sample_rows = 0
+csv_max_columns = 0
+csv_max_field_chars = 0
+text_max_chars = 0
+
+[file_processor.limits]
+max_input_bytes = 0
+max_extracted_chars = 0
+timeout_ms = 0
+bounded_text_preview = false
+```
+
+This combination fully extracts and inlines successful extractions, counts their
+full content, and preserves ordinary tool-result handling. Large requests can
+still overflow the model context as before. It introduces no final context
+rejection or special legacy-mode branch. Authorization and existing upload and
+infrastructure limits still apply.
+
 ### `file_processor`
 
 {/* erato_toml_config_key: file_processor */}

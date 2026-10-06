@@ -149,6 +149,8 @@ pub async fn prepare(
     subject: &Subject,
     source: &GenerationInputMessages,
     resolved: &mut GenerationInputMessages,
+    plans: &mut [crate::services::file_context::PlannedAttachment],
+    context_size: usize,
     access_token: Option<&str>,
     enabled: bool,
     omit_strict: bool,
@@ -161,6 +163,8 @@ pub async fn prepare(
     // never be mistaken for a resolved file, and enrich repeated files too.
     let mut file_positions: BTreeMap<Uuid, Vec<usize>> = BTreeMap::new();
     let mut position = 0;
+    let mut plan_index = 0;
+    let mut plan_positions = BTreeMap::new();
     for message in &source.messages {
         if let ContentPart::TextFilePointer(pointer) = &message.content {
             file_positions
@@ -168,11 +172,16 @@ pub async fn prepare(
                 .or_default()
                 .push(position);
         }
-        position += if matches!(message.content, ContentPart::ImageFilePointer(_)) {
-            2
+        if matches!(
+            message.content,
+            ContentPart::TextFilePointer(_) | ContentPart::ImageFilePointer(_)
+        ) {
+            plan_positions.insert(position, plan_index);
+            position += plans.get(plan_index).map_or(1, |p| p.parts.len());
+            plan_index += 1;
         } else {
-            1
-        };
+            position += 1;
+        }
     }
     let mut ids = Vec::new();
     let mut has_pdf = false;
@@ -194,7 +203,41 @@ pub async fn prepare(
                         && let ContentPart::Text(part) = &mut message.content
                         && let Some((prefix, _)) = part.text.split_once(&header)
                     {
-                        part.text = format!("{prefix}{header}---\n{text}\n---");
+                        let rendered = format!("{prefix}{header}---\n{text}\n---");
+                        let Some(&index) = plan_positions.get(&position) else {
+                            continue;
+                        };
+                        let cost = crate::services::file_context::tokens(&rendered);
+                        let config = &app_state.config.file_context;
+                        // Optional image-location annotations may not bypass the file budget.
+                        // The tool's enum still identifies retrievable images when annotations
+                        // do not fit, so retain the already planned text in that case.
+                        if config.max_inline_tokens_per_file != 0
+                            && cost > config.max_inline_tokens_per_file
+                        {
+                            continue;
+                        }
+                        if config
+                            .attachment_budget(context_size)
+                            .is_some_and(|budget| {
+                                plans
+                                    .iter()
+                                    .map(|p| p.budget_token_count(config))
+                                    .sum::<usize>()
+                                    - plans[index].budget_token_count(config)
+                                    + cost
+                                    > budget
+                            })
+                        {
+                            continue;
+                        }
+                        part.text = rendered.clone();
+                        plans[index].parts[0] =
+                            ContentPart::Text(crate::models::message::ContentPartText {
+                                text: rendered,
+                            });
+                        plans[index].token_count = cost;
+                        plans[index].full_token_count = Some(cost);
                     }
                 }
                 ids.extend(image_ids);

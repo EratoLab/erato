@@ -8,18 +8,16 @@ use crate::models::message::{
 };
 use crate::policy::engine::{PolicyEngine, authorize};
 use crate::policy::types::{Action, Resource};
-use crate::server::api::v1beta::file_resolution::{
-    format_reference_only_file, format_successful_file_content,
-};
+use crate::server::api::v1beta::file_resolution::resolve_and_plan_attachments;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::{
-    ActionFacetRequest, FileContent, FileContentsForGeneration, MeProfileChatRequestInput,
-    prepare_chat_request_with_adapters, remove_null_characters,
-    resolve_effective_selected_facet_ids,
+    ActionFacetRequest, MeProfileChatRequestInput, prepare_chat_request_with_adapters,
+    remove_null_characters, resolve_effective_selected_facet_ids,
 };
+use crate::services::file_context::{Attachment, Coverage};
 use crate::services::file_parsing::parse_file;
 use crate::services::file_processing_cached;
-use crate::services::file_storage::SharepointContext;
+
 use crate::services::prompt_composition::traits::MessageRepository;
 use crate::services::prompt_composition::{
     AppStateFileResolver, AppStatePromptProvider, DatabaseMessageRepository,
@@ -32,6 +30,7 @@ use axum::{Extension, Json};
 use base64::{Engine as _, engine::general_purpose};
 use chrono::Utc;
 use eyre::Report;
+#[cfg(test)]
 use genai::chat::ChatMessage;
 use genai::chat::ChatRequest;
 use sea_orm::prelude::Uuid;
@@ -158,6 +157,17 @@ pub struct TokenUsageResponseFileItem {
     filename: String,
     /// Number of tokens used for this file's content
     token_count: usize,
+    #[schema(required = false)]
+    inclusion_mode: crate::services::file_context::InclusionMode,
+    #[schema(required = false)]
+    reason: String,
+    #[schema(required = false)]
+    included_token_count: usize,
+    #[schema(required = false, nullable = false)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    full_token_count: Option<usize>,
+    #[schema(required = false)]
+    coverage: Coverage,
 }
 
 /// Response for the token_usage_estimate endpoint
@@ -421,92 +431,33 @@ pub async fn token_usage_estimate(
             })?
     };
 
-    let mut files_for_generation = file_processing_cached::process_files_parallel_cached(
-        &app_state,
-        &policy,
-        &me_user,
-        &input_file_ids,
-        me_user
-            .access_token
-            .as_ref()
-            .map(|token| SharepointContext {
-                access_token: token,
-            }),
-    )
-    .await
-    .map_err(|err| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to process input files: {}", err),
-        )
-    })?;
-
-    // Inline file payloads (e.g. the Outlook add-in's previewed email body).
-    // Track the index range of virtual entries so the chat-exists branch
-    // below can append them to `chat_request.messages` — the prompt
-    // composition pipeline only knows about persisted file IDs and would
-    // otherwise omit virtuals from the total-token tally.
-    let virtual_files_start = files_for_generation.len();
-    if let Some(virtual_files) = request.virtual_files.as_ref()
-        && !virtual_files.is_empty()
-    {
-        let processed = process_virtual_files(&app_state, virtual_files).await?;
-        files_for_generation.extend(processed);
+    // Authorize current uploads before any extraction/storage read.
+    for id in &input_file_ids {
+        crate::models::file_upload::get_file_upload_by_id(&app_state.db, &policy, &subject, id)
+            .await
+            .map_err(|err| (axum::http::StatusCode::FORBIDDEN, err.to_string()))?;
     }
-    let virtual_files_range = virtual_files_start..files_for_generation.len();
-
-    let (file_details, total_file_tokens) = {
-        let span = tracing::info_span!(
-            "count_file_tokens_parallel",
-            num_files = files_for_generation.len(),
-            total_tokens = tracing::field::Empty,
-        );
-        let _enter = span.enter();
-
-        let app_state_ref = &app_state;
-        let file_token_futures = files_for_generation.iter().filter_map(|file| {
-            let formatted = match &file.content {
-                FileContent::Text(text) => {
-                    format_successful_file_content(&file.filename, file.id, text)
-                }
-                FileContent::ReferenceOnly => format_reference_only_file(&file.filename, file.id),
-                FileContent::Image { .. } => return None,
-            };
-            let file_id = file.id;
-            let filename = file.filename.clone();
-            Some(async move {
-                let token_count =
-                    file_processing_cached::get_token_count_cached(app_state_ref, &formatted)
-                        .await
-                        .map_err(|err| {
-                            format!("Failed to count tokens for file {}: {}", filename, err)
-                        })?;
-                Ok::<_, String>(TokenUsageResponseFileItem {
-                    id: file_id.to_string(),
-                    filename,
-                    token_count,
-                })
-            })
-        });
-
-        let file_details_results = futures::future::join_all(file_token_futures).await;
-        let mut file_details = Vec::new();
-        let mut total_file_tokens = 0;
-        for result in file_details_results {
-            match result {
-                Ok(item) => {
-                    total_file_tokens += item.token_count;
-                    file_details.push(item);
-                }
-                Err(err) => {
-                    return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, err));
-                }
-            }
-        }
-
-        span.record("total_tokens", total_file_tokens);
-        (file_details, total_file_tokens)
-    };
+    let virtual_files =
+        process_virtual_files(&app_state, request.virtual_files.as_deref().unwrap_or(&[])).await?;
+    let effective_provider = request.chat_provider_id.as_deref().or_else(|| {
+        assistant_config
+            .as_ref()
+            .and_then(|a| a.default_chat_provider.as_deref())
+    });
+    let ChatProviderConfigWithId {
+        chat_provider_config,
+        chat_provider_id,
+    } = app_state
+        .chat_provider_for_chatcompletion(&policy, &subject, &me_user.groups, effective_provider)
+        .await
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                err.to_string(),
+            )
+        })?;
+    let max_context_tokens = chat_provider_config.model_capabilities.context_size_tokens as u32;
+    let attachment_plans;
 
     let chat_request = if let Some(chat) = chat.as_ref() {
         let synthetic_message_id = Uuid::new_v4();
@@ -597,7 +548,7 @@ pub async fn token_usage_estimate(
         };
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
 
-        let mut chat_request = prepare_chat_request_with_adapters(
+        let prepared = prepare_chat_request_with_adapters(
             &app_state,
             &policy,
             chat,
@@ -608,6 +559,7 @@ pub async fn token_usage_estimate(
             &message_repo,
             &file_resolver,
             &prompt_provider,
+            &virtual_files,
         )
         .await
         .map_err(|err| {
@@ -615,24 +567,9 @@ pub async fn token_usage_estimate(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to prepare chat request: {}", err),
             )
-        })?
-        .chat_request()
-        .clone();
-
-        // Append virtual file content as synthetic user messages — the
-        // prompt composition pipeline only ingested persisted file IDs, so
-        // virtuals are absent from `chat_request.messages` until we add
-        // them here. Without this, `total_tokens` would under-count.
-        for file in &files_for_generation[virtual_files_range.clone()] {
-            let formatted = match &file.content {
-                FileContent::Text(text) => {
-                    format_successful_file_content(&file.filename, file.id, text)
-                }
-                FileContent::ReferenceOnly => format_reference_only_file(&file.filename, file.id),
-                FileContent::Image { .. } => continue,
-            };
-            chat_request.messages.push(ChatMessage::user(formatted));
-        }
+        })?;
+        let chat_request = prepared.chat_request().clone();
+        attachment_plans = prepared.attachment_plans;
         chat_request
     } else {
         let mut messages = GenerationInputMessages { messages: vec![] };
@@ -646,21 +583,28 @@ pub async fn token_usage_estimate(
                     }),
                 });
         }
-        for file in &files_for_generation {
-            let formatted = match &file.content {
-                FileContent::Text(text) => {
-                    format_successful_file_content(&file.filename, file.id, text)
-                }
-                FileContent::ReferenceOnly => format_reference_only_file(&file.filename, file.id),
-                FileContent::Image { .. } => continue,
-            };
+        for id in &input_file_ids {
             messages
                 .messages
                 .push(crate::models::message::InputMessage {
                     role: MessageRole::User,
-                    content: ContentPart::Text(ContentPartText { text: formatted }),
+                    content: ContentPart::TextFilePointer(
+                        crate::models::message::ContentPartTextFilePointer {
+                            file_upload_id: *id,
+                        },
+                    ),
                 });
         }
+        let (messages, plans) = resolve_and_plan_attachments(
+            &app_state,
+            messages,
+            me_user.access_token.as_deref(),
+            &chat_provider_config,
+            &virtual_files,
+        )
+        .await
+        .map_err(|err| (axum::http::StatusCode::BAD_REQUEST, err.to_string()))?;
+        attachment_plans = plans;
         messages.into_chat_request()
     };
 
@@ -674,39 +618,30 @@ pub async fn token_usage_estimate(
         });
     }
 
+    let total_file_tokens: usize = attachment_plans.iter().map(|p| p.token_count).sum();
+    let image_tokens: usize = attachment_plans.iter().map(|p| p.native_image_tokens).sum();
+    let file_details = attachment_plans
+        .into_iter()
+        .map(|p| TokenUsageResponseFileItem {
+            id: p.id,
+            filename: p.filename,
+            token_count: p.token_count,
+            included_token_count: p.token_count,
+            inclusion_mode: p.inclusion_mode,
+            reason: p.reason,
+            full_token_count: p.full_token_count,
+            coverage: p.coverage,
+        })
+        .collect();
     let total_tokens = count_tokens_for_chat_request(&app_state, &chat_request)
         .await
-        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err))?;
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err))?
+        + image_tokens;
 
     let history_tokens_without_user = total_tokens
         .saturating_sub(user_message_tokens)
         .saturating_sub(total_file_tokens);
 
-    let requested_chat_provider_id = request.chat_provider_id.as_deref();
-    let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
-        assistant_config
-            .as_ref()
-            .and_then(|a| a.default_chat_provider.as_deref())
-    });
-
-    let ChatProviderConfigWithId {
-        chat_provider_config,
-        chat_provider_id,
-    } = app_state
-        .chat_provider_for_chatcompletion(
-            &policy,
-            &me_user.to_subject(),
-            &me_user.groups,
-            effective_chat_provider_id,
-        )
-        .await
-        .map_err(|err| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get chat provider configuration: {}", err),
-            )
-        })?;
-    let max_context_tokens = chat_provider_config.model_capabilities.context_size_tokens as u32;
     let remaining_tokens = max_context_tokens.saturating_sub(total_tokens as u32);
 
     Ok(Json(TokenUsageResponse {
@@ -733,7 +668,7 @@ pub async fn token_usage_estimate(
 async fn process_virtual_files(
     app_state: &AppState,
     virtual_files: &[TokenUsageVirtualFile],
-) -> Result<Vec<FileContentsForGeneration>, (axum::http::StatusCode, String)> {
+) -> Result<Vec<Attachment>, (axum::http::StatusCode, String)> {
     let max_upload_size = app_state
         .config
         .max_upload_size_bytes()
@@ -769,9 +704,10 @@ async fn process_virtual_files(
             vf.content_type.as_deref(),
         );
 
-        let _permit = app_state
+        let permit = app_state
             .file_processing_semaphore
-            .acquire()
+            .clone()
+            .acquire_owned()
             .await
             .map_err(|err| {
                 (
@@ -780,24 +716,76 @@ async fn process_virtual_files(
                 )
             })?;
 
-        let parsed = parse_file(
-            app_state.file_processor.as_ref(),
-            bytes,
-            content_type.as_deref(),
-        )
-        .await
-        .map_err(|err| {
-            (
-                axum::http::StatusCode::BAD_REQUEST,
-                format!("Failed to parse virtual_files[{}]: {}", vf.filename, err),
-            )
-        })?;
-
-        converted.push(FileContentsForGeneration {
-            id: Uuid::new_v4(),
+        let limits = &app_state.config.file_processor.limits;
+        let mut attachment = Attachment {
+            id: Uuid::new_v4().to_string(),
             filename: vf.filename.clone(),
-            content: FileContent::Text(remove_null_characters(&parsed)),
-        });
+            uri: None,
+            text: None,
+            csv_source: None,
+            image: None,
+            image_tokens: 0,
+            coverage: Coverage::Unavailable,
+            reason: "extraction_input_limit: content was not extracted".into(),
+        };
+        if crate::models::message::is_image_file(&vf.filename) || infer::is_image(&bytes) {
+            attachment.image = Some(ContentPart::Image(
+                crate::models::message::ContentPartImage {
+                    content_type: infer::get(&bytes)
+                        .map(|kind| kind.mime_type().to_string())
+                        .or(content_type)
+                        .unwrap_or_else(|| "application/octet-stream".into()),
+                    base64_data: vf.base64.clone(),
+                },
+            ));
+            attachment.coverage = Coverage::Complete;
+            attachment.reason = "complete".into();
+            converted.push(attachment);
+            continue;
+        }
+        if !crate::services::file_context::prepare_eager_attachment(
+            &mut attachment,
+            &bytes,
+            &app_state.config.file_context,
+            &app_state.config.file_processor.limits,
+        ) {
+            let processor = app_state.file_processor.clone();
+            let task = tokio::spawn(async move {
+                let _permit = permit;
+                parse_file(processor.as_ref(), bytes, content_type.as_deref()).await
+            });
+            let parsed = if limits.timeout_ms == 0 {
+                task.await
+            } else {
+                match tokio::time::timeout(std::time::Duration::from_millis(limits.timeout_ms), task).await {
+                    Ok(result) => result,
+                    Err(_) => {
+                        attachment.csv_source = None;
+                        attachment.reason = "extraction_timeout: content was not extracted within the waiting budget".into();
+                        converted.push(attachment);
+                        continue;
+                    }
+                }
+            }.map_err(|error| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("File extraction task failed: {error}")))?;
+            match parsed {
+                Ok(parsed) => {
+                    attachment.text = Some(remove_null_characters(&parsed));
+                    attachment.coverage = Coverage::Complete;
+                    attachment.reason = "complete".into();
+                }
+                Err(error) => {
+                    return Err((
+                        axum::http::StatusCode::BAD_REQUEST,
+                        format!("Failed to parse virtual_files[{}]: {error}", vf.filename),
+                    ));
+                }
+            }
+            crate::services::file_context::limit_extracted_text(
+                &mut attachment,
+                limits.max_extracted_chars,
+            );
+        }
+        converted.push(attachment);
     }
 
     Ok(converted)
@@ -853,8 +841,7 @@ async fn count_tokens_for_chat_request(
 
 /// The text of a chat request that reaches the provider as tokens: text parts,
 /// replayed tool-call arguments and replayed tool responses. Tool definitions
-/// (`chat_request.tools`) are not counted: `history_tokens` is derived from
-/// this total, and definitions are not history.
+/// (`chat_request.tools`) are included in overall request estimates.
 fn chat_request_token_chunks(chat_request: &ChatRequest) -> Vec<String> {
     let mut text_chunks: Vec<String> = Vec::new();
 
@@ -862,6 +849,14 @@ fn chat_request_token_chunks(chat_request: &ChatRequest) -> Vec<String> {
         && !system.is_empty()
     {
         text_chunks.push(system.clone());
+    }
+
+    if let Some(tools) = &chat_request.tools {
+        for tool in tools {
+            if let Ok(json) = serde_json::to_string(tool) {
+                text_chunks.push(json);
+            }
+        }
     }
 
     for msg in &chat_request.messages {

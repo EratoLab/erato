@@ -560,7 +560,11 @@ test.describe("Streaming composer + message queue", () => {
         { timeout: 10000 },
       );
       await expect(page).toHaveURL(new RegExp(`/chat/${streamingChatId}$`));
-      await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: /Preview attachment sample-report-compressed\.pdf/,
+        }),
+      ).toBeVisible();
     },
   );
 

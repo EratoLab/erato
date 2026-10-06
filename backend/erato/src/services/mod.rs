@@ -12,6 +12,7 @@ pub mod tool_display;
 
 pub mod display_text;
 pub(crate) mod embedded_images;
+pub mod file_context;
 pub mod file_parsing;
 pub mod file_processing_cached;
 pub mod file_processor;

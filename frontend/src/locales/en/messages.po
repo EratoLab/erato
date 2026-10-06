@@ -1591,6 +1591,21 @@ msgid "chat.fileDrop.overlay.label"
 msgstr "Drop to upload"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputTokenUsage.tsx
+msgid "chat.files.full_included"
+msgstr "Full content included"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputTokenUsage.tsx
+msgid "chat.files.preview_included"
+msgstr "Preview included — some content is omitted"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputTokenUsage.tsx
+msgid "chat.files.reference_only"
+msgstr "Reference only — file contents are omitted"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
 msgid "chat.history.delegatedRuns"
 msgstr "Delegated runs"
