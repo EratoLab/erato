@@ -486,6 +486,70 @@ describe("Teams and Outlook source controls", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows Teams accounts by organisation with their login and guest status", async () => {
+    const { rerender } = renderSources();
+    const account = {
+      tenantId: "tenant-home",
+      userId: "user-home",
+      email: "daniel@home.example",
+      tenantName: "Home Org",
+      userType: "Member",
+    };
+    const current = vi.mocked(useSidecarIndexing)();
+    vi.mocked(useSidecarIndexing).mockReturnValue({
+      ...current,
+      data: {
+        ...current.data!,
+        sources: [
+          sourceFixture(sourceId, false),
+          { ...sourceFixture(teamsSourceIds[0]), account },
+          {
+            ...sourceFixture(teamsSourceIds[1]),
+            account: {
+              ...account,
+              tenantId: "tenant-guest",
+              userId: "user-guest",
+              tenantName: "Customer Org",
+              userType: "Guest",
+            },
+          },
+        ],
+      },
+    } as ReturnType<typeof useSidecarIndexing>);
+    rerender(<SidecarIndexingControls />);
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[1]).toHaveTextContent("Home Org");
+    expect(rows[1]).toHaveTextContent("daniel@home.example");
+    expect(rows[1]).not.toHaveTextContent("Guest");
+    expect(rows[2]).toHaveTextContent("Customer Org");
+    expect(rows[2]).toHaveTextContent("daniel@home.example");
+    expect(rows[2]).toHaveTextContent("Guest");
+    expect(
+      screen.queryByText(/Accounts sharing a cache are combined/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Each Teams entry is one organization/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Enable indexing for Customer Org",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    );
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0][0].indexing_sources).toEqual([
+      { source_id: sourceId, enabled: false, priority: 0 },
+      {
+        source_id: teamsSourceIds[1],
+        enabled: false,
+        priority: Number.MAX_SAFE_INTEGER,
+      },
+    ]);
+  });
+
   it("toggles only the selected Teams cache and preserves disabled Outlook after polling and save", async () => {
     const { status, rerender } = renderSources();
     const checkbox = () =>

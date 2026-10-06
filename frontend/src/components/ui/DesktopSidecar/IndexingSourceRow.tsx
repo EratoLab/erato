@@ -166,6 +166,23 @@ export function IndexingSourceRow({
                 )}
                 {productLabel}
               </span>
+              {entry.account?.email && (
+                <span
+                  dir="auto"
+                  className="min-w-0 break-words [overflow-wrap:anywhere] [unicode-bidi:isolate]"
+                >
+                  {entry.account.email}
+                </span>
+              )}
+              {entry.account?.guest && (
+                <SettledInfoPill
+                  label={t({
+                    id: "sidecar.indexing.teamsGuest",
+                    message: "Guest",
+                  })}
+                  toneClassName="bg-theme-bg-tertiary text-theme-fg-secondary"
+                />
+              )}
               <SettledInfoPill
                 label={labels[summary.state]}
                 toneClassName={
