@@ -200,6 +200,57 @@ export async function replaceComposeSelection(
   );
 }
 
+/** Whitespace-insensitive form for telling whether two selections are the same passage. */
+export function normalizeSelectionText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Replaces `selectedText` in the compose subject with `data` as plain text.
+ * Matched as text, not through the live selection: `body.setSelectedDataAsync`
+ * writes into the body even when the selection is in the subject. Throws,
+ * writing nothing, unless the passage occurs exactly once (whitespace-
+ * insensitive) — guessing between occurrences could rewrite the wrong one.
+ */
+export async function replaceComposeSubjectText(
+  selectedText: string,
+  data: string,
+  isHtml = false,
+): Promise<void> {
+  const item = getActiveComposeItem();
+  const words = normalizeSelectionText(selectedText).split(" ");
+  const pattern = new RegExp(words.map(escapeRegExp).join("\\s+"), "g");
+  const replacement = normalizeSelectionText(
+    isHtml ? htmlToPlainText(data) : data,
+  );
+
+  await withPausedSelectionPolling(async () => {
+    const subject = await callOfficeAsync<string>(
+      (callback) => item.subject.getAsync(callback),
+      { timeoutMs: COMPOSE_WRITE_TIMEOUT_MS },
+    );
+    const match = words[0] ? pattern.exec(subject) : null;
+    if (match) {
+      pattern.lastIndex = match.index + 1;
+    }
+    if (!match || pattern.exec(subject)) {
+      throw new Error("Selected text does not occur exactly once in subject");
+    }
+    const nextSubject =
+      subject.slice(0, match.index) +
+      replacement +
+      subject.slice(match.index + match[0].length);
+    await callOfficeAsync<void>(
+      (callback) => item.subject.setAsync(nextSubject, callback),
+      { timeoutMs: COMPOSE_WRITE_TIMEOUT_MS },
+    );
+  });
+}
+
 /**
  * Prepends content to the beginning of the compose body.
  */

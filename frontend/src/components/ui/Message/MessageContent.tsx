@@ -1563,15 +1563,21 @@ export const MessageContent = memo(function MessageContent({
             if (index !== firstTextPartIndex) {
               return null;
             }
+            // Rendered outside renderMarkdown, so the host renderer needs the
+            // artifact provided here to see what the fenced path sees.
             return (
-              <EratoEmailSuggestion
+              <HostArtifactContext.Provider
                 key={`email-body-${index}`}
-                content={textForArtifact}
-                isHtml={
-                  wholeBodyArtifact.bodyFormat === "html" &&
-                  looksLikeHtmlFragment(textForArtifact)
-                }
-              />
+                value={wholeBodyArtifact}
+              >
+                <EratoEmailSuggestion
+                  content={textForArtifact}
+                  isHtml={
+                    wholeBodyArtifact.bodyFormat === "html" &&
+                    looksLikeHtmlFragment(textForArtifact)
+                  }
+                />
+              </HostArtifactContext.Provider>
             );
           }
 

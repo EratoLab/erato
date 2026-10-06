@@ -553,6 +553,16 @@ msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "Le brouillon est trop volumineux pour préremplir une réponse. Utilisez Copier et collez-le dans une réponse."
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.selectionChanged"
+msgstr "La sélection a changé depuis votre demande. Sélectionnez à nouveau le passage d'origine pour le remplacer, ou copiez le texte."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.subjectReplaceFailed"
+msgstr "Impossible de remplacer le texte sélectionné dans l'objet. Utilisez Copier et modifiez l'objet vous-même."
+
+#. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 #~ msgid "officeAddin.fileSource.addFiles"
 #~ msgstr "Ajouter des fichiers"
