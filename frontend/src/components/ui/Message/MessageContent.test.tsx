@@ -1227,6 +1227,38 @@ describe("MessageContent", () => {
     expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
   });
 
+  it("gives the host email renderer the artifact for an unfenced whole-body response", () => {
+    const original = componentRegistry.EratoEmailCodeBlock;
+    componentRegistry.EratoEmailCodeBlock = function EmailBlockStub({
+      content,
+    }) {
+      const artifact = useHostArtifact();
+      return (
+        <div data-testid="email-block">
+          {artifact?.facetId ?? "no artifact"}: {content}
+        </div>
+      );
+    };
+    try {
+      renderWithTheme(
+        <MessageContent
+          content={textContent("Bring your laptop and charger.")}
+          hostArtifact={{
+            facetId: "outlook_rewrite_selection",
+            bodyFormat: "text",
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(screen.getByTestId("email-block")).toHaveTextContent(
+        "outlook_rewrite_selection: Bring your laptop and charger.",
+      );
+    } finally {
+      componentRegistry.EratoEmailCodeBlock = original;
+    }
+  });
+
   it("renders ONE whole-body artifact from the joined text across multiple text parts", () => {
     renderWithTheme(
       <MessageContent
