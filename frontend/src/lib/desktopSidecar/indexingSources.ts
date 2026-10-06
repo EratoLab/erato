@@ -81,6 +81,14 @@ function teamsAccount(source: Source): IndexingAccount | undefined {
   };
 }
 
+const PRODUCT_ORDER = ["outlook", "teams"];
+
+/** Sources are listed per application, Outlook first, then by priority. */
+function productRank(product: string): number {
+  const rank = PRODUCT_ORDER.indexOf(product);
+  return rank === -1 ? PRODUCT_ORDER.length : rank;
+}
+
 /** Keeps a home account and its guest tenants together at equal priority. */
 function groupKey(entry: IndexingEntry): string {
   return entry.account?.email
@@ -167,6 +175,8 @@ export function indexingEntries(
   }
   return entries.sort(
     (a, b) =>
+      productRank(a.product) - productRank(b.product) ||
+      a.product.localeCompare(b.product) ||
       a.priority - b.priority ||
       groupKey(a).localeCompare(groupKey(b)) ||
       Number(a.account?.guest ?? false) - Number(b.account?.guest ?? false) ||

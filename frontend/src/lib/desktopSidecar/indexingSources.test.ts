@@ -53,6 +53,24 @@ describe("source indexing settings", () => {
     ).toEqual(entries);
   });
 
+  it("lists sources per application, then by priority", () => {
+    const entries = indexingEntries([mailbox], sources, {
+      user_configuration: {
+        indexing_sources: [
+          { source_id: teamsSourceIds[1], enabled: true, priority: 0 },
+          { source_id: sourceId, enabled: true, priority: 5 },
+          { source_id: teamsSourceIds[0], enabled: true, priority: 1 },
+        ],
+      },
+      organization_configuration: {},
+    });
+    expect(entries.map((entry) => [entry.product, entry.id])).toEqual([
+      ["outlook", sourceId],
+      ["teams", teamsSourceIds[1]],
+      ["teams", teamsSourceIds[0]],
+    ]);
+  });
+
   it("inherits the whole source policy array and respects null versus empty", () => {
     const config = {
       user_configuration: { indexing_sources: null },
