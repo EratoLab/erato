@@ -281,4 +281,29 @@ describe("buildOutlookArtifact", () => {
       }),
     ).toMatchObject({ renderMode: "body", bodyFormat: "text" });
   });
+
+  it("stamps the passage a selection rewrite was requested for", () => {
+    const build = (facetArgs: Record<string, string>) =>
+      buildOutlookArtifact({
+        facetId: "outlook_rewrite_selection",
+        facetArgs,
+        clientActionInfo: undefined,
+        content: [],
+        messageId: "m",
+        freshItemIdentity: undefined,
+      });
+
+    expect(
+      build({
+        selected_text: "Old subject",
+        source_property: "subject",
+        body_format: "html",
+      })?.rewriteTarget,
+    ).toEqual({ selectedText: "Old subject", sourceProperty: "subject" });
+    expect(
+      build({ selected_text: "Old passage", body_format: "html" })
+        ?.rewriteTarget,
+    ).toEqual({ selectedText: "Old passage", sourceProperty: "body" });
+    expect(build({ body_format: "text" })?.rewriteTarget).toBeUndefined();
+  });
 });

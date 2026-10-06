@@ -9,6 +9,7 @@ import {
 import {
   getComposeBodyType,
   replaceComposeSelection,
+  replaceComposeSubjectText,
   prependComposeBody,
 } from "../outlookComposeWrite";
 
@@ -296,6 +297,98 @@ describe("outlookComposeWrite", () => {
         2,
         "bold",
         { coercionType: Office.CoercionType.Text },
+        expect.any(Function),
+      );
+    });
+  });
+
+  describe("replaceComposeSubjectText", () => {
+    function installSubject(subject: string) {
+      const setAsync = vi.fn((_subject, callback) =>
+        callback(createMockAsyncResult(undefined)),
+      );
+      const setSelectedDataAsync = vi.fn();
+      mailbox.item = createMockMessageCompose({
+        subject: {
+          getAsync: vi.fn((callback) =>
+            callback(createMockAsyncResult(subject)),
+          ),
+          setAsync,
+        },
+        body: {
+          getAsync: vi.fn(),
+          setSelectedDataAsync,
+          prependAsync: vi.fn(),
+        },
+      });
+      return { setAsync, setSelectedDataAsync };
+    }
+
+    it("replaces the passage inside the subject as plain text", async () => {
+      const { setAsync, setSelectedDataAsync } = installSubject(
+        "Re: Budget (draft) for Q3",
+      );
+
+      await replaceComposeSubjectText(
+        "Budget (draft)",
+        "<p>Final\nbudget</p>",
+        true,
+      );
+
+      expect(setAsync).toHaveBeenCalledWith(
+        "Re: Final budget for Q3",
+        expect.any(Function),
+      );
+      expect(setSelectedDataAsync).not.toHaveBeenCalled();
+    });
+
+    it("matches across whitespace differences between selection and subject", async () => {
+      const { setAsync } = installSubject("Re: Budget  draft");
+
+      await replaceComposeSubjectText("Budget draft", "Final budget");
+
+      expect(setAsync).toHaveBeenCalledWith(
+        "Re: Final budget",
+        expect.any(Function),
+      );
+    });
+
+    it.each([
+      ["missing", "Re: Travel plans", "Draft"],
+      ["ambiguous", "Draft v1 / Draft v2", "Draft"],
+      ["overlapping", "aaa", "aa"],
+    ])(
+      "writes nothing when the passage is %s in the subject",
+      async (_case, subject, passage) => {
+        const { setAsync, setSelectedDataAsync } = installSubject(subject);
+
+        await expect(
+          replaceComposeSubjectText(passage, "Plan"),
+        ).rejects.toThrow("exactly once");
+        expect(setAsync).not.toHaveBeenCalled();
+        expect(setSelectedDataAsync).not.toHaveBeenCalled();
+      },
+    );
+
+    it("writes into an appointment organizer subject", async () => {
+      const setAsync = vi.fn((_subject, callback) =>
+        callback(createMockAsyncResult(undefined)),
+      );
+      mailbox.item = {
+        itemType: "appointment",
+        subject: {
+          getAsync: vi.fn((callback) =>
+            callback(createMockAsyncResult("Weekly sync")),
+          ),
+          setAsync,
+        },
+        body: { setSelectedDataAsync: vi.fn() },
+      };
+
+      await replaceComposeSubjectText("Weekly", "Biweekly");
+
+      expect(setAsync).toHaveBeenCalledWith(
+        "Biweekly sync",
         expect.any(Function),
       );
     });

@@ -24,8 +24,13 @@ import {
   clientActionDisplayLabel,
   offerableEmailClientActions,
   type OutlookEmailClientAction,
+  type OutlookHostArtifact,
 } from "../utils/outlookClientActions";
-import { replaceComposeSelection } from "../utils/outlookComposeWrite";
+import {
+  normalizeSelectionText,
+  replaceComposeSelection,
+  replaceComposeSubjectText,
+} from "../utils/outlookComposeWrite";
 import {
   ReplyBodyTooLargeError,
   getReadModeRecipientSummary,
@@ -43,6 +48,8 @@ import type { EratoEmailCodeBlockProps } from "@erato/frontend/library";
  *
  * Compose mode: action buttons that write back into the Outlook compose body
  * via Office.js setSelectedDataAsync ("Replace Selection" / "Insert at Cursor").
+ * A selection rewrite replaces only the passage it was requested for, and a
+ * subject passage is rewritten in the subject, never in the body.
  *
  * Read mode: when the producing facet allows client actions (reply /
  * reply-all from `GET /me/facets`, intersected with the add-in's fixed
@@ -65,7 +72,22 @@ export function OutlookEratoEmailRenderer({
   const composeSelection = useComposeSelectionSnapshot();
   const hasSelection = composeSelection.data.length > 0;
   const { mailItem, itemIdentity } = useOutlookMailItem();
-  const artifact = useOutlookArtifact();
+  const artifact: OutlookHostArtifact | null = useOutlookArtifact();
+  // A selection rewrite may only replace the passage it was written for, so
+  // a different live selection must not receive it. Results without a
+  // captured passage keep following the live selection.
+  const rewriteTarget = artifact?.rewriteTarget;
+  const isRewriteTargetSelected =
+    !!rewriteTarget &&
+    composeSelection.sourceProperty === rewriteTarget.sourceProperty &&
+    normalizeSelectionText(composeSelection.data) ===
+      normalizeSelectionText(rewriteTarget.selectedText);
+  // With nothing selected a body rewrite still inserts at the cursor; a
+  // subject rewrite has no cursor target, only its passage.
+  const isSelectionChanged =
+    !!rewriteTarget &&
+    !isRewriteTargetSelected &&
+    (hasSelection || rewriteTarget.sourceProperty === "subject");
   const isReadMode =
     !!mailItem &&
     mailItem.itemKind !== "appointment" &&
@@ -126,7 +148,7 @@ export function OutlookEratoEmailRenderer({
     "idle" | "inserting" | "done" | "copied" | "error"
   >("idle");
   const [errorKind, setErrorKind] = useState<
-    "insert" | "reply" | "tooLarge" | "staleItem"
+    "insert" | "subject" | "reply" | "tooLarge" | "staleItem"
   >("insert");
   const [busyAction, setBusyAction] = useState<OutlookEmailClientAction | null>(
     null,
@@ -162,7 +184,10 @@ export function OutlookEratoEmailRenderer({
   );
 
   const showError = useCallback(
-    (kind: "insert" | "reply" | "tooLarge" | "staleItem", delayMs: number) => {
+    (
+      kind: "insert" | "subject" | "reply" | "tooLarge" | "staleItem",
+      delayMs: number,
+    ) => {
       setErrorKind(kind);
       setStatus("error");
       scheduleStatusReset(delayMs);
@@ -171,16 +196,29 @@ export function OutlookEratoEmailRenderer({
   );
 
   const handleInsert = useCallback(async () => {
+    const subjectTarget =
+      rewriteTarget?.sourceProperty === "subject" ? rewriteTarget : undefined;
     setStatus("inserting");
     try {
-      await replaceComposeSelection(content, isHtml);
+      if (subjectTarget) {
+        await replaceComposeSubjectText(
+          subjectTarget.selectedText,
+          content,
+          isHtml,
+        );
+      } else {
+        await replaceComposeSelection(content, isHtml);
+      }
       setStatus("done");
       scheduleStatusReset(2000);
     } catch (err) {
       console.warn("Failed to insert into compose body:", err);
-      showError("insert", 2000);
+      showError(
+        subjectTarget ? "subject" : "insert",
+        subjectTarget ? 4000 : 2000,
+      );
     }
-  }, [content, isHtml, scheduleStatusReset, showError]);
+  }, [content, isHtml, rewriteTarget, scheduleStatusReset, showError]);
 
   /** Resolves `true` only when the reply form actually opened. */
   const executeReply = useCallback(
@@ -296,7 +334,7 @@ export function OutlookEratoEmailRenderer({
         id: "officeAddin.emailRenderer.inserting",
         message: "Inserting...",
       });
-    return hasSelection
+    return hasSelection || isSelectionChanged
       ? t({
           id: "officeAddin.emailRenderer.replaceSelection",
           message: "Replace Selection",
@@ -381,7 +419,7 @@ export function OutlookEratoEmailRenderer({
               <button
                 type="button"
                 onClick={() => void handleInsert()}
-                disabled={isBusy}
+                disabled={isBusy || isSelectionChanged}
                 className={ACTION_BUTTON_CLASS}
               >
                 {insertLabel}
@@ -404,6 +442,15 @@ export function OutlookEratoEmailRenderer({
               })}
         </button>
       </div>
+      {isSelectionChanged && !isReadMode && (
+        <p className="mt-1 text-xs text-theme-fg-secondary">
+          {t({
+            id: "officeAddin.emailRenderer.selectionChanged",
+            message:
+              "The selection changed after your request. Select the original passage again to replace it, or copy the text.",
+          })}
+        </p>
+      )}
       {status === "error" && (
         <p role="alert" className="mt-1 text-xs text-theme-error-fg">
           {errorKind === "tooLarge"
@@ -424,10 +471,16 @@ export function OutlookEratoEmailRenderer({
                     message:
                       "Failed to open the reply form. Make sure the received email is still open, or use Copy.",
                   })
-                : t({
-                    id: "officeAddin.emailRenderer.insertFailed",
-                    message: "Failed to insert into compose body.",
-                  })}
+                : errorKind === "subject"
+                  ? t({
+                      id: "officeAddin.emailRenderer.subjectReplaceFailed",
+                      message:
+                        "Couldn't replace the selected text in the subject. Use Copy and edit the subject yourself.",
+                    })
+                  : t({
+                      id: "officeAddin.emailRenderer.insertFailed",
+                      message: "Failed to insert into compose body.",
+                    })}
         </p>
       )}
       {confirmCard && (

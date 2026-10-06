@@ -7,7 +7,10 @@ import { vi } from "vitest";
 export function createMockMessageCompose(
   overrides: Partial<{
     conversationId: string | null;
-    subject: { getAsync: ReturnType<typeof vi.fn> };
+    subject: {
+      getAsync: ReturnType<typeof vi.fn>;
+      setAsync?: ReturnType<typeof vi.fn>;
+    };
     to: { getAsync: ReturnType<typeof vi.fn> };
     cc: { getAsync: ReturnType<typeof vi.fn> };
     body: {

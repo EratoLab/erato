@@ -553,6 +553,16 @@ msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "El borrador es demasiado grande para precompletar una respuesta. Usa Copiar y pégalo en una respuesta."
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.selectionChanged"
+msgstr "La selección cambió después de tu solicitud. Vuelve a seleccionar el pasaje original para reemplazarlo o copia el texto."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.subjectReplaceFailed"
+msgstr "No se pudo reemplazar el texto seleccionado en el asunto. Usa Copiar y edita el asunto manualmente."
+
+#. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 #~ msgid "officeAddin.fileSource.addFiles"
 #~ msgstr "Agregar archivos"

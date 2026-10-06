@@ -152,6 +152,20 @@ export function computeShouldRenderEmailCard(args: {
   return emailActions.length === 0 || proposedEmailAction;
 }
 
+/** The passage a selection rewrite was requested for, as sent in its facet args. */
+export interface OutlookRewriteTarget {
+  selectedText: string;
+  sourceProperty: "body" | "subject";
+}
+
+/**
+ * The stamp this add-in puts on `hostArtifact`. The library hands it back
+ * through `useOutlookArtifact()` unchanged, typed as the shared envelope.
+ */
+export type OutlookHostArtifact = HostArtifact & {
+  rewriteTarget?: OutlookRewriteTarget;
+};
+
 /**
  * Build the `hostArtifact` stamp for one assistant message, or `undefined`
  * when the producing facet doesn't render through the artifact machinery.
@@ -187,7 +201,7 @@ export function buildOutlookArtifact(args: {
    * completions render as history-like drafts).
    */
   freshItemIdentity: string | undefined;
-}): HostArtifact | undefined {
+}): OutlookHostArtifact | undefined {
   const bodyFormatArg = args.facetArgs?.body_format;
   const bodyFormat =
     bodyFormatArg === "text" || bodyFormatArg === "html"
@@ -213,6 +227,7 @@ export function buildOutlookArtifact(args: {
     allowedClientActions,
     proposedClientAction,
   });
+  const selectedText = args.facetArgs?.selected_text;
   return {
     facetId: args.facetId,
     ...(bodyFormat ? { bodyFormat } : {}),
@@ -232,6 +247,17 @@ export function buildOutlookArtifact(args: {
       : {}),
     ...(args.freshItemIdentity !== undefined
       ? { isFreshCompletion: true, itemIdentity: args.freshItemIdentity }
+      : {}),
+    ...(selectedText
+      ? {
+          rewriteTarget: {
+            selectedText,
+            sourceProperty:
+              args.facetArgs?.source_property === "subject"
+                ? "subject"
+                : "body",
+          },
+        }
       : {}),
   };
 }

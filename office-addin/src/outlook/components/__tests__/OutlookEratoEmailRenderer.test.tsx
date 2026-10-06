@@ -8,7 +8,15 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { createMockAsyncResult } from "../../../test/helpers/asyncResult";
+import { createMockMessageCompose } from "../../../test/mocks/outlook/composeMail";
+import {
+  installMockMailbox,
+  uninstallMockMailbox,
+} from "../../../test/mocks/outlook/mailbox";
 import { OutlookEratoEmailRenderer } from "../OutlookEratoEmailRenderer";
+
+import type * as ComposeSelectionStore from "../../hooks/composeSelectionStore";
 
 // The renderer's collaborators are mocked at the seams the tests steer:
 // the artifact + chat snapshot (what AddinChat stamps), the current Outlook
@@ -23,6 +31,10 @@ const mockGetReadModeRecipientSummary = vi.fn();
 const mockCopyEmailToClipboard = vi.fn();
 const mockRegisterConfirmation = vi.fn();
 const mockUnregisterConfirmation = vi.fn();
+const mockComposeSelection = vi.fn(() => ({
+  data: "",
+  sourceProperty: "body",
+}));
 
 vi.mock("@erato/frontend/library", () => ({
   // Mirrors the real card's lifecycle contract: decision buttons only while
@@ -89,8 +101,9 @@ vi.mock("../../providers/OutlookMailItemProvider", () => ({
   useOutlookMailItem: () => mockUseOutlookMailItem(),
 }));
 
-vi.mock("../../hooks/composeSelectionStore", () => ({
-  useComposeSelectionSnapshot: () => ({ data: "", sourceProperty: "body" }),
+vi.mock("../../hooks/composeSelectionStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof ComposeSelectionStore>()),
+  useComposeSelectionSnapshot: () => mockComposeSelection(),
 }));
 
 vi.mock("../../utils/outlookReadReply", () => ({
@@ -113,6 +126,7 @@ interface TestArtifact {
   isFreshCompletion?: boolean;
   itemIdentity?: string;
   proposedClientAction?: string;
+  rewriteTarget?: { selectedText: string; sourceProperty: "body" | "subject" };
 }
 
 // Unique per test: the renderer's once-per-message auto-prompt slot is
@@ -692,5 +706,245 @@ describe("OutlookEratoEmailRenderer — copy", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
 
     expect(mockCopyEmailToClipboard).toHaveBeenCalledWith("Draft body", false);
+  });
+});
+
+describe("OutlookEratoEmailRenderer — selection rewrite target", () => {
+  const ORIGINAL = "Thanks for the quick reply.";
+
+  function primeCompose(options: {
+    rewriteTarget?: TestArtifact["rewriteTarget"];
+    liveSelection: { data: string; sourceProperty: "body" | "subject" };
+    subject?: string;
+    isFreshCompletion?: boolean;
+  }) {
+    prime({
+      artifact: makeArtifact({
+        facetId: "outlook_rewrite_selection",
+        allowedClientActions: [],
+        rewriteTarget: options.rewriteTarget,
+        ...(options.isFreshCompletion
+          ? { isFreshCompletion: true, itemIdentity: "draft-a" }
+          : {}),
+      }),
+      currentItemIdentity: "draft-a",
+    });
+    mockUseOutlookMailItem.mockReturnValue({
+      mailItem: { isComposeMode: true },
+      itemIdentity: "draft-a",
+    });
+    mockComposeSelection.mockReturnValue(options.liveSelection);
+
+    const mailbox = installMockMailbox();
+    const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
+      callback(createMockAsyncResult(undefined)),
+    );
+    const subjectSetAsync = vi.fn((_subject, callback) =>
+      callback(createMockAsyncResult(undefined)),
+    );
+    mailbox.item = createMockMessageCompose({
+      subject: {
+        getAsync: vi.fn((callback) =>
+          callback(
+            createMockAsyncResult(options.subject ?? "Re: Budget draft v2"),
+          ),
+        ),
+        setAsync: subjectSetAsync,
+      },
+      body: {
+        getAsync: vi.fn(),
+        getTypeAsync: vi.fn((callback) =>
+          callback(createMockAsyncResult(Office.CoercionType.Text)),
+        ),
+        setSelectedDataAsync,
+        prependAsync: vi.fn(),
+      },
+    });
+    return { setSelectedDataAsync, subjectSetAsync };
+  }
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    mockComposeSelection.mockReturnValue({ data: "", sourceProperty: "body" });
+  });
+
+  it("does not replace a selection that differs from the rewritten passage", () => {
+    const { setSelectedDataAsync } = primeCompose({
+      rewriteTarget: { selectedText: ORIGINAL, sourceProperty: "body" },
+      liveSelection: { data: "Best regards, Dana", sourceProperty: "body" },
+    });
+    render(<OutlookEratoEmailRenderer content="Rewritten" isHtml={false} />);
+
+    const replace = screen.getByRole("button", { name: "Replace Selection" });
+    expect(replace).toBeDisabled();
+    fireEvent.click(replace);
+
+    expect(setSelectedDataAsync).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/The selection changed after your request/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
+  });
+
+  it("guards a fresh completion the same way as a card from history", async () => {
+    const { setSelectedDataAsync } = primeCompose({
+      rewriteTarget: { selectedText: ORIGINAL, sourceProperty: "body" },
+      liveSelection: { data: "Best regards, Dana", sourceProperty: "body" },
+      isFreshCompletion: true,
+    });
+    render(<OutlookEratoEmailRenderer content="Rewritten" isHtml={false} />);
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Replace Selection" }),
+      );
+    });
+
+    expect(setSelectedDataAsync).not.toHaveBeenCalled();
+  });
+
+  it("replaces when the original passage is selected, ignoring whitespace differences", async () => {
+    const { setSelectedDataAsync } = primeCompose({
+      rewriteTarget: { selectedText: ORIGINAL, sourceProperty: "body" },
+      liveSelection: {
+        data: "  Thanks for the\n quick reply. ",
+        sourceProperty: "body",
+      },
+    });
+    render(<OutlookEratoEmailRenderer content="Rewritten" isHtml={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace Selection" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Done!" }),
+    ).toBeInTheDocument();
+    expect(setSelectedDataAsync).toHaveBeenCalledWith(
+      "Rewritten",
+      { coercionType: Office.CoercionType.Text },
+      expect.any(Function),
+    );
+    expect(screen.queryByText(/The selection changed/)).toBeNull();
+  });
+
+  it("re-enables Replace once the original passage is selected again", () => {
+    primeCompose({
+      rewriteTarget: { selectedText: ORIGINAL, sourceProperty: "body" },
+      liveSelection: { data: "Something else", sourceProperty: "body" },
+    });
+    const { rerender } = render(
+      <OutlookEratoEmailRenderer content="Rewritten" isHtml={false} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Replace Selection" }),
+    ).toBeDisabled();
+
+    mockComposeSelection.mockReturnValue({
+      data: ORIGINAL,
+      sourceProperty: "body",
+    });
+    rerender(<OutlookEratoEmailRenderer content="Rewritten" isHtml={false} />);
+
+    expect(
+      screen.getByRole("button", { name: "Replace Selection" }),
+    ).toBeEnabled();
+    expect(screen.queryByText(/The selection changed/)).toBeNull();
+  });
+
+  it("keeps Insert at Cursor for a body rewrite when nothing is selected", async () => {
+    const { setSelectedDataAsync } = primeCompose({
+      rewriteTarget: { selectedText: ORIGINAL, sourceProperty: "body" },
+      liveSelection: { data: "", sourceProperty: "body" },
+    });
+    render(<OutlookEratoEmailRenderer content="Rewritten" isHtml={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert at Cursor" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Done!" }),
+    ).toBeInTheDocument();
+    expect(setSelectedDataAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Replace Selection for results that carry no rewrite target", async () => {
+    const { setSelectedDataAsync } = primeCompose({
+      liveSelection: { data: "Any passage", sourceProperty: "body" },
+    });
+    render(<OutlookEratoEmailRenderer content="Draft" isHtml={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace Selection" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Done!" }),
+    ).toBeInTheDocument();
+    expect(setSelectedDataAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes a subject rewrite into the subject, never the body", async () => {
+    const { setSelectedDataAsync, subjectSetAsync } = primeCompose({
+      rewriteTarget: {
+        selectedText: "Budget draft",
+        sourceProperty: "subject",
+      },
+      liveSelection: { data: "Budget draft", sourceProperty: "subject" },
+    });
+    render(
+      <OutlookEratoEmailRenderer content="Final budget plan" isHtml={false} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace Selection" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Done!" }),
+    ).toBeInTheDocument();
+    expect(setSelectedDataAsync).not.toHaveBeenCalled();
+    expect(subjectSetAsync).toHaveBeenCalledWith(
+      "Re: Final budget plan v2",
+      expect.any(Function),
+    );
+  });
+
+  it("offers no write for a subject rewrite once the subject passage is no longer selected", () => {
+    const { setSelectedDataAsync, subjectSetAsync } = primeCompose({
+      rewriteTarget: {
+        selectedText: "Budget draft",
+        sourceProperty: "subject",
+      },
+      liveSelection: { data: "", sourceProperty: "body" },
+    });
+    render(
+      <OutlookEratoEmailRenderer content="Final budget plan" isHtml={false} />,
+    );
+
+    const replace = screen.getByRole("button", { name: "Replace Selection" });
+    expect(replace).toBeDisabled();
+    fireEvent.click(replace);
+
+    expect(setSelectedDataAsync).not.toHaveBeenCalled();
+    expect(subjectSetAsync).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/The selection changed after your request/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an error and writes nothing when the subject holds the passage more than once", async () => {
+    const { setSelectedDataAsync, subjectSetAsync } = primeCompose({
+      rewriteTarget: {
+        selectedText: "Budget draft",
+        sourceProperty: "subject",
+      },
+      liveSelection: { data: "Budget draft", sourceProperty: "subject" },
+      subject: "Budget draft vs. Budget draft",
+    });
+    render(
+      <OutlookEratoEmailRenderer content="Final budget plan" isHtml={false} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace Selection" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't replace the selected text in the subject",
+    );
+    expect(subjectSetAsync).not.toHaveBeenCalled();
+    expect(setSelectedDataAsync).not.toHaveBeenCalled();
   });
 });
