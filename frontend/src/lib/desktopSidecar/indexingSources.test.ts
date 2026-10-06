@@ -53,6 +53,25 @@ describe("source indexing settings", () => {
     ).toEqual(entries);
   });
 
+  it("marks the sources the sidecar matched to the work account", () => {
+    const entries = indexingEntries(
+      [mailbox],
+      [
+        { ...sourceFixture(sourceId, false), defaultReason: "workAccount" },
+        { ...sourceFixture(teamsSourceIds[0]), defaultReason: "workAccount" },
+        { ...sourceFixture(teamsSourceIds[1]), defaultReason: "guestAccount" },
+      ],
+      configuration,
+    );
+    expect(
+      entries.map((entry) => [entry.id, entry.workAccount ?? false]),
+    ).toEqual([
+      [sourceId, true],
+      [teamsSourceIds[0], true],
+      [teamsSourceIds[1], false],
+    ]);
+  });
+
   it("lists sources per application, then by priority", () => {
     const entries = indexingEntries([mailbox], sources, {
       user_configuration: {

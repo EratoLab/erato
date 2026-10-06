@@ -13,6 +13,28 @@
         },
         "organization_configuration": {
           "$ref": "../configuration/sidecar-configuration.schema.json"
+        },
+        "signed_in_user": {
+          "description": "The user signed in to the client, as its Entra ID identity. The sidecar enables by default the sources that read this work account. Null or absent means unknown; sources then keep their own defaults. Clients set it on every configure; older sidecars preserve it without applying it.",
+          "type": ["object", "null"],
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "Entra object id (oid)."
+            },
+            "tenant_id": {
+              "type": ["string", "null"],
+              "description": "Entra tenant id (tid), when known."
+            },
+            "email": {
+              "type": ["string", "null"]
+            },
+            "user_principal_name": {
+              "type": ["string", "null"]
+            }
+          },
+          "required": ["user_id"],
+          "additionalProperties": true
         }
       },
       "required": ["user_configuration", "organization_configuration"],

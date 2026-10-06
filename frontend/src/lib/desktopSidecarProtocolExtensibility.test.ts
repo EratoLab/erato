@@ -13,6 +13,7 @@ import {
   validateLocalTasksStatusV1Result,
   validateOutlookGetConversationV1Result,
   validateSearchQueryV1Result,
+  validateSidecarConfigureV1Params,
   validateSourcesListV1Result,
 } from "../../../desktop-sidecar-protocol/typescript/src/generated/validators.mjs";
 import { DesktopSidecarClient } from "../../../desktop-sidecar-protocol/typescript/src/index.js";
@@ -135,6 +136,38 @@ describe("desktop sidecar protocol extensibility", () => {
       search([{ ...hit, conversationKey: "48:notes", selfNote: true }]),
     ).toBe(true);
     expect(search([{ ...hit, selfNote: "yes" }])).toBe(false);
+    expect(
+      validateSourcesListV1Result({
+        sources: [
+          {
+            ...teamsSource,
+            defaultEnabled: false,
+            defaultReason: "guestAccount",
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      validateSourcesListV1Result({
+        sources: [{ ...teamsSource, defaultEnabled: "no" }],
+      }),
+    ).toBe(false);
+    const configure = (signedInUser: unknown) =>
+      validateSidecarConfigureV1Params({
+        user_configuration: {},
+        organization_configuration: {},
+        signed_in_user: signedInUser,
+      });
+    expect(
+      configure({
+        user_id: "0b1c2d3e-0000-4000-8000-000000000001",
+        tenant_id: null,
+        email: "jane@home.example",
+        future: true,
+      }),
+    ).toBe(true);
+    expect(configure(null)).toBe(true);
+    expect(configure({ email: "jane@home.example" })).toBe(false);
 
     const start = JSON.parse(
       await readFile(

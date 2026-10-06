@@ -21,6 +21,22 @@ export interface IndexingStatusV1Result {
   configuration?: {
     user_configuration: SidecarConfiguration;
     organization_configuration: SidecarConfiguration;
+    /**
+     * The user signed in to the client, as its Entra ID identity. The sidecar enables by default the sources that read this work account. Null or absent means unknown; sources then keep their own defaults. Clients set it on every configure; older sidecars preserve it without applying it.
+     */
+    signed_in_user?: {
+      /**
+       * Entra object id (oid).
+       */
+      user_id: string;
+      /**
+       * Entra tenant id (tid), when known.
+       */
+      tenant_id?: string | null;
+      email?: string | null;
+      user_principal_name?: string | null;
+      [k: string]: unknown;
+    } | null;
     [k: string]: unknown;
   };
   sampledAt: string;

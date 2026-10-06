@@ -5852,6 +5852,11 @@ msgid "sidecar.indexing.noScan"
 msgstr "Aucune analyse réussie pour le moment"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.noWorkAccountNote"
+msgstr "Aucun compte de cet ordinateur ne correspond à votre compte professionnel {account}. Choisissez les sources à indexer."
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.numberedSource"
 msgstr "{name} ({number})"
@@ -6070,6 +6075,16 @@ msgstr "Modifications non enregistrées"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.upgrade"
 msgstr "Mettez à jour Desktop Sidecar pour configurer l’indexation."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.workAccount"
+msgstr "Compte professionnel"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.workAccountNote"
+msgstr "Compte professionnel : {account}. Les autres comptes et les accès invité sont désactivés au départ."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx

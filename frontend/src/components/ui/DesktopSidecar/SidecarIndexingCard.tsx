@@ -172,6 +172,12 @@ function SidecarIndexingSettings({
   const hasChanges =
     draft !== null || parallelism !== null || throttle !== null;
   const enabledCount = ordered.filter((entry) => entry.enabled).length;
+  const workAccount = configuration.signed_in_user;
+  const workAccountName = workAccount?.email ?? workAccount?.user_id;
+  // Older sidecars neither report defaults nor match accounts.
+  const reportsDefaults = (sources ?? []).some(
+    (source) => source.defaultReason !== undefined,
+  );
   return (
     <div className="space-y-4">
       {saveError && (
@@ -211,6 +217,23 @@ function SidecarIndexingSettings({
                 "Choose what is indexed for local search. Changes take effect when you save.",
             })}
           </p>
+          {workAccountName && reportsDefaults && (
+            <p className="text-xs text-theme-fg-secondary">
+              {ordered.some((entry) => entry.workAccount)
+                ? i18n._({
+                    id: "sidecar.indexing.workAccountNote",
+                    message:
+                      "Work account: {account}. Other accounts and guest access start disabled.",
+                    values: { account: workAccountName },
+                  })
+                : i18n._({
+                    id: "sidecar.indexing.noWorkAccountNote",
+                    message:
+                      "No account on this computer matches your work account {account}. Choose which sources to index.",
+                    values: { account: workAccountName },
+                  })}
+            </p>
+          )}
         </div>
         <SettingsDisclosure
           title={t({ id: "sidecar.indexing.sources", message: "Sources" })}

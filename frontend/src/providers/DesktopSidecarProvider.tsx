@@ -152,6 +152,23 @@ export function useDesktopSidecar(): DesktopSidecarContextValue {
   return useContext(DesktopSidecarContext);
 }
 
+/** The erato user as the sidecar's work account; null without an Entra ID sign-in. */
+export function signedInUser(
+  profile:
+    | { organization_user_id?: string | null; email?: string | null }
+    | undefined,
+) {
+  const userId = profile?.organization_user_id?.trim();
+  return userId
+    ? {
+        user_id: userId,
+        tenant_id: null,
+        email: profile?.email?.trim().toLowerCase() ?? null,
+        user_principal_name: null,
+      }
+    : null;
+}
+
 export function DesktopSidecarConfigurationSync() {
   const { client, snapshot } = useDesktopSidecar();
   const { profile } = useProfileApi();
@@ -187,6 +204,10 @@ export function DesktopSidecarConfigurationSync() {
       const configuration = {
         ...status.configuration,
         organization_configuration: organizationConfiguration,
+        signed_in_user: signedInUser({
+          organization_user_id: profile?.organization_user_id,
+          email: profile?.email,
+        }),
       };
       const { mailboxes } = client.supports("outlook.list_mailboxes.v1")
         ? await client.invoke(
@@ -218,6 +239,7 @@ export function DesktopSidecarConfigurationSync() {
     client,
     organizationConfiguration,
     profile?.email,
+    profile?.organization_user_id,
     queryClient,
     snapshot.instanceId,
     snapshot.state,

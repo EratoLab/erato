@@ -5852,6 +5852,11 @@ msgid "sidecar.indexing.noScan"
 msgstr "Noch kein erfolgreicher Scan"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.noWorkAccountNote"
+msgstr "Kein Konto auf diesem Computer entspricht Ihrem Arbeitskonto {account}. Wählen Sie aus, welche Quellen indexiert werden."
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.numberedSource"
 msgstr "{name} ({number})"
@@ -6070,6 +6075,16 @@ msgstr "Ungespeicherte Änderungen"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.upgrade"
 msgstr "Aktualisieren Sie den Desktop Sidecar, um die Indexierung zu konfigurieren."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.workAccount"
+msgstr "Arbeitskonto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.workAccountNote"
+msgstr "Arbeitskonto: {account}. Andere Konten und Gastzugänge sind zunächst deaktiviert."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx

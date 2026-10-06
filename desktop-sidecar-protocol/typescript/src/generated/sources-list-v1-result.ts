@@ -43,6 +43,14 @@ export interface SourceDescriptor {
     userType?: string | null;
     [k: string]: unknown;
   };
+  /**
+   * Whether the source is indexed when no user or organization policy names it. Older sidecars omit it.
+   */
+  defaultEnabled?: boolean;
+  /**
+   * Why the source has its default: workAccount, otherAccount, guestAccount, outlookDefault, notOutlookDefault, onlyTeamsAccount or noWorkAccount. Extensible; older sidecars omit it.
+   */
+  defaultReason?: string;
   locator: {
     [k: string]: unknown;
   };

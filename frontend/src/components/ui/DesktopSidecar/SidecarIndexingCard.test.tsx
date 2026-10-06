@@ -550,6 +550,48 @@ describe("Teams and Outlook source controls", () => {
     ]);
   });
 
+  it("names the work account the sidecar matched, or says that none matched", () => {
+    const { status, rerender } = renderSources();
+    const current = vi.mocked(useSidecarIndexing)();
+    const render = (reasons: string[]) => {
+      status.configuration!.signed_in_user = {
+        user_id: "user-home",
+        email: "daniel@home.example",
+      };
+      vi.mocked(useSidecarIndexing).mockReturnValue({
+        ...current,
+        data: {
+          ...current.data!,
+          status,
+          sources: [
+            sourceFixture(sourceId, false),
+            ...teamsSourceIds.map((id) => sourceFixture(id)),
+          ].map((source, index) => ({
+            ...source,
+            defaultReason: reasons[index],
+          })),
+        },
+      } as ReturnType<typeof useSidecarIndexing>);
+      rerender(<SidecarIndexingControls />);
+    };
+
+    render(["workAccount", "workAccount", "guestAccount"]);
+    expect(
+      screen.getByText(/^Work account: daniel@home.example\./),
+    ).toBeInTheDocument();
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("Work account");
+    expect(rows[1]).toHaveTextContent("Work account");
+    expect(rows[2]).not.toHaveTextContent("Work account");
+
+    render(["notOutlookDefault", "otherAccount", "guestAccount"]);
+    expect(
+      screen.getByText(
+        /No account on this computer matches your work account daniel@home.example/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("toggles only the selected Teams cache and preserves disabled Outlook after polling and save", async () => {
     const { status, rerender } = renderSources();
     const checkbox = () =>
