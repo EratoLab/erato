@@ -6022,9 +6022,19 @@ msgid "sidecar.indexing.status.waiting"
 msgstr "Oczekiwanie"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.teamsAccounts"
+msgstr "Każdy wpis Teams to jedna organizacja, do której się zalogowano. Dostęp gościa do innych organizacji jest wyświetlany osobno."
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.teamsCache"
 msgstr "Lokalna pamięć podręczna Microsoft Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.teamsGuest"
+msgstr "Gość"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx

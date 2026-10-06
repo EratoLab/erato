@@ -127,6 +127,95 @@ describe("source indexing settings", () => {
     expect(indexingEntries([mailbox], undefined, config)).toHaveLength(1);
   });
 
+  it("shows each Teams account by organisation and keeps guest tenants next to their home account", () => {
+    const teams = (
+      id: string,
+      account: NonNullable<(typeof sources)[number]["account"]>,
+      displayName = "Daniel Person",
+    ) => ({ ...sourceFixture(id), displayName, account });
+    const home = {
+      tenantId: "tenant-home",
+      userId: "user-home",
+      email: "daniel@home.example",
+      userPrincipalName: "daniel@home.example",
+      tenantName: "Home Org",
+      userType: "Member",
+    };
+    const ids = [
+      "e1111111-b222-4333-8444-c55555555555",
+      "e2222222-b222-4333-8444-c55555555555",
+      "e3333333-b222-4333-8444-c55555555555",
+      "e4444444-b222-4333-8444-c55555555555",
+      "e5555555-b222-4333-8444-c55555555555",
+    ];
+    const teamsSources = [
+      teams(ids[0], {
+        ...home,
+        tenantId: "tenant-zeta",
+        userId: "guest-zeta",
+        userPrincipalName: "daniel_home.example#EXT#@zeta.onmicrosoft.com",
+        tenantName: "Zeta Customer",
+        userType: "Guest",
+      }),
+      teams(ids[1], {
+        tenantId: "tenant-other",
+        userId: "user-other",
+        email: "Daniel@Other.example",
+        tenantName: "Other Org",
+        userType: "Member",
+      }),
+      teams(ids[2], home),
+      teams(ids[3], {
+        ...home,
+        tenantId: "tenant-alpha",
+        userId: "guest-alpha",
+        tenantName: "Alpha Customer",
+        userType: "Guest",
+      }),
+      teams(
+        ids[4],
+        {
+          tenantId: "tenant-unknown",
+          userId: "user-unknown",
+          userPrincipalName: "daniel_home.example#EXT#@unknown.onmicrosoft.com",
+        },
+        "Teams account (tenant db4b298b…)",
+      ),
+    ];
+    const config = {
+      user_configuration: { indexing_sources: [] },
+      organization_configuration: {},
+    };
+    const entries = indexingEntries([], teamsSources, config);
+    expect(
+      entries.map((entry) => [entry.id, entry.name, entry.account]),
+    ).toEqual([
+      [
+        ids[4],
+        "Teams account (tenant db4b298b…)",
+        { email: null, guest: false },
+      ],
+      [ids[2], "Home Org", { email: "daniel@home.example", guest: false }],
+      [ids[3], "Alpha Customer", { email: "daniel@home.example", guest: true }],
+      [ids[0], "Zeta Customer", { email: "daniel@home.example", guest: true }],
+      [ids[1], "Other Org", { email: "daniel@other.example", guest: false }],
+    ]);
+    expect(entries.every((entry) => entry.editable && !entry.number)).toBe(
+      true,
+    );
+    expect(indexingEntries([], [...teamsSources].reverse(), config)).toEqual(
+      entries,
+    );
+
+    const guest = entries.find((entry) => entry.id === ids[0])!;
+    expect(
+      indexingEntryPatch(config, [{ ...guest, enabled: false }])
+        .indexing_sources,
+    ).toEqual([
+      { source_id: ids[0], enabled: false, priority: guest.priority },
+    ]);
+  });
+
   it("keeps mailboxes missing from the catalog visible and does not initialize over source policies", () => {
     expect(indexingEntries([mailbox], [], configuration)[0].scope).toBe(
       "mailbox",

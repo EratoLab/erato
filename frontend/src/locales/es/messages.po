@@ -6022,9 +6022,19 @@ msgid "sidecar.indexing.status.waiting"
 msgstr "En espera"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.teamsAccounts"
+msgstr "Cada entrada de Teams es una organización en la que has iniciado sesión. El acceso como invitado a otras organizaciones se muestra por separado."
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.teamsCache"
 msgstr "Caché local de Microsoft Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.teamsGuest"
+msgstr "Invitado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx

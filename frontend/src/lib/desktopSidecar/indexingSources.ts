@@ -14,11 +14,19 @@ import type {
 
 type Source = SourcesListV1Result["sources"][number];
 
+/** The signed-in Teams identity behind a Teams source. */
+export interface IndexingAccount {
+  /** Login address; a guest identity carries its home address. */
+  email: string | null;
+  guest: boolean;
+}
+
 export interface IndexingEntry {
   id: string;
   scope: "source" | "mailbox";
   product: string;
   name: string | null;
+  account?: IndexingAccount;
   number?: number;
   enabled: boolean;
   priority: number;
@@ -52,8 +60,32 @@ function sourceProduct(source: Source): string {
   return "unknown";
 }
 
-function firstName(...names: (string | undefined)[]): string | null {
+function firstName(...names: (string | null | undefined)[]): string | null {
   return names.map((name) => name?.trim()).find((name) => !!name) ?? null;
+}
+
+function teamsAccount(source: Source): IndexingAccount | undefined {
+  const account = source.account;
+  if (!account) return undefined;
+  const principal = account.userPrincipalName?.trim();
+  return {
+    email:
+      firstName(
+        account.email,
+        // Guest UPNs (`name_home.example#EXT#@tenant…`) are not addresses.
+        principal && !principal.toUpperCase().includes("#EXT#")
+          ? principal
+          : undefined,
+      )?.toLowerCase() ?? null,
+    guest: account.userType?.trim().toLowerCase() === "guest",
+  };
+}
+
+/** Keeps a home account and its guest tenants together at equal priority. */
+function groupKey(entry: IndexingEntry): string {
+  return entry.account?.email
+    ? `${entry.product}:${entry.account.email}`
+    : entry.id;
 }
 
 export function indexingEntries(
@@ -94,15 +126,19 @@ export function indexingEntries(
     if (!sourceControls && mailbox) continue;
     if (mailbox) represented.add(indexingMailboxId(mailbox.id));
     const policy = policies.get(id);
+    const account = product === "teams" ? teamsAccount(source) : undefined;
     entries.push({
       id,
       scope: "source",
       product,
+      // A Teams source is one organisation the person is signed in to.
       name: firstName(
+        account ? source.account?.tenantName : undefined,
         mailbox?.emailAddress,
         source.displayName,
         mailbox?.displayName,
       ),
+      ...(account && { account }),
       enabled: policy?.enabled ?? source.indexingEnabled ?? source.enabled,
       priority: policy?.priority ?? DEFAULT_MAILBOX_PRIORITY,
       editable: sourceControls,
@@ -130,7 +166,12 @@ export function indexingEntries(
     if (peers.length > 1) entry.number = peers.indexOf(entry) + 1;
   }
   return entries.sort(
-    (a, b) => a.priority - b.priority || a.id.localeCompare(b.id),
+    (a, b) =>
+      a.priority - b.priority ||
+      groupKey(a).localeCompare(groupKey(b)) ||
+      Number(a.account?.guest ?? false) - Number(b.account?.guest ?? false) ||
+      (a.name ?? "").localeCompare(b.name ?? "") ||
+      a.id.localeCompare(b.id),
   );
 }
 

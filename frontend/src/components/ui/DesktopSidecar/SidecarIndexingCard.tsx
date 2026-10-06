@@ -284,11 +284,20 @@ function SidecarIndexingSettings({
           </p>
           {ordered.some((entry) => entry.product === "teams") && (
             <p className="text-xs text-theme-fg-secondary">
-              {t({
-                id: "sidecar.indexing.teamsScope",
-                message:
-                  "Teams status and settings apply to each local cache. Accounts sharing a cache are combined.",
-              })}
+              {/* Older sidecars report one Teams source per cache, not per account. */}
+              {ordered.some(
+                (entry) => entry.product === "teams" && !entry.account,
+              )
+                ? t({
+                    id: "sidecar.indexing.teamsScope",
+                    message:
+                      "Teams status and settings apply to each local cache. Accounts sharing a cache are combined.",
+                  })
+                : t({
+                    id: "sidecar.indexing.teamsAccounts",
+                    message:
+                      "Each Teams entry is one organization you are signed in to. Guest access to other organizations is listed separately.",
+                  })}
             </p>
           )}
         </SettingsDisclosure>
