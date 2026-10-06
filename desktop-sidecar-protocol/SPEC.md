@@ -256,10 +256,22 @@ controls from `sources.list.v1` alone: older servers may list sources but merely
 preserve unknown configuration fields. Reporting `indexing_sources` in status
 configuration indicates support for applying these controls.
 
-Teams source identities currently represent local IndexedDB caches. Multiple
-caches are distinct sources even if their display names match. Multiple logins
-within a single cache share its source policy and statistics; clients MUST NOT
-present cache-scoped statistics as independently measured login statistics.
+Clients SHOULD send `signed_in_user`, next to the two layers, on every
+configure: `{user_id, tenant_id, email, user_principal_name}` of the user signed
+in to the client, where `user_id` is the Entra object id (`oid`) and `tenant_id`
+the tenant (`tid`) when known, or null when the sign-in is not an Entra ID
+identity. It is not authentication and grants no access; the sidecar uses it
+only to choose source defaults, enabling the sources that read this work
+account (a Teams identity with the same object id, an Outlook mailbox with the
+same address) and leaving guest identities and other accounts disabled.
+`sources.list.v1` reports each source's `defaultEnabled` and `defaultReason`.
+Explicit user and organization policies always take precedence over defaults.
+
+Each signed-in Teams identity (one tenant as one user) in a local IndexedDB
+cache is its own source and carries its `account`. Several identities, including
+guest identities of the same person in other tenants, can share one cache; each
+has its own source policy and statistics. Distinct caches are distinct sources
+even if their display names match.
 
 Updated status responses include `configuration` containing both persisted
 layers so clients can preserve unrelated properties when editing. Clients must

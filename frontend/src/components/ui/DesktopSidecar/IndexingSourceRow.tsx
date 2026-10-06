@@ -174,6 +174,14 @@ export function IndexingSourceRow({
                   {entry.account.email}
                 </span>
               )}
+              {entry.workAccount && (
+                <SettledInfoPill
+                  label={t({
+                    id: "sidecar.indexing.workAccount",
+                    message: "Work account",
+                  })}
+                />
+              )}
               {entry.account?.guest && (
                 <SettledInfoPill
                   label={t({

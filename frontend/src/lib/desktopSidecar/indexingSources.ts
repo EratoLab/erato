@@ -27,6 +27,8 @@ export interface IndexingEntry {
   product: string;
   name: string | null;
   account?: IndexingAccount;
+  /** The sidecar matched this source to the signed-in work account. */
+  workAccount?: boolean;
   number?: number;
   enabled: boolean;
   priority: number;
@@ -147,6 +149,7 @@ export function indexingEntries(
         mailbox?.displayName,
       ),
       ...(account && { account }),
+      ...(source.defaultReason === "workAccount" && { workAccount: true }),
       enabled: policy?.enabled ?? source.indexingEnabled ?? source.enabled,
       priority: policy?.priority ?? DEFAULT_MAILBOX_PRIORITY,
       editable: sourceControls,

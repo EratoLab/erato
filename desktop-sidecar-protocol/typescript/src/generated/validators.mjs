@@ -7709,7 +7709,7 @@ return errors === 0;
 
 export const validateIndexingStartV1Result = validate54;
 const schema61 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-result.schema.json","title":"IndexingStartV1Result","$ref":"./indexing-status-v1-result.schema.json"};
-const schema62 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json","title":"IndexingStatusV1Result","type":"object","properties":{"configuration":{"description":"Persisted layers for editing configuration without losing unrelated settings. Updated sidecars include both layers; absent on older servers.","type":"object","properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"required":["user_configuration","organization_configuration"],"additionalProperties":true},"sampledAt":{"type":"string","format":"date-time"},"sessionId":{"type":"string","minLength":1},"uptimeSeconds":{"type":"number","minimum":0},"state":{"type":"string","enum":["running","stopping","stopped","blocked"]},"effectiveConfiguration":{"$ref":"#/definitions/EffectiveIndexingConfiguration"},"resources":{"$ref":"#/definitions/Resources"},"generations":{"type":"array","items":{"$ref":"#/definitions/Generation"}},"discovery":{"type":"array","items":{"$ref":"#/definitions/DiscoverySource"}},"search":{"$ref":"#/definitions/SearchStatistics"},"resetInProgress":{"type":"boolean","default":false,"description":"True while a full reset is draining activity or deleting files. State is stopping during reset. Optional; absence means false."},"indexingDirectory":{"type":"string","minLength":1,"pattern":"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)","description":"Absolute local filesystem path of the sidecar-managed indexing root, in the sidecar OS native path syntax (not a URI). Report it even before initialization or after reset, without creating the directory. Updated implementations must include it; optional in the wire schema for compatibility with older v1 servers."}},"required":["sampledAt","sessionId","uptimeSeconds","state","effectiveConfiguration","resources","generations","discovery","search"],"additionalProperties":true,"definitions":{"EffectiveIndexingConfiguration":{"type":"object","properties":{"parallelism":{"type":"integer","minimum":1,"maximum":9007199254740991},"documentsPerMinute":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["parallelism","documentsPerMinute"],"additionalProperties":true},"UnavailableMetric":{"type":"object","properties":{"metric":{"type":"string","minLength":1},"reason":{"type":"string","minLength":1}},"required":["metric","reason"],"additionalProperties":true,"description":"Metric is a dotted path relative to its containing section. Every unavailable null measurement must have an entry; zero means an observed zero."},"ProcessResources":{"type":"object","properties":{"processCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"cpuCoresUsed":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"memoryResidentBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"memoryResidentPeakBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"diskReadBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"diskWriteBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["processCount","cpuCoresUsed","memoryResidentBytes","memoryResidentPeakBytes","diskReadBytesPerSecond","diskWriteBytesPerSecond","unavailableMetrics"],"additionalProperties":true,"description":"Sidecar measurements include search and discovery. Worker measurements aggregate extraction children, including CPU/I/O accrued by children that exit between samples. Resident sums may double-count shared pages; peak is the maximum simultaneously observed aggregate since process startup."},"DiskUsage":{"type":"object","properties":{"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]}},"required":["allocatedBytes","logicalBytes"],"additionalProperties":true},"Resources":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"sidecar":{"$ref":"#/definitions/ProcessResources"},"extractionWorkers":{"$ref":"#/definitions/ProcessResources"},"disk":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"availableBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"breakdown":{"type":"object","properties":{"control":{"$ref":"#/definitions/DiskUsage"},"catalog":{"$ref":"#/definitions/DiskUsage"},"activeIndex":{"$ref":"#/definitions/DiskUsage"},"buildingIndex":{"$ref":"#/definitions/DiskUsage"},"retiredIndexes":{"$ref":"#/definitions/DiskUsage"},"wal":{"$ref":"#/definitions/DiskUsage"},"temporary":{"$ref":"#/definitions/DiskUsage"}},"required":["control","catalog","activeIndex","buildingIndex","retiredIndexes","wal","temporary"],"additionalProperties":true},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["sampledAt","allocatedBytes","logicalBytes","availableBytes","breakdown","unavailableMetrics"],"additionalProperties":true},"liveExtractionWorkers":{"type":"array","description":"Individual currently live workers. Their memory sums can double-count shared pages. Aggregate CPU/I/O above also includes workers that exited during the sample.","items":{"type":"object","properties":{"processId":{"type":"integer","minimum":1,"maximum":9007199254740991},"sampledAt":{"type":"string","format":"date-time"},"resources":{"$ref":"#/definitions/ProcessResources"}},"required":["processId","sampledAt","resources"],"additionalProperties":true}}},"required":["sampledAt","observationSeconds","sidecar","extractionWorkers","disk","liveExtractionWorkers"],"additionalProperties":true},"ThroughputWindow":{"type":"object","properties":{"targetWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"emptyPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unindexablePerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"completedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"attemptsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"retriesPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"deletionsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"extractedTextBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["targetWindowSeconds","observationSeconds","sampleCount","indexedPerMinute","emptyPerMinute","unindexablePerMinute","completedPerMinute","attemptsPerMinute","retriesPerMinute","deletionsPerMinute","extractedTextBytesPerSecond","unavailableReason"],"additionalProperties":true},"Backlog":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"discoveryComplete":{"type":"boolean"},"remaining":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"ready":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"inProgress":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"retryDeferred":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"blocked":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"firstTime":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"updates":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","discoveryComplete","remaining","ready","inProgress","retryDeferred","blocked","firstTime","updates","unavailableReason"],"additionalProperties":true,"description":"Counts concern current eligible revisions, not queue entries. remaining = ready + inProgress + retryDeferred + blocked = firstTime + updates. Incomplete discovery still permits exact counts for known work. Terminal outcomes and deletion-only cleanup are excluded."},"Eta":{"type":"object","properties":{"state":{"type":"string","enum":["available","unavailable"]},"estimatedRemainingSeconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"estimatedCompletionAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"basis":{"const":"knownBacklog"},"rateWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","estimatedRemainingSeconds","estimatedCompletionAt","basis","rateWindowSeconds","observationSeconds","sampleCount","unavailableReason"],"additionalProperties":true,"allOf":[{"if":{"properties":{"state":{"const":"available"}},"required":["state"],"additionalProperties":true},"then":{"properties":{"estimatedRemainingSeconds":{"type":"number","minimum":0},"estimatedCompletionAt":{"type":"string","format":"date-time"},"unavailableReason":{"type":"null"}},"additionalProperties":true},"else":{"properties":{"estimatedRemainingSeconds":{"type":"null"},"estimatedCompletionAt":{"type":"null"},"unavailableReason":{"type":"string","minLength":1}},"additionalProperties":true}}]},"Coverage":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"knownEligible":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"emptyCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"stale":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"neverProcessed":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"pendingDeletions":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"missingFromLocalCacheCurrent":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991,"description":"Current revisions whose body or attachment content is unavailable in the local cache. A separate terminal outcome from empty or unindexable. Older sidecars may omit this counter; null means unknown."}},"required":["sampledAt","knownEligible","indexedCurrent","emptyCurrent","unindexableCurrent","stale","neverProcessed","pendingDeletions","unavailableReason"],"additionalProperties":true,"description":"knownEligible is the sum of indexedCurrent, emptyCurrent, unindexableCurrent, missingFromLocalCacheCurrent (when reported), stale and neverProcessed. pendingDeletions is separate. These counts do not imply discovery is complete."},"DepthBoundary":{"type":"object","properties":{"at":{"type":"string","format":"date-time"},"inclusive":{"type":"boolean"}},"required":["at","inclusive"],"additionalProperties":true,"description":"All known eligible dated documents between this boundary and the snapshot are covered; inclusive says whether documents exactly at the boundary are included. An old pending document makes an exclusive boundary possible without rounding timestamps."},"Depth":{"type":"object","properties":{"state":{"type":"string","enum":["applicable","notApplicable","unknown"]},"dateBasis":{"anyOf":[{"type":"string","enum":["emailReceivedAtThenSentAt","parentEmailReceivedAtThenSentAt","sourceDefined"]},{"type":"null"}]},"sourceDateField":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"discoveryComplete":{"type":"boolean"},"oldestIndexedDocumentAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"fullyIndexedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"processedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"pendingDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"undatedDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","dateBasis","sourceDateField","discoveryComplete","oldestIndexedDocumentAt","fullyIndexedSince","processedSince","pendingDocuments","unindexableDocuments","undatedDocuments","unavailableReason"],"additionalProperties":true,"description":"Only applicable to chronologically prioritized kinds. fullyIndexedSince requires current indexed/empty receipts; processedSince also accepts current terminal failures. Unknown dates are excluded from the boundary and counted explicitly. Oldest indexed date alone makes no coverage claim."},"Latency":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["observationSeconds","sampleCount","p50Seconds","p95Seconds","unavailableReason"],"additionalProperties":true,"description":"Freshness is measured from discovery of a revision until its first searchable commit. Retry attempts do not reset the start; failed/empty/deleted revisions are excluded."},"ErrorCount":{"type":"object","properties":{"code":{"type":"string","minLength":1},"count":{"type":"integer","minimum":0,"maximum":9007199254740991},"lastOccurredAt":{"type":"string","format":"date-time"}},"required":["code","count","lastOccurredAt"],"additionalProperties":true},"ErrorWindow":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"attemptFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"terminalFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"byCode":{"type":"array","items":{"$ref":"#/definitions/ErrorCount"}},"truncated":{"type":"boolean"}},"required":["observationSeconds","attemptFailures","terminalFailures","byCode","truncated"],"additionalProperties":true,"description":"Bounded recent error-code histogram, without content or filesystem paths. Counts include all failures even when byCode is truncated."},"Segment":{"type":"object","properties":{"kind":{"type":"string","enum":["email","file","teams_message"]},"sourceId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"fileType":{"anyOf":[{"type":"string","enum":["pdf","office","text","image","email","archive","other"]},{"type":"null"}]},"throughput":{"type":"array","items":{"$ref":"#/definitions/ThroughputWindow"}},"backlog":{"$ref":"#/definitions/Backlog"},"eta":{"$ref":"#/definitions/Eta"},"coverage":{"$ref":"#/definitions/Coverage"},"depth":{"$ref":"#/definitions/Depth"},"freshness":{"$ref":"#/definitions/Latency"},"errors":{"$ref":"#/definitions/ErrorWindow"}},"required":["kind","sourceId","mailboxId","fileType","throughput","backlog","eta","coverage","depth","freshness","errors"],"additionalProperties":true,"description":"Null source/mailbox denotes an all-source aggregate. Non-null scopes are independent views, not additional documents. Null fileType denotes all file types; breakdowns apply only to file rows. There must be one 60-second and one 300-second throughput window per segment."},"Generation":{"type":"object","properties":{"instanceId":{"type":"string","minLength":1},"role":{"type":"string","enum":["active","building"]},"sampledAt":{"type":"string","format":"date-time"},"segments":{"type":"array","items":{"$ref":"#/definitions/Segment"}},"chunks":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"terms":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"observedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["instanceId","role","sampledAt","segments","chunks","terms","indexedAvgdl","observedAvgdl","unavailableReason"],"additionalProperties":true,"description":"Active and building counters have independent revision receipts. Never sum generations to estimate mailbox progress. An extraction shared across generations can appear in both generation throughput views."},"DiscoverySource":{"type":"object","properties":{"sourceId":{"type":"string","minLength":1},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"state":{"type":"string","enum":["notStarted","scanning","complete","failed","disabled"]},"discoveryComplete":{"type":"boolean"},"scanStartedAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"lastSuccessfulScanAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"discoveredDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"accessible":{"type":"boolean"},"lastErrorCode":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sourceId","mailboxId","state","discoveryComplete","scanStartedAt","lastSuccessfulScanAt","discoveredDocuments","accessible","lastErrorCode"],"additionalProperties":true,"description":"discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."},"SearchStatistics":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"queryCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"errorCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"inFlight":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","observationSeconds","queryCount","errorCount","inFlight","p50LatencyMilliseconds","p95LatencyMilliseconds","unavailableReason"],"additionalProperties":true}}};
+const schema62 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json","title":"IndexingStatusV1Result","type":"object","properties":{"configuration":{"description":"Persisted layers for editing configuration without losing unrelated settings. Updated sidecars include both layers; absent on older servers.","type":"object","properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"signed_in_user":{"description":"The user signed in to the client, as its Entra ID identity. The sidecar enables by default the sources that read this work account. Null or absent means unknown; sources then keep their own defaults. Clients set it on every configure; older sidecars preserve it without applying it.","type":["object","null"],"properties":{"user_id":{"type":"string","description":"Entra object id (oid)."},"tenant_id":{"type":["string","null"],"description":"Entra tenant id (tid), when known."},"email":{"type":["string","null"]},"user_principal_name":{"type":["string","null"]}},"required":["user_id"],"additionalProperties":true}},"required":["user_configuration","organization_configuration"],"additionalProperties":true},"sampledAt":{"type":"string","format":"date-time"},"sessionId":{"type":"string","minLength":1},"uptimeSeconds":{"type":"number","minimum":0},"state":{"type":"string","enum":["running","stopping","stopped","blocked"]},"effectiveConfiguration":{"$ref":"#/definitions/EffectiveIndexingConfiguration"},"resources":{"$ref":"#/definitions/Resources"},"generations":{"type":"array","items":{"$ref":"#/definitions/Generation"}},"discovery":{"type":"array","items":{"$ref":"#/definitions/DiscoverySource"}},"search":{"$ref":"#/definitions/SearchStatistics"},"resetInProgress":{"type":"boolean","default":false,"description":"True while a full reset is draining activity or deleting files. State is stopping during reset. Optional; absence means false."},"indexingDirectory":{"type":"string","minLength":1,"pattern":"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)","description":"Absolute local filesystem path of the sidecar-managed indexing root, in the sidecar OS native path syntax (not a URI). Report it even before initialization or after reset, without creating the directory. Updated implementations must include it; optional in the wire schema for compatibility with older v1 servers."}},"required":["sampledAt","sessionId","uptimeSeconds","state","effectiveConfiguration","resources","generations","discovery","search"],"additionalProperties":true,"definitions":{"EffectiveIndexingConfiguration":{"type":"object","properties":{"parallelism":{"type":"integer","minimum":1,"maximum":9007199254740991},"documentsPerMinute":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["parallelism","documentsPerMinute"],"additionalProperties":true},"UnavailableMetric":{"type":"object","properties":{"metric":{"type":"string","minLength":1},"reason":{"type":"string","minLength":1}},"required":["metric","reason"],"additionalProperties":true,"description":"Metric is a dotted path relative to its containing section. Every unavailable null measurement must have an entry; zero means an observed zero."},"ProcessResources":{"type":"object","properties":{"processCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"cpuCoresUsed":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"memoryResidentBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"memoryResidentPeakBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"diskReadBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"diskWriteBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["processCount","cpuCoresUsed","memoryResidentBytes","memoryResidentPeakBytes","diskReadBytesPerSecond","diskWriteBytesPerSecond","unavailableMetrics"],"additionalProperties":true,"description":"Sidecar measurements include search and discovery. Worker measurements aggregate extraction children, including CPU/I/O accrued by children that exit between samples. Resident sums may double-count shared pages; peak is the maximum simultaneously observed aggregate since process startup."},"DiskUsage":{"type":"object","properties":{"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]}},"required":["allocatedBytes","logicalBytes"],"additionalProperties":true},"Resources":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"sidecar":{"$ref":"#/definitions/ProcessResources"},"extractionWorkers":{"$ref":"#/definitions/ProcessResources"},"disk":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"allocatedBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"logicalBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"availableBytes":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"breakdown":{"type":"object","properties":{"control":{"$ref":"#/definitions/DiskUsage"},"catalog":{"$ref":"#/definitions/DiskUsage"},"activeIndex":{"$ref":"#/definitions/DiskUsage"},"buildingIndex":{"$ref":"#/definitions/DiskUsage"},"retiredIndexes":{"$ref":"#/definitions/DiskUsage"},"wal":{"$ref":"#/definitions/DiskUsage"},"temporary":{"$ref":"#/definitions/DiskUsage"}},"required":["control","catalog","activeIndex","buildingIndex","retiredIndexes","wal","temporary"],"additionalProperties":true},"unavailableMetrics":{"type":"array","items":{"$ref":"#/definitions/UnavailableMetric"}}},"required":["sampledAt","allocatedBytes","logicalBytes","availableBytes","breakdown","unavailableMetrics"],"additionalProperties":true},"liveExtractionWorkers":{"type":"array","description":"Individual currently live workers. Their memory sums can double-count shared pages. Aggregate CPU/I/O above also includes workers that exited during the sample.","items":{"type":"object","properties":{"processId":{"type":"integer","minimum":1,"maximum":9007199254740991},"sampledAt":{"type":"string","format":"date-time"},"resources":{"$ref":"#/definitions/ProcessResources"}},"required":["processId","sampledAt","resources"],"additionalProperties":true}}},"required":["sampledAt","observationSeconds","sidecar","extractionWorkers","disk","liveExtractionWorkers"],"additionalProperties":true},"ThroughputWindow":{"type":"object","properties":{"targetWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"indexedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"emptyPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unindexablePerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"completedPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"attemptsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"retriesPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"deletionsPerMinute":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"extractedTextBytesPerSecond":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["targetWindowSeconds","observationSeconds","sampleCount","indexedPerMinute","emptyPerMinute","unindexablePerMinute","completedPerMinute","attemptsPerMinute","retriesPerMinute","deletionsPerMinute","extractedTextBytesPerSecond","unavailableReason"],"additionalProperties":true},"Backlog":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"discoveryComplete":{"type":"boolean"},"remaining":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"ready":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"inProgress":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"retryDeferred":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"blocked":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"firstTime":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"updates":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","discoveryComplete","remaining","ready","inProgress","retryDeferred","blocked","firstTime","updates","unavailableReason"],"additionalProperties":true,"description":"Counts concern current eligible revisions, not queue entries. remaining = ready + inProgress + retryDeferred + blocked = firstTime + updates. Incomplete discovery still permits exact counts for known work. Terminal outcomes and deletion-only cleanup are excluded."},"Eta":{"type":"object","properties":{"state":{"type":"string","enum":["available","unavailable"]},"estimatedRemainingSeconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"estimatedCompletionAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"basis":{"const":"knownBacklog"},"rateWindowSeconds":{"type":"integer","enum":[60,300]},"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","estimatedRemainingSeconds","estimatedCompletionAt","basis","rateWindowSeconds","observationSeconds","sampleCount","unavailableReason"],"additionalProperties":true,"allOf":[{"if":{"properties":{"state":{"const":"available"}},"required":["state"],"additionalProperties":true},"then":{"properties":{"estimatedRemainingSeconds":{"type":"number","minimum":0},"estimatedCompletionAt":{"type":"string","format":"date-time"},"unavailableReason":{"type":"null"}},"additionalProperties":true},"else":{"properties":{"estimatedRemainingSeconds":{"type":"null"},"estimatedCompletionAt":{"type":"null"},"unavailableReason":{"type":"string","minLength":1}},"additionalProperties":true}}]},"Coverage":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"knownEligible":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"emptyCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableCurrent":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"stale":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"neverProcessed":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"pendingDeletions":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"missingFromLocalCacheCurrent":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991,"description":"Current revisions whose body or attachment content is unavailable in the local cache. A separate terminal outcome from empty or unindexable. Older sidecars may omit this counter; null means unknown."}},"required":["sampledAt","knownEligible","indexedCurrent","emptyCurrent","unindexableCurrent","stale","neverProcessed","pendingDeletions","unavailableReason"],"additionalProperties":true,"description":"knownEligible is the sum of indexedCurrent, emptyCurrent, unindexableCurrent, missingFromLocalCacheCurrent (when reported), stale and neverProcessed. pendingDeletions is separate. These counts do not imply discovery is complete."},"DepthBoundary":{"type":"object","properties":{"at":{"type":"string","format":"date-time"},"inclusive":{"type":"boolean"}},"required":["at","inclusive"],"additionalProperties":true,"description":"All known eligible dated documents between this boundary and the snapshot are covered; inclusive says whether documents exactly at the boundary are included. An old pending document makes an exclusive boundary possible without rounding timestamps."},"Depth":{"type":"object","properties":{"state":{"type":"string","enum":["applicable","notApplicable","unknown"]},"dateBasis":{"anyOf":[{"type":"string","enum":["emailReceivedAtThenSentAt","parentEmailReceivedAtThenSentAt","sourceDefined"]},{"type":"null"}]},"sourceDateField":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"discoveryComplete":{"type":"boolean"},"oldestIndexedDocumentAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"fullyIndexedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"processedSince":{"anyOf":[{"$ref":"#/definitions/DepthBoundary"},{"type":"null"}]},"pendingDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unindexableDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"undatedDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["state","dateBasis","sourceDateField","discoveryComplete","oldestIndexedDocumentAt","fullyIndexedSince","processedSince","pendingDocuments","unindexableDocuments","undatedDocuments","unavailableReason"],"additionalProperties":true,"description":"Only applicable to chronologically prioritized kinds. fullyIndexedSince requires current indexed/empty receipts; processedSince also accepts current terminal failures. Unknown dates are excluded from the boundary and counted explicitly. Oldest indexed date alone makes no coverage claim."},"Latency":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"sampleCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95Seconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["observationSeconds","sampleCount","p50Seconds","p95Seconds","unavailableReason"],"additionalProperties":true,"description":"Freshness is measured from discovery of a revision until its first searchable commit. Retry attempts do not reset the start; failed/empty/deleted revisions are excluded."},"ErrorCount":{"type":"object","properties":{"code":{"type":"string","minLength":1},"count":{"type":"integer","minimum":0,"maximum":9007199254740991},"lastOccurredAt":{"type":"string","format":"date-time"}},"required":["code","count","lastOccurredAt"],"additionalProperties":true},"ErrorWindow":{"type":"object","properties":{"observationSeconds":{"type":"number","minimum":0},"attemptFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"terminalFailures":{"type":"integer","minimum":0,"maximum":9007199254740991},"byCode":{"type":"array","items":{"$ref":"#/definitions/ErrorCount"}},"truncated":{"type":"boolean"}},"required":["observationSeconds","attemptFailures","terminalFailures","byCode","truncated"],"additionalProperties":true,"description":"Bounded recent error-code histogram, without content or filesystem paths. Counts include all failures even when byCode is truncated."},"Segment":{"type":"object","properties":{"kind":{"type":"string","enum":["email","file","teams_message"]},"sourceId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"fileType":{"anyOf":[{"type":"string","enum":["pdf","office","text","image","email","archive","other"]},{"type":"null"}]},"throughput":{"type":"array","items":{"$ref":"#/definitions/ThroughputWindow"}},"backlog":{"$ref":"#/definitions/Backlog"},"eta":{"$ref":"#/definitions/Eta"},"coverage":{"$ref":"#/definitions/Coverage"},"depth":{"$ref":"#/definitions/Depth"},"freshness":{"$ref":"#/definitions/Latency"},"errors":{"$ref":"#/definitions/ErrorWindow"}},"required":["kind","sourceId","mailboxId","fileType","throughput","backlog","eta","coverage","depth","freshness","errors"],"additionalProperties":true,"description":"Null source/mailbox denotes an all-source aggregate. Non-null scopes are independent views, not additional documents. Null fileType denotes all file types; breakdowns apply only to file rows. There must be one 60-second and one 300-second throughput window per segment."},"Generation":{"type":"object","properties":{"instanceId":{"type":"string","minLength":1},"role":{"type":"string","enum":["active","building"]},"sampledAt":{"type":"string","format":"date-time"},"segments":{"type":"array","items":{"$ref":"#/definitions/Segment"}},"chunks":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"terms":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"indexedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"observedAvgdl":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["instanceId","role","sampledAt","segments","chunks","terms","indexedAvgdl","observedAvgdl","unavailableReason"],"additionalProperties":true,"description":"Active and building counters have independent revision receipts. Never sum generations to estimate mailbox progress. An extraction shared across generations can appear in both generation throughput views."},"DiscoverySource":{"type":"object","properties":{"sourceId":{"type":"string","minLength":1},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"state":{"type":"string","enum":["notStarted","scanning","complete","failed","disabled"]},"discoveryComplete":{"type":"boolean"},"scanStartedAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"lastSuccessfulScanAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"discoveredDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"accessible":{"type":"boolean"},"lastErrorCode":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sourceId","mailboxId","state","discoveryComplete","scanStartedAt","lastSuccessfulScanAt","discoveredDocuments","accessible","lastErrorCode"],"additionalProperties":true,"description":"discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."},"SearchStatistics":{"type":"object","properties":{"sampledAt":{"type":"string","format":"date-time"},"observationSeconds":{"type":"number","minimum":0},"queryCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"errorCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"inFlight":{"type":"integer","minimum":0,"maximum":9007199254740991},"p50LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"p95LatencyMilliseconds":{"anyOf":[{"type":"number","minimum":0},{"type":"null"}]},"unavailableReason":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sampledAt","observationSeconds","queryCount","errorCount","inFlight","p50LatencyMilliseconds","p95LatencyMilliseconds","unavailableReason"],"additionalProperties":true}}};
 const schema63 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/configuration/sidecar-configuration.schema.json","title":"SidecarConfiguration","description":"An extensible configuration layer. Unknown properties must be accepted and preserved.","type":"object","properties":{"indexing_mailboxes":{"description":"Mailbox indexing overrides. Priority is explicit and independent of array order: lower numbers are processed first, with mailbox ID as a deterministic tie-breaker. Unlisted mailboxes remain enabled with priority 9007199254740991. Null inherits the other layer; an empty array explicitly uses defaults. Mailbox IDs must be unique. Disabling stops new discovery and processing but retains existing searchable data; in-flight work may finish.","type":["array","null"],"items":{"type":"object","properties":{"mailbox_id":{"type":"string","format":"uuid"},"enabled":{"type":"boolean"},"priority":{"description":"Indexing priority; lower numbers are processed first. Array order has no effect.","type":"integer","minimum":0,"maximum":9007199254740991}},"required":["mailbox_id","enabled","priority"],"additionalProperties":true}},"show_tray_icon":{"description":"Whether the sidecar should show its system tray icon. Null leaves the decision to the other configuration layer or the sidecar default.","type":["boolean","null"]},"indexing_parallelism":{"type":["integer","null"],"minimum":1,"maximum":9007199254740991,"description":"Maximum documents concurrently processed across all kinds and generations, including extraction and commit. Lowering it lets in-flight documents finish and prevents excess new starts. Null or absence inherits the other layer; the sidecar default is 1. Zero is invalid and does not pause indexing."},"indexing_documents_per_minute":{"type":["integer","null"],"minimum":1,"maximum":9007199254740991,"description":"Global maximum document-processing starts per rolling 60 seconds, shared by all workers, kinds and generations. Retry attempts consume this budget; one extraction shared by generations consumes it once. Deletion-only cleanup does not consume it. Null or absence inherits the other layer; the sidecar default is 40. Zero is invalid and does not pause indexing."},"indexing_sources":{"description":"Source indexing overrides keyed by sourceId from sources.list.v1. Lower priorities are processed first, independent of array order. Source IDs must be unique. Null inherits the other layer; an empty array uses source defaults. Disabling stops new discovery and processing while retaining the existing index. This is authoritative when supported; indexing_mailboxes is a legacy projection. Older sidecars may preserve this field without applying it.","type":["array","null"],"items":{"type":"object","properties":{"enabled":{"type":"boolean"},"priority":{"description":"Indexing priority; lower numbers are processed first. Array order has no effect.","type":"integer","minimum":0,"maximum":9007199254740991},"source_id":{"type":"string","format":"uuid"}},"required":["source_id","enabled","priority"],"additionalProperties":true}}},"additionalProperties":true};
 const schema65 = {"type":"object","properties":{"parallelism":{"type":"integer","minimum":1,"maximum":9007199254740991},"documentsPerMinute":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["parallelism","documentsPerMinute"],"additionalProperties":true};
 const schema89 = {"type":"object","properties":{"sourceId":{"type":"string","minLength":1},"mailboxId":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]},"state":{"type":"string","enum":["notStarted","scanning","complete","failed","disabled"]},"discoveryComplete":{"type":"boolean"},"scanStartedAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"lastSuccessfulScanAt":{"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},"discoveredDocuments":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"accessible":{"type":"boolean"},"lastErrorCode":{"anyOf":[{"type":"string","minLength":1},{"type":"null"}]}},"required":["sourceId","mailboxId","state","discoveryComplete","scanStartedAt","lastSuccessfulScanAt","discoveredDocuments","accessible","lastErrorCode"],"additionalProperties":true,"description":"discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."};
@@ -16618,9 +16618,10 @@ vErrors.push(err70);
 errors++;
 }
 }
-}
-else {
-const err71 = {instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data0.signed_in_user !== undefined){
+let data29 = data0.signed_in_user;
+if((!(data29 && typeof data29 == "object" && !Array.isArray(data29))) && (data29 !== null)){
+const err71 = {instancePath:instancePath+"/configuration/signed_in_user",schemaPath:"#/properties/configuration/properties/signed_in_user/type",keyword:"type",params:{type: schema62.properties.configuration.properties.signed_in_user.type},message:"must be object,null"};
 if(vErrors === null){
 vErrors = [err71];
 }
@@ -16629,12 +16630,9 @@ vErrors.push(err71);
 }
 errors++;
 }
-}
-if(data.sampledAt !== undefined){
-let data29 = data.sampledAt;
-if(typeof data29 === "string"){
-if(!(formats6.validate(data29))){
-const err72 = {instancePath:instancePath+"/sampledAt",schemaPath:"#/properties/sampledAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(data29 && typeof data29 == "object" && !Array.isArray(data29)){
+if(data29.user_id === undefined){
+const err72 = {instancePath:instancePath+"/configuration/signed_in_user",schemaPath:"#/properties/configuration/properties/signed_in_user/required",keyword:"required",params:{missingProperty: "user_id"},message:"must have required property '"+"user_id"+"'"};
 if(vErrors === null){
 vErrors = [err72];
 }
@@ -16643,9 +16641,9 @@ vErrors.push(err72);
 }
 errors++;
 }
-}
-else {
-const err73 = {instancePath:instancePath+"/sampledAt",schemaPath:"#/properties/sampledAt/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data29.user_id !== undefined){
+if(typeof data29.user_id !== "string"){
+const err73 = {instancePath:instancePath+"/configuration/signed_in_user/user_id",schemaPath:"#/properties/configuration/properties/signed_in_user/properties/user_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err73];
 }
@@ -16655,11 +16653,10 @@ vErrors.push(err73);
 errors++;
 }
 }
-if(data.sessionId !== undefined){
-let data30 = data.sessionId;
-if(typeof data30 === "string"){
-if(func2(data30) < 1){
-const err74 = {instancePath:instancePath+"/sessionId",schemaPath:"#/properties/sessionId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data29.tenant_id !== undefined){
+let data31 = data29.tenant_id;
+if((typeof data31 !== "string") && (data31 !== null)){
+const err74 = {instancePath:instancePath+"/configuration/signed_in_user/tenant_id",schemaPath:"#/properties/configuration/properties/signed_in_user/properties/tenant_id/type",keyword:"type",params:{type: schema62.properties.configuration.properties.signed_in_user.properties.tenant_id.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err74];
 }
@@ -16669,8 +16666,10 @@ vErrors.push(err74);
 errors++;
 }
 }
-else {
-const err75 = {instancePath:instancePath+"/sessionId",schemaPath:"#/properties/sessionId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data29.email !== undefined){
+let data32 = data29.email;
+if((typeof data32 !== "string") && (data32 !== null)){
+const err75 = {instancePath:instancePath+"/configuration/signed_in_user/email",schemaPath:"#/properties/configuration/properties/signed_in_user/properties/email/type",keyword:"type",params:{type: schema62.properties.configuration.properties.signed_in_user.properties.email.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err75];
 }
@@ -16680,11 +16679,10 @@ vErrors.push(err75);
 errors++;
 }
 }
-if(data.uptimeSeconds !== undefined){
-let data31 = data.uptimeSeconds;
-if((typeof data31 == "number") && (isFinite(data31))){
-if(data31 < 0 || isNaN(data31)){
-const err76 = {instancePath:instancePath+"/uptimeSeconds",schemaPath:"#/properties/uptimeSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data29.user_principal_name !== undefined){
+let data33 = data29.user_principal_name;
+if((typeof data33 !== "string") && (data33 !== null)){
+const err76 = {instancePath:instancePath+"/configuration/signed_in_user/user_principal_name",schemaPath:"#/properties/configuration/properties/signed_in_user/properties/user_principal_name/type",keyword:"type",params:{type: schema62.properties.configuration.properties.signed_in_user.properties.user_principal_name.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err76];
 }
@@ -16694,8 +16692,11 @@ vErrors.push(err76);
 errors++;
 }
 }
+}
+}
+}
 else {
-const err77 = {instancePath:instancePath+"/uptimeSeconds",schemaPath:"#/properties/uptimeSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
+const err77 = {instancePath:instancePath+"/configuration",schemaPath:"#/properties/configuration/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err77];
 }
@@ -16705,10 +16706,11 @@ vErrors.push(err77);
 errors++;
 }
 }
-if(data.state !== undefined){
-let data32 = data.state;
-if(typeof data32 !== "string"){
-const err78 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data.sampledAt !== undefined){
+let data34 = data.sampledAt;
+if(typeof data34 === "string"){
+if(!(formats6.validate(data34))){
+const err78 = {instancePath:instancePath+"/sampledAt",schemaPath:"#/properties/sampledAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
 if(vErrors === null){
 vErrors = [err78];
 }
@@ -16717,8 +16719,9 @@ vErrors.push(err78);
 }
 errors++;
 }
-if(!((((data32 === "running") || (data32 === "stopping")) || (data32 === "stopped")) || (data32 === "blocked"))){
-const err79 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/enum",keyword:"enum",params:{allowedValues: schema62.properties.state.enum},message:"must be equal to one of the allowed values"};
+}
+else {
+const err79 = {instancePath:instancePath+"/sampledAt",schemaPath:"#/properties/sampledAt/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err79];
 }
@@ -16728,11 +16731,11 @@ vErrors.push(err79);
 errors++;
 }
 }
-if(data.effectiveConfiguration !== undefined){
-let data33 = data.effectiveConfiguration;
-if(data33 && typeof data33 == "object" && !Array.isArray(data33)){
-if(data33.parallelism === undefined){
-const err80 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/required",keyword:"required",params:{missingProperty: "parallelism"},message:"must have required property '"+"parallelism"+"'"};
+if(data.sessionId !== undefined){
+let data35 = data.sessionId;
+if(typeof data35 === "string"){
+if(func2(data35) < 1){
+const err80 = {instancePath:instancePath+"/sessionId",schemaPath:"#/properties/sessionId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err80];
 }
@@ -16741,8 +16744,9 @@ vErrors.push(err80);
 }
 errors++;
 }
-if(data33.documentsPerMinute === undefined){
-const err81 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/required",keyword:"required",params:{missingProperty: "documentsPerMinute"},message:"must have required property '"+"documentsPerMinute"+"'"};
+}
+else {
+const err81 = {instancePath:instancePath+"/sessionId",schemaPath:"#/properties/sessionId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err81];
 }
@@ -16751,10 +16755,12 @@ vErrors.push(err81);
 }
 errors++;
 }
-if(data33.parallelism !== undefined){
-let data34 = data33.parallelism;
-if(!(((typeof data34 == "number") && (!(data34 % 1) && !isNaN(data34))) && (isFinite(data34)))){
-const err82 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+}
+if(data.uptimeSeconds !== undefined){
+let data36 = data.uptimeSeconds;
+if((typeof data36 == "number") && (isFinite(data36))){
+if(data36 < 0 || isNaN(data36)){
+const err82 = {instancePath:instancePath+"/uptimeSeconds",schemaPath:"#/properties/uptimeSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err82];
 }
@@ -16763,9 +16769,9 @@ vErrors.push(err82);
 }
 errors++;
 }
-if((typeof data34 == "number") && (isFinite(data34))){
-if(data34 > 9007199254740991 || isNaN(data34)){
-const err83 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+}
+else {
+const err83 = {instancePath:instancePath+"/uptimeSeconds",schemaPath:"#/properties/uptimeSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
 if(vErrors === null){
 vErrors = [err83];
 }
@@ -16774,8 +16780,11 @@ vErrors.push(err83);
 }
 errors++;
 }
-if(data34 < 1 || isNaN(data34)){
-const err84 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+}
+if(data.state !== undefined){
+let data37 = data.state;
+if(typeof data37 !== "string"){
+const err84 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err84];
 }
@@ -16784,12 +16793,8 @@ vErrors.push(err84);
 }
 errors++;
 }
-}
-}
-if(data33.documentsPerMinute !== undefined){
-let data35 = data33.documentsPerMinute;
-if(!(((typeof data35 == "number") && (!(data35 % 1) && !isNaN(data35))) && (isFinite(data35)))){
-const err85 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(!((((data37 === "running") || (data37 === "stopping")) || (data37 === "stopped")) || (data37 === "blocked"))){
+const err85 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/enum",keyword:"enum",params:{allowedValues: schema62.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err85];
 }
@@ -16798,9 +16803,12 @@ vErrors.push(err85);
 }
 errors++;
 }
-if((typeof data35 == "number") && (isFinite(data35))){
-if(data35 > 9007199254740991 || isNaN(data35)){
-const err86 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+}
+if(data.effectiveConfiguration !== undefined){
+let data38 = data.effectiveConfiguration;
+if(data38 && typeof data38 == "object" && !Array.isArray(data38)){
+if(data38.parallelism === undefined){
+const err86 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/required",keyword:"required",params:{missingProperty: "parallelism"},message:"must have required property '"+"parallelism"+"'"};
 if(vErrors === null){
 vErrors = [err86];
 }
@@ -16809,8 +16817,8 @@ vErrors.push(err86);
 }
 errors++;
 }
-if(data35 < 1 || isNaN(data35)){
-const err87 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(data38.documentsPerMinute === undefined){
+const err87 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/required",keyword:"required",params:{missingProperty: "documentsPerMinute"},message:"must have required property '"+"documentsPerMinute"+"'"};
 if(vErrors === null){
 vErrors = [err87];
 }
@@ -16819,16 +16827,84 @@ vErrors.push(err87);
 }
 errors++;
 }
-}
-}
-}
-else {
-const err88 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data38.parallelism !== undefined){
+let data39 = data38.parallelism;
+if(!(((typeof data39 == "number") && (!(data39 % 1) && !isNaN(data39))) && (isFinite(data39)))){
+const err88 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err88];
 }
 else {
 vErrors.push(err88);
+}
+errors++;
+}
+if((typeof data39 == "number") && (isFinite(data39))){
+if(data39 > 9007199254740991 || isNaN(data39)){
+const err89 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err89];
+}
+else {
+vErrors.push(err89);
+}
+errors++;
+}
+if(data39 < 1 || isNaN(data39)){
+const err90 = {instancePath:instancePath+"/effectiveConfiguration/parallelism",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/parallelism/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(vErrors === null){
+vErrors = [err90];
+}
+else {
+vErrors.push(err90);
+}
+errors++;
+}
+}
+}
+if(data38.documentsPerMinute !== undefined){
+let data40 = data38.documentsPerMinute;
+if(!(((typeof data40 == "number") && (!(data40 % 1) && !isNaN(data40))) && (isFinite(data40)))){
+const err91 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err91];
+}
+else {
+vErrors.push(err91);
+}
+errors++;
+}
+if((typeof data40 == "number") && (isFinite(data40))){
+if(data40 > 9007199254740991 || isNaN(data40)){
+const err92 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err92];
+}
+else {
+vErrors.push(err92);
+}
+errors++;
+}
+if(data40 < 1 || isNaN(data40)){
+const err93 = {instancePath:instancePath+"/effectiveConfiguration/documentsPerMinute",schemaPath:"#/definitions/EffectiveIndexingConfiguration/properties/documentsPerMinute/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(vErrors === null){
+vErrors = [err93];
+}
+else {
+vErrors.push(err93);
+}
+errors++;
+}
+}
+}
+}
+else {
+const err94 = {instancePath:instancePath+"/effectiveConfiguration",schemaPath:"#/definitions/EffectiveIndexingConfiguration/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err94];
+}
+else {
+vErrors.push(err94);
 }
 errors++;
 }
@@ -16840,86 +16916,18 @@ errors = vErrors.length;
 }
 }
 if(data.generations !== undefined){
-let data37 = data.generations;
-if(Array.isArray(data37)){
-const len4 = data37.length;
+let data42 = data.generations;
+if(Array.isArray(data42)){
+const len4 = data42.length;
 for(let i4=0; i4<len4; i4++){
-if(!(validate62(data37[i4], {instancePath:instancePath+"/generations/" + i4,parentData:data37,parentDataProperty:i4,rootData}))){
+if(!(validate62(data42[i4], {instancePath:instancePath+"/generations/" + i4,parentData:data42,parentDataProperty:i4,rootData}))){
 vErrors = vErrors === null ? validate62.errors : vErrors.concat(validate62.errors);
 errors = vErrors.length;
 }
 }
 }
 else {
-const err89 = {instancePath:instancePath+"/generations",schemaPath:"#/properties/generations/type",keyword:"type",params:{type: "array"},message:"must be array"};
-if(vErrors === null){
-vErrors = [err89];
-}
-else {
-vErrors.push(err89);
-}
-errors++;
-}
-}
-if(data.discovery !== undefined){
-let data39 = data.discovery;
-if(Array.isArray(data39)){
-const len5 = data39.length;
-for(let i5=0; i5<len5; i5++){
-let data40 = data39[i5];
-if(data40 && typeof data40 == "object" && !Array.isArray(data40)){
-if(data40.sourceId === undefined){
-const err90 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "sourceId"},message:"must have required property '"+"sourceId"+"'"};
-if(vErrors === null){
-vErrors = [err90];
-}
-else {
-vErrors.push(err90);
-}
-errors++;
-}
-if(data40.mailboxId === undefined){
-const err91 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "mailboxId"},message:"must have required property '"+"mailboxId"+"'"};
-if(vErrors === null){
-vErrors = [err91];
-}
-else {
-vErrors.push(err91);
-}
-errors++;
-}
-if(data40.state === undefined){
-const err92 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "state"},message:"must have required property '"+"state"+"'"};
-if(vErrors === null){
-vErrors = [err92];
-}
-else {
-vErrors.push(err92);
-}
-errors++;
-}
-if(data40.discoveryComplete === undefined){
-const err93 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "discoveryComplete"},message:"must have required property '"+"discoveryComplete"+"'"};
-if(vErrors === null){
-vErrors = [err93];
-}
-else {
-vErrors.push(err93);
-}
-errors++;
-}
-if(data40.scanStartedAt === undefined){
-const err94 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "scanStartedAt"},message:"must have required property '"+"scanStartedAt"+"'"};
-if(vErrors === null){
-vErrors = [err94];
-}
-else {
-vErrors.push(err94);
-}
-errors++;
-}
-if(data40.lastSuccessfulScanAt === undefined){
-const err95 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "lastSuccessfulScanAt"},message:"must have required property '"+"lastSuccessfulScanAt"+"'"};
+const err95 = {instancePath:instancePath+"/generations",schemaPath:"#/properties/generations/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err95];
 }
@@ -16928,8 +16936,16 @@ vErrors.push(err95);
 }
 errors++;
 }
-if(data40.discoveredDocuments === undefined){
-const err96 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "discoveredDocuments"},message:"must have required property '"+"discoveredDocuments"+"'"};
+}
+if(data.discovery !== undefined){
+let data44 = data.discovery;
+if(Array.isArray(data44)){
+const len5 = data44.length;
+for(let i5=0; i5<len5; i5++){
+let data45 = data44[i5];
+if(data45 && typeof data45 == "object" && !Array.isArray(data45)){
+if(data45.sourceId === undefined){
+const err96 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "sourceId"},message:"must have required property '"+"sourceId"+"'"};
 if(vErrors === null){
 vErrors = [err96];
 }
@@ -16938,8 +16954,8 @@ vErrors.push(err96);
 }
 errors++;
 }
-if(data40.accessible === undefined){
-const err97 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "accessible"},message:"must have required property '"+"accessible"+"'"};
+if(data45.mailboxId === undefined){
+const err97 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "mailboxId"},message:"must have required property '"+"mailboxId"+"'"};
 if(vErrors === null){
 vErrors = [err97];
 }
@@ -16948,8 +16964,8 @@ vErrors.push(err97);
 }
 errors++;
 }
-if(data40.lastErrorCode === undefined){
-const err98 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "lastErrorCode"},message:"must have required property '"+"lastErrorCode"+"'"};
+if(data45.state === undefined){
+const err98 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "state"},message:"must have required property '"+"state"+"'"};
 if(vErrors === null){
 vErrors = [err98];
 }
@@ -16958,11 +16974,8 @@ vErrors.push(err98);
 }
 errors++;
 }
-if(data40.sourceId !== undefined){
-let data41 = data40.sourceId;
-if(typeof data41 === "string"){
-if(func2(data41) < 1){
-const err99 = {instancePath:instancePath+"/discovery/" + i5+"/sourceId",schemaPath:"#/definitions/DiscoverySource/properties/sourceId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data45.discoveryComplete === undefined){
+const err99 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "discoveryComplete"},message:"must have required property '"+"discoveryComplete"+"'"};
 if(vErrors === null){
 vErrors = [err99];
 }
@@ -16971,9 +16984,8 @@ vErrors.push(err99);
 }
 errors++;
 }
-}
-else {
-const err100 = {instancePath:instancePath+"/discovery/" + i5+"/sourceId",schemaPath:"#/definitions/DiscoverySource/properties/sourceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data45.scanStartedAt === undefined){
+const err100 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "scanStartedAt"},message:"must have required property '"+"scanStartedAt"+"'"};
 if(vErrors === null){
 vErrors = [err100];
 }
@@ -16982,15 +16994,8 @@ vErrors.push(err100);
 }
 errors++;
 }
-}
-if(data40.mailboxId !== undefined){
-let data42 = data40.mailboxId;
-const _errs98 = errors;
-let valid26 = false;
-const _errs99 = errors;
-if(typeof data42 === "string"){
-if(func2(data42) < 1){
-const err101 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data45.lastSuccessfulScanAt === undefined){
+const err101 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "lastSuccessfulScanAt"},message:"must have required property '"+"lastSuccessfulScanAt"+"'"};
 if(vErrors === null){
 vErrors = [err101];
 }
@@ -16999,9 +17004,8 @@ vErrors.push(err101);
 }
 errors++;
 }
-}
-else {
-const err102 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data45.discoveredDocuments === undefined){
+const err102 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "discoveredDocuments"},message:"must have required property '"+"discoveredDocuments"+"'"};
 if(vErrors === null){
 vErrors = [err102];
 }
@@ -17010,12 +17014,8 @@ vErrors.push(err102);
 }
 errors++;
 }
-var _valid0 = _errs99 === errors;
-valid26 = valid26 || _valid0;
-if(!valid26){
-const _errs101 = errors;
-if(data42 !== null){
-const err103 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(data45.accessible === undefined){
+const err103 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "accessible"},message:"must have required property '"+"accessible"+"'"};
 if(vErrors === null){
 vErrors = [err103];
 }
@@ -17024,11 +17024,8 @@ vErrors.push(err103);
 }
 errors++;
 }
-var _valid0 = _errs101 === errors;
-valid26 = valid26 || _valid0;
-}
-if(!valid26){
-const err104 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(data45.lastErrorCode === undefined){
+const err104 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/required",keyword:"required",params:{missingProperty: "lastErrorCode"},message:"must have required property '"+"lastErrorCode"+"'"};
 if(vErrors === null){
 vErrors = [err104];
 }
@@ -17037,22 +17034,11 @@ vErrors.push(err104);
 }
 errors++;
 }
-else {
-errors = _errs98;
-if(vErrors !== null){
-if(_errs98){
-vErrors.length = _errs98;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data40.state !== undefined){
-let data43 = data40.state;
-if(typeof data43 !== "string"){
-const err105 = {instancePath:instancePath+"/discovery/" + i5+"/state",schemaPath:"#/definitions/DiscoverySource/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data45.sourceId !== undefined){
+let data46 = data45.sourceId;
+if(typeof data46 === "string"){
+if(func2(data46) < 1){
+const err105 = {instancePath:instancePath+"/discovery/" + i5+"/sourceId",schemaPath:"#/definitions/DiscoverySource/properties/sourceId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err105];
 }
@@ -17061,8 +17047,9 @@ vErrors.push(err105);
 }
 errors++;
 }
-if(!(((((data43 === "notStarted") || (data43 === "scanning")) || (data43 === "complete")) || (data43 === "failed")) || (data43 === "disabled"))){
-const err106 = {instancePath:instancePath+"/discovery/" + i5+"/state",schemaPath:"#/definitions/DiscoverySource/properties/state/enum",keyword:"enum",params:{allowedValues: schema89.properties.state.enum},message:"must be equal to one of the allowed values"};
+}
+else {
+const err106 = {instancePath:instancePath+"/discovery/" + i5+"/sourceId",schemaPath:"#/definitions/DiscoverySource/properties/sourceId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err106];
 }
@@ -17072,9 +17059,14 @@ vErrors.push(err106);
 errors++;
 }
 }
-if(data40.discoveryComplete !== undefined){
-if(typeof data40.discoveryComplete !== "boolean"){
-const err107 = {instancePath:instancePath+"/discovery/" + i5+"/discoveryComplete",schemaPath:"#/definitions/DiscoverySource/properties/discoveryComplete/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data45.mailboxId !== undefined){
+let data47 = data45.mailboxId;
+const _errs109 = errors;
+let valid27 = false;
+const _errs110 = errors;
+if(typeof data47 === "string"){
+if(func2(data47) < 1){
+const err107 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err107];
 }
@@ -17084,14 +17076,8 @@ vErrors.push(err107);
 errors++;
 }
 }
-if(data40.scanStartedAt !== undefined){
-let data45 = data40.scanStartedAt;
-const _errs108 = errors;
-let valid27 = false;
-const _errs109 = errors;
-if(typeof data45 === "string"){
-if(!(formats6.validate(data45))){
-const err108 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/0/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+else {
+const err108 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err108];
 }
@@ -17100,9 +17086,12 @@ vErrors.push(err108);
 }
 errors++;
 }
-}
-else {
-const err109 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+var _valid0 = _errs110 === errors;
+valid27 = valid27 || _valid0;
+if(!valid27){
+const _errs112 = errors;
+if(data47 !== null){
+const err109 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err109];
 }
@@ -17111,12 +17100,11 @@ vErrors.push(err109);
 }
 errors++;
 }
-var _valid1 = _errs109 === errors;
-valid27 = valid27 || _valid1;
+var _valid0 = _errs112 === errors;
+valid27 = valid27 || _valid0;
+}
 if(!valid27){
-const _errs111 = errors;
-if(data45 !== null){
-const err110 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+const err110 = {instancePath:instancePath+"/discovery/" + i5+"/mailboxId",schemaPath:"#/definitions/DiscoverySource/properties/mailboxId/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
 if(vErrors === null){
 vErrors = [err110];
 }
@@ -17125,11 +17113,22 @@ vErrors.push(err110);
 }
 errors++;
 }
-var _valid1 = _errs111 === errors;
-valid27 = valid27 || _valid1;
+else {
+errors = _errs109;
+if(vErrors !== null){
+if(_errs109){
+vErrors.length = _errs109;
 }
-if(!valid27){
-const err111 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data45.state !== undefined){
+let data48 = data45.state;
+if(typeof data48 !== "string"){
+const err111 = {instancePath:instancePath+"/discovery/" + i5+"/state",schemaPath:"#/definitions/DiscoverySource/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err111];
 }
@@ -17138,26 +17137,8 @@ vErrors.push(err111);
 }
 errors++;
 }
-else {
-errors = _errs108;
-if(vErrors !== null){
-if(_errs108){
-vErrors.length = _errs108;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data40.lastSuccessfulScanAt !== undefined){
-let data46 = data40.lastSuccessfulScanAt;
-const _errs114 = errors;
-let valid28 = false;
-const _errs115 = errors;
-if(typeof data46 === "string"){
-if(!(formats6.validate(data46))){
-const err112 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/0/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(!(((((data48 === "notStarted") || (data48 === "scanning")) || (data48 === "complete")) || (data48 === "failed")) || (data48 === "disabled"))){
+const err112 = {instancePath:instancePath+"/discovery/" + i5+"/state",schemaPath:"#/definitions/DiscoverySource/properties/state/enum",keyword:"enum",params:{allowedValues: schema89.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err112];
 }
@@ -17167,8 +17148,9 @@ vErrors.push(err112);
 errors++;
 }
 }
-else {
-const err113 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data45.discoveryComplete !== undefined){
+if(typeof data45.discoveryComplete !== "boolean"){
+const err113 = {instancePath:instancePath+"/discovery/" + i5+"/discoveryComplete",schemaPath:"#/definitions/DiscoverySource/properties/discoveryComplete/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err113];
 }
@@ -17177,12 +17159,15 @@ vErrors.push(err113);
 }
 errors++;
 }
-var _valid2 = _errs115 === errors;
-valid28 = valid28 || _valid2;
-if(!valid28){
-const _errs117 = errors;
-if(data46 !== null){
-const err114 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+}
+if(data45.scanStartedAt !== undefined){
+let data50 = data45.scanStartedAt;
+const _errs119 = errors;
+let valid28 = false;
+const _errs120 = errors;
+if(typeof data50 === "string"){
+if(!(formats6.validate(data50))){
+const err114 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/0/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
 if(vErrors === null){
 vErrors = [err114];
 }
@@ -17191,11 +17176,9 @@ vErrors.push(err114);
 }
 errors++;
 }
-var _valid2 = _errs117 === errors;
-valid28 = valid28 || _valid2;
 }
-if(!valid28){
-const err115 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+else {
+const err115 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err115];
 }
@@ -17204,25 +17187,12 @@ vErrors.push(err115);
 }
 errors++;
 }
-else {
-errors = _errs114;
-if(vErrors !== null){
-if(_errs114){
-vErrors.length = _errs114;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data40.discoveredDocuments !== undefined){
-let data47 = data40.discoveredDocuments;
-const _errs120 = errors;
-let valid29 = false;
-const _errs121 = errors;
-if(!(((typeof data47 == "number") && (!(data47 % 1) && !isNaN(data47))) && (isFinite(data47)))){
-const err116 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+var _valid1 = _errs120 === errors;
+valid28 = valid28 || _valid1;
+if(!valid28){
+const _errs122 = errors;
+if(data50 !== null){
+const err116 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err116];
 }
@@ -17231,9 +17201,11 @@ vErrors.push(err116);
 }
 errors++;
 }
-if((typeof data47 == "number") && (isFinite(data47))){
-if(data47 > 9007199254740991 || isNaN(data47)){
-const err117 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+var _valid1 = _errs122 === errors;
+valid28 = valid28 || _valid1;
+}
+if(!valid28){
+const err117 = {instancePath:instancePath+"/discovery/" + i5+"/scanStartedAt",schemaPath:"#/definitions/DiscoverySource/properties/scanStartedAt/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
 if(vErrors === null){
 vErrors = [err117];
 }
@@ -17242,8 +17214,26 @@ vErrors.push(err117);
 }
 errors++;
 }
-if(data47 < 0 || isNaN(data47)){
-const err118 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+else {
+errors = _errs119;
+if(vErrors !== null){
+if(_errs119){
+vErrors.length = _errs119;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data45.lastSuccessfulScanAt !== undefined){
+let data51 = data45.lastSuccessfulScanAt;
+const _errs125 = errors;
+let valid29 = false;
+const _errs126 = errors;
+if(typeof data51 === "string"){
+if(!(formats6.validate(data51))){
+const err118 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/0/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
 if(vErrors === null){
 vErrors = [err118];
 }
@@ -17253,12 +17243,8 @@ vErrors.push(err118);
 errors++;
 }
 }
-var _valid3 = _errs121 === errors;
-valid29 = valid29 || _valid3;
-if(!valid29){
-const _errs123 = errors;
-if(data47 !== null){
-const err119 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+else {
+const err119 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err119];
 }
@@ -17267,11 +17253,12 @@ vErrors.push(err119);
 }
 errors++;
 }
-var _valid3 = _errs123 === errors;
-valid29 = valid29 || _valid3;
-}
+var _valid2 = _errs126 === errors;
+valid29 = valid29 || _valid2;
 if(!valid29){
-const err120 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+const _errs128 = errors;
+if(data51 !== null){
+const err120 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err120];
 }
@@ -17280,21 +17267,11 @@ vErrors.push(err120);
 }
 errors++;
 }
-else {
-errors = _errs120;
-if(vErrors !== null){
-if(_errs120){
-vErrors.length = _errs120;
+var _valid2 = _errs128 === errors;
+valid29 = valid29 || _valid2;
 }
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data40.accessible !== undefined){
-if(typeof data40.accessible !== "boolean"){
-const err121 = {instancePath:instancePath+"/discovery/" + i5+"/accessible",schemaPath:"#/definitions/DiscoverySource/properties/accessible/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(!valid29){
+const err121 = {instancePath:instancePath+"/discovery/" + i5+"/lastSuccessfulScanAt",schemaPath:"#/definitions/DiscoverySource/properties/lastSuccessfulScanAt/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
 if(vErrors === null){
 vErrors = [err121];
 }
@@ -17303,15 +17280,25 @@ vErrors.push(err121);
 }
 errors++;
 }
+else {
+errors = _errs125;
+if(vErrors !== null){
+if(_errs125){
+vErrors.length = _errs125;
 }
-if(data40.lastErrorCode !== undefined){
-let data49 = data40.lastErrorCode;
-const _errs128 = errors;
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data45.discoveredDocuments !== undefined){
+let data52 = data45.discoveredDocuments;
+const _errs131 = errors;
 let valid30 = false;
-const _errs129 = errors;
-if(typeof data49 === "string"){
-if(func2(data49) < 1){
-const err122 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+const _errs132 = errors;
+if(!(((typeof data52 == "number") && (!(data52 % 1) && !isNaN(data52))) && (isFinite(data52)))){
+const err122 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err122];
 }
@@ -17320,9 +17307,9 @@ vErrors.push(err122);
 }
 errors++;
 }
-}
-else {
-const err123 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if((typeof data52 == "number") && (isFinite(data52))){
+if(data52 > 9007199254740991 || isNaN(data52)){
+const err123 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err123];
 }
@@ -17331,12 +17318,8 @@ vErrors.push(err123);
 }
 errors++;
 }
-var _valid4 = _errs129 === errors;
-valid30 = valid30 || _valid4;
-if(!valid30){
-const _errs131 = errors;
-if(data49 !== null){
-const err124 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(data52 < 0 || isNaN(data52)){
+const err124 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err124];
 }
@@ -17345,11 +17328,13 @@ vErrors.push(err124);
 }
 errors++;
 }
-var _valid4 = _errs131 === errors;
-valid30 = valid30 || _valid4;
 }
+var _valid3 = _errs132 === errors;
+valid30 = valid30 || _valid3;
 if(!valid30){
-const err125 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+const _errs134 = errors;
+if(data52 !== null){
+const err125 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err125];
 }
@@ -17358,21 +17343,11 @@ vErrors.push(err125);
 }
 errors++;
 }
-else {
-errors = _errs128;
-if(vErrors !== null){
-if(_errs128){
-vErrors.length = _errs128;
+var _valid3 = _errs134 === errors;
+valid30 = valid30 || _valid3;
 }
-else {
-vErrors = null;
-}
-}
-}
-}
-}
-else {
-const err126 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(!valid30){
+const err126 = {instancePath:instancePath+"/discovery/" + i5+"/discoveredDocuments",schemaPath:"#/definitions/DiscoverySource/properties/discoveredDocuments/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
 if(vErrors === null){
 vErrors = [err126];
 }
@@ -17381,10 +17356,21 @@ vErrors.push(err126);
 }
 errors++;
 }
-}
+else {
+errors = _errs131;
+if(vErrors !== null){
+if(_errs131){
+vErrors.length = _errs131;
 }
 else {
-const err127 = {instancePath:instancePath+"/discovery",schemaPath:"#/properties/discovery/type",keyword:"type",params:{type: "array"},message:"must be array"};
+vErrors = null;
+}
+}
+}
+}
+if(data45.accessible !== undefined){
+if(typeof data45.accessible !== "boolean"){
+const err127 = {instancePath:instancePath+"/discovery/" + i5+"/accessible",schemaPath:"#/definitions/DiscoverySource/properties/accessible/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err127];
 }
@@ -17394,11 +17380,14 @@ vErrors.push(err127);
 errors++;
 }
 }
-if(data.search !== undefined){
-let data50 = data.search;
-if(data50 && typeof data50 == "object" && !Array.isArray(data50)){
-if(data50.sampledAt === undefined){
-const err128 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "sampledAt"},message:"must have required property '"+"sampledAt"+"'"};
+if(data45.lastErrorCode !== undefined){
+let data54 = data45.lastErrorCode;
+const _errs139 = errors;
+let valid31 = false;
+const _errs140 = errors;
+if(typeof data54 === "string"){
+if(func2(data54) < 1){
+const err128 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err128];
 }
@@ -17407,8 +17396,9 @@ vErrors.push(err128);
 }
 errors++;
 }
-if(data50.observationSeconds === undefined){
-const err129 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "observationSeconds"},message:"must have required property '"+"observationSeconds"+"'"};
+}
+else {
+const err129 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err129];
 }
@@ -17417,8 +17407,12 @@ vErrors.push(err129);
 }
 errors++;
 }
-if(data50.queryCount === undefined){
-const err130 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "queryCount"},message:"must have required property '"+"queryCount"+"'"};
+var _valid4 = _errs140 === errors;
+valid31 = valid31 || _valid4;
+if(!valid31){
+const _errs142 = errors;
+if(data54 !== null){
+const err130 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err130];
 }
@@ -17427,8 +17421,11 @@ vErrors.push(err130);
 }
 errors++;
 }
-if(data50.errorCount === undefined){
-const err131 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "errorCount"},message:"must have required property '"+"errorCount"+"'"};
+var _valid4 = _errs142 === errors;
+valid31 = valid31 || _valid4;
+}
+if(!valid31){
+const err131 = {instancePath:instancePath+"/discovery/" + i5+"/lastErrorCode",schemaPath:"#/definitions/DiscoverySource/properties/lastErrorCode/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
 if(vErrors === null){
 vErrors = [err131];
 }
@@ -17437,8 +17434,21 @@ vErrors.push(err131);
 }
 errors++;
 }
-if(data50.inFlight === undefined){
-const err132 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "inFlight"},message:"must have required property '"+"inFlight"+"'"};
+else {
+errors = _errs139;
+if(vErrors !== null){
+if(_errs139){
+vErrors.length = _errs139;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+}
+else {
+const err132 = {instancePath:instancePath+"/discovery/" + i5,schemaPath:"#/definitions/DiscoverySource/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err132];
 }
@@ -17447,8 +17457,10 @@ vErrors.push(err132);
 }
 errors++;
 }
-if(data50.p50LatencyMilliseconds === undefined){
-const err133 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "p50LatencyMilliseconds"},message:"must have required property '"+"p50LatencyMilliseconds"+"'"};
+}
+}
+else {
+const err133 = {instancePath:instancePath+"/discovery",schemaPath:"#/properties/discovery/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err133];
 }
@@ -17457,8 +17469,12 @@ vErrors.push(err133);
 }
 errors++;
 }
-if(data50.p95LatencyMilliseconds === undefined){
-const err134 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "p95LatencyMilliseconds"},message:"must have required property '"+"p95LatencyMilliseconds"+"'"};
+}
+if(data.search !== undefined){
+let data55 = data.search;
+if(data55 && typeof data55 == "object" && !Array.isArray(data55)){
+if(data55.sampledAt === undefined){
+const err134 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "sampledAt"},message:"must have required property '"+"sampledAt"+"'"};
 if(vErrors === null){
 vErrors = [err134];
 }
@@ -17467,8 +17483,8 @@ vErrors.push(err134);
 }
 errors++;
 }
-if(data50.unavailableReason === undefined){
-const err135 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "unavailableReason"},message:"must have required property '"+"unavailableReason"+"'"};
+if(data55.observationSeconds === undefined){
+const err135 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "observationSeconds"},message:"must have required property '"+"observationSeconds"+"'"};
 if(vErrors === null){
 vErrors = [err135];
 }
@@ -17477,11 +17493,8 @@ vErrors.push(err135);
 }
 errors++;
 }
-if(data50.sampledAt !== undefined){
-let data51 = data50.sampledAt;
-if(typeof data51 === "string"){
-if(!(formats6.validate(data51))){
-const err136 = {instancePath:instancePath+"/search/sampledAt",schemaPath:"#/definitions/SearchStatistics/properties/sampledAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(data55.queryCount === undefined){
+const err136 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "queryCount"},message:"must have required property '"+"queryCount"+"'"};
 if(vErrors === null){
 vErrors = [err136];
 }
@@ -17490,9 +17503,8 @@ vErrors.push(err136);
 }
 errors++;
 }
-}
-else {
-const err137 = {instancePath:instancePath+"/search/sampledAt",schemaPath:"#/definitions/SearchStatistics/properties/sampledAt/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data55.errorCount === undefined){
+const err137 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "errorCount"},message:"must have required property '"+"errorCount"+"'"};
 if(vErrors === null){
 vErrors = [err137];
 }
@@ -17501,12 +17513,8 @@ vErrors.push(err137);
 }
 errors++;
 }
-}
-if(data50.observationSeconds !== undefined){
-let data52 = data50.observationSeconds;
-if((typeof data52 == "number") && (isFinite(data52))){
-if(data52 < 0 || isNaN(data52)){
-const err138 = {instancePath:instancePath+"/search/observationSeconds",schemaPath:"#/definitions/SearchStatistics/properties/observationSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data55.inFlight === undefined){
+const err138 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "inFlight"},message:"must have required property '"+"inFlight"+"'"};
 if(vErrors === null){
 vErrors = [err138];
 }
@@ -17515,9 +17523,8 @@ vErrors.push(err138);
 }
 errors++;
 }
-}
-else {
-const err139 = {instancePath:instancePath+"/search/observationSeconds",schemaPath:"#/definitions/SearchStatistics/properties/observationSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(data55.p50LatencyMilliseconds === undefined){
+const err139 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "p50LatencyMilliseconds"},message:"must have required property '"+"p50LatencyMilliseconds"+"'"};
 if(vErrors === null){
 vErrors = [err139];
 }
@@ -17526,11 +17533,8 @@ vErrors.push(err139);
 }
 errors++;
 }
-}
-if(data50.queryCount !== undefined){
-let data53 = data50.queryCount;
-if(!(((typeof data53 == "number") && (!(data53 % 1) && !isNaN(data53))) && (isFinite(data53)))){
-const err140 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data55.p95LatencyMilliseconds === undefined){
+const err140 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "p95LatencyMilliseconds"},message:"must have required property '"+"p95LatencyMilliseconds"+"'"};
 if(vErrors === null){
 vErrors = [err140];
 }
@@ -17539,9 +17543,8 @@ vErrors.push(err140);
 }
 errors++;
 }
-if((typeof data53 == "number") && (isFinite(data53))){
-if(data53 > 9007199254740991 || isNaN(data53)){
-const err141 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(data55.unavailableReason === undefined){
+const err141 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/required",keyword:"required",params:{missingProperty: "unavailableReason"},message:"must have required property '"+"unavailableReason"+"'"};
 if(vErrors === null){
 vErrors = [err141];
 }
@@ -17550,8 +17553,11 @@ vErrors.push(err141);
 }
 errors++;
 }
-if(data53 < 0 || isNaN(data53)){
-const err142 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data55.sampledAt !== undefined){
+let data56 = data55.sampledAt;
+if(typeof data56 === "string"){
+if(!(formats6.validate(data56))){
+const err142 = {instancePath:instancePath+"/search/sampledAt",schemaPath:"#/definitions/SearchStatistics/properties/sampledAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
 if(vErrors === null){
 vErrors = [err142];
 }
@@ -17561,11 +17567,8 @@ vErrors.push(err142);
 errors++;
 }
 }
-}
-if(data50.errorCount !== undefined){
-let data54 = data50.errorCount;
-if(!(((typeof data54 == "number") && (!(data54 % 1) && !isNaN(data54))) && (isFinite(data54)))){
-const err143 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+else {
+const err143 = {instancePath:instancePath+"/search/sampledAt",schemaPath:"#/definitions/SearchStatistics/properties/sampledAt/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err143];
 }
@@ -17574,9 +17577,12 @@ vErrors.push(err143);
 }
 errors++;
 }
-if((typeof data54 == "number") && (isFinite(data54))){
-if(data54 > 9007199254740991 || isNaN(data54)){
-const err144 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+}
+if(data55.observationSeconds !== undefined){
+let data57 = data55.observationSeconds;
+if((typeof data57 == "number") && (isFinite(data57))){
+if(data57 < 0 || isNaN(data57)){
+const err144 = {instancePath:instancePath+"/search/observationSeconds",schemaPath:"#/definitions/SearchStatistics/properties/observationSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err144];
 }
@@ -17585,8 +17591,9 @@ vErrors.push(err144);
 }
 errors++;
 }
-if(data54 < 0 || isNaN(data54)){
-const err145 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+else {
+const err145 = {instancePath:instancePath+"/search/observationSeconds",schemaPath:"#/definitions/SearchStatistics/properties/observationSeconds/type",keyword:"type",params:{type: "number"},message:"must be number"};
 if(vErrors === null){
 vErrors = [err145];
 }
@@ -17596,11 +17603,10 @@ vErrors.push(err145);
 errors++;
 }
 }
-}
-if(data50.inFlight !== undefined){
-let data55 = data50.inFlight;
-if(!(((typeof data55 == "number") && (!(data55 % 1) && !isNaN(data55))) && (isFinite(data55)))){
-const err146 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data55.queryCount !== undefined){
+let data58 = data55.queryCount;
+if(!(((typeof data58 == "number") && (!(data58 % 1) && !isNaN(data58))) && (isFinite(data58)))){
+const err146 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err146];
 }
@@ -17609,9 +17615,9 @@ vErrors.push(err146);
 }
 errors++;
 }
-if((typeof data55 == "number") && (isFinite(data55))){
-if(data55 > 9007199254740991 || isNaN(data55)){
-const err147 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if((typeof data58 == "number") && (isFinite(data58))){
+if(data58 > 9007199254740991 || isNaN(data58)){
+const err147 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err147];
 }
@@ -17620,8 +17626,8 @@ vErrors.push(err147);
 }
 errors++;
 }
-if(data55 < 0 || isNaN(data55)){
-const err148 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data58 < 0 || isNaN(data58)){
+const err148 = {instancePath:instancePath+"/search/queryCount",schemaPath:"#/definitions/SearchStatistics/properties/queryCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err148];
 }
@@ -17632,14 +17638,10 @@ errors++;
 }
 }
 }
-if(data50.p50LatencyMilliseconds !== undefined){
-let data56 = data50.p50LatencyMilliseconds;
-const _errs148 = errors;
-let valid33 = false;
-const _errs149 = errors;
-if((typeof data56 == "number") && (isFinite(data56))){
-if(data56 < 0 || isNaN(data56)){
-const err149 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if(data55.errorCount !== undefined){
+let data59 = data55.errorCount;
+if(!(((typeof data59 == "number") && (!(data59 % 1) && !isNaN(data59))) && (isFinite(data59)))){
+const err149 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err149];
 }
@@ -17648,9 +17650,9 @@ vErrors.push(err149);
 }
 errors++;
 }
-}
-else {
-const err150 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if((typeof data59 == "number") && (isFinite(data59))){
+if(data59 > 9007199254740991 || isNaN(data59)){
+const err150 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err150];
 }
@@ -17659,12 +17661,8 @@ vErrors.push(err150);
 }
 errors++;
 }
-var _valid5 = _errs149 === errors;
-valid33 = valid33 || _valid5;
-if(!valid33){
-const _errs151 = errors;
-if(data56 !== null){
-const err151 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(data59 < 0 || isNaN(data59)){
+const err151 = {instancePath:instancePath+"/search/errorCount",schemaPath:"#/definitions/SearchStatistics/properties/errorCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err151];
 }
@@ -17673,11 +17671,12 @@ vErrors.push(err151);
 }
 errors++;
 }
-var _valid5 = _errs151 === errors;
-valid33 = valid33 || _valid5;
 }
-if(!valid33){
-const err152 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+}
+if(data55.inFlight !== undefined){
+let data60 = data55.inFlight;
+if(!(((typeof data60 == "number") && (!(data60 % 1) && !isNaN(data60))) && (isFinite(data60)))){
+const err152 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err152];
 }
@@ -17686,26 +17685,9 @@ vErrors.push(err152);
 }
 errors++;
 }
-else {
-errors = _errs148;
-if(vErrors !== null){
-if(_errs148){
-vErrors.length = _errs148;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data50.p95LatencyMilliseconds !== undefined){
-let data57 = data50.p95LatencyMilliseconds;
-const _errs154 = errors;
-let valid34 = false;
-const _errs155 = errors;
-if((typeof data57 == "number") && (isFinite(data57))){
-if(data57 < 0 || isNaN(data57)){
-const err153 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if((typeof data60 == "number") && (isFinite(data60))){
+if(data60 > 9007199254740991 || isNaN(data60)){
+const err153 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err153];
 }
@@ -17714,9 +17696,8 @@ vErrors.push(err153);
 }
 errors++;
 }
-}
-else {
-const err154 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
+if(data60 < 0 || isNaN(data60)){
+const err154 = {instancePath:instancePath+"/search/inFlight",schemaPath:"#/definitions/SearchStatistics/properties/inFlight/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err154];
 }
@@ -17725,12 +17706,16 @@ vErrors.push(err154);
 }
 errors++;
 }
-var _valid6 = _errs155 === errors;
-valid34 = valid34 || _valid6;
-if(!valid34){
-const _errs157 = errors;
-if(data57 !== null){
-const err155 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+}
+}
+if(data55.p50LatencyMilliseconds !== undefined){
+let data61 = data55.p50LatencyMilliseconds;
+const _errs159 = errors;
+let valid34 = false;
+const _errs160 = errors;
+if((typeof data61 == "number") && (isFinite(data61))){
+if(data61 < 0 || isNaN(data61)){
+const err155 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err155];
 }
@@ -17739,11 +17724,9 @@ vErrors.push(err155);
 }
 errors++;
 }
-var _valid6 = _errs157 === errors;
-valid34 = valid34 || _valid6;
 }
-if(!valid34){
-const err156 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+else {
+const err156 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
 if(vErrors === null){
 vErrors = [err156];
 }
@@ -17752,26 +17735,12 @@ vErrors.push(err156);
 }
 errors++;
 }
-else {
-errors = _errs154;
-if(vErrors !== null){
-if(_errs154){
-vErrors.length = _errs154;
-}
-else {
-vErrors = null;
-}
-}
-}
-}
-if(data50.unavailableReason !== undefined){
-let data58 = data50.unavailableReason;
-const _errs160 = errors;
-let valid35 = false;
-const _errs161 = errors;
-if(typeof data58 === "string"){
-if(func2(data58) < 1){
-const err157 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+var _valid5 = _errs160 === errors;
+valid34 = valid34 || _valid5;
+if(!valid34){
+const _errs162 = errors;
+if(data61 !== null){
+const err157 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
 if(vErrors === null){
 vErrors = [err157];
 }
@@ -17780,9 +17749,11 @@ vErrors.push(err157);
 }
 errors++;
 }
+var _valid5 = _errs162 === errors;
+valid34 = valid34 || _valid5;
 }
-else {
-const err158 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(!valid34){
+const err158 = {instancePath:instancePath+"/search/p50LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p50LatencyMilliseconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
 if(vErrors === null){
 vErrors = [err158];
 }
@@ -17791,12 +17762,26 @@ vErrors.push(err158);
 }
 errors++;
 }
-var _valid7 = _errs161 === errors;
-valid35 = valid35 || _valid7;
-if(!valid35){
-const _errs163 = errors;
-if(data58 !== null){
-const err159 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+else {
+errors = _errs159;
+if(vErrors !== null){
+if(_errs159){
+vErrors.length = _errs159;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data55.p95LatencyMilliseconds !== undefined){
+let data62 = data55.p95LatencyMilliseconds;
+const _errs165 = errors;
+let valid35 = false;
+const _errs166 = errors;
+if((typeof data62 == "number") && (isFinite(data62))){
+if(data62 < 0 || isNaN(data62)){
+const err159 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/0/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err159];
 }
@@ -17805,11 +17790,9 @@ vErrors.push(err159);
 }
 errors++;
 }
-var _valid7 = _errs163 === errors;
-valid35 = valid35 || _valid7;
 }
-if(!valid35){
-const err160 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+else {
+const err160 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/0/type",keyword:"type",params:{type: "number"},message:"must be number"};
 if(vErrors === null){
 vErrors = [err160];
 }
@@ -17818,11 +17801,104 @@ vErrors.push(err160);
 }
 errors++;
 }
+var _valid6 = _errs166 === errors;
+valid35 = valid35 || _valid6;
+if(!valid35){
+const _errs168 = errors;
+if(data62 !== null){
+const err161 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err161];
+}
 else {
-errors = _errs160;
+vErrors.push(err161);
+}
+errors++;
+}
+var _valid6 = _errs168 === errors;
+valid35 = valid35 || _valid6;
+}
+if(!valid35){
+const err162 = {instancePath:instancePath+"/search/p95LatencyMilliseconds",schemaPath:"#/definitions/SearchStatistics/properties/p95LatencyMilliseconds/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err162];
+}
+else {
+vErrors.push(err162);
+}
+errors++;
+}
+else {
+errors = _errs165;
 if(vErrors !== null){
-if(_errs160){
-vErrors.length = _errs160;
+if(_errs165){
+vErrors.length = _errs165;
+}
+else {
+vErrors = null;
+}
+}
+}
+}
+if(data55.unavailableReason !== undefined){
+let data63 = data55.unavailableReason;
+const _errs171 = errors;
+let valid36 = false;
+const _errs172 = errors;
+if(typeof data63 === "string"){
+if(func2(data63) < 1){
+const err163 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/0/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err163];
+}
+else {
+vErrors.push(err163);
+}
+errors++;
+}
+}
+else {
+const err164 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err164];
+}
+else {
+vErrors.push(err164);
+}
+errors++;
+}
+var _valid7 = _errs172 === errors;
+valid36 = valid36 || _valid7;
+if(!valid36){
+const _errs174 = errors;
+if(data63 !== null){
+const err165 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err165];
+}
+else {
+vErrors.push(err165);
+}
+errors++;
+}
+var _valid7 = _errs174 === errors;
+valid36 = valid36 || _valid7;
+}
+if(!valid36){
+const err166 = {instancePath:instancePath+"/search/unavailableReason",schemaPath:"#/definitions/SearchStatistics/properties/unavailableReason/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err166];
+}
+else {
+vErrors.push(err166);
+}
+errors++;
+}
+else {
+errors = _errs171;
+if(vErrors !== null){
+if(_errs171){
+vErrors.length = _errs171;
 }
 else {
 vErrors = null;
@@ -17832,71 +17908,71 @@ vErrors = null;
 }
 }
 else {
-const err161 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err167 = {instancePath:instancePath+"/search",schemaPath:"#/definitions/SearchStatistics/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
-vErrors = [err161];
+vErrors = [err167];
 }
 else {
-vErrors.push(err161);
+vErrors.push(err167);
 }
 errors++;
 }
 }
 if(data.resetInProgress !== undefined){
 if(typeof data.resetInProgress !== "boolean"){
-const err162 = {instancePath:instancePath+"/resetInProgress",schemaPath:"#/properties/resetInProgress/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+const err168 = {instancePath:instancePath+"/resetInProgress",schemaPath:"#/properties/resetInProgress/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
-vErrors = [err162];
+vErrors = [err168];
 }
 else {
-vErrors.push(err162);
+vErrors.push(err168);
 }
 errors++;
 }
 }
 if(data.indexingDirectory !== undefined){
-let data60 = data.indexingDirectory;
-if(typeof data60 === "string"){
-if(func2(data60) < 1){
-const err163 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+let data65 = data.indexingDirectory;
+if(typeof data65 === "string"){
+if(func2(data65) < 1){
+const err169 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
-vErrors = [err163];
+vErrors = [err169];
 }
 else {
-vErrors.push(err163);
+vErrors.push(err169);
 }
 errors++;
 }
-if(!pattern53.test(data60)){
-const err164 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/pattern",keyword:"pattern",params:{pattern: "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"},message:"must match pattern \""+"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"+"\""};
+if(!pattern53.test(data65)){
+const err170 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/pattern",keyword:"pattern",params:{pattern: "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"},message:"must match pattern \""+"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"+"\""};
 if(vErrors === null){
-vErrors = [err164];
+vErrors = [err170];
 }
 else {
-vErrors.push(err164);
-}
-errors++;
-}
-}
-else {
-const err165 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err165];
-}
-else {
-vErrors.push(err165);
+vErrors.push(err170);
 }
 errors++;
 }
 }
-}
 else {
-const err166 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err171 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
-vErrors = [err166];
+vErrors = [err171];
 }
 else {
-vErrors.push(err166);
+vErrors.push(err171);
+}
+errors++;
+}
+}
+}
+else {
+const err172 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err172];
+}
+else {
+vErrors.push(err172);
 }
 errors++;
 }
@@ -22571,7 +22647,7 @@ return errors === 0;
 }
 
 export const validateSidecarConfigureV1Params = validate104;
-const schema132 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json","title":"SidecarConfigureV1Params","type":"object","required":["user_configuration","organization_configuration"],"properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"}},"additionalProperties":true};
+const schema132 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json","title":"SidecarConfigureV1Params","type":"object","required":["user_configuration","organization_configuration"],"properties":{"user_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"organization_configuration":{"$ref":"../configuration/sidecar-configuration.schema.json"},"signed_in_user":{"description":"The user signed in to the client, as its Entra ID identity. The sidecar enables by default the sources that read this work account. Null or absent means unknown; sources then keep their own defaults. Clients set it on every configure; older sidecars preserve it without applying it.","type":["object","null"],"properties":{"user_id":{"type":"string","description":"Entra object id (oid)."},"tenant_id":{"type":["string","null"],"description":"Entra tenant id (tid), when known."},"email":{"type":["string","null"]},"user_principal_name":{"type":["string","null"]}},"required":["user_id"],"additionalProperties":true}},"additionalProperties":true};
 
 function validate104(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json" */;
@@ -23326,14 +23402,90 @@ vErrors.push(err61);
 errors++;
 }
 }
-}
-else {
-const err62 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data.signed_in_user !== undefined){
+let data28 = data.signed_in_user;
+if((!(data28 && typeof data28 == "object" && !Array.isArray(data28))) && (data28 !== null)){
+const err62 = {instancePath:instancePath+"/signed_in_user",schemaPath:"#/properties/signed_in_user/type",keyword:"type",params:{type: schema132.properties.signed_in_user.type},message:"must be object,null"};
 if(vErrors === null){
 vErrors = [err62];
 }
 else {
 vErrors.push(err62);
+}
+errors++;
+}
+if(data28 && typeof data28 == "object" && !Array.isArray(data28)){
+if(data28.user_id === undefined){
+const err63 = {instancePath:instancePath+"/signed_in_user",schemaPath:"#/properties/signed_in_user/required",keyword:"required",params:{missingProperty: "user_id"},message:"must have required property '"+"user_id"+"'"};
+if(vErrors === null){
+vErrors = [err63];
+}
+else {
+vErrors.push(err63);
+}
+errors++;
+}
+if(data28.user_id !== undefined){
+if(typeof data28.user_id !== "string"){
+const err64 = {instancePath:instancePath+"/signed_in_user/user_id",schemaPath:"#/properties/signed_in_user/properties/user_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err64];
+}
+else {
+vErrors.push(err64);
+}
+errors++;
+}
+}
+if(data28.tenant_id !== undefined){
+let data30 = data28.tenant_id;
+if((typeof data30 !== "string") && (data30 !== null)){
+const err65 = {instancePath:instancePath+"/signed_in_user/tenant_id",schemaPath:"#/properties/signed_in_user/properties/tenant_id/type",keyword:"type",params:{type: schema132.properties.signed_in_user.properties.tenant_id.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err65];
+}
+else {
+vErrors.push(err65);
+}
+errors++;
+}
+}
+if(data28.email !== undefined){
+let data31 = data28.email;
+if((typeof data31 !== "string") && (data31 !== null)){
+const err66 = {instancePath:instancePath+"/signed_in_user/email",schemaPath:"#/properties/signed_in_user/properties/email/type",keyword:"type",params:{type: schema132.properties.signed_in_user.properties.email.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err66];
+}
+else {
+vErrors.push(err66);
+}
+errors++;
+}
+}
+if(data28.user_principal_name !== undefined){
+let data32 = data28.user_principal_name;
+if((typeof data32 !== "string") && (data32 !== null)){
+const err67 = {instancePath:instancePath+"/signed_in_user/user_principal_name",schemaPath:"#/properties/signed_in_user/properties/user_principal_name/type",keyword:"type",params:{type: schema132.properties.signed_in_user.properties.user_principal_name.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err67];
+}
+else {
+vErrors.push(err67);
+}
+errors++;
+}
+}
+}
+}
+}
+else {
+const err68 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err68];
+}
+else {
+vErrors.push(err68);
 }
 errors++;
 }
@@ -27584,7 +27736,7 @@ return errors === 0;
 
 export const validateSourcesListV1Result = validate127;
 const schema168 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":true};
-const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"displayName":{"description":"Human-readable source name for direct presentation. Older sidecars may omit it.","type":"string","minLength":1,"maxLength":1024},"indexingEnabled":{"description":"Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.","type":"boolean"},"product":{"description":"Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"product_variant":{"description":"Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"account":{"description":"Teams sources only: the signed-in Teams identity (one tenant as one user) that this source indexes. Several identities can share one Teams cache, including guest identities of the same person in other tenants. Older sidecars and other source kinds omit it.","type":"object","properties":{"tenantId":{"type":"string"},"userId":{"type":"string"},"displayName":{"type":["string","null"]},"email":{"type":["string","null"],"description":"Lowercase address identifying the person across tenants and mail; a guest identity carries its home address."},"userPrincipalName":{"type":["string","null"]},"tenantName":{"type":["string","null"]},"userType":{"type":["string","null"],"description":"Member or Guest, as reported by Teams."}},"required":["tenantId","userId"],"additionalProperties":true},"locator":{"type":"object","additionalProperties":true},"enabled":{"description":"Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.","type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
+const schema169 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"displayName":{"description":"Human-readable source name for direct presentation. Older sidecars may omit it.","type":"string","minLength":1,"maxLength":1024},"indexingEnabled":{"description":"Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.","type":"boolean"},"product":{"description":"Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"product_variant":{"description":"Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"account":{"description":"Teams sources only: the signed-in Teams identity (one tenant as one user) that this source indexes. Several identities can share one Teams cache, including guest identities of the same person in other tenants. Older sidecars and other source kinds omit it.","type":"object","properties":{"tenantId":{"type":"string"},"userId":{"type":"string"},"displayName":{"type":["string","null"]},"email":{"type":["string","null"],"description":"Lowercase address identifying the person across tenants and mail; a guest identity carries its home address."},"userPrincipalName":{"type":["string","null"]},"tenantName":{"type":["string","null"]},"userType":{"type":["string","null"],"description":"Member or Guest, as reported by Teams."}},"required":["tenantId","userId"],"additionalProperties":true},"defaultEnabled":{"type":"boolean","description":"Whether the source is indexed when no user or organization policy names it. Older sidecars omit it."},"defaultReason":{"type":"string","description":"Why the source has its default: workAccount, otherAccount, guestAccount, outlookDefault, notOutlookDefault, onlyTeamsAccount or noWorkAccount. Extensible; older sidecars omit it."},"locator":{"type":"object","additionalProperties":true},"enabled":{"description":"Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.","type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
 
 function validate127(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json" */;
@@ -27994,12 +28146,9 @@ vErrors.push(err33);
 errors++;
 }
 }
-if(data1.locator !== undefined){
-let data17 = data1.locator;
-if(data17 && typeof data17 == "object" && !Array.isArray(data17)){
-}
-else {
-const err34 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data1.defaultEnabled !== undefined){
+if(typeof data1.defaultEnabled !== "boolean"){
+const err34 = {instancePath:instancePath+"/sources/" + i0+"/defaultEnabled",schemaPath:"../source/source-descriptor.schema.json/properties/defaultEnabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -28009,9 +28158,9 @@ vErrors.push(err34);
 errors++;
 }
 }
-if(data1.enabled !== undefined){
-if(typeof data1.enabled !== "boolean"){
-const err35 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data1.defaultReason !== undefined){
+if(typeof data1.defaultReason !== "string"){
+const err35 = {instancePath:instancePath+"/sources/" + i0+"/defaultReason",schemaPath:"../source/source-descriptor.schema.json/properties/defaultReason/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -28021,10 +28170,12 @@ vErrors.push(err35);
 errors++;
 }
 }
-if(data1.discoveryCursor !== undefined){
-let data19 = data1.discoveryCursor;
-if((!(data19 && typeof data19 == "object" && !Array.isArray(data19))) && (data19 !== null)){
-const err36 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
+if(data1.locator !== undefined){
+let data19 = data1.locator;
+if(data19 && typeof data19 == "object" && !Array.isArray(data19)){
+}
+else {
+const err36 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -28034,10 +28185,9 @@ vErrors.push(err36);
 errors++;
 }
 }
-if(data1.completedScanId !== undefined){
-let data20 = data1.completedScanId;
-if((typeof data20 !== "string") && (data20 !== null)){
-const err37 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
+if(data1.enabled !== undefined){
+if(typeof data1.enabled !== "boolean"){
+const err37 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -28046,9 +28196,11 @@ vErrors.push(err37);
 }
 errors++;
 }
-if(typeof data20 === "string"){
-if(!(formats0.test(data20))){
-const err38 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+}
+if(data1.discoveryCursor !== undefined){
+let data21 = data1.discoveryCursor;
+if((!(data21 && typeof data21 == "object" && !Array.isArray(data21))) && (data21 !== null)){
+const err38 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema169.properties.discoveryCursor.type},message:"must be object,null"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -28058,11 +28210,10 @@ vErrors.push(err38);
 errors++;
 }
 }
-}
-if(data1.lastSuccessAt !== undefined){
-let data21 = data1.lastSuccessAt;
-if((typeof data21 !== "string") && (data21 !== null)){
-const err39 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
+if(data1.completedScanId !== undefined){
+let data22 = data1.completedScanId;
+if((typeof data22 !== "string") && (data22 !== null)){
+const err39 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema169.properties.completedScanId.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -28071,9 +28222,9 @@ vErrors.push(err39);
 }
 errors++;
 }
-if(typeof data21 === "string"){
-if(!(formats6.validate(data21))){
-const err40 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+if(typeof data22 === "string"){
+if(!(formats0.test(data22))){
+const err40 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -28084,10 +28235,10 @@ errors++;
 }
 }
 }
-if(data1.lastErrorCode !== undefined){
-let data22 = data1.lastErrorCode;
-if((typeof data22 !== "string") && (data22 !== null)){
-const err41 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
+if(data1.lastSuccessAt !== undefined){
+let data23 = data1.lastSuccessAt;
+if((typeof data23 !== "string") && (data23 !== null)){
+const err41 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema169.properties.lastSuccessAt.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -28096,10 +28247,9 @@ vErrors.push(err41);
 }
 errors++;
 }
-}
-}
-else {
-const err42 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(typeof data23 === "string"){
+if(!(formats6.validate(data23))){
+const err42 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -28110,8 +28260,10 @@ errors++;
 }
 }
 }
-else {
-const err43 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(data1.lastErrorCode !== undefined){
+let data24 = data1.lastErrorCode;
+if((typeof data24 !== "string") && (data24 !== null)){
+const err43 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema169.properties.lastErrorCode.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -28123,12 +28275,36 @@ errors++;
 }
 }
 else {
-const err44 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err44 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err44];
 }
 else {
 vErrors.push(err44);
+}
+errors++;
+}
+}
+}
+else {
+const err45 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err45];
+}
+else {
+vErrors.push(err45);
+}
+errors++;
+}
+}
+}
+else {
+const err46 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err46];
+}
+else {
+vErrors.push(err46);
 }
 errors++;
 }

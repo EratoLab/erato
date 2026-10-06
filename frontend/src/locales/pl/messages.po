@@ -5852,6 +5852,11 @@ msgid "sidecar.indexing.noScan"
 msgstr "Brak udanego skanowania"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.noWorkAccountNote"
+msgstr "Żadne konto na tym komputerze nie odpowiada kontu służbowemu {account}. Wybierz źródła do indeksowania."
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.numberedSource"
 msgstr "{name} ({number})"
@@ -6070,6 +6075,16 @@ msgstr "Niezapisane zmiany"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.upgrade"
 msgstr "Zaktualizuj Desktop Sidecar, aby skonfigurować indeksowanie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.workAccount"
+msgstr "Konto służbowe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.workAccountNote"
+msgstr "Konto służbowe: {account}. Inne konta i dostęp gościa są początkowo wyłączone."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx

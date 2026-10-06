@@ -67,6 +67,14 @@
       "required": ["tenantId", "userId"],
       "additionalProperties": true
     },
+    "defaultEnabled": {
+      "type": "boolean",
+      "description": "Whether the source is indexed when no user or organization policy names it. Older sidecars omit it."
+    },
+    "defaultReason": {
+      "type": "string",
+      "description": "Why the source has its default: workAccount, otherAccount, guestAccount, outlookDefault, notOutlookDefault, onlyTeamsAccount or noWorkAccount. Extensible; older sidecars omit it."
+    },
     "locator": {
       "type": "object",
       "additionalProperties": true
