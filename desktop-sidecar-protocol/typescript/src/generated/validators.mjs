@@ -18276,7 +18276,7 @@ return errors === 0;
 }
 
 export const validateSearchQueryV1Result = validate75;
-const schema95 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json","title":"SearchQueryV1Result","type":"object","properties":{"hits":{"type":"array","items":{"type":"object","properties":{"documentId":{"type":"string"},"uri":{"description":"A URI identifying the document, ideally an externally retrievable URL.","type":"string","format":"uri","minLength":1},"external_ids":{"$ref":"../source/external-ids.schema.json"},"chunkId":{"type":["string","null"]},"score":{"type":"number"},"kind":{"type":"string"},"title":{"type":["string","null"]},"sender":{"type":["string","null"]},"senderEmail":{"type":["string","null"],"description":"Lowercase sender address: the email sender, or the Teams sender's profile email when Teams cached one. Omitted when unknown."},"mailboxId":{"type":["string","null"]},"date":{"type":["integer","null"]},"editedAt":{"type":["integer","null"],"description":"Unix seconds of the last edit Teams reported for a Teams message. Reactions and read state are not edits. Omitted when the message was never edited."},"mimeType":{"type":["string","null"]},"conversationKey":{"type":["string","null"]},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["documentId","chunkId","score","kind","title","sender","mailboxId","date","mimeType","conversationKey"],"additionalProperties":true}},"elapsedMs":{"type":"integer","minimum":0},"blocksRead":{"type":"integer","minimum":0},"candidatesScored":{"type":"integer","minimum":0}},"required":["hits","elapsedMs","blocksRead","candidatesScored"],"additionalProperties":true};
+const schema95 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json","title":"SearchQueryV1Result","type":"object","properties":{"hits":{"type":"array","items":{"type":"object","properties":{"documentId":{"type":"string"},"uri":{"description":"A URI identifying the document, ideally an externally retrievable URL.","type":"string","format":"uri","minLength":1},"external_ids":{"$ref":"../source/external-ids.schema.json"},"chunkId":{"type":["string","null"]},"score":{"type":"number"},"kind":{"type":"string"},"title":{"type":["string","null"]},"sender":{"type":["string","null"]},"senderEmail":{"type":["string","null"],"description":"Lowercase sender address: the email sender, or the Teams sender's profile email when Teams cached one. Omitted when unknown."},"mailboxId":{"type":["string","null"]},"date":{"type":["integer","null"]},"editedAt":{"type":["integer","null"],"description":"Unix seconds of the last edit Teams reported for a Teams message. Reactions and read state are not edits. Omitted when the message was never edited."},"selfNote":{"type":"boolean","description":"True for a note the user wrote to themselves: a Teams \"Chat with yourself\" message, or an email from the mailbox owner addressed only to the owner. Omitted otherwise."},"mimeType":{"type":["string","null"]},"conversationKey":{"type":["string","null"]},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["documentId","chunkId","score","kind","title","sender","mailboxId","date","mimeType","conversationKey"],"additionalProperties":true}},"elapsedMs":{"type":"integer","minimum":0},"blocksRead":{"type":"integer","minimum":0},"candidatesScored":{"type":"integer","minimum":0}},"required":["hits","elapsedMs","blocksRead","candidatesScored"],"additionalProperties":true};
 const formats66 = (value) => /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/)?[^\s]*$/i.test(value);
 const schema97 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/top-level-parent.schema.json","title":"TopLevelParent","description":"The outermost containing document, never a folder. External IDs belong to that parent, not to the attachment.","type":"object","properties":{"documentId":{"type":"string","format":"uuid","description":"Catalog UUID, when indexed; can be passed to sources.get_document.v1."},"external_ids":{"$ref":"./external-ids.schema.json"}},"required":["external_ids"],"additionalProperties":true};
 
@@ -18853,10 +18853,9 @@ vErrors.push(err34);
 errors++;
 }
 }
-if(data1.mimeType !== undefined){
-let data17 = data1.mimeType;
-if((typeof data17 !== "string") && (data17 !== null)){
-const err35 = {instancePath:instancePath+"/hits/" + i0+"/mimeType",schemaPath:"#/properties/hits/items/properties/mimeType/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.mimeType.type},message:"must be string,null"};
+if(data1.selfNote !== undefined){
+if(typeof data1.selfNote !== "boolean"){
+const err35 = {instancePath:instancePath+"/hits/" + i0+"/selfNote",schemaPath:"#/properties/hits/items/properties/selfNote/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -18866,15 +18865,28 @@ vErrors.push(err35);
 errors++;
 }
 }
-if(data1.conversationKey !== undefined){
-let data18 = data1.conversationKey;
+if(data1.mimeType !== undefined){
+let data18 = data1.mimeType;
 if((typeof data18 !== "string") && (data18 !== null)){
-const err36 = {instancePath:instancePath+"/hits/" + i0+"/conversationKey",schemaPath:"#/properties/hits/items/properties/conversationKey/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.conversationKey.type},message:"must be string,null"};
+const err36 = {instancePath:instancePath+"/hits/" + i0+"/mimeType",schemaPath:"#/properties/hits/items/properties/mimeType/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.mimeType.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err36];
 }
 else {
 vErrors.push(err36);
+}
+errors++;
+}
+}
+if(data1.conversationKey !== undefined){
+let data19 = data1.conversationKey;
+if((typeof data19 !== "string") && (data19 !== null)){
+const err37 = {instancePath:instancePath+"/hits/" + i0+"/conversationKey",schemaPath:"#/properties/hits/items/properties/conversationKey/type",keyword:"type",params:{type: schema95.properties.hits.items.properties.conversationKey.type},message:"must be string,null"};
+if(vErrors === null){
+vErrors = [err37];
+}
+else {
+vErrors.push(err37);
 }
 errors++;
 }
@@ -18887,19 +18899,7 @@ errors = vErrors.length;
 }
 }
 else {
-const err37 = {instancePath:instancePath+"/hits/" + i0,schemaPath:"#/properties/hits/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err37];
-}
-else {
-vErrors.push(err37);
-}
-errors++;
-}
-}
-}
-else {
-const err38 = {instancePath:instancePath+"/hits",schemaPath:"#/properties/hits/type",keyword:"type",params:{type: "array"},message:"must be array"};
+const err38 = {instancePath:instancePath+"/hits/" + i0,schemaPath:"#/properties/hits/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -18909,10 +18909,9 @@ vErrors.push(err38);
 errors++;
 }
 }
-if(data.elapsedMs !== undefined){
-let data20 = data.elapsedMs;
-if(!(((typeof data20 == "number") && (!(data20 % 1) && !isNaN(data20))) && (isFinite(data20)))){
-const err39 = {instancePath:instancePath+"/elapsedMs",schemaPath:"#/properties/elapsedMs/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+}
+else {
+const err39 = {instancePath:instancePath+"/hits",schemaPath:"#/properties/hits/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -18921,9 +18920,11 @@ vErrors.push(err39);
 }
 errors++;
 }
-if((typeof data20 == "number") && (isFinite(data20))){
-if(data20 < 0 || isNaN(data20)){
-const err40 = {instancePath:instancePath+"/elapsedMs",schemaPath:"#/properties/elapsedMs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+if(data.elapsedMs !== undefined){
+let data21 = data.elapsedMs;
+if(!(((typeof data21 == "number") && (!(data21 % 1) && !isNaN(data21))) && (isFinite(data21)))){
+const err40 = {instancePath:instancePath+"/elapsedMs",schemaPath:"#/properties/elapsedMs/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -18932,12 +18933,9 @@ vErrors.push(err40);
 }
 errors++;
 }
-}
-}
-if(data.blocksRead !== undefined){
-let data21 = data.blocksRead;
-if(!(((typeof data21 == "number") && (!(data21 % 1) && !isNaN(data21))) && (isFinite(data21)))){
-const err41 = {instancePath:instancePath+"/blocksRead",schemaPath:"#/properties/blocksRead/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if((typeof data21 == "number") && (isFinite(data21))){
+if(data21 < 0 || isNaN(data21)){
+const err41 = {instancePath:instancePath+"/elapsedMs",schemaPath:"#/properties/elapsedMs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -18946,9 +18944,12 @@ vErrors.push(err41);
 }
 errors++;
 }
-if((typeof data21 == "number") && (isFinite(data21))){
-if(data21 < 0 || isNaN(data21)){
-const err42 = {instancePath:instancePath+"/blocksRead",schemaPath:"#/properties/blocksRead/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+}
+if(data.blocksRead !== undefined){
+let data22 = data.blocksRead;
+if(!(((typeof data22 == "number") && (!(data22 % 1) && !isNaN(data22))) && (isFinite(data22)))){
+const err42 = {instancePath:instancePath+"/blocksRead",schemaPath:"#/properties/blocksRead/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -18957,12 +18958,9 @@ vErrors.push(err42);
 }
 errors++;
 }
-}
-}
-if(data.candidatesScored !== undefined){
-let data22 = data.candidatesScored;
-if(!(((typeof data22 == "number") && (!(data22 % 1) && !isNaN(data22))) && (isFinite(data22)))){
-const err43 = {instancePath:instancePath+"/candidatesScored",schemaPath:"#/properties/candidatesScored/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if((typeof data22 == "number") && (isFinite(data22))){
+if(data22 < 0 || isNaN(data22)){
+const err43 = {instancePath:instancePath+"/blocksRead",schemaPath:"#/properties/blocksRead/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -18971,9 +18969,12 @@ vErrors.push(err43);
 }
 errors++;
 }
-if((typeof data22 == "number") && (isFinite(data22))){
-if(data22 < 0 || isNaN(data22)){
-const err44 = {instancePath:instancePath+"/candidatesScored",schemaPath:"#/properties/candidatesScored/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+}
+if(data.candidatesScored !== undefined){
+let data23 = data.candidatesScored;
+if(!(((typeof data23 == "number") && (!(data23 % 1) && !isNaN(data23))) && (isFinite(data23)))){
+const err44 = {instancePath:instancePath+"/candidatesScored",schemaPath:"#/properties/candidatesScored/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err44];
 }
@@ -18982,16 +18983,27 @@ vErrors.push(err44);
 }
 errors++;
 }
-}
-}
-}
-else {
-const err45 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if((typeof data23 == "number") && (isFinite(data23))){
+if(data23 < 0 || isNaN(data23)){
+const err45 = {instancePath:instancePath+"/candidatesScored",schemaPath:"#/properties/candidatesScored/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err45];
 }
 else {
 vErrors.push(err45);
+}
+errors++;
+}
+}
+}
+}
+else {
+const err46 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err46];
+}
+else {
+vErrors.push(err46);
 }
 errors++;
 }
