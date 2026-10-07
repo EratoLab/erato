@@ -1888,6 +1888,7 @@ upload_allowed_if_supports = ["supported_operations"]
 ### `file_context`
 
 {/* erato_toml_config_key: file_context */}
+{/* erato_toml_config_key: file_context.retrieve_file_contents_enabled */}
 {/* erato_toml_config_key: file_context.native_file_formats_bypass_limit */}
 {/* erato_toml_config_key: file_context.max_inline_tokens_per_file */}
 {/* erato_toml_config_key: file_context.max_total_attachment_tokens */}
@@ -1898,6 +1899,37 @@ upload_allowed_if_supports = ["supported_operations"]
 {/* erato_toml_config_key: file_context.preview.csv_max_columns */}
 {/* erato_toml_config_key: file_context.preview.csv_max_field_chars */}
 {/* erato_toml_config_key: file_context.preview.text_max_chars */}
+
+The integrated `retrieve_file_contents` tool is enabled by default and offered when
+the conversation has file references. Set `retrieve_file_contents_enabled = false`
+to disable it. Restrictive facet tool allowlists must permit
+`erato/retrieve_file_contents`; a conflicting MCP or client tool name takes precedence.
+The model chooses when to request an omitted document. Small files still go directly
+into context without a tool call.
+
+Every preview/reference indicates whether integrated full-text retrieval is currently
+available. Availability means the tool is offered and the file is eligible; it does
+not mean extraction has already succeeded. Missing permissions, unavailable storage,
+unsupported formats and known extraction restrictions make retrieval unavailable.
+This indicator and its text count toward attachment budgets. It says nothing about
+whether an MCP tool can analyze the original bytes.
+
+The tool accepts one `file_reference` such as `erato-file://<file_upload_id>`, checks
+file access again and uses the configured extractor and complete extraction cache.
+It never invokes MCP or an additional model. Uploads, configured assistant files,
+and external files admitted through the existing MCP/client-tool approval flow are
+eligible for this read. Arbitrary file IDs in tool output are not admitted references.
+Retrieval itself requires no additional tool-call approval.
+
+Tool results store only the reference, filename and status metadata. Extracted text
+is injected separately after the result. A persisted `requested_in_full` marker keeps
+this explicit read in full when conversation history is reconstructed, independently
+of extraction completeness. Automatic per-file and aggregate inclusion limits do not
+reduce it back to a preview. Extraction byte/character/time limits and model/provider
+limits still apply; incomplete extraction produces an error, and sufficiently large
+text can exceed the provider's context window. “Full” means complete textual extraction,
+not original binary bytes or preservation of every visual element. Use an appropriate
+MCP tool when original-byte analysis is needed.
 
 Attachment inclusion is independent of tool availability. By default, files passed
 in their native format to the LLM (currently images) are included in full and bypass

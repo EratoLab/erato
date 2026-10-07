@@ -496,3 +496,213 @@ async fn approved_content_filter(pool: Pool<Postgres>) {
     )
     .await;
 }
+
+/// Integrated retrieval uses the existing extraction/cache path and stores only
+/// its durable reference marker, including after a subsequent user turn.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn integrated_file_retrieval_full_text_and_replay(pool: Pool<Postgres>) {
+    let file_id = Uuid::new_v4();
+    let reference = format!("erato-file://{file_id}");
+    let contents = format!(
+        "column\n{}\nRETRIEVED-DOCUMENT-END\n",
+        "document data\n".repeat(1500)
+    );
+    let fixture = Fixture {
+        output: json!({}),
+        structured: false,
+        is_error: false,
+        storage_failure: false,
+        calls: Arc::default(),
+        files: Arc::new(Mutex::new(HashMap::from([(
+            "/files/document.csv".into(),
+            contents.as_bytes().to_vec(),
+        )]))),
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let app = Router::new().fallback(storage).with_state(fixture);
+    let storage_task = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    let empty_recorder = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["No attachment"], &[]))
+            .matcher(empty_recorder);
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&["Ready."]));
+    });
+    let first_recorder = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[],
+                &["requested_in_full", "No attachment"],
+            ))
+            .matcher(first_recorder);
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "read-document",
+                "retrieve_file_contents",
+                json!({"file_reference": reference}),
+            )]),
+        );
+    });
+    let next_recorder = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["requested_in_full"], &[]))
+            .matcher(next_recorder);
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["Document read."]),
+        );
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    config.mcp_servers.clear();
+    config.file_context.retrieve_file_contents_enabled = true;
+    config.file_context.max_inline_tokens_per_file = 1;
+    config.file_context.max_preview_tokens_per_file = 200;
+    config.file_context.max_total_attachment_tokens = 200;
+    config.file_context.preview.csv_max_sample_rows = 1;
+    config.mcp_servers_global.approval.enabled = true;
+    config.file_storage_providers.insert("seaweedfs".into(), serde_json::from_value(json!({
+        "provider_kind":"s3", "config": {"endpoint":endpoint, "bucket":"files", "region":"us-east-1",
+            "access_key_id":"fixture", "secret_access_key":"fixture"}
+    })).unwrap());
+    let state = test_app_state(config, pool).await;
+    let user = get_or_create_user(&state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    file_uploads::ActiveModel {
+        id: ActiveValue::Set(file_id),
+        owner_user_id: ActiveValue::Set(user.id.to_string()),
+        filename: ActiveValue::Set("document.csv".into()),
+        file_storage_provider_id: ActiveValue::Set("seaweedfs".into()),
+        file_storage_path: ActiveValue::Set("document.csv".into()),
+        audio_transcription: ActiveValue::Set(None),
+        external_id_ews_id: ActiveValue::Set(None),
+        outlook_provenance: ActiveValue::Set(None),
+        created_at: ActiveValue::Set(Utc::now().into()),
+        updated_at: ActiveValue::Set(Utc::now().into()),
+    }
+    .insert(&state.db)
+    .await
+    .unwrap();
+    let server = app_server(state.clone());
+    server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"user_message":"No attachment"}))
+        .await
+        .assert_status_ok();
+    let empty_request: Value = serde_json::from_str(&recorder.bodies()[0]).unwrap();
+    assert!(
+        !empty_request["tools"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|tool| tool["function"]["name"] == "retrieve_file_contents")
+    );
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"user_message":"Read the complete document", "input_files_ids":[file_id]}))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let chat_id = extract_chat_id(&events).unwrap();
+    let row = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let tool = row.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["content_type"] == "tool_use")
+        .unwrap();
+    assert_eq!(tool["status"], "success", "{}", response.text());
+    assert_eq!(tool["output"]["file_context_status"], "requested_in_full");
+    assert_eq!(tool["output"]["extraction_status"], "complete");
+    assert!(
+        !row.raw_message
+            .to_string()
+            .contains("RETRIEVED-DOCUMENT-END")
+    );
+    assert!(
+        !row.generation_input_messages
+            .unwrap()
+            .to_string()
+            .contains("RETRIEVED-DOCUMENT-END")
+    );
+    // Mock matchers can record the same request while trying multiple routes.
+    // Select the actual model phases by their message content.
+    let requests: Vec<Value> = recorder
+        .bodies()
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
+    let first = requests
+        .iter()
+        .find(|request| {
+            request.to_string().contains("Read the complete document")
+                && request["tools"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|tool| tool["function"]["name"] == "retrieve_file_contents")
+                && !request["messages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|m| m["role"] == "tool")
+        })
+        .expect("initial document request");
+    assert!(
+        first
+            .to_string()
+            .contains("available via retrieve_file_contents"),
+        "{first:#}"
+    );
+    assert!(!first.to_string().contains("RETRIEVED-DOCUMENT-END"));
+    let second = requests
+        .iter()
+        .find(|request| {
+            request["messages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|m| m["role"] == "tool")
+        })
+        .expect("model continuation after retrieval");
+    let messages = second["messages"].as_array().unwrap();
+    let tool_position = messages.iter().position(|m| m["role"] == "tool").unwrap();
+    assert!(
+        !messages[tool_position]
+            .to_string()
+            .contains("RETRIEVED-DOCUMENT-END")
+    );
+    assert!(
+        messages[tool_position + 1..]
+            .iter()
+            .any(|m| m["role"] == "user" && m.to_string().contains("RETRIEVED-DOCUMENT-END"))
+    );
+    server.post("/api/v1beta/me/messages/submitstream").with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"existing_chat_id":chat_id, "previous_message_id":message_id, "user_message":"Read that last line again"})).await.assert_status_ok();
+    assert!(
+        recorder
+            .bodies()
+            .iter()
+            .any(|body| body.contains("Read that last line again")
+                && body.contains("RETRIEVED-DOCUMENT-END"))
+    );
+    storage_task.abort();
+}

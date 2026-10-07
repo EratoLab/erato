@@ -179,6 +179,11 @@ pub async fn prepare(
             plan_positions.insert(position, plan_index);
             position += plans.get(plan_index).map_or(1, |p| p.parts.len());
             plan_index += 1;
+        } else if crate::services::file_retrieval::requested_file(message).is_some() {
+            // A persisted full-text request resolves to its tool result followed
+            // by file content, and consumes an attachment plan of its own.
+            position += 1 + plans.get(plan_index).map_or(1, |p| p.parts.len());
+            plan_index += 1;
         } else {
             position += 1;
         }

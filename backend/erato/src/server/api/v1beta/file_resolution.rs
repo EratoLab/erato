@@ -188,17 +188,56 @@ pub(crate) async fn resolve_and_plan_attachments(
     provider: &crate::config::ChatProviderConfig,
     virtual_files: &[Attachment],
 ) -> Result<(GenerationInputMessages, Vec<PlannedAttachment>), Report> {
+    resolve_and_plan_attachments_with_retrieval(
+        app_state,
+        generation_input_messages,
+        access_token,
+        provider,
+        virtual_files,
+        &mut Default::default(),
+    )
+    .await
+}
+
+pub(crate) async fn resolve_and_plan_attachments_with_retrieval(
+    app_state: &AppState,
+    generation_input_messages: GenerationInputMessages,
+    access_token: Option<&str>,
+    provider: &crate::config::ChatProviderConfig,
+    virtual_files: &[Attachment],
+    retrieval: &mut crate::services::file_retrieval::RetrievalContext,
+) -> Result<(GenerationInputMessages, Vec<PlannedAttachment>), Report> {
     let sharepoint_ctx = access_token.map(|access_token| SharepointContext { access_token });
     let mut attachments = Vec::new();
     for message in &generation_input_messages.messages {
         let id = match &message.content {
             ContentPart::TextFilePointer(p) => p.file_upload_id,
             ContentPart::ImageFilePointer(p) => p.file_upload_id,
-            _ => continue,
+            _ => {
+                let Some(id) = crate::services::file_retrieval::requested_file(message) else {
+                    continue;
+                };
+                id
+            }
         };
-        attachments.push(load_attachment(app_state, id, sharepoint_ctx.as_ref()).await);
+        let requested = crate::services::file_retrieval::requested_file(message).is_some();
+        let mut file = if requested && retrieval.files.get(&id).is_some_and(Result::is_ok) {
+            load_full_attachment(app_state, id, sharepoint_ctx.as_ref()).await
+        } else if requested {
+            unavailable_attachment(id)
+        } else {
+            load_attachment(app_state, id, sharepoint_ctx.as_ref()).await
+        };
+        file.requested_in_full = requested;
+        retrieval.observe(&file);
+        file.retrieval_indicator = retrieval.indicator(&file);
+        attachments.push(file);
     }
-    attachments.extend_from_slice(virtual_files);
+    for file in virtual_files {
+        let mut file = file.clone();
+        file.retrieval_indicator = retrieval.indicator(&file);
+        attachments.push(file);
+    }
     crate::services::file_context::estimate_native_images(&mut attachments, provider);
     let plans = plan_attachments(
         &attachments,
@@ -215,6 +254,26 @@ pub(crate) async fn resolve_and_plan_attachments(
             for content in &iter.next().expect("one plan per pointer").parts {
                 messages.push(InputMessage {
                     role: message.role.clone(),
+                    content: content.clone(),
+                });
+            }
+        } else if crate::services::file_retrieval::requested_file(&message).is_some() {
+            let plan = iter.next().expect("one plan per explicit read");
+            let mut message = message;
+            // A remote file can change or access can disappear between turns.
+            // Keep the durable request marker, but describe this replay's extraction
+            // accurately instead of repeating the old success claim.
+            if plan.coverage != Coverage::Complete
+                && let ContentPart::ToolUse(tool) = &mut message.content
+                && let Some(output) = &mut tool.output
+            {
+                output["extraction_status"] = serde_json::to_value(plan.coverage)?;
+                output["error"] = plan.reason.clone().into();
+            }
+            messages.push(message);
+            for content in &plan.parts {
+                messages.push(InputMessage {
+                    role: crate::models::message::MessageRole::User,
                     content: content.clone(),
                 });
             }
@@ -238,7 +297,22 @@ pub(crate) async fn load_attachment(
     id: Uuid,
     sharepoint_ctx: Option<&SharepointContext<'_>>,
 ) -> Attachment {
-    let mut attachment = Attachment {
+    load_attachment_mode(app_state, id, sharepoint_ctx, false).await
+}
+
+pub(crate) async fn load_full_attachment(
+    app_state: &AppState,
+    id: Uuid,
+    sharepoint_ctx: Option<&SharepointContext<'_>>,
+) -> Attachment {
+    load_attachment_mode(app_state, id, sharepoint_ctx, true).await
+}
+
+fn unavailable_attachment(id: Uuid) -> Attachment {
+    Attachment {
+        requested_in_full: false,
+        retrieval_indicator:
+            "Full extracted text retrieval: unavailable (tool disabled or not offered).".into(),
         id: id.to_string(),
         filename: "Unknown".into(),
         uri: Some(format!("erato-file://{id}")),
@@ -248,7 +322,16 @@ pub(crate) async fn load_attachment(
         image_tokens: 0,
         coverage: Coverage::Unavailable,
         reason: "Unable to retrieve file contents.".into(),
-    };
+    }
+}
+
+async fn load_attachment_mode(
+    app_state: &AppState,
+    id: Uuid,
+    sharepoint_ctx: Option<&SharepointContext<'_>>,
+    full: bool,
+) -> Attachment {
+    let mut attachment = unavailable_attachment(id);
     let file = match FileUploads::find_by_id(id).one(&app_state.db).await {
         Ok(Some(file)) => file,
         _ => return attachment,
@@ -261,6 +344,10 @@ pub(crate) async fn load_attachment(
     if let Some(transcript) = file_upload::get_audio_transcript_if_ready(&file) {
         attachment.text = Some(transcript);
         attachment.coverage = Coverage::Complete;
+        crate::services::file_context::limit_extracted_text(
+            &mut attachment,
+            app_state.config.file_processor.limits.max_extracted_chars,
+        );
         return attachment;
     }
     let Some(storage) = app_state
@@ -269,7 +356,11 @@ pub(crate) async fn load_attachment(
     else {
         return attachment;
     };
-    let limits = &app_state.config.file_processor.limits;
+    let mut extraction_limits = app_state.config.file_processor.limits.clone();
+    if full {
+        extraction_limits.bounded_text_preview = false;
+    }
+    let limits = &extraction_limits;
     let extension = file
         .filename
         .rsplit('.')
@@ -310,7 +401,7 @@ pub(crate) async fn load_attachment(
                         &mut attachment,
                         &bytes,
                         &app_state.config.file_context,
-                        &app_state.config.file_processor.limits,
+                        limits,
                     )
                 {
                     return attachment;
@@ -583,6 +674,7 @@ mod recipient_context_tests {
 
 /// Tracks only known planner output, so tool result text is never interpreted as a file.
 pub(crate) struct AttachmentSlot {
+    requested_in_full: bool,
     id: Uuid,
     start: usize,
     len: usize,
@@ -607,6 +699,7 @@ pub(crate) fn attachment_slots(
         {
             let start = cursor + offset;
             slots.push(AttachmentSlot {
+                requested_in_full: plan.requested_in_full,
                 id,
                 start,
                 len: plan.parts.len(),
@@ -617,18 +710,75 @@ pub(crate) fn attachment_slots(
     slots
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn replan_tool_attachments(
     app_state: &AppState,
+    policy: &crate::policy::prelude::PolicyEngine,
+    subject: &crate::policy::prelude::Subject,
     request: &mut genai::chat::ChatRequest,
     slots: &mut Vec<AttachmentSlot>,
+    retrieval: &mut crate::services::file_retrieval::RetrievalContext,
     new_ids: &[Uuid],
     access_token: Option<&str>,
     provider: &crate::config::ChatProviderConfig,
 ) -> Result<(), Report> {
     let ctx = access_token.map(|access_token| SharepointContext { access_token });
     let mut files = Vec::new();
-    for id in slots.iter().map(|s| &s.id).chain(new_ids) {
-        files.push(load_attachment(app_state, *id, ctx.as_ref()).await);
+    retrieval.offered = retrieval.enabled && (!slots.is_empty() || !new_ids.is_empty());
+    for (id, requested) in slots
+        .iter()
+        .map(|s| (s.id, s.requested_in_full))
+        .chain(new_ids.iter().map(|id| (*id, false)))
+    {
+        if retrieval.enabled {
+            retrieval.files.insert(
+                id,
+                crate::services::file_retrieval::check_eligible(
+                    app_state,
+                    policy,
+                    subject,
+                    id,
+                    access_token,
+                )
+                .await
+                .map_err(|e| e.to_string()),
+            );
+        }
+        let mut file = if requested {
+            if crate::services::file_retrieval::check_eligible(
+                app_state,
+                policy,
+                subject,
+                id,
+                access_token,
+            )
+            .await
+            .is_ok()
+            {
+                load_full_attachment(app_state, id, ctx.as_ref()).await
+            } else {
+                unavailable_attachment(id)
+            }
+        } else {
+            load_attachment(app_state, id, ctx.as_ref()).await
+        };
+        file.requested_in_full = requested;
+        retrieval.observe(&file);
+        file.retrieval_indicator = retrieval.indicator(&file);
+        files.push(file);
+    }
+    if retrieval.offered {
+        let tools = request.tools.get_or_insert_with(Vec::new);
+        if let Some(tool) = tools
+            .iter_mut()
+            .find(|t| t.name.to_string() == crate::services::file_retrieval::TOOL_NAME)
+        {
+            *tool = retrieval
+                .tool(tool.strict.is_none())
+                .expect("offered retrieval tool");
+        } else {
+            tools.push(retrieval.tool(true).expect("offered retrieval tool"));
+        }
     }
     crate::services::file_context::estimate_native_images(&mut files, provider);
     let plans = plan_attachments(
@@ -668,6 +818,7 @@ pub(crate) async fn replan_tool_attachments(
                 .map(|part| genai::chat::ChatMessage::user(part.clone())),
         );
         slots.push(AttachmentSlot {
+            requested_in_full: plan.requested_in_full,
             id: *id,
             start,
             len: plan.parts.len(),
