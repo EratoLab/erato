@@ -43,6 +43,12 @@
       "minimum": 0,
       "maximum": 9007199254740991
     },
+    "missingFromLocalCacheDocuments": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Documents whose content is unavailable in the local cache; excluded from failedDocuments. Older sidecars omit it."
+    },
     "indexedByType": {
       "type": "object",
       "additionalProperties": {

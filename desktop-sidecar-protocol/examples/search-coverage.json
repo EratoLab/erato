@@ -1,0 +1,25 @@
+{
+  "name": "Search and report the period each source covers",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "search-angebot",
+        "method": "search.query.v1",
+        "params": {
+          "text": "angebot",
+          "limit": 2
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "search-angebot",
+        "resultFrom": "../conformance/fixtures/search-coverage.json"
+      }
+    }
+  ]
+}

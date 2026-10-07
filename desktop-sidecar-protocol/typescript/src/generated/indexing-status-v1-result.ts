@@ -265,6 +265,10 @@ export interface Depth {
   pendingDocuments: number | null;
   unindexableDocuments: number | null;
   undatedDocuments: number | null;
+  /**
+   * Current-revision documents whose content is unavailable in the local cache. Older sidecars omit it.
+   */
+  missingFromLocalCacheDocuments?: number;
   unavailableReason: string | null;
   [k: string]: unknown;
 }
@@ -305,7 +309,7 @@ export interface ErrorCount {
   [k: string]: unknown;
 }
 /**
- * discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete.
+ * discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete. Older sidecars omit indexedRange.
  */
 export interface DiscoverySource {
   sourceId: string;
@@ -317,6 +321,61 @@ export interface DiscoverySource {
   discoveredDocuments: number | null;
   accessible: boolean;
   lastErrorCode: string | null;
+  indexedRange?: IndexedRange;
+  [k: string]: unknown;
+}
+/**
+ * Period of this source's dated documents that search can rely on, measured in the active generation with search visibility rules. Every document dated inside the range is searchable or terminal.
+ */
+export interface IndexedRange {
+  /**
+   * Oldest bound of the range. Null when no range can be claimed; unavailableReason says why.
+   */
+  from: IndexedRangeBoundary | null;
+  /**
+   * Newest bound, set only while newer documents are still queued (pendingNewer). Null means the range reaches observedAt.
+   */
+  through: IndexedRangeBoundary | null;
+  /**
+   * When the sidecar last confirmed the local store: the end of a complete enumeration or a passed unchanged-store check. Null before the first complete enumeration.
+   */
+  observedAt: string | null;
+  /**
+   * Unprocessed dated documents newer than the range. Zero when through is null.
+   */
+  pendingNewer: number | null;
+  /**
+   * Unprocessed dated documents older than the range, or all of them when from is null.
+   */
+  olderPending: number | null;
+  /**
+   * Documents inside the range that ended unindexable or missing from the local cache. They do not break the range.
+   */
+  unsearchable: number | null;
+  /**
+   * Documents without a usable date, in any state. They are excluded from the range.
+   */
+  undated: number | null;
+  /**
+   * Which document date the bounds use, such as emailReceivedAtThenSentAt or teamsMessageTimestamp. Extensible.
+   */
+  dateBasis: string;
+  /**
+   * localStore when the sidecar enumerates a complete local store, cacheObservations when it sees only what the application cached. Extensible.
+   */
+  inventory: string;
+  /**
+   * Why from is null, such as not_enumerated or no_searchable_documents. Null when a range is claimed.
+   */
+  unavailableReason: string | null;
+  [k: string]: unknown;
+}
+/**
+ * A document date bounding the indexed range; inclusive says whether documents dated exactly at it are inside the range.
+ */
+export interface IndexedRangeBoundary {
+  at: string;
+  inclusive: boolean;
   [k: string]: unknown;
 }
 export interface SearchStatistics {

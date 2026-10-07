@@ -90,8 +90,196 @@
     "candidatesScored": {
       "type": "integer",
       "minimum": 0
+    },
+    "coverage": {
+      "$ref": "#/definitions/SearchCoverage"
+    },
+    "limitReached": {
+      "type": "boolean",
+      "description": "True when more documents matched than limit allowed to return. Older sidecars omit it."
     }
   },
   "required": ["hits", "elapsedMs", "blocksRead", "candidatesScored"],
-  "additionalProperties": true
+  "additionalProperties": true,
+  "definitions": {
+    "SearchCoverage": {
+      "type": "object",
+      "properties": {
+        "sampledAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the reported ranges were computed."
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1,
+          "description": "index when the query matched indexed text, catalog when an empty-text listing read the discovered inventory. Extensible."
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SearchCoverageSource"
+          }
+        }
+      },
+      "required": ["sampledAt", "basis", "sources"],
+      "additionalProperties": true,
+      "description": "The period each source consulted by this query covers. Older sidecars omit it."
+    },
+    "SearchCoverageSource": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mailboxId": {
+          "type": ["string", "null"]
+        },
+        "product": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Product family as in sources.list.v1, such as outlook or teams. Extensible."
+        },
+        "displayName": {
+          "type": ["string", "null"]
+        },
+        "accountEmail": {
+          "type": ["string", "null"],
+          "description": "Lowercase address of the mailbox or Teams account, when known."
+        },
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexedRangeBoundary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "through": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexedRangeBoundary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pendingNewer": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "olderPending": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unsearchable": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "undated": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dateBasis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inventory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourceId",
+        "mailboxId",
+        "product",
+        "displayName",
+        "accountEmail",
+        "from",
+        "through",
+        "observedAt",
+        "pendingNewer",
+        "olderPending",
+        "unsearchable",
+        "undated",
+        "dateBasis",
+        "inventory",
+        "unavailableReason"
+      ],
+      "additionalProperties": true,
+      "description": "A source's identity and its indexed range, with the same range fields and values as indexing.status.v1 discovery[].indexedRange."
+    },
+    "IndexedRangeBoundary": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inclusive": {
+          "type": "boolean"
+        }
+      },
+      "required": ["at", "inclusive"],
+      "additionalProperties": true
+    }
+  }
 }

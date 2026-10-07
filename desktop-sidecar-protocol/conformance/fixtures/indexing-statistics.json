@@ -589,8 +589,8 @@
           },
           "depth": {
             "state": "applicable",
-            "dateBasis": "emailReceivedAtThenSentAt",
-            "sourceDateField": null,
+            "dateBasis": "sourceDefined",
+            "sourceDateField": "timestamp",
             "discoveryComplete": true,
             "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
             "fullyIndexedSince": {
@@ -1141,8 +1141,8 @@
           },
           "depth": {
             "state": "applicable",
-            "dateBasis": "emailReceivedAtThenSentAt",
-            "sourceDateField": null,
+            "dateBasis": "sourceDefined",
+            "sourceDateField": "timestamp",
             "discoveryComplete": true,
             "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
             "fullyIndexedSince": {
@@ -1197,7 +1197,51 @@
       "lastSuccessfulScanAt": "2026-09-15T12:00:00Z",
       "discoveredDocuments": 2000,
       "accessible": true,
-      "lastErrorCode": null
+      "lastErrorCode": null,
+      "indexedRange": {
+        "from": {
+          "at": "2025-03-14T08:30:00Z",
+          "inclusive": false
+        },
+        "through": null,
+        "observedAt": "2026-09-15T12:00:00Z",
+        "pendingNewer": 0,
+        "olderPending": 100,
+        "unsearchable": 15,
+        "undated": 0,
+        "dateBasis": "emailReceivedAtThenSentAt",
+        "inventory": "localStore",
+        "unavailableReason": null
+      }
+    },
+    {
+      "sourceId": "teams-source-example",
+      "mailboxId": null,
+      "state": "complete",
+      "discoveryComplete": true,
+      "scanStartedAt": "2026-09-15T11:58:00Z",
+      "lastSuccessfulScanAt": "2026-09-15T11:59:00Z",
+      "discoveredDocuments": 300,
+      "accessible": true,
+      "lastErrorCode": null,
+      "indexedRange": {
+        "from": {
+          "at": "2026-06-02T09:15:00Z",
+          "inclusive": true
+        },
+        "through": {
+          "at": "2026-09-15T11:40:00Z",
+          "inclusive": true
+        },
+        "observedAt": "2026-09-15T11:59:00Z",
+        "pendingNewer": 3,
+        "olderPending": 0,
+        "unsearchable": 1,
+        "undated": 0,
+        "dateBasis": "teamsMessageTimestamp",
+        "inventory": "cacheObservations",
+        "unavailableReason": null
+      }
     }
   ],
   "search": {

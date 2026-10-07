@@ -1023,7 +1023,22 @@
               "lastSuccessfulScanAt": "2026-09-15T12:00:00Z",
               "discoveredDocuments": 2000,
               "accessible": true,
-              "lastErrorCode": null
+              "lastErrorCode": null,
+              "indexedRange": {
+                "from": {
+                  "at": "2025-03-14T08:30:00Z",
+                  "inclusive": false
+                },
+                "through": null,
+                "observedAt": "2026-09-15T12:00:00Z",
+                "pendingNewer": 0,
+                "olderPending": 100,
+                "unsearchable": 15,
+                "undated": 0,
+                "dateBasis": "emailReceivedAtThenSentAt",
+                "inventory": "localStore",
+                "unavailableReason": null
+              }
             }
           ],
           "search": {

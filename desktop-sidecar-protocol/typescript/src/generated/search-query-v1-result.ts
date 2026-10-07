@@ -44,6 +44,11 @@ export interface SearchQueryV1Result {
   elapsedMs: number;
   blocksRead: number;
   candidatesScored: number;
+  coverage?: SearchCoverage;
+  /**
+   * True when more documents matched than limit allowed to return. Older sidecars omit it.
+   */
+  limitReached?: boolean;
   [k: string]: unknown;
 }
 /**
@@ -55,5 +60,52 @@ export interface TopLevelParent {
    */
   documentId?: string;
   external_ids: DocumentExternalIds;
+  [k: string]: unknown;
+}
+/**
+ * The period each source consulted by this query covers. Older sidecars omit it.
+ */
+export interface SearchCoverage {
+  /**
+   * When the reported ranges were computed.
+   */
+  sampledAt: string;
+  /**
+   * index when the query matched indexed text, catalog when an empty-text listing read the discovered inventory. Extensible.
+   */
+  basis: string;
+  sources: SearchCoverageSource[];
+  [k: string]: unknown;
+}
+/**
+ * A source's identity and its indexed range, with the same range fields and values as indexing.status.v1 discovery[].indexedRange.
+ */
+export interface SearchCoverageSource {
+  sourceId: string;
+  mailboxId: string | null;
+  /**
+   * Product family as in sources.list.v1, such as outlook or teams. Extensible.
+   */
+  product: string;
+  displayName: string | null;
+  /**
+   * Lowercase address of the mailbox or Teams account, when known.
+   */
+  accountEmail: string | null;
+  from: IndexedRangeBoundary | null;
+  through: IndexedRangeBoundary | null;
+  observedAt: string | null;
+  pendingNewer: number | null;
+  olderPending: number | null;
+  unsearchable: number | null;
+  undated: number | null;
+  dateBasis: string;
+  inventory: string;
+  unavailableReason: string | null;
+  [k: string]: unknown;
+}
+export interface IndexedRangeBoundary {
+  at: string;
+  inclusive: boolean;
   [k: string]: unknown;
 }
