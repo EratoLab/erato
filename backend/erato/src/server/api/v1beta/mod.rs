@@ -8,7 +8,7 @@ pub mod client_operations;
 pub mod delegated_run_retry;
 pub mod desktop_sidecar;
 pub mod entra_id;
-mod file_resolution;
+pub(crate) mod file_resolution;
 pub mod local_delegation;
 pub mod mcp_servers;
 pub mod me_profile_middleware;

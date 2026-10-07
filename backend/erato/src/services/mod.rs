@@ -16,6 +16,7 @@ pub mod file_context;
 pub mod file_parsing;
 pub mod file_processing_cached;
 pub mod file_processor;
+pub(crate) mod file_retrieval;
 pub mod file_storage;
 pub mod file_type_detection;
 pub mod genai;

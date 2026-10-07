@@ -31,6 +31,8 @@ pub enum Coverage {
 
 #[derive(Debug, Clone)]
 pub struct Attachment {
+    pub requested_in_full: bool,
+    pub retrieval_indicator: String,
     pub id: String,
     pub filename: String,
     /// None for transient virtual files; never invent a usable URI.
@@ -45,6 +47,7 @@ pub struct Attachment {
 
 #[derive(Debug, Clone)]
 pub struct PlannedAttachment {
+    pub requested_in_full: bool,
     pub id: String,
     pub filename: String,
     pub inclusion_mode: InclusionMode,
@@ -59,11 +62,12 @@ pub struct PlannedAttachment {
 impl PlannedAttachment {
     /// Budget exemptions do not change the token estimates reported for the request.
     pub(crate) fn budget_token_count(&self, config: &FileContextConfig) -> usize {
-        if config.native_file_formats_bypass_limit
-            && self
-                .parts
-                .iter()
-                .any(|part| matches!(part, ContentPart::Image(_)))
+        if self.requested_in_full
+            || config.native_file_formats_bypass_limit
+                && self
+                    .parts
+                    .iter()
+                    .any(|part| matches!(part, ContentPart::Image(_)))
         {
             0
         } else {
@@ -74,9 +78,8 @@ impl PlannedAttachment {
 
 impl Attachment {
     fn bypasses_limits(&self, config: &FileContextConfig) -> bool {
-        config.native_file_formats_bypass_limit
+        (self.requested_in_full || config.native_file_formats_bypass_limit && self.image.is_some())
             && self.coverage == Coverage::Complete
-            && self.image.is_some()
     }
 
     fn header(&self) -> String {
@@ -91,12 +94,17 @@ impl Attachment {
 
     pub(crate) fn render(&self, text: &str, preview: bool) -> String {
         format!(
-            "{}{}\n---\n{text}\n---",
+            "{}{}{}\n---\n{text}\n---",
             self.header(),
             if preview {
                 "Preview included. Content is omitted; this excerpt is not the complete file."
             } else {
                 "File contents"
+            },
+            if preview {
+                format!("\n{}", self.retrieval_indicator)
+            } else {
+                String::new()
             }
         )
     }
@@ -107,7 +115,11 @@ impl Attachment {
         } else {
             "File contents omitted from model context."
         };
-        format!("{}Reference only. {notice}", self.header())
+        format!(
+            "{}Reference only. {notice}\n{}",
+            self.header(),
+            self.retrieval_indicator
+        )
     }
 
     fn plan(
@@ -126,6 +138,7 @@ impl Attachment {
             parts.push(image.clone());
         }
         PlannedAttachment {
+            requested_in_full: self.requested_in_full,
             id: self.id.clone(),
             filename: self.filename.clone(),
             inclusion_mode: mode,
@@ -577,6 +590,9 @@ mod tests {
 
     fn file(id: &str, text: &str) -> Attachment {
         Attachment {
+            requested_in_full: false,
+            retrieval_indicator:
+                "Full extracted text retrieval: unavailable (tool disabled or not offered).".into(),
             id: id.into(),
             filename: format!("{id}.txt"),
             uri: Some(format!("erato-file://{id}")),
@@ -588,6 +604,74 @@ mod tests {
             reason: "complete".into(),
         }
     }
+    #[test]
+    fn requested_full_text_bypasses_inclusion_but_not_extraction_coverage() {
+        let mut requested = file("requested", &"whole document ".repeat(1000));
+        requested.requested_in_full = true;
+        let ordinary = file("ordinary", &"another document ".repeat(1000));
+        let config = FileContextConfig {
+            max_inline_tokens_per_file: 1,
+            max_total_attachment_tokens: tokens(&ordinary.reference()),
+            max_context_fraction: 0.0,
+            max_preview_tokens_per_file: 1,
+            ..Default::default()
+        };
+        let plans = plan_attachments(&[requested.clone(), ordinary], &config, 1).unwrap();
+        assert_eq!(plans[0].inclusion_mode, InclusionMode::Full);
+        assert_eq!(plans[0].budget_token_count(&config), 0);
+        assert!(plans[0].token_count > 1000);
+        assert_eq!(plans[1].inclusion_mode, InclusionMode::ReferenceOnly);
+        requested.coverage = Coverage::Partial;
+        let plans = plan_attachments(&[requested], &config, 1).unwrap();
+        assert_ne!(plans[0].inclusion_mode, InclusionMode::Full);
+        assert_eq!(plans[0].coverage, Coverage::Partial);
+    }
+
+    #[test]
+    fn retrieval_indicator_is_budgeted_and_does_not_promise_partial_extraction() {
+        use crate::services::file_retrieval::RetrievalContext;
+        let id = sea_orm::prelude::Uuid::new_v4();
+        let mut f = file(&id.to_string(), &"word ".repeat(1000));
+        let mut context = RetrievalContext {
+            enabled: true,
+            offered: true,
+            files: std::collections::BTreeMap::from([(id, Ok(()))]),
+        };
+        let config = FileContextConfig {
+            max_inline_tokens_per_file: 1,
+            ..unlimited()
+        };
+        f.retrieval_indicator = context.indicator(&f);
+        assert!(
+            f.retrieval_indicator
+                .contains("available via retrieve_file_contents")
+        );
+        let plans = plan_attachments(&[f.clone()], &config, 1).unwrap();
+        let ContentPart::Text(text) = &plans[0].parts[0] else {
+            panic!()
+        };
+        assert!(text.text.contains(&f.retrieval_indicator));
+        assert_eq!(plans[0].token_count, tokens(&text.text));
+        f.coverage = Coverage::Partial;
+        f.reason = "bounded_text_extraction".into();
+        context.observe(&f);
+        assert!(context.indicator(&f).contains("available via"));
+        f.reason = "extracted_character_limit".into();
+        context.observe(&f);
+        assert!(
+            context
+                .indicator(&f)
+                .contains("unavailable (extracted_character_limit)")
+        );
+        assert!(context.files[&id].is_err());
+        context.offered = false;
+        assert!(
+            context
+                .indicator(&f)
+                .contains("tool disabled or not offered")
+        );
+    }
+
     fn unlimited() -> FileContextConfig {
         FileContextConfig {
             max_inline_tokens_per_file: 0,

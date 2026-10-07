@@ -2807,7 +2807,36 @@ fn ensure_saved_assistant_content_for_abort(mut content: Vec<ContentPart>) -> Ve
     content
 }
 
+fn file_retrieval_offer_allowed(
+    app_state: &AppState,
+    selected_facets: &[String],
+    action_facet: Option<&str>,
+    mcp_claimed_names: &HashSet<String>,
+) -> bool {
+    let name = crate::services::file_retrieval::TOOL_NAME;
+    if mcp_claimed_names.contains(name)
+        || app_state
+            .config
+            .client_tools
+            .tools
+            .values()
+            .any(|tool| tool.name == name)
+    {
+        return false;
+    }
+    let allowlist = build_mcp_tool_allowlist(&app_state.config.facets, selected_facets);
+    let allowlist = match action_facet.and_then(|id| app_state.config.action_facets.facets.get(id))
+    {
+        Some(facet) => merge_action_facet_into_mcp_allowlist(allowlist, &facet.tool_call_allowlist),
+        None => allowlist,
+    };
+    allowlist
+        .as_ref()
+        .is_none_or(|allowlist| is_qualified_tool_allowed("erato", name, allowlist))
+}
+
 pub struct PreparedChatRequest {
+    pub(crate) retrieval_context: crate::services::file_retrieval::RetrievalContext,
     pub(crate) attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     // Our internal abstract structure of the message chain
     generation_input_messages: GenerationInputMessages,
@@ -3930,14 +3959,29 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     )
     .await?;
 
+    let mut retrieval_context = crate::services::file_retrieval::prepare(
+        app_state,
+        policy,
+        &me_profile_input.subject,
+        &generation_input_messages,
+        me_profile_input.access_token,
+        file_retrieval_offer_allowed(
+            app_state,
+            &effective_selected_facet_ids,
+            user_input.action_facet.as_ref().map(|a| a.id.as_str()),
+            &mcp_claimed_names,
+        ),
+    )
+    .await;
     // Resolve TextFilePointer to Text by extracting file contents JIT
     let (mut resolved_generation_input_messages, mut attachment_plans) =
-        crate::server::api::v1beta::file_resolution::resolve_and_plan_attachments(
+        crate::server::api::v1beta::file_resolution::resolve_and_plan_attachments_with_retrieval(
             app_state,
             generation_input_messages.clone(),
             me_profile_input.access_token,
             &chat_provider_config,
             virtual_files,
+            &mut retrieval_context,
         )
         .await?;
 
@@ -4283,6 +4327,9 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     {
         chat_request_tools.push(tool);
     }
+    if let Some(tool) = retrieval_context.tool(effective_model_settings.compat_omit_strict) {
+        chat_request_tools.push(tool);
+    }
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -4332,6 +4379,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // Return the unresolved version for saving to DB (to avoid duplicating file contents)
     // The resolved version is already used in chat_request
     Ok(PreparedChatRequest {
+        retrieval_context,
         attachment_plans,
         generation_input_messages,
         generation_parameters,
@@ -5474,6 +5522,7 @@ async fn stream_generate_chat_completion<'a>(
     subject: &Subject,
     chat_request: ChatRequest,
     attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
+    mut retrieval_context: crate::services::file_retrieval::RetrievalContext,
     langfuse_trace_enrichment: LangfuseTraceEnrichment,
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
@@ -5486,7 +5535,7 @@ async fn stream_generate_chat_completion<'a>(
     mcp_servers_needing_auth: Vec<String>,
     mcp_servers_disabled_by_user: Vec<String>,
     mcp_tools_disabled_by_user: Vec<String>,
-    allowed_tool_names: HashSet<String>,
+    mut allowed_tool_names: HashSet<String>,
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     offered_client_tools: HashMap<String, crate::services::client_tools::OfferedClientTool>,
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
@@ -5634,7 +5683,17 @@ async fn stream_generate_chat_completion<'a>(
     let mut current_message_content = initial_message_content;
     let mut attachment_slots =
         super::file_resolution::attachment_slots(&chat_request, &attachment_plans);
-    let mut planned_output_pointer_positions = HashSet::new();
+    let mut planned_output_pointer_positions: HashSet<usize> = current_message_content
+        .iter()
+        .enumerate()
+        .filter_map(|(position, part)| {
+            matches!(
+                part,
+                ContentPart::TextFilePointer(_) | ContentPart::ImageFilePointer(_)
+            )
+            .then_some(position)
+        })
+        .collect();
     let mut current_turn_chat_request = chat_request.clone();
     let fallback_chat_provider_id = if chat_provider_id.is_none() {
         match app_state.config.determine_chat_provider(None, None) {
@@ -5836,6 +5895,7 @@ async fn stream_generate_chat_completion<'a>(
         let batch_call_count = unfinished_tool_calls.len();
         let mut current_turn_tool_responses: Vec<(usize, genai::chat::ToolResponse)> = vec![];
         let mut retrieved_images = Vec::new();
+        let mut retrieved_files = Vec::new();
         let mut pending_waits = Vec::new();
         let mut in_flight: futures::stream::FuturesUnordered<InFlightTask<'_>> =
             futures::stream::FuturesUnordered::new();
@@ -6285,6 +6345,89 @@ async fn stream_generate_chat_completion<'a>(
                         fn_name: Some(unfinished_tool_call.fn_name.clone()),
                         call_id: unfinished_tool_call.call_id.clone(),
                         content: error_message,
+                    },
+                ));
+                continue;
+            }
+
+            if unfinished_tool_call.fn_name == crate::services::file_retrieval::TOOL_NAME
+                && !offered_client_tools.contains_key(crate::services::file_retrieval::TOOL_NAME)
+                && !available_mcp_tools_by_name
+                    .contains_key(crate::services::file_retrieval::TOOL_NAME)
+            {
+                let result = crate::services::file_retrieval::retrieve(
+                    app_state,
+                    policy,
+                    subject,
+                    &current_turn_chat_request,
+                    &unfinished_tool_call.fn_arguments,
+                    mcp_auth_context.access_token,
+                )
+                .await;
+                let (status, saved_status, output) = match result {
+                    Ok((output, file)) => {
+                        retrieved_files.push(file);
+                        (
+                            ToolCallStatus::Success,
+                            MessageToolCallStatus::Success,
+                            output,
+                        )
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "Full file retrieval failed");
+                        (
+                            ToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({"file_reference": unfinished_tool_call.fn_arguments["file_reference"],
+                                "extraction_status":"unavailable_or_incomplete", "error":error.to_string()}),
+                        )
+                    }
+                };
+                persist_otel_tool_call(
+                    tracing_client.as_ref(),
+                    &unfinished_tool_call,
+                    Some(output.clone()),
+                    otel_tool_call_start_time,
+                    Some(SystemTime::now()),
+                    tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id),
+                    assistant_id,
+                    &langfuse_trace_enrichment.platform,
+                    output.get("error").and_then(JsonValue::as_str),
+                )
+                .await;
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        output: Some(output.clone()),
+                        status: saved_status,
+                        started_at: Some(
+                            tool_call_started_at
+                                .remove(&unfinished_tool_call.call_id)
+                                .unwrap_or_else(now_timestamp),
+                        ),
+                        ended_at: Some(now_timestamp()),
+                        ..Default::default()
+                    },
+                );
+                send_tool_generation_update::<GenerationStreamingMessage>(
+                    assistant_message_id,
+                    tool_index,
+                    &unfinished_tool_call,
+                    status,
+                    None,
+                    streaming_task,
+                    &tx,
+                )
+                .await?;
+                current_turn_tool_responses.push((
+                    batch_position,
+                    genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
+                        call_id: unfinished_tool_call.call_id.clone(),
+                        content: output.to_string(),
                     },
                 ));
                 continue;
@@ -8367,8 +8510,11 @@ async fn stream_generate_chat_completion<'a>(
         if !new_pointers.is_empty() {
             super::file_resolution::replan_tool_attachments(
                 app_state,
+                policy,
+                subject,
                 &mut current_turn_chat_request,
                 &mut attachment_slots,
+                &mut retrieval_context,
                 &new_pointers,
                 mcp_auth_context.access_token,
                 app_state.config.get_chat_provider(
@@ -8380,6 +8526,23 @@ async fn stream_generate_chat_completion<'a>(
             .await?;
         }
 
+        if retrieval_context.offered {
+            allowed_tool_names.insert(crate::services::file_retrieval::TOOL_NAME.into());
+        }
+        for file in retrieved_files {
+            // The same renderer/planner is used for ordinary attachment text;
+            // explicit reads are exempt from automatic inclusion budgets.
+            let plans = crate::services::file_context::plan_attachments(
+                &[file],
+                &app_state.config.file_context,
+                0,
+            )?;
+            for part in &plans[0].parts {
+                current_turn_chat_request
+                    .messages
+                    .push(GenAiChatMessage::user(part.clone()));
+            }
+        }
         for image in retrieved_images {
             current_turn_chat_request
                 .messages
@@ -13706,6 +13869,7 @@ pub(crate) async fn run_generation_after_user_message(
         suppress_task_offer: origin == GenerationOrigin::TaskResultDelivery,
     };
     let PreparedChatRequest {
+        retrieval_context,
         attachment_plans,
         chat_request,
         chat_options,
@@ -13872,6 +14036,7 @@ pub(crate) async fn run_generation_after_user_message(
         &subject,
         chat_request,
         attachment_plans,
+        retrieval_context,
         langfuse_trace_enrichment,
         chat_options,
         initial_assistant_message.id,
@@ -14465,6 +14630,7 @@ pub(crate) async fn start_regeneration(
                 suppress_task_offer: false,
             };
             let PreparedChatRequest {
+                retrieval_context,
                 attachment_plans,
                 chat_request,
                 chat_options,
@@ -14591,6 +14757,7 @@ pub(crate) async fn start_regeneration(
                 &subject,
                 chat_request,
                 attachment_plans,
+                retrieval_context,
                 langfuse_trace_enrichment,
                 chat_options,
                 initial_assistant_message.id,
@@ -15065,6 +15232,7 @@ pub(crate) async fn start_edit(
                 suppress_task_offer: false,
             };
             let PreparedChatRequest {
+                retrieval_context,
                 attachment_plans,
                 chat_request,
                 chat_options,
@@ -15191,6 +15359,7 @@ pub(crate) async fn start_edit(
                 &subject,
                 chat_request,
                 attachment_plans,
+                retrieval_context,
                 langfuse_trace_enrichment,
                 chat_options,
                 initial_assistant_message.id,
@@ -18179,14 +18348,41 @@ async fn resume_parked_generation(
     {
         return Err(eyre!("The original model is no longer authorized"));
     }
-    let source_generation_input_messages = generation_input_messages.clone();
-    let (mut generation_input_messages, mut attachment_plans) =
-        super::file_resolution::resolve_and_plan_attachments(
+    let replayed_content_len = parsed.content.len();
+    let mut retrieval_source = generation_input_messages.clone();
+    retrieval_source.messages.extend(
+        crate::services::prompt_composition::transforms::replay_assistant_content(
+            &parsed.role,
+            parsed.content.clone(),
+        ),
+    );
+    let mut retrieval_context = crate::services::file_retrieval::prepare(
+        app_state,
+        policy,
+        &me_user.to_subject(),
+        &retrieval_source,
+        me_user.access_token.as_deref(),
+        file_retrieval_offer_allowed(
             app_state,
-            generation_input_messages,
+            &effective_selected_facet_ids,
+            generation_parameters.action_facet_id.as_deref(),
+            &mcp_claimed_names,
+        ) && !crate::services::tool_call_budget::choices(&parsed.content)
+            .last()
+            .is_some_and(|(_, choice)| {
+                choice == crate::services::tool_call_budget::BudgetChoice::Answer
+            }),
+    )
+    .await;
+    let source_generation_input_messages = retrieval_source.clone();
+    let (mut generation_input_messages, mut attachment_plans) =
+        super::file_resolution::resolve_and_plan_attachments_with_retrieval(
+            app_state,
+            retrieval_source,
             me_user.access_token.as_deref(),
             app_state.config.get_chat_provider(&chat_provider_id),
             &[],
+            &mut retrieval_context,
         )
         .await?;
     let provider = app_state.config.get_chat_provider(&chat_provider_id);
@@ -18375,6 +18571,9 @@ async fn resume_parked_generation(
     {
         continuation_tools.push(tool);
     }
+    if let Some(tool) = retrieval_context.tool(compat_omit_strict) {
+        continuation_tools.push(tool);
+    }
     let answer_without_tools = crate::services::tool_call_budget::choices(&parsed.content)
         .last()
         .is_some_and(|(_, choice)| {
@@ -18483,10 +18682,13 @@ async fn resume_parked_generation(
     // After the refusals above, so they are part of what the model is shown, and
     // through the same derivation the history walk uses: a hand-built copy is
     // what used to drop the calls that ran before the gated one.
+    // Previously settled content was resolved together with the original
+    // input above, so all automatic attachments share one collective budget.
+    // Only refusals created since that replay need appending here.
     chat_request.messages.extend(
         crate::services::prompt_composition::transforms::replay_assistant_content(
             &parsed.role,
-            parsed.content.clone(),
+            parsed.content[replayed_content_len..].to_vec(),
         )
         .into_iter()
         .map(crate::models::message::InputMessage::into_chat_message),
@@ -18550,6 +18752,7 @@ async fn resume_parked_generation(
         &me_user.to_subject(),
         chat_request,
         attachment_plans,
+        retrieval_context,
         LangfuseTraceEnrichment::default(),
         chat_options,
         message.id,

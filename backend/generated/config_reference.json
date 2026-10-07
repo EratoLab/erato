@@ -728,6 +728,7 @@
   "file_context.preview.csv_max_field_chars": {},
   "file_context.preview.csv_max_sample_rows": {},
   "file_context.preview.text_max_chars": {},
+  "file_context.retrieve_file_contents_enabled": {},
   "file_processor.limits.bounded_text_preview": {},
   "file_processor.limits.max_extracted_chars": {},
   "file_processor.limits.max_input_bytes": {},

@@ -5103,6 +5103,8 @@ impl Default for FileUploadsConfig {
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
 #[serde(default)]
 pub struct FileContextConfig {
+    /// Offer integrated, on-demand full text retrieval for approved file references.
+    pub retrieve_file_contents_enabled: bool,
     pub native_file_formats_bypass_limit: bool,
     pub max_inline_tokens_per_file: usize,
     pub max_total_attachment_tokens: usize,
@@ -5114,6 +5116,7 @@ pub struct FileContextConfig {
 impl Default for FileContextConfig {
     fn default() -> Self {
         Self {
+            retrieve_file_contents_enabled: true,
             native_file_formats_bypass_limit: true,
             max_inline_tokens_per_file: 16_000,
             max_total_attachment_tokens: 0,

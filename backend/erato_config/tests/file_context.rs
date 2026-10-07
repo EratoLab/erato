@@ -101,3 +101,17 @@ bounded_text_preview = false
     assert_eq!(c.file_processor.limits.timeout_ms, 0);
     assert!(!c.file_processor.limits.bounded_text_preview);
 }
+
+#[test]
+fn full_text_retrieval_defaults_on_and_can_be_disabled() {
+    assert!(FileContextConfig::default().retrieve_file_contents_enabled);
+    let defaults: FileContextConfig = serde_json::from_value(serde_json::json!({})).unwrap();
+    assert!(defaults.retrieve_file_contents_enabled);
+    for enabled in [false, true] {
+        let config: FileContextConfig = serde_json::from_value(serde_json::json!({
+            "retrieve_file_contents_enabled": enabled
+        }))
+        .unwrap();
+        assert_eq!(config.retrieve_file_contents_enabled, enabled);
+    }
+}

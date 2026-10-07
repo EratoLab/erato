@@ -718,6 +718,10 @@ async fn process_virtual_files(
 
         let limits = &app_state.config.file_processor.limits;
         let mut attachment = Attachment {
+            requested_in_full: false,
+            retrieval_indicator:
+                "Full extracted text retrieval: unavailable (missing accessible persisted bytes)."
+                    .into(),
             id: Uuid::new_v4().to_string(),
             filename: vf.filename.clone(),
             uri: None,
