@@ -1,6 +1,6 @@
 {
   "base_sha": "3d40f674f1829f6cb8be535bdc10678602cfac43",
-  "head_sha": "444f10c0c9010f94fe88b8d03c9d60940cee04de",
+  "head_sha": "6717e6c7cc6052f07be522f33109d148866f0b52",
   "prs": {
     "780": {
       "subject": "Merge pull request #780 from EratoLab/feature/ermain-410-create-seperate-migrator-docker-image",
@@ -2611,6 +2611,216 @@
       "commits": [
         "444f10c0c9010f94fe88b8d03c9d60940cee04de"
       ]
+    },
+    "1279": {
+      "subject": "Merge pull request #1279 from EratoLab/feature/ermain-879-handle-empty-mcp-file-output-arrays-without-losing-tool",
+      "commits": [
+        "2cf97bd2568bc90543c2259c03b62afb5d11f9f6"
+      ]
+    },
+    "1280": {
+      "subject": "Merge pull request #1280 from EratoLab/feature/ermain-885-declare-accepted-mime-types-for-mcp-file-inputs-and-expose",
+      "commits": [
+        "948f74cca7e90d5eb83ab2112fc9f91ca238a63d"
+      ]
+    },
+    "1282": {
+      "subject": "Fix Outlook and Teams indexing status and organize sidecar settings (#1282)",
+      "commits": [
+        "22126388075e657742ff95de9ce82f74a9bb0221"
+      ]
+    },
+    "1281": {
+      "subject": "Word review: building-blocks card for document plans (#1281)",
+      "commits": [
+        "596e5d549d92bfcbd8a7b53644ebce3ab43e80e1"
+      ]
+    },
+    "1284": {
+      "subject": "Merge pull request #1284 from EratoLab/feature/ermain-883-gemini-tool-call-id-reuse-overwrites-prior-python-calls-in-2",
+      "commits": [
+        "c1b3a80f1d18ce72331b6b5d7e0a0ea39238e4a5"
+      ]
+    },
+    "1283": {
+      "subject": "Guide Teams SSO setup with verified PowerShell Cloud Shell commands (#1283)",
+      "commits": [
+        "3d548b5f95b7d1d4a0bb88b107d2ee5d3fc83da8"
+      ]
+    },
+    "1276": {
+      "subject": "Merge pull request #1276 from EratoLab/feature/ermain-882-add-support-for-uploading-arbitrary-file-types",
+      "commits": [
+        "b18361f2d9dbcdfb0d01bf07ed63590125b98694"
+      ]
+    },
+    "1285": {
+      "subject": "Merge pull request #1285 from EratoLab/feature/ermain-887-rename-option-for-pinned-chats-in-sidebar-doesnt-open-rename",
+      "commits": [
+        "48fd360c65e70b630423d0309315e218d86211a3"
+      ]
+    },
+    "1286": {
+      "subject": "Merge pull request #1286 from EratoLab/feature/ermain-889-organization-user-editor-grants-hide-assistant-edit-menu-in",
+      "commits": [
+        "562882a4c3674092eb22c8cad96241fbce1aa3ea"
+      ]
+    },
+    "1287": {
+      "subject": "Merge pull request #1287 from EratoLab/feature/ermain-890-gate-office-add-in-microphone-features-on",
+      "commits": [
+        "541ee1d0737afe007607a489427dbe924b6ab491"
+      ]
+    },
+    "1288": {
+      "subject": "Merge pull request #1288 from EratoLab/feature/ermain-891-accept-mcp-results-with-omitted-optional-file-outputs",
+      "commits": [
+        "07c5df8304cbd18e67509828089361755ff8afc8"
+      ]
+    },
+    "1290": {
+      "subject": "Merge pull request #1290 from EratoLab/feature/ermain-893-add-real-pdf-integration-coverage-for-embedded-image",
+      "commits": [
+        "efd7f0a5b63d625d7c0da0bd8c97cf1e352e8507"
+      ]
+    },
+    "1289": {
+      "subject": "Merge pull request #1289 from EratoLab/feature/ermain-892-add-separate-mcp-visibility-settings-for-chat-dropdown-and",
+      "commits": [
+        "ad60bb49b08e3297029e9f28243d07a32d4c682c"
+      ]
+    },
+    "1291": {
+      "subject": "Merge pull request #1291 from EratoLab/feature/ermain-895-render-indicator-for-tool-budget-approval-as-part-of-traces",
+      "commits": [
+        "0cf54dfeed23d37ee43e41863832c96ed8b28aec"
+      ]
+    },
+    "1293": {
+      "subject": "Fix Teams bot sign-in and resume the original message (#1293)",
+      "commits": [
+        "3c41c1243b7b515ba5b9767d190d5865dc6a75df"
+      ]
+    },
+    "1278": {
+      "subject": "Scope Word edits, write them in place and make apply errors reportable (#1278)",
+      "commits": [
+        "01be1c9e7f2fd8661727a1de9ecb6c0cef4749eb"
+      ]
+    },
+    "1292": {
+      "subject": "Merge pull request #1292 from EratoLab/feature/ermain-896-update-rust-genai-fork-to-latest-upstream-and-incorporate",
+      "commits": [
+        "c15e5da89ade0e96896c1a1033847ec0ad2bdc82"
+      ]
+    },
+    "1294": {
+      "subject": "Fix Teams SSO resource generation and repair legacy OAuth connections (#1294)",
+      "commits": [
+        "72e25f2e71d6405518a9629ae7693b541ca17c1c"
+      ]
+    },
+    "1295": {
+      "subject": "Pad Word review rows and compile Word's closing paragraph after a final table (#1295)",
+      "commits": [
+        "8844186b2a09d87aaf9b8cc34965c6a055406f8f"
+      ]
+    },
+    "1296": {
+      "subject": "Show Teams generation progress and separate the final answer (#1296)",
+      "commits": [
+        "bc4a3c937b8be503e356998fc5e9cefcd19c9aff"
+      ]
+    },
+    "1297": {
+      "subject": "Add Teams Stop, Retry, and edited-question regeneration (#1297)",
+      "commits": [
+        "d8b5342aeebe0de2c0e5479cf49ff42d12d28636"
+      ]
+    },
+    "1298": {
+      "subject": "Share MCP approval display metadata across Web and Teams (#1298)",
+      "commits": [
+        "03a931cdf58d9d8c54367ac8dd2bb347836ce8d1"
+      ]
+    },
+    "1299": {
+      "subject": "Render existing file references as native Teams citations (#1299)",
+      "commits": [
+        "2e2861ea559c1b8e004ea001e7795dc5f99b5837"
+      ]
+    },
+    "1302": {
+      "subject": "Merge pull request #1302 from EratoLab/feature/ermain-894-improve-final-erato-binary-buildlink-time",
+      "commits": [
+        "de50f32391222c24aa00e2bb80f599d9e6a43da5"
+      ]
+    },
+    "1304": {
+      "subject": "Play back recorded audio and show its transcript on sent messages (ERMAIN-903) (#1304)",
+      "commits": [
+        "4dba4e40da4d94b28139938675ecc701b11c2a27"
+      ]
+    },
+    "1305": {
+      "subject": "Add Teams account, sender email and edit time to the sidecar protocol (#1305)",
+      "commits": [
+        "751f0fb6e51a467c31c4d039e228e02fdcf58f91"
+      ]
+    },
+    "1306": {
+      "subject": "Show each Teams account as its own row in sidecar indexing settings (#1306)",
+      "commits": [
+        "e1bda9609cdd38d26501c70fd2aca5491430676b"
+      ]
+    },
+    "1307": {
+      "subject": "Add selfNote to sidecar search hits in the protocol (#1307)",
+      "commits": [
+        "e4a995b41e2773d912aa4a47c6ccb1a226aa7feb"
+      ]
+    },
+    "1308": {
+      "subject": "Group sidecar indexing sources by application (#1308)",
+      "commits": [
+        "f4c77fd5ed541a96ceda9a9653ec31110fb02a91"
+      ]
+    },
+    "1310": {
+      "subject": "Merge pull request #1310 from EratoLab/feature/ermain-917-mcp-file-outputs-bypass-conversion-after-approval-causing",
+      "commits": [
+        "943109b8c79cfabb1a0e95a3bd95dce31767c18b"
+      ]
+    },
+    "1311": {
+      "subject": "Pass the signed-in user to the desktop sidecar as its work account (#1311)",
+      "commits": [
+        "b031ff21e474cb07960222fbc81b05c563819222"
+      ]
+    },
+    "1309": {
+      "subject": "Merge pull request #1309 from EratoLab/feature/ermain-915-add-configurable-file-context-budgets-and-mcp-previews-with",
+      "commits": [
+        "a102e74e3f38d49eff05c9af9c7c8ff0ce0c21d6"
+      ]
+    },
+    "1312": {
+      "subject": "Keep Outlook selection rewrites on the rewritten passage and out of the body (#1312)",
+      "commits": [
+        "6e220a2a8b4256fd6a255f3fd7d00dea0a15d270"
+      ]
+    },
+    "1313": {
+      "subject": "Merge pull request #1313 from EratoLab/feature/ermain-921-teams-text-file-warning-incorrectly-blocks-chat-attachments",
+      "commits": [
+        "b5ac7956afa1135d74579331ba7f678693f2c5cd"
+      ]
+    },
+    "1314": {
+      "subject": "Merge pull request #1314 from EratoLab/feature/ermain-916-add-optional-retrieve_file_contents-backend-tool-and",
+      "commits": [
+        "6717e6c7cc6052f07be522f33109d148866f0b52"
+      ]
     }
   },
   "unmatched_commits": [
@@ -2619,7 +2829,43 @@
       "subject": "Unify the rename dialog's generated-title field with the shared Input"
     }
   ],
-  "errors": {},
+  "errors": {
+    "1279": "Commit evidence changed; re-review the preserved summary",
+    "1280": "Commit evidence changed; re-review the preserved summary",
+    "1282": "Commit evidence changed; re-review the preserved summary",
+    "1281": "Commit evidence changed; re-review the preserved summary",
+    "1284": "Commit evidence changed; re-review the preserved summary",
+    "1283": "Commit evidence changed; re-review the preserved summary",
+    "1276": "Commit evidence changed; re-review the preserved summary",
+    "1285": "Commit evidence changed; re-review the preserved summary",
+    "1286": "Commit evidence changed; re-review the preserved summary",
+    "1287": "Commit evidence changed; re-review the preserved summary",
+    "1288": "Commit evidence changed; re-review the preserved summary",
+    "1290": "Commit evidence changed; re-review the preserved summary",
+    "1289": "Commit evidence changed; re-review the preserved summary",
+    "1291": "Commit evidence changed; re-review the preserved summary",
+    "1293": "Commit evidence changed; re-review the preserved summary",
+    "1278": "Commit evidence changed; re-review the preserved summary",
+    "1292": "Commit evidence changed; re-review the preserved summary",
+    "1294": "Commit evidence changed; re-review the preserved summary",
+    "1295": "Commit evidence changed; re-review the preserved summary",
+    "1296": "Commit evidence changed; re-review the preserved summary",
+    "1297": "Commit evidence changed; re-review the preserved summary",
+    "1298": "Commit evidence changed; re-review the preserved summary",
+    "1299": "Commit evidence changed; re-review the preserved summary",
+    "1302": "Commit evidence changed; re-review the preserved summary",
+    "1304": "Commit evidence changed; re-review the preserved summary",
+    "1305": "Commit evidence changed; re-review the preserved summary",
+    "1306": "Commit evidence changed; re-review the preserved summary",
+    "1307": "Commit evidence changed; re-review the preserved summary",
+    "1308": "Commit evidence changed; re-review the preserved summary",
+    "1310": "Commit evidence changed; re-review the preserved summary",
+    "1311": "Commit evidence changed; re-review the preserved summary",
+    "1309": "Commit evidence changed; re-review the preserved summary",
+    "1312": "Commit evidence changed; re-review the preserved summary",
+    "1313": "Commit evidence changed; re-review the preserved summary",
+    "1314": "Commit evidence changed; re-review the preserved summary"
+  },
   "collected": {
     "780": [
       "fb80522f20eb0df7c180269c00fe44f6eeda3942"
@@ -3925,6 +4171,111 @@
     ],
     "1277": [
       "444f10c0c9010f94fe88b8d03c9d60940cee04de"
+    ],
+    "1279": [
+      "2cf97bd2568bc90543c2259c03b62afb5d11f9f6"
+    ],
+    "1280": [
+      "948f74cca7e90d5eb83ab2112fc9f91ca238a63d"
+    ],
+    "1282": [
+      "22126388075e657742ff95de9ce82f74a9bb0221"
+    ],
+    "1281": [
+      "596e5d549d92bfcbd8a7b53644ebce3ab43e80e1"
+    ],
+    "1284": [
+      "c1b3a80f1d18ce72331b6b5d7e0a0ea39238e4a5"
+    ],
+    "1283": [
+      "3d548b5f95b7d1d4a0bb88b107d2ee5d3fc83da8"
+    ],
+    "1276": [
+      "b18361f2d9dbcdfb0d01bf07ed63590125b98694"
+    ],
+    "1285": [
+      "48fd360c65e70b630423d0309315e218d86211a3"
+    ],
+    "1286": [
+      "562882a4c3674092eb22c8cad96241fbce1aa3ea"
+    ],
+    "1287": [
+      "541ee1d0737afe007607a489427dbe924b6ab491"
+    ],
+    "1288": [
+      "07c5df8304cbd18e67509828089361755ff8afc8"
+    ],
+    "1290": [
+      "efd7f0a5b63d625d7c0da0bd8c97cf1e352e8507"
+    ],
+    "1289": [
+      "ad60bb49b08e3297029e9f28243d07a32d4c682c"
+    ],
+    "1291": [
+      "0cf54dfeed23d37ee43e41863832c96ed8b28aec"
+    ],
+    "1293": [
+      "3c41c1243b7b515ba5b9767d190d5865dc6a75df"
+    ],
+    "1278": [
+      "01be1c9e7f2fd8661727a1de9ecb6c0cef4749eb"
+    ],
+    "1292": [
+      "c15e5da89ade0e96896c1a1033847ec0ad2bdc82"
+    ],
+    "1294": [
+      "72e25f2e71d6405518a9629ae7693b541ca17c1c"
+    ],
+    "1295": [
+      "8844186b2a09d87aaf9b8cc34965c6a055406f8f"
+    ],
+    "1296": [
+      "bc4a3c937b8be503e356998fc5e9cefcd19c9aff"
+    ],
+    "1297": [
+      "d8b5342aeebe0de2c0e5479cf49ff42d12d28636"
+    ],
+    "1298": [
+      "03a931cdf58d9d8c54367ac8dd2bb347836ce8d1"
+    ],
+    "1299": [
+      "2e2861ea559c1b8e004ea001e7795dc5f99b5837"
+    ],
+    "1302": [
+      "de50f32391222c24aa00e2bb80f599d9e6a43da5"
+    ],
+    "1304": [
+      "4dba4e40da4d94b28139938675ecc701b11c2a27"
+    ],
+    "1305": [
+      "751f0fb6e51a467c31c4d039e228e02fdcf58f91"
+    ],
+    "1306": [
+      "e1bda9609cdd38d26501c70fd2aca5491430676b"
+    ],
+    "1307": [
+      "e4a995b41e2773d912aa4a47c6ccb1a226aa7feb"
+    ],
+    "1308": [
+      "f4c77fd5ed541a96ceda9a9653ec31110fb02a91"
+    ],
+    "1310": [
+      "943109b8c79cfabb1a0e95a3bd95dce31767c18b"
+    ],
+    "1311": [
+      "b031ff21e474cb07960222fbc81b05c563819222"
+    ],
+    "1309": [
+      "a102e74e3f38d49eff05c9af9c7c8ff0ce0c21d6"
+    ],
+    "1312": [
+      "6e220a2a8b4256fd6a255f3fd7d00dea0a15d270"
+    ],
+    "1313": [
+      "b5ac7956afa1135d74579331ba7f678693f2c5cd"
+    ],
+    "1314": [
+      "6717e6c7cc6052f07be522f33109d148866f0b52"
     ]
   },
   "titles": {
@@ -4362,6 +4713,41 @@
     "1274": "Fix undefined client-operation cursors and button timer cleanup",
     "1275": "Allow deployment-specific Teams app package versions",
     "1273": "Namespace tool calling ID to prevent overlap in e.g. Gemini",
-    "1277": "Fix Teams bot package upload validation"
+    "1277": "Fix Teams bot package upload validation",
+    "1279": "Fix handling of empty MCP file output arrays",
+    "1280": "Extend MCP file metadata to express possible MIME types",
+    "1282": "Fix Outlook and Teams indexing status and organize sidecar settings",
+    "1281": "Word review: building-blocks card for document plans",
+    "1284": "Strip tool call prefix when replaying to provider",
+    "1283": "Guide Teams SSO setup with verified PowerShell Cloud Shell commands",
+    "1276": "Implement upload of files based on supported operations, or any",
+    "1285": "Hook up Rename action for pinned sidebar items",
+    "1286": "Take org-user grants into account for assistant edit sharing",
+    "1287": "In office-addin request device permission for microphone",
+    "1288": "Handle omitted optional file fields",
+    "1290": "Add more complete test coverage for PDF embedded image retrieval",
+    "1289": "Add more granular visibility settings for MCP servers",
+    "1291": "Add trace indicator for tool budget approval",
+    "1293": "Fix Teams bot sign-in and resume the original message",
+    "1278": "Scope Word edits, write them in place and make apply errors reportable",
+    "1292": "Update rust-genai fork to latest; Should fix gemini tool call IDs",
+    "1294": "Fix Teams SSO resource generation and repair legacy OAuth connections",
+    "1295": "Pad Word review rows and compile Word's closing paragraph after a final table",
+    "1296": "Show Teams generation progress and separate the final answer",
+    "1297": "Add Teams Stop, Retry, and edited-question regeneration",
+    "1298": "Share MCP approval display metadata across Web and Teams",
+    "1299": "Render existing file references as native Teams citations",
+    "1302": "Improve build times vis less debug info",
+    "1304": "Play back recorded audio and show its transcript on sent messages (ERMAIN-903)",
+    "1305": "Add Teams account, sender email and edit time to the sidecar protocol",
+    "1306": "Show each Teams account as its own row in sidecar indexing settings",
+    "1307": "Add selfNote to sidecar search hits in the protocol",
+    "1308": "Group sidecar indexing sources by application",
+    "1310": "Fix diverging MCP output handling after tool call approval",
+    "1311": "Pass the signed-in user to the desktop sidecar as its work account",
+    "1309": "Implement per-file token budgets",
+    "1312": "Keep Outlook selection rewrites on the rewritten passage and out of the body",
+    "1313": "Fix teams chat upload blocking if unrestricted upload is configured",
+    "1314": "Add read-file-contents tool for preview-truncated files"
   }
 }
