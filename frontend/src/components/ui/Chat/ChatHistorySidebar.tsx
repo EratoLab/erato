@@ -1,6 +1,7 @@
 "use client";
 
 import { plural, t } from "@lingui/core/macro";
+import { skipToken } from "@tanstack/react-query";
 import clsx from "clsx";
 import { memo, useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -23,7 +24,10 @@ import { useGenerationIndicatorCount } from "@/hooks/chat/useGenerationIndicator
 import { useGroupedChatSessions } from "@/hooks/chat/useGroupedChatSessions";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
-import { useAssistantHubConfig } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  useAssistantHubConfig,
+  useChatDetail,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useAssistantsFeature,
   useSidebarFeature,
@@ -551,12 +555,21 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           : undefined,
       [sessions, pinnedSessions, currentSessionId],
     );
+    // Delegated runs and chats hidden by filters may have no listing row.
+    // Fetch their own details so a direct link still gets a browser title.
+    const { data: currentChatDetail } = useChatDetail(
+      currentSessionId && !currentSession
+        ? { pathParams: { chatId: currentSessionId } }
+        : skipToken,
+    );
     const rawCurrentTitle =
-      currentSession?.titleResolved ?? currentSession?.title;
+      currentSession?.titleResolved ??
+      currentSession?.title ??
+      currentChatDetail?.title_resolved;
     const currentSessionTitle =
       rawCurrentTitle && rawCurrentTitle !== UNTITLED_BACKEND_SENTINEL
         ? rawCurrentTitle
-        : (currentTitleHint ?? currentSession?.title);
+        : (currentTitleHint ?? rawCurrentTitle);
 
     useEffect(() => {
       if (typeof currentSessionTitle === "undefined") {

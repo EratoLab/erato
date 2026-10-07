@@ -1415,6 +1415,7 @@ msgid "branding.assistant_name"
 msgstr "Asistente"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.test.tsx
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/pages/AssistantChatSpacePage.tsx
 #: src/pages/AssistantCreatePage.tsx
