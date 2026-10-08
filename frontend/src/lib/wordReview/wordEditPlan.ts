@@ -89,7 +89,9 @@ export type WordEditRejection =
   | "unknown-ordinal"
   | "partial-ordinal"
   | "overlapping"
-  | "changed";
+  | "changed"
+  /** The paragraph's text recurs and nothing identifies which occurrence was sent. */
+  | "ambiguous";
 
 export type WordEditStatus = "applied" | "failed" | WordEditRejection;
 
@@ -117,7 +119,11 @@ export interface ResolvedWordEdit {
   paragraph: number;
   through?: number;
   text: string;
-  targets: { ordinal: number; uniqueLocalId: string; sentText: string }[];
+  targets: {
+    ordinal: number;
+    uniqueLocalId: string | null;
+    sentText: string;
+  }[];
   excerpt: string;
 }
 
@@ -210,56 +216,6 @@ export function planWordEdits(
 
   resolved.sort((a, b) => a.paragraph - b.paragraph);
   return { resolved, rejected };
-}
-
-export interface WordEditVerification {
-  applicable: ResolvedWordEdit[];
-  skipped: WordEditOutcome[];
-}
-
-/** Whitespace changes count as later edits. Apply from the end because newlines shift paragraph positions. */
-export function verifyWordEdits(
-  plan: WordEditPlan,
-  currentTextById: ReadonlyMap<string, string | null>,
-  currentParagraphIds?: readonly string[],
-): WordEditVerification {
-  const applicable: ResolvedWordEdit[] = [];
-  const skipped: WordEditOutcome[] = [];
-
-  for (const edit of plan.resolved) {
-    const positions = currentParagraphIds
-      ? edit.targets.map((target) =>
-          currentParagraphIds.indexOf(target.uniqueLocalId),
-        )
-      : null;
-    const contiguous =
-      !positions ||
-      positions.every(
-        (position, index) =>
-          position >= 0 &&
-          (index === 0 || position === positions[index - 1] + 1),
-      );
-    const unchanged =
-      contiguous &&
-      edit.targets.every(
-        (target) =>
-          currentTextById.get(target.uniqueLocalId) === target.sentText,
-      );
-    if (unchanged) {
-      applicable.push(edit);
-    } else {
-      skipped.push({
-        index: edit.index,
-        paragraph: edit.paragraph,
-        ...(edit.through === undefined ? {} : { through: edit.through }),
-        status: "changed",
-        excerpt: edit.excerpt,
-      });
-    }
-  }
-
-  applicable.sort((a, b) => b.paragraph - a.paragraph);
-  return { applicable, skipped };
 }
 
 export function buildWordEditReport(

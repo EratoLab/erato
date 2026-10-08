@@ -31,6 +31,12 @@ export function statusLabel(status: WordEditStatus): string {
         message:
           "Skipped - that paragraph was only partly sent, so it cannot be replaced",
       });
+    case "ambiguous":
+      return t({
+        id: "officeAddin.word.report.status.ambiguous",
+        message:
+          "Skipped - this paragraph appears more than once, so its place could not be confirmed",
+      });
     case "overlapping":
       return t({
         id: "officeAddin.word.report.status.overlapping",

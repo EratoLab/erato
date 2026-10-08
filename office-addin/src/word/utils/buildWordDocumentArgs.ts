@@ -4,7 +4,7 @@ export interface WordParagraphRead {
   /** 1-based, dense, in document order, across EVERY paragraph. */
   ordinal: number;
   text: string;
-  uniqueLocalId: string;
+  uniqueLocalId: string | null;
   styleBuiltIn: string;
   /** `Paragraph.outlineLevel`; Word uses 10 for body text, 1..9 for headings. */
   outlineLevel: number;
@@ -30,7 +30,7 @@ export interface WordDocumentBuild {
   authoring?: WordAuthoringSnapshot;
   args: WordDocumentArgs;
   coverage: WordDocumentCoverage;
-  ordinalMap: Map<number, { uniqueLocalId: string; text: string }>;
+  ordinalMap: Map<number, { uniqueLocalId: string | null; text: string }>;
   /** Only rendered, complete paragraphs are writable; the capture also contains blank or omitted paragraphs. */
   renderedOrdinals: ReadonlySet<number>;
   /** A truncated paragraph is known but not writable: replacing it would delete its unseen tail. */
@@ -100,7 +100,10 @@ export function cutToUtf8Bytes(value: string, maxBytes: number): string {
 export function buildWordDocumentArgs(
   paragraphs: readonly WordParagraphRead[],
 ): WordDocumentBuild {
-  const ordinalMap = new Map<number, { uniqueLocalId: string; text: string }>();
+  const ordinalMap = new Map<
+    number,
+    { uniqueLocalId: string | null; text: string }
+  >();
   for (const paragraph of paragraphs) {
     ordinalMap.set(paragraph.ordinal, {
       uniqueLocalId: paragraph.uniqueLocalId,

@@ -25,6 +25,7 @@ export const WORD_ROUTE_REASONS = [
   "setting",
   "latched",
   "host-sets",
+  "no-paragraph-ids",
   "no-package",
   "alignment",
   "host-error",

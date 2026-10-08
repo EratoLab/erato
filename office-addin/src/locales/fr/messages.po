@@ -3447,6 +3447,11 @@ msgstr "Paragraphes {0}–{1}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.ambiguous"
+msgstr "Ignoré – ce paragraphe apparaît plusieurs fois, sa position n'a donc pas pu être confirmée"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
 msgid "officeAddin.word.report.status.applied"
 msgstr "Appliqué"
 

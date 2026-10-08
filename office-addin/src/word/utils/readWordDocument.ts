@@ -3,6 +3,7 @@ import {
   captureWordDocumentPackage,
   supportsWordDocumentPackage,
 } from "./wordDocumentPackage";
+import { noteWordParagraphIds, wordParagraphId } from "./wordParagraphIds";
 
 import type { WordParagraphRead } from "./buildWordDocumentArgs";
 
@@ -58,6 +59,10 @@ export async function readWordDocument(
       if (includeAuthoring) context.document.load("changeTrackingMode");
       await context.sync();
 
+      const ids = paragraphs.items.map((paragraph) =>
+        wordParagraphId(paragraph.uniqueLocalId),
+      );
+      noteWordParagraphIds(ids);
       return {
         ok: true as const,
         ...(includeAuthoring
@@ -71,7 +76,7 @@ export async function readWordDocument(
         paragraphs: paragraphs.items.map((paragraph, index) => ({
           ordinal: index + 1,
           text: texts[index]?.value ?? "",
-          uniqueLocalId: paragraph.uniqueLocalId,
+          uniqueLocalId: ids[index],
           styleBuiltIn: String(paragraph.styleBuiltIn ?? ""),
           outlineLevel: paragraph.outlineLevel,
         })),

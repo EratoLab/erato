@@ -3447,6 +3447,11 @@ msgstr "Párrafos {0}–{1}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.ambiguous"
+msgstr "Omitido: este párrafo aparece más de una vez, así que no se pudo confirmar su posición"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
 msgid "officeAddin.word.report.status.applied"
 msgstr "Aplicado"
 

@@ -6,6 +6,7 @@ import {
 } from "../../../test/mocks/word/document";
 import { applyWordEdits } from "../wordApplyEdits";
 import {
+  capturedWordAnchor,
   originalWordAnchor,
   readWordTrackingMode,
   showWordReviewLocation,
@@ -120,4 +121,62 @@ describe("verified Word navigation", () => {
       expect(host.word.writes()).toEqual([]);
     },
   );
+});
+
+describe("Word navigation without paragraph IDs", () => {
+  let host: MockWordHost;
+  const noIds: WordDocumentCapture = {
+    ...capture,
+    ordinalMap: new Map(
+      [...capture.ordinalMap].map(([ordinal, p]) => [
+        ordinal,
+        { ...p, uniqueLocalId: null },
+      ]),
+    ),
+  };
+  beforeEach(() => {
+    host = installMockWordDocument([
+      { text: "Same" },
+      { text: "Same" },
+      { text: "End" },
+    ]);
+    host.word.hideParagraphIds(true);
+  });
+  afterEach(uninstallMockWordDocument);
+
+  it("tells repeated paragraphs apart by their neighbours", async () => {
+    const anchor = originalWordAnchor(
+      { paragraph: 2, text: "Revised" },
+      noIds,
+    )!;
+    expect(await showWordReviewLocation(anchor, identity)).toBe("selected");
+    expect(host.word.selections()).toEqual([["id-2"]]);
+    host.word.setParagraphs([
+      { text: "Same" },
+      { text: "Same" },
+      { text: "End" },
+      { text: "Same" },
+      { text: "Same" },
+      { text: "End" },
+    ]);
+    host.word.hideParagraphIds(true);
+    expect(await showWordReviewLocation(anchor, identity)).toBe("changed");
+    expect(host.word.writes()).toEqual([]);
+  });
+
+  it("locates a written result by its new text", async () => {
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 3, text: "Finish" }],
+      capture: noIds,
+    });
+    const anchor = result.resultAnchors!.get(0)!;
+    expect(await showWordReviewLocation(anchor, identity)).toBe("selected");
+    expect(host.word.selections()).toEqual([["id-3"]]);
+  });
+
+  it("anchors only ordinals the capture holds", () => {
+    expect(capturedWordAnchor(noIds, 1, 3)?.span.paragraphs).toHaveLength(3);
+    expect(capturedWordAnchor(noIds, 0)).toBeNull();
+    expect(capturedWordAnchor(noIds, 2, 4)).toBeNull();
+  });
 });

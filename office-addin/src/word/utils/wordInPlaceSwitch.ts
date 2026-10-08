@@ -3,6 +3,7 @@ import {
   wordInPlaceCapabilities,
   wordTrackedInPlaceCapabilities,
 } from "./wordInPlaceCapabilities";
+import { wordParagraphIdsMissing } from "./wordParagraphIds";
 
 import type { WordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 
@@ -11,6 +12,7 @@ export type WordInPlaceUnavailable =
   | "setting"
   | "latched"
   | "host-sets"
+  | "no-paragraph-ids"
   | "no-package";
 export type WordInPlaceAvailability =
   | { enabled: true }
@@ -45,7 +47,8 @@ export function writeWordCompatibilityMode(enabled: boolean): void {
   }
 }
 
-/** In-place writing needs the exact .docx backup (package support) and stable paragraph IDs (WordApi 1.6). */
+/** In-place writing needs the exact .docx backup (package support) and paragraph IDs, which WordApi
+ * 1.6 hosts without a Microsoft 365 subscription leave null. */
 export function wordInPlaceAvailability(): WordInPlaceAvailability {
   if (typeof window !== "undefined" && window.WORD_FORCE_IMPORT_APPLY === true)
     return { enabled: false, reason: "disabled" };
@@ -58,6 +61,8 @@ export function wordInPlaceAvailability(): WordInPlaceAvailability {
     )
   )
     return { enabled: false, reason: "host-sets" };
+  if (wordParagraphIdsMissing())
+    return { enabled: false, reason: "no-paragraph-ids" };
   if (!supportsWordDocumentPackage())
     return { enabled: false, reason: "no-package" };
   return { enabled: true };

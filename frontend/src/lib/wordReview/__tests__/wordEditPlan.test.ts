@@ -5,7 +5,6 @@ import {
   editExcerpt,
   parseWordEdits,
   planWordEdits,
-  verifyWordEdits,
 } from "../wordEditPlan";
 
 import type { WordDocumentCapture } from "../wordDocumentCapture";
@@ -216,126 +215,6 @@ describe("planWordEdits", () => {
   });
 });
 
-describe("verifyWordEdits", () => {
-  const threeParagraphs = capture([
-    { text: "One." },
-    { text: "Two." },
-    { text: "Three." },
-  ]);
-
-  it("keeps edits whose paragraphs are byte-identical and drops the rest", () => {
-    const plan = planWordEdits(
-      [
-        { paragraph: 1, text: "A." },
-        { paragraph: 2, text: "B." },
-      ],
-      threeParagraphs,
-    );
-
-    const verified = verifyWordEdits(
-      plan,
-      new Map([
-        ["id-1", "One."],
-        ["id-2", "Two, edited by the user."],
-      ]),
-    );
-
-    expect(verified.applicable.map((edit) => edit.paragraph)).toEqual([1]);
-    expect(verified.skipped).toEqual([
-      { index: 1, paragraph: 2, status: "changed", excerpt: "B." },
-    ]);
-  });
-
-  it.each([
-    ["trailing whitespace", "One. "],
-    ["leading whitespace", " One."],
-    ["a different case", "one."],
-    ["a non-breaking space for a space", "One.\u00a0"],
-    ["a curly apostrophe for a straight one", "One\u2019s."],
-  ])(
-    "treats %s as changed — no normalization, no fuzzy match",
-    (_name, current) => {
-      const plan = planWordEdits(
-        [{ paragraph: 1, text: "A." }],
-        threeParagraphs,
-      );
-      const verified = verifyWordEdits(plan, new Map([["id-1", current]]));
-      expect(verified.applicable).toEqual([]);
-      expect(verified.skipped[0].status).toBe("changed");
-    },
-  );
-
-  it("treats a paragraph the user deleted as changed, never as applicable", () => {
-    const plan = planWordEdits([{ paragraph: 2, text: "B." }], threeParagraphs);
-    const verified = verifyWordEdits(plan, new Map([["id-2", null]]));
-    expect(verified.applicable).toEqual([]);
-    expect(verified.skipped[0].status).toBe("changed");
-  });
-
-  it("skips a range when ANY paragraph in it moved", () => {
-    const plan = planWordEdits(
-      [{ paragraph: 1, through: 3, text: "Merged." }],
-      threeParagraphs,
-    );
-    const verified = verifyWordEdits(
-      plan,
-      new Map([
-        ["id-1", "One."],
-        ["id-2", "Two."],
-        ["id-3", "Three, edited."],
-      ]),
-    );
-    expect(verified.applicable).toEqual([]);
-  });
-
-  it.each([
-    ["reordered", ["id-2", "id-1", "id-3"]],
-    ["interrupted by a new paragraph", ["id-1", "new-id", "id-2", "id-3"]],
-  ])(
-    "skips a %s range even when every original text is unchanged",
-    (_name, ids) => {
-      const plan = planWordEdits(
-        [{ paragraph: 1, through: 3, text: "Merged." }],
-        threeParagraphs,
-      );
-      const verified = verifyWordEdits(
-        plan,
-        new Map([
-          ["id-1", "One."],
-          ["id-2", "Two."],
-          ["id-3", "Three."],
-        ]),
-        ids,
-      );
-      expect(verified.applicable).toEqual([]);
-      expect(verified.skipped[0].status).toBe("changed");
-    },
-  );
-
-  it("returns survivors in DESCENDING start order — the application order", () => {
-    const plan = planWordEdits(
-      [
-        { paragraph: 1, text: "A." },
-        { paragraph: 2, text: "B." },
-        { paragraph: 3, text: "C." },
-      ],
-      threeParagraphs,
-    );
-    const verified = verifyWordEdits(
-      plan,
-      new Map([
-        ["id-1", "One."],
-        ["id-2", "Two."],
-        ["id-3", "Three."],
-      ]),
-    );
-
-    expect(verified.applicable.map((edit) => edit.paragraph)).toEqual([
-      3, 2, 1,
-    ]);
-  });
-});
-
 describe("editExcerpt", () => {
   it("collapses whitespace and keeps a short replacement whole", () => {
     expect(editExcerpt("  Two   words\nhere ")).toBe("Two words here");
@@ -367,12 +246,9 @@ describe("buildWordEditReport", () => {
       ],
       capture([{ text: "a" }, { text: "b" }]),
     );
-    const verified = verifyWordEdits(plan, new Map([["id-2", "b"]]));
-
     const report = buildWordEditReport([
       ...plan.rejected,
-      ...verified.skipped,
-      ...verified.applicable.map((edit) => ({
+      ...plan.resolved.map((edit) => ({
         index: edit.index,
         paragraph: edit.paragraph,
         status: "applied" as const,

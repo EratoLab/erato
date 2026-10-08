@@ -2,7 +2,8 @@ import type { WordAuthoringSnapshot } from "./wordDocumentPlan";
 import type { Message } from "@/types/chat";
 
 export interface WordCapturedParagraph {
-  uniqueLocalId: string;
+  /** Null where Word provides none (single-purchase Office, Connected Experiences off). */
+  uniqueLocalId: string | null;
   text: string;
 }
 

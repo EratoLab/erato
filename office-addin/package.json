@@ -53,12 +53,12 @@
     "scheduler": "^0.27.0"
   },
   "devDependencies": {
-    "@quantco/pnpm-licenses": "2.4.1",
     "@eslint/eslintrc": "^3",
     "@eslint/js": "^9.28.0",
     "@lingui/babel-plugin-lingui-macro": "5.9.4",
     "@lingui/cli": "5.9.4",
     "@lingui/vite-plugin": "5.9.4",
+    "@quantco/pnpm-licenses": "2.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/office-js": "^1.0.571",
@@ -74,6 +74,7 @@
     "eslint-plugin-lingui": "^0.10.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "fast-check": "^4.10.2",
     "jsdom": "^29.0.1",
     "office-addin-manifest": "^2.1.2",
     "prettier": "3.5.0",

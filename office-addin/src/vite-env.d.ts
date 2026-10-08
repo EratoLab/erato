@@ -29,4 +29,6 @@ interface Window {
   MS_OFFICE_ADDIN_DEFAULT_SETTINGS?: OfficeAddinDefaultSettings;
   /** Kill switch: every Word document plan uses the full-document import. */
   WORD_FORCE_IMPORT_APPLY?: boolean;
+  /** Development and native probes: read every paragraph ID as missing, as perpetual Office does. */
+  WORD_FORCE_NO_PARAGRAPH_IDS?: boolean;
 }
