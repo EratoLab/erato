@@ -10,6 +10,7 @@ import {
 import {
   indexingEntries,
   indexingEntryPatch,
+  rankedWithinProduct,
 } from "@/lib/desktopSidecar/indexingSources";
 import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 
@@ -141,10 +142,7 @@ function SidecarIndexingSettings({
     ];
     setDraft({
       ...draft,
-      ...indexingEntryPatch(
-        draftConfiguration,
-        entries.map((entry, priority) => ({ ...entry, priority })),
-      ),
+      ...indexingEntryPatch(draftConfiguration, rankedWithinProduct(entries)),
     });
   };
   const validLimit = (value: string) =>

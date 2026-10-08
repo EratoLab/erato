@@ -9,6 +9,7 @@ import {
   multiSourceStatusFixture,
 } from "./__tests__/indexingStatusFixture";
 import {
+  DEFAULT_MAILBOX_PRIORITY,
   initializeMailboxConfiguration,
   sourceIndexingSummary,
 } from "./indexingConfiguration";
@@ -88,6 +89,31 @@ describe("source indexing settings", () => {
       ["teams", teamsSourceIds[1]],
       ["teams", teamsSourceIds[0]],
     ]);
+  });
+
+  it("starts sources without a policy from the priority the sidecar resolved", () => {
+    const entries = indexingEntries(
+      [mailbox],
+      [
+        { ...sourceFixture(sourceId, false), indexingPriority: 7 },
+        { ...sourceFixture(teamsSourceIds[0]), indexingPriority: 0 },
+        sourceFixture(teamsSourceIds[1]),
+      ],
+      configuration,
+    );
+    expect(entries.map((entry) => [entry.id, entry.priority])).toEqual([
+      [sourceId, 0],
+      [teamsSourceIds[0], 0],
+      [teamsSourceIds[1], DEFAULT_MAILBOX_PRIORITY],
+    ]);
+    expect(
+      indexingEntryPatch(configuration, [{ ...entries[1], enabled: false }])
+        .indexing_sources,
+    ).toContainEqual({
+      source_id: teamsSourceIds[0],
+      enabled: false,
+      priority: 0,
+    });
   });
 
   it("inherits the whole source policy array and respects null versus empty", () => {

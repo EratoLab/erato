@@ -655,8 +655,8 @@ describe("Teams and Outlook source controls", () => {
     await waitFor(() => expect(save).toHaveBeenCalledOnce());
     expect(save.mock.calls[0][0].indexing_sources).toEqual([
       { source_id: sourceId, enabled: false, priority: 0 },
-      { source_id: teamsSourceIds[1], enabled: true, priority: 1 },
-      { source_id: teamsSourceIds[0], enabled: true, priority: 2 },
+      { source_id: teamsSourceIds[1], enabled: true, priority: 0 },
+      { source_id: teamsSourceIds[0], enabled: true, priority: 1 },
     ]);
   });
 

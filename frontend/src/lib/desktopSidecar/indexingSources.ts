@@ -151,7 +151,8 @@ export function indexingEntries(
       ...(account && { account }),
       ...(source.defaultReason === "workAccount" && { workAccount: true }),
       enabled: policy?.enabled ?? source.indexingEnabled ?? source.enabled,
-      priority: policy?.priority ?? DEFAULT_MAILBOX_PRIORITY,
+      priority:
+        policy?.priority ?? source.indexingPriority ?? DEFAULT_MAILBOX_PRIORITY,
       editable: sourceControls,
     });
   }
@@ -186,6 +187,20 @@ export function indexingEntries(
       (a.name ?? "").localeCompare(b.name ?? "") ||
       a.id.localeCompare(b.id),
   );
+}
+
+/**
+ * Priorities for a reordered list. Each application is ordered on its own, so
+ * the first source of every application runs side by side instead of Teams
+ * waiting for every Outlook mailbox.
+ */
+export function rankedWithinProduct(entries: IndexingEntry[]): IndexingEntry[] {
+  const next = new Map<string, number>();
+  return entries.map((entry) => {
+    const priority = next.get(entry.product) ?? 0;
+    next.set(entry.product, priority + 1);
+    return { ...entry, priority };
+  });
 }
 
 /** Update only visible, edited policies; keep disconnected entries and extensions. */

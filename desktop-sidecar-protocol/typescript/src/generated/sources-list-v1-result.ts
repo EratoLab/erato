@@ -17,6 +17,10 @@ export interface SourceDescriptor {
    */
   indexingEnabled?: boolean;
   /**
+   * Effective indexing priority for this source, from its user or organization policy or else the source default; lower runs first. Clients that show or write a priority for a source without a policy use this value. Older sidecars may omit it.
+   */
+  indexingPriority?: number;
+  /**
    * Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.
    */
   product?: string;
