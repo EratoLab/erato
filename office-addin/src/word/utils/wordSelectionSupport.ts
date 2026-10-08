@@ -13,7 +13,10 @@ export type WordSelectionHostPlatform =
 export interface WordSelectionSupport {
   /** The identity text and the tracking mode can both be read; otherwise every selection is context only. */
   canRewrite: boolean;
-  /** Where the paragraph style's font is read from: getStyles, else the paragraph's OOXML styles part. */
+  /**
+   * Where the paragraph style's font is read from: getStyles on desktop, else the OOXML styles part
+   * looked up by styleBuiltIn or w:name. Word for the web has getStyles but its Style.font reads null.
+   */
   styleFontSource: "api" | "ooxml" | null;
   /** The complex-script font twins can be set, so complex-script formatting can be kept. */
   bidiSetters: boolean;
@@ -33,7 +36,7 @@ export const WORD_SELECTION_REQUIREMENTS = {
   identityText: ["WordApi", "1.7"],
   /** Document.changeTrackingMode. */
   trackingMode: ["WordApi", "1.4"],
-  /** Document.getStyles and Style.font. */
+  /** Document.getStyles and Style.font; Style.font only returns values on desktop. */
   styleFontApi: ["WordApi", "1.5"],
   /** Range.getOoxml, the style fallback. */
   ooxml: ["WordApi", "1.1"],
@@ -52,19 +55,21 @@ export function wordSelectionSupport(
       return false;
     }
   };
+  const desktop = platform === "PC" || platform === "Mac";
   const trackingMode = has(WORD_SELECTION_REQUIREMENTS.trackingMode);
   const canRewrite =
     trackingMode && has(WORD_SELECTION_REQUIREMENTS.identityText);
   return {
     canRewrite,
-    styleFontSource: has(WORD_SELECTION_REQUIREMENTS.styleFontApi)
-      ? "api"
-      : has(WORD_SELECTION_REQUIREMENTS.ooxml)
-        ? "ooxml"
-        : null,
+    styleFontSource:
+      desktop && has(WORD_SELECTION_REQUIREMENTS.styleFontApi)
+        ? "api"
+        : has(WORD_SELECTION_REQUIREMENTS.ooxml)
+          ? "ooxml"
+          : null,
     bidiSetters: has(WORD_SELECTION_REQUIREMENTS.bidiSetters),
     trackingMode,
-    picturesShiftOffsets: platform !== "PC" && platform !== "Mac",
+    picturesShiftOffsets: !desktop,
     reason: canRewrite ? null : "host_unsupported",
   };
 }

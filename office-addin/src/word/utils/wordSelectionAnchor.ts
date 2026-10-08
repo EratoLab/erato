@@ -125,7 +125,11 @@ export interface WordSelectionHazards {
   commentMark?: boolean;
   /** A character style, or direct run formatting outside the tracked font set. */
   unsupportedFormatting?: boolean;
-  /** Direct complex-script run formatting (bCs, iCs, szCs, a cs font). */
+  /**
+   * Complex-script run formatting that differs from its Latin twin (bCs vs b, iCs vs i, szCs vs sz,
+   * the cs font vs ascii), rtl, or complex-script characters. Word for the web writes equal twins
+   * on its own Ctrl+B and on every Office.js bold, italic, size or name set, so equal twins are benign.
+   */
   complexScript?: boolean;
 }
 

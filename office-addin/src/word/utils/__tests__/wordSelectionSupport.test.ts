@@ -36,12 +36,12 @@ describe("wordSelectionSupport", () => {
     },
   );
 
-  it("rewrites without complex-script setters on the web, where pictures shift offsets", () => {
+  it("rewrites without complex-script setters on the web, where pictures shift offsets and styles come from OOXML", () => {
     expect(
-      wordSelectionSupport(host({ WordApi: "1.10" }), "OfficeOnline"),
+      wordSelectionSupport(host({ WordApi: "1.11" }), "OfficeOnline"),
     ).toEqual({
       canRewrite: true,
-      styleFontSource: "api",
+      styleFontSource: "ooxml",
       bidiSetters: false,
       trackingMode: true,
       picturesShiftOffsets: true,
@@ -110,10 +110,9 @@ describe("wordSelectionSupport", () => {
     });
   });
 
-  it("assumes picture offsets shift when the platform is unknown", () => {
+  it("treats an unknown platform like the web", () => {
     expect(
-      wordSelectionSupport(host({ WordApi: "1.9" }), "unknown")
-        .picturesShiftOffsets,
-    ).toBe(true);
+      wordSelectionSupport(host({ WordApi: "1.9" }), "unknown"),
+    ).toMatchObject({ picturesShiftOffsets: true, styleFontSource: "ooxml" });
   });
 });
