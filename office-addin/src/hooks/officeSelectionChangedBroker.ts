@@ -1,11 +1,10 @@
-import { callOfficeAsync } from "../utils/officeAsync";
-
 /**
  * Registers exactly one Office.js `DocumentSelectionChanged` handler however many components
  * subscribe, following officeDragAndDropBroker: StrictMode's mount/unmount/mount must not race
- * `addHandlerAsync`/`removeHandlerAsync` into two handlers. Registration goes through
- * callOfficeAsync with a timeout, because a host that never answers would otherwise leave the
- * broker pending for the whole session.
+ * `addHandlerAsync`/`removeHandlerAsync` into two handlers. Registration has a timeout, because a
+ * host that never answers would otherwise leave the broker pending for the whole session. Unlike
+ * callOfficeAsync, it keeps the late callback, so a handler registered after the timeout is removed
+ * again instead of feeding subscribers that were told no events would come.
  */
 
 export interface OfficeSelectionChangedSubscriber {
@@ -20,6 +19,7 @@ const REGISTRATION_TIMEOUT_MS = 5000;
 
 const subscribers = new Set<OfficeSelectionChangedSubscriber>();
 let installState: InstallState = "idle";
+let registrationTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function subscribeToOfficeSelectionChanged(
   subscriber: OfficeSelectionChangedSubscriber,
@@ -44,23 +44,40 @@ function installIfNeeded(): void {
     return;
   }
   installState = "pending";
-  callOfficeAsync<void>(
-    (callback) =>
-      host.addHandlerAsync(
-        Office.EventType.DocumentSelectionChanged,
-        handleSelectionChanged,
-        callback,
-      ),
-    { timeoutMs: REGISTRATION_TIMEOUT_MS },
-  ).then(
-    () => {
-      installState = "installed";
-      if (subscribers.size === 0) teardown();
-    },
-    (error: unknown) => {
-      fail(error instanceof Error ? error.message : "addHandlerAsync failed");
-    },
-  );
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    fail(`addHandlerAsync timed out after ${REGISTRATION_TIMEOUT_MS}ms`);
+  }, REGISTRATION_TIMEOUT_MS);
+  registrationTimer = timer;
+  // Settled a microtask later, as callOfficeAsync did, so a StrictMode remount inside the same task
+  // still finds the registration pending even when a host answers at once.
+  const registered = (result: Office.AsyncResult<void>) =>
+    void Promise.resolve().then(() => settleRegistration(result));
+  const settleRegistration = (result: Office.AsyncResult<void>) => {
+    const succeeded = result.status === Office.AsyncResultStatus.Succeeded;
+    if (timedOut) {
+      if (succeeded) removeHandler();
+      return;
+    }
+    clearTimeout(timer);
+    if (!succeeded) {
+      fail(result.error?.message ?? "addHandlerAsync failed");
+      return;
+    }
+    installState = "installed";
+    if (subscribers.size === 0) teardown();
+  };
+  try {
+    host.addHandlerAsync(
+      Office.EventType.DocumentSelectionChanged,
+      handleSelectionChanged,
+      registered,
+    );
+  } catch (error) {
+    clearTimeout(timer);
+    fail(error instanceof Error ? error.message : "addHandlerAsync failed");
+  }
 }
 
 function fail(reason: string): void {
@@ -72,6 +89,10 @@ function fail(reason: string): void {
 function teardown(): void {
   if (installState !== "installed") return;
   installState = "idle";
+  removeHandler();
+}
+
+function removeHandler(): void {
   try {
     officeDocument()?.removeHandlerAsync(
       Office.EventType.DocumentSelectionChanged,
@@ -94,6 +115,7 @@ function officeDocument(): Office.Document | null {
 }
 
 function handleSelectionChanged(): void {
+  if (installState === "failed") return;
   for (const subscriber of [...subscribers]) {
     try {
       subscriber.onSelectionChanged();
@@ -123,6 +145,7 @@ function warnListenerThrew(listener: string, error: unknown): void {
 
 /** Test-only hook to reset the module state between test cases. */
 export function __resetOfficeSelectionChangedBrokerForTests(): void {
+  clearTimeout(registrationTimer);
   subscribers.clear();
   installState = "idle";
 }

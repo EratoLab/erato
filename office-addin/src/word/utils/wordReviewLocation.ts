@@ -119,6 +119,44 @@ export async function readWordParagraphEntries(
   };
 }
 
+/**
+ * Re-selecting the current selection raises no event (SV2:64-65), so a mark left for it would claim
+ * the user's next selection; a failed compare only costs that precision.
+ */
+async function isCurrentSelection(
+  context: Word.RequestContext,
+  range: Word.Range,
+): Promise<boolean> {
+  try {
+    const relation = context.document.getSelection().compareLocationWith(range);
+    await context.sync();
+    return relation.value === "Equal";
+  } catch {
+    return false;
+  }
+}
+
+/** Marks the selection event a select() causes, unless it changes nothing or never runs. */
+async function selectWordRange(
+  context: Word.RequestContext,
+  range: Word.Range,
+): Promise<void> {
+  if (await isCurrentSelection(context, range)) {
+    range.select();
+    await context.sync();
+    return;
+  }
+  const mark = markProgrammaticWordSelection();
+  range.select();
+  try {
+    await context.sync();
+  } catch (error) {
+    mark.cancel();
+    throw error;
+  }
+  mark.selected();
+}
+
 export async function showWordReviewLocation(
   anchor: WordReviewAnchor,
   currentIdentity: string | null,
@@ -140,9 +178,7 @@ export async function showWordReviewLocation(
           : first.expandTo(
               items[positions[positions.length - 1]].getRange("Content"),
             );
-      markProgrammaticWordSelection();
-      range.select();
-      await context.sync();
+      await selectWordRange(context, range);
       const { paragraphs } = anchor.span;
       return paragraphs.length === 1 && paragraphs[0].text === ""
         ? "cleared"
@@ -237,16 +273,15 @@ export async function showWordParagraphs(
         await context.sync();
         const first = changes.find((list) => list.items.length)?.items[0];
         if (!first) return "changed";
-        markProgrammaticWordSelection();
-        first.getRange().select();
+        await selectWordRange(context, first.getRange());
       } else {
-        markProgrammaticWordSelection();
-        items[0]
-          .getRange("Whole")
-          .expandTo(items[items.length - 1].getRange("Whole"))
-          .select();
+        await selectWordRange(
+          context,
+          items[0]
+            .getRange("Whole")
+            .expandTo(items[items.length - 1].getRange("Whole")),
+        );
       }
-      await context.sync();
       return "selected";
     });
   } catch {

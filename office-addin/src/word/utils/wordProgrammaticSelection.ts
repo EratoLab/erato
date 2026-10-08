@@ -1,23 +1,44 @@
-/** Word fires DocumentSelectionChanged 90-360 ms after a select() sync; the window also covers the
- * sync round-trip itself, which is slowest on the web. */
+/** Word fires DocumentSelectionChanged 90-360 ms after a select() sync (SV2:64). */
 export const PROGRAMMATIC_SELECTION_WINDOW_MS = 2000;
 
-let markedAt: number | null = null;
-
-/** Call right before queuing select(), so the event it causes is not taken for the user's choice. */
-export function markProgrammaticWordSelection(now = Date.now()): void {
-  markedAt = now;
+interface Mark {
+  since: number;
 }
 
-/** True once for the first selection event inside the window after a mark; the mark is spent
- * either way, so a later event counts as the user's. */
+/** One per select(), oldest first, so two quick selects cannot share one claim. */
+let marks: Mark[] = [];
+
+export interface ProgrammaticWordSelection {
+  /** The select() sync resolved; its event is due within the window from now. */
+  selected(now?: number): void;
+  /** Nothing was selected, so no event will come. */
+  cancel(): void;
+}
+
+/** Call right before queuing select(), so the event it causes is not taken for the user's choice. */
+export function markProgrammaticWordSelection(
+  now = Date.now(),
+): ProgrammaticWordSelection {
+  const mark: Mark = { since: now };
+  marks.push(mark);
+  return {
+    selected: (at = Date.now()) => {
+      mark.since = Math.max(mark.since, at);
+    },
+    cancel: () => {
+      marks = marks.filter((other) => other !== mark);
+    },
+  };
+}
+
+/** True when a live mark claims this event; each mark claims one, so a later event counts as the user's. */
 export function consumeProgrammaticSelectionEvent(now = Date.now()): boolean {
-  if (markedAt === null) return false;
-  const elapsed = now - markedAt;
-  markedAt = null;
-  return elapsed >= 0 && elapsed <= PROGRAMMATIC_SELECTION_WINDOW_MS;
+  marks = marks.filter(
+    (mark) => now - mark.since <= PROGRAMMATIC_SELECTION_WINDOW_MS,
+  );
+  return marks.shift() !== undefined;
 }
 
 export function resetProgrammaticWordSelectionForTests(): void {
-  markedAt = null;
+  marks = [];
 }

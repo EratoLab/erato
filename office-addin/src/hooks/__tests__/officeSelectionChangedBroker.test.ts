@@ -225,6 +225,41 @@ describe("officeSelectionChangedBroker", () => {
     }
   });
 
+  it("removes a handler the host registers after the timeout and passes none of its events on", async () => {
+    vi.useFakeTimers();
+    try {
+      const host = installDocument({ deferRegistration: true });
+      const onSelectionChanged = vi.fn();
+      const onUnavailable = vi.fn();
+      const unsubscribe = subscribeToOfficeSelectionChanged({
+        onSelectionChanged,
+        onUnavailable,
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(onUnavailable).toHaveBeenCalledTimes(1);
+
+      const handler = host.addHandlerAsync.mock.calls[0][1] as () => void;
+      host.completeRegistration();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.removeHandlerAsync).toHaveBeenCalledTimes(1);
+      expect(host.removeHandlerAsync.mock.calls[0][1]).toEqual({ handler });
+      handler();
+      expect(onSelectionChanged).not.toHaveBeenCalled();
+
+      const late = vi.fn();
+      subscribeToOfficeSelectionChanged({
+        onSelectionChanged: late,
+        onUnavailable: vi.fn(),
+      });
+      handler();
+      expect(late).not.toHaveBeenCalled();
+      unsubscribe();
+      expect(host.addHandlerAsync).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("isolates a throwing subscriber and logs no error text", async () => {
     const host = installDocument();
     const after = vi.fn();

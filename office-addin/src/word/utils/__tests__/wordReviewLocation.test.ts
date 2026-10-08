@@ -4,8 +4,16 @@ import {
   installMockWordDocument,
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
+import {
+  installWordSelectionHost,
+  uninstallWordSelectionHost,
+} from "../../../test/mocks/word/selectionHost";
 import { applyWordEdits } from "../wordApplyEdits";
-import { markProgrammaticWordSelection } from "../wordProgrammaticSelection";
+import {
+  consumeProgrammaticSelectionEvent,
+  markProgrammaticWordSelection,
+  resetProgrammaticWordSelectionForTests,
+} from "../wordProgrammaticSelection";
 import {
   capturedWordAnchor,
   originalWordAnchor,
@@ -234,18 +242,21 @@ describe("Word navigation where getText keeps the paragraph mark", () => {
 describe("Word navigation marks its own selection", () => {
   let host: MockWordHost;
   let selectionsAtMark: number[];
-  beforeEach(() => {
+  const marked = vi.mocked(markProgrammaticWordSelection);
+  beforeEach(async () => {
     host = installMockWordDocument([
       { text: "Same" },
       { text: "Same" },
       { text: "End" },
     ]);
     selectionsAtMark = [];
-    vi.mocked(markProgrammaticWordSelection)
-      .mockClear()
-      .mockImplementation(() => {
-        selectionsAtMark.push(host.word.selections().length);
-      });
+    const actual = await vi.importActual<
+      typeof wordProgrammaticSelectionModule
+    >("../wordProgrammaticSelection");
+    marked.mockClear().mockImplementation(() => {
+      selectionsAtMark.push(host.word.selections().length);
+      return actual.markProgrammaticWordSelection();
+    });
   });
   afterEach(uninstallMockWordDocument);
 
@@ -278,6 +289,77 @@ describe("Word navigation marks its own selection", () => {
       "changed",
     );
     expect(markProgrammaticWordSelection).not.toHaveBeenCalled();
+  });
+});
+
+describe("Word navigation marks its own selection on a selection host", () => {
+  const TRACKED = {
+    body: [
+      { runs: "AA1 First paragraph.", id: "id-1" },
+      {
+        runs: [
+          "TR1 Tracked ",
+          { text: "inserted ", inserted: "Other Author" },
+          "end.",
+        ],
+        id: "id-2",
+      },
+    ],
+  };
+  const marked = vi.mocked(markProgrammaticWordSelection);
+  beforeEach(() => {
+    resetProgrammaticWordSelectionForTests();
+    marked.mockClear();
+  });
+  afterEach(uninstallWordSelectionHost);
+
+  it("marks before selecting a tracked change, and the event it causes is claimed", async () => {
+    vi.useFakeTimers();
+    try {
+      const host = installWordSelectionHost(TRACKED);
+      const events: boolean[] = [];
+      host.addHandlerAsync("documentSelectionChanged", () =>
+        events.push(consumeProgrammaticSelectionEvent()),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await showWordParagraphs(["id-2"], identity, identity, true)).toBe(
+        "selected",
+      );
+      expect(marked).toHaveBeenCalledTimes(1);
+      expect(host.selectionText()).toBe("inserted ");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(events).toEqual([true]);
+      host.select({ p: "AA1" });
+      expect(events).toEqual([true, false]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves no mark when the location is already selected, since Word raises no event", async () => {
+    installWordSelectionHost(TRACKED);
+    expect(await showWordParagraphs(["id-1"], identity, identity)).toBe(
+      "selected",
+    );
+    expect(marked).toHaveBeenCalledTimes(1);
+    resetProgrammaticWordSelectionForTests();
+    expect(await showWordParagraphs(["id-1"], identity, identity)).toBe(
+      "selected",
+    );
+    expect(marked).toHaveBeenCalledTimes(1);
+    expect(consumeProgrammaticSelectionEvent()).toBe(false);
+  });
+
+  it("drops the mark when the select sync fails", async () => {
+    const host = installWordSelectionHost(TRACKED);
+    host.beforeSync((index) => {
+      if (index === 3) throw new Error("GeneralException");
+    });
+    expect(await showWordParagraphs(["id-1"], identity, identity)).toBe(
+      "unavailable",
+    );
+    expect(marked).toHaveBeenCalledTimes(1);
+    expect(consumeProgrammaticSelectionEvent()).toBe(false);
   });
 });
 
