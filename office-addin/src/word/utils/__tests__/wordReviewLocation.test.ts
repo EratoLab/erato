@@ -1,19 +1,32 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
 import { applyWordEdits } from "../wordApplyEdits";
+import { markProgrammaticWordSelection } from "../wordProgrammaticSelection";
 import {
   capturedWordAnchor,
   originalWordAnchor,
+  readWordParagraphEntries,
   readWordTrackingMode,
+  showWordParagraphs,
   showWordReviewLocation,
+  WORD_SELECTION_TEXT_OPTIONS,
 } from "../wordReviewLocation";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
+import type * as wordProgrammaticSelectionModule from "../wordProgrammaticSelection";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
+
+vi.mock("../wordProgrammaticSelection", async (importOriginal) => {
+  const actual = await importOriginal<typeof wordProgrammaticSelectionModule>();
+  return {
+    ...actual,
+    markProgrammaticWordSelection: vi.fn(actual.markProgrammaticWordSelection),
+  };
+});
 
 const identity = "test-document";
 const capture: WordDocumentCapture = {
@@ -216,4 +229,86 @@ describe("Word navigation where getText keeps the paragraph mark", () => {
       expect(host.word.selections()).toEqual([["id-3"]]);
     },
   );
+});
+
+describe("Word navigation marks its own selection", () => {
+  let host: MockWordHost;
+  let selectionsAtMark: number[];
+  beforeEach(() => {
+    host = installMockWordDocument([
+      { text: "Same" },
+      { text: "Same" },
+      { text: "End" },
+    ]);
+    selectionsAtMark = [];
+    vi.mocked(markProgrammaticWordSelection)
+      .mockClear()
+      .mockImplementation(() => {
+        selectionsAtMark.push(host.word.selections().length);
+      });
+  });
+  afterEach(uninstallMockWordDocument);
+
+  it("marks before selecting a review location", async () => {
+    const anchor = originalWordAnchor(
+      { paragraph: 2, text: "Revised" },
+      capture,
+    )!;
+    expect(await showWordReviewLocation(anchor, identity)).toBe("selected");
+    expect(selectionsAtMark).toEqual([0]);
+    expect(host.word.selections()).toHaveLength(1);
+  });
+
+  it("marks before selecting written paragraphs", async () => {
+    expect(await showWordParagraphs(["id-2", "id-3"], identity, identity)).toBe(
+      "selected",
+    );
+    expect(selectionsAtMark).toEqual([0]);
+    expect(host.word.selections()).toEqual([["id-2", "id-3"]]);
+  });
+
+  it("leaves no mark when nothing is selected", async () => {
+    const anchor = originalWordAnchor(
+      { paragraph: 2, text: "Revised" },
+      capture,
+    )!;
+    host.word.setParagraphs([{ text: "Same" }, { text: "Changed" }]);
+    expect(await showWordReviewLocation(anchor, identity)).toBe("changed");
+    expect(await showWordParagraphs(["id-3", "id-1"], identity, identity)).toBe(
+      "changed",
+    );
+    expect(markProgrammaticWordSelection).not.toHaveBeenCalled();
+  });
+});
+
+describe("readWordParagraphEntries", () => {
+  function contextWith(getText: ReturnType<typeof vi.fn>) {
+    return {
+      document: {
+        body: {
+          paragraphs: {
+            load: vi.fn(),
+            items: [{ uniqueLocalId: "id-1", getText }],
+          },
+        },
+      },
+      sync: vi.fn(() => Promise.resolve()),
+    } as unknown as Word.RequestContext;
+  }
+
+  it("forwards getText options when they are given", async () => {
+    const getText = vi.fn(() => ({ value: "Visible" }));
+    const { entries } = await readWordParagraphEntries(
+      contextWith(getText),
+      WORD_SELECTION_TEXT_OPTIONS,
+    );
+    expect(getText.mock.calls).toEqual([[WORD_SELECTION_TEXT_OPTIONS]]);
+    expect(entries).toEqual([{ id: "id-1", text: "Visible" }]);
+  });
+
+  it("keeps the v1 call without options", async () => {
+    const getText = vi.fn(() => ({ value: "Visible" }));
+    await readWordParagraphEntries(contextWith(getText));
+    expect(getText.mock.calls).toEqual([[]]);
+  });
 });

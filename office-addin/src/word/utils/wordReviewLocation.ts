@@ -5,6 +5,7 @@ import {
   resolveWordParagraphs,
   wordParagraphAnchor,
 } from "./wordParagraphResolver";
+import { markProgrammaticWordSelection } from "./wordProgrammaticSelection";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordInPlaceBackup } from "./wordDocumentPackage";
@@ -90,14 +91,24 @@ export function originalWordAnchor(
     : null;
 }
 
+/** Explicit, so the identity text a selection capture records and its later proof compares cannot
+ * drift with getText's defaults. */
+export const WORD_SELECTION_TEXT_OPTIONS = {
+  IncludeHiddenText: false,
+  IncludeTextMarkedAsDeleted: false,
+} as const;
+
 /** Every body paragraph with the text the capture recorded: getText without hidden or deleted text. */
 export async function readWordParagraphEntries(
   context: Word.RequestContext,
+  textOptions?: Parameters<Word.Paragraph["getText"]>[0],
 ): Promise<{ items: Word.Paragraph[]; entries: WordParagraphEntry[] }> {
   const paragraphs = context.document.body.paragraphs;
   paragraphs.load("items/uniqueLocalId");
   await context.sync();
-  const texts = paragraphs.items.map((p) => p.getText());
+  const texts = paragraphs.items.map((p) =>
+    textOptions ? p.getText(textOptions) : p.getText(),
+  );
   await context.sync();
   return {
     items: paragraphs.items,
@@ -129,6 +140,7 @@ export async function showWordReviewLocation(
           : first.expandTo(
               items[positions[positions.length - 1]].getRange("Content"),
             );
+      markProgrammaticWordSelection();
       range.select();
       await context.sync();
       const { paragraphs } = anchor.span;
@@ -225,12 +237,15 @@ export async function showWordParagraphs(
         await context.sync();
         const first = changes.find((list) => list.items.length)?.items[0];
         if (!first) return "changed";
+        markProgrammaticWordSelection();
         first.getRange().select();
-      } else
+      } else {
+        markProgrammaticWordSelection();
         items[0]
           .getRange("Whole")
           .expandTo(items[items.length - 1].getRange("Whole"))
           .select();
+      }
       await context.sync();
       return "selected";
     });
