@@ -697,12 +697,12 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     );
   });
 
-  it("errors on a search over 255 characters and keeps the commands before it", async () => {
+  it("errors on a desktop search over 256 characters, never on the web, and keeps the commands before it", async () => {
     const host = install();
     expect(
       await errorCode(async (context) => {
         const pl1 = await tagged(context, "PL1");
-        pl1.search("x".repeat(255)).load("items");
+        pl1.search("x".repeat(256)).load("items");
         await context.sync();
       }),
     ).toBe("ok");
@@ -710,13 +710,64 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
       await errorCode(async (context) => {
         const pl1 = await tagged(context, "PL1");
         pl1.insertText("Start ", "Start");
-        pl1.search("x".repeat(256)).load("items");
+        pl1.search("x".repeat(desktop ? 257 : 400)).load("items");
         await context.sync();
       }),
-    ).toBe("SearchStringInvalidOrTooLong");
+    ).toBe(desktop ? "SearchStringInvalidOrTooLong" : "ok");
     expect(host.paragraphs()[2].text).toBe(
       "Start PL1 Plain paragraph kilo lima mike november oscar papa.",
     );
+  });
+
+  it("changes the document when the web reads an expandTo range within one paragraph", async () => {
+    const host = install();
+    const before = host.ooxml({ p: "HT1", part: "Whole" });
+    expect(before).toContain("<w:vanish/>");
+    await Word.run(async (context) => {
+      const ht1 = await tagged(context, "HT1");
+      const pl1 = await tagged(context, "PL1");
+      const several = ht1.getRange("Whole").expandTo(pl1.getRange("Whole"));
+      several.load("text");
+      several.getOoxml();
+      await context.sync();
+    });
+    expect(host.ooxml({ p: "HT1", part: "Whole" })).toBe(before);
+    await Word.run(async (context) => {
+      const ht1 = await tagged(context, "HT1");
+      const hit = (await firstHit(context, "HT1", "hidden after")).getRange(
+        "Start",
+      );
+      ht1.getRange("Start").expandTo(hit).load("text");
+      await context.sync();
+    });
+    const after = host.ooxml({ p: "HT1", part: "Whole" });
+    if (desktop) expect(after).toBe(before);
+    else expect(after).not.toContain("<w:vanish/>");
+  });
+
+  it("drops complex-script formatting without its Latin twin when the web reads a one-paragraph expandTo range", async () => {
+    const host = install({
+      body: [
+        {
+          runs: [
+            "CS1 ",
+            { text: "both", font: { bold: true, boldBidirectional: true } },
+            " ",
+            { text: "csonly", font: { boldBidirectional: true } },
+          ],
+        },
+      ],
+    });
+    const before = host.ooxml({ p: "CS1", part: "Whole" });
+    expect(before.match(/<w:bCs\/>/g)).toHaveLength(2);
+    await Word.run(async (context) => {
+      const whole = (await tagged(context, "CS1")).getRange("Whole");
+      whole.expandTo(whole).getOoxml();
+      await context.sync();
+    });
+    expect(
+      host.ooxml({ p: "CS1", part: "Whole" }).match(/<w:bCs\/>/g),
+    ).toHaveLength(desktop ? 2 : 1);
   });
 
   it("finds repeated text by occurrence and never reads '^' as itself", async () => {

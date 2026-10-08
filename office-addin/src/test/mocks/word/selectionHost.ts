@@ -1151,7 +1151,8 @@ export function installWordSelectionHost(
     needle: string,
     matchCase: boolean,
   ): Bounds[] => {
-    if (needle.length > 255)
+    // Native probe: desktop searched 256 characters and failed at 300; the web showed no limit.
+    if (!web && needle.length > 256)
       throw officeError(
         "SearchStringInvalidOrTooLong",
         "The search string is invalid or too long.",
@@ -2431,6 +2432,43 @@ export function installWordSelectionHost(
     }
   };
 
+  /**
+   * Native probe: on Word for the web, reading an expandTo range that lies within one paragraph,
+   * even Whole.expandTo(Whole), changes the document: hidden text is shown and complex-script
+   * formatting without its Latin twin is dropped. A range over several paragraphs is safe.
+   */
+  const changeOnWebRead = (
+    ctx: Ctx,
+    range: Obj,
+    bounds: () => Bounds | undefined,
+  ) => {
+    const change = () => {
+      const b = bounds();
+      if (!b || marksIn(b.story, b.s, b.e).length > 1) return;
+      for (let i = b.s; i < b.e; i += 1) {
+        const t = b.story.tokens[i];
+        if (t.kind !== "char") continue;
+        const font: MockSelectionFont = { ...t.run.font };
+        delete font.hidden;
+        for (const [latin, twin] of Object.entries(WEB_FONT_TWINS) as [
+          FontKey,
+          FontKey,
+        ][])
+          if (font[twin] !== undefined && font[twin] !== font[latin])
+            delete font[twin];
+        t.run = { ...t.run, font };
+      }
+    };
+    for (const name of ["load", "getOoxml"] as const) {
+      const read = range[name] as (...args: unknown[]) => unknown;
+      range[name] = (...args: unknown[]) => {
+        const result = read(...args);
+        enqueue(ctx, range, `Range.${name}`, false, change);
+        return result;
+      };
+    }
+  };
+
   const makeFont = (
     ctx: Ctx,
     origin: Obj,
@@ -2946,7 +2984,8 @@ export function installWordSelectionHost(
     obj.expandTo = (other: unknown) => {
       method("expandTo");
       const otherTarget = targetOf(other);
-      return makeRange(ctx, obj, `${type}.expandTo`, () => {
+      let expanded: Bounds | undefined;
+      const range = makeRange(ctx, obj, `${type}.expandTo`, () => {
         gate("Range.expandTo");
         const a = target.whole();
         const b = otherTarget.whole();
@@ -2955,8 +2994,15 @@ export function installWordSelectionHost(
             "InvalidArgument",
             "The ranges are in different stories.",
           );
-        return { story: a.story, s: Math.min(a.s, b.s), e: Math.max(a.e, b.e) };
+        expanded = {
+          story: a.story,
+          s: Math.min(a.s, b.s),
+          e: Math.max(a.e, b.e),
+        };
+        return expanded;
       });
+      if (web) changeOnWebRead(ctx, range, () => expanded);
+      return range;
     };
     obj.compareLocationWith = (other: unknown) => {
       method("compareLocationWith");
