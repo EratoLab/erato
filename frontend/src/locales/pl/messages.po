@@ -2204,6 +2204,51 @@ msgid "chat.message.link.fallback"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.more"
+msgstr "{count, plural, one {i jeszcze #} few {i jeszcze #} other {i jeszcze #}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.noSources"
+msgstr "Przeszukano na tym urządzeniu: żadne zindeksowane źródło nie pasowało do tego wyszukiwania."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.partialCache"
+msgstr "Teams przechowuje na tym urządzeniu tylko część historii, więc może brakować starszych wiadomości."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.requestedBefore"
+msgstr "Wyszukiwanie dotyczyło elementów od {requested}, ale przeszukany okres zaczyna się później."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.searched"
+msgstr "Przeszukano na tym urządzeniu: {source}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceRange"
+msgstr "{source}: {from} – {to}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceSince"
+msgstr "{source}: od {from}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUnavailable"
+msgstr "{source}: jeszcze niedostępne do wyszukiwania"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.unknown"
+msgstr "Przeszukano na tym urządzeniu. Przeszukany okres jest nieznany."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpDisabledServersNotice.tsx
 msgid "chat.message.mcpDisabledServers.text"
 msgstr "{serverCount, plural, one {{serverList} jest wyłączony w tym czacie, więc jego narzędzia nie zostały użyte.} few {{serverList} są wyłączone w tym czacie, więc ich narzędzia nie zostały użyte.} other {{serverList} jest wyłączonych w tym czacie, więc ich narzędzia nie zostały użyte.}}"

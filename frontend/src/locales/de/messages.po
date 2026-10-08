@@ -2204,6 +2204,51 @@ msgid "chat.message.link.fallback"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.more"
+msgstr "{count, plural, one {und # weitere} other {und # weitere}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.noSources"
+msgstr "Auf diesem Gerät durchsucht: Keine indexierte Quelle passte zu dieser Suche."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.partialCache"
+msgstr "Teams speichert auf diesem Gerät nur einen Teil des Verlaufs, ältere Nachrichten können daher fehlen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.requestedBefore"
+msgstr "Gesucht wurde ab {requested}, der durchsuchte Zeitraum beginnt aber später."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.searched"
+msgstr "Auf diesem Gerät durchsucht: {source}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceRange"
+msgstr "{source}: {from} – {to}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceSince"
+msgstr "{source}: seit {from}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUnavailable"
+msgstr "{source}: noch nicht durchsuchbar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.unknown"
+msgstr "Auf diesem Gerät durchsucht. Der durchsuchte Zeitraum ist unbekannt."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpDisabledServersNotice.tsx
 msgid "chat.message.mcpDisabledServers.text"
 msgstr "{serverCount, plural, one {{serverList} ist für diesen Chat ausgeschaltet – seine Tools wurden daher nicht verwendet.} other {{serverList} sind für diesen Chat ausgeschaltet – ihre Tools wurden daher nicht verwendet.}}"
