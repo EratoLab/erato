@@ -6,10 +6,11 @@ public application IDs, tenant, connection name and messaging endpoint from
 `/office-addin/teams/bot-setup.json`, and asks for the subscription and, to create
 a bot, its resource group and name. It never collects credentials.
 
-The canonical helper is `site/public/setup/teams/1.1.0/EratoTeamsSetup.ps1`.
+The canonical helper is `site/public/setup/teams/1.1.1/EratoTeamsSetup.ps1`.
 The site publishes it at the same versioned path on `https://erato.chat`.
 `release.json` pins its SHA-256 checksum. The setup page displays this exact source
 inline, and every generated command checks the downloaded bytes before execution.
+Version 1.1.1 adds function help comments; setup behavior is unchanged from 1.1.0.
 Customers paste the command into Cloud Shell PowerShell; they do not download a
 bundle to their machine or upload files.
 

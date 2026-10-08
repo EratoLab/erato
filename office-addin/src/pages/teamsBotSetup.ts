@@ -1,5 +1,5 @@
-import release from "../../../site/public/setup/teams/1.1.0/release.json";
-export { default as teamsHelperSource } from "../../../site/public/setup/teams/1.1.0/EratoTeamsSetup.ps1?raw";
+import release from "../../../site/public/setup/teams/1.1.1/release.json";
+export { default as teamsHelperSource } from "../../../site/public/setup/teams/1.1.1/EratoTeamsSetup.ps1?raw";
 
 export const teamsHelperRelease = {
   ...release,
