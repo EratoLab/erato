@@ -162,57 +162,126 @@ const joinList = (items: string[]) =>
     ? items.join("")
     : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 
-/** Product and account, numbered as in Settings when two sources share them. */
-function coverageSourceLabels(sources: RawCoverageSource[]): string[] {
-  const labels = sources.map((source) => {
-    const product = PRODUCT_LABELS[source.product] ?? source.product;
-    // Settings names Outlook sources by mailbox address.
-    const name = (
-      source.product === "outlook"
-        ? [source.accountEmail, source.displayName]
-        : [source.displayName, source.accountEmail]
-    )
-      .map((value) => value?.trim())
-      .find((value) => !!value);
-    return name ? `${product} · ${name}` : product;
-  });
+/** Product and account. Settings names Outlook sources by mailbox address. */
+function coverageSourceLabel(source: RawCoverageSource): string {
+  const product = PRODUCT_LABELS[source.product] ?? source.product;
+  const name = (
+    source.product === "outlook"
+      ? [source.accountEmail, source.displayName]
+      : [source.displayName, source.accountEmail]
+  )
+    .map((value) => value?.trim())
+    .find((value) => !!value);
+  return name ? `${product} · ${name}` : product;
+}
+
+/**
+ * Numbers sources that share a label by id, so the numbers do not follow
+ * response order. Undefined for a label no other source has.
+ */
+export function sharedLabelNumbers(
+  sources: readonly { id: string; label: string }[],
+): (number | undefined)[] {
   const byId = sources
-    .map((source, index) => ({ id: source.sourceId, index }))
+    .map((source, index) => ({ ...source, index }))
     .sort((a, b) => a.id.localeCompare(b.id));
-  return labels.map((label, index) => {
-    const peers = byId.filter((peer) => labels[peer.index] === label);
+  return sources.map((source, index) => {
+    const peers = byId.filter((peer) => peer.label === source.label);
     return peers.length > 1
-      ? `${label} (${peers.findIndex((peer) => peer.index === index) + 1})`
-      : label;
+      ? peers.findIndex((peer) => peer.index === index) + 1
+      : undefined;
   });
 }
+
+export const numberedLabel = ({
+  label,
+  number,
+}: Pick<SearchCoverageSource, "label" | "number">) =>
+  number === undefined ? label : `${label} (${number})`;
+
+const LIMIT_REACHED_NOTICE =
+  "more items matched than were returned, so narrow the date range to see the rest";
 
 function coverageNotice(
   coverage: Omit<KnownSearchCoverage, "notice">,
   oldestHit: number | null,
 ): string {
   const day = (iso: string) => iso.slice(0, 10);
-  const periods = coverage.sources.map((source) =>
-    source.from === null
-      ? `${source.label} not yet (${source.reason ?? "unavailable"})`
-      : `${source.label} from ${day(source.from)}${source.to === null ? "" : ` to ${day(source.to)}`}`,
-  );
-  if (!periods.length) {
+  const names = (sources: SearchCoverageSource[]) =>
+    joinList(sources.map(numberedLabel));
+  if (!coverage.sources.length) {
     return "No enabled local source matched these filters, so nothing on this device was searched and missing items must not be assumed not to exist.";
   }
-  let notice = `Local search on this device covered ${joinList(periods)}`;
-  if (coverage.requestedFromBeforeCoverage && coverage.requested.from) {
-    notice += `; the requested start ${day(coverage.requested.from)} lies before that`;
+  const clauses: string[] = [];
+  if (coverage.basis === "catalog") {
+    const unscanned = coverage.sources.filter(
+      (source) => source.reason === "not_enumerated",
+    );
+    const listed = coverage.sources.filter(
+      (source) => source.reason !== "not_enumerated",
+    );
+    if (listed.length) {
+      clauses.push(
+        `this listing read the items discovered on this device in ${names(listed)}, which can include items not yet searchable by text`,
+      );
+    }
+    if (unscanned.length) {
+      clauses.push(
+        `${names(unscanned)} ${unscanned.length > 1 ? "have" : "has"} not been scanned yet`,
+      );
+    }
+    clauses.push(
+      "items not stored on this device were not listed, so do not conclude that missing items do not exist",
+    );
+    if (coverage.limitReached) {
+      clauses.push(
+        `this listing hit its limit and only reaches back to ${oldestHit === null ? "its oldest returned item" : day(isoSeconds(oldestHit))}, so narrow the date range to list older items`,
+      );
+    }
+  } else {
+    const periods = coverage.sources.flatMap((source) =>
+      source.from === null
+        ? []
+        : [
+            `${numberedLabel(source)} from ${day(source.from)}${source.to === null ? "" : ` to ${day(source.to)}`}`,
+          ],
+    );
+    const unranged = coverage.sources.filter((source) => source.from === null);
+    const pending = coverage.sources.filter(
+      (source) =>
+        source.from !== null &&
+        source.status === "newest_pending" &&
+        source.to !== null,
+    );
+    if (periods.length) {
+      clauses.push(`local search on this device covered ${joinList(periods)}`);
+    }
+    if (coverage.requestedFromBeforeCoverage && coverage.requested.from) {
+      clauses.push(
+        `the requested start ${day(coverage.requested.from)} lies before that`,
+      );
+    }
+    if (unranged.length) {
+      const reasons = unranged.map(
+        (source) =>
+          `${numberedLabel(source)} (${source.reason ?? "unavailable"})`,
+      );
+      clauses.push(`nothing in ${joinList(reasons)} is searchable yet`);
+    }
+    if (periods.length) clauses.push("earlier items were not searched");
+    if (pending.length) {
+      const after = pending.map(
+        (source) => `${numberedLabel(source)} after ${source.to}`,
+      );
+      clauses.push(
+        `items in ${joinList(after)} are still being indexed and were not searched`,
+      );
+    }
+    clauses.push("do not conclude that missing items do not exist");
+    if (coverage.limitReached) clauses.push(LIMIT_REACHED_NOTICE);
   }
-  notice +=
-    "; earlier items were not searched, so do not conclude that they do not exist";
-  if (coverage.limitReached) {
-    notice +=
-      coverage.basis === "catalog"
-        ? `; this listing hit its limit and only reaches back to ${oldestHit === null ? "its oldest returned item" : day(isoSeconds(oldestHit))}, so narrow the date range to list older items`
-        : "; more items matched than were returned, so narrow the date range to see the rest";
-  }
-  return `${notice}.`;
+  const notice = clauses.join("; ");
+  return `${notice.charAt(0).toUpperCase()}${notice.slice(1)}.`;
 }
 
 /** The compact `result.coverage` the model receives instead of the raw report. */
@@ -222,11 +291,13 @@ function searchCoverageForModel(
 ): SearchCoverage {
   const { coverage } = result;
   if (!coverage) {
+    // The sidecar omits coverage when it cannot read its ranges, yet still reports the limit.
+    const limitReached = result.limitReached === true;
     return {
       v: 1,
       status: "unknown",
-      notice:
-        "This desktop sidecar does not report which period its local index covers, so do not conclude that items missing from these results do not exist.",
+      ...(limitReached && { limitReached }),
+      notice: `This desktop sidecar does not report which period its local index covers, so do not conclude that items missing from these results do not exist.${limitReached ? ` Also, ${LIMIT_REACHED_NOTICE}.` : ""}`,
     };
   }
   const requestedFrom =
@@ -235,7 +306,16 @@ function searchCoverageForModel(
     typeof filters?.dateTo === "number"
       ? filters.dateTo * SECOND - SECOND
       : null;
-  const labels = coverageSourceLabels(coverage.sources);
+  const labels = coverage.sources.map(coverageSourceLabel);
+  const numbers = sharedLabelNumbers(
+    coverage.sources.map((source, index) => ({
+      id: source.sourceId,
+      label: labels[index],
+    })),
+  );
+  // A listing reads the discovered inventory, so its hits are not bounded by
+  // the indexed range.
+  const listing = coverage.basis === "catalog";
   const sources = coverage.sources.map(
     (source, index): SearchCoverageSource => {
       const from = inclusiveBoundary(source.from, SECOND);
@@ -243,7 +323,9 @@ function searchCoverageForModel(
         ? inclusiveBoundary(source.through, -SECOND)
         : instant(source.observedAt);
       return {
+        sourceId: source.sourceId,
         label: labels[index],
+        ...(numbers[index] !== undefined && { number: numbers[index] }),
         kinds: PRODUCT_KINDS[source.product] ?? [],
         from: from === null ? null : isoSeconds(from),
         to: to === null ? null : isoSeconds(to),
@@ -257,7 +339,10 @@ function searchCoverageForModel(
         ...(source.unavailableReason && { reason: source.unavailableReason }),
         partialCache: source.inventory !== "localStore",
         requestedFromBeforeCoverage:
-          requestedFrom !== null && from !== null && requestedFrom < from,
+          !listing &&
+          requestedFrom !== null &&
+          from !== null &&
+          requestedFrom < from,
       };
     },
   );

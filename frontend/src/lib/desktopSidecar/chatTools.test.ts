@@ -5,6 +5,7 @@ import {
   createSidecarChatTools,
   GET_SIDECAR_SEARCH_FIELDS_TOOL,
   GET_SIDECAR_DOCUMENT_TOOL,
+  numberedLabel,
   SIDECAR_CHAT_TOOL_METHODS,
 } from "./chatTools";
 import { resolveSidecarMailboxId } from "./mailboxAccess";
@@ -1107,6 +1108,7 @@ describe("search coverage for the model", () => {
       limitReached: true,
       sources: [
         {
+          sourceId: "source-example",
           label: "Outlook · jane@example.com",
           kinds: ["email", "file"],
           from: "2025-03-14T08:30:01Z",
@@ -1116,6 +1118,7 @@ describe("search coverage for the model", () => {
           requestedFromBeforeCoverage: false,
         },
         {
+          sourceId: "teams-source-example",
           label: "Teams · Contoso Ltd (jane@example.com)",
           kinds: ["teams_message"],
           from: "2026-06-02T09:15:00Z",
@@ -1126,7 +1129,7 @@ describe("search coverage for the model", () => {
         },
       ],
       notice:
-        "Local search on this device covered Outlook · jane@example.com from 2025-03-14 to 2026-09-15 and Teams · Contoso Ltd (jane@example.com) from 2026-06-02 to 2026-09-15; earlier items were not searched, so do not conclude that they do not exist; more items matched than were returned, so narrow the date range to see the rest.",
+        "Local search on this device covered Outlook · jane@example.com from 2025-03-14 to 2026-09-15 and Teams · Contoso Ltd (jane@example.com) from 2026-06-02 to 2026-09-15; earlier items were not searched; items in Teams · Contoso Ltd (jane@example.com) after 2026-09-15T11:40:00Z are still being indexed and were not searched; do not conclude that missing items do not exist; more items matched than were returned, so narrow the date range to see the rest.",
     });
     expect(Object.keys(result.coverage)).toEqual([
       "v",
@@ -1149,6 +1152,22 @@ describe("search coverage for the model", () => {
       notice: expect.stringContaining("does not report which period"),
     });
     expect(result).not.toHaveProperty("limitReached");
+  });
+
+  it("keeps a reported limit when the sidecar reports no coverage", async () => {
+    const result = await searchResult({
+      ...legacySearchResult,
+      limitReached: true,
+    });
+    expect(result).not.toHaveProperty("limitReached");
+    expect(result.coverage).toEqual({
+      v: 1,
+      status: "unknown",
+      limitReached: true,
+      notice: expect.stringContaining(
+        "more items matched than were returned, so narrow the date range",
+      ),
+    });
   });
 
   it("converts the requested filter to inclusive ISO bounds", async () => {
@@ -1175,6 +1194,9 @@ describe("search coverage for the model", () => {
       ["2026-09-15T11:39:59Z", "newest_pending"],
       ["2026-09-15T12:00:00Z", "complete"],
     ]);
+    expect(coverage.notice).toContain(
+      "items in Outlook · jane@example.com after 2026-09-15T11:39:59Z are still being indexed and were not searched",
+    );
   });
 
   it.each([
@@ -1224,8 +1246,8 @@ describe("search coverage for the model", () => {
       reason: "not_enumerated",
       requestedFromBeforeCoverage: false,
     });
-    expect(coverage.notice).toContain(
-      "Outlook · jane@example.com not yet (not_enumerated)",
+    expect(coverage.notice).toBe(
+      "Nothing in Outlook · jane@example.com (not_enumerated) is searchable yet; do not conclude that missing items do not exist.",
     );
   });
 
@@ -1261,7 +1283,29 @@ describe("search coverage for the model", () => {
     );
   });
 
-  it("numbers sources that share a label by source id, as in Settings", async () => {
+  it("does not bound a listing by the indexed range", async () => {
+    const listing = withCoverage([
+      coverageSource(),
+      coverageSource({
+        sourceId: "source-b",
+        accountEmail: "max@example.com",
+        from: null,
+        observedAt: null,
+        unavailableReason: "not_enumerated",
+      }),
+    ]);
+    const coverage = await knownCoverage(
+      { ...listing, coverage: { ...listing.coverage!, basis: "catalog" } },
+      { filters: { dateFrom: T_2026 - 86400 } },
+    );
+    expect(coverage.requestedFromBeforeCoverage).toBe(false);
+    expect(coverage.sources[0].requestedFromBeforeCoverage).toBe(false);
+    expect(coverage.notice).toBe(
+      "This listing read the items discovered on this device in Outlook · jane@example.com, which can include items not yet searchable by text; Outlook · max@example.com has not been scanned yet; items not stored on this device were not listed, so do not conclude that missing items do not exist.",
+    );
+  });
+
+  it("numbers sources that share a label by source id", async () => {
     const teams = (sourceId: string) =>
       coverageSource({
         sourceId,
@@ -1271,10 +1315,18 @@ describe("search coverage for the model", () => {
     const coverage = await knownCoverage(
       withCoverage([teams("source-b"), teams("source-a"), coverageSource()]),
     );
-    expect(coverage.sources.map((source) => source.label)).toEqual([
+    expect(coverage.sources.map(numberedLabel)).toEqual([
       "Teams · Contoso Ltd (2)",
       "Teams · Contoso Ltd (1)",
       "Outlook · jane@example.com",
     ]);
+    expect(coverage.sources.map((source) => source.number)).toEqual([
+      2,
+      1,
+      undefined,
+    ]);
+    expect(coverage.notice).toContain(
+      "covered Teams · Contoso Ltd (2) from 2026-01-01",
+    );
   });
 });

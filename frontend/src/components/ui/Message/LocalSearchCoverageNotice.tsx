@@ -3,6 +3,7 @@ import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useId, useMemo, useState } from "react";
 
+import { numberedLabel } from "@/lib/desktopSidecar/chatTools";
 import { summarizeLocalSearchCoverage } from "@/lib/desktopSidecar/searchCoverage";
 
 import { Button } from "../Controls/Button";
@@ -12,9 +13,12 @@ import type { SearchCoverageSource } from "@/lib/desktopSidecar/searchCoverage";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const formatDay = (iso: string) => i18n.date(iso, { dateStyle: "medium" });
+// The model passes date filters as UTC instants, so a requested start is a UTC day.
+const formatUtcDay = (iso: string) =>
+  i18n.date(iso, { dateStyle: "medium", timeZone: "UTC" });
 
 function sourcePeriod(coverage: SearchCoverageSource): string {
-  const source = coverage.label;
+  const source = numberedLabel(coverage);
   if (coverage.from === null) {
     return t({
       id: "chat.message.localSearchCoverage.sourceUnavailable",
@@ -81,7 +85,8 @@ export function LocalSearchCoverageNotice({
   );
   const first = sources.at(0);
   const more = sources.slice(1);
-  const requested = summary.requestedFrom && formatDay(summary.requestedFrom);
+  const requested =
+    summary.requestedFrom && formatUtcDay(summary.requestedFrom);
   const partialTeams = sources.some(
     (source) =>
       // eslint-disable-next-line lingui/no-unlocalized-strings -- Protocol document kind.
@@ -138,7 +143,7 @@ export function LocalSearchCoverageNotice({
         {count > 0 && (
           <ul id={moreId} hidden={!expanded}>
             {more.map((item) => (
-              <li key={item.label}>{sourcePeriod(item)}</li>
+              <li key={item.sourceId}>{sourcePeriod(item)}</li>
             ))}
           </ul>
         )}

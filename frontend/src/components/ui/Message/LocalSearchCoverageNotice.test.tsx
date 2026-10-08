@@ -26,6 +26,7 @@ const day = (iso: string) =>
   new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(iso));
 
 const outlook: SearchCoverageSource = {
+  sourceId: "outlook-jane",
   label: "Outlook · jane@example.com",
   kinds: ["email", "file"],
   from: "2025-03-14T08:30:01Z",
@@ -36,6 +37,7 @@ const outlook: SearchCoverageSource = {
 };
 
 const teams: SearchCoverageSource = {
+  sourceId: "teams-contoso",
   label: "Teams · Contoso Ltd",
   kinds: ["teams_message"],
   from: "2026-06-02T09:15:00Z",
@@ -62,10 +64,13 @@ function coverage(
   };
 }
 
-const searchPart = (result: Record<string, unknown>): ContentPart =>
+const searchPart = (
+  result: Record<string, unknown>,
+  toolCallId = "call-search",
+): ContentPart =>
   ({
     content_type: "tool_use",
-    tool_call_id: "call-search",
+    tool_call_id: toolCallId,
     tool_name: "search_sidecar_index",
     status: "success",
     input: { text: "offer" },
@@ -153,6 +158,74 @@ describe("LocalSearchCoverageNotice", () => {
     expect(notice).toHaveTextContent(
       `The search asked for items from ${day("2026-01-01T12:00:00Z")}, but the searched period starts later.`,
     );
+  });
+
+  it("shows the requested start as the UTC day the model asked for", () => {
+    renderContent([
+      searchPart({
+        coverage: coverage(
+          [{ ...teams, requestedFromBeforeCoverage: true }],
+          {
+            requested: { from: "2026-03-01T23:30:00Z", to: null },
+            requestedFromBeforeCoverage: true,
+          },
+        ),
+      }),
+    ]);
+    const utcDay = new Intl.DateTimeFormat("en", {
+      dateStyle: "medium",
+      timeZone: "UTC",
+    }).format(new Date("2026-03-01T23:30:00Z"));
+    expect(
+      screen.getByTestId("local-search-coverage-notice"),
+    ).toHaveTextContent(`The search asked for items from ${utcDay},`);
+  });
+
+  it("keeps leading with the flagged source after a later search", () => {
+    renderContent([
+      searchPart(
+        {
+          coverage: coverage(
+            [outlook, { ...teams, requestedFromBeforeCoverage: true }],
+            {
+              asOf: "2026-09-15T11:00:00Z",
+              requested: { from: "2026-01-01T12:00:00Z", to: null },
+              requestedFromBeforeCoverage: true,
+            },
+          ),
+        },
+        "call-dated",
+      ),
+      searchPart({ coverage: coverage([outlook, teams]) }, "call-undated"),
+      answer,
+    ]);
+    const notice = screen.getByTestId("local-search-coverage-notice");
+    expect(notice).toHaveAttribute("data-tone", "warning");
+    expect(notice).toHaveTextContent(
+      `Searched on this device: Teams · Contoso Ltd: ${day(teams.from!)}`,
+    );
+  });
+
+  it("numbers sources that share a label", () => {
+    renderContent([
+      searchPart(
+        { coverage: coverage([{ ...teams, sourceId: "teams-b" }]) },
+        "call-b",
+      ),
+      searchPart(
+        { coverage: coverage([{ ...teams, sourceId: "teams-a" }]) },
+        "call-a",
+      ),
+    ]);
+    const notice = screen.getByTestId("local-search-coverage-notice");
+    expect(notice).toHaveTextContent(
+      `Searched on this device: Teams · Contoso Ltd (2): ${day(teams.from!)}`,
+    );
+    expect(
+      within(notice).getByText(
+        `Teams · Contoso Ltd (1): ${day(teams.from!)} – ${day(teams.to!)}`,
+      ),
+    ).not.toBeVisible();
   });
 
   it("names a source that is not searchable yet", () => {

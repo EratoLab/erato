@@ -9,6 +9,7 @@ import type {
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const outlook: SearchCoverageSource = {
+  sourceId: "outlook-jane",
   label: "Outlook · jane@example.com",
   kinds: ["email", "file"],
   from: "2025-03-14T08:30:01Z",
@@ -19,6 +20,7 @@ const outlook: SearchCoverageSource = {
 };
 
 const teams: SearchCoverageSource = {
+  sourceId: "teams-contoso",
   label: "Teams · Contoso Ltd",
   kinds: ["teams_message"],
   from: "2026-06-02T09:15:00Z",
@@ -78,7 +80,7 @@ describe("summarizeLocalSearchCoverage", () => {
     ).toBeNull();
   });
 
-  it("keeps the latest coverage per source and the earliest flagged start", () => {
+  it("keeps the latest coverage per source, any flag and the earliest flagged start", () => {
     const summary = summarizeLocalSearchCoverage([
       searchPart(
         success(
@@ -113,8 +115,40 @@ describe("summarizeLocalSearchCoverage", () => {
     ]);
     expect(summary).toEqual({
       status: "known",
-      sources: [outlook, teams],
+      sources: [{ ...outlook, requestedFromBeforeCoverage: true }, teams],
       requestedFrom: "2024-06-01T00:00:00Z",
+    });
+  });
+
+  it("identifies sources by id and numbers shared labels across searches", () => {
+    const contoso = (sourceId: string, number?: number) => ({
+      ...teams,
+      sourceId,
+      ...(number !== undefined && { number }),
+    });
+    const summary = summarizeLocalSearchCoverage([
+      searchPart(
+        success(known([contoso("teams-a", 1), contoso("teams-b", 2)])),
+      ),
+      searchPart(success(known([contoso("teams-b")]))),
+      searchPart(success(known([outlook]))),
+    ]);
+    expect(summary).toEqual({
+      status: "known",
+      sources: [
+        contoso("teams-a", 1),
+        contoso("teams-b", 2),
+        outlook,
+      ],
+      requestedFrom: null,
+    });
+    expect(
+      summarizeLocalSearchCoverage([
+        searchPart(success(known([contoso("teams-a")]))),
+        searchPart(success(known([contoso("teams-b")]))),
+      ]),
+    ).toMatchObject({
+      sources: [contoso("teams-a", 1), contoso("teams-b", 2)],
     });
   });
 
@@ -134,6 +168,7 @@ describe("summarizeLocalSearchCoverage", () => {
           known([
             outlook,
             { ...teams, label: 7 } as unknown as SearchCoverageSource,
+            { ...teams, sourceId: undefined } as unknown as SearchCoverageSource,
             { ...teams, from: "yesterday" },
           ]),
         ),

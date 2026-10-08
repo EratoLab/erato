@@ -1,4 +1,4 @@
-import { SEARCH_SIDECAR_INDEX_TOOL } from "./chatTools";
+import { SEARCH_SIDECAR_INDEX_TOOL, sharedLabelNumbers } from "./chatTools";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -10,7 +10,10 @@ export type SearchCoverageSourceStatus =
 
 /** One source of a `search_sidecar_index` result, as the model receives it. */
 export interface SearchCoverageSource {
+  sourceId: string;
   label: string;
+  /** Tells sources with the same label apart; absent when the label is unique. */
+  number?: number;
   kinds: string[];
   /** First covered instant, inclusive. Null while the source is unavailable. */
   from: string | null;
@@ -38,6 +41,8 @@ export interface KnownSearchCoverage {
 export interface UnknownSearchCoverage {
   v: 1;
   status: "unknown";
+  /** Present when the sidecar reported it without a coverage report. */
+  limitReached?: boolean;
   notice: string;
 }
 
@@ -48,6 +53,7 @@ export type LocalSearchCoverageSummary =
   | { status: "unknown" }
   | {
       status: "known";
+      /** Numbered among themselves, since each search numbers only its own. */
       sources: SearchCoverageSource[];
       /** Earliest requested start that lies before a source's coverage. */
       requestedFrom: string | null;
@@ -63,6 +69,7 @@ const isIsoOrNull = (value: unknown): value is string | null =>
 function readSource(value: unknown): SearchCoverageSource | null {
   if (
     !isObject(value) ||
+    typeof value.sourceId !== "string" ||
     typeof value.label !== "string" ||
     !Array.isArray(value.kinds) ||
     !isIsoOrNull(value.from) ||
@@ -125,10 +132,21 @@ export function summarizeLocalSearchCoverage(
     for (const value of coverage.sources) {
       const source = readSource(value);
       if (!source) continue;
-      const previous = latest.get(source.label);
-      if (!previous || Date.parse(coverage.asOf) >= Date.parse(previous.asOf)) {
-        latest.set(source.label, { asOf: coverage.asOf, source });
-      }
+      const previous = latest.get(source.sourceId);
+      const kept =
+        previous && Date.parse(coverage.asOf) < Date.parse(previous.asOf)
+          ? previous
+          : { asOf: coverage.asOf, source };
+      latest.set(source.sourceId, {
+        asOf: kept.asOf,
+        source: {
+          ...kept.source,
+          // The warning stays for every later search, so its source keeps leading.
+          requestedFromBeforeCoverage:
+            source.requestedFromBeforeCoverage === true ||
+            previous?.source.requestedFromBeforeCoverage === true,
+        },
+      });
     }
     const requested = coverage.requested.from;
     if (
@@ -142,9 +160,16 @@ export function summarizeLocalSearchCoverage(
     }
   }
   if (known) {
+    const sources = [...latest.values()].map(({ source }) => source);
+    const numbers = sharedLabelNumbers(
+      sources.map(({ sourceId, label }) => ({ id: sourceId, label })),
+    );
     return {
       status: "known",
-      sources: [...latest.values()].map(({ source }) => source),
+      sources: sources.map(({ number: _number, ...source }, index) => ({
+        ...source,
+        ...(numbers[index] !== undefined && { number: numbers[index] }),
+      })),
       requestedFrom,
     };
   }
