@@ -558,7 +558,12 @@ Return null if no nonempty covered interval can be established. Undated document
 are counted and excluded; discoveryComplete and gap counts accompany the boundary.
 Aggregate depth is unknown when contributing sources have incompatible date
 bases. Aggregate boundaries MUST honor gaps in every contributing source; incomplete
-source discovery MUST NOT be described as complete mailbox coverage.
+source discovery MUST NOT be described as complete mailbox coverage. The optional
+`missingFromLocalCacheDocuments` counts current revisions whose content is missing
+from the local cache. Earlier sidecars report processing times instead of document
+dates in `fullyIndexedSince` and `processedSince`, so clients MUST NOT present
+those fields from servers that lack `indexedRange`. Clients SHOULD present the
+indexed range instead of depth.
 
 Freshness measures discovery-to-first-searchable-commit latency (p50/p95 in
 seconds), excluding failed/empty/deleted work. Building generations report null
@@ -582,6 +587,65 @@ The conformance fixture `indexing-statistics.json` is synthetic sample data,
 including a rebuild; the mock server returns it deterministically with effective
 settings resolved from the most recent configure call. It does not simulate
 resource consumption, scheduling or persisted configuration across mock restarts.
+
+### Indexed range
+
+`discovery[].indexedRange` states which period of a source's documents search
+can be relied on for. Servers that support it MUST report it on every discovery
+entry; older sidecars omit it. Start and stop results carry it too. It follows the
+inventory refresh cadence, so it can be about ten seconds old.
+
+The range is measured in the active generation with the visibility rules of
+search: deleted documents, disabled or retired sources, and attachments whose
+parent is deleted or belongs to another source do not take part. A document's
+date follows `dateBasis`: `emailReceivedAtThenSentAt` for Outlook sources, where
+an attachment takes its parent email's date, and `teamsMessageTimestamp` for
+Teams. Implementations SHOULD treat dates before 1980 or more than two days in
+the future as undated. Each dated document is in one of three states:
+
+- searchable: the active generation holds an indexed or empty receipt for it,
+  including a receipt for an older revision;
+- terminal: not searchable, and its current revision is unindexable or missing
+  from the local cache;
+- unprocessed: everything else, including retry-deferred and blocked work.
+
+`from` is the newest date of an unprocessed document older than the newest
+searchable document, exclusive. When there is none, `from` is the date of the
+oldest searchable document, inclusive. While unprocessed documents are dated at
+or after the newest searchable date, `through` is that date, exclusive when one
+of them shares it and inclusive otherwise, and `pendingNewer` counts them.
+Otherwise `through` is null and `pendingNewer` is zero. `olderPending` counts the
+unprocessed dated documents older than the range, so `olderPending` plus
+`pendingNewer` is every unprocessed dated document.
+
+The guarantee: every document dated inside the range, after `from` and up to
+`through`, or with no upper bound when `through` is null, is searchable or
+terminal. `unsearchable` counts the terminal documents inside the range; they
+do not end it. `undated` counts documents without a usable date, in any state;
+they are outside every range.
+
+`observedAt` is when the sidecar last confirmed the local store, either at the
+end of a complete enumeration or with a check that found the store unchanged.
+Documents that reach the store after it are unknown until the next enumeration.
+When `through` is null, clients present `observedAt`, not the newest document
+date, as the end of the range: a quiet mailbox would otherwise seem to end at its
+last mail. `inventory` is `localStore` when the sidecar enumerates a complete
+local store (Outlook) and `cacheObservations` when it sees only what the
+application keeps cached (Teams). With `cacheObservations`, older documents may
+never have reached the device, and documents that left the cache stay
+searchable.
+
+No range is claimed until the source has been enumerated completely once. Without
+a claim, `from` and `through` are null, `olderPending` counts every unprocessed
+dated document, and `unavailableReason` says why. `from` is null exactly when
+`unavailableReason` is set. Common reasons are `not_enumerated`,
+`no_searchable_documents`, `source_disabled` and `index_not_initialized`.
+Counts are null only when they cannot be read.
+
+`dateBasis`, `inventory` and `unavailableReason` are open strings. A client that
+does not recognize an `inventory` value treats it as `cacheObservations`. Like
+every protocol timestamp, `at`, `observedAt` and `sampledAt` are UTC strings
+ending in `Z`; a timestamp with an offset fails validation of the whole result.
 
 ## 16. Full indexing reset
 
@@ -690,9 +754,10 @@ metadata predicates. Each entry has a `field`, `operator`, and `value`; entries 
 combined with AND semantics. Values may be arrays for operators such as `in`, and
 the sidecar may expose virtual fields whose predicates are rewritten to an
 implementation-specific query.
-Empty text performs a filtered listing. Text searches use exact BM25, one result
-per document using its highest scoring chunk, descending score then documentId
-for deterministic ties. limit defaults to 20 and is capped at 100. Scores are
+Empty text performs a filtered listing, ordered by date, newest first, with
+undated documents last and documentId breaking ties. Text searches use exact
+BM25, one result per document using its highest scoring chunk, descending score
+then documentId for deterministic ties. limit defaults to 20 and is capped at 100. Scores are
 relative ranking values, not probabilities. Each hit may include `uri`, a URI
 identifying the document and ideally an externally retrievable URL, and
 `external_ids`, a list of `{key, value}` objects containing externally relatable
@@ -706,6 +771,18 @@ Search uses a consistent active generation and never creates an index. With no
 active index it returns `capability_unavailable`, reason `index_not_initialized`;
 during reset the reason is `index_reset_in_progress`. The mock returns an empty
 synthetic search result and models lifecycle state, not actual BM25 or rebuilding.
+
+Current sidecars also report the searched period in `coverage`, and
+`limitReached`; older sidecars omit both. `coverage.sources` lists every enabled
+source the filters can match, whether or not it returned hits. Each entry has the
+source's identity and the same range values that `indexing.status.v1` reports in
+`discovery[].indexedRange`, as of `coverage.sampledAt`. `coverage.basis` is
+`index` for text searches, which find only searchable documents, and `catalog`
+for empty-text listings, which read the discovered inventory and can also return
+documents outside the range. `limitReached` is true when more documents matched
+than `limit` returned. A sidecar that cannot tell MAY report true whenever it
+returned exactly `limit` hits. A listing that reached its limit covers only back
+to its oldest hit, because listings are newest first.
 
 `search.metadata_fields.v1` lists the metadata fields exposed by the sidecar for
 these filters. Each field describes its supported operators, value type, human-
@@ -734,8 +811,9 @@ update whether indexing should resume. Rebuilds are rejected during a benchmark.
 
 Snapshots report chosen parallelism, elapsed seconds, discovered/indexed/failed
 document counts, counts by email/attachment MIME type, discovery completion, and
-time-limit status. `completed` does not imply zero extraction failures or a fully
-scanned mailbox. `mailboxBytes` sums source sizes represented by successful work:
+time-limit status. The optional `missingFromLocalCacheDocuments` counts documents
+whose content is not in the local cache; they are not failed documents.
+`completed` does not imply zero extraction failures or a fully scanned mailbox. `mailboxBytes` sums source sizes represented by successful work:
 PST/OST email message sizes include attachments and are counted once; macOS OLK
 email and separately indexed attachment files contribute their file sizes.
 `emailsWithUnknownSize` explicitly counts indexed emails omitted from the byte

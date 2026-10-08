@@ -1,0 +1,84 @@
+{
+  "hits": [
+    {
+      "documentId": "document-email-1",
+      "uri": "https://outlook.example.test/message-1",
+      "chunkId": null,
+      "score": 7.5,
+      "kind": "email",
+      "title": "Angebot Q3",
+      "sender": "Jane Example",
+      "senderEmail": "jane@example.com",
+      "mailboxId": "mailbox-example",
+      "date": 1789387200,
+      "mimeType": "message/rfc822",
+      "conversationKey": "conversation-1"
+    },
+    {
+      "documentId": "document-teams-1",
+      "chunkId": null,
+      "score": 6.1,
+      "kind": "teams_message",
+      "title": null,
+      "sender": "8:orgid:user-1",
+      "senderEmail": "jane@example.com",
+      "mailboxId": null,
+      "date": 1789032600,
+      "mimeType": null,
+      "conversationKey": "19:chat@thread.v2"
+    }
+  ],
+  "elapsedMs": 4,
+  "blocksRead": 12,
+  "candidatesScored": 40,
+  "coverage": {
+    "sampledAt": "2026-09-15T12:00:00Z",
+    "basis": "index",
+    "sources": [
+      {
+        "sourceId": "source-example",
+        "mailboxId": "mailbox-example",
+        "product": "outlook",
+        "displayName": "Work mailbox",
+        "accountEmail": "jane@example.com",
+        "from": {
+          "at": "2025-03-14T08:30:00Z",
+          "inclusive": false
+        },
+        "through": null,
+        "observedAt": "2026-09-15T12:00:00Z",
+        "pendingNewer": 0,
+        "olderPending": 100,
+        "unsearchable": 15,
+        "undated": 0,
+        "dateBasis": "emailReceivedAtThenSentAt",
+        "inventory": "localStore",
+        "unavailableReason": null
+      },
+      {
+        "sourceId": "teams-source-example",
+        "mailboxId": null,
+        "product": "teams",
+        "displayName": "Contoso Ltd (jane@example.com)",
+        "accountEmail": "jane@example.com",
+        "from": {
+          "at": "2026-06-02T09:15:00Z",
+          "inclusive": true
+        },
+        "through": {
+          "at": "2026-09-15T11:40:00Z",
+          "inclusive": true
+        },
+        "observedAt": "2026-09-15T11:59:00Z",
+        "pendingNewer": 3,
+        "olderPending": 0,
+        "unsearchable": 1,
+        "undated": 0,
+        "dateBasis": "teamsMessageTimestamp",
+        "inventory": "cacheObservations",
+        "unavailableReason": null
+      }
+    ]
+  },
+  "limitReached": true
+}

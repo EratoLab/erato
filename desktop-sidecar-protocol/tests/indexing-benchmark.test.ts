@@ -67,6 +67,13 @@ describe("indexing benchmark contract", () => {
       expect(validate({ ...result, parallelism: 0 })).toBe(false);
       expect(validate({ ...result, indexedDocuments: -1 })).toBe(false);
       expect(validate({ ...result, indexedByType: { email: -1 } })).toBe(false);
+      expect(validate({ ...result, missingFromLocalCacheDocuments: 2 })).toBe(
+        true,
+      );
+      for (const missingFromLocalCacheDocuments of [-1, 1.5, null])
+        expect(validate({ ...result, missingFromLocalCacheDocuments })).toBe(
+          false,
+        );
     }
   });
   it("validates bounded history pages and rediscoverable summaries", () => {

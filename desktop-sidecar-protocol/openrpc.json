@@ -1450,7 +1450,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "12",
-    "digest": "sha256:3eb6056a923cfb29e56f993c27d3c15a09653fd1d4731ef063e3bd7f6ecc6765"
+    "revision": "13",
+    "digest": "sha256:9f628a70fca231042a092f412845ce7665d52b1547c3de37bc8c4831ef1e06c8"
   }
 }

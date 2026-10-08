@@ -152,6 +152,12 @@ const validators = {
   "indexing.status.v1:params": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-params.schema.json",
   ),
+  "search.query.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json",
+  ),
+  "search.query.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-params.schema.json",
+  ),
   "rpc.discover:params": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-params.schema.json",
   ),

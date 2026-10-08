@@ -10,6 +10,10 @@ export interface IndexingBenchmarkStatusV1Result {
   discoveredDocuments: number;
   indexedDocuments: number;
   failedDocuments: number;
+  /**
+   * Documents whose content is unavailable in the local cache; excluded from failedDocuments. Older sidecars omit it.
+   */
+  missingFromLocalCacheDocuments?: number;
   indexedByType: {
     [k: string]: number;
   };

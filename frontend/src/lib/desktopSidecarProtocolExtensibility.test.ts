@@ -136,6 +136,42 @@ describe("desktop sidecar protocol extensibility", () => {
       search([{ ...hit, conversationKey: "48:notes", selfNote: true }]),
     ).toBe(true);
     expect(search([{ ...hit, selfNote: "yes" }])).toBe(false);
+    const coverageSource = {
+      sourceId: teamsSource.sourceId,
+      mailboxId: null,
+      product: "teams",
+      displayName: teamsSource.displayName,
+      accountEmail: "jane@home.example",
+      from: { at: "2026-06-02T09:15:00Z", inclusive: true, future: true },
+      through: null,
+      observedAt: "2026-09-15T11:59:00Z",
+      pendingNewer: 0,
+      olderPending: 0,
+      unsearchable: 0,
+      undated: 0,
+      dateBasis: "teamsMessageTimestamp",
+      inventory: "cacheObservations",
+      unavailableReason: null,
+      futureSourceField: true,
+    };
+    const searchWithCoverage = (source: object) =>
+      validateSearchQueryV1Result({
+        hits: [hit],
+        elapsedMs: 1,
+        blocksRead: 0,
+        candidatesScored: 1,
+        limitReached: true,
+        coverage: {
+          sampledAt: "2026-09-15T12:00:00Z",
+          basis: "index",
+          sources: [source],
+          futureCoverageField: true,
+        },
+      });
+    expect(searchWithCoverage(coverageSource)).toBe(true);
+    expect(
+      searchWithCoverage({ ...coverageSource, observedAt: "2026-09-15" }),
+    ).toBe(false);
     expect(
       validateSourcesListV1Result({
         sources: [

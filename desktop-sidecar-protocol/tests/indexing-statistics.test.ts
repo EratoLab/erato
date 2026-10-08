@@ -15,6 +15,20 @@ import {
   validateSidecarConfigureV1Params,
 } from "../typescript/src/generated/validators.mjs";
 import type { IndexingStatusV1Result } from "../typescript/src/index.js";
+
+type IndexedRange = NonNullable<
+  IndexingStatusV1Result["discovery"][number]["indexedRange"]
+>;
+
+function readSchema(relativePath: string) {
+  return JSON.parse(
+    readFileSync(
+      new URL(`../schemas/${relativePath}`, import.meta.url),
+      "utf8",
+    ),
+  );
+}
+
 const fixture = JSON.parse(
   readFileSync(
     new URL(
@@ -90,6 +104,104 @@ describe("indexing statistics contract", () => {
         ...sourceFixture.coverage,
       }),
     ).toBe(true);
+  });
+
+  it("accepts indexed ranges per source alongside status from previous sidecars", () => {
+    const validators = [
+      validateIndexingStatusV1Result,
+      validateIndexingStartV1Result,
+      validateIndexingStopV1Result,
+    ];
+    expect(fixture.discovery.every((source) => source.indexedRange)).toBe(true);
+    const legacy = structuredClone(fixture);
+    for (const source of legacy.discovery) delete source.indexedRange;
+    const unclaimed = structuredClone(fixture);
+    Object.assign(unclaimed.discovery[0]!, {
+      lastSuccessfulScanAt: null,
+      indexedRange: {
+        ...unclaimed.discovery[0]!.indexedRange,
+        from: null,
+        through: null,
+        observedAt: null,
+        pendingNewer: null,
+        olderPending: null,
+        unsearchable: null,
+        undated: null,
+        unavailableReason: "not_enumerated",
+      },
+    });
+    const extended = structuredClone(fixture);
+    Object.assign(extended.discovery[1]!.indexedRange!, {
+      dateBasis: "futureDateBasis",
+      inventory: "futureInventory",
+      futureRangeField: true,
+    });
+    Object.assign(extended.discovery[1]!.indexedRange!.from!, {
+      futureBoundaryField: true,
+    });
+    for (const validate of validators)
+      for (const result of [fixture, legacy, unclaimed, extended])
+        expect(validate(result)).toBe(true);
+  });
+
+  it("rejects indexed ranges with offset timestamps, negative counts or missing fields", () => {
+    const range = (override: Record<string, unknown>) => {
+      const data = structuredClone(fixture);
+      Object.assign(data.discovery[1]!.indexedRange!, override);
+      return data;
+    };
+    const boundary = { at: "2026-06-02T09:15:00Z", inclusive: true };
+    const invalid = [
+      range({ from: { ...boundary, at: "2026-06-02T11:15:00+02:00" } }),
+      range({ through: { ...boundary, at: "2026-06-02" } }),
+      range({ from: { ...boundary, inclusive: "yes" } }),
+      range({ from: { inclusive: true } }),
+      range({ observedAt: "2026-09-15T13:59:00+02:00" }),
+      range({ dateBasis: "" }),
+      range({ inventory: null }),
+      range({ unavailableReason: "" }),
+      ...["pendingNewer", "olderPending", "unsearchable", "undated"].flatMap(
+        (count) => [-1, 1.5, "3"].map((value) => range({ [count]: value })),
+      ),
+    ];
+    const missing = structuredClone(fixture);
+    delete (missing.discovery[1]!.indexedRange as Partial<IndexedRange>)
+      .inventory;
+    for (const validate of [
+      validateIndexingStatusV1Result,
+      validateIndexingStartV1Result,
+      validateIndexingStopV1Result,
+    ])
+      for (const result of [...invalid, missing])
+        expect(validate(result)).toBe(false);
+  });
+
+  it("keeps indexed ranges and missing-cache depth compatible with the previous schema", () => {
+    const previous = readSchema(
+      "methods/indexing-status-v1-result.schema.json",
+    );
+    delete previous.definitions.DiscoverySource.properties.indexedRange;
+    delete previous.definitions.IndexedRange;
+    delete previous.definitions.IndexedRangeBoundary;
+    delete previous.definitions.Depth.properties.missingFromLocalCacheDocuments;
+    const ajv = new Ajv({
+      strict: true,
+      schemas: [readSchema("configuration/sidecar-configuration.schema.json")],
+    });
+    addFormats(ajv);
+    const validatePrevious = ajv.compile(previous);
+    const current = structuredClone(fixture);
+    Object.assign(current.generations[0]!.segments[0]!.depth, {
+      missingFromLocalCacheDocuments: 2,
+    });
+    expect(validateIndexingStatusV1Result(current)).toBe(true);
+    expect(validatePrevious(current)).toBe(true);
+    for (const value of [-1, 1.5, null]) {
+      Object.assign(current.generations[0]!.segments[0]!.depth, {
+        missingFromLocalCacheDocuments: value,
+      });
+      expect(validateIndexingStatusV1Result(current)).toBe(false);
+    }
   });
 
   it("validates source configuration fields while preserving additive policy extensions", () => {

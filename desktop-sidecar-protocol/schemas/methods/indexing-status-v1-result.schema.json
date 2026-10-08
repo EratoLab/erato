@@ -1004,6 +1004,12 @@
             }
           ]
         },
+        "missingFromLocalCacheDocuments": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Current-revision documents whose content is unavailable in the local cache. Older sidecars omit it."
+        },
         "unavailableReason": {
           "anyOf": [
             {
@@ -1399,6 +1405,9 @@
               "type": "null"
             }
           ]
+        },
+        "indexedRange": {
+          "$ref": "#/definitions/IndexedRange"
         }
       },
       "required": [
@@ -1413,7 +1422,149 @@
         "lastErrorCode"
       ],
       "additionalProperties": true,
-      "description": "discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."
+      "description": "discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete. Older sidecars omit indexedRange."
+    },
+    "IndexedRangeBoundary": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inclusive": {
+          "type": "boolean"
+        }
+      },
+      "required": ["at", "inclusive"],
+      "additionalProperties": true,
+      "description": "A document date bounding the indexed range; inclusive says whether documents dated exactly at it are inside the range."
+    },
+    "IndexedRange": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexedRangeBoundary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Oldest bound of the range. Null when no range can be claimed; unavailableReason says why."
+        },
+        "through": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexedRangeBoundary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Newest bound, set only while newer documents are still queued (pendingNewer). Null means the range reaches observedAt."
+        },
+        "observedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the sidecar last confirmed the local store: the end of a complete enumeration or a passed unchanged-store check. Null before the first complete enumeration."
+        },
+        "pendingNewer": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Unprocessed dated documents newer than the range. Zero when through is null."
+        },
+        "olderPending": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Unprocessed dated documents older than the range, or all of them when from is null."
+        },
+        "unsearchable": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Documents inside the range that ended unindexable or missing from the local cache. They do not break the range."
+        },
+        "undated": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Documents without a usable date, in any state. They are excluded from the range."
+        },
+        "dateBasis": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which document date the bounds use, such as emailReceivedAtThenSentAt or teamsMessageTimestamp. Extensible."
+        },
+        "inventory": {
+          "type": "string",
+          "minLength": 1,
+          "description": "localStore when the sidecar enumerates a complete local store, cacheObservations when it sees only what the application cached. Extensible."
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why from is null, such as not_enumerated or no_searchable_documents. Null when a range is claimed."
+        }
+      },
+      "required": [
+        "from",
+        "through",
+        "observedAt",
+        "pendingNewer",
+        "olderPending",
+        "unsearchable",
+        "undated",
+        "dateBasis",
+        "inventory",
+        "unavailableReason"
+      ],
+      "additionalProperties": true,
+      "description": "Period of this source's dated documents that search can rely on, measured in the active generation with search visibility rules. Every document dated inside the range is searchable or terminal."
     },
     "SearchStatistics": {
       "type": "object",

@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 
+import Ajv from "ajv";
+import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
+
+import type { SearchQueryV1Result } from "../typescript/src/index.js";
 
 import {
   validateDiagnosticsEchoV1Params,
@@ -16,6 +20,10 @@ import {
   validateSidecarProgressV1Params,
   validateSidecarProgressV1Result,
 } from "../typescript/src/generated/validators.mjs";
+
+type CoverageSource = NonNullable<
+  SearchQueryV1Result["coverage"]
+>["sources"][number];
 
 interface InvalidMessageFixture {
   cases: { name: string; message: unknown; error: string }[];
@@ -354,7 +362,99 @@ describe("search.query.v1 result boundary", () => {
       }),
     ).toBe(false);
   });
+
+  it("accepts the searched period per source and limitReached", async () => {
+    const fixture = await readFixture<SearchQueryV1Result>(
+      "search-coverage.json",
+    );
+    const listing = structuredClone(fixture);
+    listing.hits = [];
+    listing.limitReached = false;
+    Object.assign(listing.coverage!, {
+      basis: "catalog",
+      futureCoverageField: true,
+    });
+    Object.assign(listing.coverage!.sources[0]!, {
+      from: null,
+      through: null,
+      observedAt: null,
+      unavailableReason: "not_enumerated",
+      futureSourceField: true,
+    });
+    const legacy: Partial<SearchQueryV1Result> = structuredClone(fixture);
+    delete legacy.coverage;
+    delete legacy.limitReached;
+    const noSources = structuredClone(fixture);
+    noSources.coverage!.sources = [];
+    for (const result of [fixture, listing, legacy, noSources])
+      expect(validateSearchQueryV1Result(result)).toBe(true);
+  });
+
+  it("rejects coverage with offset timestamps, negative counts or missing identity", async () => {
+    const fixture = await readFixture<SearchQueryV1Result>(
+      "search-coverage.json",
+    );
+    const source = (override: Record<string, unknown>) => {
+      const data = structuredClone(fixture);
+      Object.assign(data.coverage!.sources[1]!, override);
+      return data;
+    };
+    const coverage = (override: Record<string, unknown>) => {
+      const data = structuredClone(fixture);
+      Object.assign(data.coverage!, override);
+      return data;
+    };
+    const missingSourceId = structuredClone(fixture);
+    delete (missingSourceId.coverage!.sources[0] as Partial<CoverageSource>)
+      .sourceId;
+    for (const result of [
+      coverage({ sampledAt: "2026-09-15T14:00:00+02:00" }),
+      coverage({ basis: "" }),
+      coverage({ sources: null }),
+      source({ observedAt: "2026-09-15T11:59:00+00:00" }),
+      source({ from: { at: "2026-06-02T09:15:00", inclusive: true } }),
+      source({ olderPending: -1 }),
+      source({ pendingNewer: 2.5 }),
+      source({ product: "" }),
+      source({ inventory: null }),
+      missingSourceId,
+      { ...fixture, limitReached: "yes" },
+    ])
+      expect(validateSearchQueryV1Result(result)).toBe(false);
+  });
+
+  it("keeps coverage readable by the previous search result schema", async () => {
+    const fixture = await readFixture<SearchQueryV1Result>(
+      "search-coverage.json",
+    );
+    const previous = await readSchema(
+      "methods/search-query-v1-result.schema.json",
+    );
+    delete previous.properties.coverage;
+    delete previous.properties.limitReached;
+    delete previous.definitions;
+    const ajv = new Ajv({
+      strict: true,
+      schemas: await Promise.all(
+        [
+          "source/external-ids.schema.json",
+          "source/top-level-parent.schema.json",
+        ].map(readSchema),
+      ),
+    });
+    addFormats(ajv);
+    expect(ajv.compile(previous)(fixture)).toBe(true);
+  });
 });
+
+async function readSchema(relativePath: string) {
+  return JSON.parse(
+    await readFile(
+      new URL(`../schemas/${relativePath}`, import.meta.url),
+      "utf8",
+    ),
+  );
+}
 
 async function readFixture<T>(name: string): Promise<T> {
   return JSON.parse(
