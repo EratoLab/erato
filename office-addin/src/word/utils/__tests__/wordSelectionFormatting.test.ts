@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  installWordSelectionHost,
+  uninstallWordSelectionHost,
+} from "../../../test/mocks/word/selectionHost";
 import {
   WORD_SELECTION_TOGGLE_PROPERTIES,
   WORD_SELECTION_VALUE_PROPERTIES,
@@ -131,5 +135,119 @@ describe("wordSelectionTargetFormat", () => {
         false,
       ).unresolved,
     ).toEqual(["bold", "subscript"]);
+  });
+});
+
+describe("a span whose first word alone carries a colour, highlight, font and size", () => {
+  afterEach(uninstallWordSelectionHost);
+
+  const rewrite = async (host: "mac" | "pc" | "web") => {
+    const mock = installWordSelectionHost(
+      {
+        body: [
+          {
+            runs: [
+              "MC1 ",
+              {
+                text: "Red",
+                font: {
+                  color: "#FF0000",
+                  highlightColor: "Yellow",
+                  name: "Courier New",
+                  size: 20,
+                },
+              },
+              " plain end.",
+            ],
+          },
+        ],
+      },
+      { host },
+    );
+    await Word.run(async (context) => {
+      const hits = context.document.body.paragraphs
+        .getFirst()
+        .search("Red plain", { matchCase: true });
+      hits.load("items");
+      await context.sync();
+      hits.items[0].insertText("Rewritten", "Replace");
+      await context.sync();
+    });
+    return mock.paragraphs()[0].runs;
+  };
+
+  it("is unresolved, because Replace gives it the first character's values on desktop and none on the web", async () => {
+    const span: WordSelectionSpanFormat = Object.fromEntries(
+      WORD_SELECTION_VALUE_PROPERTIES.map((property) => [
+        property,
+        { state: "mixed" },
+      ]),
+    );
+    expect(wordSelectionTargetFormat(span, STYLE, true).unresolved).toEqual([
+      ...WORD_SELECTION_VALUE_PROPERTIES,
+    ]);
+    const desktop = [
+      { text: "MC1 " },
+      {
+        text: "Rewritten",
+        font: {
+          color: "#FF0000",
+          highlightColor: "Yellow",
+          name: "Courier New",
+          size: 20,
+        },
+      },
+      { text: " end." },
+    ];
+    expect(await rewrite("mac")).toEqual(desktop);
+    expect(await rewrite("pc")).toEqual(desktop);
+    expect(await rewrite("web")).toEqual([{ text: "MC1 Rewritten end." }]);
+  });
+});
+
+describe("a span whose first word alone is bold with its complex-script twin", () => {
+  afterEach(uninstallWordSelectionHost);
+
+  const rewrite = async (requirements: "m365" | "ltsc2024") => {
+    const bidiSetters = requirements === "m365";
+    const { font } = wordSelectionTargetFormat(
+      { bold: { state: "mixed" } },
+      STYLE,
+      bidiSetters,
+    );
+    const mock = installWordSelectionHost(
+      {
+        body: [
+          {
+            runs: [
+              "BF1 ",
+              { text: "Bold", font: { bold: true, boldBidirectional: true } },
+              " plain end.",
+            ],
+          },
+        ],
+      },
+      { host: "pc", requirements },
+    );
+    await Word.run(async (context) => {
+      const hits = context.document.body.paragraphs
+        .getFirst()
+        .search("Bold plain", { matchCase: true });
+      hits.load("items");
+      await context.sync();
+      const written = hits.items[0].insertText("Rewritten", "Replace");
+      Object.assign(written.font, font);
+      await context.sync();
+    });
+    return mock.paragraphs()[0].runs;
+  };
+
+  it("keeps the first character's bCs on LTSC 2024, which has no bidi setters, so such a twin is context only there", async () => {
+    expect(await rewrite("m365")).toEqual([{ text: "BF1 Rewritten end." }]);
+    expect(await rewrite("ltsc2024")).toEqual([
+      { text: "BF1 " },
+      { text: "Rewritten", font: { boldBidirectional: true } },
+      { text: " end." },
+    ]);
   });
 });

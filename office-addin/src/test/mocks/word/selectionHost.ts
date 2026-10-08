@@ -6,8 +6,10 @@ import type { Mock } from "vitest";
  * A character-level Word host for selection-based editing (ERMAIN-928). Every paragraph is a
  * sequence of tokens (one per UTF-16 unit, plus pictures, footnote references, comment marks and
  * the paragraph mark), so a range is a pair of token boundaries and moves with edits as a desktop
- * Range does. Text, offsets and write behaviour follow the native probes recorded in
- * erato-word-benchmarks-selection-v2/results/word-selection-v2-report.md ("SV2:<line>").
+ * Range does (a tracked web range keeps its offsets instead). Text, offsets and write behaviour
+ * follow the native probes recorded in
+ * erato-word-benchmarks-selection-v2/results/word-selection-v2-report.md ("SV2:<line>") and
+ * ermain-928-preflight-report.md ("P<n>", "impact <n>").
  *
  * Office.js calls queue commands that run at context.sync(), in order, and a rejected sync keeps
  * the commands before the failure, as Word does. Properties must be loaded before they are read.
@@ -255,6 +257,11 @@ export const WORD_SELECTION_API_SETS: Readonly<
   "Font.bidirectional": ["WordApiDesktop", "1.3"],
   // Plan §4 lists WordApiDesktop 1.3; the office-js typings place it in WordApi 1.3.
   "Range.getHyperlinkRanges": ["WordApi", "1.3"],
+  // P3: the object-model hazard checks a span's OOXML cannot replace.
+  "Range.hyperlink": ["WordApi", "1.3"],
+  "Range.contentControls": ["WordApi", "1.1"],
+  "Range.parentContentControlOrNullObject": ["WordApi", "1.3"],
+  "Range.fields": ["WordApi", "1.4"],
 };
 
 const OTHER_AUTHOR = "Other Author";
@@ -1359,6 +1366,26 @@ export function installWordSelectionHost(
         paragraphAround(b.story, b.s),
       ),
     );
+  /**
+   * P8 and P2: desktop writes no value equal to the one the run inherits (automatic colour is not
+   * #000000, so a colour is always written); the web drops only a toggle switched off where it
+   * already is off, and writes every other value.
+   */
+  const elided = (
+    t: Token,
+    para: ParaState | undefined,
+    key: FontKey,
+    value: unknown,
+  ) => {
+    const inherited = mergeFont(
+      { ...DEFAULT_FONT, color: undefined },
+      styleFont(para?.style ?? "Normal"),
+      styleFont(t.run.rStyle),
+    )[key];
+    return web
+      ? value === false && inherited === false
+      : inherited !== undefined && value === inherited;
+  };
   const setFont = (b: Bounds, key: FontKey, value: unknown) => {
     let change: Revision | undefined;
     for (let i = b.s; i < b.e; i += 1) {
@@ -1369,7 +1396,9 @@ export function installWordSelectionHost(
         change ??= revision("format");
         formatChange = { revision: change, font: t.run.font };
       }
-      t.run = { ...t.run, font: { ...t.run.font, [key]: value }, formatChange };
+      const font: MockSelectionFont = { ...t.run.font, [key]: value };
+      if (elided(t, paraAt(b.story, i), key, value)) delete font[key];
+      t.run = { ...t.run, font, formatChange };
     }
   };
   const fontValue = (b: Bounds, key: FontKey): unknown => {
@@ -1514,19 +1543,28 @@ export function installWordSelectionHost(
     const change = run.formatChange
       ? `<w:rPrChange${revisionAttrs(run.formatChange.revision)}><w:rPr>${rPrContent(run.formatChange.font)}</w:rPr></w:rPrChange>`
       : "";
-    const content = rPrContent(run.font, run.rStyle) + change;
+    // Word marks field results noProof (P3).
+    const content =
+      rPrContent(run.font, run.rStyle) +
+      (run.field ? "<w:noProof/>" : "") +
+      change;
     return content ? `<w:rPr>${content}</w:rPr>` : "";
+  };
+  /** Word's Range.text shows a page break as \f and a column break as \u000E, like a line break as \v. */
+  const BREAK_XML: Record<string, string> = {
+    "\t": "<w:tab/>",
+    "\v": "<w:br/>",
+    "\f": '<w:br w:type="page"/>',
+    "\u000E": '<w:br w:type="column"/>',
   };
   const charsXml = (text: string, deleted: boolean) =>
     text
-      .split(/([\t\v])/)
+      .split(/([\t\v\f\u000E])/)
       .filter(Boolean)
-      .map((part) =>
-        part === "\t"
-          ? "<w:tab/>"
-          : part === "\v"
-            ? "<w:br/>"
-            : `<w:${deleted ? "delText" : "t"} xml:space="preserve">${esc(part)}</w:${deleted ? "delText" : "t"}>`,
+      .map(
+        (part) =>
+          BREAK_XML[part] ??
+          `<w:${deleted ? "delText" : "t"} xml:space="preserve">${esc(part)}</w:${deleted ? "delText" : "t"}>`,
       )
       .join("");
   const runKey = (t: Token) =>
@@ -1541,7 +1579,10 @@ export function installWordSelectionHost(
     from: number,
     to: number,
     links: Map<LinkState, string>,
+    clipped: ReadonlySet<unknown>,
   ) => {
+    const kept = <T>(wrapper: T | undefined) =>
+      wrapper === undefined || clipped.has(wrapper) ? undefined : wrapper;
     const out: string[] = [];
     let sdt: SdtState | undefined;
     let link: LinkState | undefined;
@@ -1568,18 +1609,21 @@ export function installWordSelectionHost(
     for (let i = from; i < to; ) {
       const t = st.tokens[i];
       const tRev = t.run.ins ?? t.run.del;
-      if (t.run.sdt !== sdt) closeFrom(0);
-      else if (t.run.link !== link) closeFrom(1);
+      const tSdt = kept(t.run.sdt);
+      const tLink = kept(t.run.link);
+      const tField = kept(t.run.field);
+      if (tSdt !== sdt) closeFrom(0);
+      else if (tLink !== link) closeFrom(1);
       else if (tRev !== rev) closeFrom(2);
-      else if (t.run.field !== field) closeFrom(3);
-      if (!sdt && t.run.sdt) {
-        sdt = t.run.sdt;
+      else if (tField !== field) closeFrom(3);
+      if (!sdt && tSdt) {
+        sdt = tSdt;
         out.push(
           `<w:sdt><w:sdtPr><w:tag w:val="${esc(sdt.tag)}"/></w:sdtPr><w:sdtContent>`,
         );
       }
-      if (!link && t.run.link) {
-        link = t.run.link;
+      if (!link && tLink) {
+        link = tLink;
         let id = links.get(link);
         if (!id) {
           id = `rIdLink${links.size + 1}`;
@@ -1591,8 +1635,8 @@ export function installWordSelectionHost(
         rev = tRev;
         out.push(`<w:${rev.kind}${revisionAttrs(rev)}>`);
       }
-      if (!field && t.run.field) {
-        field = t.run.field;
+      if (!field && tField) {
+        field = tField;
         out.push(
           `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${esc(field.code)} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`,
         );
@@ -1640,6 +1684,8 @@ export function installWordSelectionHost(
     from: number,
     to: number,
     links: Map<LinkState, string>,
+    clipped: ReadonlySet<unknown>,
+    withProperties: boolean,
   ) => {
     const markTokenAt = st.tokens[mark];
     const para = paraOf(markTokenAt);
@@ -1651,7 +1697,7 @@ export function installWordSelectionHost(
     const markRev = markTokenAt.run.ins ?? markTokenAt.run.del;
     if (markRev)
       pPr.push(`<w:rPr><w:${markRev.kind}${revisionAttrs(markRev)}/></w:rPr>`);
-    return `<w:p>${pPr.length ? `<w:pPr>${pPr.join("")}</w:pPr>` : ""}${runsXml(st, from, to, links)}</w:p>`;
+    return `<w:p>${pPr.length && withProperties ? `<w:pPr>${pPr.join("")}</w:pPr>` : ""}${runsXml(st, from, to, links, clipped)}</w:p>`;
   };
   const stylesXml = () =>
     `<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr>${rPrContent({
@@ -1667,14 +1713,53 @@ export function installWordSelectionHost(
       .join("")}</w:styles>`;
   const pkgPart = (name: string, type: string, xml: string) =>
     `<pkg:part pkg:name="${name}" pkg:contentType="${type}"><pkg:xmlData>${xml}</pkg:xmlData></pkg:part>`;
-  /** Like Word's: the clipped paragraphs (tables only when the range spans cells) plus styles. */
+  /**
+   * P3: the wrappers a range's own OOXML drops. A range inside a hyperlink (desktop also for exactly
+   * the link text) keeps only rStyle, one inside or partly over a content control has no w:sdt, and
+   * one inside a field result has no fldChar on desktop.
+   */
+  const clippedWrappers = (b: Bounds): Set<unknown> => {
+    const { story: st, s, e } = b;
+    const clipped = new Set<unknown>();
+    const covered = st.tokens.slice(s, e);
+    const extent = (owns: (t: Token) => boolean) =>
+      st.tokens.reduce((n, t) => n + (owns(t) ? 1 : 0), 0);
+    const sole = <T>(of: (run: RunState) => T | undefined) => {
+      const first = covered.length ? of(covered[0].run) : undefined;
+      return first !== undefined &&
+        covered.every((t) => isInline(t) && of(t.run) === first)
+        ? first
+        : undefined;
+    };
+    const link = sole((run) => run.link);
+    if (link && (!web || extent((t) => t.run.link === link) > covered.length))
+      clipped.add(link);
+    const field = sole((run) => run.field);
+    if (field && !web) clipped.add(field);
+    for (const sdt of new Set(covered.map((t) => t.run.sdt))) {
+      if (!sdt) continue;
+      const contained =
+        extent((t) => t.run.sdt === sdt) ===
+        covered.filter((t) => t.run.sdt === sdt).length;
+      if (!contained || covered.every((t) => t.run.sdt === sdt))
+        clipped.add(sdt);
+    }
+    return clipped;
+  };
+  /**
+   * Like Word's: the clipped paragraphs (tables only when the range spans cells) plus styles. P2:
+   * the web leaves out the paragraph properties when the range lies within one paragraph.
+   */
   const ooxmlOf = (b: Bounds): string => {
     const { story: st, s, e } = b;
     const links = new Map<LinkState, string>();
     const common = commonCells(b);
     const out: string[] = [];
+    const clipped = clippedWrappers(b);
+    const marks = marksIn(st, s, e);
+    const withProperties = !web || marks.length > 1;
     let open: readonly CellState[] = common;
-    for (const m of marksIn(st, s, e)) {
+    for (const m of marks) {
       const path = paraOf(st.tokens[m]).cells;
       let k = common.length;
       while (k < open.length && k < path.length && open[k] === path[k]) k += 1;
@@ -1701,6 +1786,8 @@ export function installWordSelectionHost(
           Math.max(paragraphStart(st, m), s),
           Math.min(m, e),
           links,
+          clipped,
+          withProperties,
         ),
       );
     }
@@ -1939,9 +2026,16 @@ export function installWordSelectionHost(
               tokens.push({ kind: "char", ch: "\t", run: current() });
               break;
             case "br":
-            case "cr":
-              tokens.push({ kind: "char", ch: "\v", run: current() });
+            case "cr": {
+              const type = attrW(node, "type");
+              tokens.push({
+                kind: "char",
+                ch:
+                  type === "page" ? "\f" : type === "column" ? "\u000E" : "\v",
+                run: current(),
+              });
               break;
+            }
             case "drawing":
               tokens.push({ kind: "picture", ch: "", run: current() });
               break;
@@ -2176,6 +2270,8 @@ export function installWordSelectionHost(
     queue: Command[];
     session: number;
     api: Obj;
+    /** Writes the document shows only once the current Word.run has ended. */
+    afterRun: (() => void)[];
   }
   interface Meta {
     ctx: Ctx;
@@ -2433,9 +2529,11 @@ export function installWordSelectionHost(
   };
 
   /**
-   * Native probe: on Word for the web, reading an expandTo range that lies within one paragraph,
-   * even Whole.expandTo(Whole), changes the document: hidden text is shown and complex-script
-   * formatting without its Latin twin is dropped. A range over several paragraphs is safe.
+   * Preflight impact 1: on Word for the web, reading or selecting an expandTo range within one
+   * paragraph rewrites the runs it covers. A prefix or point range unhides hidden text, drops
+   * cs-only bCs and szCs, gives a lone sz its szCs and drops rtl; the paragraph's own
+   * Whole.expandTo(Whole) does the last three only. A range over several paragraphs is safe. The
+   * re-spaced field instruction is not modelled.
    */
   const changeOnWebRead = (
     ctx: Ctx,
@@ -2445,21 +2543,24 @@ export function installWordSelectionHost(
     const change = () => {
       const b = bounds();
       if (!b || marksIn(b.story, b.s, b.e).length > 1) return;
+      const cover = b.story.tokens
+        .slice(b.s, b.e)
+        .some((t) => t.kind === "mark");
       for (let i = b.s; i < b.e; i += 1) {
         const t = b.story.tokens[i];
         if (t.kind !== "char") continue;
         const font: MockSelectionFont = { ...t.run.font };
-        delete font.hidden;
-        for (const [latin, twin] of Object.entries(WEB_FONT_TWINS) as [
-          FontKey,
-          FontKey,
-        ][])
-          if (font[twin] !== undefined && font[twin] !== font[latin])
-            delete font[twin];
+        if (!cover) {
+          delete font.hidden;
+          if (font.size === undefined) delete font.sizeBidirectional;
+        }
+        if (font.bold === undefined) delete font.boldBidirectional;
+        if (font.size !== undefined) font.sizeBidirectional ??= font.size;
+        delete font.rtl;
         t.run = { ...t.run, font };
       }
     };
-    for (const name of ["load", "getOoxml"] as const) {
+    for (const name of ["load", "getOoxml", "select"] as const) {
       const read = range[name] as (...args: unknown[]) => unknown;
       range[name] = (...args: unknown[]) => {
         const result = read(...args);
@@ -2505,17 +2606,61 @@ export function installWordSelectionHost(
     return font;
   };
 
+  /** A tracked range on the web: its paragraph, the offset into it and its length (SV2:44-52). */
+  interface WebAnchor {
+    story: Story;
+    mark: Token;
+    offset: number;
+    length: number;
+  }
+  const webAnchorOf = (b: Bounds): WebAnchor | undefined => {
+    const m = paragraphEnd(b.story, b.s);
+    if (m < 0) return undefined;
+    return {
+      story: b.story,
+      mark: b.story.tokens[m],
+      offset: b.s - paragraphStart(b.story, m),
+      length: b.e - b.s,
+    };
+  };
+  const webAnchorBounds = (anchor: WebAnchor): Bounds => {
+    const { story: st } = anchor;
+    const m = st.tokens.indexOf(anchor.mark);
+    if (m < 0) throw itemNotFound("Range");
+    const last = st.tokens.length - 1;
+    const s = Math.min(paragraphStart(st, m) + anchor.offset, last);
+    return { story: st, s, e: Math.min(s + anchor.length, last) };
+  };
   const rangeFrom = (ctx: Ctx, getSpan: () => Span): Obj => {
     const range: Obj = {};
     register(range, ctx, "Range");
-    const target: Target = {
-      type: "Range",
-      whole: () => boundsOf(getSpan()),
-      content: () => boundsOf(getSpan()),
+    let webAnchor: WebAnchor | undefined;
+    let anchored = false;
+    // SV2:44-52: a tracked web range keeps paragraph-relative offsets and its length, so an earlier
+    // edit in its paragraph moves it onto other text, where desktop's moves with the text.
+    const whole = () => {
+      if (webAnchor) return webAnchorBounds(webAnchor);
+      const b = boundsOf(getSpan());
+      if (web && !anchored && metaOf(range).tracked) {
+        anchored = true;
+        webAnchor = webAnchorOf(b);
+      }
+      return b;
     };
+    const target: Target = { type: "Range", whole, content: whole };
     decorate(range, ctx, target);
     defineProps(range, ctx, "Range", {
       text: { get: () => renderRange(target.whole()) },
+      hyperlink: {
+        get: () => {
+          const b = target.whole();
+          return (
+            b.story.tokens.slice(b.s, b.e).find((t) => t.run.link)?.run.link
+              ?.url ?? ""
+          );
+        },
+        api: "Range.hyperlink",
+      },
       isEmpty: {
         get: () => {
           const b = target.whole();
@@ -2607,10 +2752,17 @@ export function installWordSelectionHost(
         get: () => (nullIds ? null : para().id),
         api: "Paragraph.uniqueLocalId",
       },
+      // P2: the web reports the OOXML w:name ("heading 1"), which getByNameOrNullObject cannot find.
       style: {
-        get: () => para().style,
+        get: () => {
+          const style = para().style;
+          return web ? (styleTable.get(style)?.ooxmlName ?? style) : style;
+        },
         set: (value) => {
-          para().style = String(value);
+          const name = String(value);
+          para().style =
+            [...styleTable.values()].find((def) => def.ooxmlName === name)
+              ?.name ?? name;
         },
       },
       styleBuiltIn: {
@@ -2965,6 +3117,112 @@ export function installWordSelectionHost(
       );
       return list;
     });
+    /** P3: the controls a range touches without lying inside them, and the one it lies inside. */
+    const parentControl = (b: Bounds): SdtState | undefined => {
+      const covered = b.story.tokens.slice(b.s, Math.max(b.e, b.s + 1));
+      const first = covered[0]?.run.sdt;
+      return first && covered.every((t) => isInline(t) && t.run.sdt === first)
+        ? first
+        : undefined;
+    };
+    const control = (sdt: SdtState): Obj => {
+      const item: Obj = {};
+      register(item, ctx, "ContentControl");
+      defineProps(item, ctx, "ContentControl", { tag: { get: () => sdt.tag } });
+      return item;
+    };
+    nav(obj, "contentControls", () => {
+      const { list } = collection(
+        ctx,
+        obj,
+        "ContentControlCollection",
+        () => {
+          gate("Range.contentControls");
+          const b = target.whole();
+          const parent = parentControl(b);
+          const found = new Set<SdtState>();
+          for (let i = b.s; i < b.e; i += 1) {
+            const sdt = b.story.tokens[i].run.sdt;
+            if (sdt && sdt !== parent) found.add(sdt);
+          }
+          return [...found];
+        },
+        control,
+      );
+      return list;
+    });
+    nav(obj, "parentContentControlOrNullObject", () => {
+      const item: Obj = {};
+      register(item, ctx, "ContentControl", obj);
+      let sdt: SdtState | null | undefined;
+      enqueue(ctx, obj, "Range.parentContentControlOrNullObject", false, () => {
+        gate("Range.parentContentControlOrNullObject");
+        sdt = parentControl(target.whole()) ?? null;
+      });
+      Object.defineProperty(item, "isNullObject", {
+        enumerable: true,
+        get: () => {
+          if (sdt === undefined)
+            throw officeError(
+              "PropertyNotLoaded",
+              "The property 'isNullObject' is not available.",
+            );
+          return sdt === null;
+        },
+      });
+      defineProps(
+        item,
+        ctx,
+        "ContentControl",
+        {
+          tag: {
+            get: () => {
+              if (!sdt) throw itemNotFound("ContentControl");
+              return sdt.tag;
+            },
+          },
+        },
+        () => sdt === null,
+      );
+      return item;
+    });
+    nav(obj, "fields", () => {
+      const { list } = collection(
+        ctx,
+        obj,
+        "FieldCollection",
+        () => {
+          gate("Range.fields");
+          const b = target.whole();
+          const found = new Set<FieldState>();
+          for (let i = b.s; i < b.e; i += 1) {
+            const field = b.story.tokens[i].run.field;
+            if (field) found.add(field);
+          }
+          return [...found].map((field) => ({ story: b.story, field }));
+        },
+        ({ story: st, field }) => {
+          const item: Obj = {};
+          register(item, ctx, "Field");
+          defineProps(item, ctx, "Field", { code: { get: () => field.code } });
+          nav(item, "result", () =>
+            rangeFrom(ctx, () => {
+              const indices = st.tokens.flatMap((t, i) =>
+                t.run.field === field ? [i] : [],
+              );
+              if (!indices.length) throw itemNotFound("Field.result");
+              return spanOf({
+                story: st,
+                s: indices[0],
+                e: indices[indices.length - 1] + 1,
+              });
+            }),
+          );
+          return item;
+        },
+      );
+      return list;
+    });
     obj.getRange = (location: string = "Whole") => {
       method("getRange");
       return makeRange(ctx, obj, `${type}.getRange`, () => {
@@ -3050,15 +3308,20 @@ export function installWordSelectionHost(
     };
     obj.insertOoxml = (ooxml: string, location: string) => {
       method("insertOoxml");
+      const where = () =>
+        location === "Replace" ? target.whole() : locate(target, location);
       return makeRange(
         ctx,
         obj,
         `${type}.insertOoxml`,
-        () =>
-          ooxmlWrite(
-            location === "Replace" ? target.whole() : locate(target, location),
-            ooxml,
-          ),
+        () => {
+          if (!web) return ooxmlWrite(where(), ooxml);
+          // SV2:74, P4: the web shows a restore only in a later Word.run; reads in this one are stale.
+          parseOoxml(ooxml);
+          const placed = where();
+          ctx.afterRun.push(() => ooxmlWrite(where(), ooxml));
+          return placed;
+        },
         true,
       );
     };
@@ -3301,7 +3564,13 @@ export function installWordSelectionHost(
   };
   const makeContext = (): Ctx => {
     contextSeed += 1;
-    const ctx: Ctx = { id: contextSeed, queue: [], session: 0, api: {} };
+    const ctx: Ctx = {
+      id: contextSeed,
+      queue: [],
+      session: 0,
+      api: {},
+      afterRun: [],
+    };
     const doc = makeDocument(ctx);
     const trackedObjects = (tracked: boolean) => (value: unknown) => {
       for (const item of Array.isArray(value) ? value : [value]) {
@@ -3345,6 +3614,7 @@ export function installWordSelectionHost(
       return value;
     } finally {
       ctx.queue = [];
+      for (const apply of ctx.afterRun.splice(0)) apply();
       ctx.session += 1;
     }
   });

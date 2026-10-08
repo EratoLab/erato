@@ -616,7 +616,9 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     expect(ooxml("FN1")).toContain("<w:footnoteReference");
     expect(ooxml("CM1")).toContain("<w:commentReference");
     expect(ooxml("PC1")).toContain("<w:drawing>");
-    expect(ooxml("H1")).toContain('<w:pStyle w:val="Heading1"/>');
+    expect(host.ooxml({ p: "H1", part: "Whole", to: { p: "MX1" } })).toContain(
+      '<w:pStyle w:val="Heading1"/>',
+    );
     expect(ooxml("H1")).toMatch(
       /pkg:name="\/word\/styles.xml".*<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"\/><w:basedOn w:val="Normal"\/><w:rPr><w:rFonts w:ascii="Calibri Light" w:hAnsi="Calibri Light"\/><w:b\/><w:color w:val="2F5496"\/><w:sz w:val="32"\/>/,
     );
@@ -670,15 +672,185 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     expect(host.writeSyncs().map((s) => s.writes)).toEqual([
       ["Font.bold=", "Font.color="],
     ]);
+    // P8: bold = false where the style gives no bold writes nothing on any host.
     expect(host.paragraphs()[1].runs.slice(0, 2)).toEqual([
       { text: "MX1 " },
+      { text: "Alpha bravo", font: { color: "#FF0000" } },
+    ]);
+  });
+
+  it("P8 and P2: writes no toggle switched off where it already is, and desktop no value the style gives", async () => {
+    const host = install();
+    await Word.run(async (context) => {
+      (await tagged(context, "PL1")).getRange("Content").font.bold = false;
+      const heading = (await tagged(context, "H1")).getRange("Content").font;
+      heading.bold = true;
+      heading.size = 16;
+      heading.color = "#000000";
+      await context.sync();
+    });
+    const [h1, , pl1] = host.paragraphs();
+    expect(pl1.runs).toEqual([{ text: pl1.text }]);
+    expect(h1.runs).toEqual([
       {
-        text: "Alpha bravo",
+        text: h1.text,
         font: desktop
-          ? { bold: false, color: "#FF0000" }
-          : { bold: false, boldBidirectional: false, color: "#FF0000" },
+          ? { color: "#000000" }
+          : {
+              bold: true,
+              boldBidirectional: true,
+              size: 16,
+              sizeBidirectional: 16,
+              color: "#000000",
+            },
       },
     ]);
+  });
+
+  it("P2: names a heading's style per host and leaves paragraph properties out of the web's single-paragraph OOXML", async () => {
+    install();
+    const read = await Word.run(async (context) => {
+      const h1 = await tagged(context, "H1");
+      const mx1 = await tagged(context, "MX1");
+      h1.load("style,styleBuiltIn");
+      await context.sync();
+      const style = context.document
+        .getStyles()
+        .getByNameOrNullObject(h1.style);
+      style.load("nameLocal");
+      const single = h1.getOoxml();
+      const pair = h1
+        .getRange("Whole")
+        .expandTo(mx1.getRange("Whole"))
+        .getOoxml();
+      await context.sync();
+      const pStyle = '<w:pStyle w:val="Heading1"/>';
+      return {
+        style: h1.style,
+        builtIn: h1.styleBuiltIn,
+        found: !style.isNullObject,
+        single: single.value.includes(pStyle),
+        pair: pair.value.includes(pStyle),
+      };
+    });
+    expect(read).toEqual({
+      style: desktop ? "Heading 1" : "heading 1",
+      builtIn: "Heading1",
+      found: desktop,
+      single: desktop,
+      pair: true,
+    });
+  });
+
+  it("P3: a span's own OOXML drops the link, control and field around it, and the object model still finds them", async () => {
+    const host = install({
+      body: [
+        {
+          runs: [
+            "LK1 Before ",
+            { text: "the link text", link: "https://example.com/" },
+            " after.",
+          ],
+        },
+        {
+          runs: [
+            "CC1 Before ",
+            { text: "the control text", sdt: "tag-1" },
+            " after.",
+          ],
+        },
+        {
+          runs: [
+            "FD1 Before ",
+            { text: "2026-10-06", field: 'DATE \\@ "yyyy-MM-dd"' },
+            " after.",
+          ],
+        },
+      ],
+    });
+    const inLink = host.ooxml({ p: "LK1", text: "link" });
+    expect(inLink).toContain('<w:rStyle w:val="Hyperlink"/>');
+    expect(inLink).not.toContain("<w:hyperlink");
+    expect(
+      host.ooxml({ p: "LK1", text: "the link text" }).includes("<w:hyperlink"),
+    ).toBe(!desktop);
+    expect(host.ooxml({ p: "LK1", part: "Whole" })).toContain("<w:hyperlink");
+    expect(host.ooxml({ p: "CC1", text: "control" })).not.toContain("<w:sdt>");
+    expect(host.ooxml({ p: "CC1", text: "Before the control" })).not.toContain(
+      "<w:sdt>",
+    );
+    expect(host.ooxml({ p: "CC1", part: "Whole" })).toContain("<w:sdt>");
+    const inField = host.ooxml({ p: "FD1", text: "10-06" });
+    expect(inField).toContain("<w:noProof/>");
+    expect(inField.includes("fldChar")).toBe(!desktop);
+    expect(host.ooxml({ p: "FD1", part: "Whole" })).toContain("fldChar");
+
+    const found = await Word.run(async (context) => {
+      const link = await firstHit(context, "LK1", "link");
+      const inside = await firstHit(context, "CC1", "control");
+      const partly = await firstHit(context, "CC1", "Before the control");
+      const result = await firstHit(context, "FD1", "10-06");
+      const fd1 = await tagged(context, "FD1");
+      link.load("hyperlink");
+      const parent = inside.parentContentControlOrNullObject;
+      parent.load("tag");
+      const touched = partly.contentControls;
+      touched.load("items/tag");
+      const fields = fd1.fields;
+      fields.load("items/code");
+      await context.sync();
+      const relation = fields.items[0].result.compareLocationWith(result);
+      await context.sync();
+      return {
+        hyperlink: link.hyperlink,
+        parent: parent.isNullObject ? null : parent.tag,
+        touched: touched.items.map((c) => c.tag),
+        code: fields.items[0].code,
+        relation: relation.value,
+      };
+    });
+    expect(found).toEqual({
+      hyperlink: "https://example.com/",
+      parent: "tag-1",
+      touched: ["tag-1"],
+      code: 'DATE \\@ "yyyy-MM-dd"',
+      relation: "ContainsEnd",
+    });
+  });
+
+  it("writes a page break as \\f and a column break as \\u000E and reads them back from OOXML", async () => {
+    const host = install({ body: ["BR1 Page\fColumn\u000Eend."] });
+    const xml = host.ooxml({ p: "BR1", part: "Content" });
+    expect(xml).toContain('<w:br w:type="page"/>');
+    expect(xml).toContain('<w:br w:type="column"/>');
+    await Word.run(async (context) => {
+      const br1 = await tagged(context, "BR1");
+      const backup = br1.getOoxml();
+      await context.sync();
+      br1.insertOoxml(backup.value, "Replace");
+      await context.sync();
+    });
+    expect(host.paragraphs()[0].text).toBe("BR1 Page\fColumn\u000Eend.");
+  });
+
+  it("SV2:74 and P4: shows an insertOoxml restore in the same Word.run on desktop and only in a later one on the web", async () => {
+    const host = install();
+    const original = host.paragraphs()[2].text;
+    const sameRun = await Word.run(async (context) => {
+      const pl1 = await tagged(context, "PL1");
+      const backup = pl1.getOoxml();
+      await context.sync();
+      (await firstHit(context, "PL1", "kilo")).insertText("KILO", "Replace");
+      await context.sync();
+      pl1.insertOoxml(backup.value, "Replace");
+      await context.sync();
+      const again = context.document.body.paragraphs;
+      again.load("items/text");
+      await context.sync();
+      return again.items[2].text;
+    });
+    expect(sameRun).toBe(desktop ? original : original.replace("kilo", "KILO"));
+    expect(host.paragraphs()[2].text).toBe(original);
   });
 
   it("writes the complex-script twin of a font set where the host does", async () => {
@@ -719,55 +891,98 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     );
   });
 
-  it("changes the document when the web reads an expandTo range within one paragraph", async () => {
-    const host = install();
-    const before = host.ooxml({ p: "HT1", part: "Whole" });
-    expect(before).toContain("<w:vanish/>");
-    await Word.run(async (context) => {
-      const ht1 = await tagged(context, "HT1");
-      const pl1 = await tagged(context, "PL1");
-      const several = ht1.getRange("Whole").expandTo(pl1.getRange("Whole"));
-      several.load("text");
-      several.getOoxml();
-      await context.sync();
-    });
-    expect(host.ooxml({ p: "HT1", part: "Whole" })).toBe(before);
-    await Word.run(async (context) => {
-      const ht1 = await tagged(context, "HT1");
-      const hit = (await firstHit(context, "HT1", "hidden after")).getRange(
-        "Start",
-      );
-      ht1.getRange("Start").expandTo(hit).load("text");
-      await context.sync();
-    });
-    const after = host.ooxml({ p: "HT1", part: "Whole" });
-    if (desktop) expect(after).toBe(before);
-    else expect(after).not.toContain("<w:vanish/>");
-  });
-
-  it("drops complex-script formatting without its Latin twin when the web reads a one-paragraph expandTo range", async () => {
-    const host = install({
+  describe("preflight impact 1: reading or selecting an expandTo range within one paragraph", () => {
+    const SIDE_EFFECTS: MockSelectionDocument = {
       body: [
         {
           runs: [
-            "CS1 ",
-            { text: "both", font: { bold: true, boldBidirectional: true } },
-            " ",
-            { text: "csonly", font: { boldBidirectional: true } },
+            "SE1 ",
+            { text: "hidden ", hidden: true },
+            { text: "szcs ", font: { sizeBidirectional: 14 } },
+            { text: "bcs ", font: { boldBidirectional: true } },
+            { text: "both ", font: { bold: true, boldBidirectional: true } },
+            { text: "size ", font: { size: 14 } },
+            { text: "rtl", font: { rtl: true } },
+            " end.",
           ],
         },
+        "SE2 Next paragraph.",
       ],
+    };
+    const ORIGINAL = [
+      { text: "SE1 " },
+      { text: "hidden ", font: { hidden: true } },
+      { text: "szcs ", font: { sizeBidirectional: 14 } },
+      { text: "bcs ", font: { boldBidirectional: true } },
+      { text: "both ", font: { bold: true, boldBidirectional: true } },
+      { text: "size ", font: { size: 14 } },
+      { text: "rtl", font: { rtl: true } },
+      { text: " end." },
+    ];
+    const runsAfter = async (
+      read: (se1: Word.Paragraph, end: Word.Range, se2: Word.Paragraph) => void,
+    ) => {
+      const host = install(SIDE_EFFECTS);
+      await Word.run(async (context) => {
+        const se1 = await tagged(context, "SE1");
+        const se2 = await tagged(context, "SE2");
+        read(se1, await firstHit(context, "SE1", " end."), se2);
+        await context.sync();
+      });
+      return host.paragraphs()[0].runs;
+    };
+    const prefix = (se1: Word.Paragraph, end: Word.Range) =>
+      se1.getRange("Start").expandTo(end.getRange("Start"));
+
+    it("unhides, drops cs-only twins, adds szCs and drops rtl for a prefix range on the web only", async () => {
+      const expected = desktop
+        ? ORIGINAL
+        : [
+            { text: "SE1 hidden szcs bcs " },
+            { text: "both ", font: { bold: true, boldBidirectional: true } },
+            { text: "size ", font: { size: 14, sizeBidirectional: 14 } },
+            { text: "rtl end." },
+          ];
+      expect(
+        await runsAfter((se1, end) => {
+          prefix(se1, end).load("text");
+        }),
+      ).toEqual(expected);
+      expect(
+        await runsAfter((se1, end) => {
+          prefix(se1, end).select();
+        }),
+      ).toEqual(expected);
     });
-    const before = host.ooxml({ p: "CS1", part: "Whole" });
-    expect(before.match(/<w:bCs\/>/g)).toHaveLength(2);
-    await Word.run(async (context) => {
-      const whole = (await tagged(context, "CS1")).getRange("Whole");
-      whole.expandTo(whole).getOoxml();
-      await context.sync();
+
+    it("keeps hidden text and szCs-only runs for the paragraph's own Whole.expandTo(Whole) on the web", async () => {
+      expect(
+        await runsAfter((se1) => {
+          const whole = se1.getRange("Whole");
+          whole.expandTo(whole).getOoxml();
+        }),
+      ).toEqual(
+        desktop
+          ? ORIGINAL
+          : [
+              { text: "SE1 " },
+              { text: "hidden ", font: { hidden: true } },
+              { text: "szcs ", font: { sizeBidirectional: 14 } },
+              { text: "bcs " },
+              { text: "both ", font: { bold: true, boldBidirectional: true } },
+              { text: "size ", font: { size: 14, sizeBidirectional: 14 } },
+              { text: "rtl end." },
+            ],
+      );
     });
-    expect(
-      host.ooxml({ p: "CS1", part: "Whole" }).match(/<w:bCs\/>/g),
-    ).toHaveLength(desktop ? 2 : 1);
+
+    it("changes nothing for a range over several paragraphs", async () => {
+      expect(
+        await runsAfter((se1, _end, se2) => {
+          se1.getRange("Whole").expandTo(se2.getRange("Whole")).getOoxml();
+        }),
+      ).toEqual(ORIGINAL);
+    });
   });
 
   it("finds repeated text by occurrence and never reads '^' as itself", async () => {
@@ -1038,7 +1253,7 @@ describe("requirement flavours", () => {
 });
 
 describe("tracked ranges", () => {
-  it.each(HOSTS)(
+  it.each(["mac", "pc"] as const)(
     "SV2:41-46 on %s: a foreign context reads stale text silently, mixing contexts throws, Word.run(r) reads the range grown by an edit inside it",
     async (flavour) => {
       const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
@@ -1078,6 +1293,37 @@ describe("tracked ranges", () => {
       expect(host.run).toHaveBeenLastCalledWith(tracked, expect.any(Function));
     },
   );
+
+  it("SV2:44-45 and :52 on web: a tracked range keeps its offsets and length, so an earlier edit moves it and a write lands on the wrong passage", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, { host: "web" });
+    host.select({ p: "PL1", text: "lima mike" });
+    const tracked = await Word.run(async (context) => {
+      const selection = context.document.getSelection();
+      selection.track();
+      selection.load("text");
+      await context.sync();
+      return selection;
+    });
+    const read = () =>
+      Word.run(tracked, async (context) => {
+        tracked.load("text");
+        await context.sync();
+        return tracked.text;
+      });
+    host.insertText({ p: "PL1", text: "lima" }, " INSIDE", "End");
+    expect(await read()).toBe("lima INSI");
+    host.insertText({ p: "PL1", text: "kilo" }, "XYZ ", "Start");
+    expect(await read()).toBe("ilo lima ");
+    host.insertParagraphs({ p: "PL1" }, ["NEW1 Paragraph before."], "Before");
+    expect(await read()).toBe("ilo lima ");
+    await Word.run(tracked, async (context) => {
+      tracked.insertText("WRITTEN", "Replace");
+      await context.sync();
+    });
+    expect(host.paragraphs()[3].text).toBe(
+      "PL1 Plain paragraph XYZ kWRITTENINSIDE mike november oscar papa.",
+    );
+  });
 
   it("refuses an untracked object once its run has ended", async () => {
     installWordSelectionHost(SV2_MAIN_DOCUMENT);
@@ -1217,5 +1463,104 @@ describe("selection events", () => {
       "failed",
     ]);
     expect(host.handlerCount()).toBe(1);
+  });
+});
+
+describe("test controls", () => {
+  it("deletes, inserts and restyles paragraphs and formats runs as a user would", () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT);
+    const texts = () => host.paragraphs().map((p) => p.text);
+    const count = texts().length;
+    host.deleteParagraphs({ p: "PL1" });
+    expect(texts()).toHaveLength(count - 1);
+    expect(texts().some((text) => text.startsWith("PL1 "))).toBe(false);
+    host.insertParagraphs(
+      { p: "MP1" },
+      ["NEW1 First new.", { runs: "NEW2 Second new.", style: "Heading 2" }],
+      "Before",
+    );
+    const mp1 = texts().findIndex((text) => text.startsWith("MP1 "));
+    expect(texts().slice(mp1 - 2, mp1)).toEqual([
+      "NEW1 First new.",
+      "NEW2 Second new.",
+    ]);
+    const inserted = host.paragraphs().slice(mp1 - 2, mp1);
+    expect(inserted.map((p) => p.style)).toEqual(["Normal", "Heading 2"]);
+    expect(new Set(host.paragraphs().map((p) => p.id)).size).toBe(count + 1);
+    host.setParagraphStyle({ p: "MP2" }, "Heading 3");
+    host.format(
+      { p: "MP3", text: "zulu" },
+      { font: { italic: true }, sdt: "tag" },
+    );
+    const after = host.paragraphs();
+    expect(after.find((p) => p.text.startsWith("MP2 "))?.style).toBe(
+      "Heading 3",
+    );
+    expect(after.find((p) => p.text.startsWith("MP3 "))?.runs).toContainEqual({
+      text: "zulu",
+      font: { italic: true },
+      sdt: "tag",
+    });
+  });
+
+  it("tracks a user edit under Track Changes, and Reject or Accept settles it", () => {
+    const host = installWordSelectionHost({
+      body: ["MP1 Multi paragraph uniform victor whiskey."],
+    });
+    host.setTrackingMode("TrackAll");
+    expect(host.trackingMode()).toBe("TrackAll");
+    host.insertText({ p: "MP1", text: "victor" }, "VICTOR");
+    expect(host.revisions()).toEqual([
+      { type: "Deleted", text: "victor", author: "Mock Author" },
+      { type: "Added", text: "VICTOR", author: "Mock Author" },
+    ]);
+    host.rejectAllRevisions();
+    expect(host.paragraphs()[0].text).toBe(
+      "MP1 Multi paragraph uniform victor whiskey.",
+    );
+    expect(host.revisions()).toEqual([]);
+    host.insertText({ p: "MP1", text: "victor" }, "VICTOR");
+    host.acceptAllRevisions();
+    expect(host.paragraphs()[0].text).toBe(
+      "MP1 Multi paragraph uniform VICTOR whiskey.",
+    );
+    expect(host.revisions()).toEqual([]);
+  });
+
+  it("runs after-sync hooks, fires selection events on demand and reports the document URL", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+      url: "https://example.com/selection.docx",
+    });
+    expect(Office.context.document.url).toBe(
+      "https://example.com/selection.docx",
+    );
+    const synced: number[] = [];
+    const stop = host.afterSync((index) => synced.push(index));
+    await Word.run(async (context) => {
+      context.document.body.paragraphs.load("items");
+      await context.sync();
+    });
+    stop();
+    await Word.run(async (context) => {
+      context.document.body.paragraphs.load("items");
+      await context.sync();
+    });
+    expect(synced).toEqual([1]);
+    const handler = vi.fn();
+    host.addHandlerAsync("documentSelectionChanged", handler);
+    await flush();
+    host.fireSelectionChanged();
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports null paragraph IDs when asked, on any requirement level", async () => {
+    installWordSelectionHost(SV2_MAIN_DOCUMENT, { nullParagraphIds: true });
+    const id = await Word.run(async (context) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items/uniqueLocalId");
+      await context.sync();
+      return paragraphs.items[0].uniqueLocalId;
+    });
+    expect(id).toBeNull();
   });
 });
