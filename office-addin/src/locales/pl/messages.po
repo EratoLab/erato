@@ -245,6 +245,7 @@ msgid "officeAddin.chatInput.dismissDraftContext"
 msgstr "Nie dołączaj wersji roboczej"
 
 #. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Odrzuć zaznaczenie"
@@ -722,6 +723,16 @@ msgstr "Odrzuć"
 #: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.title"
 msgstr "Przypnij, aby śledzić pocztę"
+
+#. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
+msgid "officeAddin.selection.shownByErato"
+msgstr "Pokazane przez Erato"
+
+#. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
+msgid "officeAddin.selection.useThis"
+msgstr "Użyj tego zaznaczenia"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/sessionAskToast.tsx
