@@ -69,12 +69,37 @@ describe("splitWordSelectionReplacement", () => {
     ).toEqual({ refused: "INVALID_REPLACEMENT" });
   });
 
-  it.each(["\u000B", "\u0002", "\u0005", "\u0007"])(
-    "refuses the control character %j",
-    (mark) => {
+  it.each([
+    "\u000B",
+    "\u0002",
+    "\u0005",
+    "\u0007",
+    "\f",
+    "\u000E",
+    "\u001E",
+    "\u001F",
+  ])("refuses the control character %j", (mark) => {
+    expect(
+      splitWordSelectionReplacement(`Text ${mark}here`, "paragraph", 1),
+    ).toEqual({ refused: "INVALID_REPLACEMENT" });
+  });
+
+  it.each(["\u2028", "\u2029"])(
+    "reads the separator %j as a newline, which Word would make a break",
+    (separator) => {
       expect(
-        splitWordSelectionReplacement(`Text ${mark}here`, "paragraph", 1),
-      ).toEqual({ refused: "INVALID_REPLACEMENT" });
+        splitWordSelectionReplacement(`A${separator}B`, "paragraph", 1),
+      ).toEqual({ lines: ["A B"] });
+      expect(
+        splitWordSelectionReplacement(
+          `A${separator}B\nC`,
+          "multi_paragraph",
+          2,
+        ),
+      ).toEqual({ refused: "PARAGRAPH_COUNT_MISMATCH" });
+      expect(
+        splitWordSelectionReplacement(`A${separator}B`, "multi_paragraph", 2),
+      ).toEqual({ lines: ["A", "B"] });
     },
   );
 

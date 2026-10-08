@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  WORD_SELECTION_FONT_PROPERTIES,
+  WORD_SELECTION_TOGGLE_PROPERTIES,
+  WORD_SELECTION_VALUE_PROPERTIES,
   wordSelectionTargetFormat,
 } from "../wordSelectionFormatting";
 
@@ -22,8 +23,8 @@ const STYLE: WordSelectionFont = {
 
 const HEADING: WordSelectionFont = { ...STYLE, bold: true };
 
-const MIXED: WordSelectionSpanFormat = Object.fromEntries(
-  WORD_SELECTION_FONT_PROPERTIES.map((property) => [
+const MIXED_TOGGLES: WordSelectionSpanFormat = Object.fromEntries(
+  WORD_SELECTION_TOGGLE_PROPERTIES.map((property) => [
     property,
     { state: "mixed" },
   ]),
@@ -70,12 +71,28 @@ describe("wordSelectionTargetFormat", () => {
     });
   });
 
-  it("gives mixed toggles the paragraph style's value and leaves mixed values to the host", () => {
-    expect(wordSelectionTargetFormat(MIXED, HEADING, false)).toEqual({
+  it("gives mixed toggles the paragraph style's value", () => {
+    expect(wordSelectionTargetFormat(MIXED_TOGGLES, HEADING, false)).toEqual({
       font: { ...HEADING },
       unresolved: [],
     });
   });
+
+  it.each(WORD_SELECTION_VALUE_PROPERTIES)(
+    "reports a mixed %s as unresolved, since desktop would copy the first character's value",
+    (property) => {
+      expect(
+        wordSelectionTargetFormat(
+          { bold: { state: "mixed" }, [property]: { state: "mixed" } },
+          { ...STYLE, color: "#000000", name: "Calibri", size: 11 },
+          true,
+        ),
+      ).toEqual({
+        font: { bold: false, boldBidirectional: false },
+        unresolved: [property],
+      });
+    },
+  );
 
   it("also sets the bold and italic twins of a mixed span where the host has their setters", () => {
     expect(
@@ -109,7 +126,7 @@ describe("wordSelectionTargetFormat", () => {
   it("reports mixed toggles the style gives no value for", () => {
     expect(
       wordSelectionTargetFormat(
-        MIXED,
+        MIXED_TOGGLES,
         { ...STYLE, bold: null, subscript: undefined },
         false,
       ).unresolved,

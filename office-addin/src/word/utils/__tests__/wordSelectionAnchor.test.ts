@@ -9,7 +9,6 @@ import {
   resolveWordSelection,
   rewritableWordSelection,
   WORD_SELECTION_CONTEXT_BYTES,
-  WORD_SELECTION_REASON_MESSAGE_IDS,
   WORD_SELECTION_REPLACE_SHAPES,
   wordSelectionOf,
   wordSelectionParts,
@@ -212,6 +211,8 @@ describe("classifyWordSelection: D-10", () => {
       { unsupportedFormatting: true },
       "unsupported_formatting",
     ],
+    ["a colour on part of it", { mixedFormatting: true }, "mixed_formatting"],
+    ["a page break or symbol", { breakOrSymbol: true }, "special_character"],
   ] as const)(
     "sends a span containing %s as context only",
     (_, hazards, reason) => {
@@ -223,6 +224,10 @@ describe("classifyWordSelection: D-10", () => {
     ["\u0002", "note_reference"],
     ["\u0005", "comment_mark"],
     ["\u000B", "line_break"],
+    ["\f", "special_character"],
+    ["\u000E", "special_character"],
+    ["\u001E", "special_character"],
+    ["\u001F", "special_character"],
   ])("finds the mark %j in the span's text", (mark, reason) => {
     const story = body(["Intro", `Before ${mark} inside`, "Outro"]);
     expect(reasonOf(facts(story, { first: 1 }))).toBe(reason);
@@ -345,12 +350,19 @@ describe("classifyWordSelection: hosts and edges", () => {
     expect(reasonOf(INLINE, WEB)).toBeNull();
   });
 
-  it("keeps direct complex-script formatting only where the bidi setters exist", () => {
+  it("sends complex-script formatting as context only on every host, since the rewrite tracks no twin", () => {
     const complex = { ...PARAGRAPH, hazards: { complexScript: true } };
-    expect(reasonOf(complex, MAC)).toBeNull();
-    expect(reasonOf(complex, WEB)).toBe("complex_script_format");
-    expect(reasonOf(complex, LTSC_2024)).toBe("complex_script_format");
+    for (const support of [MAC, PC, WEB, LTSC_2024])
+      expect(reasonOf(complex, support)).toBe("complex_script_format");
     expect(reasonOf(PARAGRAPH, LTSC_2024)).toBeNull();
+  });
+
+  it("keeps a twin equal to a mixed Latin toggle only where the rewrite resets it", () => {
+    const twin = { ...PARAGRAPH, hazards: { complexScriptTwin: true } };
+    expect(reasonOf(twin, MAC)).toBeNull();
+    expect(reasonOf(twin, PC)).toBeNull();
+    expect(reasonOf(twin, WEB)).toBeNull();
+    expect(reasonOf(twin, LTSC_2024)).toBe("complex_script_format");
   });
 
   it("sends a span holding a tracked change, such as an earlier tracked Replace, as context only", () => {
@@ -413,13 +425,6 @@ describe("classifyWordSelection: hosts and edges", () => {
     expect(reasonOf(facts(story, { first: 1, start: 1, end: 3 }))).toBe(
       "position_unknown",
     );
-  });
-
-  it("reserves exactly one distinct V2-4 message per reason", () => {
-    const ids = Object.values(WORD_SELECTION_REASON_MESSAGE_IDS);
-    expect(new Set(ids).size).toBe(ids.length);
-    for (const id of ids)
-      expect(id).toMatch(/^officeAddin\.word\.selection\.contextOnly\.\w+$/);
   });
 });
 
@@ -486,6 +491,56 @@ describe("buildWordSelectionSnapshot", () => {
     ]);
     expect(multi.contextBefore).toBe("Title\nThe ");
     expect(multi.contextAfter).toBe(" paragraph.\nClosing.");
+  });
+
+  it("never sends a tracked deletion that paragraph.text shows, as on PC and the web", () => {
+    const story = body(["Intro", "Kept words here.", "Outro"]);
+    const shown = "Kept deleted words here.";
+    const deletion = (overrides: Partial<WordSelectionFacts>) =>
+      snapshot({
+        ...facts(story, { first: 1 }),
+        paragraphs: [
+          { ...facts(story, { first: 1 }).paragraphs[0], rangeText: shown },
+        ],
+        endOffset: shown.length,
+        hazards: { trackedChange: true },
+        ...overrides,
+      });
+    expect(deletion({ reviewedText: "Kept words here.\r" })).toMatchObject({
+      reasonCode: "tracked_changes",
+      selectedText: "Kept words here.",
+      contextBefore: "Intro\n",
+      contextAfter: "\nOutro",
+    });
+    expect(deletion({}).selectedText).toBe("");
+    const inline = snapshot({
+      ...facts(story, { first: 1, start: 0, end: 4 }),
+      paragraphs: [
+        { ...facts(story, { first: 1 }).paragraphs[0], rangeText: shown },
+      ],
+      reviewedText: "Kept",
+    });
+    expect(inline).toMatchObject({
+      role: "rewrite",
+      selectedText: "Kept",
+      contextBefore: "Intro\n",
+      contextAfter: "\nOutro",
+    });
+  });
+
+  it("drops the web's comment marks from the text it sends", () => {
+    const story = body(["Intro", "Noted text after.", "Outro"]);
+    const base = facts(story, { first: 1, start: 0, end: 5 });
+    const built = snapshot({
+      ...base,
+      paragraphs: [
+        { ...base.paragraphs[0], rangeText: "Noted\u0005 text after." },
+      ],
+    });
+    expect(built).toMatchObject({
+      selectedText: "Noted",
+      contextAfter: " text after.\nOutro",
+    });
   });
 
   it("marks a span at the start and end of its paragraph with empty edge lines", () => {

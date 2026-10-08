@@ -1,17 +1,16 @@
+import type { WordHostPlatform } from "./wordHostPlatform";
+
 /** `Office.context.requirements.isSetSupported`, passed in so the table needs no Office host. */
 export type WordRequirementCheck = (
   name: string,
   minVersion?: string,
 ) => boolean;
 
-export type WordSelectionHostPlatform =
-  | "PC"
-  | "Mac"
-  | "OfficeOnline"
-  | "unknown";
-
 export interface WordSelectionSupport {
-  /** The identity text and the tracking mode can both be read; otherwise every selection is context only. */
+  /**
+   * The identity text and the tracking mode can both be read, on a host the native probes measured;
+   * otherwise every selection is context only.
+   */
   canRewrite: boolean;
   /**
    * Where the paragraph style's font is read from: getStyles on desktop, else the OOXML styles part
@@ -20,6 +19,8 @@ export interface WordSelectionSupport {
   styleFontSource: "api" | "ooxml" | null;
   /** The complex-script font twins can be set, so complex-script formatting can be kept. */
   bidiSetters: boolean;
+  /** Word for the web's bold and italic setters also write bCs and iCs (P8). */
+  twinsFollowLatin: boolean;
   /** Document.changeTrackingMode can be read. */
   trackingMode: boolean;
   /**
@@ -46,7 +47,7 @@ export const WORD_SELECTION_REQUIREMENTS = {
 
 export function wordSelectionSupport(
   isSetSupported: WordRequirementCheck,
-  platform: WordSelectionHostPlatform,
+  platform: WordHostPlatform,
 ): WordSelectionSupport {
   const has = ([name, version]: readonly [string, string]) => {
     try {
@@ -57,8 +58,11 @@ export function wordSelectionSupport(
   };
   const desktop = platform === "PC" || platform === "Mac";
   const trackingMode = has(WORD_SELECTION_REQUIREMENTS.trackingMode);
+  // Replace formatting, select events and undo grouping were only measured on these hosts.
   const canRewrite =
-    trackingMode && has(WORD_SELECTION_REQUIREMENTS.identityText);
+    (desktop || platform === "OfficeOnline") &&
+    trackingMode &&
+    has(WORD_SELECTION_REQUIREMENTS.identityText);
   return {
     canRewrite,
     styleFontSource:
@@ -68,6 +72,7 @@ export function wordSelectionSupport(
           ? "ooxml"
           : null,
     bidiSetters: has(WORD_SELECTION_REQUIREMENTS.bidiSetters),
+    twinsFollowLatin: platform === "OfficeOnline",
     trackingMode,
     picturesShiftOffsets: !desktop,
     reason: canRewrite ? null : "host_unsupported",

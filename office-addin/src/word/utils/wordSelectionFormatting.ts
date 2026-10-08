@@ -61,17 +61,17 @@ export type WordSelectionSpanFormat = Partial<
 export interface WordSelectionTargetFormat {
   /** To set on the range insertText returns; anything left out keeps what the host writes. */
   font: WordSelectionFont;
-  /** Mixed toggles the paragraph style gave no value for; the write must not go ahead. */
-  unresolved: WordSelectionToggleProperty[];
+  /**
+   * Mixed properties the write cannot make the same on every host: a value property, or a toggle
+   * the paragraph style gave no value for. The selection must be context only.
+   */
+  unresolved: WordSelectionSpanProperty[];
 }
 
 /**
- * Sets again only what the span sets directly. Setting every property, as first planned, changed
- * runs on every host: the Font getters read an automatic colour as #000000 and, on the web, a
- * mixed span as its first run, Style.font reads null on the web, and each set adds w:color or cs
- * twins. A mixed toggle takes the paragraph style's value (resolved from the styles part, with
- * docDefaults), because desktop would copy the first character's and the web would write none.
- * Colour, highlight, font and size are set only when uniform and direct.
+ * Re-sets only what the span sets directly. A mixed toggle takes the paragraph style's value,
+ * because desktop would copy the first character's and the web writes none; a mixed colour,
+ * highlight, font or size has no such value (automatic colour cannot be set), so it is unresolved.
  */
 export function wordSelectionTargetFormat(
   span: WordSelectionSpanFormat,
@@ -79,15 +79,15 @@ export function wordSelectionTargetFormat(
   bidiSetters: boolean,
 ): WordSelectionTargetFormat {
   const font: WordSelectionFont = {};
-  const unresolved: WordSelectionToggleProperty[] = [];
+  const unresolved: WordSelectionSpanProperty[] = [];
   for (const property of WORD_SELECTION_FONT_PROPERTIES) {
     const run = span[property];
     if (run?.state === "direct") {
       font[property] = run.value;
       continue;
     }
-    if (run?.state !== "mixed" || !isToggle(property)) continue;
-    const value = style[property];
+    if (run?.state !== "mixed") continue;
+    const value = isToggle(property) ? style[property] : undefined;
     if (value === undefined || value === null) {
       unresolved.push(property);
       continue;

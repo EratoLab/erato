@@ -1,8 +1,9 @@
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
 import { resolveWordParagraphs } from "./wordParagraphResolver";
 import { fitWordSelectionText } from "./wordSelectionArgs";
+import { WORD_CONTROL_CHARACTER } from "./wordSelectionEdit";
 import {
-  ACTION_FACET_ARG_MAX_BYTES,
+  fitsActionFacetArg,
   utf8ByteLength,
 } from "../../core/clientActions/actionFacetArgs";
 
@@ -33,7 +34,6 @@ export type WordSelectionOrigin = "user" | "erato";
 
 /** The model returns one line per paragraph; more would strain its output budget. */
 export const WORD_SELECTION_MAX_PARAGRAPHS = 40;
-export const WORD_SELECTION_MAX_BYTES = ACTION_FACET_ARG_MAX_BYTES;
 /** Per side. The neighbours only inform the model; the target proof uses the anchor. */
 export const WORD_SELECTION_CONTEXT_BYTES = 4_096;
 
@@ -44,43 +44,39 @@ export const WORD_SELECTION_CONTEXT_BYTES = 4_096;
 export const WORD_SELECTION_REPLACE_SHAPES: ReadonlySet<WordSelectionShape> =
   new Set<WordSelectionShape>([]);
 
-/** One V2-4 message per reason, so the card can explain each refusal to rewrite. */
-export const WORD_SELECTION_REASON_MESSAGE_IDS = {
-  host_unsupported: "officeAddin.word.selection.contextOnly.hostUnsupported",
-  other_story: "officeAddin.word.selection.contextOnly.otherStory",
-  whole_table: "officeAddin.word.selection.contextOnly.wholeTable",
-  multi_cell: "officeAddin.word.selection.contextOnly.multiCell",
-  nested_table: "officeAddin.word.selection.contextOnly.nestedTable",
-  cell_multi_paragraph:
-    "officeAddin.word.selection.contextOnly.cellMultiParagraph",
-  too_many_paragraphs:
-    "officeAddin.word.selection.contextOnly.tooManyParagraphs",
-  too_large: "officeAddin.word.selection.contextOnly.tooLarge",
-  position_unknown: "officeAddin.word.selection.contextOnly.positionUnknown",
-  empty_edge_paragraph:
-    "officeAddin.word.selection.contextOnly.emptyEdgeParagraph",
-  tracked_changes: "officeAddin.word.selection.contextOnly.trackedChanges",
-  hyperlink: "officeAddin.word.selection.contextOnly.hyperlink",
-  field: "officeAddin.word.selection.contextOnly.field",
-  content_control: "officeAddin.word.selection.contextOnly.contentControl",
-  hidden_text: "officeAddin.word.selection.contextOnly.hiddenText",
-  note_reference: "officeAddin.word.selection.contextOnly.noteReference",
-  comment_mark: "officeAddin.word.selection.contextOnly.commentMark",
-  inline_picture: "officeAddin.word.selection.contextOnly.inlinePicture",
-  line_break: "officeAddin.word.selection.contextOnly.lineBreak",
-  unsupported_formatting:
-    "officeAddin.word.selection.contextOnly.unsupportedFormatting",
-  complex_script_format:
-    "officeAddin.word.selection.contextOnly.complexScriptFormat",
-  web_picture_offset: "officeAddin.word.selection.contextOnly.webPictureOffset",
-  style_font_unavailable:
-    "officeAddin.word.selection.contextOnly.styleFontUnavailable",
-  not_unique: "officeAddin.word.selection.contextOnly.notUnique",
-  shape_not_enabled: "officeAddin.word.selection.contextOnly.shapeNotEnabled",
-} as const;
+/** Why a selection is sent as context only; the card maps each code to its own V2-4 message. */
+export const WORD_SELECTION_REASON_CODES = [
+  "host_unsupported",
+  "other_story",
+  "whole_table",
+  "multi_cell",
+  "nested_table",
+  "cell_multi_paragraph",
+  "too_many_paragraphs",
+  "too_large",
+  "position_unknown",
+  "empty_edge_paragraph",
+  "tracked_changes",
+  "hyperlink",
+  "field",
+  "content_control",
+  "hidden_text",
+  "note_reference",
+  "comment_mark",
+  "inline_picture",
+  "line_break",
+  "special_character",
+  "unsupported_formatting",
+  "mixed_formatting",
+  "complex_script_format",
+  "web_picture_offset",
+  "style_font_unavailable",
+  "not_unique",
+  "shape_not_enabled",
+] as const;
 
 export type WordSelectionReasonCode =
-  keyof typeof WORD_SELECTION_REASON_MESSAGE_IDS;
+  (typeof WORD_SELECTION_REASON_CODES)[number];
 
 /** Every code except UNVERIFIED_AFTER_WRITE means nothing was written. */
 export const WORD_SELECTION_REPLACE_CODES = [
@@ -125,12 +121,23 @@ export interface WordSelectionHazards {
   commentMark?: boolean;
   /** A character style, or direct run formatting outside the tracked font set. */
   unsupportedFormatting?: boolean;
+  /** wordSelectionTargetFormat left a property unresolved, such as a colour on part of the span. */
+  mixedFormatting?: boolean;
   /**
    * Complex-script run formatting that differs from its Latin twin (bCs vs b, iCs vs i, szCs vs sz,
-   * the cs font vs ascii), rtl, or complex-script characters. Word for the web writes equal twins
-   * on its own Ctrl+B and on every Office.js bold, italic, size or name set, so equal twins are benign.
+   * the cs font vs ascii), rtl, or complex-script characters. The rewrite's formatting rule tracks
+   * no twin of its own and rtl has no setter, so no host keeps them through Replace.
    */
   complexScript?: boolean;
+  /**
+   * A direct bCs or iCs equal to its Latin toggle where that toggle is mixed in the span. Word for
+   * the web writes such twins on its own Ctrl+B, so they are benign where the rewrite resets them:
+   * on the web, whose Latin setters write the twin too, or with the bidi setters. Desktop without
+   * them would copy the first character's twin onto the whole rewrite.
+   */
+  complexScriptTwin?: boolean;
+  /** A page or column break (w:br type page or column), w:sym, or a non-breaking or optional hyphen. */
+  breakOrSymbol?: boolean;
 }
 
 export interface WordSelectionFacts {
@@ -158,6 +165,11 @@ export interface WordSelectionFacts {
   styleFontResolved: boolean;
   /** A tracked Range was kept as a hint (desktop only). */
   trackedRange?: boolean;
+  /**
+   * The selection's getReviewedText("Current"), without tracked deletions. The model is sent this
+   * when paragraph.text holds text that getText leaves out, as on PC and the web.
+   */
+  reviewedText?: string;
 }
 
 export interface WordSelectionParagraph {
@@ -175,7 +187,7 @@ export interface WordSelectionSnapshot {
   shape: WordSelectionShape;
   story: WordSelectionStory;
   origin: WordSelectionOrigin;
-  /** The covered part of each paragraph, one line each. */
+  /** The covered part of each paragraph, one line each, without tracked deletions or comment marks. */
   selectedText: string;
   /** selectedText was cut to fit one facet argument. */
   truncated: boolean;
@@ -186,9 +198,12 @@ export interface WordSelectionSnapshot {
   /** Earlier search matches of the first covered part within its paragraph's rangeText. */
   occurrence: number;
   anchor: WordParagraphAnchor | null;
-  /** The paragraphs before the span, then a last line with the span paragraph's text before it. */
+  /**
+   * The paragraphs before the span, then a last line with the span paragraph's text before it,
+   * left empty when paragraph.text holds a tracked deletion.
+   */
   contextBefore: string;
-  /** A first line with the span paragraph's text after it, then the paragraphs after the span. */
+  /** A first line with the span paragraph's text after it (empty likewise), then the paragraphs after. */
   contextAfter: string;
 }
 
@@ -349,8 +364,19 @@ function hazardOf(
   if (hazards.commentMark || contains("\u0005")) return "comment_mark";
   if (hazards.inlinePicture) return "inline_picture";
   if (contains("\u000B")) return "line_break";
+  if (
+    hazards.breakOrSymbol ||
+    parts.some((part) => WORD_CONTROL_CHARACTER.test(part))
+  )
+    return "special_character";
   if (hazards.unsupportedFormatting) return "unsupported_formatting";
-  if (hazards.complexScript && !support.bidiSetters)
+  if (hazards.mixedFormatting) return "mixed_formatting";
+  if (
+    hazards.complexScript ||
+    (hazards.complexScriptTwin &&
+      !support.bidiSetters &&
+      !support.twinsFollowLatin)
+  )
     return "complex_script_format";
   return null;
 }
@@ -373,8 +399,7 @@ function contextOnlyReason(
   }
   if (paragraphs.length > WORD_SELECTION_MAX_PARAGRAPHS)
     return "too_many_paragraphs";
-  if (utf8ByteLength(analysis.text) > WORD_SELECTION_MAX_BYTES)
-    return "too_large";
+  if (!fitsActionFacetArg(analysis.text)) return "too_large";
   if (!parts || !anchor || !anchorMatches(facts)) return "position_unknown";
   if (
     shape === "multi_paragraph" &&
@@ -443,13 +468,38 @@ function keepUtf8Tail(value: string, maxBytes: number): string {
 
 const present = (text: string | null): text is string => text !== null;
 
+/**
+ * The paragraph's offset text with its comment marks removed, when that equals the identity text;
+ * null when paragraph.text holds more, such as a tracked deletion, which the model must not see.
+ */
+function visibleOffsetText(p: WordSelectionParagraphFacts): string | null {
+  const visible = p.rangeText.replace(/\u0005/g, "");
+  return visible === p.text.replace(/\r$/, "") ? visible : null;
+}
+
+const removeCommentMarks = (text: string) => text.replace(/\u0005/g, "");
+
+/** What the model is sent as the selected text; the offsets keep counting in rangeText. */
+function modelText(facts: WordSelectionFacts, analysis: Analysis): string {
+  if (!analysis.parts) return analysis.text;
+  if (facts.paragraphs.every((p) => visibleOffsetText(p) !== null))
+    return removeCommentMarks(analysis.text);
+  return (facts.reviewedText ?? "").replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+}
+
 function surroundings(facts: WordSelectionFacts, analysis: Analysis) {
   const { anchor, paragraphs } = facts;
   if (!anchor || !analysis.parts) return { before: "", after: "" };
-  const prefix = paragraphs[0].rangeText.slice(0, facts.startOffset);
-  const suffix = paragraphs[paragraphs.length - 1].rangeText.slice(
-    facts.endOffset,
-  );
+  const first = paragraphs[0];
+  const last = paragraphs[paragraphs.length - 1];
+  const prefix =
+    visibleOffsetText(first) === null
+      ? ""
+      : removeCommentMarks(first.rangeText.slice(0, facts.startOffset));
+  const suffix =
+    visibleOffsetText(last) === null
+      ? ""
+      : removeCommentMarks(last.rangeText.slice(facts.endOffset));
   return {
     before: keepUtf8Tail(
       [...anchor.before.filter(present).reverse(), prefix].join("\n"),
@@ -472,7 +522,7 @@ export function buildWordSelectionSnapshot(
   const analysis = analyse(facts);
   const classification = classify(facts, support, analysis, enabledShapes);
   if (classification.role === "none") return null;
-  const fitted = fitWordSelectionText(analysis.text);
+  const fitted = fitWordSelectionText(modelText(facts, analysis));
   const { before, after } = surroundings(facts, analysis);
   return {
     ...classification,

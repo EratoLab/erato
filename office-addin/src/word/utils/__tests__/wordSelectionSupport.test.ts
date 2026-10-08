@@ -29,6 +29,7 @@ describe("wordSelectionSupport", () => {
         canRewrite: true,
         styleFontSource: "api",
         bidiSetters: true,
+        twinsFollowLatin: false,
         trackingMode: true,
         picturesShiftOffsets: false,
         reason: null,
@@ -43,6 +44,7 @@ describe("wordSelectionSupport", () => {
       canRewrite: true,
       styleFontSource: "ooxml",
       bidiSetters: false,
+      twinsFollowLatin: true,
       trackingMode: true,
       picturesShiftOffsets: true,
       reason: null,
@@ -68,6 +70,7 @@ describe("wordSelectionSupport", () => {
       canRewrite: false,
       styleFontSource: "ooxml",
       bidiSetters: false,
+      twinsFollowLatin: false,
       trackingMode: false,
       picturesShiftOffsets: false,
       reason: "host_unsupported",
@@ -110,9 +113,15 @@ describe("wordSelectionSupport", () => {
     });
   });
 
-  it("treats an unknown platform like the web", () => {
+  it("treats an unknown platform like the web but never rewrites there, since no probe measured it", () => {
     expect(
       wordSelectionSupport(host({ WordApi: "1.9" }), "unknown"),
-    ).toMatchObject({ picturesShiftOffsets: true, styleFontSource: "ooxml" });
+    ).toMatchObject({
+      canRewrite: false,
+      reason: "host_unsupported",
+      picturesShiftOffsets: true,
+      styleFontSource: "ooxml",
+      twinsFollowLatin: false,
+    });
   });
 });

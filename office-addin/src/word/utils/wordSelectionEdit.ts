@@ -15,8 +15,13 @@ export type WordSelectionReplacement =
       >;
     };
 
-/** Control characters other than tab and newline would write marks, breaks or fields, not text. */
-const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
+/**
+ * Control characters other than tab and newline: Word reads them as marks, breaks, fields or special
+ * hyphens, not text. A reply holding one is refused, and a span holding one is context only, since
+ * its rewrite could neither echo nor keep it.
+ */
+export const WORD_CONTROL_CHARACTER =
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
 /**
  * One line per covered paragraph. Word turns every newline into a new paragraph, so a
@@ -28,8 +33,11 @@ export function splitWordSelectionReplacement(
   shape: WordSelectionShape,
   paragraphCount: number,
 ): WordSelectionReplacement {
-  const text = fenceContent.replace(/\r\n?/g, "\n").replace(/\n$/, "");
-  if (text.trim() === "" || CONTROL.test(text))
+  // insertText turns the Unicode line and paragraph separators into breaks too.
+  const text = fenceContent
+    .replace(/\r\n?|[\u2028\u2029]/g, "\n")
+    .replace(/\n$/, "");
+  if (text.trim() === "" || WORD_CONTROL_CHARACTER.test(text))
     return { refused: "INVALID_REPLACEMENT" };
   if (shape !== "multi_paragraph")
     return {
