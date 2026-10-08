@@ -46,6 +46,11 @@ export interface MockWordRun {
   failWriteOn: (uniqueLocalId: string | null) => void;
   setTrackingMode: (mode: "Off" | "TrackAll" | "TrackMineOnly") => void;
   selections: () => string[][];
+  /** Report every paragraph ID as null, as single-purchase Office does; writes still track the
+   * paragraph internally under its ID. */
+  hideParagraphIds: (hidden: boolean) => void;
+  /** End getText with the paragraph mark, as Word on Windows and Mac does. */
+  showParagraphMarks: (shown: boolean) => void;
 }
 
 export interface MockWordHost {
@@ -117,6 +122,8 @@ export function installMockWordDocument(
   let syncCount = 0;
   let writes: MockWordWrite[] = [];
   let trackingMode = "Off";
+  let idsHidden = false;
+  let marksShown = false;
   const selections: string[][] = [];
 
   const run = vi.fn(
@@ -177,7 +184,9 @@ export function installMockWordDocument(
         const state = () =>
           body.find((entry) => entry.uniqueLocalId === uniqueLocalId);
         return {
-          uniqueLocalId,
+          get uniqueLocalId() {
+            return idsHidden ? null : uniqueLocalId;
+          },
           getRange: () => rangeProxy(uniqueLocalId),
           get styleBuiltIn() {
             return state()?.styleBuiltIn ?? "Normal";
@@ -194,7 +203,7 @@ export function installMockWordDocument(
             return state()?.outlineLevel ?? 10;
           },
           getText: () => {
-            const captured = state()?.text ?? "";
+            const captured = `${state()?.text ?? ""}${marksShown ? "\r" : ""}`;
             return deferred(() => captured);
           },
           insertText: (text: string, location: string) => {
@@ -355,6 +364,12 @@ export function installMockWordDocument(
         trackingMode = mode;
       },
       selections: () => selections.map((ids) => [...ids]),
+      hideParagraphIds: (hidden) => {
+        idsHidden = hidden;
+      },
+      showParagraphMarks: (shown) => {
+        marksShown = shown;
+      },
     },
   };
 }

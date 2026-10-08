@@ -168,6 +168,7 @@ describe("route wording", () => {
       disabled: "unavailable",
       latched: "unavailable",
       "host-sets": "unavailable",
+      "no-paragraph-ids": "unavailable",
       "no-package": "unavailable",
       "host-error": "unavailable",
       "source-shape": "other",

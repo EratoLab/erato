@@ -9,6 +9,8 @@ import {
   captureWordDocumentPackage,
   supportsWordDocumentPackage,
 } from "../wordDocumentPackage";
+import { wordInPlaceAvailability } from "../wordInPlaceSwitch";
+import { wordParagraphIdsMissing } from "../wordParagraphIds";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
 
@@ -152,5 +154,47 @@ describe("readWordDocument", () => {
     (globalThis as Record<string, unknown>).Word = {};
 
     await expect(readWordDocument()).resolves.toEqual({ ok: false });
+  });
+});
+
+describe("readWordDocument without paragraph IDs", () => {
+  let word: MockWordHost;
+  beforeEach(() => {
+    word = installMockWordDocument([{ text: "One" }, { text: "Two" }]);
+  });
+  afterEach(() => {
+    delete window.WORD_FORCE_NO_PARAGRAPH_IDS;
+    uninstallMockWordDocument();
+  });
+
+  it("reads missing IDs as null and keeps the session out of in-place writing", async () => {
+    word.word.hideParagraphIds(true);
+    const missing = await readWordDocument();
+    expect(
+      missing.ok && missing.paragraphs.map((p) => p.uniqueLocalId),
+    ).toEqual([null, null]);
+    expect(wordParagraphIdsMissing()).toBe(true);
+    expect(wordInPlaceAvailability()).toEqual({
+      enabled: false,
+      reason: "no-paragraph-ids",
+    });
+
+    word.word.hideParagraphIds(false);
+    await readWordDocument();
+    expect(wordParagraphIdsMissing()).toBe(false);
+    expect(wordInPlaceAvailability()).toEqual({
+      enabled: false,
+      reason: "no-package",
+    });
+  });
+
+  it("treats every ID as missing while the development switch is on", async () => {
+    window.WORD_FORCE_NO_PARAGRAPH_IDS = true;
+    const result = await readWordDocument();
+    expect(result.ok && result.paragraphs.map((p) => p.uniqueLocalId)).toEqual([
+      null,
+      null,
+    ]);
+    expect(wordParagraphIdsMissing()).toBe(true);
   });
 });

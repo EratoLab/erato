@@ -14,12 +14,13 @@ const IDENTITY = "https://contoso.sharepoint.com/report.docx";
 const captureOf = (
   texts: string[],
   paragraphsSent = texts.length,
+  ids = true,
 ): WordDocumentCapture => ({
   identity: IDENTITY,
   ordinalMap: new Map(
     texts.map((text, index) => [
       index + 1,
-      { uniqueLocalId: `id-${index + 1}`, text },
+      { uniqueLocalId: ids ? `id-${index + 1}` : null, text },
     ]),
   ),
   paragraphsSent,
@@ -324,6 +325,96 @@ describe("applyWordEdits", () => {
     expect(result.hostFailed).toBe(true);
     expect(result.snapshotOoxml).toBeNull();
     expect(result.outcomes[0].status).toBe("failed");
+  });
+});
+
+describe("applyWordEdits without paragraph IDs", () => {
+  let word: MockWordHost;
+  const bodyText = () => word.word.paragraphs().map((entry) => entry.text);
+  const withoutIds = (texts: string[]) => captureOf(texts, texts.length, false);
+
+  beforeEach(() => {
+    word = installMockWordDocument();
+    word.word.hideParagraphIds(true);
+  });
+  afterEach(() => {
+    uninstallMockWordDocument();
+    vi.restoreAllMocks();
+  });
+
+  it("locates paragraphs by text after one was added above", async () => {
+    const texts = ["Alpha.", "Bravo.", "Charlie."];
+    word.word.setParagraphs([
+      { text: "Added." },
+      ...texts.map((text) => ({ text })),
+    ]);
+
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 2, text: "Bravo, revised." }],
+      capture: withoutIds(texts),
+    });
+
+    expect(result.outcomes[0].status).toBe("applied");
+    expect(bodyText()).toEqual([
+      "Added.",
+      "Alpha.",
+      "Bravo, revised.",
+      "Charlie.",
+    ]);
+  });
+
+  it("skips repeats it cannot tell apart and still applies the rest", async () => {
+    const texts = [...Array.from({ length: 8 }, () => "Repeated."), "Unique."];
+    word.word.setParagraphs(texts.map((text) => ({ text })));
+
+    const result = await applyWordEdits({
+      edits: [
+        { paragraph: 4, text: "Never written." },
+        { paragraph: 9, text: "Unique, revised." },
+      ],
+      capture: withoutIds(texts),
+    });
+
+    expect(result.outcomes.map((outcome) => outcome.status)).toEqual([
+      "ambiguous",
+      "applied",
+    ]);
+    expect(bodyText()).toEqual([...texts.slice(0, 8), "Unique, revised."]);
+  });
+
+  it("refuses when a repeat existed at capture and the original was then deleted", async () => {
+    word.word.setParagraphs(
+      ["P.", "N.", "Q.", "Same.", "R."].map((text) => ({ text })),
+    );
+
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 2, text: "Never written." }],
+      capture: withoutIds(["P.", "Same.", "N.", "Q.", "Same.", "R."]),
+    });
+
+    expect(result.outcomes[0].status).toBe("ambiguous");
+    expect(word.word.writes()).toEqual([]);
+  });
+});
+
+describe("applyWordEdits with paragraph IDs", () => {
+  afterEach(uninstallMockWordDocument);
+
+  it("never writes a copy in place of an edited original", async () => {
+    const word = installMockWordDocument([
+      { text: "Alpha.", uniqueLocalId: "id-1" },
+      { text: "Bravo, amended.", uniqueLocalId: "id-2" },
+      { text: "Bravo.", uniqueLocalId: "copy" },
+      { text: "Charlie.", uniqueLocalId: "id-3" },
+    ]);
+
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 2, text: "Never written." }],
+      capture: captureOf(["Alpha.", "Bravo.", "Charlie."]),
+    });
+
+    expect(result.outcomes[0].status).toBe("changed");
+    expect(word.word.writes()).toEqual([]);
   });
 });
 

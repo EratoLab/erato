@@ -1,20 +1,30 @@
 import {
   buildWordEditReport,
   planWordEdits,
-  verifyWordEdits,
 } from "@erato/frontend/word-review";
 
 import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
 import { wordDocumentFingerprint } from "./wordDocumentXml";
+import {
+  resolveWordParagraphs,
+  wordParagraphAnchor,
+} from "./wordParagraphResolver";
+import {
+  capturedWordAnchor,
+  readWordParagraphEntries,
+} from "./wordReviewLocation";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
+import type { WordParagraphEntry } from "./wordParagraphResolver";
 import type { WordReviewAnchor } from "./wordReviewLocation";
 import type {
+  ResolvedWordEdit,
   WordDocumentCapture,
   WordEdit,
   WordEditOutcome,
+  WordEditPlan,
 } from "@erato/frontend/word-review";
 
 export interface WordApplyResult {
@@ -51,8 +61,66 @@ async function observeWordBody(
   }
 }
 
-/** Load IDs as a collection: resolving a deleted ID directly rejects the whole sync.
- * Apply last-to-first because inserted paragraphs shift collection positions. */
+interface PositionedWordEdit extends ResolvedWordEdit {
+  positions: number[];
+}
+
+/** Each edit's captured span located in the live body; a paragraph claimed twice is not written twice.
+ * Survivors come last-to-first, the order they are written in. */
+function resolveWordEdits(
+  plan: WordEditPlan,
+  capture: WordDocumentCapture,
+  live: readonly WordParagraphEntry[],
+): { applicable: PositionedWordEdit[]; skipped: WordEditOutcome[] } {
+  const applicable: PositionedWordEdit[] = [];
+  const skipped: WordEditOutcome[] = [];
+  const claimed = new Set<number>();
+  for (const edit of plan.resolved) {
+    const anchor = capturedWordAnchor(
+      capture,
+      edit.targets[0].ordinal,
+      edit.targets[edit.targets.length - 1].ordinal,
+    );
+    const resolved = anchor
+      ? resolveWordParagraphs(anchor.span, live)
+      : ({ refused: "changed" } as const);
+    if (
+      "positions" in resolved &&
+      !resolved.positions.some((p) => claimed.has(p))
+    ) {
+      resolved.positions.forEach((p) => claimed.add(p));
+      applicable.push({ ...edit, positions: resolved.positions });
+    } else {
+      skipped.push({
+        index: edit.index,
+        paragraph: edit.paragraph,
+        ...(edit.through === undefined ? {} : { through: edit.through }),
+        status: "refused" in resolved ? resolved.refused : "ambiguous",
+        excerpt: edit.excerpt,
+      });
+    }
+  }
+  applicable.sort((a, b) => b.positions[0] - a.positions[0]);
+  return { applicable, skipped };
+}
+
+/** The written paragraph after the batch: by its ID where Word has one, else by its new text alone.
+ * Desktop getText keeps the paragraph or cell mark that the written text lacks. */
+function writtenPosition(
+  id: string | null,
+  text: string,
+  after: readonly WordParagraphEntry[],
+): number | null {
+  const matches = after
+    .map((p, i) =>
+      (id ? p.id === id : true) && p.text.replace(/[\r\t\u0007]$/u, "") === text
+        ? i
+        : -1,
+    )
+    .filter((i) => i >= 0);
+  return matches.length === 1 ? matches[0] : null;
+}
+
 export async function applyWordEdits(args: {
   edits: readonly WordEdit[];
   capture: WordDocumentCapture;
@@ -102,33 +170,8 @@ async function applyEdits(
 
   try {
     const result = await word.run(async (context) => {
-      const paragraphs = context.document.body.paragraphs;
-      paragraphs.load("items/uniqueLocalId");
-      await context.sync();
-
-      const targetIds = new Set(
-        plan.resolved.flatMap((edit) =>
-          edit.targets.map((target) => target.uniqueLocalId),
-        ),
-      );
-      const pending = new Map<string, ReturnType<Word.Paragraph["getText"]>>();
-      for (const paragraph of paragraphs.items) {
-        if (targetIds.has(paragraph.uniqueLocalId)) {
-          pending.set(paragraph.uniqueLocalId, paragraph.getText());
-        }
-      }
-      await context.sync();
-
-      const currentTextById = new Map<string, string | null>();
-      for (const id of targetIds) {
-        currentTextById.set(id, pending.get(id)?.value ?? null);
-      }
-
-      const verified = verifyWordEdits(
-        plan,
-        currentTextById,
-        paragraphs.items.map((p) => p.uniqueLocalId),
-      );
+      const { items, entries } = await readWordParagraphEntries(context);
+      const verified = resolveWordEdits(plan, capture, entries);
       if (verified.applicable.length === 0) {
         return {
           outcomes: buildWordEditReport([
@@ -149,7 +192,7 @@ async function applyEdits(
 
         progress.stage("writing");
         for (const edit of verified.applicable) {
-          writeReplacement(context, edit.targets, edit.text);
+          writeReplacement(items, edit.positions, edit.text);
         }
         await context.sync();
       } catch (error) {
@@ -190,24 +233,17 @@ async function applyEdits(
           (edit) => edit.targets.length === 1 && !/[\r\n\v\f]/u.test(edit.text),
         );
         if (candidates.length > 0) {
-          const after = context.document.body.paragraphs;
-          after.load("items/uniqueLocalId");
-          await context.sync();
-          const candidateIds = new Set(
-            candidates.map((edit) => edit.targets[0].uniqueLocalId),
-          );
-          const texts = new Map(
-            after.items
-              .filter((p) => candidateIds.has(p.uniqueLocalId))
-              .map((p) => [p.uniqueLocalId, p.getText()]),
-          );
-          await context.sync();
+          const after = (await readWordParagraphEntries(context)).entries;
           for (const edit of candidates) {
-            const id = edit.targets[0].uniqueLocalId;
-            if (texts.get(id)?.value === edit.text) {
+            const position = writtenPosition(
+              entries[edit.positions[0]].id,
+              edit.text,
+              after,
+            );
+            if (position !== null) {
               resultAnchors.set(edit.index, {
                 identity: capture.identity,
-                paragraphs: [{ uniqueLocalId: id, text: edit.text }],
+                span: wordParagraphAnchor(after, position, position),
               });
             }
           }
@@ -258,19 +294,15 @@ async function applyEdits(
 
 /** Delete trailing paragraphs first, then replace the head to retain its style. */
 function writeReplacement(
-  context: Word.RequestContext,
-  targets: readonly { uniqueLocalId: string }[],
+  items: readonly Word.Paragraph[],
+  positions: readonly number[],
   text: string,
 ): void {
-  for (let index = targets.length - 1; index >= 1; index -= 1) {
-    context.document
-      .getParagraphByUniqueLocalId(targets[index].uniqueLocalId)
-      .delete();
+  for (let index = positions.length - 1; index >= 1; index -= 1) {
+    items[positions[index]].delete();
   }
-  context.document
-    .getParagraphByUniqueLocalId(targets[0].uniqueLocalId)
-    // Word.InsertLocation is a runtime SDK object; use its literal value.
-    .insertText(text, "Replace");
+  // Word.InsertLocation is a runtime SDK object; use its literal value.
+  items[positions[0]].insertText(text, "Replace");
 }
 
 export type WordEditsRevertStatus =

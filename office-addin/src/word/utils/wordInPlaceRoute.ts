@@ -113,6 +113,7 @@ const ROUTE_GROUPS: Partial<Record<WordRouteReason, WordRouteGroup>> = {
   disabled: "unavailable",
   latched: "unavailable",
   "host-sets": "unavailable",
+  "no-paragraph-ids": "unavailable",
   "no-package": "unavailable",
   "host-error": "unavailable",
 };

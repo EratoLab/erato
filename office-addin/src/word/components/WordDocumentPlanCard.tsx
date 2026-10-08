@@ -76,6 +76,7 @@ import {
 } from "../utils/wordInPlaceRoute";
 import { wordInPlaceAvailability } from "../utils/wordInPlaceSwitch";
 import {
+  capturedWordAnchor,
   showWordParagraphs,
   showWordReviewLocation,
   wordInPlaceMismatchedParagraphs,
@@ -403,22 +404,22 @@ export function WordDocumentPlanCard({
     );
   const locate = async (ref: string) => {
     const source = snapshot?.blocks.find((b) => b.ref === ref);
-    const paragraph = source?.paragraphOrdinal
-      ? capture?.ordinalMap.get(source.paragraphOrdinal)
-      : undefined;
+    const ordinal = source?.paragraphOrdinal;
+    const paragraph = ordinal ? capture?.ordinalMap.get(ordinal) : undefined;
     if (
       !gate.allowed ||
       !source ||
+      !ordinal ||
       !paragraph ||
       source.text !== paragraph.text ||
       !host.beginOperation()
     )
       return;
     try {
-      const result = await showWordReviewLocation(
-        { identity: gate.capture.identity, paragraphs: [paragraph] },
-        host.documentIdentity,
-      );
+      const anchor = capturedWordAnchor(gate.capture, ordinal);
+      const result = anchor
+        ? await showWordReviewLocation(anchor, host.documentIdentity)
+        : "changed";
       if (result !== "selected") cannotLocate();
     } finally {
       host.endOperation();

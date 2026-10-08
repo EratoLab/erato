@@ -1,8 +1,17 @@
 import { planWordEdits } from "@erato/frontend/word-review";
 
+import { wordParagraphId } from "./wordParagraphIds";
+import {
+  resolveWordParagraphs,
+  wordParagraphAnchor,
+} from "./wordParagraphResolver";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordInPlaceBackup } from "./wordDocumentPackage";
+import type {
+  WordParagraphAnchor,
+  WordParagraphEntry,
+} from "./wordParagraphResolver";
 import type {
   WordDocumentCapture,
   WordEdit,
@@ -11,7 +20,7 @@ import type {
 export type WordTrackingMode = "off" | "on" | "unknown";
 export interface WordReviewAnchor {
   identity: string;
-  paragraphs: { uniqueLocalId: string; text: string }[];
+  span: WordParagraphAnchor;
 }
 export type WordLocationResult =
   | "selected"
@@ -39,43 +48,64 @@ export async function readWordTrackingMode(): Promise<WordTrackingMode> {
   }
 }
 
+const captureBodies = new WeakMap<WordDocumentCapture, WordParagraphEntry[]>();
+
+/** The captured body in document order; ordinals are dense from 1. */
+function capturedBody(capture: WordDocumentCapture): WordParagraphEntry[] {
+  let body = captureBodies.get(capture);
+  if (!body) {
+    body = [...capture.ordinalMap.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, p]) => ({ id: p.uniqueLocalId || null, text: p.text }));
+    captureBodies.set(capture, body);
+  }
+  return body;
+}
+
+/** The span between two captured ordinals, inclusive. */
+export function capturedWordAnchor(
+  capture: WordDocumentCapture,
+  first: number,
+  last = first,
+): WordReviewAnchor | null {
+  const body = capturedBody(capture);
+  if (first < 1 || last < first || last > body.length) return null;
+  return {
+    identity: capture.identity,
+    span: wordParagraphAnchor(body, first - 1, last - 1),
+  };
+}
+
 export function originalWordAnchor(
   edit: WordEdit,
   capture: WordDocumentCapture,
 ): WordReviewAnchor | null {
-  const resolved = planWordEdits([edit], capture).resolved[0];
-  return resolved
-    ? {
-        identity: capture.identity,
-        paragraphs: resolved.targets.map((target) => ({
-          uniqueLocalId: target.uniqueLocalId,
-          text: target.sentText,
-        })),
-      }
+  const targets = planWordEdits([edit], capture).resolved[0]?.targets;
+  return targets
+    ? capturedWordAnchor(
+        capture,
+        targets[0].ordinal,
+        targets[targets.length - 1].ordinal,
+      )
     : null;
 }
 
-export function verifiedAnchorPositions(
-  anchor: WordReviewAnchor,
-  current: readonly { uniqueLocalId: string; text: string }[],
-): number[] | null {
-  if (anchor.paragraphs.length === 0) return null;
-  const byId = new Map(
-    current.map((p, index) => [p.uniqueLocalId, { ...p, index }]),
-  );
-  const positions: number[] = [];
-  for (const expected of anchor.paragraphs) {
-    const actual = byId.get(expected.uniqueLocalId);
-    if (
-      !actual ||
-      actual.text !== expected.text ||
-      (positions.length > 0 &&
-        actual.index !== positions[positions.length - 1] + 1)
-    )
-      return null;
-    positions.push(actual.index);
-  }
-  return positions;
+/** Every body paragraph with the text the capture recorded: getText without hidden or deleted text. */
+export async function readWordParagraphEntries(
+  context: Word.RequestContext,
+): Promise<{ items: Word.Paragraph[]; entries: WordParagraphEntry[] }> {
+  const paragraphs = context.document.body.paragraphs;
+  paragraphs.load("items/uniqueLocalId");
+  await context.sync();
+  const texts = paragraphs.items.map((p) => p.getText());
+  await context.sync();
+  return {
+    items: paragraphs.items,
+    entries: paragraphs.items.map((p, i) => ({
+      id: wordParagraphId(p.uniqueLocalId),
+      text: texts[i].value,
+    })),
+  };
 }
 
 export async function showWordReviewLocation(
@@ -88,36 +118,21 @@ export async function showWordReviewLocation(
   if (!word) return "unavailable";
   try {
     return await word.run(async (context) => {
-      const paragraphs = context.document.body.paragraphs;
-      paragraphs.load("items/uniqueLocalId");
-      await context.sync();
-      const wanted = new Set(anchor.paragraphs.map((p) => p.uniqueLocalId));
-      const text = new Map(
-        paragraphs.items
-          .filter((p) => wanted.has(p.uniqueLocalId))
-          .map((p) => [p.uniqueLocalId, p.getText()]),
-      );
-      await context.sync();
-      const positions = verifiedAnchorPositions(
-        anchor,
-        paragraphs.items.map((p) => ({
-          uniqueLocalId: p.uniqueLocalId,
-          text: text.get(p.uniqueLocalId)?.value ?? "",
-        })),
-      );
-      if (!positions) return "changed";
-      const first = paragraphs.items[positions[0]].getRange("Content");
+      const { items, entries } = await readWordParagraphEntries(context);
+      const resolved = resolveWordParagraphs(anchor.span, entries);
+      if ("refused" in resolved) return "changed";
+      const { positions } = resolved;
+      const first = items[positions[0]].getRange("Content");
       const range =
         positions.length === 1
           ? first
           : first.expandTo(
-              paragraphs.items[positions[positions.length - 1]].getRange(
-                "Content",
-              ),
+              items[positions[positions.length - 1]].getRange("Content"),
             );
       range.select();
       await context.sync();
-      return anchor.paragraphs.length === 1 && anchor.paragraphs[0].text === ""
+      const { paragraphs } = anchor.span;
+      return paragraphs.length === 1 && paragraphs[0].text === ""
         ? "cleared"
         : "selected";
     });
