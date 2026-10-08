@@ -117,7 +117,7 @@ export interface WordSelectionHostOptions {
   host?: WordSelectionHostFlavour;
   /** Defaults to "web" on the web host and "m365" elsewhere. */
   requirements?: WordRequirementFlavour;
-  /** Defaults to true on ltsc2024: perpetual Office reports null paragraph IDs. */
+  /** Defaults to true on ltsc2024: documented for single-purchase Office (office-js #4258), not measured. */
   nullParagraphIds?: boolean;
   trackingMode?: MockTrackingMode;
   styles?: Readonly<Record<string, MockSelectionStyle>>;
@@ -257,7 +257,7 @@ export const WORD_SELECTION_API_SETS: Readonly<
   "Font.bidirectional": ["WordApiDesktop", "1.3"],
   // Plan §4 lists WordApiDesktop 1.3; the office-js typings place it in WordApi 1.3.
   "Range.getHyperlinkRanges": ["WordApi", "1.3"],
-  // P3: the object-model hazard checks a span's OOXML cannot replace.
+  // PF3: the object-model hazard checks a span's OOXML cannot replace.
   "Range.hyperlink": ["WordApi", "1.3"],
   "Range.contentControls": ["WordApi", "1.1"],
   "Range.parentContentControlOrNullObject": ["WordApi", "1.3"],
@@ -1367,7 +1367,7 @@ export function installWordSelectionHost(
       ),
     );
   /**
-   * P8 and P2: desktop writes no value equal to the one the run inherits (automatic colour is not
+   * PF8 and PF2: desktop writes no value equal to the one the run inherits (automatic colour is not
    * #000000, so a colour is always written); the web drops only a toggle switched off where it
    * already is off, and writes every other value.
    */
@@ -1391,13 +1391,18 @@ export function installWordSelectionHost(
     for (let i = b.s; i < b.e; i += 1) {
       const t = b.story.tokens[i];
       if (t.kind !== "char" && t.kind !== "footnote") continue;
+      const font: MockSelectionFont = { ...t.run.font, [key]: value };
+      if (elided(t, paraAt(b.story, i), key, value)) delete font[key];
+      // PF2: inserted text gets a tracked format change too, once a set writes something new.
       let formatChange = t.run.formatChange;
-      if (tracked() && !t.run.ins && !formatChange) {
+      if (
+        tracked() &&
+        !formatChange &&
+        (!t.run.ins || font[key] !== t.run.font[key])
+      ) {
         change ??= revision("format");
         formatChange = { revision: change, font: t.run.font };
       }
-      const font: MockSelectionFont = { ...t.run.font, [key]: value };
-      if (elided(t, paraAt(b.story, i), key, value)) delete font[key];
       t.run = { ...t.run, font, formatChange };
     }
   };
@@ -1458,11 +1463,14 @@ export function installWordSelectionHost(
   });
   /**
    * SV2:102-105: a body lists our Replace as one Added change on desktop until that insertion is
-   * rejected; a range or paragraph never lists the deletion half.
+   * rejected; a range or paragraph never lists the deletion half. PF2: desktop also folds a format
+   * change on inserted text into its Added change, where the web lists it as Formatted.
    */
   const listedRevision =
     (st: Story, wholeBody: boolean) => (entry: RevisionEntry) => {
       const r = entry.revision;
+      if (r.kind === "format")
+        return web || !entry.tokens.every((t) => t.run.ins);
       if (r.kind !== "del" || !r.pair) return true;
       const pair = r.pair;
       return wholeBody && (web || !st.tokens.some((t) => t.run.ins === pair));
@@ -1543,7 +1551,7 @@ export function installWordSelectionHost(
     const change = run.formatChange
       ? `<w:rPrChange${revisionAttrs(run.formatChange.revision)}><w:rPr>${rPrContent(run.formatChange.font)}</w:rPr></w:rPrChange>`
       : "";
-    // Word marks field results noProof (P3).
+    // Word marks field results noProof (PF3).
     const content =
       rPrContent(run.font, run.rStyle) +
       (run.field ? "<w:noProof/>" : "") +
@@ -1714,7 +1722,7 @@ export function installWordSelectionHost(
   const pkgPart = (name: string, type: string, xml: string) =>
     `<pkg:part pkg:name="${name}" pkg:contentType="${type}"><pkg:xmlData>${xml}</pkg:xmlData></pkg:part>`;
   /**
-   * P3: the wrappers a range's own OOXML drops. A range inside a hyperlink (desktop also for exactly
+   * PF3: the wrappers a range's own OOXML drops. A range inside a hyperlink (desktop also for exactly
    * the link text) keeps only rStyle, one inside or partly over a content control has no w:sdt, and
    * one inside a field result has no fldChar on desktop.
    */
@@ -1747,7 +1755,7 @@ export function installWordSelectionHost(
     return clipped;
   };
   /**
-   * Like Word's: the clipped paragraphs (tables only when the range spans cells) plus styles. P2:
+   * Like Word's: the clipped paragraphs (tables only when the range spans cells) plus styles. PF2:
    * the web leaves out the paragraph properties when the range lies within one paragraph.
    */
   const ooxmlOf = (b: Bounds): string => {
@@ -2752,7 +2760,7 @@ export function installWordSelectionHost(
         get: () => (nullIds ? null : para().id),
         api: "Paragraph.uniqueLocalId",
       },
-      // P2: the web reports the OOXML w:name ("heading 1"), which getByNameOrNullObject cannot find.
+      // PF2: the web reports the OOXML w:name ("heading 1"), which getByNameOrNullObject cannot find.
       style: {
         get: () => {
           const style = para().style;
@@ -3117,7 +3125,7 @@ export function installWordSelectionHost(
       );
       return list;
     });
-    /** P3: the controls a range touches without lying inside them, and the one it lies inside. */
+    /** PF3: the controls a range touches without lying inside them, and the one it lies inside. */
     const parentControl = (b: Bounds): SdtState | undefined => {
       const covered = b.story.tokens.slice(b.s, Math.max(b.e, b.s + 1));
       const first = covered[0]?.run.sdt;
@@ -3316,7 +3324,7 @@ export function installWordSelectionHost(
         `${type}.insertOoxml`,
         () => {
           if (!web) return ooxmlWrite(where(), ooxml);
-          // SV2:74, P4: the web shows a restore only in a later Word.run; reads in this one are stale.
+          // SV2:74, PF4: the web shows a restore only in a later Word.run; reads in this one are stale.
           parseOoxml(ooxml);
           const placed = where();
           ctx.afterRun.push(() => ooxmlWrite(where(), ooxml));

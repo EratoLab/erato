@@ -413,6 +413,14 @@ function contextOnlyReason(
   if (support.styleFontSource === null || !facts.styleFontResolved)
     return "style_font_unavailable";
   if (analysis.occurrence < 0) return "position_unknown";
+  // paragraph.text shows text the model must not see and no reviewed text came with the capture.
+  if (
+    !facts.reviewedText &&
+    !paragraphs.every((p) => visibleOffsetText(p) !== null)
+  )
+    return "position_unknown";
+  // Word's search reads ^ as a special-character code, so it could not find the span again.
+  if (analysis.text.includes("^")) return "position_unknown";
   // Capture step 6: without a unique text window, only a hint can find the paragraphs again.
   if (
     anchor.window === null &&

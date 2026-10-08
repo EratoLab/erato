@@ -20,6 +20,9 @@ export function markProgrammaticWordSelection(
   now = Date.now(),
 ): ProgrammaticWordSelection {
   const mark: Mark = { since: now };
+  marks = marks.filter(
+    (other) => now - other.since <= PROGRAMMATIC_SELECTION_WINDOW_MS,
+  );
   marks.push(mark);
   return {
     selected: (at = Date.now()) => {

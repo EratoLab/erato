@@ -19,7 +19,7 @@ export interface WordSelectionSupport {
   styleFontSource: "api" | "ooxml" | null;
   /** The complex-script font twins can be set, so complex-script formatting can be kept. */
   bidiSetters: boolean;
-  /** Word for the web's bold and italic setters also write bCs and iCs (P8). */
+  /** Word for the web's bold and italic setters also write bCs and iCs (PF8). */
   twinsFollowLatin: boolean;
   /** Document.changeTrackingMode can be read. */
   trackingMode: boolean;
@@ -31,7 +31,8 @@ export interface WordSelectionSupport {
   reason: "host_unsupported" | null;
 }
 
-/** P8 checks these on real hosts; LTSC 2021 stops at WordApi 1.3 and LTSC 2024 has WordApiDesktop 1.1. */
+/** PF8 checked these on Mac, PC and web. The LTSC limits (2021: WordApi 1.3; 2024: WordApiDesktop 1.1)
+ * come from Microsoft's requirement-set tables and were never measured. */
 export const WORD_SELECTION_REQUIREMENTS = {
   /** Paragraph.getText(options). */
   identityText: ["WordApi", "1.7"],

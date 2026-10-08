@@ -231,7 +231,15 @@ describe("classifyWordSelection: D-10", () => {
   ])("finds the mark %j in the span's text", (mark, reason) => {
     const story = body(["Intro", `Before ${mark} inside`, "Outro"]);
     expect(reasonOf(facts(story, { first: 1 }))).toBe(reason);
-    expect(reasonOf(facts(story, { first: 1, start: 0, end: 6 }))).toBeNull();
+    expect(
+      reasonOf(
+        facts(
+          story,
+          { first: 1, start: 0, end: 6 },
+          { reviewedText: "Before" },
+        ),
+      ),
+    ).toBeNull();
   });
 
   it("sends a whole table as context only", () => {
@@ -418,6 +426,22 @@ describe("classifyWordSelection: hosts and edges", () => {
     expect(reasonOf({ ...INLINE, anchor: PARAGRAPH.anchor })).toBe(
       "position_unknown",
     );
+  });
+
+  it("refuses a span the model would see no text of, or Word's search could not find", () => {
+    const story = body(["Intro", "Kept words here.", "x^2 grows.", "Outro"]);
+    const shown = {
+      ...facts(story, { first: 1 }).paragraphs[0],
+      rangeText: "Kept deleted words here.",
+    };
+    const inline = {
+      ...facts(story, { first: 1, end: 4 }),
+      paragraphs: [shown],
+    };
+    expect(reasonOf({ ...inline, reviewedText: "Kept" })).toBeNull();
+    expect(reasonOf(inline)).toBe("position_unknown");
+    expect(reasonOf(facts(story, { first: 2 }))).toBe("position_unknown");
+    expect(reasonOf(facts(story, { first: 2, start: 4 }))).toBeNull();
   });
 
   it("refuses a span that search could not find at its offset", () => {

@@ -672,14 +672,46 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     expect(host.writeSyncs().map((s) => s.writes)).toEqual([
       ["Font.bold=", "Font.color="],
     ]);
-    // P8: bold = false where the style gives no bold writes nothing on any host.
+    // PF8: bold = false where the style gives no bold writes nothing on any host.
     expect(host.paragraphs()[1].runs.slice(0, 2)).toEqual([
       { text: "MX1 " },
       { text: "Alpha bravo", font: { color: "#FF0000" } },
     ]);
   });
 
-  it("P8 and P2: writes no toggle switched off where it already is, and desktop no value the style gives", async () => {
+  it("PF2: tracks a format change on inserted text when a set writes something new", async () => {
+    install();
+    const ooxml = await Word.run(async (context) => {
+      context.document.changeTrackingMode = "TrackAll";
+      const inserted = (await firstHit(context, "PL1", "lima mike")).insertText(
+        "LIMA",
+        "Replace",
+      );
+      inserted.font.bold = false;
+      await context.sync();
+      const unchanged = (await tagged(context, "PL1")).getOoxml();
+      inserted.font.color = "#FF0000";
+      await context.sync();
+      const changed = (await tagged(context, "PL1")).getOoxml();
+      await context.sync();
+      return { unchanged: unchanged.value, changed: changed.value };
+    });
+    expect(ooxml.unchanged).not.toContain("w:rPrChange");
+    expect(ooxml.changed).toContain("w:rPrChange");
+    const listed = await Word.run(async (context) => {
+      const all = context.document.body.getTrackedChanges();
+      all.load("items/type,items/author");
+      await context.sync();
+      return all.items
+        .filter((c) => c.author === "Mock Author")
+        .map((c) => c.type);
+    });
+    expect(listed).toEqual(
+      desktop ? ["Added"] : ["Deleted", "Added", "Formatted"],
+    );
+  });
+
+  it("PF8 and PF2: writes no toggle switched off where it already is, and desktop no value the style gives", async () => {
     const host = install();
     await Word.run(async (context) => {
       (await tagged(context, "PL1")).getRange("Content").font.bold = false;
@@ -707,7 +739,7 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     ]);
   });
 
-  it("P2: names a heading's style per host and leaves paragraph properties out of the web's single-paragraph OOXML", async () => {
+  it("PF2: names a heading's style per host and leaves paragraph properties out of the web's single-paragraph OOXML", async () => {
     install();
     const read = await Word.run(async (context) => {
       const h1 = await tagged(context, "H1");
@@ -742,7 +774,7 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     });
   });
 
-  it("P3: a span's own OOXML drops the link, control and field around it, and the object model still finds them", async () => {
+  it("PF3: a span's own OOXML drops the link, control and field around it, and the object model still finds them", async () => {
     const host = install({
       body: [
         {
@@ -833,7 +865,7 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     expect(host.paragraphs()[0].text).toBe("BR1 Page\fColumn\u000Eend.");
   });
 
-  it("SV2:74 and P4: shows an insertOoxml restore in the same Word.run on desktop and only in a later one on the web", async () => {
+  it("SV2:74 and PF4: shows an insertOoxml restore in the same Word.run on desktop and only in a later one on the web", async () => {
     const host = install();
     const original = host.paragraphs()[2].text;
     const sameRun = await Word.run(async (context) => {
