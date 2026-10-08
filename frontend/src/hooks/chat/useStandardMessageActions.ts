@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 
+import { useMessageActionsFeature } from "@/providers/FeatureConfigProvider";
+
 import type { ChatMessage } from "@/components/ui/MessageList/MessageList";
 import type { MessageAction } from "@/types/message-controls";
 
@@ -28,7 +30,8 @@ interface UseStandardMessageActionsOptions {
  * Returns an onMessageAction handler that covers the intrinsic chat actions
  * (edit, regenerate, like, dislike) shared by the main Chat and AddinChat
  * components. Caller-specific actions (copy policy, etc.) are delegated via
- * onUnhandledAction.
+ * onUnhandledAction. Edit and regenerate are refused while the deployment
+ * hides them, so custom message controls cannot offer them either.
  */
 export function useStandardMessageActions({
   messages,
@@ -39,9 +42,11 @@ export function useStandardMessageActions({
   openFeedbackDialog,
   onUnhandledAction,
 }: UseStandardMessageActionsOptions) {
+  const { editingEnabled, regenerationEnabled } = useMessageActionsFeature();
   return useCallback(
     async (action: MessageAction): Promise<boolean> => {
       if (action.type === "edit") {
+        if (!editingEnabled) return false;
         if (messages[action.messageId].role === "user") {
           onBeginEdit(action.messageId);
         }
@@ -49,6 +54,7 @@ export function useStandardMessageActions({
       }
 
       if (action.type === "regenerate") {
+        if (!regenerationEnabled) return false;
         handleRegenerate(action.messageId);
         return true;
       }
@@ -68,6 +74,8 @@ export function useStandardMessageActions({
       return false;
     },
     [
+      editingEnabled,
+      regenerationEnabled,
       messages,
       onBeginEdit,
       handleRegenerate,

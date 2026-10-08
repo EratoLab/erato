@@ -6,6 +6,7 @@ import { memo, useState, useEffect, useCallback } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
+import { useMessageActionsFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import {
@@ -40,6 +41,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
   hasToolCalls = false,
   onViewFeedback,
 }: MessageControlsProps) {
+  const { editingEnabled, regenerationEnabled } = useMessageActionsFeature();
   const [isCopied, setIsCopied] = useState(false);
   const controlsRowStyle = {
     gap: "var(--theme-spacing-control-gap)",
@@ -209,7 +211,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
           className={controlsButtonClassName}
         />
 
-        {isUser && canEditChat && !context.isSharedDialog && (
+        {isUser && editingEnabled && canEditChat && !context.isSharedDialog && (
           <Button
             onClick={() => void handleAction("edit")}
             variant="icon-only"
@@ -223,24 +225,27 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
           />
         )}
 
-        {!isUser && canEditChat && !context.isSharedDialog && (
-          <Button
-            onClick={() => void handleAction("regenerate")}
-            variant="icon-only"
-            icon={<RerunIcon />}
-            size="sm"
-            showOnHover={showOnHover}
-            aria-label={t({
-              id: "message.regenerate.aria",
-              message: "Regenerate response",
-            })}
-            title={t({
-              id: "message.regenerate.aria",
-              message: "Regenerate response",
-            })}
-            className={controlsButtonClassName}
-          />
-        )}
+        {!isUser &&
+          regenerationEnabled &&
+          canEditChat &&
+          !context.isSharedDialog && (
+            <Button
+              onClick={() => void handleAction("regenerate")}
+              variant="icon-only"
+              icon={<RerunIcon />}
+              size="sm"
+              showOnHover={showOnHover}
+              aria-label={t({
+                id: "message.regenerate.aria",
+                message: "Regenerate response",
+              })}
+              title={t({
+                id: "message.regenerate.aria",
+                message: "Regenerate response",
+              })}
+              className={controlsButtonClassName}
+            />
+          )}
 
         {!isUser && showFeedbackButtons && (
           <>

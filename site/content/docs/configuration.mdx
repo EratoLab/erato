@@ -250,6 +250,45 @@ When enabled, the logout button/option will be hidden from the user interface.
 disable_logout = true
 ```
 
+#### `frontend.enable_message_editing`
+
+{/* erato_toml_config_key: frontend.enable_message_editing */}
+
+Whether to show the edit action on user messages. Set to `false` for customer chat interfaces that should not offer message editing. Existing chat permissions still apply. This presentation setting does not disable the editing API.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+#### `frontend.enable_message_regeneration`
+
+{/* erato_toml_config_key: frontend.enable_message_regeneration */}
+
+Whether to show the regenerate action on assistant responses. Existing chat permissions still apply. This presentation setting does not disable the regeneration API. Copying and message feedback remain available independently.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+#### `frontend.enable_chat_history_filters`
+
+{/* erato_toml_config_key: frontend.enable_chat_history_filters */}
+
+Whether to offer filtering and grouping in the chat history of the web sidebar and the Office add-in. When `false`, the history shows an ungrouped Recent list of active chats, without delegated runs, and search lists active chats only. Saved browser filters are ignored for both display and API requests; they are retained for use if filtering is enabled again. Archived chats are then not listed anywhere, so archiving a chat hides it from the interface.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+**Example: reduced customer interface**
+
+```toml
+[frontend]
+enable_message_editing = false
+enable_message_regeneration = false
+enable_chat_history_filters = false
+```
+
 #### `frontend.enable_message_feedback`
 
 {/* erato_toml_config_key: frontend.enable_message_feedback */}

@@ -61,3 +61,43 @@ describe("env MCP visibility", () => {
     },
   );
 });
+
+describe("env reduced UI controls", () => {
+  afterEach(() => {
+    delete window.MESSAGE_EDITING_ENABLED;
+    delete window.MESSAGE_REGENERATION_ENABLED;
+    delete window.CHAT_HISTORY_FILTERS_ENABLED;
+    vi.unstubAllEnvs();
+  });
+  it("preserves the existing defaults when no flags are supplied", () => {
+    expect(env()).toMatchObject({
+      messageEditingEnabled: true,
+      messageRegenerationEnabled: true,
+      chatHistoryFiltersEnabled: true,
+    });
+  });
+  it.each([true, false])(
+    "honors backend values and explicit Vite overrides (%s)",
+    (value) => {
+      window.MESSAGE_EDITING_ENABLED = value;
+      window.MESSAGE_REGENERATION_ENABLED = value;
+      window.CHAT_HISTORY_FILTERS_ENABLED = value;
+      expect(env()).toMatchObject({
+        messageEditingEnabled: value,
+        messageRegenerationEnabled: value,
+        chatHistoryFiltersEnabled: value,
+      });
+      for (const key of [
+        "MESSAGE_EDITING_ENABLED",
+        "MESSAGE_REGENERATION_ENABLED",
+        "CHAT_HISTORY_FILTERS_ENABLED",
+      ])
+        vi.stubEnv(`VITE_${key}`, String(!value));
+      expect(env()).toMatchObject({
+        messageEditingEnabled: !value,
+        messageRegenerationEnabled: !value,
+        chatHistoryFiltersEnabled: !value,
+      });
+    },
+  );
+});

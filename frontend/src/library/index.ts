@@ -435,6 +435,7 @@ export {
   isSourceFilterAvailable,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterFoldback,
+  useChatHistoryListFilters,
   useSanitizedChatHistoryFilters,
   type ChatHistoryFilterStoreHook,
   type ChatHistoryFilterValues,
@@ -515,6 +516,7 @@ export {
 export {
   FeatureConfigProvider,
   StaticFeatureConfigProvider,
+  useMessageActionsFeature,
   defaultStaticFeatureConfig,
   useAudioConversationalFeature,
   useFeatureConfig,

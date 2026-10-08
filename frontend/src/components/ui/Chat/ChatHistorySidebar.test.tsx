@@ -10,6 +10,7 @@ import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 
+let mockedFiltersEnabled = true;
 let mockedCollapsedMode = "hidden";
 let mockedLogoPath: string | null = null;
 let mockedAssistantsEnabled = false;
@@ -52,6 +53,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
     logoPath: mockedLogoPath,
     logoDarkPath: null,
     chatHistorySources: [],
+    chatHistoryFiltersEnabled: mockedFiltersEnabled,
   }),
 }));
 
@@ -97,7 +99,41 @@ const sessions: ChatSession[] = [
 ];
 
 describe("ChatHistorySidebar", () => {
+  it("shows the ungrouped recent list without a filter menu when disabled", async () => {
+    mockedFiltersEnabled = false;
+    const { useChatHistoryFilterStore } = await import(
+      "@/hooks/chat/store/chatHistoryFilterStore"
+    );
+    useChatHistoryFilterStore.setState({
+      groupBy: "date",
+      statusFilter: "all",
+    });
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      screen.queryByTestId("chat-history-filter-menu-trigger"),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[data-ui="chat-history-group"]'),
+    ).toBeNull();
+    expect(screen.getByText("Recent")).toBeInTheDocument();
+  });
+
   beforeEach(async () => {
+    mockedFiltersEnabled = true;
     mockedCollapsedMode = "hidden";
     mockedLogoPath = null;
     mockedAssistantsEnabled = false;

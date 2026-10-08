@@ -60,6 +60,8 @@ const spies = vi.hoisted(() => {
     filterMenuStore,
     sharingEnabled: { current: true },
     showMetadata: { current: true },
+    filtersEnabled: { current: true },
+    sanitizeCapabilities: [] as unknown[],
   };
 });
 
@@ -195,6 +197,7 @@ vi.mock("@erato/frontend/library", async () => {
     useFeatureConfig: () => ({
       sidebar: {
         chatHistoryShowMetadata: spies.showMetadata.current,
+        chatHistoryFiltersEnabled: spies.filtersEnabled.current,
         chatHistorySources: [],
       },
     }),
@@ -205,7 +208,10 @@ vi.mock("@erato/frontend/library", async () => {
             { key: "a", label: "Group A", sessions: sessions.slice(0, 1) },
             { key: "b", label: "Group B", sessions: sessions.slice(1) },
           ].filter((group) => group.sessions.length > 0),
-    useSanitizedChatHistoryFilters: () => spies.filters,
+    useSanitizedChatHistoryFilters: (capabilities: unknown) => {
+      spies.sanitizeCapabilities.push(capabilities);
+      return spies.filters;
+    },
   });
 });
 
@@ -249,6 +255,8 @@ describe("AddinHistoryDrawerCore", () => {
     spies.filterMenuStore.current = null;
     spies.sharingEnabled.current = true;
     spies.showMetadata.current = true;
+    spies.filtersEnabled.current = true;
+    spies.sanitizeCapabilities.length = 0;
     spies.chatContext.chats = [{ id: "c1" }, { id: "c2" }];
     spies.chatContext.isLoading = false;
     spies.chatContext.isHistoryLoading = false;
@@ -388,6 +396,20 @@ describe("AddinHistoryDrawerCore", () => {
   it("hands the platform's filter store to the filter menu", () => {
     renderDrawer();
     expect(spies.filterMenuStore.current).toBe(fakeFilterStore);
+  });
+
+  it("drops the filter menu and saved filters when the deployment disables them", () => {
+    spies.filtersEnabled.current = false;
+    spies.filters = {
+      typeFilter: "all",
+      statusFilter: "active",
+      groupBy: "none",
+    };
+    renderDrawer();
+    expect(screen.queryByTestId("filter-menu")).toBeNull();
+    expect(spies.sanitizeCapabilities.at(-1)).toMatchObject({
+      enabled: false,
+    });
   });
 
   it("withholds the share action when sharing is disabled", () => {

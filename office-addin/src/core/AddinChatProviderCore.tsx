@@ -11,6 +11,7 @@ import {
   useAssistantsFeature,
   useBudgetStatus,
   useChatHistoryFilterFoldback,
+  useChatHistoryListFilters,
   useChatMessaging,
   useFeatureConfig,
   useFileCapabilitiesContext,
@@ -91,9 +92,11 @@ export function AddinChatProviderCore({
   const filterStore = getAddinChatHistoryFilterStore(platform);
   const { enabled: assistantsEnabled, delegationEnabled } =
     useAssistantsFeature();
-  const { chatHistorySources } = useFeatureConfig().sidebar;
+  const { chatHistorySources, chatHistoryFiltersEnabled } =
+    useFeatureConfig().sidebar;
   useChatHistoryFilterFoldback(
     {
+      enabled: chatHistoryFiltersEnabled,
       assistantsEnabled,
       delegationEnabled,
       availableSources: chatHistorySources,
@@ -101,13 +104,9 @@ export function AddinChatProviderCore({
     filterStore,
   );
 
-  const typeFilter = filterStore((state) => state.typeFilter);
-  const statusFilter = filterStore((state) => state.statusFilter);
-  const delegatedFilter = filterStore((state) => state.delegatedFilter);
-  const sourceFilter = filterStore((state) => state.sourceFilter);
-  const filters = useMemo<RecentChatsListFilters>(
-    () => ({ typeFilter, statusFilter, delegatedFilter, sourceFilter }),
-    [typeFilter, statusFilter, delegatedFilter, sourceFilter],
+  const filters = useChatHistoryListFilters(
+    chatHistoryFiltersEnabled,
+    filterStore,
   );
   const history = useInfiniteRecentChats({ filters });
   const chats = history.chats;

@@ -21,7 +21,7 @@ import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input/Input";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SearchIcon, CloseIcon } from "@/components/ui/icons";
-import { useChatHistoryFilterStore } from "@/hooks/chat/store/chatHistoryFilterStore";
+import { useChatHistoryListFilters } from "@/hooks/chat/store/chatHistoryFilterStore";
 import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
 import { buildRecentChatsFilterParams } from "@/hooks/chat/useInfiniteRecentChats";
 import { usePageAlignment } from "@/hooks/ui";
@@ -35,6 +35,7 @@ import {
   useChatInputFeature,
   useChatSharingFeature,
   usePinnedChatsFeature,
+  useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
@@ -190,7 +191,9 @@ export default function SearchPage() {
   const backendSearchQuery = debouncedSearchQuery.trim();
   const isShowingRecent = backendSearchQuery === "";
 
-  const statusFilter = useChatHistoryFilterStore((state) => state.statusFilter);
+  const { statusFilter } = useChatHistoryListFilters(
+    useSidebarFeature().chatHistoryFiltersEnabled,
+  );
   // Status follows the sidebar's filter, which is on screen here, so an archive
   // from either surface edits the same cache entries.
   const searchQueryParams = {

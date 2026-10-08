@@ -38,6 +38,7 @@ import {
   ShareIcon,
   MoreVertical,
 } from "@/components/ui/icons";
+import { useMessageActionsFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
@@ -125,6 +126,8 @@ export const MessageControls = ({
 
   // Chat-level edit permission
   const canEditChat = context.canEdit !== false;
+  // Deployment switches (`frontend.enable_message_editing` / `_regeneration`)
+  const { editingEnabled, regenerationEnabled } = useMessageActionsFeature();
 
   // Reset copy state after 2 seconds
   useEffect(() => {
@@ -325,20 +328,23 @@ export const MessageControls = ({
           title={isCopied ? "Copied" : "Copy message"}
         />
 
-        {isUserMessage && canEditChat && !context.isSharedDialog && (
-          <Button
-            onClick={() => {
-              void handleEdit();
-            }}
-            variant="icon-only"
-            icon={<EditIcon />}
-            size="sm"
-            aria-label="Edit message"
-            title="Edit message"
-          />
-        )}
+        {isUserMessage &&
+          editingEnabled &&
+          canEditChat &&
+          !context.isSharedDialog && (
+            <Button
+              onClick={() => {
+                void handleEdit();
+              }}
+              variant="icon-only"
+              icon={<EditIcon />}
+              size="sm"
+              aria-label="Edit message"
+              title="Edit message"
+            />
+          )}
 
-        {!isUserMessage && (
+        {!isUserMessage && regenerationEnabled && (
           <Button
             onClick={() => {
               void handleRegenerate();

@@ -27,6 +27,9 @@ const FRONTEND_ENV_KEY_FRONTEND_PLATFORM: &str = "FRONTEND_PLATFORM";
 const FRONTEND_ENV_KEY_FRONTEND_PUBLIC_BASE_PATH: &str = "FRONTEND_PUBLIC_BASE_PATH";
 const FRONTEND_ENV_KEY_COMMON_PUBLIC_BASE_PATH: &str = "COMMON_PUBLIC_BASE_PATH";
 const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
+const FRONTEND_ENV_KEY_MESSAGE_EDITING_ENABLED: &str = "MESSAGE_EDITING_ENABLED";
+const FRONTEND_ENV_KEY_MESSAGE_REGENERATION_ENABLED: &str = "MESSAGE_REGENERATION_ENABLED";
+const FRONTEND_ENV_KEY_CHAT_HISTORY_FILTERS_ENABLED: &str = "CHAT_HISTORY_FILTERS_ENABLED";
 const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
 const FRONTEND_ENV_KEY_MAX_FILES_PER_MESSAGE: &str = "MAX_FILES_PER_MESSAGE";
 const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
@@ -322,6 +325,24 @@ fn build_frontend_environment(
             FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME.to_string(),
             Value::String(theme.clone()),
         );
+    }
+
+    for (key, enabled) in [
+        (
+            FRONTEND_ENV_KEY_MESSAGE_EDITING_ENABLED,
+            config.frontend.enable_message_editing,
+        ),
+        (
+            FRONTEND_ENV_KEY_MESSAGE_REGENERATION_ENABLED,
+            config.frontend.enable_message_regeneration,
+        ),
+        (
+            FRONTEND_ENV_KEY_CHAT_HISTORY_FILTERS_ENABLED,
+            config.frontend.enable_chat_history_filters,
+        ),
+    ] {
+        env.additional_environment
+            .insert(key.to_string(), Value::Bool(enabled));
     }
 
     // Inject frontend configuration flags
@@ -1348,6 +1369,27 @@ mod tests {
                 .get(FRONTEND_ENV_KEY_ASSISTANTS_MAX_FILES),
             Some(&Value::Number(9.into()))
         );
+    }
+
+    #[test]
+    fn reduced_ui_controls_are_exposed_to_the_frontend() {
+        for enabled in [true, false] {
+            let mut config = AppConfig::default();
+            config.frontend.enable_message_editing = enabled;
+            config.frontend.enable_message_regeneration = enabled;
+            config.frontend.enable_chat_history_filters = enabled;
+            let environment = build_frontend_environment(&config, FrontendKind::Web);
+            for key in [
+                FRONTEND_ENV_KEY_MESSAGE_EDITING_ENABLED,
+                FRONTEND_ENV_KEY_MESSAGE_REGENERATION_ENABLED,
+                FRONTEND_ENV_KEY_CHAT_HISTORY_FILTERS_ENABLED,
+            ] {
+                assert_eq!(
+                    environment.additional_environment.get(key),
+                    Some(&Value::Bool(enabled))
+                );
+            }
+        }
     }
 
     #[test]

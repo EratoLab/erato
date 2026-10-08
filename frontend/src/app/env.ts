@@ -55,6 +55,9 @@ export type Env = {
   sharepointEnabled: boolean;
   sharepointShowDisclaimer: boolean;
   chatSharingEnabled: boolean;
+  messageEditingEnabled: boolean;
+  messageRegenerationEnabled: boolean;
+  chatHistoryFiltersEnabled: boolean;
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
   messageFeedbackEditTimeLimitSeconds: number | null;
@@ -125,6 +128,9 @@ declare global {
     SHAREPOINT_ENABLED?: boolean;
     SHAREPOINT_SHOW_DISCLAIMER?: boolean;
     CHAT_SHARING_ENABLED?: boolean;
+    MESSAGE_EDITING_ENABLED?: boolean;
+    MESSAGE_REGENERATION_ENABLED?: boolean;
+    CHAT_HISTORY_FILTERS_ENABLED?: boolean;
     MESSAGE_FEEDBACK_ENABLED?: boolean;
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
     MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
@@ -358,6 +364,18 @@ export const env = (): Env => {
     import.meta.env.VITE_CHAT_SHARING_ENABLED === "true"
       ? true
       : (window.CHAT_SHARING_ENABLED ?? false);
+  const messageEditingEnabled =
+    import.meta.env.VITE_MESSAGE_EDITING_ENABLED !== undefined
+      ? import.meta.env.VITE_MESSAGE_EDITING_ENABLED === "true"
+      : (window.MESSAGE_EDITING_ENABLED ?? true);
+  const messageRegenerationEnabled =
+    import.meta.env.VITE_MESSAGE_REGENERATION_ENABLED !== undefined
+      ? import.meta.env.VITE_MESSAGE_REGENERATION_ENABLED === "true"
+      : (window.MESSAGE_REGENERATION_ENABLED ?? true);
+  const chatHistoryFiltersEnabled =
+    import.meta.env.VITE_CHAT_HISTORY_FILTERS_ENABLED !== undefined
+      ? import.meta.env.VITE_CHAT_HISTORY_FILTERS_ENABLED === "true"
+      : (window.CHAT_HISTORY_FILTERS_ENABLED ?? true);
   const messageFeedbackEnabled =
     import.meta.env.VITE_MESSAGE_FEEDBACK_ENABLED === "true"
       ? true
@@ -511,6 +529,9 @@ export const env = (): Env => {
     sharepointEnabled,
     sharepointShowDisclaimer,
     chatSharingEnabled,
+    messageEditingEnabled,
+    messageRegenerationEnabled,
+    chatHistoryFiltersEnabled,
     messageFeedbackEnabled,
     messageFeedbackCommentsEnabled,
     messageFeedbackEditTimeLimitSeconds,

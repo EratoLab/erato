@@ -241,6 +241,10 @@ vi.mock("@/hooks/useProfile", () => ({
 }));
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
+  useMessageActionsFeature: () => ({
+    editingEnabled: true,
+    regenerationEnabled: true,
+  }),
   useChatInputFeature: () => ({
     emptyStateLayout: testState.emptyStateLayout,
     showUsageAdvisory: testState.showUsageAdvisory,
