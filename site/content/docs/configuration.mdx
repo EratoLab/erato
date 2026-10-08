@@ -1138,7 +1138,9 @@ The type of chat provider to use.
 
 **Type:** `string`
 
-**Supported values:** `"openai"`, `"azure_openai"`
+**Supported values:** `"openai"`, `"openai_responses"`, `"azure_openai"`, `"azure_openai_responses"`, `"ollama"`, `"gemini"`, `"vertex_ai"`, `"openai_audio_transcriptions"`
+
+`"openai_audio_transcriptions"` uses the OpenAI-compatible `/v1/audio/transcriptions` API for audio modes. It is configured like other providers, but is excluded from chat model selection.
 
 **Example:** `"openai"`
 
@@ -2154,6 +2156,36 @@ Erato has three independently configurable audio modes:
 - `audio_conversational` enables hands-free conversational audio mode with voice activity detection, auto-send, and restart behavior.
 
 Each enabled audio mode needs an audio-capable chat provider. Either set `chat_provider_id` on the audio mode, or omit it to let Erato pick the first provider in `chat_providers.priority_order` with `model_capabilities.supports_audio_input = true`. Provider kinds using the OpenAI Responses adapters do not currently support binary audio input for these modes.
+
+For providers that implement the [OpenAI audio transcription API](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create), use `provider_kind = "openai_audio_transcriptions"`:
+
+```toml
+[chat_providers.providers.transcriber]
+provider_kind = "openai_audio_transcriptions"
+model_name = "whisper-1"
+api_key = "your-api-key"
+# Optional for other OpenAI-compatible providers; defaults to https://api.openai.com/v1/
+base_url = "https://api.openai.com/v1/"
+
+[chat_providers.providers.transcriber.model_capabilities]
+supports_audio_input = true
+
+[audio_dictation]
+enabled = true
+chat_provider_id = "transcriber"
+
+[audio_transcription]
+enabled = true
+chat_provider_id = "transcriber"
+
+[audio_conversational]
+enabled = true
+chat_provider_id = "transcriber"
+```
+
+Erato appends `audio/transcriptions` to `base_url`, uploads each WAV chunk as multipart form data, and requests JSON transcripts. `api_key` supplies bearer authentication; `additional_request_headers` (including user and token claim templates) and `additional_request_parameters` work as usual. An explicit `Authorization` header takes precedence over `api_key`. No API key is required for unauthenticated compatible servers.
+
+The provider retains the audio modes' chunking, retries, and hallucination checks. Chat-specific prompts, reasoning options, and output token budgets do not apply to this API. Keep an ordinary chat provider configured for conversation responses and chat summaries. A transcriber can be selected explicitly as above, or included in `priority_order` for automatic audio provider selection; it will not appear in the chat model picker.
 
 #### `audio_dictation`
 

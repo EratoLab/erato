@@ -853,7 +853,7 @@ impl AppState {
         Ok(genai_client)
     }
 
-    fn build_request_headers<'a>(
+    pub(crate) fn build_request_headers<'a>(
         config: &ChatProviderConfig,
         chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
     ) -> Result<HeaderMap, Report> {
