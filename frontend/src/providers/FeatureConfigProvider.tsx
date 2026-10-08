@@ -195,14 +195,13 @@ interface ErrorReportFeatureConfig {
   platform: string;
 }
 
-/**
- * Configuration for sidebar feature
- */
+/** Presentation switches for editing and regenerating messages. */
 interface MessageActionsFeatureConfig {
   editingEnabled: boolean;
   regenerationEnabled: boolean;
 }
 
+/** Configuration for the sidebar feature. */
 interface SidebarFeatureConfig {
   /** Whether filtering and grouping are available in chat history */
   chatHistoryFiltersEnabled?: boolean;
@@ -641,6 +640,11 @@ export function StaticFeatureConfigProvider({
   );
 }
 
+/** Optional access for hooks and controls that also support standalone use. */
+export function useOptionalFeatureConfig(): FeatureConfig | null {
+  return useContext(FeatureConfigContext);
+}
+
 /**
  * Hook to access the complete feature configuration.
  *
@@ -654,11 +658,6 @@ export function StaticFeatureConfigProvider({
  * }
  * ```
  */
-/** Optional access for hooks and controls that also support standalone use. */
-export function useOptionalFeatureConfig(): FeatureConfig | null {
-  return useContext(FeatureConfigContext);
-}
-
 export function useFeatureConfig(): FeatureConfig {
   const context = useContext(FeatureConfigContext);
   if (!context) {
@@ -803,6 +802,13 @@ export function useCloudProvidersFeature(): CloudProvidersFeatureConfig {
   return config.cloudProviders;
 }
 
+export function useMessageActionsFeature(): MessageActionsFeatureConfig {
+  return (
+    useOptionalFeatureConfig()?.messageActions ??
+    defaultStaticFeatureConfig.messageActions
+  );
+}
+
 /**
  * Convenience hook for accessing message feedback feature configuration.
  *
@@ -817,13 +823,6 @@ export function useCloudProvidersFeature(): CloudProvidersFeatureConfig {
  * }
  * ```
  */
-export function useMessageActionsFeature(): MessageActionsFeatureConfig {
-  return (
-    useOptionalFeatureConfig()?.messageActions ??
-    defaultStaticFeatureConfig.messageActions
-  );
-}
-
 export function useMessageFeedbackFeature(): MessageFeedbackFeatureConfig {
   const config = useFeatureConfig();
   return config.messageFeedback;
