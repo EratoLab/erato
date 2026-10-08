@@ -13,6 +13,13 @@ import { TAG_CI, TAG_NO_CI } from "./tags";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// The composer can also list the file in its context budget notice, so
+// match the attachment chip itself.
+const pdfAttachmentChip = (page: Page) =>
+  page.getByRole("button", {
+    name: /Preview attachment sample-report-compressed\.pdf/,
+  });
+
 const selectMockModel = async (page: Page) => {
   const modelSelectorButton = page.locator(
     'button[aria-controls="model-selector-dropdown"]',
@@ -856,7 +863,7 @@ test(
       "../test-files/sample-report-compressed.pdf",
     );
     await uploadFileInChat(page, sampleReportPath);
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
+    await expect(pdfAttachmentChip(page)).toBeVisible({
       timeout: 10000,
     });
 
@@ -868,7 +875,7 @@ test(
     await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
 
     await expect(textbox).toHaveValue("");
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toHaveCount(0);
+    await expect(pdfAttachmentChip(page)).toHaveCount(0);
 
     const secondChatDraft = "chat two draft text";
     await textbox.fill(secondChatDraft);
@@ -881,7 +888,7 @@ test(
     await expect(page).toHaveURL(new RegExp(`/chat/${firstChatId}$`));
 
     await expect(textbox).toHaveValue(firstChatDraft);
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
+    await expect(pdfAttachmentChip(page)).toBeVisible({
       timeout: 10000,
     });
 
@@ -893,7 +900,7 @@ test(
     await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
 
     await expect(textbox).toHaveValue(secondChatDraft);
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toHaveCount(0);
+    await expect(pdfAttachmentChip(page)).toHaveCount(0);
   },
 );
 
@@ -1314,7 +1321,7 @@ test(
     );
 
     await uploadFileInChat(page, pdfPath);
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
+    await expect(pdfAttachmentChip(page)).toBeVisible({
       timeout: 10000,
     });
 
@@ -1392,7 +1399,7 @@ test(
     );
 
     await uploadFileInChat(page, pdfPath);
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
+    await expect(pdfAttachmentChip(page)).toBeVisible({
       timeout: 10000,
     });
 
