@@ -1,5 +1,6 @@
 import { planWordEdits } from "@erato/frontend/word-review";
 
+import { wordHostPlatform } from "./wordHostPlatform";
 import { wordParagraphId } from "./wordParagraphIds";
 import {
   resolveWordParagraphs,
@@ -136,6 +137,13 @@ async function isCurrentSelection(
   }
 }
 
+/** Word for the web rewrites the end paragraphs of a multi-paragraph range it selects (ERMAIN-932),
+ * so only known desktop hosts select across paragraphs; elsewhere the first paragraph stands in. */
+function selectsAcrossParagraphs(): boolean {
+  const platform = wordHostPlatform();
+  return platform === "PC" || platform === "Mac";
+}
+
 /** Marks the selection event a select() causes, unless it changes nothing or never runs. */
 async function selectWordRange(
   context: Word.RequestContext,
@@ -173,7 +181,7 @@ export async function showWordReviewLocation(
       const { positions } = resolved;
       const first = items[positions[0]].getRange("Content");
       const range =
-        positions.length === 1
+        positions.length === 1 || !selectsAcrossParagraphs()
           ? first
           : first.expandTo(
               items[positions[positions.length - 1]].getRange("Content"),
@@ -275,11 +283,12 @@ export async function showWordParagraphs(
         if (!first) return "changed";
         await selectWordRange(context, first.getRange());
       } else {
+        const whole = items[0].getRange("Whole");
         await selectWordRange(
           context,
-          items[0]
-            .getRange("Whole")
-            .expandTo(items[items.length - 1].getRange("Whole")),
+          items.length === 1 || !selectsAcrossParagraphs()
+            ? whole
+            : whole.expandTo(items[items.length - 1].getRange("Whole")),
         );
       }
       return "selected";

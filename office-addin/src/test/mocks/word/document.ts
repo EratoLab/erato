@@ -46,6 +46,8 @@ export interface MockWordRun {
   failWriteOn: (uniqueLocalId: string | null) => void;
   setTrackingMode: (mode: "Off" | "TrackAll" | "TrackMineOnly") => void;
   selections: () => string[][];
+  /** Ranges built with expandTo, which Word for the web must not select (ERMAIN-932). */
+  expansions: () => number;
   /** Report every paragraph ID as null, as single-purchase Office does; writes still track the
    * paragraph internally under its ID. */
   hideParagraphIds: (hidden: boolean) => void;
@@ -123,6 +125,7 @@ export function installMockWordDocument(
   let writes: MockWordWrite[] = [];
   let trackingMode = "Off";
   let idsHidden = false;
+  let expansions = 0;
   let marksShown = false;
   const selections: string[][] = [];
 
@@ -164,7 +167,10 @@ export function installMockWordDocument(
       const rangeProxy = (first: string, last = first) => ({
         first,
         last,
-        expandTo: (other: { last: string }) => rangeProxy(first, other.last),
+        expandTo: (other: { last: string }) => {
+          expansions += 1;
+          return rangeProxy(first, other.last);
+        },
         select: () =>
           queue.push(() => {
             const start = body.findIndex((p) => p.uniqueLocalId === first);
@@ -364,6 +370,7 @@ export function installMockWordDocument(
         trackingMode = mode;
       },
       selections: () => selections.map((ids) => [...ids]),
+      expansions: () => expansions,
       hideParagraphIds: (hidden) => {
         idsHidden = hidden;
       },
