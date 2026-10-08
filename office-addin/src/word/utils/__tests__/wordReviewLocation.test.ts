@@ -1,19 +1,40 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
+import {
+  installWordSelectionHost,
+  uninstallWordSelectionHost,
+} from "../../../test/mocks/word/selectionHost";
 import { applyWordEdits } from "../wordApplyEdits";
+import {
+  consumeProgrammaticSelectionEvent,
+  markProgrammaticWordSelection,
+  resetProgrammaticWordSelectionForTests,
+} from "../wordProgrammaticSelection";
 import {
   capturedWordAnchor,
   originalWordAnchor,
+  readWordParagraphEntries,
   readWordTrackingMode,
+  showWordParagraphs,
   showWordReviewLocation,
+  WORD_SELECTION_TEXT_OPTIONS,
 } from "../wordReviewLocation";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
+import type * as wordProgrammaticSelectionModule from "../wordProgrammaticSelection";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
+
+vi.mock("../wordProgrammaticSelection", async (importOriginal) => {
+  const actual = await importOriginal<typeof wordProgrammaticSelectionModule>();
+  return {
+    ...actual,
+    markProgrammaticWordSelection: vi.fn(actual.markProgrammaticWordSelection),
+  };
+});
 
 const identity = "test-document";
 const capture: WordDocumentCapture = {
@@ -216,4 +237,160 @@ describe("Word navigation where getText keeps the paragraph mark", () => {
       expect(host.word.selections()).toEqual([["id-3"]]);
     },
   );
+});
+
+describe("Word navigation marks its own selection", () => {
+  let host: MockWordHost;
+  let selectionsAtMark: number[];
+  const marked = vi.mocked(markProgrammaticWordSelection);
+  beforeEach(async () => {
+    host = installMockWordDocument([
+      { text: "Same" },
+      { text: "Same" },
+      { text: "End" },
+    ]);
+    selectionsAtMark = [];
+    const actual = await vi.importActual<
+      typeof wordProgrammaticSelectionModule
+    >("../wordProgrammaticSelection");
+    marked.mockClear().mockImplementation(() => {
+      selectionsAtMark.push(host.word.selections().length);
+      return actual.markProgrammaticWordSelection();
+    });
+  });
+  afterEach(uninstallMockWordDocument);
+
+  it("marks before selecting a review location", async () => {
+    const anchor = originalWordAnchor(
+      { paragraph: 2, text: "Revised" },
+      capture,
+    )!;
+    expect(await showWordReviewLocation(anchor, identity)).toBe("selected");
+    expect(selectionsAtMark).toEqual([0]);
+    expect(host.word.selections()).toHaveLength(1);
+  });
+
+  it("marks before selecting written paragraphs", async () => {
+    expect(await showWordParagraphs(["id-2", "id-3"], identity, identity)).toBe(
+      "selected",
+    );
+    expect(selectionsAtMark).toEqual([0]);
+    expect(host.word.selections()).toEqual([["id-2", "id-3"]]);
+  });
+
+  it("leaves no mark when nothing is selected", async () => {
+    const anchor = originalWordAnchor(
+      { paragraph: 2, text: "Revised" },
+      capture,
+    )!;
+    host.word.setParagraphs([{ text: "Same" }, { text: "Changed" }]);
+    expect(await showWordReviewLocation(anchor, identity)).toBe("changed");
+    expect(await showWordParagraphs(["id-3", "id-1"], identity, identity)).toBe(
+      "changed",
+    );
+    expect(markProgrammaticWordSelection).not.toHaveBeenCalled();
+  });
+});
+
+describe("Word navigation marks its own selection on a selection host", () => {
+  const TRACKED = {
+    body: [
+      { runs: "AA1 First paragraph.", id: "id-1" },
+      {
+        runs: [
+          "TR1 Tracked ",
+          { text: "inserted ", inserted: "Other Author" },
+          "end.",
+        ],
+        id: "id-2",
+      },
+    ],
+  };
+  const marked = vi.mocked(markProgrammaticWordSelection);
+  beforeEach(() => {
+    resetProgrammaticWordSelectionForTests();
+    marked.mockClear();
+  });
+  afterEach(uninstallWordSelectionHost);
+
+  it("marks before selecting a tracked change, and the event it causes is claimed", async () => {
+    vi.useFakeTimers();
+    try {
+      const host = installWordSelectionHost(TRACKED);
+      const events: boolean[] = [];
+      host.addHandlerAsync("documentSelectionChanged", () =>
+        events.push(consumeProgrammaticSelectionEvent()),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await showWordParagraphs(["id-2"], identity, identity, true)).toBe(
+        "selected",
+      );
+      expect(marked).toHaveBeenCalledTimes(1);
+      expect(host.selectionText()).toBe("inserted ");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(events).toEqual([true]);
+      host.select({ p: "AA1" });
+      expect(events).toEqual([true, false]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves no mark when the location is already selected, since Word raises no event", async () => {
+    installWordSelectionHost(TRACKED);
+    expect(await showWordParagraphs(["id-1"], identity, identity)).toBe(
+      "selected",
+    );
+    expect(marked).toHaveBeenCalledTimes(1);
+    resetProgrammaticWordSelectionForTests();
+    expect(await showWordParagraphs(["id-1"], identity, identity)).toBe(
+      "selected",
+    );
+    expect(marked).toHaveBeenCalledTimes(1);
+    expect(consumeProgrammaticSelectionEvent()).toBe(false);
+  });
+
+  it("drops the mark when the select sync fails", async () => {
+    const host = installWordSelectionHost(TRACKED);
+    host.beforeSync((index) => {
+      if (index === 3) throw new Error("GeneralException");
+    });
+    expect(await showWordParagraphs(["id-1"], identity, identity)).toBe(
+      "unavailable",
+    );
+    expect(marked).toHaveBeenCalledTimes(1);
+    expect(consumeProgrammaticSelectionEvent()).toBe(false);
+  });
+});
+
+describe("readWordParagraphEntries", () => {
+  function contextWith(getText: ReturnType<typeof vi.fn>) {
+    return {
+      document: {
+        body: {
+          paragraphs: {
+            load: vi.fn(),
+            items: [{ uniqueLocalId: "id-1", getText }],
+          },
+        },
+      },
+      sync: vi.fn(() => Promise.resolve()),
+    } as unknown as Word.RequestContext;
+  }
+
+  it("forwards getText options when they are given", async () => {
+    const getText = vi.fn(() => ({ value: "Visible" }));
+    const { entries } = await readWordParagraphEntries(
+      contextWith(getText),
+      WORD_SELECTION_TEXT_OPTIONS,
+    );
+    expect(getText.mock.calls).toEqual([[WORD_SELECTION_TEXT_OPTIONS]]);
+    expect(entries).toEqual([{ id: "id-1", text: "Visible" }]);
+  });
+
+  it("keeps the v1 call without options", async () => {
+    const getText = vi.fn(() => ({ value: "Visible" }));
+    await readWordParagraphEntries(contextWith(getText));
+    expect(getText.mock.calls).toEqual([[]]);
+  });
 });

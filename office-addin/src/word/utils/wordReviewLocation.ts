@@ -5,6 +5,7 @@ import {
   resolveWordParagraphs,
   wordParagraphAnchor,
 } from "./wordParagraphResolver";
+import { markProgrammaticWordSelection } from "./wordProgrammaticSelection";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordInPlaceBackup } from "./wordDocumentPackage";
@@ -90,14 +91,24 @@ export function originalWordAnchor(
     : null;
 }
 
+/** Explicit, so the identity text a selection capture records and its later proof compares cannot
+ * drift with getText's defaults. */
+export const WORD_SELECTION_TEXT_OPTIONS = {
+  IncludeHiddenText: false,
+  IncludeTextMarkedAsDeleted: false,
+} as const;
+
 /** Every body paragraph with the text the capture recorded: getText without hidden or deleted text. */
 export async function readWordParagraphEntries(
   context: Word.RequestContext,
+  textOptions?: Parameters<Word.Paragraph["getText"]>[0],
 ): Promise<{ items: Word.Paragraph[]; entries: WordParagraphEntry[] }> {
   const paragraphs = context.document.body.paragraphs;
   paragraphs.load("items/uniqueLocalId");
   await context.sync();
-  const texts = paragraphs.items.map((p) => p.getText());
+  const texts = paragraphs.items.map((p) =>
+    textOptions ? p.getText(textOptions) : p.getText(),
+  );
   await context.sync();
   return {
     items: paragraphs.items,
@@ -106,6 +117,44 @@ export async function readWordParagraphEntries(
       text: texts[i].value,
     })),
   };
+}
+
+/**
+ * Re-selecting the current selection raises no event (SV2:64-65), so a mark left for it would claim
+ * the user's next selection; a failed compare only costs that precision.
+ */
+async function isCurrentSelection(
+  context: Word.RequestContext,
+  range: Word.Range,
+): Promise<boolean> {
+  try {
+    const relation = context.document.getSelection().compareLocationWith(range);
+    await context.sync();
+    return relation.value === "Equal";
+  } catch {
+    return false;
+  }
+}
+
+/** Marks the selection event a select() causes, unless it changes nothing or never runs. */
+async function selectWordRange(
+  context: Word.RequestContext,
+  range: Word.Range,
+): Promise<void> {
+  if (await isCurrentSelection(context, range)) {
+    range.select();
+    await context.sync();
+    return;
+  }
+  const mark = markProgrammaticWordSelection();
+  range.select();
+  try {
+    await context.sync();
+  } catch (error) {
+    mark.cancel();
+    throw error;
+  }
+  mark.selected();
 }
 
 export async function showWordReviewLocation(
@@ -129,8 +178,7 @@ export async function showWordReviewLocation(
           : first.expandTo(
               items[positions[positions.length - 1]].getRange("Content"),
             );
-      range.select();
-      await context.sync();
+      await selectWordRange(context, range);
       const { paragraphs } = anchor.span;
       return paragraphs.length === 1 && paragraphs[0].text === ""
         ? "cleared"
@@ -225,13 +273,15 @@ export async function showWordParagraphs(
         await context.sync();
         const first = changes.find((list) => list.items.length)?.items[0];
         if (!first) return "changed";
-        first.getRange().select();
-      } else
-        items[0]
-          .getRange("Whole")
-          .expandTo(items[items.length - 1].getRange("Whole"))
-          .select();
-      await context.sync();
+        await selectWordRange(context, first.getRange());
+      } else {
+        await selectWordRange(
+          context,
+          items[0]
+            .getRange("Whole")
+            .expandTo(items[items.length - 1].getRange("Whole")),
+        );
+      }
       return "selected";
     });
   } catch {

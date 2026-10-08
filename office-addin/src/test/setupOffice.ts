@@ -56,6 +56,7 @@ const officeMock = {
     Failed: "failed",
   },
   EventType: {
+    DocumentSelectionChanged: "documentSelectionChanged",
     ItemChanged: "itemChanged",
     OfficeThemeChanged: "officeThemeChanged",
   },

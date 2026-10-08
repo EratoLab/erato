@@ -1,3 +1,7 @@
+import { wordHostPlatform } from "./wordHostPlatform";
+
+import type { WordHostPlatform } from "./wordHostPlatform";
+
 export const WORD_IN_PLACE_MECHANISMS_LIST = [
   "text",
   "cell",
@@ -30,7 +34,6 @@ export type WordInPlaceProbeId =
   | "P11"
   | "P12"
   | "P13";
-type WordInPlacePlatform = "PC" | "Mac" | "OfficeOnline" | "unknown";
 type WordInPlaceGate = true | { probe: WordInPlaceProbeId };
 
 const PENDING: Record<
@@ -56,7 +59,7 @@ const PENDING: Record<
  * builds keep the kill switch on (see injectFrontendEnv) until P1-P4 pass.
  */
 export const WORD_IN_PLACE_MECHANISMS: Record<
-  WordInPlacePlatform,
+  WordHostPlatform,
   Record<WordInPlaceMechanism, WordInPlaceGate>
 > = {
   // Word PC 16.0.20326: P4 (marks), P5 (insert, split), P7 (restyle) and P8 (delete) passed; P2
@@ -85,19 +88,10 @@ export function wordComplexScriptMarkSetters(): boolean {
   );
 }
 
-function currentPlatform(): WordInPlacePlatform {
-  const platform = String(
-    globalThis.Office?.context?.diagnostics?.platform ?? "",
-  );
-  return platform === "PC" || platform === "Mac" || platform === "OfficeOnline"
-    ? platform
-    : "unknown";
-}
-
 let override: WordInPlaceCapabilities | undefined;
 
 export function wordInPlaceCapabilities(
-  platform: WordInPlacePlatform = currentPlatform(),
+  platform: WordHostPlatform = wordHostPlatform(),
 ): WordInPlaceCapabilities {
   if (override) return { ...override };
   const gates = WORD_IN_PLACE_MECHANISMS[platform];

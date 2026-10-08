@@ -245,6 +245,7 @@ msgid "officeAddin.chatInput.dismissDraftContext"
 msgstr "Entwurf nicht einbeziehen"
 
 #. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Auswahl verwerfen"
@@ -722,6 +723,16 @@ msgstr "Schließen"
 #: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.title"
 msgstr "Anheften, um deinen E-Mails zu folgen"
+
+#. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
+msgid "officeAddin.selection.shownByErato"
+msgstr "Von Erato angezeigt"
+
+#. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
+msgid "officeAddin.selection.useThis"
+msgstr "Diese Auswahl verwenden"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/sessionAskToast.tsx

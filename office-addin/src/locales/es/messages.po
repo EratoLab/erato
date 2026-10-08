@@ -245,6 +245,7 @@ msgid "officeAddin.chatInput.dismissDraftContext"
 msgstr "No incluir el borrador"
 
 #. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Descartar selección"
@@ -722,6 +723,16 @@ msgstr "Descartar"
 #: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.title"
 msgstr "Ánclalo para seguir tu correo"
+
+#. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
+msgid "officeAddin.selection.shownByErato"
+msgstr "Mostrado por Erato"
+
+#. js-lingui-explicit-id
+#: src/core/selection/AddinSelectionChip.tsx
+msgid "officeAddin.selection.useThis"
+msgstr "Usar esta selección"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/sessionAskToast.tsx
