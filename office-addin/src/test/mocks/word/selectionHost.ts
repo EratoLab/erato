@@ -220,12 +220,12 @@ export interface WordSelectionHost {
   calls(): string[];
 }
 
-/** Requirement sets per flavour: plan §4; m365 and web as measured (SV2:11-13). */
+/** Requirement sets per flavour: plan §4; m365 as measured (SV2:11-12), web as the native probe reported it. */
 export const WORD_REQUIREMENT_LEVELS: Readonly<
   Record<WordRequirementFlavour, Readonly<Record<string, string>>>
 > = {
   m365: { WordApi: "1.9", WordApiDesktop: "1.5", WordApiHiddenDocument: "1.5" },
-  web: { WordApi: "1.10", WordApiOnline: "1.1" },
+  web: { WordApi: "1.11", WordApiOnline: "1.1" },
   ltsc2024: { WordApi: "1.8", WordApiDesktop: "1.1" },
   ltsc2021: { WordApi: "1.3" },
 };
@@ -401,6 +401,13 @@ const DEFAULT_FONT: Required<Pick<MockSelectionFont, FontKey>> = {
   italicBidirectional: false,
   sizeBidirectional: 11,
   nameBidirectional: "Times New Roman",
+};
+/** The complex-script twin each Office.js font set also writes on Word for the web. */
+const WEB_FONT_TWINS: Partial<Record<FontKey, FontKey>> = {
+  bold: "boldBidirectional",
+  italic: "italicBidirectional",
+  size: "sizeBidirectional",
+  name: "nameBidirectional",
 };
 const fontApi = (key: FontKey): string | undefined =>
   key === "hidden"
@@ -1388,7 +1395,8 @@ export function installWordSelectionHost(
         ? effectiveFont(near, paraAt(st, s))[key]
         : mergeFont(DEFAULT_FONT, styleFont(paraAt(st, s)?.style))[key];
     }
-    return values.every((v) => v === values[0]) ? values[0] : null;
+    // Word for the web reads a mixed span as its first character.
+    return web || values.every((v) => v === values[0]) ? values[0] : null;
   };
 
   interface RevisionEntry {
@@ -2435,8 +2443,10 @@ export function installWordSelectionHost(
       props[key] = {
         get: () => {
           const target = compute();
-          return "story" in target
-            ? fontValue(target, key)
+          if ("story" in target) return fontValue(target, key);
+          // Word for the web has getStyles, but Style.font reads null there.
+          return web
+            ? null
             : mergeFont(DEFAULT_FONT, styleFont(target.name))[key];
         },
         set: (value) => {
@@ -2444,6 +2454,12 @@ export function installWordSelectionHost(
           if (!("story" in target))
             throw new Error("mock: style fonts are read-only");
           setFont(target, key, value);
+          const twin = web
+            ? WEB_FONT_TWINS[key]
+            : key === "name"
+              ? "nameBidirectional"
+              : undefined;
+          if (twin) setFont(target, twin, value);
         },
         api: fontApi(key),
       };

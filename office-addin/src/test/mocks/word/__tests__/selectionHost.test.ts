@@ -630,7 +630,7 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     );
   });
 
-  it("reads fonts as null when mixed, sets them on every character and resolves style fonts", async () => {
+  it("reads mixed fonts as null on desktop and as the first character on the web, sets them on every character and resolves style fonts on desktop only", async () => {
     const host = install();
     const fonts = await Word.run(async (context) => {
       const mixed = (await firstHit(context, "MX1", "Alpha bravo")).font;
@@ -654,10 +654,10 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     });
     expect(fonts).toEqual({
       values: [
-        [null, 11, "Calibri"],
+        [desktop ? null : false, 11, "Calibri"],
         [true, 11, "Calibri"],
         [true, 16, "Calibri Light"],
-        [true, 16, "Calibri Light"],
+        desktop ? [true, 16, "Calibri Light"] : [null, null, null],
       ],
       missing: true,
     });
@@ -672,8 +672,29 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     ]);
     expect(host.paragraphs()[1].runs.slice(0, 2)).toEqual([
       { text: "MX1 " },
-      { text: "Alpha bravo", font: { bold: false, color: "#FF0000" } },
+      {
+        text: "Alpha bravo",
+        font: desktop
+          ? { bold: false, color: "#FF0000" }
+          : { bold: false, boldBidirectional: false, color: "#FF0000" },
+      },
     ]);
+  });
+
+  it("writes the complex-script twin of a font set where the host does", async () => {
+    const host = install();
+    await Word.run(async (context) => {
+      const range = (await tagged(context, "PL1")).getRange("Content");
+      range.font.italic = true;
+      range.font.size = 14;
+      range.font.name = "Georgia";
+      await context.sync();
+    });
+    expect(host.ooxml({ p: "PL1", part: "Content" })).toContain(
+      desktop
+        ? '<w:rFonts w:ascii="Georgia" w:hAnsi="Georgia" w:cs="Georgia"/><w:i/><w:sz w:val="28"/>'
+        : '<w:rFonts w:ascii="Georgia" w:hAnsi="Georgia" w:cs="Georgia"/><w:i/><w:iCs/><w:sz w:val="28"/><w:szCs w:val="28"/>',
+    );
   });
 
   it("errors on a search over 255 characters and keeps the commands before it", async () => {
@@ -779,7 +800,8 @@ describe("requirement flavours", () => {
     [
       "web",
       {
-        "WordApi 1.10": true,
+        "WordApi 1.11": true,
+        "WordApi 1.12": false,
         "WordApiDesktop 1.1": false,
         "WordApiOnline 1.1": true,
       },
