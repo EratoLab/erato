@@ -244,9 +244,9 @@ function SidecarIndexingSettings({
         >
           <p className="text-xs text-theme-fg-secondary">
             {t({
-              id: "sidecar.indexing.sourcesHelp",
+              id: "sidecar.indexing.sourcesRangeHelp",
               message:
-                "Enable sources for indexing. Expand a source to see progress and change its priority.",
+                "Enable sources for indexing. Each source shows the period local search covers. Expand a source for details and to change its priority.",
             })}
           </p>
           {ordered.length === 0 && (
@@ -302,13 +302,6 @@ function SidecarIndexingSettings({
               );
             })}
           </ul>
-          <p className="text-xs text-theme-fg-secondary">
-            {t({
-              id: "sidecar.indexing.discoveredTotals",
-              message:
-                "Totals reflect discovered documents and may grow while scanning.",
-            })}
-          </p>
           {ordered.some((entry) => entry.product === "teams") && (
             <p className="text-xs text-theme-fg-secondary">
               {/* Older sidecars report one Teams source per cache, not per account. */}

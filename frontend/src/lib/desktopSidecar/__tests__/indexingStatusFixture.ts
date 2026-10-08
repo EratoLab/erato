@@ -5,6 +5,10 @@ import type {
   SourcesListV1Result,
 } from "@erato/desktop-sidecar-protocol";
 
+type IndexedRange = NonNullable<
+  IndexingStatusV1Result["discovery"][number]["indexedRange"]
+>;
+
 export const mailboxId = "aabbccdd-1122-4455-8899-001122334455";
 export const sourceId = "a1111111-b222-4333-8444-c55555555555";
 export const teamsSourceIds = [
@@ -56,6 +60,13 @@ export function multiSourceStatusFixture(): IndexingStatusV1Result {
       sourceId: id,
       mailboxId: null,
       discoveredDocuments: 10 + index,
+      indexedRange: {
+        ...indexedRangeFixture(),
+        from: { at: `2026-06-0${index + 1}T12:00:00Z`, inclusive: true },
+        unsearchable: 0,
+        dateBasis: "teamsMessageTimestamp",
+        inventory: "cacheObservations",
+      },
     });
   }
   const aggregate = globalThis.structuredClone(
@@ -66,6 +77,22 @@ export function multiSourceStatusFixture(): IndexingStatusV1Result {
   aggregate.coverage.indexedCurrent = 21;
   status.generations[0].segments.push(aggregate);
   return status;
+}
+
+/** An Outlook range ending at the fixture's sampledAt, as of protocol 0.1.35. */
+export function indexedRangeFixture(): IndexedRange {
+  return {
+    from: { at: "2025-03-14T12:00:00Z", inclusive: false },
+    through: null,
+    observedAt: "2026-09-15T12:00:00Z",
+    pendingNewer: 0,
+    olderPending: 0,
+    unsearchable: 2,
+    undated: 0,
+    dateBasis: "emailReceivedAtThenSentAt",
+    inventory: "localStore",
+    unavailableReason: null,
+  };
 }
 
 /** A contract-valid sparse snapshot: email documents, no mailbox file row.
@@ -135,6 +162,7 @@ export function indexingStatusFixture(): IndexingStatusV1Result {
       discoveredDocuments: 554,
       accessible: true,
       lastErrorCode: null,
+      indexedRange: indexedRangeFixture(),
     },
   ];
   return status;
