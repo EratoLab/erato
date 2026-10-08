@@ -1,3 +1,4 @@
+pub(crate) mod audio_transcription;
 pub mod background_tasks;
 pub mod client_actions;
 pub mod client_tools;

@@ -5,28 +5,26 @@ use crate::models::file_upload::{
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::audio_transcription::{
+    AudioTranscriber, AudioTranscriptionClient, AudioTranscriptionErrorCode,
+    AudioTranscriptionProviderError, AudioTranscriptionRequest,
+};
 use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::Extension;
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use eyre::{OptionExt, Report, WrapErr};
 use futures::{SinkExt, StreamExt};
-use genai::chat::{
-    ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ContentPart as GenAiContentPart,
-    MessageContent, ReasoningEffort,
-};
 use opendal::Writer;
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::ops::Range;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{debug, instrument, trace, warn};
+use tracing::{debug, instrument, warn};
 
 const CANONICAL_AUDIO_CONTENT_TYPE: &str = "audio/wav";
 const CANONICAL_SAMPLE_RATE_HZ: u32 = 16_000;
@@ -187,68 +185,6 @@ enum DictationServerControlFrame {
         error: String,
     },
 }
-
-/// Why a chunk could not be transcribed, in a form the client can translate and the
-/// user can quote. The snake_case literals are part of the socket protocol.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum AudioTranscriptionErrorCode {
-    ProviderContentBlocked,
-    ProviderError,
-    TranscriptionFailed,
-}
-
-impl AudioTranscriptionErrorCode {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::ProviderContentBlocked => "provider_content_blocked",
-            Self::ProviderError => "provider_error",
-            Self::TranscriptionFailed => "transcription_failed",
-        }
-    }
-}
-
-/// Provider-side transcription failure. The raw response is logged where it is
-/// classified; the Display text is the short, user-safe message sent to the client.
-#[derive(Debug)]
-struct AudioTranscriptionProviderError {
-    code: AudioTranscriptionErrorCode,
-    block_reason: Option<String>,
-}
-
-impl AudioTranscriptionProviderError {
-    fn from_response_body(response_body: &serde_json::Value) -> Self {
-        let block_reason = response_body
-            .pointer("/promptFeedback/blockReason")
-            .and_then(|value| value.as_str())
-            .map(str::to_string);
-        Self {
-            code: if block_reason.is_some() {
-                AudioTranscriptionErrorCode::ProviderContentBlocked
-            } else {
-                AudioTranscriptionErrorCode::ProviderError
-            },
-            block_reason,
-        }
-    }
-}
-
-impl std::fmt::Display for AudioTranscriptionProviderError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match (self.code, self.block_reason.as_deref()) {
-            (AudioTranscriptionErrorCode::ProviderContentBlocked, Some(reason)) => write!(
-                f,
-                "The AI provider's content filter blocked this passage (reason: {reason})"
-            ),
-            (AudioTranscriptionErrorCode::ProviderContentBlocked, None) => {
-                write!(f, "The AI provider's content filter blocked this passage")
-            }
-            _ => write!(f, "The AI provider could not transcribe this passage"),
-        }
-    }
-}
-
-impl std::error::Error for AudioTranscriptionProviderError {}
 
 /// Maps any transcription failure to a protocol code and a short message.
 fn classify_transcription_failure(error: &Report) -> (AudioTranscriptionErrorCode, String) {
@@ -1537,15 +1473,24 @@ async fn transcribe_audio_chunk(
         audio_bytes = audio_bytes.len(),
         "Selected audio transcription provider"
     );
-    transcribe_audio_chunk_genai(
+    let client = AudioTranscriptionClient::new(
         app_state,
-        audio_feature,
-        &provider,
+        &provider.chat_provider_config,
         chat_provider_headers_context,
-        pending,
-        audio_bytes,
-    )
-    .await
+    )?;
+    let transcript = client
+        .transcribe(AudioTranscriptionRequest {
+            audio_bytes,
+            filename: format!("audio-chunk-{}.wav", pending.chunk_index),
+            max_output_tokens: max_output_tokens_for_chunk(app_state, audio_feature, pending),
+        })
+        .await?;
+    let transcript = transcript.trim().to_string();
+    if is_punctuation_only_transcript(&transcript) {
+        Ok(String::new())
+    } else {
+        Ok(transcript)
+    }
 }
 
 fn audio_provider(
@@ -1615,121 +1560,6 @@ fn audio_provider(
 
 fn audio_provider_kind_supports_binary_audio(provider_kind: &str) -> bool {
     !matches!(provider_kind, "openai_responses" | "azure_openai_responses")
-}
-
-async fn transcribe_audio_chunk_genai(
-    app_state: &AppState,
-    audio_feature: AudioFeature,
-    provider: &ChatProviderConfigWithId,
-    chat_provider_headers_context: Option<&ChatProviderHeadersContext<'_>>,
-    pending: &PendingChunk,
-    audio_bytes: Vec<u8>,
-) -> Result<String, Report> {
-    let client = app_state.genai_for_chat_provider_config_with_headers_context(
-        provider.chat_provider_config.clone(),
-        chat_provider_headers_context,
-    )?;
-    let max_output_tokens = max_output_tokens_for_chunk(app_state, audio_feature, pending);
-    let audio_data_range = validate_canonical_wav(&audio_bytes).ok();
-    let audio_pcm_bytes = audio_data_range
-        .as_ref()
-        .map(|range| range.end.saturating_sub(range.start));
-    trace!(
-        chunk_index = pending.chunk_index,
-        start_ms = pending.start_ms,
-        end_ms = pending.end_ms,
-        provider_id = %provider.chat_provider_id,
-        model_name = %provider.chat_provider_config.model_name,
-        audio_bytes = audio_bytes.len(),
-        audio_pcm_bytes,
-        max_output_tokens,
-        "Building genai audio transcription request"
-    );
-    let b64_audio = STANDARD.encode(audio_bytes);
-    let user_content = MessageContent::from_parts(vec![
-        GenAiContentPart::Text(
-            "Transcribe the provided audio excerpt verbatim. Return only spoken words as plain text. The excerpt may start or end mid-sentence, so transcribe any audible partial speech. Do not summarize, add commentary, timestamps, markdown, speaker labels, or inferred missing words. Return an empty string only when there is no audible speech."
-                .to_string(),
-        ),
-        GenAiContentPart::from_binary_base64(
-            CANONICAL_AUDIO_CONTENT_TYPE,
-            Arc::from(b64_audio.as_str()),
-            Some(format!("audio-chunk-{}.wav", pending.chunk_index)),
-        ),
-    ]);
-    let chat_request = ChatRequest::new(vec![GenAiChatMessage::user(user_content)])
-        .with_system("You are a strict audio transcription engine.");
-    let reasoning_effort = audio_transcription_reasoning_effort(
-        &provider.chat_provider_config.provider_kind,
-        &provider.chat_provider_config.model_name,
-    );
-    let chat_options = ChatOptions::default()
-        .with_capture_content(true)
-        .with_capture_raw_body(true)
-        .with_temperature(0.0)
-        .with_reasoning_effort(reasoning_effort)
-        .with_max_tokens(max_output_tokens);
-    let response = match client
-        .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
-        .await
-    {
-        Ok(response) => response,
-        Err(genai::Error::ChatResponseGeneration {
-            model_iden,
-            response_body,
-            cause,
-            ..
-        }) => {
-            // The default rendering of this error embeds the whole request payload,
-            // including the base64 audio. Log the provider's raw response and the cause
-            // on their own; only the classification travels to the client.
-            let provider_error =
-                AudioTranscriptionProviderError::from_response_body(&response_body);
-            warn!(
-                chunk_index = pending.chunk_index,
-                model = %model_iden,
-                error_code = provider_error.code.as_str(),
-                cause = %cause,
-                response_body = %response_body,
-                "Audio transcription provider returned an unusable response"
-            );
-            return Err(Report::new(provider_error));
-        }
-        Err(error) => {
-            warn!(
-                chunk_index = pending.chunk_index,
-                error = %error,
-                "Audio transcription provider call failed"
-            );
-            return Err(Report::new(AudioTranscriptionProviderError {
-                code: AudioTranscriptionErrorCode::ProviderError,
-                block_reason: None,
-            }));
-        }
-    };
-    let transcript = response.first_text().unwrap_or_default().trim().to_string();
-    let transcript = if is_punctuation_only_transcript(&transcript) {
-        if !transcript.is_empty() {
-            debug!(
-                chunk_index = pending.chunk_index,
-                raw_transcript = %transcript,
-                "Discarding punctuation-only transcript as a silence hallucination"
-            );
-        }
-        String::new()
-    } else {
-        transcript
-    };
-    debug!(
-        chunk_index = pending.chunk_index,
-        provider_id = %provider.chat_provider_id,
-        model_name = %provider.chat_provider_config.model_name,
-        transcript_chars = transcript.chars().count(),
-        transcript_empty = transcript.is_empty(),
-        "Received genai audio transcription response"
-    );
-
-    Ok(transcript)
 }
 
 /// Audio models reliably hallucinate on (near-)silent excerpts despite the
@@ -1930,27 +1760,6 @@ async fn retry_failed_chunks(
     Ok(session_state_frame(session))
 }
 
-fn audio_transcription_reasoning_effort(provider_kind: &str, model_name: &str) -> ReasoningEffort {
-    if !matches!(provider_kind, "gemini" | "vertex_ai") {
-        return ReasoningEffort::Zero;
-    }
-
-    // Gemini 3 cannot disable thinking. Low maps to thinkingLevel=LOW in the
-    // Gemini adapter, whereas Budget(0) sends an unsupported zero thinkingBudget.
-    // Accept resource-qualified model names used by Vertex AI as well.
-    if model_name
-        .rsplit('/')
-        .next()
-        .unwrap_or(model_name)
-        .starts_with("gemini-3")
-    {
-        ReasoningEffort::Low
-    } else {
-        // Preserve the existing extraction behavior for earlier Gemini models.
-        ReasoningEffort::Budget(0)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2033,38 +1842,6 @@ mod tests {
         assert_eq!(value["chunk_index"], 3);
         assert_eq!(value["error_code"], "provider_content_blocked");
         assert!(value.get("file_upload_id").is_none());
-    }
-
-    #[test]
-    fn gemini_3_audio_uses_a_supported_thinking_level() {
-        for provider_kind in ["gemini", "vertex_ai"] {
-            for model_name in [
-                "gemini-3.8-flash",
-                "gemini-3-flash-preview",
-                "publishers/google/models/gemini-3.8-flash",
-            ] {
-                assert!(matches!(
-                    audio_transcription_reasoning_effort(provider_kind, model_name),
-                    ReasoningEffort::Low
-                ));
-            }
-        }
-    }
-
-    #[test]
-    fn audio_thinking_preserves_other_provider_behavior() {
-        assert!(matches!(
-            audio_transcription_reasoning_effort("gemini", "gemini-2.5-flash"),
-            ReasoningEffort::Budget(0)
-        ));
-        assert!(matches!(
-            audio_transcription_reasoning_effort("vertex_ai", "gemini-2.5-flash"),
-            ReasoningEffort::Budget(0)
-        ));
-        assert!(matches!(
-            audio_transcription_reasoning_effort("openai", "gpt-4o-audio-preview"),
-            ReasoningEffort::Zero
-        ));
     }
 
     #[test]

@@ -1925,6 +1925,10 @@ impl AppConfig {
                     .collect()
             }
         };
+        let filtered: Vec<&str> = filtered
+            .into_iter()
+            .filter(|id| !self.get_chat_provider(id).is_audio_transcription_provider())
+            .collect();
         tracing::debug!(?filtered, "Available chat providers after allowlist filter");
         filtered
     }
@@ -1975,6 +1979,10 @@ impl AppConfig {
             }
             None => all_providers,
         };
+        let allowed: Vec<&str> = allowed
+            .into_iter()
+            .filter(|id| !self.get_chat_provider(id).is_audio_transcription_provider())
+            .collect();
         tracing::debug!(?allowed, "Allowed chat providers after allowlist filter");
 
         if let Some(requested) = requested_chat_provider {
@@ -2183,6 +2191,56 @@ fn audio_provider_kind_supports_binary_audio(provider_kind: &str) -> bool {
 #[cfg(test)]
 mod audio_config_tests {
     use super::*;
+
+    #[test]
+    fn transcription_providers_work_for_all_audio_modes_but_are_not_chat_models() {
+        let audio_provider: ChatProviderConfig = serde_json::from_value(serde_json::json!({
+            "provider_kind": "openai_audio_transcriptions",
+            "model_name": "whisper-1",
+            "model_capabilities": { "supports_audio_input": true }
+        }))
+        .unwrap();
+        let chat_provider = ChatProviderConfig {
+            provider_kind: "openai".into(),
+            model_name: "gpt-4o".into(),
+            ..Default::default()
+        };
+        let config = AppConfig {
+            chat_providers: Some(ChatProvidersConfig {
+                priority_order: vec!["audio".into(), "chat".into()],
+                providers: HashMap::from([
+                    ("audio".into(), audio_provider),
+                    ("chat".into(), chat_provider),
+                ]),
+                all_providers: Default::default(),
+                summary: Default::default(),
+            }),
+            ..Default::default()
+        };
+        for key in [
+            "audio_transcription",
+            "audio_dictation",
+            "audio_conversational",
+        ] {
+            for provider_id in [None, Some("audio".to_string())] {
+                let audio_config = serde_json::from_value(serde_json::json!({
+                    "enabled": true,
+                    "chat_provider_id": provider_id,
+                }))
+                .unwrap();
+                validate_audio_feature_config(&config, key, &audio_config);
+            }
+        }
+        assert_eq!(config.available_chat_providers(None), vec!["chat"]);
+        assert_eq!(config.determine_chat_provider(None, None).unwrap(), "chat");
+        assert!(config.determine_chat_provider(None, Some("audio")).is_err());
+        assert!(config.available_chat_providers(Some(&["audio"])).is_empty());
+        assert!(
+            config
+                .determine_chat_provider(Some(&["audio"]), None)
+                .is_err()
+        );
+    }
 
     #[test]
     fn audio_config_rejects_openai_responses_provider_kinds() {
@@ -2416,6 +2474,7 @@ pub struct ChatProviderConfig {
     // May be one of:
     // - "openai" (OpenAI-compatible Chat Completions API)
     // - "openai_responses" (OpenAI Responses API)
+    // - "openai_audio_transcriptions" (OpenAI-compatible audio transcription API; audio modes only)
     // - "azure_openai" (will be automatically converted to "openai" format during config loading)
     // - "azure_openai_responses" (Azure OpenAI Responses API endpoint settings)
     // - "ollama"
@@ -2514,6 +2573,11 @@ fn default_hallucination_suppression_whitespace_delta_threshold() -> usize {
 }
 
 impl ChatProviderConfig {
+    /// Transcription-only providers use multipart audio requests rather than chat APIs.
+    pub fn is_audio_transcription_provider(&self) -> bool {
+        self.provider_kind == "openai_audio_transcriptions"
+    }
+
     pub const VERTEX_AI_BASE_URL: &str = "https://aiplatform.googleapis.com/v1/publishers/google/";
     pub const VERTEX_AI_REGION_BASE_URL_TEMPLATE: &str =
         "https://{region}-aiplatform.googleapis.com/v1/publishers/google/";
