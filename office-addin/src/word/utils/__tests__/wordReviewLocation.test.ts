@@ -180,3 +180,40 @@ describe("Word navigation without paragraph IDs", () => {
     expect(capturedWordAnchor(noIds, 2, 4)).toBeNull();
   });
 });
+
+describe("Word navigation where getText keeps the paragraph mark", () => {
+  afterEach(uninstallMockWordDocument);
+
+  it.each([true, false])(
+    "anchors a written result on desktop hosts (IDs: %s)",
+    async (ids) => {
+      const host = installMockWordDocument([
+        { text: "Same" },
+        { text: "Same" },
+        { text: "End" },
+      ]);
+      host.word.showParagraphMarks(true);
+      host.word.hideParagraphIds(!ids);
+      const marked: WordDocumentCapture = {
+        ...capture,
+        ordinalMap: new Map(
+          [...capture.ordinalMap].map(([ordinal, p]) => [
+            ordinal,
+            {
+              uniqueLocalId: ids ? p.uniqueLocalId : null,
+              text: `${p.text}\r`,
+            },
+          ]),
+        ),
+      };
+      const result = await applyWordEdits({
+        edits: [{ paragraph: 3, text: "Finish" }],
+        capture: marked,
+      });
+      expect(result.outcomes[0].status).toBe("applied");
+      const anchor = result.resultAnchors!.get(0)!;
+      expect(await showWordReviewLocation(anchor, identity)).toBe("selected");
+      expect(host.word.selections()).toEqual([["id-3"]]);
+    },
+  );
+});

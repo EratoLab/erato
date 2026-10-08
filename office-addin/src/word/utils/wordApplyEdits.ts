@@ -104,14 +104,19 @@ function resolveWordEdits(
   return { applicable, skipped };
 }
 
-/** The written paragraph after the batch: by its ID where Word has one, else by its new text alone. */
+/** The written paragraph after the batch: by its ID where Word has one, else by its new text alone.
+ * Desktop getText keeps the paragraph or cell mark that the written text lacks. */
 function writtenPosition(
   id: string | null,
   text: string,
   after: readonly WordParagraphEntry[],
 ): number | null {
   const matches = after
-    .map((p, i) => ((id ? p.id === id : true) && p.text === text ? i : -1))
+    .map((p, i) =>
+      (id ? p.id === id : true) && p.text.replace(/[\r\t\u0007]$/u, "") === text
+        ? i
+        : -1,
+    )
     .filter((i) => i >= 0);
   return matches.length === 1 ? matches[0] : null;
 }
