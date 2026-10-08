@@ -55,9 +55,9 @@ export type Env = {
   sharepointEnabled: boolean;
   sharepointShowDisclaimer: boolean;
   chatSharingEnabled: boolean;
-  messageEditingEnabled?: boolean;
-  messageRegenerationEnabled?: boolean;
-  chatHistoryFiltersEnabled?: boolean;
+  messageEditingEnabled: boolean;
+  messageRegenerationEnabled: boolean;
+  chatHistoryFiltersEnabled: boolean;
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
   messageFeedbackEditTimeLimitSeconds: number | null;

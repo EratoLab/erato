@@ -25,9 +25,8 @@ import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
 import {
-  CHAT_HISTORY_FILTER_DEFAULTS,
   sourceFilterKeeps,
-  useChatHistoryFilterStore,
+  useChatHistoryListFilters,
 } from "./store/chatHistoryFilterStore";
 import {
   seedGenerationStatusFromListing,
@@ -244,39 +243,9 @@ export function useChatHistory({
   const pendingChat = useChatHistoryStore((state) => state.pendingChat);
   const setPendingChat = useChatHistoryStore((state) => state.setPendingChat);
 
-  // Read saved preferences, but apply deployment defaults before the first
-  // request as well as during optimistic list reconciliation.
-  const savedTypeFilter = useChatHistoryFilterStore(
-    (state) => state.typeFilter,
-  );
-  const savedStatusFilter = useChatHistoryFilterStore(
-    (state) => state.statusFilter,
-  );
-  const savedDelegatedFilter = useChatHistoryFilterStore(
-    (state) => state.delegatedFilter,
-  );
-  const savedSourceFilter = useChatHistoryFilterStore(
-    (state) => state.sourceFilter,
-  );
-  const chatHistoryFiltersEnabled =
-    useOptionalFeatureConfig()?.sidebar.chatHistoryFiltersEnabled ?? true;
-  const listFilters = useMemo(
-    () =>
-      chatHistoryFiltersEnabled
-        ? {
-            typeFilter: savedTypeFilter,
-            statusFilter: savedStatusFilter,
-            delegatedFilter: savedDelegatedFilter,
-            sourceFilter: savedSourceFilter,
-          }
-        : CHAT_HISTORY_FILTER_DEFAULTS,
-    [
-      chatHistoryFiltersEnabled,
-      savedTypeFilter,
-      savedStatusFilter,
-      savedDelegatedFilter,
-      savedSourceFilter,
-    ],
+  // Standalone library use has no feature config; filtering stays on there.
+  const listFilters = useChatHistoryListFilters(
+    useOptionalFeatureConfig()?.sidebar.chatHistoryFiltersEnabled ?? true,
   );
   const { typeFilter, statusFilter, sourceFilter } = listFilters;
 

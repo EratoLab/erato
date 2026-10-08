@@ -204,7 +204,7 @@ interface MessageActionsFeatureConfig {
 /** Configuration for the sidebar feature. */
 interface SidebarFeatureConfig {
   /** Whether filtering and grouping are available in chat history */
-  chatHistoryFiltersEnabled?: boolean;
+  chatHistoryFiltersEnabled: boolean;
   /** Behavior of the collapsed sidebar state: "hidden" or "slim" (icon-only) */
   collapsedMode: "hidden" | "slim";
   /** Optional path to sidebar-specific logo */
@@ -475,8 +475,8 @@ function createFeatureConfig(
       sharepointShowDisclaimer: environment.sharepointShowDisclaimer,
     },
     messageActions: {
-      editingEnabled: environment.messageEditingEnabled ?? true,
-      regenerationEnabled: environment.messageRegenerationEnabled ?? true,
+      editingEnabled: environment.messageEditingEnabled,
+      regenerationEnabled: environment.messageRegenerationEnabled,
     },
     messageFeedback: {
       enabled: environment.messageFeedbackEnabled,
@@ -495,7 +495,7 @@ function createFeatureConfig(
       logoPath: environment.sidebarLogoPath,
       logoDarkPath: environment.sidebarLogoDarkPath,
       chatHistoryShowMetadata: environment.sidebarChatHistoryShowMetadata,
-      chatHistoryFiltersEnabled: environment.chatHistoryFiltersEnabled ?? true,
+      chatHistoryFiltersEnabled: environment.chatHistoryFiltersEnabled,
       chatHistorySources: chatHistorySourcesFromCreatedVia(
         environment.chatCreatedViaSources ?? [],
       ),

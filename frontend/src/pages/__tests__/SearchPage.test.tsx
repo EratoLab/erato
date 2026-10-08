@@ -245,6 +245,18 @@ describe("SearchPage", () => {
     expect(queryParams).toHaveProperty("include_archived", true);
   });
 
+  it("ignores a saved status filter when the deployment disables history filters", () => {
+    useChatHistoryFilterStore.setState({ statusFilter: "all" });
+    renderPage({ sidebar: { chatHistoryFiltersEnabled: false } });
+
+    const { queryKey, queryParams } = lastRequest();
+    for (const part of queryKey) {
+      expect(part).not.toHaveProperty("include_archived");
+    }
+    expect(queryParams).not.toHaveProperty("include_archived");
+    expect(useChatHistoryFilterStore.getState().statusFilter).toBe("all");
+  });
+
   it("offers Unarchive and Rename alone on an archived result", () => {
     mockUseInfiniteQuery.mockReturnValue(
       pageOf([

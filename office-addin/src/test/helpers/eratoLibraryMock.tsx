@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type * as EratoLibrary from "@erato/frontend/library";
 import type { ReactNode } from "react";
@@ -356,6 +356,27 @@ export const DEFAULT_STUBS = {
   useChatHistoryRow: () => ({ menuItems: [] }),
   useChatHistoryRowMenuItems: () => [],
   useChatHistoryFilterFoldback: () => undefined,
+  useChatHistoryListFilters: (
+    enabled: boolean,
+    store: (selector: (state: Record<string, unknown>) => unknown) => unknown,
+  ) => {
+    const typeFilter = store((state) => state.typeFilter);
+    const statusFilter = store((state) => state.statusFilter);
+    const delegatedFilter = store((state) => state.delegatedFilter);
+    const sourceFilter = store((state) => state.sourceFilter);
+    return useMemo(
+      () =>
+        enabled
+          ? { typeFilter, statusFilter, delegatedFilter, sourceFilter }
+          : {
+              typeFilter: "all",
+              statusFilter: "active",
+              delegatedFilter: "hidden",
+              sourceFilter: { mode: "all", sources: [] },
+            },
+      [enabled, typeFilter, statusFilter, delegatedFilter, sourceFilter],
+    );
+  },
   useConversationDropzone: () => ({
     getRootProps: () => ({}),
     getInputProps: () => ({}),
@@ -365,7 +386,11 @@ export const DEFAULT_STUBS = {
   useDesktopSidecar: () => ({ client: null }),
   useFacets: () => ({ data: { action_facets: [] } }),
   useFeatureConfig: () => ({
-    sidebar: { chatHistoryShowMetadata: true, chatHistorySources: [] },
+    sidebar: {
+      chatHistoryShowMetadata: true,
+      chatHistoryFiltersEnabled: true,
+      chatHistorySources: [],
+    },
   }),
   useFileCapabilitiesContext: () => ({ capabilities: [] }),
   useFileDropzone: () => ({

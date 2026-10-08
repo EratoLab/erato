@@ -436,11 +436,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     // Get sidebar configuration
     // Logo env overrides are resolved by ThemeProvider, which also decides
     // whether the file exists; only the collapse mode is read here.
-    const {
-      collapsedMode,
-      chatHistorySources,
-      chatHistoryFiltersEnabled = true,
-    } = useSidebarFeature();
+    const { collapsedMode, chatHistorySources, chatHistoryFiltersEnabled } =
+      useSidebarFeature();
 
     // Get responsive collapsed mode (forces hidden on mobile even if config is slim)
     const effectiveCollapsedMode = useResponsiveCollapsedMode(collapsedMode);
@@ -511,6 +508,13 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     const chatHistoryFilters =
       useSanitizedChatHistoryFilters(filterCapabilities);
+    const filterMenu = chatHistoryFiltersEnabled ? (
+      <ChatHistoryFilterMenu
+        assistantsEnabled={assistantsEnabled}
+        delegationEnabled={delegationEnabled}
+        availableSources={chatHistorySources}
+      />
+    ) : undefined;
     // Grouped-mode collapse state is per-mount on purpose: date-bucket keys
     // churn daily, so persisting them would accumulate stale entries.
     const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<
@@ -856,15 +860,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         defaultExpanded={true}
                         expanded={isRecentChatsExpanded}
                         onExpandedChange={setIsRecentChatsExpanded}
-                        actions={
-                          chatHistoryFiltersEnabled ? (
-                            <ChatHistoryFilterMenu
-                              assistantsEnabled={assistantsEnabled}
-                              delegationEnabled={delegationEnabled}
-                              availableSources={chatHistorySources}
-                            />
-                          ) : undefined
-                        }
+                        actions={filterMenu}
                       >
                         {sessions.length === 0 &&
                         hasActiveFilters(chatHistoryFilters) ? (
@@ -899,11 +895,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                           )}
                           data-ui="chat-history-filter-row"
                         >
-                          <ChatHistoryFilterMenu
-                            assistantsEnabled={assistantsEnabled}
-                            delegationEnabled={delegationEnabled}
-                            availableSources={chatHistorySources}
-                          />
+                          {filterMenu}
                         </div>
                         {hasActiveFilters(chatHistoryFilters) && (
                           <div className={sidebarInsetClassName}>
@@ -923,15 +915,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                               onExpandedChange={(expanded) =>
                                 setGroupExpanded(group.key, expanded)
                               }
-                              actions={
-                                index === 0 ? (
-                                  <ChatHistoryFilterMenu
-                                    assistantsEnabled={assistantsEnabled}
-                                    delegationEnabled={delegationEnabled}
-                                    availableSources={chatHistorySources}
-                                  />
-                                ) : undefined
-                              }
+                              actions={index === 0 ? filterMenu : undefined}
                             >
                               <ResolvedChatHistoryList
                                 sessions={group.sessions}

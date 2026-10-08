@@ -435,6 +435,7 @@ export {
   isSourceFilterAvailable,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterFoldback,
+  useChatHistoryListFilters,
   useSanitizedChatHistoryFilters,
   type ChatHistoryFilterStoreHook,
   type ChatHistoryFilterValues,

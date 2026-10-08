@@ -83,10 +83,14 @@ export function AddinHistoryDrawerCore({
   const { enabled: assistantsEnabled, delegationEnabled } =
     useAssistantsFeature();
   // Same source as the web sidebar: the backend's sidebar config.
-  const { chatHistoryShowMetadata, chatHistorySources } =
-    useFeatureConfig().sidebar;
+  const {
+    chatHistoryShowMetadata,
+    chatHistorySources,
+    chatHistoryFiltersEnabled,
+  } = useFeatureConfig().sidebar;
   const filters = useSanitizedChatHistoryFilters(
     {
+      enabled: chatHistoryFiltersEnabled,
       assistantsEnabled,
       delegationEnabled,
       availableSources: chatHistorySources,
@@ -339,14 +343,14 @@ export function AddinHistoryDrawerCore({
     sessions.length === 0 &&
     !hasActiveFilters(filters);
 
-  const filterMenu = (
+  const filterMenu = chatHistoryFiltersEnabled ? (
     <ChatHistoryFilterMenu
       assistantsEnabled={assistantsEnabled}
       delegationEnabled={delegationEnabled}
       availableSources={chatHistorySources}
       store={filterStore}
     />
-  );
+  ) : undefined;
   const emptyRow = (
     <p
       className="sidebar-content-col-geometry py-2 pr-3 text-xs text-theme-fg-muted"

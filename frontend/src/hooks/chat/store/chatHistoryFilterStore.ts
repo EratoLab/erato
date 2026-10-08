@@ -540,3 +540,26 @@ export const useChatHistoryFilterFoldback = (
     store,
   ]);
 };
+
+/**
+ * The values a recent-chats request filters by. Raw persisted values on
+ * purpose: every listing must derive the same query key, and the foldback
+ * already writes feature-gated values back to the store. While filtering is
+ * off, the defaults apply and the saved values stay for when it returns.
+ */
+export const useChatHistoryListFilters = (
+  enabled: boolean,
+  store: ChatHistoryFilterStoreHook = useChatHistoryFilterStore,
+): Omit<ChatHistoryFilterValues, "groupBy"> => {
+  const typeFilter = store((state) => state.typeFilter);
+  const statusFilter = store((state) => state.statusFilter);
+  const delegatedFilter = store((state) => state.delegatedFilter);
+  const sourceFilter = store((state) => state.sourceFilter);
+  return useMemo(
+    () =>
+      enabled
+        ? { typeFilter, statusFilter, delegatedFilter, sourceFilter }
+        : CHAT_HISTORY_FILTER_DEFAULTS,
+    [enabled, typeFilter, statusFilter, delegatedFilter, sourceFilter],
+  );
+};
