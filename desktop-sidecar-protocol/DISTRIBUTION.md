@@ -369,7 +369,7 @@ Set the corresponding `[desktop_sidecar]` backend keys to personalize downloads.
 The same port and TLS configuration generate the web and Office add-in runtime
 `DESKTOP_SIDECAR_URL`; an explicit port overrides the legacy additional-environment
 URL. The complete Windows executable bootstrap, including icon and TLS, MUST fit
-the existing 4070-byte payload capacity; distribution loading rejects overflow.
+the 524262-byte payload capacity; distribution loading rejects overflow.
 MSI and macOS bootstrap files do not have this executable-slot limit.
 
 The suffix scopes the Windows `%APPDATA%/Erato Labs/Erato Desktop Sidecar`, macOS
@@ -416,23 +416,23 @@ Linux installers can supply this file separately.
 ### 6.1 Windows executable personalization
 
 The Windows executable template contains exactly one file-backed, non-executable
-`.erato` section with a 4096-byte slot. Its bytes are:
+`.erato` section with a 512 KiB (524288-byte) slot. Its bytes are:
 
 | Offset | Length | Value                                                |
 | ------ | ------ | ---------------------------------------------------- |
 | 0      | 16     | ASCII magic `ERATO_BOOTSTRAP!`                       |
 | 16     | 2      | Little-endian format version (`1`)                   |
 | 18     | 4      | Little-endian JSON payload length                    |
-| 22     | 4      | Little-endian payload capacity (`4070`)              |
-| 26     | 4070   | UTF-8 bootstrap JSON followed by ASCII space padding |
+| 22     | 4      | Little-endian payload capacity (`524262`)            |
+| 26     | 524262 | UTF-8 bootstrap JSON followed by ASCII space padding |
 
 A personalizer MUST parse the PE section table, find exactly one `.erato`
 section, then find the magic exactly once inside that section. It MUST validate
-the template header, replace the complete 4096-byte slot, and reject an
+the template header, replace the complete 524288-byte slot, and reject an
 oversized document, including the JSON-escaped PEM strings. The complete JSON
-must fit within 4070 UTF-8 bytes; large RSA keys or long chains may exceed this
-limit and require an MSI/external bootstrap file. It MUST NOT truncate PEM,
-replace a JSON substring, or append an EOF trailer. The sidecar validates the
+must fit within 524262 UTF-8 bytes; larger documents require an MSI/external
+bootstrap file. It MUST NOT truncate PEM, replace a JSON substring, or append an
+EOF trailer. The sidecar validates the
 header, version, length, JSON, origin policy, and TLS identity before opening its
 browser listener. A template slot with a zero length is an unpersonalized
 artifact and has an empty, fail-closed allowlist.
@@ -472,7 +472,7 @@ erato-desktop-sidecar.app/Contents/Resources/bootstrap.json
 This entry contains the same bootstrap document used by the Windows transports,
 including the immutable allowed origins and optional TLS certificate/key. Fixed
 TLS values are copied; intermediate-CA mode issues a fresh identity per download.
-There is no 4070-byte executable-slot limit for the ZIP bootstrap entry.
+The executable-slot capacity does not limit the ZIP bootstrap entry.
 
 The user extracts and installs the application normally. The bootstrap stays
 inside the `.app` at `Contents/Resources/bootstrap.json`, where the startup

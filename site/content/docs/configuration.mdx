@@ -733,8 +733,9 @@ hyphens and underscores. Omitted or empty suffixes retain existing paths.
 The display name defaults to `Erato Desktop Sidecar` and allows up to 128 bytes,
 without control characters. The optional tray icon is a base64 PNG with dimensions
 between 1 and 256 pixels. Omit it to use the bundled icon. Windows executable
-bootstrap data, including TLS and icon, must fit the 4070-byte payload slot;
-use a small, optimized PNG or an installer when more space is needed.
+bootstrap data, including TLS and icon, must fit the 524262-byte payload capacity
+of the 512 KiB slot; use a small, optimized PNG or an installer when more space
+is needed.
 
 #### `desktop_sidecar.tls`
 
@@ -804,7 +805,7 @@ automatically enables HTTPS on the sidecar; certificate trust installation and
 automatic renewal are separate deployment responsibilities. Re-download and
 redeploy before expiry. Copies of one download share its key. Treat personalized
 artifacts and installed bootstrap files as secrets. EXE bootstrap JSON has a
-4070-byte limit including escaped PEM; oversized identities are rejected. MSI
+524262-byte limit including escaped PEM; oversized identities are rejected. MSI
 bootstrap files and macOS application ZIPs do not have that slot limit. macOS
 downloads automatically include `Contents/Resources/bootstrap.json` inside the app
 bundle, so normal extraction and installation also installs the TLS identity.

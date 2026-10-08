@@ -399,7 +399,7 @@ mod tests {
                 .contains("erato-desktop-sidecar-windows-x86_64.exe")
         );
         let mut expected = template.clone();
-        expected[0x200 + 32..0x200 + 32 + 4096]
+        expected[0x200 + 32..0x200 + 32 + EMBEDDED_BOOTSTRAP_SLOT_CAPACITY]
             .copy_from_slice(&encode_executable_bootstrap_slot(distribution.bootstrap()).unwrap());
         assert_eq!(
             to_bytes(response.into_body(), template.len())
@@ -462,7 +462,10 @@ mod tests {
             assert_ne!(private_key, key.serialize_pem());
             identities.push(private_key);
             assert_eq!(&bytes[..offset], &template[..offset]);
-            assert_eq!(&bytes[offset + 4096..], &template[offset + 4096..]);
+            assert_eq!(
+                &bytes[offset + EMBEDDED_BOOTSTRAP_SLOT_CAPACITY..],
+                &template[offset + EMBEDDED_BOOTSTRAP_SLOT_CAPACITY..]
+            );
         }
         assert_ne!(identities[0], identities[1]);
         assert_eq!(
@@ -624,10 +627,9 @@ mod tests {
     }
 
     fn windows_executable_template() -> Vec<u8> {
-        const SLOT_CAPACITY: usize = 4096;
         const HEADER_BYTES: usize = 26;
         let section_offset = 0x200;
-        let section_size = SLOT_CAPACITY + 64;
+        let section_size = EMBEDDED_BOOTSTRAP_SLOT_CAPACITY + 64;
         let mut binary = vec![0; section_offset + section_size];
         binary[..2].copy_from_slice(b"MZ");
         binary[0x3c..0x40].copy_from_slice(&(0x80_u32).to_le_bytes());
@@ -641,8 +643,9 @@ mod tests {
         let slot_offset = section_offset + 32;
         binary[slot_offset..slot_offset + 16].copy_from_slice(b"ERATO_BOOTSTRAP!");
         binary[slot_offset + 16..slot_offset + 18].copy_from_slice(&1_u16.to_le_bytes());
-        binary[slot_offset + 22..slot_offset + 26]
-            .copy_from_slice(&((SLOT_CAPACITY - HEADER_BYTES) as u32).to_le_bytes());
+        binary[slot_offset + 22..slot_offset + 26].copy_from_slice(
+            &((EMBEDDED_BOOTSTRAP_SLOT_CAPACITY - HEADER_BYTES) as u32).to_le_bytes(),
+        );
         binary
     }
 }

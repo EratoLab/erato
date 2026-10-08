@@ -22,7 +22,7 @@ use tls::BootstrapTls;
 
 const MANIFEST_FILE_NAME: &str = "manifest.json";
 const BOOTSTRAP_FORMAT_VERSION: u16 = 1;
-pub const EMBEDDED_BOOTSTRAP_SLOT_CAPACITY: usize = 4096;
+pub const EMBEDDED_BOOTSTRAP_SLOT_CAPACITY: usize = 512 * 1024;
 const EMBEDDED_BOOTSTRAP_MAGIC: &[u8; 16] = b"ERATO_BOOTSTRAP!";
 const EMBEDDED_BOOTSTRAP_HEADER_BYTES: usize = 16 + 2 + 4 + 4;
 const MSI_BOOTSTRAP_CABINET_STREAM: &str = "bootstrap.cab";
@@ -379,16 +379,14 @@ fn bootstrap_transport(
     }
 }
 
-pub fn encode_executable_bootstrap_slot(
-    bootstrap: &[u8],
-) -> Result<[u8; EMBEDDED_BOOTSTRAP_SLOT_CAPACITY]> {
+pub fn encode_executable_bootstrap_slot(bootstrap: &[u8]) -> Result<Vec<u8>> {
     let payload_capacity = EMBEDDED_BOOTSTRAP_SLOT_CAPACITY - EMBEDDED_BOOTSTRAP_HEADER_BYTES;
     ensure!(
         bootstrap.len() <= payload_capacity,
         "Desktop sidecar bootstrap is {} bytes; embedded capacity is {payload_capacity} bytes",
         bootstrap.len()
     );
-    let mut slot = [b' '; EMBEDDED_BOOTSTRAP_SLOT_CAPACITY];
+    let mut slot = vec![b' '; EMBEDDED_BOOTSTRAP_SLOT_CAPACITY];
     slot[..EMBEDDED_BOOTSTRAP_MAGIC.len()].copy_from_slice(EMBEDDED_BOOTSTRAP_MAGIC);
     slot[16..18].copy_from_slice(&BOOTSTRAP_FORMAT_VERSION.to_le_bytes());
     slot[18..22].copy_from_slice(&(bootstrap.len() as u32).to_le_bytes());
@@ -794,7 +792,16 @@ mod tests {
         config.allowed_origins = (0..100)
             .map(|i| format!("https://very-long-installation-name-{i}.example.com"))
             .collect();
-        assert!(DesktopSidecarDistribution::load_with_config(directory.path(), &config).is_err());
+        assert!(DesktopSidecarDistribution::load_with_config(directory.path(), &config).is_ok());
+        config.allowed_origins = (0..12_000)
+            .map(|i| format!("https://very-long-installation-name-{i}.example.com"))
+            .collect();
+        assert!(
+            DesktopSidecarDistribution::load_with_config(directory.path(), &config)
+                .unwrap_err()
+                .to_string()
+                .contains("embedded capacity")
+        );
         config.allowed_origins.clear();
         config.port = Some(0);
         assert!(DesktopSidecarDistribution::load_with_config(directory.path(), &config).is_err());
@@ -885,10 +892,22 @@ mod tests {
             fixed_distribution.bootstrap_for_download().unwrap(),
             fixed_distribution.bootstrap_for_download().unwrap()
         );
-        assert!(
-            encode_executable_bootstrap_slot(&vec![b' '; EMBEDDED_BOOTSTRAP_SLOT_CAPACITY])
-                .is_err()
+        let payload_capacity = EMBEDDED_BOOTSTRAP_SLOT_CAPACITY - EMBEDDED_BOOTSTRAP_HEADER_BYTES;
+        let mut boundary_bootstrap = vec![b' '; payload_capacity];
+        boundary_bootstrap[..first.len()].copy_from_slice(&first);
+        let slot = encode_executable_bootstrap_slot(&boundary_bootstrap).unwrap();
+        assert_eq!(slot.len(), 512 * 1024);
+        assert_eq!(
+            u32::from_le_bytes(slot[18..22].try_into().unwrap()),
+            524_262
         );
+        assert_eq!(
+            u32::from_le_bytes(slot[22..26].try_into().unwrap()),
+            524_262
+        );
+        assert_eq!(&slot[EMBEDDED_BOOTSTRAP_HEADER_BYTES..], boundary_bootstrap);
+        boundary_bootstrap.push(b' ');
+        assert!(encode_executable_bootstrap_slot(&boundary_bootstrap).is_err());
     }
 
     #[test]
