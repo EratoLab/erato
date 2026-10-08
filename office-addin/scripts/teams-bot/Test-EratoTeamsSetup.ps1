@@ -1,7 +1,7 @@
 # Offline regression checks. No Azure account, network or Pester installation needed.
 # Run: pwsh -NoProfile -File scripts/teams-bot/Test-EratoTeamsSetup.ps1
 $ErrorActionPreference = 'Stop'
-$helper = Join-Path $PSScriptRoot '../../../site/public/setup/teams/1.1.0/EratoTeamsSetup.ps1'
+$helper = Join-Path $PSScriptRoot '../../../site/public/setup/teams/1.1.1/EratoTeamsSetup.ps1'
 $base = @{ TenantId = '11111111-1111-1111-1111-111111111111'; SubscriptionId = '22222222-2222-2222-2222-222222222222'
     BotAppId = '33333333-3333-3333-3333-333333333333'; AuthAppId = '44444444-4444-4444-4444-444444444444'; BaseUrl = 'https://erato.example.com' }
 . $helper @base
@@ -159,7 +159,7 @@ Test-Case 'default resource uses the bot ID with a separate authentication app' 
     $report = Invoke-EratoSetup -Settings $settings -Json
     Assert-True ($settings.SsoResource -ceq "api://erato.example.com/botid-$($base.BotAppId)") 'Default resource used the authentication app ID'
     Assert-True ($report.authAppId -eq $base.AuthAppId -and $writes.Count -eq 0) 'Authentication identity changed'
-    Assert-True ($report.version -eq '1.1.0') 'Report version does not match the helper release'
+    Assert-True ($report.version -eq '1.1.1') 'Report version does not match the helper release'
     Assert-True (-not ($report.remainingSteps -match 'Deploy Erato')) 'Erato needs no redeploy after the helper'
 }
 Test-Case 'authentication app ID in resource is rejected before Azure access' {
