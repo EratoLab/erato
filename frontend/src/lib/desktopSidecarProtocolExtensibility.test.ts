@@ -60,6 +60,7 @@ describe("desktop sidecar protocol extensibility", () => {
       lastErrorCode: null,
       displayName: "Work mailbox",
       indexingEnabled: true,
+      indexingPriority: 0,
       product: "outlook",
       product_variant: "outlook_classic",
     };
@@ -75,6 +76,7 @@ describe("desktop sidecar protocol extensibility", () => {
           ![
             "displayName",
             "indexingEnabled",
+            "indexingPriority",
             "product",
             "product_variant",
           ].includes(key),
@@ -84,6 +86,11 @@ describe("desktop sidecar protocol extensibility", () => {
     expect(
       validateSourcesListV1Result({
         sources: [{ ...source, indexingEnabled: "yes" }],
+      }),
+    ).toBe(false);
+    expect(
+      validateSourcesListV1Result({
+        sources: [{ ...source, indexingPriority: -1 }],
       }),
     ).toBe(false);
     const teamsSource = {

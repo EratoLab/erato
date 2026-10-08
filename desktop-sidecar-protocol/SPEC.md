@@ -251,7 +251,10 @@ clients. Source edits MUST preserve unrelated and temporarily disconnected sourc
 policies. A legacy mailbox edit applies to all sources belonging to that mailbox
 and MUST preserve source-only policies such as Teams. Unknown source IDs are
 preserved but do not schedule work until discovered. Unlisted sources use the
-implementation's source defaults. Clients MUST NOT infer support for source
+implementation's source defaults; `sources.list.v1` reports the effective
+`indexingEnabled` and `indexingPriority` of every source, and clients that show
+or write a policy for an unlisted source SHOULD start from those values rather
+than assume `9007199254740991`. Clients MUST NOT infer support for source
 controls from `sources.list.v1` alone: older servers may list sources but merely
 preserve unknown configuration fields. Reporting `indexing_sources` in status
 configuration indicates support for applying these controls.

@@ -29806,7 +29806,7 @@ return errors === 0;
 
 export const validateSourcesListV1Result = validate135;
 const schema175 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json","title":"SourcesListV1Result","type":"object","properties":{"sources":{"type":"array","items":{"$ref":"../source/source-descriptor.schema.json"}}},"required":["sources"],"additionalProperties":true};
-const schema176 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"displayName":{"description":"Human-readable source name for direct presentation. Older sidecars may omit it.","type":"string","minLength":1,"maxLength":1024},"indexingEnabled":{"description":"Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.","type":"boolean"},"product":{"description":"Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"product_variant":{"description":"Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"account":{"description":"Teams sources only: the signed-in Teams identity (one tenant as one user) that this source indexes. Several identities can share one Teams cache, including guest identities of the same person in other tenants. Older sidecars and other source kinds omit it.","type":"object","properties":{"tenantId":{"type":"string"},"userId":{"type":"string"},"displayName":{"type":["string","null"]},"email":{"type":["string","null"],"description":"Lowercase address identifying the person across tenants and mail; a guest identity carries its home address."},"userPrincipalName":{"type":["string","null"]},"tenantName":{"type":["string","null"]},"userType":{"type":["string","null"],"description":"Member or Guest, as reported by Teams."}},"required":["tenantId","userId"],"additionalProperties":true},"defaultEnabled":{"type":"boolean","description":"Whether the source is indexed when no user or organization policy names it. Older sidecars omit it."},"defaultReason":{"type":"string","description":"Why the source has its default: workAccount, otherAccount, guestAccount, outlookDefault, notOutlookDefault, onlyTeamsAccount or noWorkAccount. Extensible; older sidecars omit it."},"locator":{"type":"object","additionalProperties":true},"enabled":{"description":"Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.","type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
+const schema176 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-descriptor.schema.json","title":"SourceDescriptor","type":"object","properties":{"sourceId":{"type":"string","format":"uuid"},"sourceKind":{"type":"string","minLength":1},"sourceKey":{"type":"string","minLength":1},"displayName":{"description":"Human-readable source name for direct presentation. Older sidecars may omit it.","type":"string","minLength":1,"maxLength":1024},"indexingEnabled":{"description":"Effective persisted indexing policy for this source, independent of scheduler activity or scan health. Older sidecars may omit it.","type":"boolean"},"indexingPriority":{"description":"Effective indexing priority for this source, from its user or organization policy or else the source default; lower runs first. Clients that show or write a priority for a source without a policy use this value. Older sidecars may omit it.","type":"integer","minimum":0,"maximum":9007199254740991},"product":{"description":"Stable product family, such as outlook or teams. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"product_variant":{"description":"Product variant inferred from the discovered store/source type, such as outlook_classic. Older sidecars may omit it; values are extensible.","type":"string","minLength":1},"account":{"description":"Teams sources only: the signed-in Teams identity (one tenant as one user) that this source indexes. Several identities can share one Teams cache, including guest identities of the same person in other tenants. Older sidecars and other source kinds omit it.","type":"object","properties":{"tenantId":{"type":"string"},"userId":{"type":"string"},"displayName":{"type":["string","null"]},"email":{"type":["string","null"],"description":"Lowercase address identifying the person across tenants and mail; a guest identity carries its home address."},"userPrincipalName":{"type":["string","null"]},"tenantName":{"type":["string","null"]},"userType":{"type":["string","null"],"description":"Member or Guest, as reported by Teams."}},"required":["tenantId","userId"],"additionalProperties":true},"defaultEnabled":{"type":"boolean","description":"Whether the source is indexed when no user or organization policy names it. Older sidecars omit it."},"defaultReason":{"type":"string","description":"Why the source has its default: workAccount, otherAccount, guestAccount, outlookDefault, notOutlookDefault, onlyTeamsAccount or noWorkAccount. Extensible; older sidecars omit it."},"locator":{"type":"object","additionalProperties":true},"enabled":{"description":"Existing catalog source-enabled flag. It is distinct from effective persisted indexing policy in indexingEnabled.","type":"boolean"},"discoveryCursor":{"type":["object","null"],"additionalProperties":true},"completedScanId":{"type":["string","null"],"format":"uuid"},"lastSuccessAt":{"type":["string","null"],"format":"date-time"},"lastErrorCode":{"type":["string","null"]}},"required":["sourceId","sourceKind","sourceKey","locator","enabled","discoveryCursor","completedScanId","lastSuccessAt","lastErrorCode"],"additionalProperties":true};
 
 function validate135(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json" */;
@@ -30042,11 +30042,10 @@ vErrors.push(err19);
 errors++;
 }
 }
-if(data1.product !== undefined){
-let data7 = data1.product;
-if(typeof data7 === "string"){
-if(func2(data7) < 1){
-const err20 = {instancePath:instancePath+"/sources/" + i0+"/product",schemaPath:"../source/source-descriptor.schema.json/properties/product/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data1.indexingPriority !== undefined){
+let data7 = data1.indexingPriority;
+if(!(((typeof data7 == "number") && (!(data7 % 1) && !isNaN(data7))) && (isFinite(data7)))){
+const err20 = {instancePath:instancePath+"/sources/" + i0+"/indexingPriority",schemaPath:"../source/source-descriptor.schema.json/properties/indexingPriority/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -30055,9 +30054,9 @@ vErrors.push(err20);
 }
 errors++;
 }
-}
-else {
-const err21 = {instancePath:instancePath+"/sources/" + i0+"/product",schemaPath:"../source/source-descriptor.schema.json/properties/product/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if((typeof data7 == "number") && (isFinite(data7))){
+if(data7 > 9007199254740991 || isNaN(data7)){
+const err21 = {instancePath:instancePath+"/sources/" + i0+"/indexingPriority",schemaPath:"../source/source-descriptor.schema.json/properties/indexingPriority/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -30066,12 +30065,8 @@ vErrors.push(err21);
 }
 errors++;
 }
-}
-if(data1.product_variant !== undefined){
-let data8 = data1.product_variant;
-if(typeof data8 === "string"){
-if(func2(data8) < 1){
-const err22 = {instancePath:instancePath+"/sources/" + i0+"/product_variant",schemaPath:"../source/source-descriptor.schema.json/properties/product_variant/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data7 < 0 || isNaN(data7)){
+const err22 = {instancePath:instancePath+"/sources/" + i0+"/indexingPriority",schemaPath:"../source/source-descriptor.schema.json/properties/indexingPriority/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -30081,8 +30076,12 @@ vErrors.push(err22);
 errors++;
 }
 }
-else {
-const err23 = {instancePath:instancePath+"/sources/" + i0+"/product_variant",schemaPath:"../source/source-descriptor.schema.json/properties/product_variant/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data1.product !== undefined){
+let data8 = data1.product;
+if(typeof data8 === "string"){
+if(func2(data8) < 1){
+const err23 = {instancePath:instancePath+"/sources/" + i0+"/product",schemaPath:"../source/source-descriptor.schema.json/properties/product/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -30092,11 +30091,8 @@ vErrors.push(err23);
 errors++;
 }
 }
-if(data1.account !== undefined){
-let data9 = data1.account;
-if(data9 && typeof data9 == "object" && !Array.isArray(data9)){
-if(data9.tenantId === undefined){
-const err24 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/required",keyword:"required",params:{missingProperty: "tenantId"},message:"must have required property '"+"tenantId"+"'"};
+else {
+const err24 = {instancePath:instancePath+"/sources/" + i0+"/product",schemaPath:"../source/source-descriptor.schema.json/properties/product/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -30105,8 +30101,12 @@ vErrors.push(err24);
 }
 errors++;
 }
-if(data9.userId === undefined){
-const err25 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/required",keyword:"required",params:{missingProperty: "userId"},message:"must have required property '"+"userId"+"'"};
+}
+if(data1.product_variant !== undefined){
+let data9 = data1.product_variant;
+if(typeof data9 === "string"){
+if(func2(data9) < 1){
+const err25 = {instancePath:instancePath+"/sources/" + i0+"/product_variant",schemaPath:"../source/source-descriptor.schema.json/properties/product_variant/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -30115,9 +30115,9 @@ vErrors.push(err25);
 }
 errors++;
 }
-if(data9.tenantId !== undefined){
-if(typeof data9.tenantId !== "string"){
-const err26 = {instancePath:instancePath+"/sources/" + i0+"/account/tenantId",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/tenantId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+else {
+const err26 = {instancePath:instancePath+"/sources/" + i0+"/product_variant",schemaPath:"../source/source-descriptor.schema.json/properties/product_variant/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -30127,9 +30127,11 @@ vErrors.push(err26);
 errors++;
 }
 }
-if(data9.userId !== undefined){
-if(typeof data9.userId !== "string"){
-const err27 = {instancePath:instancePath+"/sources/" + i0+"/account/userId",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data1.account !== undefined){
+let data10 = data1.account;
+if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
+if(data10.tenantId === undefined){
+const err27 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/required",keyword:"required",params:{missingProperty: "tenantId"},message:"must have required property '"+"tenantId"+"'"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -30138,11 +30140,8 @@ vErrors.push(err27);
 }
 errors++;
 }
-}
-if(data9.displayName !== undefined){
-let data12 = data9.displayName;
-if((typeof data12 !== "string") && (data12 !== null)){
-const err28 = {instancePath:instancePath+"/sources/" + i0+"/account/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/displayName/type",keyword:"type",params:{type: schema176.properties.account.properties.displayName.type},message:"must be string,null"};
+if(data10.userId === undefined){
+const err28 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/required",keyword:"required",params:{missingProperty: "userId"},message:"must have required property '"+"userId"+"'"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -30151,11 +30150,9 @@ vErrors.push(err28);
 }
 errors++;
 }
-}
-if(data9.email !== undefined){
-let data13 = data9.email;
-if((typeof data13 !== "string") && (data13 !== null)){
-const err29 = {instancePath:instancePath+"/sources/" + i0+"/account/email",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/email/type",keyword:"type",params:{type: schema176.properties.account.properties.email.type},message:"must be string,null"};
+if(data10.tenantId !== undefined){
+if(typeof data10.tenantId !== "string"){
+const err29 = {instancePath:instancePath+"/sources/" + i0+"/account/tenantId",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/tenantId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -30165,10 +30162,9 @@ vErrors.push(err29);
 errors++;
 }
 }
-if(data9.userPrincipalName !== undefined){
-let data14 = data9.userPrincipalName;
-if((typeof data14 !== "string") && (data14 !== null)){
-const err30 = {instancePath:instancePath+"/sources/" + i0+"/account/userPrincipalName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userPrincipalName/type",keyword:"type",params:{type: schema176.properties.account.properties.userPrincipalName.type},message:"must be string,null"};
+if(data10.userId !== undefined){
+if(typeof data10.userId !== "string"){
+const err30 = {instancePath:instancePath+"/sources/" + i0+"/account/userId",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -30178,10 +30174,10 @@ vErrors.push(err30);
 errors++;
 }
 }
-if(data9.tenantName !== undefined){
-let data15 = data9.tenantName;
-if((typeof data15 !== "string") && (data15 !== null)){
-const err31 = {instancePath:instancePath+"/sources/" + i0+"/account/tenantName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/tenantName/type",keyword:"type",params:{type: schema176.properties.account.properties.tenantName.type},message:"must be string,null"};
+if(data10.displayName !== undefined){
+let data13 = data10.displayName;
+if((typeof data13 !== "string") && (data13 !== null)){
+const err31 = {instancePath:instancePath+"/sources/" + i0+"/account/displayName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/displayName/type",keyword:"type",params:{type: schema176.properties.account.properties.displayName.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -30191,10 +30187,10 @@ vErrors.push(err31);
 errors++;
 }
 }
-if(data9.userType !== undefined){
-let data16 = data9.userType;
-if((typeof data16 !== "string") && (data16 !== null)){
-const err32 = {instancePath:instancePath+"/sources/" + i0+"/account/userType",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userType/type",keyword:"type",params:{type: schema176.properties.account.properties.userType.type},message:"must be string,null"};
+if(data10.email !== undefined){
+let data14 = data10.email;
+if((typeof data14 !== "string") && (data14 !== null)){
+const err32 = {instancePath:instancePath+"/sources/" + i0+"/account/email",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/email/type",keyword:"type",params:{type: schema176.properties.account.properties.email.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -30204,9 +30200,10 @@ vErrors.push(err32);
 errors++;
 }
 }
-}
-else {
-const err33 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data10.userPrincipalName !== undefined){
+let data15 = data10.userPrincipalName;
+if((typeof data15 !== "string") && (data15 !== null)){
+const err33 = {instancePath:instancePath+"/sources/" + i0+"/account/userPrincipalName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userPrincipalName/type",keyword:"type",params:{type: schema176.properties.account.properties.userPrincipalName.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -30216,9 +30213,10 @@ vErrors.push(err33);
 errors++;
 }
 }
-if(data1.defaultEnabled !== undefined){
-if(typeof data1.defaultEnabled !== "boolean"){
-const err34 = {instancePath:instancePath+"/sources/" + i0+"/defaultEnabled",schemaPath:"../source/source-descriptor.schema.json/properties/defaultEnabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data10.tenantName !== undefined){
+let data16 = data10.tenantName;
+if((typeof data16 !== "string") && (data16 !== null)){
+const err34 = {instancePath:instancePath+"/sources/" + i0+"/account/tenantName",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/tenantName/type",keyword:"type",params:{type: schema176.properties.account.properties.tenantName.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -30228,9 +30226,10 @@ vErrors.push(err34);
 errors++;
 }
 }
-if(data1.defaultReason !== undefined){
-if(typeof data1.defaultReason !== "string"){
-const err35 = {instancePath:instancePath+"/sources/" + i0+"/defaultReason",schemaPath:"../source/source-descriptor.schema.json/properties/defaultReason/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data10.userType !== undefined){
+let data17 = data10.userType;
+if((typeof data17 !== "string") && (data17 !== null)){
+const err35 = {instancePath:instancePath+"/sources/" + i0+"/account/userType",schemaPath:"../source/source-descriptor.schema.json/properties/account/properties/userType/type",keyword:"type",params:{type: schema176.properties.account.properties.userType.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -30240,12 +30239,9 @@ vErrors.push(err35);
 errors++;
 }
 }
-if(data1.locator !== undefined){
-let data19 = data1.locator;
-if(data19 && typeof data19 == "object" && !Array.isArray(data19)){
 }
 else {
-const err36 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err36 = {instancePath:instancePath+"/sources/" + i0+"/account",schemaPath:"../source/source-descriptor.schema.json/properties/account/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -30255,9 +30251,9 @@ vErrors.push(err36);
 errors++;
 }
 }
-if(data1.enabled !== undefined){
-if(typeof data1.enabled !== "boolean"){
-const err37 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data1.defaultEnabled !== undefined){
+if(typeof data1.defaultEnabled !== "boolean"){
+const err37 = {instancePath:instancePath+"/sources/" + i0+"/defaultEnabled",schemaPath:"../source/source-descriptor.schema.json/properties/defaultEnabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -30267,10 +30263,9 @@ vErrors.push(err37);
 errors++;
 }
 }
-if(data1.discoveryCursor !== undefined){
-let data21 = data1.discoveryCursor;
-if((!(data21 && typeof data21 == "object" && !Array.isArray(data21))) && (data21 !== null)){
-const err38 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema176.properties.discoveryCursor.type},message:"must be object,null"};
+if(data1.defaultReason !== undefined){
+if(typeof data1.defaultReason !== "string"){
+const err38 = {instancePath:instancePath+"/sources/" + i0+"/defaultReason",schemaPath:"../source/source-descriptor.schema.json/properties/defaultReason/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -30280,10 +30275,12 @@ vErrors.push(err38);
 errors++;
 }
 }
-if(data1.completedScanId !== undefined){
-let data22 = data1.completedScanId;
-if((typeof data22 !== "string") && (data22 !== null)){
-const err39 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema176.properties.completedScanId.type},message:"must be string,null"};
+if(data1.locator !== undefined){
+let data20 = data1.locator;
+if(data20 && typeof data20 == "object" && !Array.isArray(data20)){
+}
+else {
+const err39 = {instancePath:instancePath+"/sources/" + i0+"/locator",schemaPath:"../source/source-descriptor.schema.json/properties/locator/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -30292,9 +30289,10 @@ vErrors.push(err39);
 }
 errors++;
 }
-if(typeof data22 === "string"){
-if(!(formats0.test(data22))){
-const err40 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+}
+if(data1.enabled !== undefined){
+if(typeof data1.enabled !== "boolean"){
+const err40 = {instancePath:instancePath+"/sources/" + i0+"/enabled",schemaPath:"../source/source-descriptor.schema.json/properties/enabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -30304,11 +30302,10 @@ vErrors.push(err40);
 errors++;
 }
 }
-}
-if(data1.lastSuccessAt !== undefined){
-let data23 = data1.lastSuccessAt;
-if((typeof data23 !== "string") && (data23 !== null)){
-const err41 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema176.properties.lastSuccessAt.type},message:"must be string,null"};
+if(data1.discoveryCursor !== undefined){
+let data22 = data1.discoveryCursor;
+if((!(data22 && typeof data22 == "object" && !Array.isArray(data22))) && (data22 !== null)){
+const err41 = {instancePath:instancePath+"/sources/" + i0+"/discoveryCursor",schemaPath:"../source/source-descriptor.schema.json/properties/discoveryCursor/type",keyword:"type",params:{type: schema176.properties.discoveryCursor.type},message:"must be object,null"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -30317,9 +30314,11 @@ vErrors.push(err41);
 }
 errors++;
 }
-if(typeof data23 === "string"){
-if(!(formats6.validate(data23))){
-const err42 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
+}
+if(data1.completedScanId !== undefined){
+let data23 = data1.completedScanId;
+if((typeof data23 !== "string") && (data23 !== null)){
+const err42 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/type",keyword:"type",params:{type: schema176.properties.completedScanId.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -30328,12 +30327,9 @@ vErrors.push(err42);
 }
 errors++;
 }
-}
-}
-if(data1.lastErrorCode !== undefined){
-let data24 = data1.lastErrorCode;
-if((typeof data24 !== "string") && (data24 !== null)){
-const err43 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema176.properties.lastErrorCode.type},message:"must be string,null"};
+if(typeof data23 === "string"){
+if(!(formats0.test(data23))){
+const err43 = {instancePath:instancePath+"/sources/" + i0+"/completedScanId",schemaPath:"../source/source-descriptor.schema.json/properties/completedScanId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -30344,8 +30340,10 @@ errors++;
 }
 }
 }
-else {
-const err44 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data1.lastSuccessAt !== undefined){
+let data24 = data1.lastSuccessAt;
+if((typeof data24 !== "string") && (data24 !== null)){
+const err44 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/type",keyword:"type",params:{type: schema176.properties.lastSuccessAt.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err44];
 }
@@ -30354,10 +30352,9 @@ vErrors.push(err44);
 }
 errors++;
 }
-}
-}
-else {
-const err45 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(typeof data24 === "string"){
+if(!(formats6.validate(data24))){
+const err45 = {instancePath:instancePath+"/sources/" + i0+"/lastSuccessAt",schemaPath:"../source/source-descriptor.schema.json/properties/lastSuccessAt/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""};
 if(vErrors === null){
 vErrors = [err45];
 }
@@ -30368,13 +30365,51 @@ errors++;
 }
 }
 }
-else {
-const err46 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data1.lastErrorCode !== undefined){
+let data25 = data1.lastErrorCode;
+if((typeof data25 !== "string") && (data25 !== null)){
+const err46 = {instancePath:instancePath+"/sources/" + i0+"/lastErrorCode",schemaPath:"../source/source-descriptor.schema.json/properties/lastErrorCode/type",keyword:"type",params:{type: schema176.properties.lastErrorCode.type},message:"must be string,null"};
 if(vErrors === null){
 vErrors = [err46];
 }
 else {
 vErrors.push(err46);
+}
+errors++;
+}
+}
+}
+else {
+const err47 = {instancePath:instancePath+"/sources/" + i0,schemaPath:"../source/source-descriptor.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err47];
+}
+else {
+vErrors.push(err47);
+}
+errors++;
+}
+}
+}
+else {
+const err48 = {instancePath:instancePath+"/sources",schemaPath:"#/properties/sources/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err48];
+}
+else {
+vErrors.push(err48);
+}
+errors++;
+}
+}
+}
+else {
+const err49 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err49];
+}
+else {
+vErrors.push(err49);
 }
 errors++;
 }
