@@ -48,6 +48,16 @@ const capture: WordDocumentCapture = {
   paragraphsSent: 3,
   partialOrdinal: null,
 };
+/** Office.context.diagnostics.platform, which the Show in Word selection depends on. */
+const onPlatform = (platform: string) => {
+  (Office.context as unknown as Record<string, unknown>).diagnostics = {
+    platform,
+  };
+};
+afterEach(() => {
+  delete (Office.context as unknown as Record<string, unknown>).diagnostics;
+});
+
 describe("verified Word navigation", () => {
   let host: MockWordHost;
   beforeEach(() => {
@@ -67,7 +77,8 @@ describe("verified Word navigation", () => {
     expect(host.word.selections()).toEqual([["id-2"]]);
     expect(host.word.writes()).toEqual([]);
   });
-  it("selects the full original range only when it is still contiguous", async () => {
+  it("selects the full original range on desktop only when it is still contiguous", async () => {
+    onPlatform("Mac");
     const anchor = originalWordAnchor(
       { paragraph: 1, through: 2, text: "Merged" },
       capture,
@@ -239,6 +250,44 @@ describe("Word navigation where getText keeps the paragraph mark", () => {
   );
 });
 
+describe("Show in Word off desktop (ERMAIN-932)", () => {
+  let host: MockWordHost;
+  beforeEach(() => {
+    host = installMockWordDocument([
+      { text: "Same" },
+      { text: "Same" },
+      { text: "End" },
+    ]);
+  });
+  afterEach(uninstallMockWordDocument);
+
+  it.each(["OfficeOnline", "iOS", undefined])(
+    "selects only the first paragraph of a span on %s",
+    async (platform) => {
+      if (platform) onPlatform(platform);
+      const anchor = originalWordAnchor(
+        { paragraph: 1, through: 2, text: "Merged" },
+        capture,
+      )!;
+      expect(await showWordReviewLocation(anchor, identity)).toBe("selected");
+      expect(
+        await showWordParagraphs(["id-2", "id-3"], identity, identity),
+      ).toBe("selected");
+      expect(host.word.selections()).toEqual([["id-1"], ["id-2"]]);
+      expect(host.word.expansions()).toBe(0);
+    },
+  );
+
+  it("selects one written paragraph without expandTo on desktop too", async () => {
+    onPlatform("Mac");
+    expect(await showWordParagraphs(["id-2"], identity, identity)).toBe(
+      "selected",
+    );
+    expect(host.word.selections()).toEqual([["id-2"]]);
+    expect(host.word.expansions()).toBe(0);
+  });
+});
+
 describe("Word navigation marks its own selection", () => {
   let host: MockWordHost;
   let selectionsAtMark: number[];
@@ -271,6 +320,7 @@ describe("Word navigation marks its own selection", () => {
   });
 
   it("marks before selecting written paragraphs", async () => {
+    onPlatform("PC");
     expect(await showWordParagraphs(["id-2", "id-3"], identity, identity)).toBe(
       "selected",
     );
