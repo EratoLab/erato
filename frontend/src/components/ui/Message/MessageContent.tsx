@@ -43,6 +43,7 @@ import { CollapsibleCodeBlock } from "./CollapsibleCodeBlock";
 import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
+import { LocalSearchCoverageNotice } from "./LocalSearchCoverageNotice";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 import { MermaidBlock } from "./MermaidBlock";
 import {
@@ -1477,6 +1478,7 @@ export const MessageContent = memo(function MessageContent({
           <code>{rawText}</code>
         </pre>
         {messageId && <ClientToolFileApprovals messageId={messageId} />}
+        <LocalSearchCoverageNotice content={content} />
       </article>
     );
   }
@@ -1639,6 +1641,7 @@ export const MessageContent = memo(function MessageContent({
         </React.Suspense>
       )}
       {messageId && <ClientToolFileApprovals messageId={messageId} />}
+      <LocalSearchCoverageNotice content={content} />
     </article>
   );
 });

@@ -2204,6 +2204,51 @@ msgid "chat.message.link.fallback"
 msgstr "Link"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.more"
+msgstr "{count, plural, one {and # more} other {and # more}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.noSources"
+msgstr "Searched on this device: no indexed source matched this search."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.partialCache"
+msgstr "Teams keeps only part of its history on this device, so older messages may be missing."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.requestedBefore"
+msgstr "The search asked for items from {requested}, but the searched period starts later."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.searched"
+msgstr "Searched on this device: {source}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceRange"
+msgstr "{source}: {from} – {to}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceSince"
+msgstr "{source}: since {from}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUnavailable"
+msgstr "{source}: not searchable yet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.unknown"
+msgstr "Searched on this device. The searched period is unknown."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpDisabledServersNotice.tsx
 msgid "chat.message.mcpDisabledServers.text"
 msgstr "{serverCount, plural, one {{serverList} is switched off for this chat, so its tools were not used.} other {{serverList} are switched off for this chat, so their tools were not used.}}"

@@ -8,12 +8,17 @@ import {
   SIDECAR_CHAT_TOOL_METHODS,
 } from "./chatTools";
 import { resolveSidecarMailboxId } from "./mailboxAccess";
+import searchCoverageFixture from "../../../../desktop-sidecar-protocol/conformance/fixtures/search-coverage.json";
 
 import type {
   SidecarAttachmentUpload,
   SidecarChatToolOptions,
 } from "./chatTools";
-import type { OutlookGetConversationV1Result } from "@erato/desktop-sidecar-protocol";
+import type { KnownSearchCoverage, SearchCoverage } from "./searchCoverage";
+import type {
+  OutlookGetConversationV1Result,
+  SearchQueryV1Result,
+} from "@erato/desktop-sidecar-protocol";
 
 const mailboxId = "a".repeat(32);
 const context = { toolCallId: "call", messageId: "message", chatId: "chat" };
@@ -1025,5 +1030,251 @@ describe("settings tool list", () => {
     expect([...SIDECAR_CHAT_TOOL_METHODS].sort(byName)).toEqual(
       registered.sort(byName),
     );
+  });
+});
+
+type RawCoverageSource = NonNullable<
+  SearchQueryV1Result["coverage"]
+>["sources"][number];
+
+const T_2026 = 1767225600;
+const legacySearchResult = {
+  hits: [],
+  elapsedMs: 0,
+  blocksRead: 0,
+  candidatesScored: 0,
+};
+
+function coverageSource(
+  overrides: Partial<RawCoverageSource> = {},
+): RawCoverageSource {
+  return {
+    sourceId: "source-a",
+    mailboxId: null,
+    product: "outlook",
+    displayName: "Work mailbox",
+    accountEmail: "jane@example.com",
+    from: { at: "2026-01-01T00:00:00Z", inclusive: true },
+    through: null,
+    observedAt: "2026-09-15T12:00:00Z",
+    pendingNewer: 0,
+    olderPending: 0,
+    unsearchable: 0,
+    undated: 0,
+    dateBasis: "emailReceivedAtThenSentAt",
+    inventory: "localStore",
+    unavailableReason: null,
+    ...overrides,
+  };
+}
+
+function withCoverage(
+  sources: RawCoverageSource[],
+  extra: Partial<SearchQueryV1Result> = {},
+): SearchQueryV1Result {
+  return {
+    ...legacySearchResult,
+    coverage: { sampledAt: "2026-09-15T12:00:00Z", basis: "index", sources },
+    limitReached: false,
+    ...extra,
+  };
+}
+
+async function searchResult(response: unknown, input: unknown = {}) {
+  const outcome = await setup({ "search.query.v1": response })
+    .tools()[0]
+    .execute(input);
+  if (!outcome.ok || !outcome.result) throw new Error("search failed");
+  return outcome.result as Record<string, unknown> & {
+    coverage: SearchCoverage;
+  };
+}
+
+async function knownCoverage(response: unknown, input: unknown = {}) {
+  return (await searchResult(response, input)).coverage as KnownSearchCoverage;
+}
+
+describe("search coverage for the model", () => {
+  it("maps the conformance report to the compact shape and drops the raw keys", async () => {
+    const result = await searchResult(searchCoverageFixture);
+    expect(result).not.toHaveProperty("limitReached");
+    expect(result.coverage).toEqual({
+      v: 1,
+      asOf: "2026-09-15T12:00:00Z",
+      basis: "index",
+      requested: { from: null, to: null },
+      requestedFromBeforeCoverage: false,
+      limitReached: true,
+      sources: [
+        {
+          label: "Outlook · jane@example.com",
+          kinds: ["email", "file"],
+          from: "2025-03-14T08:30:01Z",
+          to: "2026-09-15T12:00:00Z",
+          status: "indexing",
+          partialCache: false,
+          requestedFromBeforeCoverage: false,
+        },
+        {
+          label: "Teams · Contoso Ltd (jane@example.com)",
+          kinds: ["teams_message"],
+          from: "2026-06-02T09:15:00Z",
+          to: "2026-09-15T11:40:00Z",
+          status: "newest_pending",
+          partialCache: true,
+          requestedFromBeforeCoverage: false,
+        },
+      ],
+      notice:
+        "Local search on this device covered Outlook · jane@example.com from 2025-03-14 to 2026-09-15 and Teams · Contoso Ltd (jane@example.com) from 2026-06-02 to 2026-09-15; earlier items were not searched, so do not conclude that they do not exist; more items matched than were returned, so narrow the date range to see the rest.",
+    });
+    expect(Object.keys(result.coverage)).toEqual([
+      "v",
+      "asOf",
+      "basis",
+      "requested",
+      "requestedFromBeforeCoverage",
+      "limitReached",
+      "sources",
+      "notice",
+    ]);
+    expect(result.hits).toHaveLength(2);
+  });
+
+  it("reports an unknown period for a sidecar without coverage", async () => {
+    const result = await searchResult(legacySearchResult);
+    expect(result.coverage).toEqual({
+      v: 1,
+      status: "unknown",
+      notice: expect.stringContaining("does not report which period"),
+    });
+    expect(result).not.toHaveProperty("limitReached");
+  });
+
+  it("converts the requested filter to inclusive ISO bounds", async () => {
+    const coverage = await knownCoverage(withCoverage([coverageSource()]), {
+      filters: { dateFrom: T_2026 - 86400, dateTo: T_2026 + 86400 },
+    });
+    expect(coverage.requested).toEqual({
+      from: "2025-12-31T00:00:00Z",
+      to: "2026-01-01T23:59:59Z",
+    });
+  });
+
+  it("moves an exclusive end back a second and uses observedAt without one", async () => {
+    const coverage = await knownCoverage(
+      withCoverage([
+        coverageSource({
+          through: { at: "2026-09-15T11:40:00Z", inclusive: false },
+          pendingNewer: 2,
+        }),
+        coverageSource({ sourceId: "source-b", product: "teams" }),
+      ]),
+    );
+    expect(coverage.sources.map(({ to, status }) => [to, status])).toEqual([
+      ["2026-09-15T11:39:59Z", "newest_pending"],
+      ["2026-09-15T12:00:00Z", "complete"],
+    ]);
+  });
+
+  it.each([
+    { inclusive: true, dateFrom: T_2026, flagged: false },
+    { inclusive: true, dateFrom: T_2026 - 1, flagged: true },
+    { inclusive: false, dateFrom: T_2026, flagged: true },
+    { inclusive: false, dateFrom: T_2026 + 1, flagged: false },
+    { inclusive: true, dateFrom: undefined, flagged: false },
+  ])(
+    "flags a requested start of $dateFrom against an inclusive=$inclusive start: $flagged",
+    async ({ inclusive, dateFrom, flagged }) => {
+      const coverage = await knownCoverage(
+        withCoverage([
+          coverageSource({
+            from: { at: "2026-01-01T00:00:00Z", inclusive },
+          }),
+          coverageSource({
+            sourceId: "source-b",
+            from: { at: "2020-01-01T00:00:00Z", inclusive: true },
+          }),
+        ]),
+        dateFrom === undefined ? {} : { filters: { dateFrom } },
+      );
+      expect(coverage.sources[0].requestedFromBeforeCoverage).toBe(flagged);
+      expect(coverage.sources[1].requestedFromBeforeCoverage).toBe(false);
+      expect(coverage.requestedFromBeforeCoverage).toBe(flagged);
+      expect(coverage.notice.includes("lies before that")).toBe(flagged);
+    },
+  );
+
+  it("reports a source without a range as unavailable with its reason", async () => {
+    const coverage = await knownCoverage(
+      withCoverage([
+        coverageSource({
+          from: null,
+          observedAt: null,
+          olderPending: 40,
+          unavailableReason: "not_enumerated",
+        }),
+      ]),
+      { filters: { dateFrom: T_2026 } },
+    );
+    expect(coverage.sources[0]).toMatchObject({
+      from: null,
+      to: null,
+      status: "unavailable",
+      reason: "not_enumerated",
+      requestedFromBeforeCoverage: false,
+    });
+    expect(coverage.notice).toContain(
+      "Outlook · jane@example.com not yet (not_enumerated)",
+    );
+  });
+
+  it("says nothing was searched when no enabled source matched", async () => {
+    const coverage = await knownCoverage(withCoverage([]));
+    expect(coverage.sources).toEqual([]);
+    expect(coverage.notice).toMatch(/^No enabled local source matched/);
+  });
+
+  it("marks every inventory but a complete local store as a partial cache", async () => {
+    const coverage = await knownCoverage(
+      withCoverage([
+        coverageSource(),
+        coverageSource({ sourceId: "b", inventory: "cacheObservations" }),
+        coverageSource({ sourceId: "c", inventory: "futureInventory" }),
+      ]),
+    );
+    expect(coverage.sources.map((source) => source.partialCache)).toEqual([
+      false,
+      true,
+      true,
+    ]);
+  });
+
+  it("says a capped listing only reaches back to its oldest hit", async () => {
+    const coverage = await knownCoverage({
+      ...searchCoverageFixture,
+      coverage: { ...searchCoverageFixture.coverage, basis: "catalog" },
+    });
+    expect(coverage.basis).toBe("catalog");
+    expect(coverage.notice).toContain(
+      "this listing hit its limit and only reaches back to 2026-09-10, so narrow the date range",
+    );
+  });
+
+  it("numbers sources that share a label by source id, as in Settings", async () => {
+    const teams = (sourceId: string) =>
+      coverageSource({
+        sourceId,
+        product: "teams",
+        displayName: "Contoso Ltd",
+      });
+    const coverage = await knownCoverage(
+      withCoverage([teams("source-b"), teams("source-a"), coverageSource()]),
+    );
+    expect(coverage.sources.map((source) => source.label)).toEqual([
+      "Teams · Contoso Ltd (2)",
+      "Teams · Contoso Ltd (1)",
+      "Outlook · jane@example.com",
+    ]);
   });
 });

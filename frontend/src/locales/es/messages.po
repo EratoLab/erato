@@ -2204,6 +2204,51 @@ msgid "chat.message.link.fallback"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.more"
+msgstr "{count, plural, one {y # más} other {y # más}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.noSources"
+msgstr "Búsqueda en este dispositivo: ninguna fuente indexada coincidía con esta búsqueda."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.partialCache"
+msgstr "Teams solo guarda parte de su historial en este dispositivo, por lo que pueden faltar mensajes más antiguos."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.requestedBefore"
+msgstr "La búsqueda pedía elementos desde el {requested}, pero el periodo buscado empieza más tarde."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.searched"
+msgstr "Búsqueda en este dispositivo: {source}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceRange"
+msgstr "{source}: {from} – {to}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceSince"
+msgstr "{source}: desde el {from}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUnavailable"
+msgstr "{source}: aún no se puede buscar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.unknown"
+msgstr "Búsqueda en este dispositivo. Se desconoce el periodo buscado."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpDisabledServersNotice.tsx
 msgid "chat.message.mcpDisabledServers.text"
 msgstr "{serverCount, plural, one {{serverList} está desactivado para este chat, por lo que no se usaron sus herramientas.} other {{serverList} están desactivados para este chat, por lo que no se usaron sus herramientas.}}"

@@ -2204,6 +2204,51 @@ msgid "chat.message.link.fallback"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.more"
+msgstr "{count, plural, one {et # autre} other {et # autres}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.noSources"
+msgstr "Recherche effectuée sur cet appareil : aucune source indexée ne correspondait à cette recherche."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.partialCache"
+msgstr "Teams ne conserve qu'une partie de son historique sur cet appareil ; des messages plus anciens peuvent donc manquer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.requestedBefore"
+msgstr "La recherche demandait des éléments à partir du {requested}, mais la période recherchée commence plus tard."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.searched"
+msgstr "Recherche effectuée sur cet appareil : {source}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceRange"
+msgstr "{source} : {from} – {to}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceSince"
+msgstr "{source} : depuis le {from}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUnavailable"
+msgstr "{source} : pas encore consultable"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.unknown"
+msgstr "Recherche effectuée sur cet appareil. La période recherchée est inconnue."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpDisabledServersNotice.tsx
 msgid "chat.message.mcpDisabledServers.text"
 msgstr "{serverCount, plural, one {{serverList} est désactivé pour ce chat, ses outils n'ont donc pas été utilisés.} other {{serverList} sont désactivés pour ce chat, leurs outils n'ont donc pas été utilisés.}}"

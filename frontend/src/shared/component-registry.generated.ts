@@ -321,6 +321,7 @@ export { DefaultEratoEmailCodeBlock } from "@/components/ui/Message/EratoEmailSu
 export { EratoEmailSuggestion } from "@/components/ui/Message/EratoEmailSuggestion";
 export { ImageContentDisplay } from "@/components/ui/Message/ImageContentDisplay";
 export { ImageLightbox } from "@/components/ui/Message/ImageLightbox";
+export { LocalSearchCoverageNotice } from "@/components/ui/Message/LocalSearchCoverageNotice";
 export { McpToolApprovalCard } from "@/components/ui/Message/McpToolApprovalCard";
 export type { McpToolApprovalRequestPart } from "@/components/ui/Message/McpToolApprovalCard";
 export { MermaidBlock } from "@/components/ui/Message/MermaidBlock";
