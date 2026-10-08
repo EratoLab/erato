@@ -5762,9 +5762,19 @@ msgstr "Usuario"
 #~ msgstr "{indexed} / {total} adjuntos indexados"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.cachedOnly"
+msgstr "Solo se pueden indexar los elementos almacenados en caché en este dispositivo"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.caption"
 msgstr "Búsqueda local en este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.checked"
+msgstr "Comprobado {time}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -5778,8 +5788,8 @@ msgstr "Elige qué se indexa para la búsqueda local. Los cambios se aplican al 
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.discoveredTotals"
-msgstr "Los totales reflejan los documentos encontrados y pueden aumentar durante el análisis."
+#~ msgid "sidecar.indexing.discoveredTotals"
+#~ msgstr "Los totales reflejan los documentos encontrados y pueden aumentar durante el análisis."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5798,8 +5808,8 @@ msgstr "No se encontraron fuentes locales."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.emptyDocuments"
-msgstr "Los documentos vacíos no contienen texto que se pueda buscar, por lo que la cobertura es inferior al 100%."
+#~ msgid "sidecar.indexing.emptyDocuments"
+#~ msgstr "Los documentos vacíos no contienen texto que se pueda buscar, por lo que la cobertura es inferior al 100%."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -5823,8 +5833,8 @@ msgstr "Aumentar prioridad"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.lastScan"
-msgstr "Último análisis correcto {time}"
+#~ msgid "sidecar.indexing.lastScan"
+#~ msgstr "Último análisis correcto {time}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5843,8 +5853,8 @@ msgstr "Fuente de datos local"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.missingFromLocalCache"
-msgstr "{missingCount, plural, one {# documento no está disponible en la caché local.} other {# documentos no están disponibles en la caché local.}}"
+#~ msgid "sidecar.indexing.missingFromLocalCache"
+#~ msgstr "{missingCount, plural, one {# documento no está disponible en la caché local.} other {# documentos no están disponibles en la caché local.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -5858,13 +5868,18 @@ msgstr "Aumentar la prioridad de {mailbox}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.noDocuments"
-msgstr "Aún no se han encontrado documentos"
+#~ msgid "sidecar.indexing.noDocuments"
+#~ msgstr "Aún no se han encontrado documentos"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.noScan"
-msgstr "Aún no hay ningún análisis correcto"
+#~ msgid "sidecar.indexing.noScan"
+#~ msgstr "Aún no hay ningún análisis correcto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.notStoredLocally"
+msgstr "Algunos elementos no están guardados en este dispositivo"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5875,6 +5890,11 @@ msgstr "Ninguna cuenta de este equipo coincide con tu cuenta de trabajo {account
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.numberedSource"
 msgstr "{name} ({number})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.olderPending"
+msgstr "Los elementos más antiguos aún se están indexando"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -5893,13 +5913,38 @@ msgstr "Prioridad de indexación"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.progress"
-msgstr "{indexed} de {total} documentos indexados ({percentage} %)"
+#~ msgid "sidecar.indexing.progress"
+#~ msgstr "{indexed} de {total} documentos indexados ({percentage} %)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.progressUnavailable"
-msgstr "Progreso de indexación no disponible"
+#~ msgid "sidecar.indexing.progressUnavailable"
+#~ msgstr "Progreso de indexación no disponible"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.range.newerPending"
+msgstr "Indexado del {from} al {through} · los elementos más recientes aún se están indexando"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.range.nothingSearchable"
+msgstr "Aún no hay nada que se pueda buscar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.range.notScanned"
+msgstr "Aún no analizado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.range.toDate"
+msgstr "Indexado del {from} al {to}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.range.toToday"
+msgstr "Indexado del {from} hasta hoy"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
@@ -5958,8 +6003,13 @@ msgstr "Fuentes"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.sourcesHelp"
-msgstr "Activa las fuentes que se indexarán. Despliega una fuente para ver el progreso y cambiar su prioridad."
+#~ msgid "sidecar.indexing.sourcesHelp"
+#~ msgstr "Activa las fuentes que se indexarán. Despliega una fuente para ver el progreso y cambiar su prioridad."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.sourcesRangeHelp"
+msgstr "Activa las fuentes que se indexarán. Cada fuente muestra el periodo que cubre la búsqueda local. Despliega una fuente para ver los detalles y cambiar su prioridad."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -5983,8 +6033,8 @@ msgstr "Controla cuánto trabajo procesa el sidecar a la vez."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.status.complete"
-msgstr "Indexación completada"
+#~ msgid "sidecar.indexing.status.complete"
+#~ msgstr "Indexación completada"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -6008,8 +6058,13 @@ msgstr "Indexación no disponible"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.status.partial"
-msgstr "Parcialmente indexado"
+msgid "sidecar.indexing.status.notScanned"
+msgstr "Aún no analizado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+#~ msgid "sidecar.indexing.status.partial"
+#~ msgstr "Parcialmente indexado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -6057,14 +6112,19 @@ msgid "sidecar.indexing.teamsGuest"
 msgstr "Invitado"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.teamsRecentChats"
+msgstr "Teams solo guarda en este dispositivo los chats abiertos recientemente"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.teamsScope"
 msgstr "El estado y los ajustes de Teams se aplican a cada caché local. Las cuentas que comparten una caché se agrupan."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
-msgid "sidecar.indexing.terminal"
-msgstr "Algunos documentos están vacíos o no se han podido indexar, por lo que la cobertura es inferior al 100%."
+#~ msgid "sidecar.indexing.terminal"
+#~ msgstr "Algunos documentos están vacíos o no se han podido indexar, por lo que la cobertura es inferior al 100%."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -6080,6 +6140,11 @@ msgstr "Número máximo de documentos que pueden comenzar a procesarse por minut
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.title"
 msgstr "Indexación local"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.unreadable"
+msgstr "Algunos elementos no se han podido leer"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx

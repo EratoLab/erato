@@ -1,5 +1,6 @@
 import example from "../../../../../desktop-sidecar-protocol/examples/indexing-statistics.json";
 
+import type { IndexedRange } from "../indexingConfiguration";
 import type {
   IndexingStatusV1Result,
   SourcesListV1Result,
@@ -56,6 +57,13 @@ export function multiSourceStatusFixture(): IndexingStatusV1Result {
       sourceId: id,
       mailboxId: null,
       discoveredDocuments: 10 + index,
+      indexedRange: {
+        ...indexedRangeFixture(),
+        from: { at: `2026-06-0${index + 1}T12:00:00Z`, inclusive: true },
+        unsearchable: 0,
+        dateBasis: "teamsMessageTimestamp",
+        inventory: "cacheObservations",
+      },
     });
   }
   const aggregate = globalThis.structuredClone(
@@ -66,6 +74,22 @@ export function multiSourceStatusFixture(): IndexingStatusV1Result {
   aggregate.coverage.indexedCurrent = 21;
   status.generations[0].segments.push(aggregate);
   return status;
+}
+
+/** An Outlook range ending at the fixture's sampledAt, as of protocol 0.1.35. */
+export function indexedRangeFixture(): IndexedRange {
+  return {
+    from: { at: "2025-03-14T12:00:00Z", inclusive: true },
+    through: null,
+    observedAt: "2026-09-15T12:00:00Z",
+    pendingNewer: 0,
+    olderPending: 0,
+    unsearchable: 2,
+    undated: 0,
+    dateBasis: "emailReceivedAtThenSentAt",
+    inventory: "localStore",
+    unavailableReason: null,
+  };
 }
 
 /** A contract-valid sparse snapshot: email documents, no mailbox file row.
@@ -135,6 +159,7 @@ export function indexingStatusFixture(): IndexingStatusV1Result {
       discoveredDocuments: 554,
       accessible: true,
       lastErrorCode: null,
+      indexedRange: indexedRangeFixture(),
     },
   ];
   return status;

@@ -5,11 +5,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSidecarIndexing } from "@/hooks/useSidecarIndexing";
 import { expectSidecarConfigurationAccepted } from "@/lib/desktopSidecar/__tests__/configurationTestUtils";
 import {
+  indexedRangeFixture,
   indexingStatusFixture,
   multiSourceStatusFixture,
   sourceFixture,
@@ -84,6 +85,7 @@ const data = {
   },
 };
 let currentData: typeof data;
+const counts = /\d+ of \d+|%|\d+ documents?\b/;
 
 function renderControls() {
   const view = render(<SidecarIndexingControls />);
@@ -111,6 +113,8 @@ async function expectValidSavedConfiguration() {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-09-15T12:05:00Z"));
   save.mockReset();
   save.mockResolvedValue();
   currentData = globalThis.structuredClone(data);
@@ -125,12 +129,16 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useSidecarIndexing>);
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("mailbox indexing controls", () => {
-  it("shows ordered mailboxes with combined progress", () => {
+  it("shows ordered mailboxes without document counts", () => {
     renderControls();
     const entries = screen.getAllByRole("listitem");
     expect(entries[0]).toHaveTextContent("personal@example.com");
-    expect(entries[0]).toHaveTextContent("6 of 13 documents indexed (46%)");
+    for (const entry of entries) expect(entry).not.toHaveTextContent(counts);
     expect(
       screen.getByRole("button", {
         name: "Increase priority for personal@example.com",
@@ -360,88 +368,174 @@ describe("mailbox status rendering", () => {
       .getAllByRole("listitem")
       .find((entry) => entry.textContent?.includes("shared@example.com"));
     if (!row) throw new Error("Shared mailbox row missing");
+    expect(row).not.toHaveTextContent(counts);
     return within(row);
   }
+  function withRange(
+    range: Partial<ReturnType<typeof indexedRangeFixture>>,
+    status = indexingStatusFixture(),
+  ) {
+    status.discovery[0].indexedRange = { ...indexedRangeFixture(), ...range };
+    return status;
+  }
 
-  it("shows sparse Mac coverage and missing-cache content without a scan error", () => {
+  it("shows the period up to today, when it was checked, and missing-cache content without counts", () => {
     const row = renderStatus();
-    expect(row.getByText("Partially indexed")).toBeInTheDocument();
+    expect(row.getByText("Up-to-date")).toBeInTheDocument();
+    expect(row.getByText("Indexed Mar 14, 2025 to today")).toBeInTheDocument();
+    expect(row.getByText("Checked 5 min. ago")).toBeInTheDocument();
     expect(
-      row.getByText("552 of 554 documents indexed (99%)"),
+      row.getByText("Some items aren't stored on this device"),
     ).toBeInTheDocument();
     expect(
-      row.getByText("2 documents are unavailable in the local cache."),
-    ).toBeInTheDocument();
-    expect(row.getByText(/Last successful scan/)).toBeInTheDocument();
-    expect(row.queryByText("Status unavailable")).not.toBeInTheDocument();
-    expect(
-      row.queryByText("Indexing progress unavailable"),
+      row.queryByText("Some items couldn't be read"),
     ).not.toBeInTheDocument();
-    expect(row.queryByText("Scan failed")).not.toBeInTheDocument();
+    expect(row.queryByText(/still being indexed/)).not.toBeInTheDocument();
+    expect(row.queryByText(/Teams keeps only/)).not.toBeInTheDocument();
+    expect(row.queryByText("Status unavailable")).not.toBeInTheDocument();
+  });
+
+  it("ends the period on the day the store was last checked", () => {
+    vi.setSystemTime(new Date("2026-09-20T12:00:00Z"));
+    const row = renderStatus();
     expect(
-      row.queryByText(/empty or could not be indexed/),
+      row.getByText("Indexed Mar 14, 2025 to Sep 15, 2026"),
+    ).toBeInTheDocument();
+    expect(row.getByText("Checked 5 days ago")).toBeInTheDocument();
+  });
+
+  it("starts the period on the next day after an exclusive start", () => {
+    const row = renderStatus(
+      withRange({
+        from: { at: "2025-03-14T12:00:00Z", inclusive: false },
+        olderPending: 5,
+      }),
+    );
+    expect(row.getByText("Indexed Mar 15, 2025 to today")).toBeInTheDocument();
+  });
+
+  it("explains cache-only inventories without Teams wording outside Teams", () => {
+    const row = renderStatus(withRange({ inventory: "futureInventory" }));
+    expect(
+      row.getByText("Only items cached on this device can be indexed"),
+    ).toBeInTheDocument();
+    expect(row.queryByText(/Teams keeps only/)).not.toBeInTheDocument();
+  });
+
+  it("shows newer and older items that are still being indexed", () => {
+    const row = renderStatus(
+      withRange({
+        through: { at: "2026-09-10T12:00:00Z", inclusive: true },
+        pendingNewer: 3,
+        olderPending: 100,
+      }),
+    );
+    expect(
+      row.getByText(
+        "Indexed Mar 14, 2025 to Sep 10, 2026 · newest items still being indexed",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      row.getByText("Older items are still being indexed"),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["not_enumerated", "Not scanned yet"],
+    ["no_searchable_documents", "Nothing searchable yet"],
+    ["index_not_initialized", "Nothing searchable yet"],
+  ])("explains a missing range for %s", (unavailableReason, text) => {
+    const status = withRange({
+      from: null,
+      observedAt: null,
+      unavailableReason,
+    });
+    if (unavailableReason === "not_enumerated") {
+      status.discovery[0].state = "failed";
+      status.discovery[0].discoveryComplete = false;
+    }
+    const row = renderStatus(status);
+    expect(row.getByText(text)).toBeInTheDocument();
+    expect(row.queryByText(/^Indexed /)).not.toBeInTheDocument();
+    expect(row.queryByText(/^Checked /)).not.toBeInTheDocument();
+  });
+
+  it("leaves a disabled source to its status pill", () => {
+    const status = withRange({
+      from: null,
+      unavailableReason: "source_disabled",
+    });
+    status.discovery[0].state = "disabled";
+    const row = renderStatus(status);
+    expect(row.getByText("Disabled")).toBeInTheDocument();
+    expect(
+      row.queryByText(/^Indexed |Not scanned yet|Nothing searchable yet/),
     ).not.toBeInTheDocument();
   });
 
-  it("uses singular wording for one locally unavailable document", () => {
+  it("shows a source that was never scanned once", () => {
+    const status = withRange({
+      from: null,
+      observedAt: null,
+      unavailableReason: "not_enumerated",
+    });
+    status.discovery[0].state = "notStarted";
+    status.discovery[0].discoveryComplete = false;
+    const row = renderStatus(status);
+    expect(row.getAllByText("Not scanned yet")).toHaveLength(1);
+  });
+
+  it("notes unreadable items without a count", () => {
     const status = indexingStatusFixture();
     Object.assign(status.generations[0].segments[0].coverage, {
       indexedCurrent: 553,
-      missingFromLocalCacheCurrent: 1,
-    });
-    expect(
-      renderStatus(status).getByText(
-        "1 document is unavailable in the local cache.",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("shows completion for email-only mailboxes when every message is indexed", () => {
-    const status = indexingStatusFixture();
-    Object.assign(status.generations[0].segments[0].coverage, {
-      indexedCurrent: 554,
       missingFromLocalCacheCurrent: 0,
+      unindexableCurrent: 1,
     });
     const row = renderStatus(status);
     expect(row.getByText("Up-to-date")).toBeInTheDocument();
+    expect(row.getByText("Some items couldn't be read")).toBeInTheDocument();
     expect(
-      row.getByText("554 of 554 documents indexed (100%)"),
-    ).toBeInTheDocument();
-    expect(row.queryByText(/local cache/)).not.toBeInTheDocument();
+      row.queryByText("Some items aren't stored on this device"),
+    ).not.toBeInTheDocument();
   });
 
-  it("shows an empty completed scan without an unavailable-status warning", () => {
+  it("falls back to the oldest indexed date for sidecars without a range, once settled", () => {
     const status = indexingStatusFixture();
-    status.generations[0].segments = status.generations[0].segments.filter(
-      (row) => row.mailboxId === null,
-    );
-    status.discovery[0].discoveredDocuments = 0;
+    delete status.discovery[0].indexedRange;
+    status.generations[0].segments[0].depth.oldestIndexedDocumentAt =
+      "2020-01-01T12:00:00Z";
     const row = renderStatus(status);
-    expect(row.getByText("Up-to-date")).toBeInTheDocument();
-    expect(row.getByText("No documents discovered yet")).toBeInTheDocument();
+    expect(row.getByText("Indexed Jan 1, 2020 to today")).toBeInTheDocument();
+    expect(row.getByText("Checked 5 min. ago")).toBeInTheDocument();
+    expect(row.queryByText(/Teams keeps only/)).not.toBeInTheDocument();
   });
 
-  it("keeps a real scan failure visible alongside known coverage", () => {
+  it("shows only the status pill for older sidecars until indexing settles", () => {
+    const status = indexingStatusFixture();
+    delete status.discovery[0].indexedRange;
+    status.generations[0].segments[0].backlog.remaining = 1;
+    const row = renderStatus(status);
+    expect(row.getByText("Waiting")).toBeInTheDocument();
+    expect(row.queryByText(/^Indexed /)).not.toBeInTheDocument();
+  });
+
+  it("keeps a real scan failure visible alongside the known range", () => {
     const status = indexingStatusFixture();
     status.discovery[0].state = "failed";
     status.discovery[0].discoveryComplete = false;
     status.discovery[0].lastErrorCode = "source_scan_incomplete";
     const row = renderStatus(status);
     expect(row.getByText("Scan failed")).toBeInTheDocument();
-    expect(
-      row.getByText("552 of 554 documents indexed (99%)"),
-    ).toBeInTheDocument();
+    expect(row.getByText("Indexed Mar 14, 2025 to today")).toBeInTheDocument();
   });
 
-  it("does not present explicitly unavailable counters as zero or complete", () => {
+  it("does not present explicitly unavailable counters as complete", () => {
     const status = indexingStatusFixture();
     status.generations[0].segments[0].coverage.knownEligible = null;
     const row = renderStatus(status);
     expect(row.getByText("Status unavailable")).toBeInTheDocument();
-    expect(row.getByText("Indexing progress unavailable")).toBeInTheDocument();
-    expect(
-      row.queryByText("No documents discovered yet"),
-    ).not.toBeInTheDocument();
+    expect(row.queryByText("Up-to-date")).not.toBeInTheDocument();
   });
 });
 
@@ -475,12 +569,19 @@ describe("Teams and Outlook source controls", () => {
     expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveTextContent("shared@example.com");
     expect(rows[0]).toHaveTextContent("Disabled");
+    expect(rows[0]).not.toHaveTextContent(/Indexed |Teams keeps only/);
     expect(rows[1]).toHaveTextContent("Microsoft Teams local cache (1)");
     expect(rows[1]).toHaveTextContent("Scan failed");
-    expect(rows[1]).toHaveTextContent("10 of 10 documents indexed (100%)");
+    expect(rows[1]).toHaveTextContent("Indexed Jun 1, 2026 to today");
     expect(rows[2]).toHaveTextContent("Microsoft Teams local cache (2)");
     expect(rows[2]).toHaveTextContent("Up-to-date");
-    expect(rows[2]).toHaveTextContent("11 of 11 documents indexed (100%)");
+    expect(rows[2]).toHaveTextContent("Indexed Jun 2, 2026 to today");
+    for (const row of rows.slice(1)) {
+      expect(row).toHaveTextContent(
+        "Teams keeps only recently opened chats on this device",
+      );
+      expect(row).not.toHaveTextContent(counts);
+    }
     expect(
       screen.getByText(/Accounts sharing a cache are combined/),
     ).toBeInTheDocument();
@@ -669,9 +770,7 @@ describe("Teams and Outlook source controls", () => {
     });
     expect(checkbox).toBeDisabled();
     const row = within(checkbox.closest("li")!);
-    expect(
-      row.getByText("10 of 10 documents indexed (100%)"),
-    ).toBeInTheDocument();
+    expect(row.getByText("Indexed Jun 1, 2026 to today")).toBeInTheDocument();
     expect(
       row.getByText(
         "Update the desktop sidecar to change indexing for this source.",
@@ -703,17 +802,16 @@ describe("indexing information and actions", () => {
     expect(screen.getAllByRole("checkbox")).toHaveLength(2);
     expect(screen.getByText("Disabled")).toBeInTheDocument();
     expect(
-      screen.queryByText("Indexing progress unavailable"),
-    ).not.toBeInTheDocument();
+      screen.getByText(/Each source shows the period local search covers/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Totals reflect/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Increase priority for/ }),
     ).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Details for personal@example.com" }),
     );
-    expect(
-      screen.getByText("6 of 13 documents indexed (46%)"),
-    ).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")[0]).not.toHaveTextContent(counts);
     expect(
       screen.getByRole("button", {
         name: "Increase priority for personal@example.com",

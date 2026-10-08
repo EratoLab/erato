@@ -3,17 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import { expectSidecarConfigurationAccepted } from "./__tests__/configurationTestUtils";
 import {
+  indexedRangeFixture,
   indexingStatusFixture,
   mailboxId as fixtureMailboxId,
   sourceId,
 } from "./__tests__/indexingStatusFixture";
 import {
   initializeMailboxConfiguration,
-  mailboxCoverage,
   mailboxIndexingSummary,
   orderedMailboxes,
 } from "./indexingConfiguration";
 
+import type { IndexedRange } from "./indexingConfiguration";
 import type {
   IndexingStatusV1Result,
   OutlookMailbox,
@@ -110,41 +111,6 @@ describe("mailbox indexing configuration", () => {
       }).map((mailbox) => mailbox.id),
     ).toEqual([sharedId, personalId]);
   });
-  it("uses only active mailbox aggregates and preserves unknown counts", () => {
-    const segment = {
-      mailboxId: sharedUuid.toUpperCase(),
-      kind: "file",
-      fileType: null,
-      coverage: { indexedCurrent: 2, knownEligible: 5 },
-    };
-    const status = {
-      discovery: [],
-      generations: [
-        {
-          role: "active",
-          segments: [
-            segment,
-            { ...segment, fileType: "pdf" },
-            { ...segment, mailboxId: null },
-            { ...segment, mailboxId: personalUuid },
-          ],
-        },
-        { role: "building", segments: [segment] },
-      ],
-    } as unknown as IndexingStatusV1Result;
-    expect(mailboxCoverage(status, sharedId, "file")).toEqual({
-      indexed: 2,
-      total: 5,
-    });
-    expect(
-      mailboxCoverage(status, "ccddee0033444455aabb223344556677", "file"),
-    ).toEqual({
-      indexed: null,
-      total: null,
-    });
-    segment.coverage.knownEligible = null as unknown as number;
-    expect(mailboxCoverage(status, sharedId, "file").total).toBeNull();
-  });
 });
 
 describe("mailbox indexing summary", () => {
@@ -168,6 +134,11 @@ describe("mailbox indexing summary", () => {
         stale: 0,
         neverProcessed: 0,
         pendingDeletions: 0,
+      },
+      depth: {
+        oldestIndexedDocumentAt: "2021-05-04T12:00:00Z",
+        fullyIndexedSince: { at: "2026-09-21T12:00:00Z", inclusive: true },
+        processedSince: { at: "2026-09-21T12:00:00Z", inclusive: true },
       },
     };
     return {
@@ -195,22 +166,69 @@ describe("mailbox indexing summary", () => {
                 indexedCurrent: 436,
                 knownEligible: 436,
               },
+              depth: {
+                ...segment.depth,
+                oldestIndexedDocumentAt: "1970-01-01T00:00:00Z",
+              },
             },
-            { ...segment, mailboxId: null },
+            {
+              ...segment,
+              mailboxId: null,
+              depth: {
+                ...segment.depth,
+                oldestIndexedDocumentAt: "2019-01-01T12:00:00Z",
+              },
+            },
             { ...segment, fileType: "pdf" },
           ],
         },
-        { role: "building", segments: [segment] },
+        {
+          role: "building",
+          segments: [
+            {
+              ...segment,
+              depth: {
+                ...segment.depth,
+                oldestIndexedDocumentAt: "2019-01-01T12:00:00Z",
+              },
+            },
+          ],
+        },
       ],
     } as unknown as IndexingStatusV1Result;
   }
-  it("combines only active mailbox aggregates and uses the successful scan", () => {
-    expect(mailboxIndexingSummary(fixture(), sharedId, true)).toMatchObject({
-      total: 1076,
-      indexed: 1076,
-      percentage: 100,
+  it("falls back to the oldest indexed date of active mailbox rows up to the successful scan for older sidecars", () => {
+    expect(mailboxIndexingSummary(fixture(), sharedId, true)).toEqual({
       state: "current",
-      lastScan: Date.parse("2026-09-22T10:00:00Z"),
+      range: {
+        kind: "indexed",
+        from: Date.parse("2021-05-04T12:00:00Z"),
+        fromInclusive: true,
+        through: null,
+        olderPending: false,
+      },
+      observedAt: Date.parse("2026-09-22T10:00:00Z"),
+      notices: {
+        unreadable: false,
+        notStoredLocally: false,
+        cachedOnly: false,
+      },
+    });
+  });
+  it("claims no legacy range until every document is settled", () => {
+    const status = fixture();
+    status.generations[0].segments[0].backlog.remaining = 1;
+    expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
+      state: "waiting",
+      range: null,
+      observedAt: Date.parse("2026-09-22T10:00:00Z"),
+    });
+    const undated = fixture();
+    for (const row of undated.generations[0].segments)
+      row.depth.oldestIndexedDocumentAt = "1979-12-31T12:00:00Z";
+    expect(mailboxIndexingSummary(undated, sharedId, true)).toMatchObject({
+      state: "current",
+      range: null,
     });
   });
   it("prioritizes disabled, blocked and stopped states over completion", () => {
@@ -259,11 +277,10 @@ describe("mailbox indexing summary", () => {
       "scanning",
     );
     status.discovery[0].lastSuccessfulScanAt = null;
-    expect(mailboxIndexingSummary(status, sharedId, true).lastScan).toBeNull();
-    status.generations[0].segments[0].coverage.knownEligible = null;
-    expect(
-      mailboxIndexingSummary(status, sharedId, true).percentage,
-    ).toBeNull();
+    expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
+      observedAt: null,
+      range: null,
+    });
   });
   it("requires in-progress work for indexing and distinguishes queued work", () => {
     const status = fixture();
@@ -283,21 +300,20 @@ describe("mailbox indexing summary", () => {
       "waiting",
     );
   });
-  it("never rounds incomplete coverage to 100 and explains terminal outcomes", () => {
+  it("counts terminal outcomes as current and notes only unreadable ones", () => {
     const status = fixture();
     const row = status.generations[0].segments[0];
     row.coverage.indexedCurrent = 639;
     row.coverage.emptyCurrent = 1;
     expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
-      percentage: 99,
-      terminal: true,
-      state: "complete",
+      state: "current",
+      notices: { unreadable: false, notStoredLocally: false },
     });
     row.coverage.emptyCurrent = 0;
     row.coverage.unindexableCurrent = 1;
     expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
-      terminal: true,
-      state: "partial",
+      state: "current",
+      notices: { unreadable: true, notStoredLocally: false },
     });
   });
   it("handles empty and missing inventories explicitly", () => {
@@ -306,16 +322,13 @@ describe("mailbox indexing summary", () => {
       row.coverage.knownEligible = 0;
       row.coverage.indexedCurrent = 0;
     }
-    expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
-      total: 0,
-      percentage: null,
-      state: "current",
-    });
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "current",
+    );
     status.generations = [];
     expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
-      total: null,
-      percentage: null,
       state: "unavailable",
+      range: null,
     });
   });
 });
@@ -331,9 +344,8 @@ describe("sparse mailbox status and missing local cache content", () => {
       .replaceAll("-", "")
       .toUpperCase();
     expect(summary(status)).toMatchObject({
-      total: 554,
-      indexed: 552,
-      state: "partial",
+      state: "current",
+      notices: { notStoredLocally: true },
     });
   });
 
@@ -360,19 +372,17 @@ describe("sparse mailbox status and missing local cache content", () => {
       includeSourceBreakdowns: true,
       includeFileTypeBreakdowns: false,
     });
-    expect(summary(response)).toMatchObject({
-      total: 554,
-      indexed: 552,
-      percentage: 99,
-      missingFromLocalCache: 2,
-      state: "partial",
-      terminal: false,
-      hasUnindexable: false,
-      lastScan: Date.parse(status.sampledAt),
-    });
-    expect(mailboxCoverage(response, fixtureMailboxId, "file")).toEqual({
-      indexed: 0,
-      total: 0,
+    expect(summary(response)).toEqual({
+      state: "current",
+      range: {
+        kind: "indexed",
+        from: Date.parse("2025-03-14T12:00:00Z"),
+        fromInclusive: true,
+        through: null,
+        olderPending: false,
+      },
+      observedAt: Date.parse(status.sampledAt),
+      notices: { unreadable: false, notStoredLocally: true, cachedOnly: false },
     });
   });
 
@@ -389,10 +399,8 @@ describe("sparse mailbox status and missing local cache content", () => {
         }
       }
       expect(summary(status)).toMatchObject({
-        total: 554,
-        indexed: 554,
-        percentage: 100,
         state: "current",
+        notices: { unreadable: false, notStoredLocally: false },
       });
     },
   );
@@ -403,24 +411,15 @@ describe("sparse mailbox status and missing local cache content", () => {
       (row) => row.mailboxId === null,
     );
     status.discovery[0].discoveredDocuments = 0;
-    expect(summary(status)).toMatchObject({
-      total: 0,
-      indexed: 0,
-      state: "current",
-    });
+    expect(summary(status).state).toBe("current");
     status.discovery[0].state = "notStarted";
     status.discovery[0].discoveryComplete = false;
-    expect(summary(status)).toMatchObject({
-      total: null,
-      indexed: null,
-      state: "waiting",
-    });
+    expect(summary(status).state).toBe("notScanned");
     status.discovery = [];
     expect(summary(status)).toMatchObject({
-      total: null,
-      indexed: null,
       state: "unavailable",
-      lastScan: null,
+      range: null,
+      observedAt: null,
     });
   });
 
@@ -429,10 +428,7 @@ describe("sparse mailbox status and missing local cache content", () => {
     status.generations[0].segments = status.generations[0].segments.filter(
       (row) => row.mailboxId === null,
     );
-    expect(summary(status)).toMatchObject({
-      total: null,
-      state: "unavailable",
-    });
+    expect(summary(status).state).toBe("unavailable");
   });
 
   it("preserves unknown metrics and missing generations", () => {
@@ -466,11 +462,7 @@ describe("sparse mailbox status and missing local cache content", () => {
     ]) {
       const status = indexingStatusFixture();
       damage(status);
-      expect(summary(status)).toMatchObject({
-        total: null,
-        percentage: null,
-        state: "unavailable",
-      });
+      expect(summary(status).state).toBe("unavailable");
     }
   });
 
@@ -479,20 +471,18 @@ describe("sparse mailbox status and missing local cache content", () => {
     const coverage = status.generations[0].segments[0].coverage;
     coverage.missingFromLocalCacheCurrent = null;
     expect(summary(status)).toMatchObject({
-      total: 554,
-      indexed: 552,
-      missingFromLocalCache: null,
       state: "unavailable",
+      notices: { notStoredLocally: false },
     });
     delete coverage.missingFromLocalCacheCurrent;
     expect(summary(status)).toMatchObject({
-      missingFromLocalCache: 0,
       state: "unavailable",
+      notices: { notStoredLocally: false },
     });
     coverage.indexedCurrent = 554;
     expect(summary(status)).toMatchObject({
-      missingFromLocalCache: 0,
       state: "current",
+      notices: { notStoredLocally: false },
     });
   });
 
@@ -503,13 +493,12 @@ describe("sparse mailbox status and missing local cache content", () => {
     coverage.emptyCurrent = 1;
     expect(summary(status)).toMatchObject({
       state: "unavailable",
-      terminal: false,
+      notices: { unreadable: false },
     });
     coverage.unindexableCurrent = 1;
     expect(summary(status)).toMatchObject({
-      state: "partial",
-      terminal: true,
-      hasUnindexable: true,
+      state: "current",
+      notices: { unreadable: true },
     });
   });
 
@@ -520,12 +509,8 @@ describe("sparse mailbox status and missing local cache content", () => {
       missingFromLocalCacheCurrent: 554,
     });
     expect(summary(status)).toMatchObject({
-      total: 554,
-      indexed: 0,
-      percentage: 0,
-      missingFromLocalCache: 554,
-      state: "partial",
-      terminal: false,
+      state: "current",
+      notices: { unreadable: false, notStoredLocally: true },
     });
   });
 
@@ -548,8 +533,8 @@ describe("sparse mailbox status and missing local cache content", () => {
     status.discovery[0].state = "scanning";
     expect(summary(status)).toMatchObject({
       state: "scanning",
-      total: 554,
-      lastScan: Date.parse(status.sampledAt),
+      range: { kind: "indexed" },
+      observedAt: Date.parse(status.sampledAt),
     });
     status.discovery[0].state = "complete";
     status.discovery[0].discoveryComplete = false;
@@ -607,15 +592,18 @@ describe("sparse mailbox status and missing local cache content", () => {
       ...globalThis.structuredClone(row),
       sourceId: "22222222-2222-4333-8444-555555555555",
     };
+    Object.assign(second.coverage, {
+      indexedCurrent: 551,
+      unindexableCurrent: 1,
+    });
     generation.segments.push(second);
     status.discovery.push({
       ...status.discovery[0],
       sourceId: second.sourceId,
     });
     expect(summary(status)).toMatchObject({
-      total: 1108,
-      indexed: 1104,
-      missingFromLocalCache: 4,
+      state: "current",
+      notices: { unreadable: true, notStoredLocally: true },
     });
     generation.segments.push({
       ...globalThis.structuredClone(row),
@@ -625,22 +613,254 @@ describe("sparse mailbox status and missing local cache content", () => {
       ...globalThis.structuredClone(generation),
       role: "building",
     });
-    expect(summary(status).total).toBe(1108);
+    expect(summary(status).notices.unreadable).toBe(true);
     generation.segments.push({
       ...globalThis.structuredClone(row),
       sourceId: null,
     });
     expect(summary(status)).toMatchObject({
-      total: 554,
-      indexed: 552,
-      missingFromLocalCache: 2,
+      state: "current",
+      notices: { unreadable: false, notStoredLocally: true },
     });
     generation.segments = generation.segments.filter(
       (segment) => segment.sourceId === sourceId || segment.mailboxId === null,
     );
-    expect(summary(status)).toMatchObject({
-      total: null,
-      state: "unavailable",
+    expect(summary(status).state).toBe("unavailable");
+  });
+});
+
+describe("indexed range", () => {
+  const summary = (status: IndexingStatusV1Result) =>
+    mailboxIndexingSummary(status, fixtureMailboxId, true);
+  const withRange = (range: Partial<IndexedRange>) => {
+    const status = indexingStatusFixture();
+    status.discovery[0].indexedRange = { ...indexedRangeFixture(), ...range };
+    return status;
+  };
+  const unclaimed = (unavailableReason: string) =>
+    withRange({
+      from: null,
+      through: null,
+      observedAt: null,
+      olderPending: 554,
+      unavailableReason,
     });
+
+  it("ends a settled range at the last confirmation of the local store", () => {
+    expect(summary(indexingStatusFixture())).toMatchObject({
+      range: {
+        kind: "indexed",
+        from: Date.parse("2025-03-14T12:00:00Z"),
+        through: null,
+        olderPending: false,
+      },
+      observedAt: Date.parse("2026-09-15T12:00:00Z"),
+    });
+  });
+
+  it("ends at the newest indexed date while newer items wait and notes older pending items", () => {
+    expect(
+      summary(
+        withRange({
+          through: { at: "2026-09-10T12:00:00Z", inclusive: true },
+          pendingNewer: 3,
+          olderPending: 100,
+        }),
+      ).range,
+    ).toEqual({
+      kind: "indexed",
+      from: Date.parse("2025-03-14T12:00:00Z"),
+      fromInclusive: true,
+      through: Date.parse("2026-09-10T12:00:00Z"),
+      olderPending: true,
+    });
+  });
+
+  it("keeps an exclusive start bound", () => {
+    expect(
+      summary(
+        withRange({
+          from: { at: "2025-03-14T12:00:00Z", inclusive: false },
+          olderPending: 5,
+        }),
+      ).range,
+    ).toMatchObject({ fromInclusive: false, olderPending: true });
+  });
+
+  it("combines the sources of one mailbox to the period all of them cover", () => {
+    const status = indexingStatusFixture();
+    const second = globalThis.structuredClone(
+      status.generations[0].segments[0],
+    );
+    second.sourceId = "22222222-2222-4333-8444-555555555555";
+    status.generations[0].segments.push(second);
+    status.discovery.push({
+      ...status.discovery[0],
+      sourceId: second.sourceId,
+      indexedRange: {
+        ...indexedRangeFixture(),
+        from: { at: "2026-01-05T12:00:00Z", inclusive: true },
+        through: { at: "2026-09-14T12:00:00Z", inclusive: false },
+        observedAt: "2026-09-15T11:00:00Z",
+        pendingNewer: 1,
+      },
+    });
+    expect(summary(status)).toMatchObject({
+      range: {
+        kind: "indexed",
+        from: Date.parse("2026-01-05T12:00:00Z"),
+        through: Date.parse("2026-09-14T12:00:00Z"),
+      },
+      observedAt: Date.parse("2026-09-15T11:00:00Z"),
+    });
+  });
+
+  const withSecondSource = (range: Partial<IndexedRange>) => {
+    const status = indexingStatusFixture();
+    const second = globalThis.structuredClone(
+      status.generations[0].segments[0],
+    );
+    second.sourceId = "22222222-2222-4333-8444-555555555555";
+    status.generations[0].segments.push(second);
+    status.discovery.push({
+      ...status.discovery[0],
+      sourceId: second.sourceId,
+      indexedRange: { ...indexedRangeFixture(), ...range },
+    });
+    return status;
+  };
+
+  it("ends where the earliest confirmed source was last checked", () => {
+    const status = withSecondSource({
+      through: { at: "2026-10-07T12:00:00Z", inclusive: true },
+      observedAt: "2026-10-08T12:00:00Z",
+      pendingNewer: 1,
+    });
+    status.discovery[0].indexedRange!.observedAt = "2026-09-01T12:00:00Z";
+    expect(summary(status).range).toMatchObject({
+      through: Date.parse("2026-09-01T12:00:00Z"),
+    });
+  });
+
+  it("claims no range when the sources of one mailbox share no period", () => {
+    const disjoint = withSecondSource({
+      from: { at: "2026-06-05T12:00:00Z", inclusive: true },
+    });
+    disjoint.discovery[0].indexedRange!.through = {
+      at: "2026-06-01T12:00:00Z",
+      inclusive: true,
+    };
+    expect(summary(disjoint).range).toBeNull();
+    const confirmedEarlier = withSecondSource({
+      from: { at: "2026-06-05T12:00:00Z", inclusive: true },
+    });
+    confirmedEarlier.discovery[0].indexedRange!.observedAt =
+      "2026-06-01T12:00:00Z";
+    expect(summary(confirmedEarlier).range).toBeNull();
+  });
+
+  it("combines with an empty source, but not with one still waiting for its first items", () => {
+    const empty = withSecondSource({
+      from: null,
+      olderPending: 0,
+      unavailableReason: "no_searchable_documents",
+    });
+    expect(summary(empty).range).toEqual(
+      summary(indexingStatusFixture()).range,
+    );
+    const waiting = withSecondSource({
+      from: null,
+      olderPending: 5,
+      unavailableReason: "no_searchable_documents",
+    });
+    expect(summary(waiting).range).toBeNull();
+  });
+
+  it("says a source was not scanned yet unless the status pill already says so", () => {
+    const failed = unclaimed("not_enumerated");
+    failed.discovery[0].state = "failed";
+    failed.discovery[0].discoveryComplete = false;
+    expect(summary(failed)).toMatchObject({
+      state: "scanFailed",
+      range: { kind: "notScanned" },
+      observedAt: null,
+    });
+    const scanning = unclaimed("not_enumerated");
+    scanning.discovery[0].state = "scanning";
+    scanning.discovery[0].discoveryComplete = false;
+    expect(summary(scanning)).toMatchObject({ state: "scanning", range: null });
+    const notStarted = unclaimed("not_enumerated");
+    notStarted.discovery[0].state = "notStarted";
+    notStarted.discovery[0].discoveryComplete = false;
+    expect(summary(notStarted)).toMatchObject({
+      state: "notScanned",
+      range: null,
+    });
+  });
+
+  it.each(["no_searchable_documents", "index_not_initialized"])(
+    "says nothing is searchable yet for %s",
+    (reason) => {
+      expect(summary(unclaimed(reason)).range).toEqual({
+        kind: "nothingSearchable",
+      });
+    },
+  );
+
+  it("leaves disabled sources and unknown reasons to the status pill", () => {
+    const disabled = unclaimed("source_disabled");
+    disabled.discovery[0].state = "disabled";
+    expect(summary(disabled)).toMatchObject({ state: "disabled", range: null });
+    expect(summary(unclaimed("future_reason")).range).toBeNull();
+    expect(
+      mailboxIndexingSummary(indexingStatusFixture(), fixtureMailboxId, false),
+    ).toMatchObject({ state: "disabled", range: null });
+  });
+
+  it("drops notices for disabled sources", () => {
+    const status = indexingStatusFixture();
+    status.generations[0].segments[0].coverage.unindexableCurrent = 1;
+    expect(
+      mailboxIndexingSummary(status, fixtureMailboxId, false).notices,
+    ).toEqual({
+      unreadable: false,
+      notStoredLocally: false,
+      cachedOnly: false,
+    });
+  });
+
+  it("flags cache-only inventories, treating unknown inventories as cache-only", () => {
+    expect(summary(indexingStatusFixture()).notices.cachedOnly).toBe(false);
+    for (const inventory of ["cacheObservations", "futureInventory"])
+      expect(summary(withRange({ inventory })).notices.cachedOnly).toBe(true);
+  });
+
+  it("falls back to the oldest indexed document date when the sidecar reports no range", () => {
+    const status = indexingStatusFixture();
+    delete status.discovery[0].indexedRange;
+    expect(status.generations[0].segments[0].depth).toMatchObject({
+      oldestIndexedDocumentAt: "2020-01-01T00:00:00Z",
+      fullyIndexedSince: { at: "2025-01-01T00:00:00Z" },
+    });
+    expect(summary(status)).toMatchObject({
+      range: {
+        kind: "indexed",
+        from: Date.parse("2020-01-01T00:00:00Z"),
+        through: null,
+        olderPending: false,
+      },
+      observedAt: Date.parse(status.sampledAt),
+      notices: { cachedOnly: false },
+    });
+  });
+
+  it("says a source without a range was not scanned yet unless the pill says so", () => {
+    const status = indexingStatusFixture();
+    delete status.discovery[0].indexedRange;
+    status.discovery[0].lastSuccessfulScanAt = null;
+    status.discovery[0].state = "failed";
+    expect(summary(status).range).toEqual({ kind: "notScanned" });
+    status.discovery[0].state = "scanning";
+    expect(summary(status).range).toBeNull();
   });
 });

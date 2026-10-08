@@ -294,7 +294,7 @@ describe("source indexing settings", () => {
 });
 
 describe("source indexing statistics", () => {
-  it("isolates Teams source counts from other logins, Outlook, aggregates, and building generations", () => {
+  it("isolates Teams source status from other logins, Outlook, aggregates, and building generations", () => {
     const status = multiSourceStatusFixture();
     status.generations.unshift({
       ...globalThis.structuredClone(status.generations[0]),
@@ -309,22 +309,30 @@ describe("source indexing statistics", () => {
         "teams",
         true,
       ),
-    ).toMatchObject({ state: "scanFailed", indexed: 10, total: 10 });
+    ).toMatchObject({
+      state: "scanFailed",
+      range: { kind: "indexed", from: Date.parse("2026-06-01T12:00:00Z") },
+    });
     expect(
       sourceIndexingSummary(status, teamsSourceIds[1], "teams", true),
-    ).toMatchObject({
+    ).toEqual({
       state: "current",
-      indexed: 11,
-      total: 11,
-      percentage: 100,
+      range: {
+        kind: "indexed",
+        from: Date.parse("2026-06-02T12:00:00Z"),
+        fromInclusive: true,
+        through: null,
+        olderPending: false,
+      },
+      observedAt: Date.parse("2026-09-15T12:00:00Z"),
+      notices: { unreadable: false, notStoredLocally: false, cachedOnly: true },
     });
     expect(
       sourceIndexingSummary(status, sourceId, "outlook", true),
     ).toMatchObject({
-      state: "partial",
-      indexed: 552,
-      total: 554,
-      missingFromLocalCache: 2,
+      state: "current",
+      range: { kind: "indexed", from: Date.parse("2025-03-14T12:00:00Z") },
+      notices: { notStoredLocally: true, cachedOnly: false },
     });
     expect(
       sourceIndexingSummary(status, teamsSourceIds[1], "teams", false).state,
@@ -338,12 +346,12 @@ describe("source indexing statistics", () => {
     );
     const summary = () =>
       sourceIndexingSummary(status, teamsSourceIds[0], "teams", true);
-    expect(summary()).toMatchObject({ state: "unavailable", total: null });
+    expect(summary().state).toBe("unavailable");
     status.discovery[1].discoveredDocuments = 0;
-    expect(summary()).toMatchObject({ state: "current", total: 0 });
+    expect(summary().state).toBe("current");
     status.generations[0].segments = status.generations[0].segments.filter(
       (row) => row.sourceId !== null || row.kind !== "teams_message",
     );
-    expect(summary()).toMatchObject({ state: "unavailable", total: null });
+    expect(summary().state).toBe("unavailable");
   });
 });

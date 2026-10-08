@@ -1,5 +1,5 @@
 import { i18n } from "@lingui/core";
-import { plural, t } from "@lingui/core/macro";
+import { t } from "@lingui/core/macro";
 import { useId, useState } from "react";
 
 import { Button } from "../Controls/Button";
@@ -8,7 +8,7 @@ import { Tooltip } from "../Controls/Tooltip";
 import { SettledInfoPill } from "../Trace/steps/ToolStatusPill";
 import { ArrowUpIcon, ChatBubbleIcon, ComputerIcon, MailIcon } from "../icons";
 
-import type { mailboxIndexingSummary } from "@/lib/desktopSidecar/indexingConfiguration";
+import type { IndexingSummary } from "@/lib/desktopSidecar/indexingConfiguration";
 import type { IndexingEntry } from "@/lib/desktopSidecar/indexingSources";
 
 export function IndexingSourceRow({
@@ -22,7 +22,7 @@ export function IndexingSourceRow({
   onToggle,
 }: {
   entry: IndexingEntry;
-  summary: ReturnType<typeof mailboxIndexingSummary>;
+  summary: IndexingSummary;
   now: number;
   busy: boolean;
   canMoveUp: boolean;
@@ -53,11 +53,10 @@ export function IndexingSourceRow({
         });
   };
   const name = entryName(entry);
-  const missingCount = summary.missingFromLocalCache ?? 0;
   const seconds =
-    summary.lastScan === null
+    summary.observedAt === null
       ? null
-      : Math.max(0, Math.floor((now - summary.lastScan) / 1000));
+      : Math.max(0, Math.floor((now - summary.observedAt) / 1000));
   const relative =
     seconds === null
       ? null
@@ -68,9 +67,61 @@ export function IndexingSourceRow({
             ? seconds
             : seconds < 3600
               ? Math.floor(seconds / 60)
-              : Math.floor(seconds / 3600)),
-          seconds < 60 ? "second" : seconds < 3600 ? "minute" : "hour",
+              : seconds < 86400
+                ? Math.floor(seconds / 3600)
+                : Math.floor(seconds / 86400)),
+          seconds < 60
+            ? "second"
+            : seconds < 3600
+              ? "minute"
+              : seconds < 86400
+                ? "hour"
+                : "day",
         );
+  const day = (at: number) =>
+    i18n.date(at, { day: "numeric", month: "short", year: "numeric" });
+  const rangeLabel = () => {
+    const range = summary.range;
+    if (range === null) return null;
+    if (range.kind === "notScanned")
+      return t({
+        id: "sidecar.indexing.range.notScanned",
+        message: "Not scanned yet",
+      });
+    if (range.kind === "nothingSearchable")
+      return t({
+        id: "sidecar.indexing.range.nothingSearchable",
+        message: "Nothing searchable yet",
+      });
+    const end = range.through ?? summary.observedAt;
+    if (end === null) return null;
+    // Mail earlier on the day of an exclusive start is not guaranteed, so
+    // start at the next full day unless the range ends before it.
+    const nextDay = new Date(range.from);
+    nextDay.setHours(24, 0, 0, 0);
+    const from = day(
+      range.fromInclusive ? range.from : Math.min(nextDay.getTime(), end),
+    );
+    if (range.through !== null)
+      return i18n._({
+        id: "sidecar.indexing.range.newerPending",
+        message:
+          "Indexed {from} to {through} · newest items still being indexed",
+        values: { from, through: day(range.through) },
+      });
+    return new Date(end).toDateString() === new Date(now).toDateString()
+      ? i18n._({
+          id: "sidecar.indexing.range.toToday",
+          message: "Indexed {from} to today",
+          values: { from },
+        })
+      : i18n._({
+          id: "sidecar.indexing.range.toDate",
+          message: "Indexed {from} to {to}",
+          values: { from, to: day(end) },
+        });
+  };
+  const rangeText = rangeLabel();
   const labels = {
     disabled: t({
       id: "sidecar.indexing.status.disabled",
@@ -88,14 +139,6 @@ export function IndexingSourceRow({
       id: "sidecar.indexing.status.indexingUnavailable",
       message: "Indexing unavailable",
     }),
-    partial: t({
-      id: "sidecar.indexing.status.partial",
-      message: "Partially indexed",
-    }),
-    complete: t({
-      id: "sidecar.indexing.status.complete",
-      message: "Indexing complete",
-    }),
     stopped: t({ id: "sidecar.indexing.status.stopped", message: "Stopped" }),
     scanning: t({
       id: "sidecar.indexing.status.scanning",
@@ -104,6 +147,10 @@ export function IndexingSourceRow({
     indexing: t({
       id: "sidecar.indexing.status.indexing",
       message: "Indexing",
+    }),
+    notScanned: t({
+      id: "sidecar.indexing.status.notScanned",
+      message: "Not scanned yet",
     }),
     waiting: t({ id: "sidecar.indexing.status.waiting", message: "Waiting" }),
     current: t({
@@ -120,7 +167,6 @@ export function IndexingSourceRow({
     "scanFailed",
     "sourceUnavailable",
     "indexingUnavailable",
-    "partial",
   ].includes(summary.state);
   /* eslint-enable lingui/no-unlocalized-strings */
   const productLabel =
@@ -200,6 +246,11 @@ export function IndexingSourceRow({
                 }
               />
             </span>
+            {rangeText && (
+              <span className="block text-xs text-theme-fg-secondary">
+                {rangeText}
+              </span>
+            )}
           </span>
         </button>
         <input
@@ -220,53 +271,23 @@ export function IndexingSourceRow({
           id={detailsId}
           className="space-y-2 pl-6 text-xs text-theme-fg-secondary"
         >
-          <p>
-            {summary.total === null ||
-            summary.indexed === null ||
-            (summary.total > 0 && summary.percentage === null)
-              ? t({
-                  id: "sidecar.indexing.progressUnavailable",
-                  message: "Indexing progress unavailable",
-                })
-              : summary.total === 0
-                ? t({
-                    id: "sidecar.indexing.noDocuments",
-                    message: "No documents discovered yet",
-                  })
-                : i18n._({
-                    id: "sidecar.indexing.progress",
-                    message:
-                      "{indexed} of {total} documents indexed ({percentage}%)",
-                    values: {
-                      indexed: i18n.number(summary.indexed),
-                      percentage: i18n.number(summary.percentage ?? 0),
-                      total: i18n.number(summary.total),
-                    },
-                  })}
-          </p>
-          {missingCount > 0 && (
+          {summary.range?.kind === "indexed" && summary.range.olderPending && (
             <p>
               {t({
-                id: "sidecar.indexing.missingFromLocalCache",
-                message: plural(missingCount, {
-                  one: "# document is unavailable in the local cache.",
-                  other: "# documents are unavailable in the local cache.",
-                }),
+                id: "sidecar.indexing.olderPending",
+                message: "Older items are still being indexed",
               })}
             </p>
           )}
-          <p>
-            {relative === null
-              ? t({
-                  id: "sidecar.indexing.noScan",
-                  message: "No successful scan yet",
-                })
-              : i18n._({
-                  id: "sidecar.indexing.lastScan",
-                  message: "Last successful scan {time}",
-                  values: { time: relative },
-                })}
-          </p>
+          {relative !== null && (
+            <p>
+              {i18n._({
+                id: "sidecar.indexing.checked",
+                message: "Checked {time}",
+                values: { time: relative },
+              })}
+            </p>
+          )}
           {!entry.editable && (
             <p>
               {t({
@@ -276,24 +297,33 @@ export function IndexingSourceRow({
               })}
             </p>
           )}
-          {summary.terminal && (
-            <p
-              className={
-                summary.hasUnindexable
-                  ? "text-theme-warning-fg"
-                  : "text-theme-fg-secondary"
-              }
-            >
-              {summary.hasUnindexable
+          {summary.notices.unreadable && (
+            <p className="text-theme-warning-fg">
+              {t({
+                id: "sidecar.indexing.unreadable",
+                message: "Some items couldn't be read",
+              })}
+            </p>
+          )}
+          {summary.notices.notStoredLocally && (
+            <p>
+              {t({
+                id: "sidecar.indexing.notStoredLocally",
+                message: "Some items aren't stored on this device",
+              })}
+            </p>
+          )}
+          {summary.notices.cachedOnly && (
+            <p>
+              {entry.product === "teams"
                 ? t({
-                    id: "sidecar.indexing.terminal",
+                    id: "sidecar.indexing.teamsRecentChats",
                     message:
-                      "Some documents are empty or could not be indexed, so coverage is below 100%.",
+                      "Teams keeps only recently opened chats on this device",
                   })
                 : t({
-                    id: "sidecar.indexing.emptyDocuments",
-                    message:
-                      "Empty documents contain no searchable text, so coverage is below 100%.",
+                    id: "sidecar.indexing.cachedOnly",
+                    message: "Only items cached on this device can be indexed",
                   })}
             </p>
           )}

@@ -208,41 +208,126 @@ function coverageCounter(
   );
 }
 
-export function mailboxCoverage(
-  status: IndexingStatusV1Result,
-  mailboxId: string,
-  kind: "email" | "file",
-) {
-  const statistics = indexingStatistics(status, { mailboxId }, [
-    "email",
-    "file",
-  ]);
-  const rows = statistics.rows.filter((row) => row.kind === kind);
-  const counter = (key: CoverageCounter) =>
-    statistics.available
-      ? coverageCounter(rows, key, statistics.canInferZero(kind))
-      : null;
-  /* eslint-disable lingui/no-unlocalized-strings -- Protocol coverage field names. */
-  return {
-    indexed: counter("indexedCurrent"),
-    total: counter("knownEligible"),
-  };
-  /* eslint-enable lingui/no-unlocalized-strings */
-}
-
 export type MailboxIndexingState =
   | "disabled"
   | "scanFailed"
   | "sourceUnavailable"
   | "indexingUnavailable"
-  | "partial"
-  | "complete"
   | "stopped"
   | "scanning"
   | "indexing"
+  | "notScanned"
   | "waiting"
   | "current"
   | "unavailable";
+
+/** Bounds are epoch milliseconds; a null `through` ends at `observedAt`. */
+export type IndexingRange =
+  | {
+      kind: "indexed";
+      from: number;
+      /** An exclusive `from` leaves documents dated exactly at it unprocessed. */
+      fromInclusive: boolean;
+      through: number | null;
+      olderPending: boolean;
+    }
+  | { kind: "notScanned" }
+  | { kind: "nothingSearchable" };
+
+export interface IndexingSummary {
+  state: MailboxIndexingState;
+  range: IndexingRange | null;
+  observedAt: number | null;
+  notices: {
+    unreadable: boolean;
+    notStoredLocally: boolean;
+    /** Only what the application cached reached the index, e.g. Teams. */
+    cachedOnly: boolean;
+  };
+}
+
+export type IndexedRange = NonNullable<
+  IndexingStatusV1Result["discovery"][number]["indexedRange"]
+>;
+
+// SPEC.md treats earlier document dates as undated.
+const EARLIEST_DOCUMENT_DATE = Date.UTC(1980, 0, 1);
+
+function timestamp(value: string | null | undefined): number | null {
+  const parsed = value == null ? Number.NaN : Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function reportedRange(
+  ranges: IndexedRange[],
+  notScanned: IndexingRange | null,
+): Pick<IndexingSummary, "range" | "observedAt"> {
+  const observed = ranges.map((range) => timestamp(range.observedAt));
+  const observedAt = observed.every((at): at is number => at !== null)
+    ? Math.min(...observed)
+    : null;
+  /* eslint-disable lingui/no-unlocalized-strings -- Protocol unavailable reasons and internal range kinds. */
+  if (ranges.some((range) => range.unavailableReason === "not_enumerated"))
+    return { range: notScanned, observedAt };
+  const nothingSearchable = (range: IndexedRange) =>
+    range.unavailableReason === "no_searchable_documents" ||
+    range.unavailableReason === "index_not_initialized";
+  // A source with nothing left to index cannot narrow what its siblings cover.
+  const claimed = ranges.filter(
+    (range) => !(nothingSearchable(range) && range.olderPending === 0),
+  );
+  if (claimed.every(nothingSearchable))
+    return { range: { kind: "nothingSearchable" }, observedAt };
+  /* eslint-enable lingui/no-unlocalized-strings */
+  const starts = claimed.map((range) => timestamp(range.from?.at));
+  const ends = claimed.map((range) =>
+    timestamp(range.through === null ? range.observedAt : range.through.at),
+  );
+  if (
+    !starts.every((at): at is number => at !== null) ||
+    !ends.every((at): at is number => at !== null)
+  )
+    return { range: null, observedAt };
+  const from = Math.max(...starts);
+  const through = claimed.some((range) => range.through !== null)
+    ? Math.min(...ends)
+    : null;
+  const end = through ?? observedAt;
+  // Sources whose ranges do not overlap share no covered period.
+  if (end === null || from > end) return { range: null, observedAt };
+  return {
+    range: {
+      kind: "indexed",
+      from,
+      fromInclusive: claimed.every(
+        (range, index) => starts[index] !== from || range.from?.inclusive,
+      ),
+      through,
+      olderPending: claimed.some((range) => (range.olderPending ?? 0) > 0),
+    },
+    observedAt,
+  };
+}
+
+// Earlier depth boundaries hold processing times rather than document dates,
+// so only the oldest indexed date of a fully settled source is trusted.
+function legacyRange(
+  rows: Segment[],
+  lastScan: number | null,
+): IndexingRange | null {
+  const dates = rows
+    .map((row) => timestamp(row.depth.oldestIndexedDocumentAt))
+    .filter((at): at is number => at !== null && at >= EARLIEST_DOCUMENT_DATE);
+  return lastScan !== null && dates.length
+    ? {
+        kind: "indexed",
+        from: Math.min(...dates),
+        fromInclusive: true,
+        through: null,
+        olderPending: false,
+      }
+    : null;
+}
 
 export function mailboxIndexingSummary(
   status: IndexingStatusV1Result,
@@ -280,7 +365,7 @@ function indexingSummary(
   status: IndexingStatusV1Result,
   statistics: ReturnType<typeof indexingStatistics>,
   enabled: boolean,
-) {
+): IndexingSummary {
   const { rows, discovery, complete } = statistics;
   const counter = (key: CoverageCounter) =>
     statistics.available
@@ -304,20 +389,11 @@ function indexingSummary(
   const empty = counter("emptyCurrent");
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Protocol coverage field names.
   const unindexable = counter("unindexableCurrent");
-  const percentage =
-    total === null || indexed === null || total === 0 || indexed > total
-      ? null
-      : Math.min(
-          indexed < total ? 99 : 100,
-          Math.floor((indexed / total) * 100),
-        );
-  const hasEmpty = empty !== null && empty > 0;
-  const hasUnindexable = unindexable !== null && unindexable > 0;
-  const terminal = hasEmpty || hasUnindexable;
   const accounted =
     total !== null &&
     sum([indexed, empty, unindexable, missingFromLocalCache]) === total;
   const settled =
+    complete &&
     statistics.available &&
     accounted &&
     rows.every(
@@ -352,6 +428,8 @@ function indexingSummary(
     state = "indexing";
   else if (discovery.some((source) => source.state === "scanning"))
     state = "scanning";
+  else if (discovery.some((source) => source.state === "notStarted"))
+    state = "notScanned";
   else if (
     rows.some(
       (row) =>
@@ -361,34 +439,64 @@ function indexingSummary(
         (row.coverage.stale ?? 0) > 0 ||
         (row.coverage.neverProcessed ?? 0) > 0 ||
         (row.coverage.pendingDeletions ?? 0) > 0,
-    ) ||
-    discovery.some((source) => source.state === "notStarted")
+    )
   )
     state = "waiting";
-  else if (complete && settled)
-    state =
-      hasUnindexable || (missingFromLocalCache ?? 0) > 0
-        ? "partial"
-        : hasEmpty
-          ? "complete"
-          : "current";
+  else if (settled) state = "current";
   else state = "unavailable";
   /* eslint-enable lingui/no-unlocalized-strings */
   // If multiple discovery entries contribute, report the oldest successful scan.
-  const scans = discovery.map((source) => source.lastSuccessfulScanAt);
+  const scans = discovery.map((source) =>
+    timestamp(source.lastSuccessfulScanAt),
+  );
   const lastScan =
-    scans.length &&
-    scans.every((scan) => scan !== null && Number.isFinite(Date.parse(scan)))
-      ? Math.min(...scans.map((scan) => Date.parse(scan ?? "")))
+    scans.length && scans.every((at): at is number => at !== null)
+      ? Math.min(...scans)
       : null;
+  const ranges = discovery.map((source) => source.indexedRange);
+  const reported =
+    ranges.length > 0 &&
+    ranges.every((range): range is IndexedRange => range !== undefined);
+  // The status pill already says when a source is being or was never scanned.
+  const notScanned: IndexingRange | null =
+    state === "notScanned" ||
+    discovery.some((source) => source.state === "scanning")
+      ? null
+      : // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal range kind.
+        { kind: "notScanned" };
+  const { range, observedAt } = reported
+    ? reportedRange(ranges, notScanned)
+    : {
+        range:
+          lastScan === null && discovery.length
+            ? notScanned
+            : settled
+              ? legacyRange(rows, lastScan)
+              : null,
+        observedAt: lastScan,
+      };
+  if (state === "disabled")
+    return {
+      state,
+      range: null,
+      observedAt,
+      notices: {
+        unreadable: false,
+        notStoredLocally: false,
+        cachedOnly: false,
+      },
+    };
   return {
     state,
-    total,
-    indexed,
-    percentage,
-    missingFromLocalCache,
-    terminal: terminal && complete && settled,
-    hasUnindexable,
-    lastScan,
+    range,
+    observedAt,
+    notices: {
+      unreadable: (unindexable ?? 0) > 0,
+      notStoredLocally: (missingFromLocalCache ?? 0) > 0,
+      cachedOnly:
+        reported &&
+        // Unknown inventory values count as cached observations.
+        ranges.some((range) => range.inventory !== "localStore"),
+    },
   };
 }
