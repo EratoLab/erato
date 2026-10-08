@@ -198,7 +198,14 @@ interface ErrorReportFeatureConfig {
 /**
  * Configuration for sidebar feature
  */
+interface MessageActionsFeatureConfig {
+  editingEnabled: boolean;
+  regenerationEnabled: boolean;
+}
+
 interface SidebarFeatureConfig {
+  /** Whether filtering and grouping are available in chat history */
+  chatHistoryFiltersEnabled?: boolean;
   /** Behavior of the collapsed sidebar state: "hidden" or "slim" (icon-only) */
   collapsedMode: "hidden" | "slim";
   /** Optional path to sidebar-specific logo */
@@ -257,6 +264,8 @@ export interface FeatureConfig {
   cloudProviders: CloudProvidersFeatureConfig;
   /** Message feedback feature flags */
   messageFeedback: MessageFeedbackFeatureConfig;
+  /** Presentation controls; these do not change API permissions */
+  messageActions: MessageActionsFeatureConfig;
   /** Error report display flags */
   errorReport: ErrorReportFeatureConfig;
   /** Sidebar feature flags */
@@ -332,6 +341,10 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     availableProviders: [],
     sharepointShowDisclaimer: false,
   },
+  messageActions: {
+    editingEnabled: true,
+    regenerationEnabled: true,
+  },
   messageFeedback: {
     enabled: false,
     commentsEnabled: false,
@@ -349,6 +362,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     logoPath: null,
     logoDarkPath: null,
     chatHistoryShowMetadata: true,
+    chatHistoryFiltersEnabled: true,
     chatHistorySources: [],
   },
   pinnedChats: {
@@ -461,6 +475,10 @@ function createFeatureConfig(
       availableProviders,
       sharepointShowDisclaimer: environment.sharepointShowDisclaimer,
     },
+    messageActions: {
+      editingEnabled: environment.messageEditingEnabled ?? true,
+      regenerationEnabled: environment.messageRegenerationEnabled ?? true,
+    },
     messageFeedback: {
       enabled: environment.messageFeedbackEnabled,
       commentsEnabled: environment.messageFeedbackCommentsEnabled,
@@ -478,6 +496,7 @@ function createFeatureConfig(
       logoPath: environment.sidebarLogoPath,
       logoDarkPath: environment.sidebarLogoDarkPath,
       chatHistoryShowMetadata: environment.sidebarChatHistoryShowMetadata,
+      chatHistoryFiltersEnabled: environment.chatHistoryFiltersEnabled ?? true,
       chatHistorySources: chatHistorySourcesFromCreatedVia(
         environment.chatCreatedViaSources ?? [],
       ),
@@ -537,6 +556,10 @@ function mergeFeatureConfig(
     cloudProviders: {
       ...baseConfig.cloudProviders,
       ...overrides.cloudProviders,
+    },
+    messageActions: {
+      ...baseConfig.messageActions,
+      ...overrides.messageActions,
     },
     messageFeedback: {
       ...baseConfig.messageFeedback,
@@ -631,6 +654,11 @@ export function StaticFeatureConfigProvider({
  * }
  * ```
  */
+/** Optional access for hooks and controls that also support standalone use. */
+export function useOptionalFeatureConfig(): FeatureConfig | null {
+  return useContext(FeatureConfigContext);
+}
+
 export function useFeatureConfig(): FeatureConfig {
   const context = useContext(FeatureConfigContext);
   if (!context) {
@@ -789,6 +817,13 @@ export function useCloudProvidersFeature(): CloudProvidersFeatureConfig {
  * }
  * ```
  */
+export function useMessageActionsFeature(): MessageActionsFeatureConfig {
+  return (
+    useOptionalFeatureConfig()?.messageActions ??
+    defaultStaticFeatureConfig.messageActions
+  );
+}
+
 export function useMessageFeedbackFeature(): MessageFeedbackFeatureConfig {
   const config = useFeatureConfig();
   return config.messageFeedback;

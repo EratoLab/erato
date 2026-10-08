@@ -1,13 +1,57 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  fireEvent,
+  render as renderWithTestingLibrary,
+  screen,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+
 import { DefaultMessageControls } from "./DefaultMessageControls";
+
+import type { ReactElement } from "react";
+
+const render = (
+  ui: ReactElement,
+  editingEnabled = true,
+  regenerationEnabled = true,
+) =>
+  renderWithTestingLibrary(
+    <StaticFeatureConfigProvider
+      config={{ messageActions: { editingEnabled, regenerationEnabled } }}
+    >
+      {ui}
+    </StaticFeatureConfigProvider>,
+  );
 
 vi.mock("@/components/ui/Message/MessageTimestamp", () => ({
   MessageTimestamp: () => <time data-testid="message-timestamp">now</time>,
 }));
 
 describe("DefaultMessageControls", () => {
+  it.each([true, false])(
+    "hides disabled actions but keeps copying (user=%s)",
+    (isUserMessage) => {
+      render(
+        <DefaultMessageControls
+          messageId="message"
+          createdAt="2026-01-01T12:00:00Z"
+          context={{ canEdit: true }}
+          onAction={vi.fn()}
+          isUserMessage={isUserMessage}
+          showFeedbackButtons={!isUserMessage}
+        />,
+        false,
+        false,
+      );
+      expect(screen.queryByLabelText("Edit message")).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText("Regenerate response"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Copy message")).toBeInTheDocument();
+    },
+  );
+
   it("uses token-driven spacing and controls surface styling", () => {
     const { container } = render(
       <DefaultMessageControls

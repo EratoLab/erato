@@ -436,7 +436,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     // Get sidebar configuration
     // Logo env overrides are resolved by ThemeProvider, which also decides
     // whether the file exists; only the collapse mode is read here.
-    const { collapsedMode, chatHistorySources } = useSidebarFeature();
+    const {
+      collapsedMode,
+      chatHistorySources,
+      chatHistoryFiltersEnabled = true,
+    } = useSidebarFeature();
 
     // Get responsive collapsed mode (forces hidden on mobile even if config is slim)
     const effectiveCollapsedMode = useResponsiveCollapsedMode(collapsedMode);
@@ -498,6 +502,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     );
 
     const filterCapabilities = {
+      enabled: chatHistoryFiltersEnabled,
       assistantsEnabled,
       delegationEnabled,
       availableSources: chatHistorySources,
@@ -852,11 +857,13 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         expanded={isRecentChatsExpanded}
                         onExpandedChange={setIsRecentChatsExpanded}
                         actions={
-                          <ChatHistoryFilterMenu
-                            assistantsEnabled={assistantsEnabled}
-                            delegationEnabled={delegationEnabled}
-                            availableSources={chatHistorySources}
-                          />
+                          chatHistoryFiltersEnabled ? (
+                            <ChatHistoryFilterMenu
+                              assistantsEnabled={assistantsEnabled}
+                              delegationEnabled={delegationEnabled}
+                              availableSources={chatHistorySources}
+                            />
+                          ) : undefined
                         }
                       >
                         {sessions.length === 0 &&

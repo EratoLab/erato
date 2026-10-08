@@ -3102,6 +3102,21 @@ pub struct FrontendConfig {
     #[serde(default)]
     pub disable_logout: bool,
 
+    // Whether to show the user-message edit action in the UI. Defaults to `true`.
+    // This is a presentation setting, not an API authorization control.
+    #[serde(default = "default_true")]
+    pub enable_message_editing: bool,
+
+    // Whether to show the assistant-response regenerate action in the UI. Defaults to `true`.
+    // This is a presentation setting, not an API authorization control.
+    #[serde(default = "default_true")]
+    pub enable_message_regeneration: bool,
+
+    // Whether to offer chat history filters and grouping. Defaults to `true`.
+    // When disabled, show an ungrouped list of active chats, ignoring saved filters.
+    #[serde(default = "default_true")]
+    pub enable_chat_history_filters: bool,
+
     // Whether to enable message feedback functionality in the UI.
     // Allows users to submit thumbs up/down ratings with optional comments for messages.
     // Defaults to `false`.
@@ -3180,6 +3195,9 @@ impl Default for FrontendConfig {
             disable_chat_input_autofocus: false,
             chat_input_empty_state_layout: default_chat_input_empty_state_layout(),
             disable_logout: false,
+            enable_message_editing: true,
+            enable_message_regeneration: true,
+            enable_chat_history_filters: true,
             enable_message_feedback: false,
             enable_message_feedback_comments: false,
             message_feedback_edit_time_limit_seconds: None,
@@ -3199,6 +3217,27 @@ impl Default for FrontendConfig {
 #[cfg(test)]
 mod frontend_config_tests {
     use super::FrontendConfig;
+
+    #[test]
+    fn reduced_ui_controls_default_on_and_can_be_disabled() {
+        for config in [
+            FrontendConfig::default(),
+            serde_json::from_str("{}").unwrap(),
+        ] {
+            assert!(config.enable_message_editing);
+            assert!(config.enable_message_regeneration);
+            assert!(config.enable_chat_history_filters);
+        }
+        let config: FrontendConfig = serde_json::from_value(serde_json::json!({
+            "enable_message_editing": false,
+            "enable_message_regeneration": false,
+            "enable_chat_history_filters": false
+        }))
+        .unwrap();
+        assert!(!config.enable_message_editing);
+        assert!(!config.enable_message_regeneration);
+        assert!(!config.enable_chat_history_filters);
+    }
 
     #[test]
     fn chat_input_empty_state_layout_defaults_to_centered() {

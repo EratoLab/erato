@@ -515,6 +515,7 @@ export {
 export {
   FeatureConfigProvider,
   StaticFeatureConfigProvider,
+  useMessageActionsFeature,
   defaultStaticFeatureConfig,
   useAudioConversationalFeature,
   useFeatureConfig,

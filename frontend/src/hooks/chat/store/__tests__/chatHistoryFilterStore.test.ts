@@ -295,6 +295,17 @@ describe("sanitizeChatHistoryFilters", () => {
     sourceFilter: CHAT_HISTORY_SOURCE_FILTER_DEFAULT,
   } as const;
 
+  it("ignores every saved filter and grouping when the menu is disabled", () => {
+    const saved = {
+      ...assistantScoped,
+      sourceFilter: { mode: "only", sources: ["teams"] } as const,
+    };
+    expect(
+      sanitizeChatHistoryFilters(saved, { ...allEnabled, enabled: false }),
+    ).toEqual({ ...CHAT_HISTORY_FILTER_DEFAULTS, groupBy: "none" });
+    expect(saved.statusFilter).toBe("all");
+  });
+
   it("passes values through when assistants and delegation are enabled", () => {
     expect(sanitizeChatHistoryFilters(assistantScoped, allEnabled)).toEqual(
       assistantScoped,

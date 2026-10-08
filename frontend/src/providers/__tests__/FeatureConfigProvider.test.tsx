@@ -41,6 +41,25 @@ function createWrapper(
 }
 
 describe("FeatureConfigProvider", () => {
+  it("maps deployment UI controls independently from message feedback", () => {
+    mockEnv.mockReturnValue({
+      ...vi.mocked(env)(),
+      messageEditingEnabled: false,
+      messageRegenerationEnabled: false,
+      chatHistoryFiltersEnabled: false,
+      messageFeedbackEnabled: true,
+    });
+    const { result } = renderHook(() => useFeatureConfig(), {
+      wrapper: createWrapper(),
+    });
+    expect(result.current.messageActions).toEqual({
+      editingEnabled: false,
+      regenerationEnabled: false,
+    });
+    expect(result.current.sidebar.chatHistoryFiltersEnabled).toBe(false);
+    expect(result.current.messageFeedback.enabled).toBe(true);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -187,6 +206,7 @@ describe("FeatureConfigProvider", () => {
           availableProviders: [],
           sharepointShowDisclaimer: false,
         },
+        messageActions: { editingEnabled: true, regenerationEnabled: true },
         messageFeedback: {
           enabled: false,
           commentsEnabled: false,
@@ -204,6 +224,7 @@ describe("FeatureConfigProvider", () => {
           logoPath: null,
           logoDarkPath: null,
           chatHistoryShowMetadata: true,
+          chatHistoryFiltersEnabled: true,
           chatHistorySources: [],
         },
         pinnedChats: {
@@ -1176,6 +1197,7 @@ describe("FeatureConfigProvider", () => {
         logoPath: null,
         logoDarkPath: null,
         chatHistoryShowMetadata: true,
+        chatHistoryFiltersEnabled: true,
         chatHistorySources: [],
       });
     });

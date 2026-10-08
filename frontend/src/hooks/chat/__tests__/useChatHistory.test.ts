@@ -27,6 +27,13 @@ import type {
 } from "@/hooks/chat/store/chatHistoryFilterStore";
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
+let mockedFiltersEnabled = true;
+vi.mock("@/providers/FeatureConfigProvider", () => ({
+  useOptionalFeatureConfig: () => ({
+    sidebar: { chatHistoryFiltersEnabled: mockedFiltersEnabled },
+  }),
+}));
+
 const mockUseInfiniteQuery = vi.hoisted(() => vi.fn());
 
 const mockNavigate = vi.fn();
@@ -110,6 +117,7 @@ const pending = { id: PENDING_ID, createdAt: "2026-02-02T08:00:00.000Z" };
 
 describe("useChatHistory pending chat placeholder", () => {
   beforeEach(() => {
+    mockedFiltersEnabled = true;
     vi.clearAllMocks();
     mockLocation = { pathname: "/chat" };
     mockParams = {};
@@ -280,7 +288,26 @@ describe("deriveTitleHint", () => {
 });
 
 describe("recent-chats filter wiring", () => {
+  it("ignores saved filters on the first request when deployment filtering is disabled", () => {
+    mockedFiltersEnabled = false;
+    useChatHistoryFilterStore.setState({
+      typeFilter: "assistant",
+      statusFilter: "all",
+      delegatedFilter: "shown",
+      sourceFilter: { mode: "only", sources: ["teams"] },
+    });
+    renderHook(() => useChatHistory());
+    const query = mockUseInfiniteQuery.mock.calls[0][0];
+    query.queryFn({ pageParam: 0 });
+    expect(vi.mocked(fetchRecentChats)).toHaveBeenCalledWith(
+      expect.objectContaining({ queryParams: { limit: 30, offset: 0 } }),
+      undefined,
+    );
+    expect(useChatHistoryFilterStore.getState().typeFilter).toBe("assistant");
+  });
+
   beforeEach(() => {
+    mockedFiltersEnabled = true;
     vi.clearAllMocks();
     mockLocation = { pathname: "/chat" };
     mockParams = {};

@@ -365,6 +365,8 @@ export const useChatHistoryFilterStore = createChatHistoryFilterStore(
 
 /** The feature gates that decide which filter values the menu offers. */
 export interface ChatHistoryFilterCapabilities {
+  /** Ignore persisted filters and use the ungrouped active list when disabled. */
+  enabled?: boolean;
   assistantsEnabled: boolean;
   /**
    * Delegation implies assistants, so the delegated facet needs both gates —
@@ -387,11 +389,15 @@ export interface ChatHistoryFilterCapabilities {
 export function sanitizeChatHistoryFilters(
   values: ChatHistoryFilterValues,
   {
+    enabled = true,
     assistantsEnabled,
     delegationEnabled,
     availableSources,
   }: ChatHistoryFilterCapabilities,
 ): ChatHistoryFilterValues {
+  if (!enabled) {
+    return { ...CHAT_HISTORY_FILTER_DEFAULTS, groupBy: "none" };
+  }
   const delegatedFilter =
     assistantsEnabled && delegationEnabled
       ? values.delegatedFilter
@@ -443,6 +449,7 @@ function sanitizeSourceFilter(
  */
 export const useSanitizedChatHistoryFilters = (
   {
+    enabled = true,
     assistantsEnabled,
     delegationEnabled,
     availableSources,
@@ -464,6 +471,7 @@ export const useSanitizedChatHistoryFilters = (
       sanitizeChatHistoryFilters(
         { typeFilter, statusFilter, delegatedFilter, groupBy, sourceFilter },
         {
+          enabled,
           assistantsEnabled,
           delegationEnabled,
           availableSources: availableSourcesKey
@@ -477,6 +485,7 @@ export const useSanitizedChatHistoryFilters = (
       delegatedFilter,
       groupBy,
       sourceFilter,
+      enabled,
       assistantsEnabled,
       delegationEnabled,
       availableSourcesKey,
@@ -492,6 +501,7 @@ export const useSanitizedChatHistoryFilters = (
  */
 export const useChatHistoryFilterFoldback = (
   {
+    enabled = true,
     assistantsEnabled,
     delegationEnabled,
     availableSources,
@@ -500,6 +510,7 @@ export const useChatHistoryFilterFoldback = (
 ): void => {
   const availableSourcesKey = availableSources.join(",");
   useEffect(() => {
+    if (!enabled) return;
     const state = store.getState();
     const sanitized = sanitizeChatHistoryFilters(state, {
       assistantsEnabled,
@@ -521,5 +532,11 @@ export const useChatHistoryFilterFoldback = (
     if (sanitized.groupBy !== state.groupBy) {
       state.setGroupBy(sanitized.groupBy);
     }
-  }, [assistantsEnabled, delegationEnabled, availableSourcesKey, store]);
+  }, [
+    enabled,
+    assistantsEnabled,
+    delegationEnabled,
+    availableSourcesKey,
+    store,
+  ]);
 };

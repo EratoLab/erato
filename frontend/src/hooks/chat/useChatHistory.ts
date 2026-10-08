@@ -20,10 +20,12 @@ import {
   type RecentChatsError,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { useOptionalFeatureConfig } from "@/providers/FeatureConfigProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
 import {
+  CHAT_HISTORY_FILTER_DEFAULTS,
   sourceFilterKeeps,
   useChatHistoryFilterStore,
 } from "./store/chatHistoryFilterStore";
@@ -37,7 +39,6 @@ import {
   useInfiniteRecentChats,
   useUnarchiveChat,
   useUpdateChatTitle,
-  type RecentChatsListFilters,
 } from "./useInfiniteRecentChats";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -243,19 +244,41 @@ export function useChatHistory({
   const pendingChat = useChatHistoryStore((state) => state.pendingChat);
   const setPendingChat = useChatHistoryStore((state) => state.setPendingChat);
 
-  // Raw persisted values on purpose: every mounted copy of this hook must
-  // derive the same query key, and the sidebar folds feature-gated values back
-  // to their defaults in the store itself.
-  const typeFilter = useChatHistoryFilterStore((state) => state.typeFilter);
-  const statusFilter = useChatHistoryFilterStore((state) => state.statusFilter);
-  const delegatedFilter = useChatHistoryFilterStore(
+  // Read saved preferences, but apply deployment defaults before the first
+  // request as well as during optimistic list reconciliation.
+  const savedTypeFilter = useChatHistoryFilterStore(
+    (state) => state.typeFilter,
+  );
+  const savedStatusFilter = useChatHistoryFilterStore(
+    (state) => state.statusFilter,
+  );
+  const savedDelegatedFilter = useChatHistoryFilterStore(
     (state) => state.delegatedFilter,
   );
-  const sourceFilter = useChatHistoryFilterStore((state) => state.sourceFilter);
-  const listFilters = useMemo<RecentChatsListFilters>(
-    () => ({ typeFilter, statusFilter, delegatedFilter, sourceFilter }),
-    [typeFilter, statusFilter, delegatedFilter, sourceFilter],
+  const savedSourceFilter = useChatHistoryFilterStore(
+    (state) => state.sourceFilter,
   );
+  const chatHistoryFiltersEnabled =
+    useOptionalFeatureConfig()?.sidebar.chatHistoryFiltersEnabled ?? true;
+  const listFilters = useMemo(
+    () =>
+      chatHistoryFiltersEnabled
+        ? {
+            typeFilter: savedTypeFilter,
+            statusFilter: savedStatusFilter,
+            delegatedFilter: savedDelegatedFilter,
+            sourceFilter: savedSourceFilter,
+          }
+        : CHAT_HISTORY_FILTER_DEFAULTS,
+    [
+      chatHistoryFiltersEnabled,
+      savedTypeFilter,
+      savedStatusFilter,
+      savedDelegatedFilter,
+      savedSourceFilter,
+    ],
+  );
+  const { typeFilter, statusFilter, sourceFilter } = listFilters;
 
   const pinnedChatsQueryKey = useMemo(
     () =>
