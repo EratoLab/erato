@@ -163,13 +163,10 @@ describe("LocalSearchCoverageNotice", () => {
   it("shows the requested start as the UTC day the model asked for", () => {
     renderContent([
       searchPart({
-        coverage: coverage(
-          [{ ...teams, requestedFromBeforeCoverage: true }],
-          {
-            requested: { from: "2026-03-01T23:30:00Z", to: null },
-            requestedFromBeforeCoverage: true,
-          },
-        ),
+        coverage: coverage([{ ...teams, requestedFromBeforeCoverage: true }], {
+          requested: { from: "2026-03-01T23:30:00Z", to: null },
+          requestedFromBeforeCoverage: true,
+        }),
       }),
     ]);
     const utcDay = new Intl.DateTimeFormat("en", {

@@ -135,11 +135,7 @@ describe("summarizeLocalSearchCoverage", () => {
     ]);
     expect(summary).toEqual({
       status: "known",
-      sources: [
-        contoso("teams-a", 1),
-        contoso("teams-b", 2),
-        outlook,
-      ],
+      sources: [contoso("teams-a", 1), contoso("teams-b", 2), outlook],
       requestedFrom: null,
     });
     expect(
@@ -168,7 +164,10 @@ describe("summarizeLocalSearchCoverage", () => {
           known([
             outlook,
             { ...teams, label: 7 } as unknown as SearchCoverageSource,
-            { ...teams, sourceId: undefined } as unknown as SearchCoverageSource,
+            {
+              ...teams,
+              sourceId: undefined,
+            } as unknown as SearchCoverageSource,
             { ...teams, from: "yesterday" },
           ]),
         ),
