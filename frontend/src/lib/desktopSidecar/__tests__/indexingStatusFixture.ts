@@ -1,13 +1,10 @@
 import example from "../../../../../desktop-sidecar-protocol/examples/indexing-statistics.json";
 
+import type { IndexedRange } from "../indexingConfiguration";
 import type {
   IndexingStatusV1Result,
   SourcesListV1Result,
 } from "@erato/desktop-sidecar-protocol";
-
-type IndexedRange = NonNullable<
-  IndexingStatusV1Result["discovery"][number]["indexedRange"]
->;
 
 export const mailboxId = "aabbccdd-1122-4455-8899-001122334455";
 export const sourceId = "a1111111-b222-4333-8444-c55555555555";
@@ -82,7 +79,7 @@ export function multiSourceStatusFixture(): IndexingStatusV1Result {
 /** An Outlook range ending at the fixture's sampledAt, as of protocol 0.1.35. */
 export function indexedRangeFixture(): IndexedRange {
   return {
-    from: { at: "2025-03-14T12:00:00Z", inclusive: false },
+    from: { at: "2025-03-14T12:00:00Z", inclusive: true },
     through: null,
     observedAt: "2026-09-15T12:00:00Z",
     pendingNewer: 0,

@@ -93,25 +93,32 @@ export function IndexingSourceRow({
         id: "sidecar.indexing.range.nothingSearchable",
         message: "Nothing searchable yet",
       });
+    const end = range.through ?? summary.observedAt;
+    if (end === null) return null;
+    // Mail earlier on the day of an exclusive start is not guaranteed, so
+    // start at the next full day unless the range ends before it.
+    const nextDay = new Date(range.from);
+    nextDay.setHours(24, 0, 0, 0);
+    const from = day(
+      range.fromInclusive ? range.from : Math.min(nextDay.getTime(), end),
+    );
     if (range.through !== null)
       return i18n._({
         id: "sidecar.indexing.range.newerPending",
         message:
           "Indexed {from} to {through} · newest items still being indexed",
-        values: { from: day(range.from), through: day(range.through) },
+        values: { from, through: day(range.through) },
       });
-    if (summary.observedAt === null) return null;
-    return new Date(summary.observedAt).toDateString() ===
-      new Date(now).toDateString()
+    return new Date(end).toDateString() === new Date(now).toDateString()
       ? i18n._({
           id: "sidecar.indexing.range.toToday",
           message: "Indexed {from} to today",
-          values: { from: day(range.from) },
+          values: { from },
         })
       : i18n._({
           id: "sidecar.indexing.range.toDate",
           message: "Indexed {from} to {to}",
-          values: { from: day(range.from), to: day(summary.observedAt) },
+          values: { from, to: day(end) },
         });
   };
   const rangeText = rangeLabel();
@@ -308,11 +315,16 @@ export function IndexingSourceRow({
           )}
           {summary.notices.cachedOnly && (
             <p>
-              {t({
-                id: "sidecar.indexing.teamsRecentChats",
-                message:
-                  "Teams keeps only recently opened chats on this device",
-              })}
+              {entry.product === "teams"
+                ? t({
+                    id: "sidecar.indexing.teamsRecentChats",
+                    message:
+                      "Teams keeps only recently opened chats on this device",
+                  })
+                : t({
+                    id: "sidecar.indexing.cachedOnly",
+                    message: "Only items cached on this device can be indexed",
+                  })}
             </p>
           )}
           {entry.editable && (

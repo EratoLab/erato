@@ -320,6 +320,7 @@ describe("source indexing statistics", () => {
       range: {
         kind: "indexed",
         from: Date.parse("2026-06-02T12:00:00Z"),
+        fromInclusive: true,
         through: null,
         olderPending: false,
       },

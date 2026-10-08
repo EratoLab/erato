@@ -5762,6 +5762,11 @@ msgstr "Utilisateur"
 #~ msgstr "{indexed} / {total} pièces jointes indexées"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.cachedOnly"
+msgstr "Seuls les éléments mis en cache sur cet appareil peuvent être indexés"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.caption"
 msgstr "Recherche locale sur cet appareil"

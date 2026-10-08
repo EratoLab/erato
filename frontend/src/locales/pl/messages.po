@@ -5762,6 +5762,11 @@ msgstr "Użytkownik"
 #~ msgstr "Zindeksowane załączniki: {indexed} / {total}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.cachedOnly"
+msgstr "Indeksować można tylko elementy zapisane w pamięci podręcznej na tym urządzeniu"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.caption"
 msgstr "Wyszukiwanie lokalne na tym urządzeniu"

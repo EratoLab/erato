@@ -5762,6 +5762,11 @@ msgstr "Benutzer"
 #~ msgstr "{indexed} / {total} Anhänge indexiert"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.cachedOnly"
+msgstr "Nur auf diesem Gerät zwischengespeicherte Elemente können indexiert werden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.caption"
 msgstr "Lokale Suche auf diesem Gerät"

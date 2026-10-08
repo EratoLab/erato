@@ -404,6 +404,24 @@ describe("mailbox status rendering", () => {
     expect(row.getByText("Checked 5 days ago")).toBeInTheDocument();
   });
 
+  it("starts the period on the next day after an exclusive start", () => {
+    const row = renderStatus(
+      withRange({
+        from: { at: "2025-03-14T12:00:00Z", inclusive: false },
+        olderPending: 5,
+      }),
+    );
+    expect(row.getByText("Indexed Mar 15, 2025 to today")).toBeInTheDocument();
+  });
+
+  it("explains cache-only inventories without Teams wording outside Teams", () => {
+    const row = renderStatus(withRange({ inventory: "futureInventory" }));
+    expect(
+      row.getByText("Only items cached on this device can be indexed"),
+    ).toBeInTheDocument();
+    expect(row.queryByText(/Teams keeps only/)).not.toBeInTheDocument();
+  });
+
   it("shows newer and older items that are still being indexed", () => {
     const row = renderStatus(
       withRange({

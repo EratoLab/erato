@@ -5762,6 +5762,11 @@ msgstr "User"
 #~ msgstr "{indexed} / {total} attachments indexed"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.cachedOnly"
+msgstr "Only items cached on this device can be indexed"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.caption"
 msgstr "Local search on this device"

@@ -226,6 +226,8 @@ export type IndexingRange =
   | {
       kind: "indexed";
       from: number;
+      /** An exclusive `from` leaves documents dated exactly at it unprocessed. */
+      fromInclusive: boolean;
       through: number | null;
       olderPending: boolean;
     }
@@ -244,7 +246,7 @@ export interface IndexingSummary {
   };
 }
 
-type IndexedRange = NonNullable<
+export type IndexedRange = NonNullable<
   IndexingStatusV1Result["discovery"][number]["indexedRange"]
 >;
 
@@ -258,44 +260,50 @@ function timestamp(value: string | null | undefined): number | null {
 
 function reportedRange(
   ranges: IndexedRange[],
-  hideNotScanned: boolean,
+  notScanned: IndexingRange | null,
 ): Pick<IndexingSummary, "range" | "observedAt"> {
   const observed = ranges.map((range) => timestamp(range.observedAt));
   const observedAt = observed.every((at): at is number => at !== null)
     ? Math.min(...observed)
     : null;
-  const reasons = ranges
-    .filter((range) => range.from === null)
-    .map((range) => range.unavailableReason);
-  /* eslint-disable lingui/no-unlocalized-strings -- Protocol unavailable reasons. */
-  if (reasons.includes("not_enumerated"))
-    return {
-      range: hideNotScanned ? null : { kind: "notScanned" },
-      observedAt,
-    };
-  if (
-    reasons.includes("no_searchable_documents") ||
-    reasons.includes("index_not_initialized")
-  )
+  /* eslint-disable lingui/no-unlocalized-strings -- Protocol unavailable reasons and internal range kinds. */
+  if (ranges.some((range) => range.unavailableReason === "not_enumerated"))
+    return { range: notScanned, observedAt };
+  const nothingSearchable = (range: IndexedRange) =>
+    range.unavailableReason === "no_searchable_documents" ||
+    range.unavailableReason === "index_not_initialized";
+  // A source with nothing left to index cannot narrow what its siblings cover.
+  const claimed = ranges.filter(
+    (range) => !(nothingSearchable(range) && range.olderPending === 0),
+  );
+  if (claimed.every(nothingSearchable))
     return { range: { kind: "nothingSearchable" }, observedAt };
   /* eslint-enable lingui/no-unlocalized-strings */
-  if (reasons.length) return { range: null, observedAt };
-  const from = ranges.map((range) => timestamp(range.from?.at));
-  const through = ranges
-    .filter((range) => range.through !== null)
-    .map((range) => timestamp(range.through?.at));
+  const starts = claimed.map((range) => timestamp(range.from?.at));
+  const ends = claimed.map((range) =>
+    timestamp(range.through === null ? range.observedAt : range.through.at),
+  );
   if (
-    !from.every((at): at is number => at !== null) ||
-    !through.every((at): at is number => at !== null) ||
-    (!through.length && observedAt === null)
+    !starts.every((at): at is number => at !== null) ||
+    !ends.every((at): at is number => at !== null)
   )
     return { range: null, observedAt };
+  const from = Math.max(...starts);
+  const through = claimed.some((range) => range.through !== null)
+    ? Math.min(...ends)
+    : null;
+  const end = through ?? observedAt;
+  // Sources whose ranges do not overlap share no covered period.
+  if (end === null || from > end) return { range: null, observedAt };
   return {
     range: {
       kind: "indexed",
-      from: Math.max(...from),
-      through: through.length ? Math.min(...through) : null,
-      olderPending: ranges.some((range) => (range.olderPending ?? 0) > 0),
+      from,
+      fromInclusive: claimed.every(
+        (range, index) => starts[index] !== from || range.from?.inclusive,
+      ),
+      through,
+      olderPending: claimed.some((range) => (range.olderPending ?? 0) > 0),
     },
     observedAt,
   };
@@ -314,6 +322,7 @@ function legacyRange(
     ? {
         kind: "indexed",
         from: Math.min(...dates),
+        fromInclusive: true,
         through: null,
         olderPending: false,
       }
@@ -437,30 +446,49 @@ function indexingSummary(
   else state = "unavailable";
   /* eslint-enable lingui/no-unlocalized-strings */
   // If multiple discovery entries contribute, report the oldest successful scan.
-  const scans = discovery.map((source) => source.lastSuccessfulScanAt);
+  const scans = discovery.map((source) =>
+    timestamp(source.lastSuccessfulScanAt),
+  );
   const lastScan =
-    scans.length &&
-    scans.every((scan) => scan !== null && Number.isFinite(Date.parse(scan)))
-      ? Math.min(...scans.map((scan) => Date.parse(scan ?? "")))
+    scans.length && scans.every((at): at is number => at !== null)
+      ? Math.min(...scans)
       : null;
   const ranges = discovery.map((source) => source.indexedRange);
-  const reported = ranges.every(
-    (range): range is IndexedRange => range !== undefined,
-  );
-  const { range, observedAt } =
-    reported && ranges.length
-      ? reportedRange(
-          ranges,
-          state === "notScanned" ||
-            discovery.some((source) => source.state === "scanning"),
-        )
-      : {
-          range: settled ? legacyRange(rows, lastScan) : null,
-          observedAt: lastScan,
-        };
+  const reported =
+    ranges.length > 0 &&
+    ranges.every((range): range is IndexedRange => range !== undefined);
+  // The status pill already says when a source is being or was never scanned.
+  const notScanned: IndexingRange | null =
+    state === "notScanned" ||
+    discovery.some((source) => source.state === "scanning")
+      ? null
+      : // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal range kind.
+        { kind: "notScanned" };
+  const { range, observedAt } = reported
+    ? reportedRange(ranges, notScanned)
+    : {
+        range:
+          lastScan === null && discovery.length
+            ? notScanned
+            : settled
+              ? legacyRange(rows, lastScan)
+              : null,
+        observedAt: lastScan,
+      };
+  if (state === "disabled")
+    return {
+      state,
+      range: null,
+      observedAt,
+      notices: {
+        unreadable: false,
+        notStoredLocally: false,
+        cachedOnly: false,
+      },
+    };
   return {
     state,
-    range: state === "disabled" ? null : range,
+    range,
     observedAt,
     notices: {
       unreadable: (unindexable ?? 0) > 0,
