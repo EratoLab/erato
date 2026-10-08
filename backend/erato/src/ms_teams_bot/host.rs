@@ -17,7 +17,10 @@ use super::cards::{
 use super::citations::{self, FileSource};
 use super::graph::{GraphIdentity, SharedItem};
 use super::streaming::WORKING_STATUS;
-use crate::db::entity::prelude::{Chats, Messages, MsTeamsConversations, MsTeamsTokenExchanges};
+use crate::db::entity::prelude::{
+    Chats, Messages, MsTeamsConversations, MsTeamsPendingSignIns, MsTeamsRequests,
+    MsTeamsTokenExchanges,
+};
 use crate::db::entity::{ms_teams_conversations, ms_teams_token_exchanges, users};
 use crate::models::message::{
     ContentPart, GenerationRequestContext, MessageSchema, ToolApprovalKind,
@@ -209,6 +212,15 @@ impl Host {
 
     pub async fn find_user(&self, entra_object_id: &str) -> Result<Option<users::Model>, Report> {
         crate::models::user::find_user_by_entra_object_id(&self.app_state.db, entra_object_id).await
+    }
+
+    /// Whether any Teams message got through to Erato on any replica: it left
+    /// a conversation, a pending sign-in or a request behind.
+    pub async fn teams_activity_recorded(&self) -> Result<bool, Report> {
+        let db = &self.app_state.db;
+        Ok(MsTeamsConversations::find().one(db).await?.is_some()
+            || MsTeamsPendingSignIns::find().one(db).await?.is_some()
+            || MsTeamsRequests::find().one(db).await?.is_some())
     }
 
     /// Build the profile a web login would produce, from Graph instead of an

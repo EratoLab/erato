@@ -1,0 +1,40 @@
+{{- if .Values.msTeamsBot.publicIngress.enabled -}}
+{{- if not .Values.msTeamsBot.publicIngress.host -}}
+{{- fail "msTeamsBot.publicIngress.host is required when msTeamsBot.publicIngress.enabled is true" -}}
+{{- end -}}
+{{- $public := .Values.msTeamsBot.publicIngress -}}
+# Public entry point for Azure Bot Service: only the Teams bot messaging
+# endpoint, which the backend authenticates itself. Every other path on this
+# host is unrouted.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ms-teams-bot-ingress
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  {{- with $public.annotations }}
+  annotations:
+    {{- range $key, $value := . }}
+    {{ $key }}: {{ $value | squote }}
+    {{- end }}
+  {{- end }}
+spec:
+  ingressClassName: {{ default .Values.ingress.className $public.className }}
+  {{- if $public.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $public.host | quote }}
+      secretName: {{ $public.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ $public.host | quote }}
+      http:
+        paths:
+          - path: /api/integrations/ms_teams/messages
+            pathType: Exact
+            backend:
+              service:
+                name: {{ printf "%s-erato-app" .Release.Name }}
+                port:
+                  number: 3130
+{{- end }}

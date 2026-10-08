@@ -2,27 +2,40 @@
 
 The customer entry point is `/office-addin/setup` → **Teams**: **Open Azure Cloud
 Shell**, **Copy command**, and **View script**. The page fills the deployment's
-public application IDs and asks for the target tenant and subscription. It never
-collects credentials.
+public application IDs, tenant, connection name and messaging endpoint from
+`/office-addin/teams/bot-setup.json`, and asks for the subscription and, to create
+a bot, its resource group and name. It never collects credentials.
 
-The canonical helper is `site/public/setup/teams/1.0.1/EratoTeamsSetup.ps1`.
+The canonical helper is `site/public/setup/teams/1.1.0/EratoTeamsSetup.ps1`.
 The site publishes it at the same versioned path on `https://erato.chat`.
 `release.json` pins its SHA-256 checksum. The setup page displays this exact source
 inline, and every generated command checks the downloaded bytes before execution.
 Customers paste the command into Cloud Shell PowerShell; they do not download a
 bundle to their machine or upload files.
 
-- Default: read-only checks of the proposed SSO configuration.
-- `-WhatIf`: preview the Entra additions and OAuth connection creation or repair.
+- Default: read-only checks of the Azure Bot, SSO configuration and consent.
+- `-WhatIf`: preview every change: bot creation or endpoint/channel correction,
+  Entra additions, OAuth connection creation or repair, and consent.
 - `-Apply`: display the target and plan and use PowerShell confirmation before
   writes. `-Apply -WhatIf` also performs no writes.
 - `-Json`: sanitized report; no token or secret values.
+- `-SkipConsent`: leave tenant-wide consent to a separate process; the report
+  links the admin consent page.
 
-The helper supports existing single-tenant bots in public Azure with the global
-Bot Framework token service. It preserves existing scopes, redirects, permissions,
-credentials and bot identity, and refuses conflicting OAuth connections. Consent,
-Erato deployment and the Teams package update remain separate customer steps.
-Local execution requires PowerShell 7.2+ and Azure CLI; Cloud Shell is the default.
+Version 1.1.0 finds the Azure Bot for `BotAppId` or, with `-ResourceGroup` and
+`-BotName`, creates it: single-tenant with the existing app registration, Free
+(F0), `global`, registering `Microsoft.BotService` first when needed. It sets the
+messaging endpoint (`-MessagingEndpoint`, default `<BaseUrl>/api/integrations/ms_teams/messages`)
+and enables the Teams channel on an existing bot, but never changes a bot of
+another tenant, type or app registration. A failed consent grant (missing Entra
+role) keeps the other changes and reports the admin consent link.
+
+The helper supports single-tenant bots in public Azure with the global Bot
+Framework token service. It preserves existing scopes, redirects, permissions,
+credentials and bot identity, and refuses conflicting OAuth connections. Erato
+itself needs no change afterwards; the Teams package upload remains a customer
+step. Local execution requires PowerShell 7.2+ and Azure CLI; Cloud Shell is the
+default.
 
 The resource URI ends in `botid-<BotAppId>`, including when `AuthAppId` belongs
 to a separate authentication registration. Version 1.0.1 corrects the previous

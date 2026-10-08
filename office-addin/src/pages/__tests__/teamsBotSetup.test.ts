@@ -8,7 +8,11 @@ import {
   createTeamsSetupCommand,
   proposedSsoResource,
   readTeamsBotSetup,
+  readTeamsBotSetupInfo,
   teamsHelperRelease,
+  validBotName,
+  validMessagingEndpoint,
+  validResourceGroupName,
 } from "../teamsBotSetup";
 
 const botId = "11111111-1111-1111-1111-111111111111";
@@ -139,5 +143,116 @@ describe("Teams setup delivery", () => {
         "x; exit",
       ),
     ).toThrow("connection names");
+  });
+});
+
+describe("Teams bot setup info", () => {
+  const info = {
+    botAppId: botId,
+    authAppId,
+    tenantId: tenant,
+    connectionName: "graph-sso",
+    ssoResource: resource,
+    messagingEndpoint:
+      "https://bot.example.com/api/integrations/ms_teams/messages",
+    messagingEndpointConfigured: true,
+    ssoEnabled: true,
+    status: { activityReceived: true, credential: "accepted" },
+  };
+
+  it("reads the values the deployment uses", () => {
+    expect(readTeamsBotSetupInfo(info)).toEqual(info);
+    expect(
+      readTeamsBotSetupInfo({ ...info, status: { credential: "other" } })
+        ?.status,
+    ).toEqual({ activityReceived: false, credential: "unknown" });
+    expect(
+      readTeamsBotSetupInfo({
+        ...info,
+        ssoEnabled: false,
+        status: { credential: "app_not_in_tenant" },
+      }),
+    ).toMatchObject({
+      ssoEnabled: false,
+      status: { credential: "app_not_in_tenant" },
+    });
+  });
+
+  it("ignores missing or unsafe setup info", () => {
+    expect(readTeamsBotSetupInfo("<OfficeApp />")).toBeNull();
+    expect(readTeamsBotSetupInfo({ ...info, tenantId: "" })).toBeNull();
+    expect(
+      readTeamsBotSetupInfo({
+        ...info,
+        messagingEndpoint:
+          "http://bot.example.com/api/integrations/ms_teams/messages",
+      }),
+    ).toBeNull();
+  });
+
+  it("validates endpoint, resource group and bot names", () => {
+    expect(validMessagingEndpoint(info.messagingEndpoint)).toBe(true);
+    for (const endpoint of [
+      "https://bot.example.com/",
+      "https://bot.example.com/api/integrations/ms_teams/messages?x=1",
+      "https://user@bot.example.com/api/integrations/ms_teams/messages",
+    ]) {
+      expect(validMessagingEndpoint(endpoint)).toBe(false);
+    }
+    expect(validResourceGroupName("rg-erato_prod.(1)")).toBe(true);
+    expect(validResourceGroupName("rg.")).toBe(false);
+    expect(validResourceGroupName("rg'; exit")).toBe(false);
+    expect(validBotName("erato-teams-bot")).toBe(true);
+    expect(validBotName("-bot")).toBe(false);
+    expect(validBotName("b")).toBe(false);
+  });
+
+  it("passes the messaging endpoint and an explicit bot to the helper", () => {
+    const defaults = command();
+    expect(defaults).toContain(
+      "MessagingEndpoint = 'https://erato.example.com/api/integrations/ms_teams/messages'",
+    );
+    expect(defaults).not.toContain("ResourceGroup");
+    const targeted = createTeamsSetupCommand(
+      bot,
+      origin,
+      tenant,
+      subscription,
+      "graph",
+      "graph-sso",
+      "apply",
+      {
+        messagingEndpoint: info.messagingEndpoint,
+        resourceGroup: "rg-erato",
+        botName: "erato-teams-bot",
+      },
+    );
+    expect(targeted).toContain(
+      `MessagingEndpoint = '${info.messagingEndpoint}'`,
+    );
+    expect(targeted).toContain("ResourceGroup = 'rg-erato'");
+    expect(targeted).toContain("BotName = 'erato-teams-bot'");
+  });
+
+  it("rejects an incomplete bot target or unsafe endpoint", () => {
+    const attempt =
+      (target: Parameters<typeof createTeamsSetupCommand>[7]) => () =>
+        createTeamsSetupCommand(
+          bot,
+          origin,
+          tenant,
+          subscription,
+          "graph",
+          "graph-sso",
+          "check",
+          target,
+        );
+    expect(attempt({ resourceGroup: "rg-erato" })).toThrow("bot name");
+    expect(attempt({ resourceGroup: "rg-erato", botName: "x'; exit" })).toThrow(
+      "bot name",
+    );
+    expect(attempt({ messagingEndpoint: "https://bot.example.com/" })).toThrow(
+      "messaging endpoint",
+    );
   });
 });

@@ -178,15 +178,17 @@ describe("AddinSetupRoute Teams bot section", () => {
   const originalOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
   const botId = "11111111-2222-3333-4444-555555555555";
 
-  function stubTeamsManifest(manifest: object) {
+  function stubTeamsManifest(manifest: object, setupInfo?: object) {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => ({
-        ok: true,
+        ok: !String(url).includes("teams/bot-setup.json") || !!setupInfo,
         text: async () =>
           String(url).includes("teams/manifest.json")
             ? JSON.stringify(manifest)
-            : "<OfficeApp />",
+            : String(url).includes("teams/bot-setup.json")
+              ? JSON.stringify(setupInfo)
+              : "<OfficeApp />",
       })),
     );
   }
@@ -211,6 +213,20 @@ describe("AddinSetupRoute Teams bot section", () => {
     if (originalOffice) {
       Object.defineProperty(globalThis, "Office", originalOffice);
     }
+  });
+
+  it("says when the deployment's settings could not be read", async () => {
+    stubTeamsManifest({
+      bots: [{ botId }],
+      webApplicationInfo: { id: authAppId, resource: `api://${authAppId}` },
+    });
+    await selectTeams();
+    expect(
+      screen.getByText(/could not read the deployment’s Teams bot settings/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/This package also contains the Teams bot/),
+    ).toBeVisible();
   });
 
   it("stays hidden when the manifest has no bot", async () => {
@@ -250,7 +266,7 @@ describe("AddinSetupRoute Teams bot section", () => {
     await selectTeams();
     expect(screen.getByRole("heading", { name: "Teams bot" })).toBeVisible();
     expect(
-      screen.getByText(/Azure settings have not been checked/),
+      screen.getByText(/The first command only reads Azure and Entra/),
     ).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Open Azure Cloud Shell" }),
@@ -288,7 +304,14 @@ describe("AddinSetupRoute Teams bot section", () => {
       target: { value: "wrong" },
     });
     expect(screen.getByRole("button", { name: "Copy command" })).toBeDisabled();
+    // No interruption while typing; the error appears once the field is left.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    fireEvent.blur(screen.getByLabelText("Tenant ID"));
     expect(screen.getByRole("alert")).toHaveTextContent("Enter complete IDs");
+    expect(screen.getByLabelText("Tenant ID")).toHaveAttribute(
+      "aria-describedby",
+      "teams-target-error",
+    );
   });
 
   it("provides a selectable command if clipboard permission is denied", async () => {
@@ -329,5 +352,144 @@ describe("AddinSetupRoute Teams bot section", () => {
       "The check can use the current connection",
     );
     expect(screen.getByRole("button", { name: "Copy command" })).toBeEnabled();
+  });
+
+  describe("with the deployment's setup info", () => {
+    const publicEndpoint =
+      "https://teams-bot.example.com/api/integrations/ms_teams/messages";
+    const setupInfo = {
+      botAppId: botId,
+      authAppId,
+      tenantId,
+      connectionName: "graph-sso",
+      ssoResource: `api://${window.location.host}/botid-${botId}`,
+      messagingEndpoint: publicEndpoint,
+      messagingEndpointConfigured: true,
+      status: { activityReceived: false, credential: "unknown" },
+    };
+
+    async function selectTeamsWithInfo(info: object = setupInfo) {
+      stubTeamsManifest(
+        {
+          bots: [{ botId }],
+          webApplicationInfo: {
+            id: authAppId,
+            resource: `api://${window.location.host}/botid-${botId}`,
+          },
+        },
+        info,
+      );
+      await selectTeams();
+      await waitFor(() =>
+        expect(screen.getByLabelText<HTMLInputElement>("Tenant ID").value).toBe(
+          tenantId,
+        ),
+      );
+    }
+
+    it("lists prerequisites with the configured public endpoint", async () => {
+      await selectTeamsWithInfo();
+      expect(
+        screen.getByRole("heading", { name: "Before you start" }),
+      ).toBeVisible();
+      expect(screen.getAllByText(publicEndpoint)[0]).toBeVisible();
+      expect(
+        screen.queryByText(/This is the address this page was opened at/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/No Teams message has reached Erato yet/),
+      ).toBeVisible();
+      // Erato already uses these values: no redeploy step for its administrator.
+      expect(
+        screen.queryByText("Settings for your Erato administrator"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("passes the endpoint and a new bot to the helper command", async () => {
+      await selectTeamsWithInfo();
+      fireEvent.change(screen.getByLabelText("Subscription ID"), {
+        target: { value: subscriptionId },
+      });
+      fireEvent.change(screen.getByLabelText("Resource group"), {
+        target: { value: "rg-erato" },
+      });
+      fireEvent.blur(screen.getByLabelText("Resource group"));
+      expect(screen.getByLabelText("Bot name")).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
+      expect(screen.getByLabelText("Resource group")).toHaveAttribute(
+        "aria-invalid",
+        "false",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Enter both a resource group and a bot name",
+      );
+      expect(
+        screen.getByRole("button", { name: "Copy command" }),
+      ).toBeDisabled();
+      fireEvent.change(screen.getByLabelText("Bot name"), {
+        target: { value: "erato-teams-bot" },
+      });
+      const command =
+        screen.getByLabelText<HTMLTextAreaElement>("Copy command").value;
+      expect(command).toContain(`MessagingEndpoint = '${publicEndpoint}'`);
+      expect(command).toContain("ResourceGroup = 'rg-erato'");
+      expect(command).toContain("BotName = 'erato-teams-bot'");
+      expect(command).toContain(`TenantId = '${tenantId}'`);
+    });
+
+    it("shows what Erato has seen and refreshes it", async () => {
+      await selectTeamsWithInfo({
+        ...setupInfo,
+        messagingEndpointConfigured: false,
+        status: { activityReceived: true, credential: "rejected" },
+      });
+      expect(
+        screen.getByText(/This is the address this page was opened at/),
+      ).toBeVisible();
+      expect(
+        screen.getByText(/A Teams message from this tenant arrived/),
+      ).toBeVisible();
+      expect(
+        screen.getByText(/Entra rejected Erato’s bot credential/),
+      ).toBeVisible();
+      const requests = () =>
+        vi
+          .mocked(globalThis.fetch)
+          .mock.calls.filter(([url]) => String(url).includes("bot-setup.json"))
+          .length;
+      const before = requests();
+      fireEvent.click(screen.getByRole("button", { name: "Refresh status" }));
+      await waitFor(() => expect(requests()).toBe(before + 1));
+    });
+
+    it("explains a bot app unknown to the tenant", async () => {
+      await selectTeamsWithInfo({
+        ...setupInfo,
+        status: { activityReceived: false, credential: "app_not_in_tenant" },
+      });
+      expect(
+        screen.getByText(/Entra does not find Erato’s bot app in this tenant/),
+      ).toBeVisible();
+    });
+
+    it("asks to turn single sign-on on when the deployment keeps it off", async () => {
+      await selectTeamsWithInfo({ ...setupInfo, ssoEnabled: false });
+      expect(
+        screen.getByText(/Single sign-on is turned off in this deployment/),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/sso_enabled = true/)).toBeInTheDocument();
+    });
+
+    it("asks for Erato settings when a different connection is chosen", async () => {
+      await selectTeamsWithInfo();
+      fireEvent.change(screen.getByLabelText("SSO connection name"), {
+        target: { value: "teams-sso" },
+      });
+      expect(
+        screen.getByText("Settings for your Erato administrator"),
+      ).toBeInTheDocument();
+    });
   });
 });

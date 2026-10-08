@@ -4,8 +4,9 @@
 
 use eyre::{Report, WrapErr, eyre};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
@@ -14,12 +15,29 @@ const BOT_FRAMEWORK_SCOPE: &str = "https://api.botframework.com/.default";
 const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(300);
 /// Hosts that serve Teams attachment content and expect the bot's token.
 /// Anything else (for example SharePoint download URLs) never sees it.
+/// A leading dot matches the domain and its subdomains; anything else only
+/// that exact host.
 const BOT_TOKEN_DOWNLOAD_HOSTS: [&str; 4] = [
     "smba.trafficmanager.net",
     ".botframework.com",
     ".skype.com",
     ".teams.microsoft.com",
 ];
+/// Hosts attachment content may be downloaded from at all, including every
+/// redirect hop: the Teams hosts above plus SharePoint/OneDrive, where files
+/// uploaded in personal chats live. Attachment URLs arrive in the activity
+/// body, so nothing else (internal hosts in particular) is ever fetched.
+const ATTACHMENT_DOWNLOAD_HOSTS: [&str; 5] = [
+    "smba.trafficmanager.net",
+    ".botframework.com",
+    ".skype.com",
+    ".teams.microsoft.com",
+    ".sharepoint.com",
+];
+const MAX_DOWNLOAD_REDIRECTS: usize = 5;
+/// The setup status checks the credential on demand from a public route, so
+/// at most one token request per interval.
+const CREDENTIAL_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 /// Conversation and activity IDs carry `:`, `;`, `@` and `=`.
 const PATH_SEGMENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'.').remove(b'_');
 
@@ -91,27 +109,94 @@ struct ResourceResponse {
     id: Option<String>,
 }
 
+/// Whether Entra last accepted the bot's credential, shown on the setup page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialState {
+    /// No token was requested yet.
+    Unknown,
+    Accepted,
+    /// Wrong or expired secret.
+    Rejected,
+    /// Entra does not know the app in this tenant: wrong app or tenant ID,
+    /// or the app registration has no service principal yet.
+    AppNotInTenant,
+}
+
+impl CredentialState {
+    /// Classify a failed token response by Entra's `error_codes`.
+    fn from_token_error(body: &[u8]) -> Self {
+        let codes = serde_json::from_slice::<Value>(body)
+            .ok()
+            .and_then(|body| body.get("error_codes").cloned())
+            .and_then(|codes| serde_json::from_value::<Vec<u64>>(codes).ok())
+            .unwrap_or_default();
+        // AADSTS7000229: no service principal; AADSTS700016: app not found.
+        if codes.iter().any(|code| matches!(code, 7_000_229 | 700_016)) {
+            Self::AppNotInTenant
+        } else {
+            Self::Rejected
+        }
+    }
+}
+
 pub struct Connector {
     http: reqwest::Client,
+    /// Attachment downloads only; see [`download_client`].
+    downloads: reqwest::Client,
     app_id: String,
     app_password: String,
     tenant_id: String,
     token: Mutex<Option<(String, Instant)>>,
+    credential: AtomicU8,
+    next_credential_check: Mutex<Option<Instant>>,
 }
 
 impl Connector {
     pub fn new(
         http: reqwest::Client,
+        downloads: reqwest::Client,
         app_id: String,
         app_password: String,
         tenant_id: String,
     ) -> Self {
         Self {
             http,
+            downloads,
             app_id,
             app_password,
             tenant_id,
             token: Mutex::new(None),
+            credential: AtomicU8::new(CredentialState::Unknown as u8),
+            next_credential_check: Mutex::new(None),
+        }
+    }
+
+    /// Whether Entra accepts the bot's credential, requesting a token when
+    /// none is cached, at most once per [`CREDENTIAL_CHECK_INTERVAL`]. Works
+    /// before the Azure Bot exists: the token only needs the app registration.
+    pub async fn check_credential(&self) -> CredentialState {
+        {
+            let mut next = self.next_credential_check.lock().await;
+            if next.is_some_and(|at| Instant::now() < at) {
+                return self.credential_state();
+            }
+            *next = Some(Instant::now() + CREDENTIAL_CHECK_INTERVAL);
+        }
+        if let Err(error) = self.app_token().await {
+            tracing::warn!(%error, "Teams bot credential check failed");
+        }
+        self.credential_state()
+    }
+
+    pub fn credential_state(&self) -> CredentialState {
+        match self.credential.load(Ordering::Relaxed) {
+            value if value == CredentialState::Accepted as u8 => CredentialState::Accepted,
+            value if value == CredentialState::Rejected as u8 => CredentialState::Rejected,
+            value if value == CredentialState::AppNotInTenant as u8 => {
+                CredentialState::AppNotInTenant
+            }
+            _ => CredentialState::Unknown,
         }
     }
 
@@ -121,7 +206,13 @@ impl Connector {
 
     #[cfg(test)]
     pub(super) fn with_test_token(http: reqwest::Client) -> Self {
-        let mut connector = Self::new(http, "bot".into(), "unused".into(), "tenant".into());
+        let mut connector = Self::new(
+            http.clone(),
+            http,
+            "bot".into(),
+            "unused".into(),
+            "tenant".into(),
+        );
         connector.token = Mutex::new(Some((
             "test-bot-token".into(),
             Instant::now() + Duration::from_secs(600),
@@ -136,6 +227,8 @@ impl Connector {
         if let Some((token, valid_until)) = cached.as_ref()
             && Instant::now() < *valid_until
         {
+            self.credential
+                .store(CredentialState::Accepted as u8, Ordering::Relaxed);
             return Ok(token.clone());
         }
         let url = format!(
@@ -161,9 +254,15 @@ impl Connector {
         let status = response.status();
         let body = response.bytes().await?;
         if !status.is_success() {
+            if status.is_client_error() {
+                let state = CredentialState::from_token_error(&body);
+                self.credential.store(state as u8, Ordering::Relaxed);
+            }
             // The body may echo request details; log the status only.
             return Err(eyre!("bot token request failed with {status}"));
         }
+        self.credential
+            .store(CredentialState::Accepted as u8, Ordering::Relaxed);
         let token: TokenResponse = serde_json::from_slice(&body)?;
         let valid_until = Instant::now()
             + Duration::from_secs(token.expires_in).saturating_sub(TOKEN_REFRESH_MARGIN);
@@ -290,15 +389,15 @@ impl Connector {
     /// content hosts; pre-authenticated URLs are fetched without it.
     pub async fn download(&self, url: &str, max_bytes: usize) -> Result<Vec<u8>, Report> {
         let parsed = url::Url::parse(url).wrap_err("invalid attachment URL")?;
-        if parsed.scheme() != "https" {
-            return Err(eyre!("attachment URL must use https"));
+        if !download_url_allowed(&parsed) {
+            return Err(eyre!(
+                "attachment URL is not an https URL on a Teams or SharePoint host"
+            ));
         }
         let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
-        let mut request = self.http.get(parsed);
-        if BOT_TOKEN_DOWNLOAD_HOSTS
-            .iter()
-            .any(|allowed| host == allowed.trim_start_matches('.') || host.ends_with(allowed))
-        {
+        let mut request = self.downloads.get(parsed);
+        if host_in(&host, &BOT_TOKEN_DOWNLOAD_HOSTS) {
+            // reqwest drops the header if a redirect leaves this host.
             request = request.bearer_auth(self.app_token().await?);
         }
         let response = request.send().await?;
@@ -310,6 +409,42 @@ impl Connector {
         }
         read_limited(response, max_bytes).await
     }
+}
+
+/// The client for attachment content: https only, and every redirect hop must
+/// stay on [`ATTACHMENT_DOWNLOAD_HOSTS`].
+pub fn download_client(timeout: Duration) -> reqwest::Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .https_only(true)
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() > MAX_DOWNLOAD_REDIRECTS {
+                attempt.error("too many redirects")
+            } else if download_url_allowed(attempt.url()) {
+                attempt.follow()
+            } else {
+                attempt.error("attachment redirect left the allowed hosts")
+            }
+        }))
+        .build()
+}
+
+fn download_url_allowed(url: &url::Url) -> bool {
+    url.scheme() == "https"
+        && url
+            .host_str()
+            .is_some_and(|host| host_in(&host.to_ascii_lowercase(), &ATTACHMENT_DOWNLOAD_HOSTS))
+}
+
+/// `.example.com` matches `example.com` and its subdomains; `example.com`
+/// matches only itself.
+fn host_in(host: &str, patterns: &[&str]) -> bool {
+    patterns
+        .iter()
+        .any(|pattern| match pattern.strip_prefix('.') {
+            Some(domain) => host == domain || host.ends_with(pattern),
+            None => host == *pattern,
+        })
 }
 
 /// Read a response body, refusing anything larger than `max_bytes`.
@@ -348,7 +483,82 @@ fn encode(segment: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{ActivityError, encode};
+    use super::{
+        ATTACHMENT_DOWNLOAD_HOSTS, ActivityError, BOT_TOKEN_DOWNLOAD_HOSTS, download_url_allowed,
+        encode, host_in,
+    };
+
+    #[test]
+    fn classifies_token_errors_by_entra_code() {
+        use super::CredentialState;
+        let error = |codes: &str| {
+            CredentialState::from_token_error(
+                format!(r#"{{"error":"invalid_client","error_codes":{codes}}}"#).as_bytes(),
+            )
+        };
+        assert_eq!(error("[7000215]"), CredentialState::Rejected);
+        assert_eq!(error("[7000222]"), CredentialState::Rejected);
+        assert_eq!(error("[7000229]"), CredentialState::AppNotInTenant);
+        assert_eq!(error("[700016]"), CredentialState::AppNotInTenant);
+        assert_eq!(
+            CredentialState::from_token_error(b"not json"),
+            CredentialState::Rejected
+        );
+    }
+
+    #[tokio::test]
+    async fn credential_check_uses_the_cached_token_without_a_request() {
+        let connector = super::Connector::with_test_token(reqwest::Client::new());
+        assert_eq!(
+            connector.check_credential().await,
+            super::CredentialState::Accepted
+        );
+    }
+
+    #[test]
+    fn matches_exact_hosts_exactly_and_dotted_entries_as_domains() {
+        assert!(host_in(
+            "smba.trafficmanager.net",
+            &BOT_TOKEN_DOWNLOAD_HOSTS
+        ));
+        assert!(!host_in(
+            "attackersmba.trafficmanager.net",
+            &BOT_TOKEN_DOWNLOAD_HOSTS
+        ));
+        assert!(host_in("us-api.asm.skype.com", &BOT_TOKEN_DOWNLOAD_HOSTS));
+        assert!(host_in("skype.com", &BOT_TOKEN_DOWNLOAD_HOSTS));
+        assert!(!host_in("evilskype.com", &BOT_TOKEN_DOWNLOAD_HOSTS));
+        assert!(!host_in(
+            "contoso-my.sharepoint.com",
+            &BOT_TOKEN_DOWNLOAD_HOSTS
+        ));
+        assert!(host_in(
+            "contoso-my.sharepoint.com",
+            &ATTACHMENT_DOWNLOAD_HOSTS
+        ));
+    }
+
+    #[test]
+    fn downloads_only_https_urls_on_teams_and_sharepoint_hosts() {
+        let allowed = |url: &str| download_url_allowed(&url::Url::parse(url).unwrap());
+        assert!(allowed(
+            "https://contoso-my.sharepoint.com/personal/a/_layouts/15/download.aspx?UniqueId=1"
+        ));
+        assert!(allowed(
+            "https://smba.trafficmanager.net/emea/v3/attachments/1/views/original"
+        ));
+        for url in [
+            "http://contoso-my.sharepoint.com/file",
+            "https://localhost/file",
+            "https://127.0.0.1/file",
+            "https://169.254.169.254/metadata",
+            "https://erato.internal.example/api",
+            "https://sharepoint.com.evil.example/file",
+            "https://attackersmba.trafficmanager.net/file",
+        ] {
+            assert!(!allowed(url), "{url} must not be fetched");
+        }
+    }
 
     #[test]
     fn recognizes_both_live_stop_spellings_without_treating_other_stream_errors_as_stop() {

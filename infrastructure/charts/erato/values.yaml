@@ -66,13 +66,42 @@ msTeamsBot:
   directRoute:
     # -- Route the Microsoft Teams bot endpoint (`/api/integrations/ms_teams/messages`, exact path) straight to the backend Service instead of through oauth2-proxy, which strips the Bot Connector's `Authorization` header. The backend verifies that token itself. Only relevant while oauth2-proxy is enabled; enable together with `integrations.ms_office.teams.bot` in the Erato configuration.
     enabled: false
-    # -- NetworkPolicy peers (for example the ingress controller or Gateway pods) allowed to reach the backend port for the direct route. Required while `backend.networkPolicy.enabled` is true; keep it narrow, because these peers reach every backend route on that port.
+    # -- NetworkPolicy peers (for example the ingress controller or Gateway pods) allowed to reach the backend port for the direct route and `msTeamsBot.publicIngress`. Required while `backend.networkPolicy.enabled` is true; keep it narrow, because these peers reach every backend route on that port.
     # Example:
     # ingressFrom:
     #   - namespaceSelector:
     #       matchLabels:
     #         kubernetes.io/metadata.name: ingress-nginx
     ingressFrom: []
+  appPassword:
+    # -- Existing Secret holding the bot's client secret, passed to the backend as `integrations.ms_office.teams.bot.app_password`. The bot uses the add-in's Entra app registration by default, so this can point at the secret the oauth2-proxy client secret already lives in; no new credential is needed.
+    # Example:
+    # existingSecret:
+    #   name: erato-secrets
+    #   key: OAUTH2_PROXY_CLIENT_SECRET
+    existingSecret:
+      # -- Name of the Secret
+      name: ""
+      # -- Key within the Secret
+      key: ""
+  publicIngress:
+    # -- Render a separate Ingress that routes only the exact path `/api/integrations/ms_teams/messages` (the backend accepts only POST there) on a public hostname, for deployments whose main host is internal-only. Azure Bot Service must reach the messaging endpoint from the internet; everything else on this host returns 404. Set `integrations.ms_office.teams.bot.messaging_endpoint` to the same hostname. Requires `msTeamsBot.directRoute.ingressFrom` while `backend.networkPolicy.enabled` is true.
+    enabled: false
+    # -- Public hostname of the messaging endpoint
+    host: ""
+    # -- IngressClass for the public Ingress, for example a controller in a DMZ. Defaults to `ingress.className`.
+    className: ""
+    # -- Annotations for the public Ingress, for example rate limits or a body size limit of about 256 KB
+    # Example (ingress-nginx):
+    # annotations:
+    #   nginx.ingress.kubernetes.io/proxy-body-size: 256k
+    #   nginx.ingress.kubernetes.io/limit-rps: "20"
+    annotations: {}
+    tls:
+      # -- Enable TLS for the public hostname. Azure Bot Service requires a certificate from a publicly trusted CA.
+      enabled: false
+      # -- Secret containing the TLS certificate
+      secretName: ""
 
 oauth2Proxy:
   # -- Enable OAuth2 Proxy for authentication

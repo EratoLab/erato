@@ -740,6 +740,46 @@ async fn teams_app_manifest(
     }
 }
 
+/// `GET /office-addin/teams/bot-setup.json`: the values the setup page needs
+/// to guide the Teams bot setup, for the address it was opened at. Public like
+/// the manifest; `404` while the bot is disabled.
+async fn teams_bot_setup(
+    State(app_state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<TeamsManifestQuery>,
+) -> Response {
+    let Some(bot) = app_state.ms_teams_bot.as_deref() else {
+        return (StatusCode::NOT_FOUND, "The Teams bot is disabled").into_response();
+    };
+    let base_url = match query.base_url {
+        Some(value) => normalize_manifest_base_url(&value),
+        None => derive_manifest_base_url(&headers),
+    };
+    let base_url = match base_url {
+        Ok(base_url) => base_url,
+        Err(message) => return (StatusCode::BAD_REQUEST, message).into_response(),
+    };
+    let status = bot
+        .setup_status(&crate::ms_teams_bot::host::Host::new(app_state.clone()))
+        .await;
+    match crate::ms_teams_bot::SetupInfo::new(
+        &app_state.config.integrations.ms_office.teams.bot,
+        &base_url,
+        status,
+    ) {
+        Ok(info) => (
+            [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
+            Json(info),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to describe the Teams bot setup: {error}"),
+        )
+            .into_response(),
+    }
+}
+
 async fn teams_app_package(
     State(app_state): State<AppState>,
     headers: HeaderMap,
@@ -905,6 +945,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/office-addin/teams/app-package.zip",
             get(teams_app_package),
         )
+        .route("/office-addin/teams/bot-setup.json", get(teams_bot_setup))
         .route(
             crate::ms_teams_bot::MESSAGES_ROUTE,
             axum::routing::post(crate::ms_teams_bot::messages_route),

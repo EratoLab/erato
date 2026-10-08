@@ -28,30 +28,39 @@ pub mod user_token;
 use crate::state::AppState;
 use activity::Activity;
 use axum::Json;
-use axum::body::Bytes;
+use axum::body::Body;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use connector::Connector;
-use erato_config::config::TeamsBotConfig;
+use connector::{Connector, CredentialState};
+use erato_config::config::{MsOfficeTeamsAppConfig, TeamsBotConfig};
 use eyre::{Report, eyre};
 use graph::GraphIdentity;
 use host::Host;
-use inbound_auth::InboundAuth;
+use inbound_auth::{InboundAuth, Rejection};
 use sea_orm::prelude::Uuid;
+use serde::Serialize;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use user_token::UserTokenClient;
 
 /// The `X-Erato-Platform` value recorded on messages sent through Teams.
 pub const TEAMS_PLATFORM: &str = "teams";
 /// Path of the messaging endpoint configured on the Azure Bot resource.
-pub const MESSAGES_ROUTE: &str = "/api/integrations/ms_teams/messages";
+pub const MESSAGES_ROUTE: &str = erato_config::config::TEAMS_BOT_MESSAGES_PATH;
+/// Teams caps a message at about 100 KB; card actions and file metadata stay
+/// well below this.
+const MAX_ACTIVITY_BYTES: usize = 256 * 1024;
 const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const IDENTITY_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 
 pub struct TeamsBotSettings {
     pub tenant_id: String,
+    /// The Teams app's short name, as users see the bot.
+    pub app_name: String,
+    /// The personal tab's name, when the Teams app ships the tab.
+    pub tab_name: Option<String>,
     pub public_base_url: Option<String>,
     pub assistant_id: Option<Uuid>,
     pub context_message_count: u32,
@@ -67,11 +76,43 @@ pub struct TeamsBot {
     /// Graph identity and groups per Entra object ID, to spare two Graph
     /// calls on every message.
     identities: moka::future::Cache<String, (GraphIdentity, Vec<String>)>,
+    /// Whether an authenticated activity from the tenant arrived since the
+    /// start, shown on the setup page.
+    activity_received: AtomicBool,
+}
+
+/// What the setup page needs to guide the bot setup. Served on the public
+/// setup route: identifiers that also appear in the Teams package, never
+/// secrets.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupInfo {
+    pub bot_app_id: String,
+    pub auth_app_id: Option<String>,
+    pub tenant_id: String,
+    pub connection_name: String,
+    pub sso_resource: Option<String>,
+    pub messaging_endpoint: String,
+    /// Whether `messaging_endpoint` comes from configuration rather than the
+    /// address the setup page was opened at.
+    pub messaging_endpoint_configured: bool,
+    pub sso_enabled: bool,
+    pub status: SetupStatus,
+}
+
+/// What Erato has observed: activity across all instances, the credential
+/// as checked by the instance answering.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupStatus {
+    pub activity_received: bool,
+    pub credential: CredentialState,
 }
 
 impl TeamsBot {
     /// The bot runtime, or `None` when the bot is disabled.
-    pub fn from_config(config: &TeamsBotConfig) -> Result<Option<Arc<Self>>, Report> {
+    pub fn from_config(app: &MsOfficeTeamsAppConfig) -> Result<Option<Arc<Self>>, Report> {
+        let config = &app.bot;
         if !config.enabled {
             return Ok(None);
         }
@@ -100,6 +141,8 @@ impl TeamsBot {
         Ok(Some(Arc::new(Self {
             settings: TeamsBotSettings {
                 tenant_id: tenant_id.clone(),
+                app_name: app.manifest.short_name.clone(),
+                tab_name: app.enabled.then(|| app.manifest.tab_name.clone()),
                 public_base_url: config
                     .public_base_url
                     .as_deref()
@@ -115,12 +158,79 @@ impl TeamsBot {
                 connection_name,
                 app_id.clone(),
             ),
-            connector: Connector::new(http, app_id, app_password, tenant_id),
+            connector: Connector::new(
+                http,
+                connector::download_client(HTTP_TIMEOUT)?,
+                app_id,
+                app_password,
+                tenant_id,
+            ),
             identities: moka::future::Cache::builder()
                 .time_to_live(IDENTITY_CACHE_TTL)
                 .max_capacity(10_000)
                 .build(),
+            activity_received: AtomicBool::new(false),
         })))
+    }
+
+    /// For the setup page: replicas share activity through the database;
+    /// this one also checks the credential, rate limited. Once activity was
+    /// seen, it is remembered, so later calls need no query.
+    pub async fn setup_status(&self, host: &Host) -> SetupStatus {
+        let activity_received = self.activity_received.load(Ordering::Relaxed)
+            || host
+                .teams_activity_recorded()
+                .await
+                .unwrap_or_else(|error| {
+                    tracing::warn!(%error, "Could not read recorded Teams activity");
+                    false
+                });
+        if activity_received {
+            self.activity_received.store(true, Ordering::Relaxed);
+        }
+        SetupStatus {
+            activity_received,
+            credential: self.connector.check_credential().await,
+        }
+    }
+}
+
+impl SetupInfo {
+    /// Setup values for a bot whose configuration has defaults applied, as
+    /// seen from `base_url`, the address the setup page was opened at.
+    pub fn new(
+        config: &TeamsBotConfig,
+        base_url: &str,
+        status: SetupStatus,
+    ) -> Result<Self, Report> {
+        let required = |value: &Option<String>, key: &str| {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| eyre!("Teams bot `{key}` is required"))
+        };
+        let base = url::Url::parse(base_url)?;
+        let authority = match (base.host_str(), base.port()) {
+            (Some(host), Some(port)) => format!("{host}:{port}"),
+            (Some(host), None) => host.to_string(),
+            (None, _) => return Err(eyre!("setup base URL has no host")),
+        };
+        let configured_endpoint = config.messaging_endpoint_url();
+        Ok(Self {
+            bot_app_id: required(&config.app_id, "app_id")?,
+            auth_app_id: config.sso_app_id.clone(),
+            tenant_id: required(&config.tenant_id, "tenant_id")?,
+            connection_name: required(&config.oauth_connection_name, "oauth_connection_name")?,
+            sso_resource: config.sso_resource_for_host(&authority),
+            messaging_endpoint_configured: configured_endpoint.is_some(),
+            sso_enabled: config.sso_enabled,
+            messaging_endpoint: configured_endpoint.unwrap_or_else(|| {
+                format!("{}{MESSAGES_ROUTE}", base.origin().ascii_serialization())
+            }),
+            status,
+        })
     }
 }
 
@@ -131,6 +241,8 @@ impl TeamsBot {
         Self {
             settings: TeamsBotSettings {
                 tenant_id: "tenant".into(),
+                app_name: "Erato".into(),
+                tab_name: Some("Erato".into()),
                 public_base_url: None,
                 assistant_id: None,
                 context_message_count: 0,
@@ -141,37 +253,46 @@ impl TeamsBot {
             connector: Connector::with_test_token(reqwest::Client::new()),
             user_tokens: UserTokenClient::new(base, "graph-sso".into(), "bot".into()),
             identities: moka::future::Cache::new(10),
+            activity_received: AtomicBool::new(false),
         }
     }
 }
 
 /// `POST /api/integrations/ms_teams/messages`: the Azure Bot messaging endpoint.
 ///
-/// Outside oauth2-proxy and the user middleware; authenticated by the Bot
-/// Connector's signed JWT and restricted to the deployment's tenant.
+/// Outside oauth2-proxy and the user middleware, and usually reachable from
+/// the internet: the Connector token is verified before the body is read, the
+/// activity is then bound to the token and the Teams channel, and restricted
+/// to the deployment's tenant.
 pub async fn messages_route(
     State(app_state): State<AppState>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Body,
 ) -> Response {
     let Some(bot) = app_state.ms_teams_bot.clone() else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let Ok(activity) = serde_json::from_slice::<Activity>(&body) else {
-        return StatusCode::BAD_REQUEST.into_response();
-    };
     let authorization = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok());
-    let service_url = activity.service_url.as_deref().unwrap_or_default();
-    if let Err(error) = bot.inbound.verify(authorization, service_url).await {
-        tracing::warn!(%error, "Rejected a Teams activity with an invalid connector token");
-        return StatusCode::UNAUTHORIZED.into_response();
+    let token = match bot.inbound.verify_token(authorization).await {
+        Ok(token) => token,
+        Err(rejection) => return reject(&rejection),
+    };
+    let Ok(body) = axum::body::to_bytes(body, MAX_ACTIVITY_BYTES).await else {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    };
+    let Ok(activity) = serde_json::from_slice::<Activity>(&body) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if let Err(rejection) = token.check_activity(&activity) {
+        return reject(&rejection);
     }
     if activity.tenant_id() != Some(bot.settings.tenant_id.as_str()) {
         tracing::warn!(tenant = ?activity.tenant_id(), "Rejected a Teams activity from another tenant");
         return StatusCode::FORBIDDEN.into_response();
     }
+    bot.activity_received.store(true, Ordering::Relaxed);
 
     let host = Host::new(app_state);
     match activity.kind.as_str() {
@@ -187,12 +308,31 @@ pub async fn messages_route(
             let (status, body) = handler::on_invoke(&bot, &host, &activity).await;
             (status, Json(body)).into_response()
         }
+        "conversationUpdate" if activity.bot_added_to_personal_chat() => {
+            tokio::spawn(handler::on_bot_added(bot, host, activity));
+            StatusCode::OK.into_response()
+        }
         "event" if activity.name.as_deref() == Some("tokens/response") => {
             tokio::spawn(handler::on_token_response(bot, host, activity));
             StatusCode::OK.into_response()
         }
-        // conversationUpdate, installationUpdate, messageReaction, …
+        // other conversationUpdates, installationUpdate, messageReaction, …
         _ => StatusCode::OK.into_response(),
+    }
+}
+
+/// Log why an activity was refused (never the token) and answer as the Bot
+/// Framework protocol expects.
+fn reject(rejection: &Rejection) -> Response {
+    match rejection {
+        Rejection::Unauthenticated(error) => {
+            tracing::warn!(%error, "Rejected a Teams activity with an invalid connector token");
+            StatusCode::UNAUTHORIZED.into_response()
+        }
+        Rejection::Forbidden(error) => {
+            tracing::warn!(%error, "Rejected a Teams activity that does not match its token");
+            StatusCode::FORBIDDEN.into_response()
+        }
     }
 }
 
@@ -208,4 +348,74 @@ pub fn notify_task_reaction(app_state: &AppState, chat_id: Uuid, message_id: Uui
             tracing::warn!(%error, %chat_id, "Could not deliver a task result to Teams");
         }
     });
+}
+
+#[cfg(test)]
+mod setup_info_tests {
+    use super::{CredentialState, SetupInfo, SetupStatus};
+    use erato_config::config::TeamsBotConfig;
+
+    const APP_ID: &str = "11111111-2222-3333-4444-555555555555";
+
+    fn config() -> TeamsBotConfig {
+        TeamsBotConfig {
+            enabled: true,
+            app_id: Some(APP_ID.into()),
+            sso_app_id: Some(APP_ID.into()),
+            tenant_id: Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into()),
+            oauth_connection_name: Some("graph-sso".into()),
+            ..TeamsBotConfig::default()
+        }
+    }
+
+    fn status() -> SetupStatus {
+        SetupStatus {
+            activity_received: false,
+            credential: CredentialState::Unknown,
+        }
+    }
+
+    #[test]
+    fn reports_no_sso_resource_without_single_sign_on() {
+        let config = TeamsBotConfig {
+            sso_enabled: false,
+            ..config()
+        };
+        let info = SetupInfo::new(&config, "https://erato.internal.example", status())
+            .expect("setup info");
+        assert!(!info.sso_enabled);
+        assert!(info.sso_resource.is_none());
+    }
+
+    #[test]
+    fn uses_the_setup_page_address_unless_an_endpoint_is_configured() {
+        let info = SetupInfo::new(&config(), "https://erato.internal.example", status())
+            .expect("setup info");
+        assert_eq!(
+            info.messaging_endpoint,
+            "https://erato.internal.example/api/integrations/ms_teams/messages"
+        );
+        assert!(!info.messaging_endpoint_configured);
+        assert_eq!(
+            info.sso_resource.as_deref(),
+            Some(format!("api://erato.internal.example/botid-{APP_ID}").as_str())
+        );
+
+        let config = TeamsBotConfig {
+            messaging_endpoint: Some("https://teams-bot.example.com".into()),
+            ..config()
+        };
+        let info = SetupInfo::new(&config, "https://erato.internal.example", status())
+            .expect("setup info");
+        assert_eq!(
+            info.messaging_endpoint,
+            "https://teams-bot.example.com/api/integrations/ms_teams/messages"
+        );
+        assert!(info.messaging_endpoint_configured);
+        // Single sign-on stays tied to the host users download the package from.
+        assert_eq!(
+            info.sso_resource.as_deref(),
+            Some(format!("api://erato.internal.example/botid-{APP_ID}").as_str())
+        );
+    }
 }

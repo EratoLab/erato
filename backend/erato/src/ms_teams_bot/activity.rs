@@ -42,6 +42,8 @@ pub struct Activity {
     pub value: Option<Value>,
     #[serde(default)]
     pub locale: Option<String>,
+    #[serde(default)]
+    pub members_added: Vec<ChannelAccount>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -126,6 +128,17 @@ impl Activity {
             Some("channel") => ConversationKind::Channel,
             _ => ConversationKind::Personal,
         }
+    }
+
+    /// A `conversationUpdate` for the bot itself joining a personal chat:
+    /// someone installed the app, or Teams installed it for them.
+    pub fn bot_added_to_personal_chat(&self) -> bool {
+        let Some(bot_id) = self.recipient.as_ref().map(|bot| bot.id.as_str()) else {
+            return false;
+        };
+        self.kind == "conversationUpdate"
+            && self.conversation_kind().is_personal()
+            && self.members_added.iter().any(|member| member.id == bot_id)
     }
 
     pub fn conversation_id(&self) -> Option<&str> {
@@ -289,6 +302,23 @@ mod tests {
         }));
         assert!(!undelete.is_edit_message());
         assert!(undelete.timestamp.is_none());
+    }
+
+    #[test]
+    fn recognizes_the_bot_joining_a_personal_chat_only() {
+        let added = |conversation_type: Option<&str>, member: &str| {
+            parse(json!({
+                "type": "conversationUpdate",
+                "recipient": {"id": "28:bot"},
+                "conversation": {"id": "a:1", "conversationType": conversation_type},
+                "membersAdded": [{"id": member}]
+            }))
+        };
+        assert!(added(Some("personal"), "28:bot").bot_added_to_personal_chat());
+        assert!(added(None, "28:bot").bot_added_to_personal_chat());
+        assert!(!added(Some("personal"), "29:user").bot_added_to_personal_chat());
+        assert!(!added(Some("groupChat"), "28:bot").bot_added_to_personal_chat());
+        assert!(!added(Some("channel"), "28:bot").bot_added_to_personal_chat());
     }
 
     fn parse(value: Value) -> Activity {

@@ -190,6 +190,33 @@ tests:
           path: spec.ingress[2].ports[0].port
           value: 3131
 
+  - it: should admit the configured peers for the Teams bot public ingress
+    set:
+      msTeamsBot.publicIngress.enabled: true
+      msTeamsBot.publicIngress.host: teams-bot.example.com
+      msTeamsBot.directRoute.ingressFrom:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-public
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-backend-network-policy
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: ingress-public
+      - equal:
+          path: spec.ingress[1].ports[0].port
+          value: 3130
+
+  - it: should refuse the Teams bot public ingress without NetworkPolicy peers
+    set:
+      msTeamsBot.publicIngress.enabled: true
+      msTeamsBot.publicIngress.host: teams-bot.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: msTeamsBot.directRoute.ingressFrom must list the ingress controller or Gateway pods while backend.networkPolicy.enabled is true
+
   - it: should refuse the Teams bot direct route without NetworkPolicy peers
     set:
       msTeamsBot.directRoute.enabled: true
