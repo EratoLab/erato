@@ -38,8 +38,6 @@ export interface WordSelectionRangeTarget {
   start: number;
   /** Exclusive. */
   end: number;
-  /** The index among the search matches the capture recorded, where it recorded one. */
-  occurrence?: number;
 }
 
 export type WordSelectionRangePart =
@@ -81,14 +79,13 @@ export async function wordSearchHitAt(
   target: WordSelectionRangeTarget,
   prefixRanges: boolean,
 ): Promise<Word.Range | null> {
-  const { paragraph, rangeText, start, end, occurrence } = target;
+  const { paragraph, rangeText, start, end } = target;
   const part = rangeText.slice(start, end);
   const starts = searchStartsOf(rangeText, part);
   const index = starts.indexOf(start);
   const items = hits.items;
   if (
     index < 0 ||
-    (occurrence !== undefined && occurrence !== index) ||
     items.length !== starts.length ||
     items.some((hit) => hit.text !== part)
   )

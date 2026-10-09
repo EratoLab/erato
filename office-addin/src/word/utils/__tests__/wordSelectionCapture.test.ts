@@ -816,6 +816,17 @@ describe.each(HOSTS)(
       });
     });
 
+    it("reads a cell's text from its offsets, without desktop's cell mark taken for deleted text", async () => {
+      const { host, selection } = await capture({ p: "CB2", text: "Cell B2" });
+      expect(selection).toMatchObject({
+        role: "rewrite",
+        selectedText: "Cell B2",
+      });
+      expect(selection?.contextBefore).toMatch(/CA2 Cell A2 text\nCB2 $/);
+      expect(selection?.contextAfter).toMatch(/^ text\n/);
+      expect(host.calls()).not.toContain("Range.getReviewedText");
+    });
+
     it("checks every covered paragraph's OOXML in one sync", async () => {
       const { host, selection } = await capture({
         p: "MP1",

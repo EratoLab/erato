@@ -44,7 +44,6 @@ async function build(
   tag: string,
   from: number | string,
   to?: number,
-  occurrence?: number,
 ): Promise<Built> {
   return Word.run(async (context) => {
     const paragraphs = context.document.body.paragraphs;
@@ -62,15 +61,7 @@ async function build(
         : (to ?? paragraph.text.length);
     const built = await buildWordSelectionRanges(
       context,
-      [
-        {
-          paragraph,
-          rangeText: paragraph.text,
-          start,
-          end,
-          ...(occurrence === undefined ? {} : { occurrence }),
-        },
-      ],
+      [{ paragraph, rangeText: paragraph.text, start, end }],
       currentWordSelectionSupport(),
     );
     if ("refused" in built) return built;
@@ -93,17 +84,15 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
     installWordSelectionHost(DOCUMENT, { host: flavour, ...options });
 
   it.each([
-    ["a unique passage", "PL1", 25, 34, undefined, "lima mike"],
-    ["the second of three equal passages", "RP1", 23, 41, 1, RP1.slice(23, 41)],
-    ["a passage at the paragraph's start", "PL1", 0, 9, undefined, "PL1 Plain"],
-    ["a passage at its end", "PL1", 50, 55, undefined, "papa."],
+    ["a unique passage", "PL1", 25, 34, "lima mike"],
+    ["the second of three equal passages", "RP1", 23, 41, RP1.slice(23, 41)],
+    ["a passage at the paragraph's start", "PL1", 0, 9, "PL1 Plain"],
+    ["a passage at its end", "PL1", 50, 55, "papa."],
   ] as const)(
     "builds %s on exactly its text",
-    async (_, tag, start, end, occurrence, text) => {
+    async (_, tag, start, end, text) => {
       install();
-      expect(await build(tag, start, end, occurrence)).toMatchObject({
-        text,
-      });
+      expect(await build(tag, start, end)).toMatchObject({ text });
     },
   );
 
@@ -130,7 +119,6 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
           rangeText: paragraph.text,
           start: i === 0 ? 28 : 0,
           end: i === 2 ? 9 : paragraph.text.length,
-          ...(i === 0 ? { occurrence: 0 } : {}),
         })),
         currentWordSelectionSupport(),
       );
@@ -151,14 +139,6 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
       );
   });
 
-  it("refuses an occurrence that is not the one captured", async () => {
-    const host = install();
-    expect(await build("RP1", 23, 41, 2)).toEqual({
-      refused: "TARGET_RANGE_UNPROVEN",
-    });
-    expect(host.writeSyncs()).toEqual([]);
-  });
-
   it("refuses when Word's Find also matches the curly-quoted copy", async () => {
     const host = install({ searchMatchesQuoteVariants: true });
     expect(await build("QV1", 8, 16)).toEqual({
@@ -172,12 +152,12 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
   it("refuses hits that come back out of order or repeated", async () => {
     const host = install();
     const reversed = host.onSearch((hits) => [...hits].reverse());
-    expect(await build("RP1", 23, 41, 1)).toEqual({
+    expect(await build("RP1", 23, 41)).toEqual({
       refused: "TARGET_RANGE_UNPROVEN",
     });
     reversed();
     host.onSearch((hits) => [hits[0], ...hits.slice(0, -1)]);
-    expect(await build("RP1", 23, 41, 1)).toEqual({
+    expect(await build("RP1", 23, 41)).toEqual({
       refused: "TARGET_RANGE_UNPROVEN",
     });
     expect(host.writeSyncs()).toEqual([]);
@@ -186,7 +166,7 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
   it("refuses when Word misses a match, which would shift every later hit's index", async () => {
     const host = install();
     host.onSearch((hits) => hits.slice(1));
-    expect(await build("RP1", 23, 41, 1)).toEqual({
+    expect(await build("RP1", 23, 41)).toEqual({
       refused: "TARGET_RANGE_UNPROVEN",
     });
     expect(host.writeSyncs()).toEqual([]);
@@ -222,7 +202,7 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
       ];
       const before = targets.map((target) => host.ooxml(target));
       await build("PL1", 25, 34);
-      await build("RP1", 23, 41, 1);
+      await build("RP1", 23, 41);
       await build("MX1", "Alpha");
       await build("HT1", "Hidden");
       await build("RT1", "ABC");
@@ -259,6 +239,23 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
       },
     );
 
+    it("refuses a part whose range between the snippet points no longer reads as the part", async () => {
+      const host = install();
+      let edited = false;
+      host.beforeSync(() => {
+        const expands = host.calls().filter((c) => c === "Range.expandTo");
+        // Both points' prefixes and the part range itself are queued: only its text read is left.
+        if (!edited && expands.length === 3) {
+          edited = true;
+          host.insertText({ p: "LG1", text: "term10 " }, "termX ");
+        }
+      });
+      expect(await build("LG1", 4, 304)).toEqual({
+        refused: "TARGET_RANGE_UNPROVEN",
+      });
+      expect(edited).toBe(true);
+    });
+
     it("refuses when a hit's prefix no longer reads as the paragraph text before it", async () => {
       const host = install();
       let syncs = 0;
@@ -268,7 +265,7 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
         if (syncs === 3)
           host.insertText({ p: "RP1", text: "Repeated" }, "X", "Start");
       });
-      expect(await build("RP1", 23, 41, 1)).toEqual({
+      expect(await build("RP1", 23, 41)).toEqual({
         refused: "TARGET_RANGE_UNPROVEN",
       });
       expect(host.writeSyncs()).toEqual([]);

@@ -111,20 +111,26 @@ function byId(
   );
   if (!intact) return { refused: "changed" };
   // Word hands a paragraph's ID to the paragraph split off below it (Return at its end,
-  // insertParagraph "After", office-js #5784). With the same text now right above, the ID may have
-  // moved onto a copy, which looks just like a copy pasted above the original.
+  // insertParagraph "After", office-js #5784), once per Return. So with the target's text anywhere
+  // above, the ID may have moved onto a copy typed one or more paragraphs below the original. That
+  // puts the original, and anything typed in between, where the captured context above was.
   const first = positions[0];
   const text = anchor.paragraphs[0].text;
-  if (first > 0 && live[first - 1].text === text && anchor.before[0] !== text)
-    return { refused: "ambiguous" };
+  const twinAbove = live.slice(0, first).some((p) => p.text === text);
+  const contextAbove = anchor.before.every(
+    (expected, k) =>
+      (first - 1 - k < 0 ? null : live[first - 1 - k].text) === expected,
+  );
+  if (twinAbove && !contextAbove) return { refused: "ambiguous" };
   return { positions };
 }
 
 /**
  * A surviving ID is decisive: if its paragraph changed, a copy of the old text elsewhere must not
- * take its place, nor where it may have moved onto a copy of its text. Without one, the span with
- * its capture-time context must occur exactly once now. A second occurrence refuses rather than
- * widening the context, because a copied block and the original are indistinguishable by text.
+ * take its place, nor where it may have moved onto a copy of its text: with that text above it, the
+ * captured context above must still be there. Without one, the span with its capture-time context
+ * must occur exactly once now. A second occurrence refuses rather than widening the context,
+ * because a copied block and the original are indistinguishable by text.
  */
 export function resolveWordParagraphs(
   anchor: WordParagraphAnchor,

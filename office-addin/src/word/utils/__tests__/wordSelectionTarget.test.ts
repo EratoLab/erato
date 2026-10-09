@@ -486,6 +486,50 @@ describe.each(HOSTS)(
   },
 );
 
+describe.each(HOSTS)(
+  "checkTargetVerification of an inline part on %s",
+  (flavour) => {
+    it("refuses once the built part range reads other text in the final read", async () => {
+      const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        host: flavour,
+      });
+      const selection = await captureSpan(host, {
+        p: "PL1",
+        text: "lima mike",
+      });
+      const verification = await Word.run(async (context) => {
+        const proof = await proveWordSelectionTarget(
+          context,
+          selection,
+          currentWordSelectionSupport(),
+          INLINE,
+        );
+        if ("refused" in proof) throw new Error("not proven");
+        const verify = queueTargetVerification(
+          context,
+          proof.parts,
+          selection.paragraphs,
+        );
+        await context.sync();
+        return verify();
+      });
+      const support = currentWordSelectionSupport();
+      const [live] = verification.paragraphs;
+      expect(live.partText).toBe("lima mike");
+      expect(
+        checkTargetVerification(selection, verification, support),
+      ).toMatchObject({ formats: [expect.anything()] });
+      expect(
+        checkTargetVerification(
+          selection,
+          { ...verification, paragraphs: [{ ...live, partText: "lima mik" }] },
+          support,
+        ),
+      ).toEqual({ refused: "TARGET_RANGE_UNPROVEN" });
+    });
+  },
+);
+
 describe("checkTargetVerification of a cell", () => {
   it("refuses a cell paragraph that left its cell or moved into a nested table", async () => {
     const host = installWordSelectionHost(SV2_MAIN_DOCUMENT);
@@ -519,8 +563,7 @@ describe("checkTargetVerification of a cell", () => {
     });
     for (const changed of [
       { ...live, tableNestingLevel: 2 },
-      { ...live, tableNestingLevel: 0, inCell: false },
-      { ...live, inCell: false },
+      { ...live, tableNestingLevel: 0 },
     ])
       expect(
         checkTargetVerification(

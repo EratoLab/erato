@@ -288,7 +288,6 @@ export async function proveWordSelectionTarget(
       rangeText: selection.paragraphs[i].rangeText,
       start: offsets[i].start,
       end: offsets[i].end,
-      ...(i === 0 ? { occurrence: selection.occurrence } : {}),
     })),
     support,
   );
@@ -311,7 +310,6 @@ export interface WordTargetVerification {
     partText: string | null;
     /** Read for a paragraph captured in a table cell only; null elsewhere. */
     cellTable: WordCellTable | null;
-    inCell: boolean;
     checks: WordParagraphSpanChecks;
   }[];
   trackingMode: string;
@@ -331,11 +329,8 @@ export function queueTargetVerification(
     const { paragraph } = part;
     paragraph.load("text,style,tableNestingLevel");
     if (part.kind === "part") part.range.load("text");
-    const cell = paragraph.parentTableCellOrNullObject;
-    cell.load("cellIndex");
     return {
       part,
-      cell,
       cellTable:
         captured[i].tableNestingLevel > 0
           ? queueWordCellTable(paragraph)
@@ -348,14 +343,13 @@ export function queueTargetVerification(
     };
   });
   return () => ({
-    paragraphs: queued.map(({ part, cell, cellTable, text, checks }) => ({
+    paragraphs: queued.map(({ part, cellTable, text, checks }) => ({
       text: text.value,
       rangeText: part.paragraph.text,
       style: part.paragraph.style,
       tableNestingLevel: part.paragraph.tableNestingLevel,
       partText: part.kind === "part" ? part.range.text : null,
       cellTable: cellTable?.() ?? null,
-      inCell: !cell.isNullObject,
       checks: checks(),
     })),
     trackingMode: String(context.document.changeTrackingMode),
@@ -388,8 +382,7 @@ export function checkTargetVerification(
       live.text === captured.text &&
       live.rangeText === captured.rangeText &&
       live.style === captured.styleName &&
-      live.tableNestingLevel === captured.tableNestingLevel &&
-      live.inCell === captured.tableNestingLevel > 0
+      live.tableNestingLevel === captured.tableNestingLevel
     );
   });
   if (!unchanged) return { refused: "TARGET_TEXT_MISMATCH" };
@@ -464,12 +457,11 @@ const rangeOf = (part: WordSelectionRangePart): Word.Range =>
 
 /**
  * Desktop selects from the first paragraph's part to the last's. Word for the web rewrites the end
- * paragraphs of a range it selects across paragraphs (ERMAIN-932), so there the first stands in.
+ * paragraphs of a range it selects across paragraphs (ERMAIN-932), so callers pass no last there
+ * and the first stands in.
  */
-const spanOf = (first: Word.Range, last: () => Word.Range | null) => {
-  const to = selectsAcrossParagraphs() ? last() : null;
-  return to ? first.expandTo(to) : first;
-};
+const spanOf = (first: Word.Range, last: Word.Range | null) =>
+  last ? first.expandTo(last) : first;
 
 /** Selects the passage captured at Send, once it is proven unchanged. */
 export function showWordSelection(
@@ -490,8 +482,11 @@ export function showWordSelection(
     );
     if ("refused" in proof) return null;
     const { parts } = proof;
-    return spanOf(rangeOf(parts[0]), () =>
-      parts.length > 1 ? rangeOf(parts[parts.length - 1]) : null,
+    return spanOf(
+      rangeOf(parts[0]),
+      parts.length > 1 && selectsAcrossParagraphs()
+        ? rangeOf(parts[parts.length - 1])
+        : null,
     );
   });
 }
@@ -560,6 +555,6 @@ export function showWrittenWordSelection(
       positions.length > 1 && selectsAcrossParagraphs()
         ? await writtenRange(positions.length - 1)
         : null;
-    return spanOf(first, () => last);
+    return spanOf(first, last);
   });
 }

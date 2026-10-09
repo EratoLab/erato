@@ -7,9 +7,11 @@ import {
 import { runWordGuarded } from "./wordRunGuard";
 import {
   rewritableWordSelection,
+  wordIdentityShows,
   wordSelectionPartOffsets,
   wordSelectionParts,
 } from "./wordSelectionAnchor";
+import { WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH } from "./wordSelectionCapture";
 import { splitWordSelectionReplacement } from "./wordSelectionEdit";
 import { currentWordSelectionSupport } from "./wordSelectionSupport";
 import {
@@ -37,9 +39,17 @@ import type {
   WordStoryRead,
 } from "./wordSelectionTarget";
 
-/** Proof, final read and write in one run; generous because the web's OOXML reads are slow. */
+/**
+ * Proof, final read and write in one run; generous because the web's OOXML reads are slow. Each
+ * covered paragraph adds the capture's span-check allowance, since the final read repeats them.
+ */
 export const WORD_REPLACE_SELECTION_TIMEOUT_MS = 30_000;
 export const WORD_REVERT_SELECTION_TIMEOUT_MS = 30_000;
+/**
+ * Added to the restore run per restored paragraph. A one-paragraph restore took 4.5-7.6 s on the
+ * web, mostly its write sync; restores of more than 3 paragraphs are not measured there.
+ */
+export const WORD_REVERT_SELECTION_MS_PER_PARAGRAPH = 1_000;
 
 /** Undo of a Replace while Track Changes was off: a written paragraph's own OOXML before the write. */
 export interface WordSelectionBackup {
@@ -97,9 +107,6 @@ interface Written {
   endOffset: number;
 }
 
-/** Desktop's getText keeps the paragraph or cell mark the written line lacks. */
-const withoutMark = (text: string) => text.replace(/[\r\u0007]$/, "");
-
 function setFont(range: Word.Range, font: WordSelectionFont): void {
   const target = range.font as unknown as Record<string, unknown>;
   for (const [property, value] of Object.entries(font))
@@ -140,11 +147,10 @@ async function readBack(
   const matches = written.positions.every((position, i) => {
     if (!written.trackingOn)
       return story.rangeTexts[position] === written.expected[i];
-    const text = withoutMark(story.entries[position]?.text ?? "");
-    // Desktop's getText ends the last paragraph of a cell with the cell separator.
-    return (
-      text === written.expected[i] ||
-      (written.cellTables[i] !== null && text === `${written.expected[i]}\t`)
+    return wordIdentityShows(
+      story.entries[position]?.text ?? "",
+      written.expected[i],
+      written.cellTables[i] !== null,
     );
   });
   if (!matches) return null;
@@ -267,7 +273,13 @@ export async function replaceWordSelection(args: {
         endOffset: offsets[last].start + lines[last].length,
       };
     },
-    { timeoutMs: args.timeoutMs ?? WORD_REPLACE_SELECTION_TIMEOUT_MS },
+    {
+      timeoutMs:
+        args.timeoutMs ??
+        WORD_REPLACE_SELECTION_TIMEOUT_MS +
+          selection.paragraphs.length *
+            WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+    },
   );
 
   const { settled } = run;
@@ -387,7 +399,11 @@ export async function revertWordSelection(
         cellTables,
       };
     },
-    { timeoutMs: WORD_REVERT_SELECTION_TIMEOUT_MS },
+    {
+      timeoutMs:
+        WORD_REVERT_SELECTION_TIMEOUT_MS +
+        backups.length * WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+    },
   );
   const { settled } = run;
   const timedOut = run.outcome === "timeout";

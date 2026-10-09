@@ -87,7 +87,9 @@ export function wordSelectionSupport(
     trackingMode,
     picturesShiftOffsets: !desktop,
     prefixRanges: desktop,
-    // The web showed no limit, but was measured only up to 313 characters.
+    // Desktop's search fails above about 255-300 characters. The web's returned the right hits up
+    // to 4,000 (block 3 webSearchProbe), but a write or select of a hit over 255 characters is not
+    // measured there, so its longer parts stay context only.
     searchMaxCharacters: 255,
     reason: canRewrite ? null : "host_unsupported",
   };

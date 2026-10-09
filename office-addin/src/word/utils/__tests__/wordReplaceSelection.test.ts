@@ -9,9 +9,14 @@ import {
   replaceWordSelection,
   revertWordSelection,
   WORD_REPLACE_SELECTION_TIMEOUT_MS,
+  WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+  WORD_REVERT_SELECTION_TIMEOUT_MS,
 } from "../wordReplaceSelection";
 import { emptySelectionCapture } from "../wordSelectionAnchor";
-import { captureWordSelection } from "../wordSelectionCapture";
+import {
+  captureWordSelection,
+  WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+} from "../wordSelectionCapture";
 
 import type {
   MockParagraphState,
@@ -869,6 +874,57 @@ describe.each(HOSTS)(
       hang.release();
     });
 
+    it("gives the final read the capture's span-check allowance per covered paragraph", async () => {
+      const offset = await syncsBeforeWrite();
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      vi.useFakeTimers();
+      const hang = host.hangSync({ at: host.syncCount() + offset - 1 });
+      let done = false;
+      const result = replaceAll(capture, REWRITE_MP).finally(() => {
+        done = true;
+      });
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(WORD_REPLACE_SELECTION_TIMEOUT_MS);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(
+        3 * WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+      );
+      expect(await result).toMatchObject({ status: "failed", timedOut: true });
+      hang.release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it("gives the restore more time for each paragraph it restores", async () => {
+      const host = install();
+      const result = await replaceAll(
+        await captureAll(host, SPAN, "multi_paragraph"),
+        REWRITE_MP,
+      );
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      vi.useFakeTimers();
+      const hang = host.hangSync();
+      let done = false;
+      const revert = revertWordSelection(
+        result.backups,
+        result.written,
+      ).finally(() => {
+        done = true;
+      });
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(WORD_REVERT_SELECTION_TIMEOUT_MS);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(
+        3 * WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+      );
+      expect(await revert).toMatchObject({ status: "failed", timedOut: true });
+      hang.release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.writeSyncs()).toHaveLength(1);
+    });
+
     it("writes deletions and insertions of the covered parts only under Track Changes", async () => {
       const host = install();
       const capture = await captureAll(host, SPAN, "multi_paragraph");
@@ -928,6 +984,26 @@ describe.each(HOSTS)(
       expect(host.paragraphs().map(({ id: _, ...rest }) => rest)).toEqual(
         before.map(({ id: _, ...rest }) => rest),
       );
+    });
+
+    it("restores the paragraphs from the last to the first", async () => {
+      const host = install();
+      const result = await replaceAll(
+        await captureAll(host, SPAN, "multi_paragraph"),
+        REWRITE_MP,
+      );
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      expect(
+        await revertWordSelection(result.backups, result.written),
+      ).toMatchObject({ status: "reverted" });
+      // Each insertOoxml gives its paragraph the mock's next ID, so the IDs show the restore order.
+      const ids = host
+        .paragraphs()
+        .slice(5, 8)
+        .map((p) => p.id);
+      expect(ids).toEqual([...ids].sort().reverse());
+      expect(new Set(ids).size).toBe(3);
     });
 
     it("refuses to undo once any written paragraph changed again", async () => {
@@ -1066,7 +1142,35 @@ describe.each(HOSTS)(
       expect(host.writeSyncs()).toEqual([]);
     });
 
-    it("reports unverified when a restore changed the cell's table", async () => {
+    /** Merges the written cell into its neighbour once `writes` write syncs have run. */
+    const mergeAfterWrite = (host: WordSelectionHost, writes: number) => {
+      let merged = false;
+      host.afterSync(() => {
+        if (merged || host.writeSyncs().length !== writes) return;
+        merged = true;
+        host.mergeCellIntoPrevious(0, [1, 1]);
+      });
+      return () => merged;
+    };
+
+    it("reports unverified when the cell's table lost a cell by the read-back", async () => {
+      const host = install();
+      const capture = await captureAll(
+        host,
+        { table: 0, cell: [1, 1] },
+        "table_cell",
+      );
+      const count = host.paragraphs().length;
+      const merged = mergeAfterWrite(host, 1);
+      expect(await replaceAll(capture, "CB2 New cell text")).toMatchObject({
+        status: "unverified",
+      });
+      expect(merged()).toBe(true);
+      expect(host.paragraphs()).toHaveLength(count);
+      expect(texts(host)).toContain("CB2 New cell text");
+    });
+
+    it("reports unverified when the cell's table lost a cell by the restore's check", async () => {
       const host = install();
       const result = await replaceAll(
         await captureAll(host, { table: 0, cell: [1, 1] }, "table_cell"),
@@ -1074,18 +1178,14 @@ describe.each(HOSTS)(
       );
       if (result.status !== "applied" || !result.backups)
         throw new Error("not applied");
-      const [backup] = result.backups;
+      const count = host.paragraphs().length;
+      const merged = mergeAfterWrite(host, 2);
       expect(
-        await revertWordSelection(
-          [
-            {
-              ...backup,
-              ooxml: backup.ooxml.replace("</w:body>", "<w:p/></w:body>"),
-            },
-          ],
-          result.written,
-        ),
+        await revertWordSelection(result.backups, result.written),
       ).toMatchObject({ status: "unverified" });
+      expect(merged()).toBe(true);
+      expect(host.paragraphs()).toHaveLength(count);
+      expect(texts(host)).toContain("CB2 Cell B2 text");
     });
   },
 );

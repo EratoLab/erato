@@ -18,8 +18,16 @@ import {
 } from "../../../test/mocks/word/selectionHost";
 import { wordSelectionStore } from "../../hooks/wordSelectionStore";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
+import {
+  WORD_REPLACE_SELECTION_TIMEOUT_MS,
+  WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+  WORD_REVERT_SELECTION_TIMEOUT_MS,
+} from "../../utils/wordReplaceSelection";
 import { emptySelectionCapture } from "../../utils/wordSelectionAnchor";
-import { captureWordSelection } from "../../utils/wordSelectionCapture";
+import {
+  captureWordSelection,
+  WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+} from "../../utils/wordSelectionCapture";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 import { wordSelectionReasonText } from "../WordSelectionCard";
 
@@ -390,7 +398,10 @@ describe("WordSelectionCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Restore passage" }));
     await act(async () => {
       await hang.reached;
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(
+        WORD_REVERT_SELECTION_TIMEOUT_MS +
+          WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+      );
     });
     expect(
       screen.getByText(
@@ -428,7 +439,10 @@ describe("WordSelectionCard", () => {
     fireEvent.click(replaceButton()!);
     await act(async () => {
       await hang.reached;
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(
+        WORD_REPLACE_SELECTION_TIMEOUT_MS +
+          WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+      );
     });
     expect(
       screen.getByText(

@@ -126,6 +126,57 @@ describe("resolveWordParagraphs", () => {
     ).toEqual({ positions: [2] });
   });
 
+  it("refuses an ID that moved onto a copy below a twin that was there at capture", () => {
+    const anchor = wordParagraphAnchor(body(["A", "Same", "Same", "B"]), 2, 2);
+    const live = [
+      { id: "id-1", text: "A" },
+      { id: "id-2", text: "Same" },
+      { id: "fresh", text: "Same" },
+      { id: "id-3", text: "Same" },
+      { id: "id-4", text: "B" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({
+      refused: "ambiguous",
+    });
+  });
+
+  it.each(["", "Copy:"])(
+    "refuses an ID that moved two paragraphs down onto a copy, past %j",
+    (between) => {
+      const anchor = wordParagraphAnchor(body(["BK04", "BK05", "BK06"]), 1, 1);
+      const live = [
+        { id: "id-1", text: "BK04" },
+        { id: "y", text: "BK05" },
+        { id: "z", text: between },
+        { id: "id-2", text: "BK05" },
+        { id: "id-3", text: "BK06" },
+      ];
+      expect(resolveWordParagraphs(anchor, live)).toEqual({
+        refused: "ambiguous",
+      });
+    },
+  );
+
+  it("keeps the ID with a twin further up only while the context above is unchanged", () => {
+    const doc = body(["Same", "A", "B", "C", "Same", "D"]);
+    const anchor = wordParagraphAnchor(doc, 4, 4);
+    expect(resolveWordParagraphs(anchor, doc)).toEqual({ positions: [4] });
+    expect(
+      resolveWordParagraphs(anchor, [
+        ...doc.slice(0, 5),
+        { id: "copy", text: "Same" },
+        doc[5],
+      ]),
+    ).toEqual({ positions: [4] });
+    expect(
+      resolveWordParagraphs(anchor, [
+        ...doc.slice(0, 3),
+        { id: "id-4", text: "C edited" },
+        ...doc.slice(4),
+      ]),
+    ).toEqual({ refused: "ambiguous" });
+  });
+
   it("refuses an ID that two live paragraphs share", () => {
     const anchor = wordParagraphAnchor(body(["A", "Target", "B"]), 1, 1);
     const live = [
@@ -260,11 +311,14 @@ function referenceResolve(
         )
       )
         return { refused: "changed" };
-      const above = live[positions[0] - 1]?.text;
+      const first = positions[0];
       const text = anchor.paragraphs[0].text;
-      return above === text && anchor.before[0] !== text
-        ? { refused: "ambiguous" }
-        : { positions };
+      const twin = live.some((l, i) => i < first && l.text === text);
+      const at = (index: number) => (index < 0 ? null : live[index].text);
+      const context = anchor.before.every(
+        (expected, k) => at(first - 1 - k) === expected,
+      );
+      return twin && !context ? { refused: "ambiguous" } : { positions };
     }
   }
   if (anchor.window === null) return { refused: "ambiguous" };

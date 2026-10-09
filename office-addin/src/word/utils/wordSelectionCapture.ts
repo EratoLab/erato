@@ -6,6 +6,7 @@ import {
   buildWordSelectionSnapshot,
   classifyWordSelection,
   WORD_SELECTION_REPLACE_SHAPES,
+  wordIdentityShows,
   wordSelectionPartOffsets,
 } from "./wordSelectionAnchor";
 import {
@@ -45,14 +46,6 @@ export const WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH = 500;
 
 /** Kept for the chip, which shows less. */
 const PREVIEW_MAX_CHARACTERS = 400;
-
-/** The shapes whose covered paragraphs the capture can check for a rewrite. */
-const SPAN_CHECKED_SHAPES: ReadonlySet<WordSelectionShape> = new Set([
-  "paragraph",
-  "inline",
-  "multi_paragraph",
-  "table_cell",
-]);
 
 /** What the composer chip shows of the live selection. */
 export interface WordSelectionPreview {
@@ -256,12 +249,18 @@ function baseFacts(
  * codes and content-control marks, so it is read only then.
  */
 function showsDeletedText(
-  rangeTexts: readonly string[],
-  identities: readonly string[],
+  paragraphs: readonly Pick<
+    WordSelectionParagraphFacts,
+    "text" | "rangeText" | "tableNestingLevel"
+  >[],
 ): boolean {
-  return rangeTexts.some(
-    (text, i) =>
-      text.replace(/\u0005/g, "") !== identities[i].replace(/\r$/, ""),
+  return paragraphs.some(
+    (p) =>
+      !wordIdentityShows(
+        p.text,
+        p.rangeText.replace(/\u0005/g, ""),
+        p.tableNestingLevel > 0,
+      ),
   );
 }
 
@@ -352,8 +351,11 @@ export async function describeWordSelection(
         texts &&
         support.trackingMode &&
         showsDeletedText(
-          read.paragraphs.map((p) => p.text),
-          texts,
+          read.paragraphs.map((p, i) => ({
+            text: texts[i],
+            rangeText: p.text,
+            tableNestingLevel: p.tableNestingLevel,
+          })),
         )
           ? read.selection.getReviewedText("Current")
           : null;
@@ -532,10 +534,7 @@ export async function captureWordSelection(
           };
         },
       );
-      const deleted = showsDeletedText(
-        paragraphs.map((p) => p.rangeText),
-        paragraphs.map((p) => p.text),
-      );
+      const deleted = showsDeletedText(paragraphs);
       const reviewed =
         (deleted || !span) && support.trackingMode
           ? read.selection.getReviewedText("Current")
@@ -563,8 +562,7 @@ export async function captureWordSelection(
       if (
         unchecked.role !== "context_only" ||
         unchecked.reasonCode !== "shape_not_enabled" ||
-        !enabledShapes.has(unchecked.shape) ||
-        !SPAN_CHECKED_SHAPES.has(unchecked.shape)
+        !enabledShapes.has(unchecked.shape)
       )
         return buildWordSelectionSnapshot(
           facts,

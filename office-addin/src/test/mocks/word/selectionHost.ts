@@ -204,6 +204,8 @@ export interface WordSelectionHost {
     location?: "Replace" | "Start" | "End",
   ): void;
   deleteParagraphs(target: MockSelectionTarget): void;
+  /** Merges a body table's cell into the one before it in its row; the body keeps its paragraphs. */
+  mergeCellIntoPrevious(table: number, cell: readonly [number, number]): void;
   insertParagraphs(
     target: MockSelectionTarget,
     paragraphs: readonly MockSelectionParagraph[],
@@ -4082,6 +4084,43 @@ export function installWordSelectionHost(
     },
     deleteParagraphs: (target) => {
       writeTokens(wholeParagraphs(resolveTarget(target)), []);
+    },
+    mergeCellIntoPrevious: (tableIndex, [row, col]) => {
+      const st = stories.body;
+      const table = tablesOf(st)[tableIndex];
+      if (!table) throw new Error(`mock: no table ${tableIndex}`);
+      const depth = table.nesting - 1;
+      const paras = allMarks(st).map((m) => paraOf(st.tokens[m]));
+      const inCell = (c: number) =>
+        paras.filter((p) => {
+          const cell = p.cells[depth];
+          return cell?.table === table && cell.row === row && cell.col === c;
+        });
+      const into = inCell(col - 1);
+      const moved = inCell(col);
+      if (!into.length || !moved.length)
+        throw new Error(`mock: no cell before ${row},${col}`);
+      const target = into[0].cells[depth];
+      const source = moved[0].cells[depth];
+      const intoEnd = [...into]
+        .reverse()
+        .find((p) => p.cells.length === depth + 1);
+      if (intoEnd) intoEnd.cellEnd = false;
+      for (const p of moved)
+        p.cells = p.cells.map((cell) => (cell === source ? target : cell));
+      const shifted = new Set<CellState>();
+      for (const p of paras) {
+        const cell = p.cells[depth];
+        if (
+          cell?.table === table &&
+          cell.row === row &&
+          cell.col > col &&
+          !shifted.has(cell)
+        ) {
+          shifted.add(cell);
+          cell.col -= 1;
+        }
+      }
     },
     insertParagraphs: (target, paragraphs, location) => {
       const b = wholeParagraphs(resolveTarget(target));
