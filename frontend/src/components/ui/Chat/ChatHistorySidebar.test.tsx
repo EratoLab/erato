@@ -1,4 +1,5 @@
 import { I18nProvider } from "@lingui/react";
+import { skipToken } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +16,7 @@ let mockedCollapsedMode = "hidden";
 let mockedLogoPath: string | null = null;
 let mockedAssistantsEnabled = false;
 let mockedAssistantHubEnabled = false;
+const mockUseChatDetail = vi.fn();
 
 vi.mock("@/components/providers/ThemeProvider", () => ({
   useTheme: () => ({
@@ -37,6 +39,7 @@ vi.mock("@/hooks/ui", () => ({
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  useChatDetail: (...args: unknown[]) => mockUseChatDetail(...args),
   useAssistantHubConfig: () => ({
     data: { enabled: mockedAssistantHubEnabled },
   }),
@@ -138,6 +141,8 @@ describe("ChatHistorySidebar", () => {
     mockedLogoPath = null;
     mockedAssistantsEnabled = false;
     mockedAssistantHubEnabled = false;
+    mockUseChatDetail.mockReset();
+    mockUseChatDetail.mockReturnValue({ data: undefined });
     localStorage.clear();
     historyListProps.length = 0;
     const { CHAT_HISTORY_FILTER_DEFAULTS, useChatHistoryFilterStore } =
@@ -189,6 +194,86 @@ describe("ChatHistorySidebar", () => {
       expect(band).not.toHaveAttribute("style");
     }
     expect(screen.getByTestId("history-list")).toBeInTheDocument();
+  });
+
+  const titleSidebar = async (
+    currentSessionId: string | null = "run-1",
+    pinnedSessions: ChatSession[] = [],
+  ) => {
+    const { i18n } = await import("@lingui/core");
+    return (
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            pinnedSessions={pinnedSessions}
+            currentSessionId={currentSessionId}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>
+    );
+  };
+
+  it("sets a delegated run's browser title without a listing row", async () => {
+    mockUseChatDetail.mockReturnValue({
+      data: {
+        id: "run-1",
+        provenance_kind: "delegation",
+        title_resolved: "Research the numbers",
+      },
+    });
+    render(await titleSidebar());
+
+    const { i18n } = await import("@lingui/core");
+    expect(mockUseChatDetail).toHaveBeenCalledWith({
+      pathParams: { chatId: "run-1" },
+    });
+    expect(document.title).toBe(
+      `Research the numbers - ${i18n._("branding.page_title_suffix")}`,
+    );
+  });
+
+  it("updates the browser title when the unlisted chat's details arrive", async () => {
+    const { rerender } = render(await titleSidebar());
+    mockUseChatDetail.mockReturnValue({
+      data: { title_resolved: "Loaded run" },
+    });
+    rerender(await titleSidebar());
+
+    const { i18n } = await import("@lingui/core");
+    expect(document.title).toBe(
+      `Loaded run - ${i18n._("branding.page_title_suffix")}`,
+    );
+  });
+
+  it.each(["recent", "pinned"])(
+    "uses the %s listing title without fetching details",
+    async (listing) => {
+      const { i18n } = await import("@lingui/core");
+      render(
+        await titleSidebar(
+          listing === "recent" ? "chat-1" : "run-1",
+          listing === "pinned" ? [{ ...sessions[0], id: "run-1" }] : [],
+        ),
+      );
+
+      expect(mockUseChatDetail).toHaveBeenCalledWith(skipToken);
+      expect(document.title).toBe(
+        `First chat - ${i18n._("branding.page_title_suffix")}`,
+      );
+    },
+  );
+
+  it("preserves another page's title when there is no current chat", async () => {
+    document.title = "Another page";
+    render(await titleSidebar(null));
+
+    expect(mockUseChatDetail).toHaveBeenCalledWith(skipToken);
+    expect(document.title).toBe("Another page");
   });
 
   it("flips the expanded toggle's glyph rather than the button", async () => {
