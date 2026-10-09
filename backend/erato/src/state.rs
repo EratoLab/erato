@@ -260,7 +260,9 @@ impl AppState {
         // The lease only has to arbitrate once a write can be refused because
         // of it, which is what the task route turns on.
         .with_lease_identity_guard(
-            config.delegation.tasks.enabled || config.client_tools.durable_operations_enabled,
+            config.delegation.tasks.enabled
+                || config.client_tools.durable_operations_enabled
+                || config.chat_history_compaction.enabled,
         );
 
         // Initialize the system prompt renderer
@@ -495,6 +497,20 @@ impl AppState {
         Ok(ChatProviderConfigWithId {
             chat_provider_id: chat_provider_id.to_string(),
             chat_provider_config: self.config.get_chat_provider(chat_provider_id).clone(),
+        })
+    }
+
+    pub fn chat_provider_for_compaction(&self) -> Result<ChatProviderConfigWithId, Report> {
+        self.config.validate_chat_history_compaction()?;
+        let id = self
+            .config
+            .chat_history_compaction
+            .chat_provider_id
+            .as_deref()
+            .ok_or_eyre("Compaction chat provider is not configured")?;
+        Ok(ChatProviderConfigWithId {
+            chat_provider_id: id.to_string(),
+            chat_provider_config: self.config.get_chat_provider(id).clone(),
         })
     }
 

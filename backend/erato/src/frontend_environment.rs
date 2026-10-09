@@ -450,6 +450,18 @@ fn build_frontend_environment(
         Value::Bool(config.prompt_optimizer.enabled),
     );
     env.additional_environment.insert(
+        "CHAT_HISTORY_COMPACTION_ENABLED".into(),
+        Value::Bool(config.chat_history_compaction.enabled),
+    );
+    env.additional_environment.insert(
+        "CHAT_HISTORY_COMPACTION_THRESHOLD_PERCENTAGE".into(),
+        serde_json::json!(
+            config
+                .chat_history_compaction
+                .trigger_on_token_limit_threshold_percentage
+        ),
+    );
+    env.additional_environment.insert(
         FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED.to_string(),
         Value::Bool(config.user_preferences.enabled),
     );

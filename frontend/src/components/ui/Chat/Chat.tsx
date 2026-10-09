@@ -14,6 +14,7 @@ import {
   useModelSwitches,
   useStandardMessageActions,
 } from "@/hooks/chat";
+import { useCompactionStore } from "@/hooks/chat/store/compactionStore";
 import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
@@ -320,6 +321,9 @@ export const Chat = ({
   // a run its delegate is still writing refuses them exactly as it refuses a send.
   const canEditForCurrentChat =
     useChatCanEdit(currentChatId) && !composerDisabled;
+  const isCompacting = useCompactionStore(
+    (state) => !!currentChatId && state.pending[currentChatId] === true,
+  );
   const modelSwitches = useModelSwitches(
     messages,
     messageOrder,
@@ -768,7 +772,7 @@ export const Chat = ({
             messageRenderer={resolvedMessageRenderer}
             controlsContext={{
               ...controlsContext,
-              canEdit: canEditForCurrentChat,
+              canEdit: canEditForCurrentChat && !isCompacting,
             }}
             onMessageAction={standardMessageActionHandler}
             className={layout}

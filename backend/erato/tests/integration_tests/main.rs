@@ -174,7 +174,9 @@ async fn test_app_state_internal(
             .then_some(app_config.delegation.run_timeout_seconds),
     );
     let background_tasks = background_tasks.with_lease_identity_guard(
-        app_config.delegation.tasks.enabled || app_config.client_tools.durable_operations_enabled,
+        app_config.delegation.tasks.enabled
+            || app_config.client_tools.durable_operations_enabled
+            || app_config.chat_history_compaction.enabled,
     );
     let distribution = Arc::new(erato::distribution::Distribution::load(&app_config));
     let mcp_servers = McpServers::new(&app_config);

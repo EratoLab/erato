@@ -3421,6 +3421,62 @@ export const useUpdateChat = (
   });
 };
 
+export type CompactChatPathParams = {
+  /**
+   * Chat ID
+   *
+   * @format uuid
+   */
+  chatId: string;
+};
+
+export type CompactChatError = Fetcher.ErrorWrapper<undefined>;
+
+export type CompactChatVariables = {
+  body: Schemas.CompactChatRequest;
+  pathParams: CompactChatPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCompactChat = (
+  variables: CompactChatVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.CompactChatResponse,
+    CompactChatError,
+    Schemas.CompactChatRequest,
+    {},
+    {},
+    CompactChatPathParams
+  >({
+    url: "/api/v1beta/me/chats/{chatId}/compact",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useCompactChat = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.CompactChatResponse,
+      CompactChatError,
+      CompactChatVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.CompactChatResponse,
+    CompactChatError,
+    CompactChatVariables
+  >({
+    mutationFn: (variables: CompactChatVariables) =>
+      fetchCompactChat(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type RetryDelegatedRunPathParams = {
   /**
    * The origin chat the run was dispatched from

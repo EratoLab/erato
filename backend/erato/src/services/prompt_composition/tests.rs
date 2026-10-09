@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod test_cases {
+    #[path = "compaction.rs"]
+    mod compaction;
     use super::super::replay_policy::{RECEIPT_MARKER_KEY, ToolReplayPolicy};
     use super::super::traits::{FileResolver, MessageRepository, PromptProvider};
     use super::super::transforms::replay_assistant_content;

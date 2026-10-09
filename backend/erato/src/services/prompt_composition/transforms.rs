@@ -102,9 +102,26 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
 
     // 3. Get the previous messages for the conversation history
     // We need these early to check if we should add system prompts
-    let previous_messages = message_repo
-        .get_generation_input_messages(previous_message_id, 10)
-        .await?;
+    // Walk until the latest self-contained assistant snapshot. An arbitrary
+    // row count must not hide a durable compaction boundary.
+    let mut previous_messages = Vec::new();
+    let mut cursor = Some(*previous_message_id);
+    let mut visited = std::collections::HashSet::new();
+    while let Some(id) = cursor {
+        if !visited.insert(id) {
+            return Err(eyre::eyre!("Cycle in message lineage"));
+        }
+        let message = message_repo.get_message_by_id(&id).await?;
+        let checkpoint = crate::models::message::compaction_marker(&message)?.is_some();
+        let snapshot = message.generation_input_messages.is_some()
+            && message.raw_message["role"] == "assistant";
+        cursor = message.previous_message_id;
+        previous_messages.push(message);
+        if checkpoint || snapshot {
+            break;
+        }
+    }
+    previous_messages.reverse();
 
     // 4. Find the most recent message with generation_input_messages
     let most_recent_with_gen_input = previous_messages
@@ -350,7 +367,8 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
                 .map(|role| role == "assistant")
                 .unwrap_or(false)
             {
-                let mut include_raw_assistant = true;
+                let mut include_raw_assistant =
+                    crate::models::message::compaction_marker(prev_msg)?.is_none();
                 if let Some(gen_input_json) = &prev_msg.generation_input_messages
                     && let Ok(gen_input) =
                         serde_json::from_value::<GenerationInputMessages>(gen_input_json.clone())
@@ -428,6 +446,9 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
                     }
                 }
                 MessageRole::Assistant => {
+                    if crate::models::message::compaction_marker(prev_msg)?.is_some() {
+                        continue;
+                    }
                     sequence.push(AbstractChatSequencePart::PreviousAssistantMessage {
                         message_id: prev_msg.id,
                     });
@@ -626,6 +647,7 @@ pub async fn resolve_sequence(
                                 // this turn derives — see
                                 // `is_prior_turn_directive_message`.
                                 if is_prior_turn_directive_message(&input_msg)
+                                    || matches!(input_msg.content, ContentPart::CompactionMarker(_))
                                     || is_client_action_tool_use_message(&input_msg)
                                 {
                                     continue;
@@ -739,7 +761,8 @@ pub(crate) fn replay_assistant_content(
             ContentPart::ClientToolPending(_)
             | ContentPart::ToolApprovalRequest(_)
             | ContentPart::ToolApproval(_)
-            | ContentPart::ToolRejection(_) => {}
+            | ContentPart::ToolRejection(_)
+            | ContentPart::CompactionMarker(_) => {}
             ContentPart::ToolUse(tool_use) => {
                 // Synthetic client-action proposals never replay
                 // — see is_client_action_tool_use_message.

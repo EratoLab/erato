@@ -155,6 +155,23 @@ impl Attachment {
         }
     }
 
+    /// Explicit preview path for auxiliary relevance selection. Never honors
+    /// full-read/native-file exemptions from ordinary prompt composition.
+    pub(crate) fn compaction_preview(&self, config: &FileContextConfig) -> PlannedAttachment {
+        let mut config = config.clone();
+        config.max_preview_tokens_per_file = if config.max_preview_tokens_per_file == 0 {
+            1024
+        } else {
+            config.max_preview_tokens_per_file.min(1024)
+        };
+        config.preview.text_max_chars = if config.preview.text_max_chars == 0 {
+            4000
+        } else {
+            config.preview.text_max_chars.min(4000)
+        };
+        self.preview(&config, None, "compaction_relevance_preview")
+    }
+
     fn preview(
         &self,
         config: &FileContextConfig,
@@ -587,6 +604,29 @@ fn image_token_estimate(dimensions: Option<(u32, u32)>, provider: &str, model: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compaction_preview_is_bounded_even_for_explicit_full_reads_and_unicode() {
+        let mut attachment = file("preview", &"PREVIEW-SENTINEL 🙂ö data ".repeat(3000));
+        attachment.requested_in_full = true;
+        let config = FileContextConfig {
+            max_preview_tokens_per_file: 0,
+            ..Default::default()
+        };
+        let plan = attachment.compaction_preview(&config);
+        let payload = plan
+            .parts
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::Text(text) => Some(text.text.as_str()),
+                _ => None,
+            })
+            .collect::<String>();
+        assert!(payload.contains("PREVIEW-SENTINEL"));
+        assert!(plan.token_count <= 1024);
+        assert!(!payload.contains(&attachment.text.unwrap()));
+        assert_eq!(plan.inclusion_mode, InclusionMode::Preview);
+    }
 
     fn file(id: &str, text: &str) -> Attachment {
         Attachment {

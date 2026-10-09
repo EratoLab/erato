@@ -3870,6 +3870,58 @@ If set, this value takes precedence over `mcp_servers_global.max_session_idle_se
 
 See the [MCP Servers](./features/mcp_servers) documentation for more information about Model Context Protocol integration.
 
+### `chat_history_compaction`
+
+{/* erato_toml_config_key: chat_history_compaction */}
+
+Chat history compaction lets users replace the context of a long conversation with a summary. The original transcript remains visible, with an expandable summary marker. Assistant knowledge files are always retained; other files are selected using bounded previews. Compaction runs only after a user clicks the action.
+
+```toml
+[chat_history_compaction]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+mode = "summarize"
+trigger_mode = "suggest_with_user_approval"
+trigger_on_token_limit_threshold_percentage = 80
+target_compaction_token_limit_percentage = 10
+```
+
+#### `chat_history_compaction.enabled`
+
+{/* erato_toml_config_key: chat_history_compaction.enabled */}
+
+Enable the manual action and context-limit suggestion. **Default:** `false`. Disabling the feature still honors checkpoints already stored in conversations.
+
+#### `chat_history_compaction.chat_provider_id`
+
+{/* erato_toml_config_key: chat_history_compaction.chat_provider_id */}
+
+Explicit provider used to summarize, required when enabled. It must identify a configured chat provider. The conversation's selected model determines the target context size; this auxiliary provider handles summarization and its token usage.
+
+#### `chat_history_compaction.mode`
+
+{/* erato_toml_config_key: chat_history_compaction.mode */}
+
+**Default and supported value:** `"summarize"`.
+
+#### `chat_history_compaction.trigger_mode`
+
+{/* erato_toml_config_key: chat_history_compaction.trigger_mode */}
+
+**Default and supported value:** `"suggest_with_user_approval"`. Suggestions never trigger compaction automatically.
+
+#### `chat_history_compaction.trigger_on_token_limit_threshold_percentage`
+
+{/* erato_toml_config_key: chat_history_compaction.trigger_on_token_limit_threshold_percentage */}
+
+Show the suggestion when estimated context usage reaches this inclusive percentage of the selected conversation model's context limit. **Default:** `80`. **Range:** `0–100`.
+
+#### `chat_history_compaction.target_compaction_token_limit_percentage`
+
+{/* erato_toml_config_key: chat_history_compaction.target_compaction_token_limit_percentage */}
+
+Soft target for the resulting context as a percentage of the selected conversation model's context limit. **Default:** `10`. **Range:** `0–100`. Summaries are not cut to meet this target. Persistent instructions and retained files may keep the measured context above it. If the conversation and previews do not fit the summarizer's context window, the operation fails without changing history.
+
 ### `prompt_optimizer`
 
 {/* erato_toml_config_key: prompt_optimizer */}

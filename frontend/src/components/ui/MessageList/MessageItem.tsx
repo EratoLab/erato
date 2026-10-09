@@ -6,6 +6,7 @@ import { useMessageEdit } from "./MessageEditContext";
 import { MessageEditor } from "./MessageEditor";
 import { ChatInputTokenUsage } from "../Chat/ChatInputTokenUsage";
 import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "../Chat/ChatMessage";
+import { CompactionMarker } from "../Message/CompactionMarker";
 import { ModelSwitchMarker } from "../Message/ModelSwitchMarker";
 
 import type { MessageEditContextValue } from "./MessageEditContext";
@@ -68,6 +69,22 @@ export const MessageItem = memo<MessageItemProps>(
     modelSwitch,
   }) => {
     const messageEdit = useMessageEdit();
+    const compaction = message.content.find(
+      (part) => part.content_type === "compaction_marker",
+    );
+    if (compaction?.content_type === "compaction_marker") {
+      return (
+        <div className={className}>
+          <CompactionMarker
+            marker={compaction}
+            content={message.content}
+            messageId={messageId}
+            filesById={allFilesById}
+            onFilePreview={onFilePreview}
+          />
+        </div>
+      );
+    }
 
     // Replacing the renderer (rather than editing inside it) keeps editing
     // available to kits that override ChatMessageRenderer.

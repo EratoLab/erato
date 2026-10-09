@@ -1502,6 +1502,47 @@ msgid "chat.attachments.toggle"
 msgstr "Afficher ou masquer les pièces jointes"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/CompactionSuggestion.tsx
+msgid "chat.compaction.action"
+msgstr "Compacter l’historique du chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.description"
+msgstr "Les prochaines réponses utiliseront un résumé de ce chat. Certains détails peuvent être perdus."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.error"
+msgstr "Impossible de compacter l’historique du chat. Réessayez ; si le chat a changé, actualisez-le d’abord."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.hideSummary"
+msgstr "Masquer le résumé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.marker"
+msgstr "Historique du chat compacté. {after} tokens estimés sur {before} ({percent} %) et {retainedFiles} fichiers sur {totalFiles} conservés."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.pending"
+msgstr "Compactage de l’historique du chat…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.showSummary"
+msgstr "Afficher le résumé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/CompactionSuggestion.tsx
+msgid "chat.compaction.suggestion"
+msgstr "Ce chat approche de sa limite de contexte. Compactez-le pour continuer avec un résumé. Certains détails peuvent être perdus."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Conversation de chat"

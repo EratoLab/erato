@@ -1834,6 +1834,69 @@
         ]
       }
     },
+    "/api/v1beta/me/chats/{chat_id}/compact": {
+      "post": {
+        "tags": [
+          "chat_history_compaction"
+        ],
+        "summary": "Compact the current active conversation after explicit user approval.",
+        "operationId": "compact_chat",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "path",
+            "description": "Chat ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompactChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or over-limit context"
+          },
+          "403": {
+            "description": "Chat is read-only"
+          },
+          "404": {
+            "description": "Disabled or missing chat"
+          },
+          "409": {
+            "description": "Stale tip or busy chat"
+          },
+          "502": {
+            "description": "Invalid summarizer response"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/chats/{chat_id}/delegated_runs/{child_chat_id}/retry": {
       "post": {
         "tags": [],
@@ -6548,6 +6611,50 @@
           }
         }
       },
+      "CompactChatRequest": {
+        "type": "object",
+        "required": [
+          "expected_tip_message_id",
+          "operation_id"
+        ],
+        "properties": {
+          "expected_tip_message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "selected_facet_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target_chat_provider_id": {
+            "type": "string",
+            "description": "Conversation model used for estimates and the soft target, not the summarizer."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CompactChatResponse": {
+        "type": "object",
+        "required": [
+          "message_id",
+          "compaction"
+        ],
+        "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/ContentPartCompactionMarker"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "CompleteClientOperationRequest": {
         "type": "object",
         "required": [
@@ -6603,6 +6710,27 @@
       },
       "ContentPart": {
         "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContentPartCompactionMarker"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "compaction_marker"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
           {
             "allOf": [
               {
@@ -6904,6 +7032,73 @@
           "facet_id": {
             "type": "string",
             "description": "Identifier of the action facet whose template should be rendered."
+          }
+        }
+      },
+      "ContentPartCompactionMarker": {
+        "type": "object",
+        "description": "A durable context boundary. Its replacement snapshot is authoritative;\nthis metadata is only for display and retry identification.",
+        "required": [
+          "version",
+          "mode",
+          "operation_id",
+          "summarizer_chat_provider_id",
+          "target_chat_provider_id",
+          "before_tokens",
+          "after_tokens",
+          "before_files",
+          "after_files",
+          "retained_file_ids",
+          "dropped_file_ids"
+        ],
+        "properties": {
+          "after_files": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "after_tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "before_files": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "before_tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "dropped_file_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "mode": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "retained_file_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "summarizer_chat_provider_id": {
+            "type": "string"
+          },
+          "target_chat_provider_id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },

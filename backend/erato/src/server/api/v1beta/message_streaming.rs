@@ -769,6 +769,9 @@ async fn collect_reasoning_replay_messages(
 
     while let Some(previous_message_id) = current_message.previous_message_id {
         current_message = message_repo.get_message_by_id(&previous_message_id).await?;
+        if crate::models::message::compaction_marker(&current_message)?.is_some() {
+            break;
+        }
         let parsed_message = MessageSchema::validate(&current_message.raw_message)?;
         if parsed_message.role != MessageRole::Assistant {
             continue;
@@ -2449,6 +2452,7 @@ async fn acquire_user_generation_lease(
 > {
     if !app_state.config.delegation.tasks.enabled
         && !app_state.config.client_tools.durable_operations_enabled
+        && !app_state.config.chat_history_compaction.enabled
     {
         return Ok(app_state
             .background_tasks
@@ -2880,6 +2884,19 @@ pub struct PreparedChatRequest {
 }
 
 impl PreparedChatRequest {
+    pub(crate) fn generation_parameters(&self) -> &GenerationParameters {
+        &self.generation_parameters
+    }
+    pub(crate) fn generation_parameters_id(&self) -> String {
+        self.generation_parameters
+            .generation_chat_provider_id
+            .clone()
+            .expect("Prepared model ID")
+    }
+
+    pub(crate) fn generation_input(&self) -> &GenerationInputMessages {
+        &self.generation_input_messages
+    }
     pub(crate) fn chat_request(&self) -> &ChatRequest {
         &self.chat_request
     }
@@ -3445,7 +3462,9 @@ pub(crate) fn platform_from_headers(headers: &HeaderMap) -> String {
         .unwrap_or_else(|| DEFAULT_ERATO_PLATFORM.to_string())
 }
 
-fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationRequestContext {
+pub(crate) fn generation_request_context_from_headers(
+    headers: &HeaderMap,
+) -> GenerationRequestContext {
     GenerationRequestContext {
         platform: Some(platform_from_headers(headers)),
         registered_client_tools: crate::services::client_tools::registered_client_tools(headers),
@@ -10097,7 +10116,8 @@ fn summary_user_message_text_from_generation_input(
                 | ContentPart::Image(_)
                 | ContentPart::ActionFacetMarker(_)
                 | ContentPart::DelegationPreambleMarker(_)
-                | ContentPart::TaskResult(_) => None,
+                | ContentPart::TaskResult(_)
+                | ContentPart::CompactionMarker(_) => None,
             }
         })
 }
@@ -12346,6 +12366,15 @@ async fn validate_regenerate_request(
     )
     .await?;
 
+    if crate::models::message::compaction_marker(&current_message)
+        .map_err(|e| (axum::http::StatusCode::BAD_REQUEST, e.to_string()))?
+        .is_some()
+    {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "A compaction checkpoint cannot be regenerated".into(),
+        ));
+    }
     // Verify current message has a previous message
     let previous_message_id = current_message.previous_message_id.ok_or((
         axum::http::StatusCode::BAD_REQUEST,
@@ -12842,6 +12871,111 @@ pub async fn message_submit_sse(
 #[cfg(test)]
 mod reasoning_replay_tests {
     use super::*;
+
+    struct BoundaryRepository(std::collections::HashMap<Uuid, messages::Model>);
+    #[async_trait::async_trait]
+    impl MessageRepository for BoundaryRepository {
+        async fn get_message_by_id(&self, id: &Uuid) -> Result<messages::Model, Report> {
+            self.0
+                .get(id)
+                .cloned()
+                .ok_or_else(|| eyre!("Ancestry crossed compaction boundary"))
+        }
+        async fn get_generation_input_messages(
+            &self,
+            _: &Uuid,
+            _: usize,
+        ) -> Result<Vec<messages::Model>, Report> {
+            unreachable!("reasoning must walk actual lineage")
+        }
+    }
+
+    #[tokio::test]
+    async fn reasoning_replay_stops_at_checkpoint_and_keeps_only_later_reasoning() {
+        use crate::models::message::ContentPartCompactionMarker;
+        let checkpoint_id = Uuid::new_v4();
+        let after_id = Uuid::new_v4();
+        let draft_id = Uuid::new_v4();
+        let now = chrono::Utc::now().into();
+        let row = |id, previous_message_id, role, content| messages::Model {
+            id,
+            chat_id: Uuid::new_v4(),
+            created_at: now,
+            updated_at: now,
+            previous_message_id,
+            sibling_message_id: None,
+            is_message_in_active_thread: true,
+            raw_message: MessageSchema {
+                role,
+                content,
+                name: None,
+                additional_fields: Default::default(),
+            }
+            .to_json()
+            .unwrap(),
+            generation_input_messages: None,
+            generation_parameters: None,
+            generation_metadata: None,
+            input_parameters: None,
+            input_file_uploads: None,
+        };
+        // This predecessor deliberately doesn't exist: crossing the boundary fails the test.
+        let mut checkpoint = row(
+            checkpoint_id,
+            Some(Uuid::new_v4()),
+            MessageRole::Assistant,
+            vec![ContentPart::CompactionMarker(ContentPartCompactionMarker {
+                version: 1,
+                mode: "summarize".into(),
+                operation_id: checkpoint_id,
+                summarizer_chat_provider_id: "summary".into(),
+                target_chat_provider_id: "conversation".into(),
+                before_tokens: 100,
+                after_tokens: 10,
+                before_files: 0,
+                after_files: 0,
+                retained_file_ids: vec![],
+                dropped_file_ids: vec![],
+            })],
+        );
+        checkpoint.generation_input_messages = Some(serde_json::json!({"messages": []}));
+        let mut after = row(
+            after_id,
+            Some(checkpoint_id),
+            MessageRole::Assistant,
+            vec![ContentPart::Text(ContentPartText {
+                text: "post-boundary answer".into(),
+            })],
+        );
+        after.generation_parameters =
+            Some(serde_json::json!({"generation_chat_provider_id":"conversation"}));
+        after.generation_metadata = Some(
+            serde_json::to_value(GenerationMetadata {
+                reasoning_item_encrypted_content: Some(vec![
+                    "post-boundary encrypted reasoning".into(),
+                ]),
+                ..Default::default()
+            })
+            .unwrap(),
+        );
+        let draft = row(draft_id, Some(after_id), MessageRole::User, vec![]);
+        let repo = BoundaryRepository(std::collections::HashMap::from([
+            (checkpoint_id, checkpoint),
+            (after_id, after),
+            (draft_id, draft),
+        ]));
+        let replay = collect_reasoning_replay_messages(&repo, &draft_id, "conversation", false)
+            .await
+            .unwrap();
+        assert_eq!(replay.len(), 1);
+        assert_eq!(replay[0].assistant_text, "post-boundary answer");
+        assert!(
+            collect_reasoning_replay_messages(&repo, &draft_id, "switched-model", false)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     struct InMemoryResponsesChatProvider;
 

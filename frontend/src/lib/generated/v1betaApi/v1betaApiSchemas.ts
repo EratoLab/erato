@@ -186,6 +186,8 @@ export type ApprovedExport = {
      * @minLength 1
      */
     toolCallId: string;
+  } & {
+    [key: string]: any;
   };
   /**
    * @maximum 9007199254740991
@@ -208,6 +210,8 @@ export type ApprovedExport = {
    * @pattern ^[A-Za-z0-9_-]{32,128}$
    */
   snapshotId: string;
+} & {
+  [key: string]: any;
 };
 
 /**
@@ -1193,6 +1197,30 @@ export type ClientToolValidationIssue = {
   path: string;
 };
 
+export type CompactChatRequest = {
+  /**
+   * @format uuid
+   */
+  expected_tip_message_id: string;
+  /**
+   * @format uuid
+   */
+  operation_id: string;
+  selected_facet_ids?: string[];
+  /**
+   * Conversation model used for estimates and the soft target, not the summarizer.
+   */
+  target_chat_provider_id?: string;
+};
+
+export type CompactChatResponse = {
+  compaction: ContentPartCompactionMarker;
+  /**
+   * @format uuid
+   */
+  message_id: string;
+};
+
 export type CompleteClientOperationRequest = {
   /**
    * @format uuid
@@ -1216,6 +1244,9 @@ export type CompleteRequest = {
 export type ConsentPolicy = "none" | "ask" | "native";
 
 export type ContentPart =
+  | (ContentPartCompactionMarker & {
+      content_type: "compaction_marker";
+    })
   | (ContentPartText & {
       content_type: "text";
     })
@@ -1270,6 +1301,43 @@ export type ContentPartActionFacetMarker = {
    * Identifier of the action facet whose template should be rendered.
    */
   facet_id: string;
+};
+
+/**
+ * A durable context boundary. Its replacement snapshot is authoritative;
+ * this metadata is only for display and retry identification.
+ */
+export type ContentPartCompactionMarker = {
+  /**
+   * @minimum 0
+   */
+  after_files: number;
+  /**
+   * @minimum 0
+   */
+  after_tokens: number;
+  /**
+   * @minimum 0
+   */
+  before_files: number;
+  /**
+   * @minimum 0
+   */
+  before_tokens: number;
+  dropped_file_ids: string[];
+  mode: string;
+  /**
+   * @format uuid
+   */
+  operation_id: string;
+  retained_file_ids: string[];
+  summarizer_chat_provider_id: string;
+  target_chat_provider_id: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  version: number;
 };
 
 /**
@@ -2626,6 +2694,8 @@ export type NativeJobResponse = {
      * @minLength 1
      */
     toolCallId: string;
+  } & {
+    [key: string]: any;
   };
   /**
    * @format uuid
@@ -2672,6 +2742,8 @@ export type NativeJobResponse = {
      * @uniqueItems true
      */
     queryVariants: string[];
+  } & {
+    [key: string]: any;
   };
   receipt?: string;
   serverOutcome?: {

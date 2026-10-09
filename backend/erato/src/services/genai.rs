@@ -120,7 +120,8 @@ impl From<ContentPart> for GenAiMessageContent {
             }
             ContentPart::ActionFacetMarker(_)
             | ContentPart::DelegationPreambleMarker(_)
-            | ContentPart::TaskResult(_) => {
+            | ContentPart::TaskResult(_)
+            | ContentPart::CompactionMarker(_) => {
                 // Should never reach here after resolve_directive_markers_in_generation_input.
                 // Log error and return empty text rather than panicking.
                 tracing::error!(
@@ -182,6 +183,7 @@ impl GenerationInputMessages {
         let messages = self
             .messages
             .into_iter()
+            .filter(|message| !matches!(message.content, ContentPart::CompactionMarker(_)))
             .flat_map(|message| {
                 // Keep the image in the durable tool result until conversion:
                 // raw ContentPart::Image cannot round-trip its internally tagged

@@ -4,6 +4,7 @@ pub mod assistant_usage;
 pub mod assistants;
 pub mod audio_transcription;
 pub mod budget;
+pub mod chat_history_compaction;
 pub mod client_operations;
 pub mod delegated_run_retry;
 pub mod desktop_sidecar;
@@ -220,6 +221,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/chats", post(create_chat))
         .route("/chats/{chat_id}", get(chat_detail).put(update_chat))
         .route("/chats/{chat_id}/react", post(react_to_task_result_sse))
+        .route(
+            "/chats/{chat_id}/compact",
+            post(chat_history_compaction::compact_chat),
+        )
         .route(
             "/chats/{chat_id}/delegated_runs/{child_chat_id}/retry",
             post(delegated_run_retry::retry_delegated_run),
@@ -480,6 +485,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         unarchive_chat_endpoint,
         token_usage::token_usage_estimate,
         prompt_optimizer,
+        chat_history_compaction::compact_chat,
         available_models,
         mcp_servers::list_mcp_servers,
         mcp_servers::list_mcp_server_tools,
@@ -534,6 +540,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     ),
     components(schemas(
         Message,
+        chat_history_compaction::CompactChatRequest,
+        chat_history_compaction::CompactChatResponse,
         Chat,
         RecentChat,
         FacetInfo,
@@ -2809,6 +2817,35 @@ pub async fn submit_message_feedback(
         .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
         .await?;
 
+    // Both the checkpoint lookup and feedback submission must preserve the
+    // endpoint's missing-message and authorization status codes.
+    let feedback_error_status = |e: eyre::Report| {
+        let error_msg = e.to_string().to_lowercase();
+        if error_msg.contains("not found") {
+            StatusCode::NOT_FOUND
+        } else if error_msg.contains("not authorized") || error_msg.contains("time limit exceeded")
+        {
+            StatusCode::FORBIDDEN
+        } else {
+            log_internal_server_error(e)
+        }
+    };
+
+    let message = models::message::get_message_by_id(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &message_id,
+    )
+    .await
+    .map_err(feedback_error_status)?;
+    if models::message::compaction_marker(&message)
+        .map_err(log_internal_server_error)?
+        .is_some()
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
     // Convert sentiment enum to string
     let sentiment_str: String = request.sentiment.into();
 
@@ -2828,17 +2865,7 @@ pub async fn submit_message_feedback(
             .message_feedback_edit_time_limit_seconds,
     )
     .await
-    .map_err(|e| {
-        let error_msg = e.to_string().to_lowercase();
-        if error_msg.contains("not found") {
-            StatusCode::NOT_FOUND
-        } else if error_msg.contains("not authorized") || error_msg.contains("time limit exceeded")
-        {
-            StatusCode::FORBIDDEN
-        } else {
-            log_internal_server_error(e)
-        }
-    })?;
+    .map_err(feedback_error_status)?;
 
     // Convert to response format
     let response = MessageFeedback {

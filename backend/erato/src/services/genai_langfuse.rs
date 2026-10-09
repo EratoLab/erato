@@ -180,6 +180,9 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "run_mode": marker.run_mode,
                 }));
             }
+            ContentPart::CompactionMarker(marker) => {
+                output_parts.push(serde_json::to_value(marker)?);
+            }
             ContentPart::TaskResult(result) => {
                 // Metadata only: the summary is the child's own text and does
                 // not belong in a trace attribute.

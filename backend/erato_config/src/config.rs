@@ -601,6 +601,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub prompt_optimizer: PromptOptimizerConfig,
 
+    /// User-approved replacement of conversational context with a summary.
+    #[serde(default)]
+    pub chat_history_compaction: ChatHistoryCompactionConfig,
+
     // User preferences feature configuration.
     #[serde(default)]
     pub user_preferences: UserPreferencesConfig,
@@ -1247,6 +1251,10 @@ impl AppConfig {
             panic!("Invalid prompt optimizer configuration: {}", e);
         }
 
+        if let Err(e) = config.validate_chat_history_compaction() {
+            panic!("Invalid chat history compaction configuration: {}", e);
+        }
+
         // Validate model permissions configuration
         if let Err(e) = config.model_permissions.validate() {
             panic!("Invalid model permissions configuration: {}", e);
@@ -1869,6 +1877,34 @@ impl AppConfig {
         Ok(())
     }
 
+    pub fn validate_chat_history_compaction(&self) -> Result<(), eyre::Report> {
+        let config = &self.chat_history_compaction;
+        if config.trigger_on_token_limit_threshold_percentage > 100
+            || config.target_compaction_token_limit_percentage > 100
+        {
+            return Err(eyre!(
+                "Chat history compaction percentages must be between 0 and 100"
+            ));
+        }
+        if config.enabled {
+            let id = config
+                .chat_provider_id
+                .as_deref()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| {
+                    eyre!("chat_history_compaction.chat_provider_id is required when enabled")
+                })?;
+            if let Some(providers) = &self.chat_providers {
+                if !providers.providers.contains_key(id) {
+                    return Err(eyre!("Compaction chat provider '{}' not found", id));
+                }
+            } else if self.chat_provider.is_none() {
+                return Err(eyre!("No compaction chat provider configured"));
+            }
+        }
+        Ok(())
+    }
+
     /// Returns the maximum configured file upload size in bytes, if any.
     pub fn max_upload_size_bytes(&self) -> Option<u64> {
         self.file_storage_providers
@@ -2452,6 +2488,49 @@ impl SummaryConfig {
         self.system_prompt
             .as_ref()
             .is_some_and(PromptSourceSpecification::uses_langfuse)
+    }
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ChatHistoryCompactionMode {
+    #[default]
+    Summarize,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ChatHistoryCompactionTriggerMode {
+    #[default]
+    SuggestWithUserApproval,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(default)]
+pub struct ChatHistoryCompactionConfig {
+    pub enabled: bool,
+    /// Explicit auxiliary provider, required when enabled.
+    pub chat_provider_id: Option<String>,
+    pub mode: ChatHistoryCompactionMode,
+    pub trigger_mode: ChatHistoryCompactionTriggerMode,
+    pub trigger_on_token_limit_threshold_percentage: u8,
+    pub target_compaction_token_limit_percentage: u8,
+}
+
+impl Default for ChatHistoryCompactionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            chat_provider_id: None,
+            mode: ChatHistoryCompactionMode::Summarize,
+            trigger_mode: ChatHistoryCompactionTriggerMode::SuggestWithUserApproval,
+            trigger_on_token_limit_threshold_percentage: 80,
+            target_compaction_token_limit_percentage: 10,
+        }
     }
 }
 

@@ -14,6 +14,7 @@ import type { UseChatFileSourcesParams } from "@/hooks/files/useChatFileSources"
 import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface ChatInputAddControlsProps {
+  compactionSection?: AddMenuSection;
   /** Whether file upload is available (feature flag + handler present). */
   canUpload: boolean;
 
@@ -62,6 +63,7 @@ export function ChatInputAddControls({
   onToggleFacet,
   assistantSection,
   mcpToolsSection,
+  compactionSection,
   disabled = false,
   uploadDisabled = false,
   toolsDisabled = false,
@@ -89,11 +91,13 @@ export function ChatInputAddControls({
   );
 
   const extraSections = useMemo(() => {
-    const sections = [mcpToolsSection, assistantSection].filter(
-      (section): section is AddMenuSection => section !== undefined,
-    );
+    const sections = [
+      mcpToolsSection,
+      assistantSection,
+      compactionSection,
+    ].filter((section): section is AddMenuSection => section !== undefined);
     return sections.length > 0 ? sections : undefined;
-  }, [assistantSection, mcpToolsSection]);
+  }, [assistantSection, mcpToolsSection, compactionSection]);
 
   const tools: AddMenuToolItem[] = useMemo(
     () =>

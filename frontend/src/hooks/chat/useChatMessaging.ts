@@ -69,6 +69,7 @@ import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
 import { serverAttachKey } from "./serverAttachKey";
+import { useCompactionStore } from "./store/compactionStore";
 import { useComposeSessionStore } from "./store/composeSessionStore";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
 import {
@@ -1776,6 +1777,10 @@ export function useChatMessaging(
       disabledMcpTools?: string[],
       prepare?: SendMessagePreparation,
     ): Promise<string | undefined> => {
+      if (chatId && useCompactionStore.getState().pending[chatId]) {
+        prepare?.onAbandoned?.();
+        return undefined;
+      }
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
         logger.warn(

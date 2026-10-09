@@ -1502,6 +1502,47 @@ msgid "chat.attachments.toggle"
 msgstr "Przełącz załączniki"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/CompactionSuggestion.tsx
+msgid "chat.compaction.action"
+msgstr "Skróć historię czatu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.description"
+msgstr "Przyszłe odpowiedzi będą korzystać z podsumowania tego czatu. Niektóre szczegóły mogą zostać utracone."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.error"
+msgstr "Nie udało się skrócić historii czatu. Spróbuj ponownie; jeśli czat się zmienił, najpierw go odśwież."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.hideSummary"
+msgstr "Ukryj podsumowanie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.marker"
+msgstr "Historia czatu skrócona. Zachowano {after} z {before} szacowanych tokenów ({percent}%) i {retainedFiles} z {totalFiles} plików."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.pending"
+msgstr "Skracanie historii czatu…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.showSummary"
+msgstr "Pokaż podsumowanie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/CompactionSuggestion.tsx
+msgid "chat.compaction.suggestion"
+msgstr "Ten czat zbliża się do limitu kontekstu. Skróć go, aby kontynuować z podsumowaniem. Niektóre szczegóły mogą zostać utracone."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Rozmowa czatu"
