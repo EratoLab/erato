@@ -131,7 +131,7 @@ describe("LocalSearchCoverageNotice", () => {
     renderContent([searchPart({ coverage: coverage([newOutlook]) }), answer]);
     const notice = screen.getByTestId("local-search-coverage-notice");
     expect(notice).toHaveTextContent(
-      "This mailbox keeps only part of its mail on this device, so older emails may be missing.",
+      "Outlook · jane@example.com keeps only part of its mail on this device, so older emails may be missing.",
     );
     expect(notice).not.toHaveTextContent("Teams keeps only part");
   });

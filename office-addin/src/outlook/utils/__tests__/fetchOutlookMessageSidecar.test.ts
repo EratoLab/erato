@@ -22,7 +22,11 @@ function stubInner(): OutlookMessageFetcher {
 
 interface FakeClientOptions {
   supports?: boolean;
-  mailboxes?: { id: string; emailAddress?: string }[];
+  mailboxes?: {
+    id: string;
+    emailAddress?: string;
+    capabilities?: { conversations?: boolean };
+  }[];
   conversation?: unknown;
 }
 
@@ -173,6 +177,34 @@ describe("createSidecarOutlookMessageFetcher", () => {
         .map(([method]) => String(method))
         .filter((method) => method === "outlook.get_conversation.v1"),
     ).toHaveLength(1);
+    expect(inner.fetchConversationMessages).toHaveBeenCalledTimes(2);
+    info.mockRestore();
+  });
+
+  it("skips the conversation for a mailbox without conversations, for every rebuilt fetcher", async () => {
+    const inner = stubInner();
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const client = fakeClient({
+      mailboxes: [
+        {
+          id: "a".repeat(32),
+          emailAddress: "user@example.test",
+          capabilities: { conversations: false },
+        },
+      ],
+    });
+    const invoke = vi.spyOn(client, "invoke");
+    for (const anchor of ["<a@b>", "<c@d>"]) {
+      const fetcher = createSidecarOutlookMessageFetcher({
+        ...context(client, inner),
+        anchorInternetMessageId: anchor,
+      });
+      expect(await fetcher.fetchConversationMessages("conv")).toBe(FALLBACK);
+    }
+    expect(invoke.mock.calls.map(([method]) => String(method))).toEqual([
+      "outlook.list_mailboxes.v1",
+      "outlook.list_mailboxes.v1",
+    ]);
     expect(inner.fetchConversationMessages).toHaveBeenCalledTimes(2);
     info.mockRestore();
   });

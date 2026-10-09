@@ -13,11 +13,13 @@ import {
   readSidecarConversation,
   SidecarConversationUnavailableError,
 } from "./mailboxAccess";
+import { outlookStoreVariant } from "./outlookStores";
 import {
-  outlookStoreVariant,
+  cachedSourceDirectory,
   sidecarSourceError,
   sourceDirectory,
 } from "./sourceCapabilities";
+import searchCoverageFixture from "../../../../desktop-sidecar-protocol/conformance/fixtures/search-coverage.json";
 import capabilityFixture from "../../../../desktop-sidecar-protocol/conformance/fixtures/source-capabilities.json";
 
 import type {
@@ -129,7 +131,7 @@ describe("source capabilities in the chat tools", () => {
     });
     expect(hits[1].readConversation).toBeNull();
     expect(contentNotice).toContain(
-      "Conversation reading isn't available for new Outlook for Mac · jane@example.com",
+      "Conversation reading isn't available for Outlook · jane@example.com (new Outlook for Mac)",
     );
   });
 
@@ -162,7 +164,7 @@ describe("source capabilities in the chat tools", () => {
       ],
     })) as { result: { filterNotice?: string } };
     expect(result.result.filterNotice).toBe(
-      "These sources never record some filtered fields, so their items cannot match: to (new Outlook for Mac · jane@example.com). Do not conclude that no such items exist there; tell the user that this information isn't available for those sources.",
+      "Some sources never record a filtered field, so their items cannot match it: to for Outlook · jane@example.com (new Outlook for Mac). Do not conclude that no such items exist there; tell the user that this information isn't available for those sources.",
     );
   });
 
@@ -182,7 +184,7 @@ describe("source capabilities in the chat tools", () => {
     expect(to.unavailableFor).toEqual([
       {
         sourceId: hx.sourceId,
-        label: "new Outlook for Mac · jane@example.com",
+        label: "Outlook · jane@example.com (new Outlook for Mac)",
       },
     ]);
     expect(sender.unavailableFor).toBeUndefined();
@@ -289,10 +291,91 @@ describe("source capabilities in the chat tools", () => {
         sourceId: hx.sourceId,
         foldersAvailable: false,
         notice: expect.stringMatching(
-          /^Folders aren't available for new Outlook for Mac · jane@example.com: .*does not mean the mailbox has no folders/,
+          /^Folders aren't available for Outlook · jane@example.com \(new Outlook for Mac\): .*does not mean the mailbox has no folders/,
         ),
       },
     });
+  });
+});
+
+describe("source names and shared lookups", () => {
+  it("names a mailbox as the search coverage does", async () => {
+    const [covered] = searchCoverageFixture.coverage.sources;
+    const { run } = setup({
+      "search.query.v1": {
+        result: {
+          ...searchResult(),
+          coverage: {
+            ...searchCoverageFixture.coverage,
+            sources: [
+              {
+                ...covered,
+                sourceId: hx.sourceId,
+                accountEmail: "jane.work@example.com",
+              },
+            ],
+          },
+        },
+      },
+      "sources.list.v1": { result: sources },
+    });
+    const result = (await run(SEARCH_SIDECAR_INDEX_TOOL, {
+      text: "offer",
+    })) as { result: { contentNotice: string; coverage: { notice: string } } };
+    expect(result.result.coverage.notice).toContain(
+      "Outlook · jane.work@example.com",
+    );
+    expect(result.result.contentNotice).toContain(
+      "Conversation reading isn't available for Outlook · jane.work@example.com (new Outlook for Mac)",
+    );
+  });
+
+  it("names only the filtered sources that cannot match a field", async () => {
+    const { run } = setup({
+      "search.query.v1": { result: { ...searchResult(), hits: [] } },
+      "sources.list.v1": { result: sources },
+      "search.metadata_fields.v1": { result: { fields } },
+    });
+    const result = (await run(SEARCH_SIDECAR_INDEX_TOOL, {
+      text: "",
+      filters: { sourceId: ost.sourceId },
+      metadata_filters: [
+        { field: "to", operator: "eq", value: "sabrina@example.com" },
+      ],
+    })) as { result: { filterNotice?: string } };
+    expect(result.result.filterNotice).toBeUndefined();
+  });
+
+  it("keeps the shared source list for other callers when one cancels", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const request = vi.fn(async (body: string) => {
+      const { id } = JSON.parse(body) as { id: string };
+      await gate;
+      return JSON.stringify({ jsonrpc: "2.0", id, result: sources });
+    });
+    const client = new DesktopSidecarClient({
+      transport: { request },
+      clientInfo: {
+        name: "test",
+        version: "1",
+        host: { application: "test", runtime: "test" },
+        os: { name: "test" },
+      },
+    });
+    vi.spyOn(client, "supports").mockReturnValue(true);
+    const load = cachedSourceDirectory(client);
+    const cancelled = new AbortController();
+    const first = load(cancelled.signal);
+    const second = load();
+    cancelled.abort();
+    release();
+    await expect(first).rejects.toThrow();
+    const directory = await second;
+    expect(directory?.bySourceId(hx.sourceId)[0]?.capabilities).toMatchObject({
+      conversations: false,
+    });
+    expect(request).toHaveBeenCalledOnce();
   });
 });
 

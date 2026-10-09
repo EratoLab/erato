@@ -2222,7 +2222,7 @@ msgstr "Teams keeps only part of its history on this device, so older messages m
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.partialMailboxCache"
-msgstr "{partialMailboxes, plural, one {This mailbox keeps only part of its mail on this device, so older emails may be missing.} other {These mailboxes keep only part of their mail on this device, so older emails may be missing.}}"
+msgstr "{mailboxCount, plural, one {{mailboxNames} keeps only part of its mail on this device, so older emails may be missing.} other {{mailboxNames} keep only part of their mail on this device, so older emails may be missing.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx

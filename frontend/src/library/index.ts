@@ -644,6 +644,7 @@ export { McpAuthorizationToasts } from "@/components/ui/Settings/mcpAuthorizatio
 export { DesktopSidecarClientTools } from "@/providers/DesktopSidecarClientTools";
 export {
   readSidecarConversation,
+  resolveSidecarMailbox,
   resolveSidecarMailboxId,
   SidecarConversationUnavailableError,
 } from "@/lib/desktopSidecar/mailboxAccess";

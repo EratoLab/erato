@@ -1,5 +1,7 @@
 /* eslint-disable lingui/no-unlocalized-strings -- Protocol values and model-facing results. */
+import { sourceProduct } from "./indexingSources";
 import { outlookMailboxId } from "./mailboxAccess";
+import { storeName } from "./outlookStores";
 
 import type {
   DesktopSidecarClient,
@@ -9,39 +11,11 @@ import type {
 
 type Source = SourcesListV1Result["sources"][number];
 
-export type OutlookStoreVariant =
-  | "newOutlookForMac"
-  | "newOutlookForWindows"
-  | "classic";
-
-/**
- * The Outlook a source or mailbox belongs to, from its catalog `sourceKind`
- * or its `outlook.list_mailboxes.v1` `source`.
- */
-export function outlookStoreVariant(
-  kindOrSource: string | undefined,
-): OutlookStoreVariant | null {
-  const value = kindOrSource?.trim().toLowerCase().replaceAll(" ", "");
-  if (!value) return null;
-  if (value === "macoshxaccount") return "newOutlookForMac";
-  if (value === "newoutlookforwindows" || value === "windowsnewoutlook")
-    return "newOutlookForWindows";
-  if (["pst", "ost", "macosprofile", "outlook"].includes(value))
-    return "classic";
-  return null;
-}
-
-const STORE_NAMES: Record<OutlookStoreVariant, string> = {
-  newOutlookForMac: "new Outlook for Mac",
-  newOutlookForWindows: "new Outlook for Windows",
-  classic: "classic Outlook",
+/** Product names as the model sees them in coverage and source notices. */
+export const PRODUCT_LABELS: Record<string, string> = {
+  outlook: "Outlook",
+  teams: "Teams",
 };
-
-/** The Outlook a model should name, e.g. "new Outlook for Mac". */
-export function storeName(kindOrSource: string | undefined): string | null {
-  const variant = outlookStoreVariant(kindOrSource);
-  return variant ? STORE_NAMES[variant] : null;
-}
 
 /** `error.data.sourceError` of a sidecar RPC error, when it names one. */
 export function sidecarSourceError(error: unknown): string | undefined {
@@ -81,6 +55,7 @@ export interface SidecarSourceInfo {
   product: string;
   /** Outlook store name for the model, e.g. "new Outlook for Mac". */
   store: string | null;
+  /** Product and name, as search coverage labels a source. */
   label: string;
   /** Absent from older sidecars, which means unknown. */
   capabilities?: SourceCapabilities;
@@ -101,16 +76,14 @@ function sourceInfo(source: Source): SidecarSourceInfo {
       mailboxId = null;
     }
   }
-  const store = storeName(source.sourceKind);
+  const product = sourceProduct(source);
   const name = source.displayName?.trim();
-  const product = source.product ?? (store ? "outlook" : source.sourceKind);
-  const productLabel =
-    store ?? (product === "teams" ? "Teams" : source.sourceKind);
+  const productLabel = PRODUCT_LABELS[product] ?? source.sourceKind;
   return {
     sourceId: source.sourceId,
     mailboxId,
     product,
-    store,
+    store: product === "outlook" ? storeName(source.sourceKind) : null,
     label: name ? `${productLabel} · ${name}` : productLabel,
     ...(source.capabilities && { capabilities: source.capabilities }),
   };
@@ -139,7 +112,12 @@ export function sourceDirectory(sources: readonly Source[]): SourceDirectory {
   };
 }
 
-/** False only when every matching source reports the capability as missing. */
+/** The model-facing name of a source, with its Outlook, e.g. "Outlook · Jane (new Outlook for Mac)". */
+export function sourceName(source: SidecarSourceInfo, label = source.label) {
+  return source.store ? `${label} (${source.store})` : label;
+}
+
+/** True only when there are matching sources and every one reports the capability as missing. */
 export function lacks(
   sources: readonly SidecarSourceInfo[],
   capability: "conversations" | "attachments" | "folders" | "recipients",
@@ -151,6 +129,32 @@ export function lacks(
 }
 
 const SOURCE_DIRECTORY_TTL_MS = 30_000;
+
+/**
+ * Waits for a request shared by several tool calls. Cancelling one caller
+ * stops only its wait, never the request the others depend on.
+ */
+export function untilAborted<T>(
+  shared: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!signal) return shared;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    shared.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
+}
 
 /**
  * Lists the sidecar's sources at most every 30 seconds per sidecar instance.
@@ -168,19 +172,18 @@ export function cachedSourceDirectory(client: DesktopSidecarClient) {
     const { instanceId } = client.getSnapshot();
     const now = Date.now();
     if (
-      cache?.instanceId === instanceId &&
-      now - cache.at < SOURCE_DIRECTORY_TTL_MS
+      cache?.instanceId !== instanceId ||
+      now - cache.at >= SOURCE_DIRECTORY_TTL_MS
     ) {
-      return cache.directory;
+      const directory = client
+        .invoke("sources.list.v1", {})
+        .then(({ sources }) => sourceDirectory(sources))
+        .catch(() => {
+          cache = null;
+          return null;
+        });
+      cache = { instanceId, at: now, directory };
     }
-    const directory = client
-      .invoke("sources.list.v1", {}, { signal })
-      .then(({ sources }) => sourceDirectory(sources))
-      .catch(() => {
-        cache = null;
-        return null;
-      });
-    cache = { instanceId, at: now, directory };
-    return directory;
+    return untilAborted(cache.directory, signal);
   };
 }

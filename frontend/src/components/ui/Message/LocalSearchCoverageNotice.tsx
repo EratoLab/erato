@@ -90,10 +90,15 @@ export function LocalSearchCoverageNotice({
   const partialCache = (kind: string) =>
     sources.filter(
       (source) => source.partialCache && source.kinds.includes(kind),
-    ).length;
+    );
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Protocol document kind.
-  const partialTeams = partialCache("teams_message") > 0;
-  const partialMailboxes = partialCache("email");
+  const partialTeams = partialCache("teams_message").length > 0;
+  // A collapsed list can hide the cached mailbox, so the caveat names it.
+  const partialMailboxes = partialCache("email").map(numberedLabel);
+  const mailboxNames = new Intl.ListFormat(i18n.locale, {
+    type: "conjunction",
+  }).format(partialMailboxes);
+  const mailboxCount = partialMailboxes.length;
   const Icon = warning ? WarningIcon : InfoIcon;
   const source = first ? sourcePeriod(first) : "";
   const count = more.length;
@@ -157,14 +162,13 @@ export function LocalSearchCoverageNotice({
             })}
           </span>
         )}
-        {partialMailboxes > 0 && (
+        {mailboxCount > 0 && (
           <span>
             {t({
               id: "chat.message.localSearchCoverage.partialMailboxCache",
-              message: plural(partialMailboxes, {
-                one: "This mailbox keeps only part of its mail on this device, so older emails may be missing.",
-                other:
-                  "These mailboxes keep only part of their mail on this device, so older emails may be missing.",
+              message: plural(mailboxCount, {
+                one: `${mailboxNames} keeps only part of its mail on this device, so older emails may be missing.`,
+                other: `${mailboxNames} keep only part of their mail on this device, so older emails may be missing.`,
               }),
             })}
           </span>

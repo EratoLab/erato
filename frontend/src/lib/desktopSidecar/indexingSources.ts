@@ -4,9 +4,9 @@ import {
   indexingMailboxId,
   orderedMailboxes,
 } from "./indexingConfiguration";
-import { outlookStoreVariant } from "./sourceCapabilities";
+import { outlookStoreVariant } from "./outlookStores";
 
-import type { OutlookStoreVariant } from "./sourceCapabilities";
+import type { OutlookStoreVariant } from "./outlookStores";
 import type {
   OutlookMailbox,
   SidecarConfiguration,
@@ -47,7 +47,8 @@ function effectiveSources(configuration: SidecarConfigureV1Params) {
   );
 }
 
-function sourceProduct(source: Source): string {
+/** The product family of a source, also for sidecars that predate `product`. */
+export function sourceProduct(source: Source): string {
   if (source.product) return source.product;
   const kind = source.sourceKind.trim().toLowerCase();
   if (kind === "teams") return "teams";

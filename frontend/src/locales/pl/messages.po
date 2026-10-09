@@ -2222,7 +2222,7 @@ msgstr "Teams przechowuje na tym urządzeniu tylko część historii, więc moż
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.partialMailboxCache"
-msgstr "{partialMailboxes, plural, one {Ta skrzynka pocztowa przechowuje na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.} few {Te skrzynki pocztowe przechowują na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.} other {Te skrzynki pocztowe przechowują na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.}}"
+msgstr "{mailboxCount, plural, one {{mailboxNames} przechowuje na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.} few {{mailboxNames} przechowują na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.} other {{mailboxNames} przechowują na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx

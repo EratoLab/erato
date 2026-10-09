@@ -1,8 +1,11 @@
 /* eslint-disable lingui/no-unlocalized-strings -- Protocol values and model-facing errors. */
+import { storeName } from "./outlookStores";
+
 import type {
   DesktopSidecarClient,
   OutlookConversationWarning,
   OutlookGetConversationV1Params,
+  OutlookMailbox,
 } from "@erato/desktop-sidecar-protocol";
 
 /** Outlook RPCs use compact mailbox IDs; the index uses UUID spelling. */
@@ -15,11 +18,11 @@ export function outlookMailboxId(id: string): string {
 }
 
 /** Never guess a mailbox: the add-in must retain its own/shared mailbox scope. */
-export async function resolveSidecarMailboxId(
+export async function resolveSidecarMailbox(
   client: DesktopSidecarClient,
   emailAddress: string,
   signal?: AbortSignal,
-): Promise<string | null> {
+): Promise<OutlookMailbox | null> {
   const { mailboxes } = await client.invoke(
     "outlook.list_mailboxes.v1",
     {},
@@ -29,7 +32,17 @@ export async function resolveSidecarMailboxId(
   return (
     mailboxes.find(
       (mailbox) => mailbox.emailAddress?.trim().toLowerCase() === target,
-    )?.id ?? null
+    ) ?? null
+  );
+}
+
+export async function resolveSidecarMailboxId(
+  client: DesktopSidecarClient,
+  emailAddress: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  return (
+    (await resolveSidecarMailbox(client, emailAddress, signal))?.id ?? null
   );
 }
 
@@ -58,11 +71,6 @@ export class SidecarConversationUnavailableError extends Error {
 export const NO_CONVERSATION_MESSAGES =
   "The local mailbox has no message with this Message-ID. Use get_sidecar_document with the search hit's documentId instead; do not retry this anchor.";
 
-const MAILBOX_STORES: Record<string, string> = {
-  macOsHxAccount: "new Outlook for Mac",
-  windowsNewOutlook: "new Outlook for Windows",
-};
-
 export async function readSidecarConversation(
   client: DesktopSidecarClient,
   params: OutlookGetConversationV1Params,
@@ -78,7 +86,7 @@ export async function readSidecarConversation(
     if (
       result.warnings?.some((warning) => warning.code === "unsupported_source")
     ) {
-      const store = MAILBOX_STORES[result.mailbox?.source ?? ""];
+      const store = storeName(result.mailbox?.source);
       throw new SidecarConversationUnavailableError(
         "unsupported_source",
         `Conversation reading isn't available for this mailbox${store ? ` (${store})` : ""}. Use get_sidecar_document with the search hit's documentId instead. Do not retry read_sidecar_conversation for this mailbox.`,

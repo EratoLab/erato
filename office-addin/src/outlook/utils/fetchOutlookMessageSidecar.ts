@@ -1,6 +1,6 @@
 import {
   readSidecarConversation,
-  resolveSidecarMailboxId,
+  resolveSidecarMailbox,
   SidecarConversationUnavailableError,
   sidecarSourceError,
 } from "@erato/frontend/library";
@@ -54,12 +54,14 @@ interface ConversionProgress {
  * delegates unchanged. The conversation itself failing (unsupported, no mailbox
  * match, RPC error) falls back to the wrapped fetcher, so the result is never
  * worse than the EWS path. A mailbox whose store cannot be read as
- * conversations at all (new Outlook for Mac) goes straight to that fallback
- * afterwards. The sidecar carries message bodies and attachment
+ * conversations at all (new Outlook for Mac) goes to that fallback after one
+ * mailbox lookup, since the host rebuilds this fetcher for every selected item. The sidecar carries message bodies and attachment
  * bytes inline in the result; an attachment it could not read arrives with no
  * bytes, degrading just that item to a marker and marking the result `partial`
  * rather than discarding the whole thread.
  */
+let reportedUnsupportedStore = false;
+
 export function createSidecarOutlookMessageFetcher(
   context: SidecarFetcherContext,
 ): OutlookMessageFetcher {
@@ -89,9 +91,12 @@ export function createSidecarOutlookMessageFetcher(
           sidecarSourceError(error) === "unsupported_source"
         ) {
           unsupportedStore = true;
-          console.info(
-            "The local Outlook store cannot be read as conversations; loading conversations through Exchange instead.",
-          );
+          if (!reportedUnsupportedStore) {
+            reportedUnsupportedStore = true;
+            console.info(
+              "The local Outlook store cannot be read as conversations; loading conversations through Exchange instead.",
+            );
+          }
         } else {
           console.warn(
             "Could not load the conversation from the desktop sidecar; loading it through Exchange instead:",
@@ -113,18 +118,24 @@ async function fetchConversationViaSidecar(
   const userEmailAddress = context.userEmailAddress!;
   const signal = options?.signal;
 
-  const mailboxId = await resolveSidecarMailboxId(
-    client,
-    userEmailAddress,
-    signal,
-  );
-  if (!mailboxId) {
+  const mailbox = await resolveSidecarMailbox(client, userEmailAddress, signal);
+  if (!mailbox) {
     throw new Error("No local Outlook mailbox matches the signed-in user.");
+  }
+  if (mailbox.capabilities?.conversations === false) {
+    throw new SidecarConversationUnavailableError(
+      "unsupported_source",
+      "The local Outlook store cannot be read as conversations.",
+      { state: "partial" },
+    );
   }
 
   const conversation = await readSidecarConversation(
     client,
-    { mailboxId, anchor: { internetMessageId: anchorInternetMessageId } },
+    {
+      mailboxId: mailbox.id,
+      anchor: { internetMessageId: anchorInternetMessageId },
+    },
     signal,
   );
 

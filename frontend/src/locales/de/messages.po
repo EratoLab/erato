@@ -2222,7 +2222,7 @@ msgstr "Teams speichert auf diesem Gerät nur einen Teil des Verlaufs, ältere N
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.partialMailboxCache"
-msgstr "{partialMailboxes, plural, one {Dieses Postfach speichert auf diesem Gerät nur einen Teil seiner E-Mails, ältere E-Mails können daher fehlen.} other {Diese Postfächer speichern auf diesem Gerät nur einen Teil ihrer E-Mails, ältere E-Mails können daher fehlen.}}"
+msgstr "{mailboxCount, plural, one {{mailboxNames} speichert auf diesem Gerät nur einen Teil seiner E-Mails, ältere E-Mails können daher fehlen.} other {{mailboxNames} speichern auf diesem Gerät nur einen Teil ihrer E-Mails, ältere E-Mails können daher fehlen.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
