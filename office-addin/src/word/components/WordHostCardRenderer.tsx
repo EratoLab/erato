@@ -35,6 +35,7 @@ import {
   wordInsertedText,
   WordReviewReceipt,
 } from "./WordReviewReceipt";
+import { WordSelectionCard } from "./WordSelectionCard";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
@@ -81,6 +82,14 @@ export function WordHostCardRenderer({
   if (entry.action === "word.apply_document_plan")
     return (
       <WordDocumentPlanCard
+        key={`${entry.action}:${content}`}
+        entry={entry}
+        content={content}
+      />
+    );
+  if (entry.action === "word.replace_selection")
+    return (
+      <WordSelectionCard
         key={`${entry.action}:${content}`}
         entry={entry}
         content={content}

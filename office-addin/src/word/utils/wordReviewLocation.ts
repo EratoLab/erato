@@ -145,7 +145,7 @@ function selectsAcrossParagraphs(): boolean {
 }
 
 /** Marks the selection event a select() causes, unless it changes nothing or never runs. */
-async function selectWordRange(
+export async function selectWordRange(
   context: Word.RequestContext,
   range: Word.Range,
 ): Promise<void> {

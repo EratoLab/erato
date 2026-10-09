@@ -219,6 +219,31 @@ describe("WordChatInput with a Word selection", () => {
     expect(word.calls().slice(callsBefore)).not.toContain("Paragraph.getText");
   });
 
+  it("sends a whole paragraph Erato can replace instead of the included document", async () => {
+    word.select({ p: "PL1" });
+    await renderInput();
+    fireEvent.click(screen.getByTestId("word-include-document-chip"));
+    expect(chip()?.textContent).toContain(
+      "If this passage can be replaced, it is sent instead of the document.",
+    );
+    send();
+    const result = await prepared();
+    expect(result?.actionFacet).toMatchObject({
+      id: "word_selection",
+      args: { selection_role: "rewrite", selection_shape: "paragraph" },
+    });
+    expect(host.capture).not.toHaveBeenCalled();
+  });
+
+  it("sends the document when the paragraph turns out to be context only", async () => {
+    word.select({ p: "MX1" });
+    await renderInput();
+    fireEvent.click(screen.getByTestId("word-include-document-chip"));
+    send();
+    const result = await prepared();
+    expect(result?.actionFacet?.id).toBe("word_document_review");
+  });
+
   it("sends a plain message when the selection collapsed before Send", async () => {
     await renderInput();
     word.select({ p: "PL1", collapse: "End" }, { event: false });
@@ -261,7 +286,7 @@ describe("WordChatInput with a Word selection", () => {
     });
     expect(await result).toBeNull();
     expect(screen.getByRole("alert").textContent).toBe(
-      "Erato could not read your selection in Word. Your message was not sent.",
+      "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
     );
     act(() => prepare.onAbandoned?.());
     expect(staged.at(-1)).toBeNull();

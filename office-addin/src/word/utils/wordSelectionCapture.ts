@@ -3,8 +3,19 @@ import { wordParagraphId } from "./wordParagraphIds";
 import { wordParagraphAnchor } from "./wordParagraphResolver";
 import { WORD_SELECTION_TEXT_OPTIONS } from "./wordReviewLocation";
 import { runWordGuarded } from "./wordRunGuard";
-import { buildWordSelectionSnapshot } from "./wordSelectionAnchor";
+import {
+  buildWordSelectionSnapshot,
+  classifyWordSelection,
+  WORD_SELECTION_REPLACE_SHAPES,
+} from "./wordSelectionAnchor";
 import { wordSelectionSupport } from "./wordSelectionSupport";
+import {
+  evaluateParagraphSpan,
+  queueParagraphSpanChecks,
+  queueWordSections,
+  readWordStory,
+  wordParagraphEndsSection,
+} from "./wordSelectionTarget";
 
 import type { WordParagraphEntry } from "./wordParagraphResolver";
 import type {
@@ -39,6 +50,11 @@ export interface WordSelectionPreview {
   story: WordSelectionStory;
   /** Too long to be sent whole. */
   truncated: boolean;
+  /**
+   * The host, story and shape allow a rewrite. Whether this passage gets one is decided at Send,
+   * once its content and position are checked.
+   */
+  mayRewrite: boolean;
 }
 
 /** A failed read is not "nothing selected": the caller keeps what it had. */
@@ -70,6 +86,8 @@ async function storyTypeOf(
 ): Promise<string> {
   let current = body;
   for (;;) {
+    // Word for Mac reports body text as a Section body once a document has a second section.
+    if (current.type === "Section") return "MainDoc";
     if (current.type !== "TableCell") return current.type;
     const parent = current.parentBodyOrNullObject;
     parent.load("type");
@@ -293,6 +311,7 @@ function lightFacts(
 function previewOf(
   snapshot: WordSelectionSnapshot,
   facts: WordSelectionFacts,
+  support: WordSelectionSupport,
 ): WordSelectionPreview {
   return {
     key: JSON.stringify([
@@ -309,6 +328,10 @@ function previewOf(
     shape: snapshot.shape,
     story: snapshot.story,
     truncated: snapshot.truncated,
+    mayRewrite:
+      support.canRewrite &&
+      snapshot.story === "main" &&
+      WORD_SELECTION_REPLACE_SHAPES.has(snapshot.shape),
   };
 }
 
@@ -351,7 +374,7 @@ export async function describeWordSelection(
         reviewed?.value,
       );
       const snapshot = buildWordSelectionSnapshot(facts, support, "user");
-      return snapshot ? previewOf(snapshot, facts) : null;
+      return snapshot ? previewOf(snapshot, facts, support) : null;
     },
     { timeoutMs },
   );
@@ -374,11 +397,8 @@ async function readBody(
   context: Word.RequestContext,
   read: SelectionRead,
 ): Promise<BodyRead> {
-  const body = context.document.body.paragraphs;
-  body.load("items/uniqueLocalId,items/text");
-  await context.sync();
-  const texts = body.items.map((p) => p.getText(WORD_SELECTION_TEXT_OPTIONS));
-  const ids = body.items.map((p) => wordParagraphId(p.uniqueLocalId));
+  const story = await readWordStory(context);
+  const ids = story.entries.map((entry) => entry.id);
   const idCounts = new Map<string, number>();
   for (const id of ids) if (id) idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
   const selectedIds = read.paragraphs.map((p) =>
@@ -389,8 +409,8 @@ async function readBody(
     ? []
     : read.paragraphs.map((p) => {
         const whole = p.getRange("Whole");
-        return body.items.flatMap((candidate, j) =>
-          candidate.text === p.text
+        return story.items.flatMap((candidate, j) =>
+          story.rangeTexts[j] === p.text
             ? [
                 {
                   j,
@@ -402,11 +422,8 @@ async function readBody(
             : [],
         );
       });
-  await context.sync();
-  const entries = body.items.map((_, j) => ({
-    id: ids[j],
-    text: texts[j].value,
-  }));
+  if (!byId) await context.sync();
+  const { entries } = story;
   const positions = byId
     ? selectedIds.map((id) => ids.indexOf(id))
     : compared.map((candidates) => {
@@ -436,6 +453,7 @@ function consecutive(
 export async function captureWordSelection(
   origin: WordSelectionOrigin = "user",
   timeoutMs = WORD_SELECTION_CAPTURE_TIMEOUT_MS,
+  enabledShapes: ReadonlySet<WordSelectionShape> = WORD_SELECTION_REPLACE_SHAPES,
 ): Promise<WordSelectionRead<WordSelectionSnapshot>> {
   const support = currentWordSelectionSupport();
   const result = await runWordGuarded(
@@ -544,7 +562,47 @@ export async function captureWordSelection(
             : null,
         ...(reviewed ? { reviewedText: reviewed.value } : {}),
       };
-      return buildWordSelectionSnapshot(facts, support, origin);
+      // The span checks cost an OOXML read (0.5 s and more on the web), so they run only when
+      // nothing else keeps the selection context only.
+      const unchecked = classifyWordSelection(facts, support, enabledShapes);
+      if (
+        unchecked.role !== "context_only" ||
+        unchecked.reasonCode !== "shape_not_enabled" ||
+        !enabledShapes.has(unchecked.shape) ||
+        unchecked.shape !== "paragraph"
+      )
+        return buildWordSelectionSnapshot(
+          facts,
+          support,
+          origin,
+          enabledShapes,
+        );
+      const checks = queueParagraphSpanChecks(read.paragraphs[0]);
+      const sections = queueWordSections(context);
+      await context.sync();
+      const endsSection = await wordParagraphEndsSection(
+        context,
+        sections,
+        read.paragraphs[0],
+      );
+      const spanCheck = evaluateParagraphSpan(
+        checks(),
+        read.paragraphs[0].style,
+        support,
+      );
+      return buildWordSelectionSnapshot(
+        {
+          ...facts,
+          hazards: endsSection
+            ? { ...spanCheck.hazards, breakOrSymbol: true }
+            : spanCheck.hazards,
+          styleFontResolved: spanCheck.styleFontResolved,
+          spanChecked: true,
+        },
+        support,
+        origin,
+        enabledShapes,
+      );
     },
     { timeoutMs },
   );

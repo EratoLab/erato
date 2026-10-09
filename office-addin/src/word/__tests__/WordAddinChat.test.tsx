@@ -161,6 +161,7 @@ describe("WordAddinChatHost", () => {
       "erato-word-edits",
       "erato-word-insert",
       "erato-word-document-plan",
+      "erato-word-replace",
     ]);
     expect(stamped.hostArtifact?.itemIdentity).toBeUndefined();
     expect(harness.stampedMessages.current.u1).not.toHaveProperty(

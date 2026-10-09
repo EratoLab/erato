@@ -9,10 +9,13 @@ import { t } from "@lingui/core/macro";
 import { applyWordDocumentPlan } from "./wordApplyDocumentPlan";
 import { applyWordEdits } from "./wordApplyEdits";
 import { insertWordTextAtCursor } from "./wordInsertText";
+import { replaceWordSelection } from "./wordReplaceSelection";
+import { WORD_REPLACE_FENCE } from "./wordSelectionEdit";
 import { extractProposedClientAction as extractProposedClientActionFor } from "../../core/clientActions/proposedClientAction";
 
 import type { WordDocumentApplyResult } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
+import type { WordReplaceSelectionResult } from "./wordReplaceSelection";
 import type { WordReviewAnchor } from "./wordReviewLocation";
 import type { ContentPart } from "@erato/frontend/library";
 import type {
@@ -22,12 +25,18 @@ import type {
 
 export { CLIENT_ACTION_TOOL_NAME } from "../../core/clientActions/proposedClientAction";
 /** Fence tags are case-sensitive and must match the renderer registration. */
-export { WORD_EDITS_FENCE, WORD_INSERT_FENCE, WORD_PLAN_FENCE };
+export {
+  WORD_EDITS_FENCE,
+  WORD_INSERT_FENCE,
+  WORD_PLAN_FENCE,
+  WORD_REPLACE_FENCE,
+};
 
 export type WordClientAction =
   | "word.apply_edits"
   | "word.insert_at_cursor"
-  | "word.apply_document_plan";
+  | "word.apply_document_plan"
+  | "word.replace_selection";
 
 export interface WordClientActionContext {
   fenceContent: string;
@@ -47,6 +56,7 @@ export interface WordClientActionRun {
   hostFailed?: boolean;
   documentPlanResult?: WordDocumentApplyResult;
   resultAnchors?: ReadonlyMap<number, WordReviewAnchor>;
+  selectionResult?: WordReplaceSelectionResult;
 }
 
 export interface WordClientActionEntry {
@@ -146,6 +156,34 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
         outcomes: [],
         snapshotOoxml: null,
       }),
+    },
+  ],
+  [
+    "word.replace_selection",
+    {
+      action: "word.replace_selection",
+      facetIds: ["word_selection"],
+      fenceLanguage: WORD_REPLACE_FENCE,
+      promptScope: "word-selection",
+      displayLabel: () =>
+        t({
+          id: "officeAddin.word.clientActions.replaceSelection",
+          message: "Replace the selected passage",
+        }),
+      // The target is the passage captured at Send, never the model's arguments or the live selection.
+      execute: async ({ fenceContent, capture, onStage }) => {
+        const result = await replaceWordSelection({
+          capture,
+          fenceContent,
+          onStage,
+        });
+        return {
+          ok: result.status === "applied",
+          outcomes: [],
+          snapshotOoxml: null,
+          selectionResult: result,
+        };
+      },
     },
   ],
 ]);

@@ -44,6 +44,7 @@ describe("buildWordArtifact", () => {
       "erato-word-edits",
       "erato-word-insert",
       "erato-word-document-plan",
+      "erato-word-replace",
     ]);
     expect(artifact?.renderMode).toBe("suggestions");
   });
@@ -125,7 +126,7 @@ describe("buildWordArtifact", () => {
 
     expect(artifact?.itemIdentity).toBeUndefined();
     expect(artifact?.isFreshCompletion).toBeUndefined();
-    expect(artifact?.cardFenceLanguages).toHaveLength(3);
+    expect(artifact?.cardFenceLanguages).toHaveLength(4);
   });
 
   it("returns nothing when the facet advertises no action this build implements", () => {

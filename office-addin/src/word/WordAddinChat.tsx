@@ -2,7 +2,7 @@ import {
   useConversationDropzone,
   useUploadFeature,
 } from "@erato/frontend/library";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { WordChatInput } from "./components/WordChatInput";
 import { WordSettingsDialog } from "./components/WordSettingsDialog";
@@ -38,6 +38,11 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
 
   const clientActionsByFacetId = useActionFacetClientActions();
   const { messages, messageOrder } = controller;
+  const { setDraftMessage } = controller.chatInputControls;
+  const restoreRequest = useCallback(
+    (message: string) => setDraftMessage(message, { focus: true }),
+    [setDraftMessage],
+  );
   const { capturesByAssistantMessageId } = captures;
   const messagesWithArtifact = useMemo(() => {
     let next = messages;
@@ -76,6 +81,7 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
     <WordWriteProvider
       documentIdentity={documentIdentity}
       capturesByAssistantMessageId={capturesByAssistantMessageId}
+      restoreRequest={restoreRequest}
     >
       <AddinChatCoreView
         controller={controller}

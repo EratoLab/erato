@@ -6,6 +6,7 @@ import {
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
+  WORD_REPLACE_FENCE,
 } from "./wordClientActions";
 import { WORD_SUBMIT_PLAN_ACTION } from "./wordDocumentSubmission";
 
@@ -16,6 +17,7 @@ export const WORD_CARD_FENCE_LANGUAGES: readonly string[] = [
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
+  WORD_REPLACE_FENCE,
 ];
 
 /** Historical cards can render without a capture, but only an owned live capture permits writing. */

@@ -65,11 +65,17 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
                           message:
                             "Applies the complete rewrite without asking, only if the document still matches the reviewed source. Erato Revert is available while the applied document remains unchanged.",
                         })
-                      : t({
-                          id: "officeAddin.settings.addin.clientActions.always.helper.word",
-                          message:
-                            "Writes into the open document without asking. Paragraphs you changed since asking are skipped, every change is listed afterwards, and a single Revert undoes the batch.",
-                        }),
+                      : action === "word.replace_selection"
+                        ? t({
+                            id: "officeAddin.word.settings.alwaysReplaceSelection",
+                            message:
+                              "Replaces the selected passage without asking, only if it is unchanged since your request. Undo is available while Track Changes is off.",
+                          })
+                        : t({
+                            id: "officeAddin.settings.addin.clientActions.always.helper.word",
+                            message:
+                              "Writes into the open document without asking. Paragraphs you changed since asking are skipped, every change is listed afterwards, and a single Revert undoes the batch.",
+                          }),
               }}
             />
             <WordCompatibilityModeSetting />

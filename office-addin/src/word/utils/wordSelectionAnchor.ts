@@ -42,7 +42,7 @@ export const WORD_SELECTION_CONTEXT_BYTES = 4_096;
  * host; until then an otherwise eligible selection is sent as context only.
  */
 export const WORD_SELECTION_REPLACE_SHAPES: ReadonlySet<WordSelectionShape> =
-  new Set<WordSelectionShape>([]);
+  new Set<WordSelectionShape>(["paragraph"]);
 
 /** Why a selection is sent as context only; the card maps each code to its own V2-4 message. */
 export const WORD_SELECTION_REASON_CODES = [
@@ -136,7 +136,10 @@ export interface WordSelectionHazards {
    * them would copy the first character's twin onto the whole rewrite.
    */
   complexScriptTwin?: boolean;
-  /** A page or column break (w:br type page or column), w:sym, or a non-breaking or optional hyphen. */
+  /**
+   * A break, w:sym, a non-breaking or optional hyphen, or any other paragraph content that is not
+   * plain text (an equation, a bookmark, ruby text, a permission range).
+   */
   breakOrSymbol?: boolean;
 }
 
@@ -164,8 +167,8 @@ export interface WordSelectionFacts {
   /** The style font of every covered paragraph could be read. */
   styleFontResolved: boolean;
   /**
-   * The span's hazard scan and style font read ran. The capture runs them only for a shape Replace
-   * may write, so an unchecked span is never rewritten.
+   * The span's hazard scan and style font read ran. The capture runs them only when nothing else
+   * keeps the selection context only, and an unchecked span is never rewritten.
    */
   spanChecked?: boolean;
   /** A tracked Range was kept as a hint (desktop only). */
@@ -354,7 +357,11 @@ function anchorMatches(facts: WordSelectionFacts): boolean {
   );
 }
 
-function hazardOf(
+/**
+ * The first hazard that keeps a span context only on this host. Some are benign where the rewrite
+ * resets them (complex-script twins on the web), so a hazard flag alone does not decide.
+ */
+export function wordSelectionHazardReason(
   hazards: WordSelectionHazards,
   parts: readonly string[],
   support: WordSelectionSupport,
@@ -405,19 +412,21 @@ function contextOnlyReason(
   if (paragraphs.length > WORD_SELECTION_MAX_PARAGRAPHS)
     return "too_many_paragraphs";
   if (!fitsActionFacetArg(analysis.text)) return "too_large";
-  if (!enabledShapes.has(shape) || !facts.spanChecked)
-    return "shape_not_enabled";
+  if (!enabledShapes.has(shape)) return "shape_not_enabled";
   if (!parts || !anchor || !anchorMatches(facts)) return "position_unknown";
   if (
     shape === "multi_paragraph" &&
     (parts[0] === "" || parts[parts.length - 1] === "")
   )
     return "empty_edge_paragraph";
-  const hazard = hazardOf(facts.hazards, parts, support);
+  const hazard = wordSelectionHazardReason(facts.hazards, parts, support);
   if (hazard) return hazard;
   if (facts.pictureBeforeSpan && support.picturesShiftOffsets)
     return "web_picture_offset";
-  if (support.styleFontSource === null || !facts.styleFontResolved)
+  if (
+    facts.spanChecked &&
+    (support.styleFontSource === null || !facts.styleFontResolved)
+  )
     return "style_font_unavailable";
   if (analysis.occurrence < 0) return "position_unknown";
   // paragraph.text shows text the model must not see and no reviewed text came with the capture.
@@ -435,6 +444,8 @@ function contextOnlyReason(
     !facts.trackedRange
   )
     return "not_unique";
+  // Every other check passed; the span's own content was not looked at yet.
+  if (!facts.spanChecked) return "shape_not_enabled";
   return null;
 }
 

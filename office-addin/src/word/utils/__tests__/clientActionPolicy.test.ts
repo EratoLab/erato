@@ -37,7 +37,7 @@ describe("the Word decision store", () => {
   it("drops an unimplemented Word action and an unknown decision value", () => {
     expect(
       wordClientActionDecisionStore.persistedOptions.parse?.({
-        "word_selection/word.replace_selection": "always",
+        "word_comment_thread/word.add_comment": "always",
         "word_document_review/word.apply_edits": "sometimes",
       }),
     ).toEqual({});
