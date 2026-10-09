@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { utf8ByteLength } from "../../../core/clientActions/actionFacetArgs";
 import { wordParagraphAnchor } from "../wordParagraphResolver";
+import { buildWordSelectionSnapshot } from "../wordSelectionAnchor";
 import {
   fitWordSelectionText,
   WORD_SELECTION_ARG_KEYS,
   wordSelectionFacetArgs,
 } from "../wordSelectionArgs";
+import { wordSelectionSupport } from "../wordSelectionSupport";
 
 import type { WordSelectionSnapshot } from "../wordSelectionAnchor";
 
@@ -108,6 +110,50 @@ describe("wordSelectionFacetArgs", () => {
     ).toMatchObject({
       selection_role: "context_only",
       context_reason: "hyperlink",
+    });
+  });
+
+  it("offers a passage inside one paragraph for rewriting", () => {
+    const text = "The quick brown fox.";
+    const inline = buildWordSelectionSnapshot(
+      {
+        isEmpty: false,
+        storyType: "MainDoc",
+        selectionText: "quick",
+        objectOnly: false,
+        tables: "none",
+        paragraphs: [
+          {
+            id: "p1",
+            text,
+            rangeText: text,
+            index: 1,
+            styleName: "Normal",
+            tableNestingLevel: 0,
+            cell: null,
+          },
+        ],
+        startOffset: 4,
+        endOffset: 9,
+        anchor: wordParagraphAnchor(
+          [story[0], { id: "p1", text }, story[2]],
+          1,
+          1,
+        ),
+        hazards: {},
+        pictureBeforeSpan: false,
+        styleFontResolved: true,
+        spanChecked: true,
+      },
+      wordSelectionSupport(() => true, "Mac"),
+      "user",
+    );
+    if (!inline) throw new Error("no snapshot");
+    expect(args(inline)).toMatchObject({
+      selected_text: "quick",
+      selection_role: "rewrite",
+      context_reason: "",
+      selection_shape: "inline",
     });
   });
 

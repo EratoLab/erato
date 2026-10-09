@@ -4158,7 +4158,7 @@ msgstr "Erato ne peut pas localiser précisément ce passage dans le document : 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.shape"
-msgstr "Pour l'instant, Erato ne peut remplacer qu'un paragraphe entier. Sélectionnez le paragraphe entier pour qu'il soit remplacé."
+msgstr "Erato ne peut pas encore remplacer ce type de sélection. Sélectionnez du texte dans un seul paragraphe pour qu'il soit remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

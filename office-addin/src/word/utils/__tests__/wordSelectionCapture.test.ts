@@ -49,8 +49,8 @@ describe.each(HOSTS)("captureWordSelection on %s", (flavour) => {
   it("records inline text with its offsets, its paragraph's identity and the anchor", async () => {
     const selection = await captureOf({ p: "PL1", text: "lima mike" });
     expect(selection).toMatchObject({
-      role: "context_only",
-      reasonCode: "shape_not_enabled",
+      role: "rewrite",
+      reasonCode: null,
       shape: "inline",
       story: "main",
       origin: "user",
@@ -123,9 +123,19 @@ describe.each(HOSTS)("captureWordSelection on %s", (flavour) => {
     },
   );
 
-  it("reads no search for a passage that occurs once", async () => {
+  it("searches a passage that occurs once only to check that Replace could find it", async () => {
     const host = install();
     host.select({ p: "PL1", text: "lima mike" });
+    await captured();
+    expect(
+      host.calls().filter((call) => call === "Paragraph.search"),
+    ).toHaveLength(1);
+    expect(host.calls()).not.toContain("Range.compareLocationWith");
+  });
+
+  it("reads no search for a whole paragraph", async () => {
+    const host = install();
+    host.select({ p: "PL1" });
     await captured();
     expect(host.calls()).not.toContain("Paragraph.search");
   });
@@ -139,7 +149,7 @@ describe.each(HOSTS)("captureWordSelection on %s", (flavour) => {
     expect(selection).toMatchObject({
       selectedText: "x^y",
       startOffset: -1,
-      reasonCode: "shape_not_enabled",
+      reasonCode: "position_unknown",
     });
   });
 
@@ -318,7 +328,7 @@ describe("captureWordSelection across requirement levels", () => {
     });
     host.select({ p: "PL1", text: "lima mike" });
     const selection = await captured();
-    expect(selection).toMatchObject({ reasonCode: "shape_not_enabled" });
+    expect(selection).toMatchObject({ role: "rewrite", reasonCode: null });
     expect(selection!.paragraphs[0]).toMatchObject({ id: null, index: 2 });
   });
 });

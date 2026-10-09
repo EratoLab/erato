@@ -169,16 +169,17 @@ describe("classifyWordSelection: D-10", () => {
     });
   });
 
-  it("rewrites whole paragraphs only, keeping every other shape context only", () => {
-    expect([...WORD_SELECTION_REPLACE_SHAPES]).toEqual(["paragraph"]);
-    expect(classifyWordSelection(PARAGRAPH, MAC)).toMatchObject({
-      role: "rewrite",
-    });
-    expect(classifyWordSelection(PARAGRAPH, LTSC_2021)).toMatchObject({
+  it("rewrites whole paragraphs and inline spans, keeping every other shape context only", () => {
+    expect([...WORD_SELECTION_REPLACE_SHAPES]).toEqual(["paragraph", "inline"]);
+    for (const selection of [PARAGRAPH, INLINE])
+      expect(classifyWordSelection(selection, MAC)).toMatchObject({
+        role: "rewrite",
+      });
+    expect(classifyWordSelection(INLINE, LTSC_2021)).toMatchObject({
       role: "context_only",
       reasonCode: "host_unsupported",
     });
-    for (const selection of [INLINE, MULTI, CELL])
+    for (const selection of [MULTI, CELL])
       expect(classifyWordSelection(selection, MAC)).toMatchObject({
         role: "context_only",
         reasonCode: "shape_not_enabled",

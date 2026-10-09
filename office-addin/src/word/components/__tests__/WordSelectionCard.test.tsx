@@ -200,14 +200,50 @@ describe("WordSelectionCard", () => {
     });
   });
 
-  it("explains a selection Erato can only use as context and offers no Replace", async () => {
+  it("replaces only the selected passage inside its paragraph", async () => {
+    const capture = await captureOf(host, {
+      p: "RP1",
+      text: "Repeated word one.",
+      occ: 1,
+    });
+    renderCard({ capture });
+    fireEvent.click(replaceButton()!);
+    await screen.findByText("Replaced the selected passage.");
+    expect(host.paragraphs().find((p) => p.text.startsWith("RP1"))?.text).toBe(
+      `RP1 Repeated word one. ${PROPOSAL} Repeated word one.`,
+    );
+    expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
+  });
+
+  it("says Word could not pinpoint the passage, keeping Copy and Use current selection", async () => {
     const capture = await captureOf(host, { p: "PL1", text: "lima mike" });
-    renderCard({ capture, proposed: true, presentation: "auto_prompt" });
+    host.onSearch((hits) => [...hits, ...hits]);
+    const { restoreRequest } = renderCard({ capture });
+    fireEvent.click(replaceButton()!);
+    await screen.findByText(
+      "Word could not pinpoint the passage inside its paragraph. Nothing was replaced.",
+    );
+    expect(host.writeSyncs()).toEqual([]);
     expect(
-      screen.getByText(
-        "Erato can only replace a whole paragraph so far. Select the whole paragraph to have it replaced.",
-      ),
+      screen.getByRole("button", { name: "Copy proposal" }),
     ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use current selection" }),
+    );
+    expect(restoreRequest).toHaveBeenCalledWith(REQUEST);
+  });
+
+  it("explains a selection Erato can only use as context and offers no Replace", async () => {
+    const capture = await captureOf(host, {
+      p: "MP1",
+      text: "whiskey.",
+      to: { p: "MP2", text: "MP2" },
+    });
+    renderCard({ capture, proposed: true, presentation: "auto_prompt" });
+    const reason = screen.getByText(
+      "Erato cannot replace this kind of selection yet. Select text within one paragraph to have it replaced.",
+    );
+    expect(reason.textContent).not.toContain("whole paragraph");
     expect(replaceButton()).toBeNull();
     expect(screen.queryByTestId("confirmation-card")).toBeNull();
     await act(() => Promise.resolve());

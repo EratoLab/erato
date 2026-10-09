@@ -4158,7 +4158,7 @@ msgstr "Erato kann diese Passage im Dokument nicht eindeutig finden und sie dahe
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.shape"
-msgstr "Erato kann bisher nur einen ganzen Absatz ersetzen. Wählen Sie den ganzen Absatz aus, damit er ersetzt werden kann."
+msgstr "Erato kann diese Art von Auswahl noch nicht ersetzen. Wählen Sie Text innerhalb eines Absatzes aus, damit er ersetzt werden kann."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

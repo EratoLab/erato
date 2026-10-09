@@ -4158,7 +4158,7 @@ msgstr "Erato cannot pinpoint this passage in the document, so it cannot replace
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.shape"
-msgstr "Erato can only replace a whole paragraph so far. Select the whole paragraph to have it replaced."
+msgstr "Erato cannot replace this kind of selection yet. Select text within one paragraph to have it replaced."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

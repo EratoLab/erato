@@ -4158,7 +4158,7 @@ msgstr "Erato nie może dokładnie zlokalizować tego fragmentu w dokumencie, wi
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.shape"
-msgstr "Na razie Erato może zastąpić tylko cały akapit. Zaznacz cały akapit, aby można go było zastąpić."
+msgstr "Erato nie może jeszcze zastąpić tego rodzaju zaznaczenia. Zaznacz tekst w obrębie jednego akapitu, aby można go było zastąpić."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

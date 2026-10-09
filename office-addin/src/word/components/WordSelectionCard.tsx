@@ -123,7 +123,7 @@ export function wordSelectionReasonText(
       return t({
         id: "officeAddin.word.selection.reason.shape",
         message:
-          "Erato can only replace a whole paragraph so far. Select the whole paragraph to have it replaced.",
+          "Erato cannot replace this kind of selection yet. Select text within one paragraph to have it replaced.",
       });
     default:
       return t({
