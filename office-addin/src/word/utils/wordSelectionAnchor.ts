@@ -354,7 +354,11 @@ function anchorMatches(facts: WordSelectionFacts): boolean {
   );
 }
 
-function hazardOf(
+/**
+ * The first hazard that keeps a span context only on this host. Some are benign where the rewrite
+ * resets them (complex-script twins on the web), so a hazard flag alone does not decide.
+ */
+export function wordSelectionHazardReason(
   hazards: WordSelectionHazards,
   parts: readonly string[],
   support: WordSelectionSupport,
@@ -412,7 +416,7 @@ function contextOnlyReason(
     (parts[0] === "" || parts[parts.length - 1] === "")
   )
     return "empty_edge_paragraph";
-  const hazard = hazardOf(facts.hazards, parts, support);
+  const hazard = wordSelectionHazardReason(facts.hazards, parts, support);
   if (hazard) return hazard;
   if (facts.pictureBeforeSpan && support.picturesShiftOffsets)
     return "web_picture_offset";

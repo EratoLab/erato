@@ -287,3 +287,27 @@ describe("replaceWordSelection across hosts", () => {
     expect(WORD_REPLACE_SELECTION_TIMEOUT_MS).toBe(30_000);
   });
 });
+
+describe("replaceWordSelection on the web", () => {
+  it("rewrites a paragraph whose bold word carries the web's own bold twin", async () => {
+    const host = installWordSelectionHost(
+      {
+        body: [
+          "Intro.",
+          {
+            runs: [
+              { text: "Bold", font: { bold: true, boldBidirectional: true } },
+              " then plain words.",
+            ],
+          },
+        ],
+      },
+      { host: "web" },
+    );
+    const capture = await captureOf(host, { paragraph: 1 });
+    expect(capture.selection?.role).toBe("rewrite");
+    expect(await replace(capture, "Rewritten words.")).toMatchObject({
+      status: "applied",
+    });
+  });
+});

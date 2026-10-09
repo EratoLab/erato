@@ -5,7 +5,10 @@ import {
   WORD_SELECTION_TEXT_OPTIONS,
 } from "./wordReviewLocation";
 import { runWordGuarded } from "./wordRunGuard";
-import { resolveWordSelection } from "./wordSelectionAnchor";
+import {
+  resolveWordSelection,
+  wordSelectionHazardReason,
+} from "./wordSelectionAnchor";
 import {
   WORD_SELECTION_TOGGLE_PROPERTIES,
   wordSelectionTargetFormat,
@@ -125,9 +128,6 @@ export function evaluateParagraphSpan(
   };
 }
 
-const hasHazard = (hazards: WordSelectionHazards) =>
-  Object.values(hazards).some(Boolean);
-
 export type WordSelectionProof =
   | { paragraphs: Word.Paragraph[]; positions: number[]; story: WordStoryRead }
   | { refused: WordSelectionReplaceCode };
@@ -227,7 +227,7 @@ export function checkTargetVerification(
   for (const live of paragraphs) {
     const evaluated = evaluateParagraphSpan(live.checks, live.style, support);
     if (
-      hasHazard(evaluated.hazards) ||
+      wordSelectionHazardReason(evaluated.hazards, [live.text], support) ||
       !evaluated.styleFontResolved ||
       !evaluated.format
     )

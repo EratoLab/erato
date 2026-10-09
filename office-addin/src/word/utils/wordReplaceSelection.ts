@@ -167,9 +167,9 @@ export async function replaceWordSelection(args: {
         .map((paragraph, i) => ({ paragraph, i }))
         .filter(({ i }) => lines[i] !== selection.paragraphs[i].rangeText);
       if (changed.length === 0) return null;
-      progress.stage("writing");
       // Nothing may be awaited between this check and the write sync.
       guard.beforeWrite();
+      progress.stage("writing");
       for (const { paragraph, i } of changed.reverse())
         setFont(
           paragraph.insertText(lines[i], "Replace"),
