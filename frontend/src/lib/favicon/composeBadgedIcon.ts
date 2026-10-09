@@ -1,6 +1,6 @@
-import { badgeGeometry, ICON_CANVAS_SIZE } from "./badgeGeometry";
+import { env } from "@/app/env";
 
-const BASE_ICON_URL = "/favicon.svg";
+import { badgeGeometry, ICON_CANVAS_SIZE } from "./badgeGeometry";
 
 export type TabIndicatorTone = "working" | "ready" | "attention";
 
@@ -27,7 +27,7 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 };
 
 const fetchBaseIcon = async (): Promise<BaseIcon | null> => {
-  const response = await fetch(BASE_ICON_URL);
+  const response = await fetch(env().faviconPath);
   if (!response.ok) {
     return null;
   }

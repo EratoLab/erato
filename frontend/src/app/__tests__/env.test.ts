@@ -2,6 +2,24 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { env } from "@/app/env";
 
+describe("env faviconPath", () => {
+  afterEach(() => {
+    delete window.FAVICON_PATH;
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to the existing favicon route", () => {
+    expect(env().faviconPath).toBe("/favicon.svg");
+  });
+
+  it("reads backend configuration and prefers the Vite override", () => {
+    window.FAVICON_PATH = "/public/common/custom-theme/acme/icon.png";
+    expect(env().faviconPath).toBe(window.FAVICON_PATH);
+    vi.stubEnv("VITE_FAVICON_PATH", "/local-icon.ico");
+    expect(env().faviconPath).toBe("/local-icon.ico");
+  });
+});
+
 describe("env chatInputEmptyStateLayout", () => {
   afterEach(() => {
     delete window.CHAT_INPUT_EMPTY_STATE_LAYOUT;

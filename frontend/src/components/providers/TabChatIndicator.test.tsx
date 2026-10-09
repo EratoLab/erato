@@ -70,7 +70,30 @@ describe("TabChatIndicator", () => {
   });
 
   afterEach(() => {
+    delete window.FAVICON_PATH;
     vi.unstubAllGlobals();
+  });
+
+  it("uses the configured image for badges and restores it when visible", async () => {
+    window.FAVICON_PATH = "/public/common/custom-theme/acme/icon.png";
+    setStreaming(true);
+    const { unmount } = render(<TabChatIndicator />);
+    expect(iconHrefs()).toEqual([window.FAVICON_PATH, window.FAVICON_PATH]);
+    const svgLink = document.querySelector('link[rel="icon"][type]');
+    expect(svgLink).toBeNull();
+
+    setHidden(true);
+    await waitFor(() => {
+      expect(iconHrefs()[0]).toContain("circle");
+    });
+    expect(fetch).toHaveBeenCalledWith(window.FAVICON_PATH);
+
+    setHidden(false);
+    await waitFor(() => {
+      expect(iconHrefs()).toEqual([window.FAVICON_PATH, window.FAVICON_PATH]);
+    });
+    unmount();
+    expect(iconHrefs()).toEqual([window.FAVICON_PATH, window.FAVICON_PATH]);
   });
 
   it("leaves the original icons alone while the tab is visible", async () => {

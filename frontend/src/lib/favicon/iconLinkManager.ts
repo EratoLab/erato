@@ -5,6 +5,19 @@ let detachedLinks: HTMLLinkElement[] = [];
 const managedLink = (): HTMLLinkElement | null =>
   document.head.querySelector<HTMLLinkElement>(`link[${MANAGED_ATTRIBUTE}]`);
 
+/** Updates the originals that are restored after a chat activity badge. */
+export const configureIconLinks = (href: string): void => {
+  restoreIconLinks();
+  for (const link of document.querySelectorAll<HTMLLinkElement>(
+    'link[rel~="icon"]',
+  )) {
+    link.setAttribute("href", href);
+    // The configured image can have a different format and size.
+    link.removeAttribute("type");
+    link.removeAttribute("sizes");
+  }
+};
+
 export const applyIconHref = (href: string): void => {
   let link = managedLink();
   if (!link) {

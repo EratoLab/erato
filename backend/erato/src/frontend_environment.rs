@@ -27,6 +27,7 @@ const FRONTEND_ENV_KEY_FRONTEND_PLATFORM: &str = "FRONTEND_PLATFORM";
 const FRONTEND_ENV_KEY_FRONTEND_PUBLIC_BASE_PATH: &str = "FRONTEND_PUBLIC_BASE_PATH";
 const FRONTEND_ENV_KEY_COMMON_PUBLIC_BASE_PATH: &str = "COMMON_PUBLIC_BASE_PATH";
 const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
+const FRONTEND_ENV_KEY_FAVICON_PATH: &str = "FAVICON_PATH";
 const FRONTEND_ENV_KEY_MESSAGE_EDITING_ENABLED: &str = "MESSAGE_EDITING_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_REGENERATION_ENABLED: &str = "MESSAGE_REGENERATION_ENABLED";
 const FRONTEND_ENV_KEY_CHAT_HISTORY_FILTERS_ENABLED: &str = "CHAT_HISTORY_FILTERS_ENABLED";
@@ -346,6 +347,10 @@ fn build_frontend_environment(
     }
 
     // Inject frontend configuration flags
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_FAVICON_PATH.to_string(),
+        Value::String(config.frontend.favicon_path.clone()),
+    );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_DISABLE_UPLOAD.to_string(),
         Value::Bool(config.frontend.disable_upload),
@@ -801,6 +806,19 @@ pub fn inject_environment_script_tag(
                     }
                     Ok(())
                 }),
+                element!("link[rel~=\"icon\"]", |el| {
+                    if let Some(path) = frontend_env
+                        .additional_environment
+                        .get(FRONTEND_ENV_KEY_FAVICON_PATH)
+                        .and_then(Value::as_str)
+                        .filter(|path| *path != "/favicon.svg")
+                    {
+                        el.set_attribute("href", path)?;
+                        el.remove_attribute("type");
+                        el.remove_attribute("sizes");
+                    }
+                    Ok(())
+                }),
                 element!("link[rel=\"modulepreload\"][href]", |el| {
                     // Vite emits the runtime entry as a preload because the app imports it too.
                     if let Some(href) = el.get_attribute("href")
@@ -1190,6 +1208,34 @@ pub mod axum {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn favicon_path_is_injected_into_frontend_environment() {
+        let mut config = AppConfig::default();
+        for path in ["/favicon.svg", "/public/common/custom-theme/acme/icon.png"] {
+            config.frontend.favicon_path = path.to_string();
+            let environment = build_frontend_environment(&config, FrontendKind::Web);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_FAVICON_PATH),
+                Some(&Value::String(path.to_string()))
+            );
+            let input = br#"<html><head><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple.png"></head></html>"#;
+            let mut output = Vec::new();
+            inject_environment_script_tag(input, &mut output, &environment, &[], None).unwrap();
+            let output = String::from_utf8(output).unwrap();
+            if path == "/favicon.svg" {
+                assert!(output.contains(r#"href="/favicon.ico" sizes="any""#));
+                assert!(output.contains(r#"href="/favicon.svg" type="image/svg+xml""#));
+            } else {
+                assert_eq!(output.matches(&format!("href=\"{path}\"")).count(), 2);
+                assert!(!output.contains("image/svg+xml"));
+                assert!(!output.contains("sizes="));
+            }
+            assert!(output.contains(r#"rel="apple-touch-icon" href="/apple.png""#));
+        }
+    }
 
     #[test]
     fn mcp_visibility_inherits_and_overrides_for_both_frontends() {

@@ -161,6 +161,25 @@ If not provided, the default bundled theme will be used.
 theme = "my-theme"
 ```
 
+#### `frontend.favicon_path`
+
+{/* erato_toml_config_key: frontend.favicon_path */}
+
+Browser URL for the favicon. Use a deployment-root-relative path to a served image, such as an SVG, ICO, or PNG. Chat activity badges use the same image.
+
+**Default value:** `/favicon.svg` (uses the theme favicon or the bundled default, with the existing ICO fallback)
+
+**Type:** `string`
+
+**Example**
+
+```toml
+[frontend]
+favicon_path = "/public/common/custom-theme/my-company/icon.png"
+```
+
+For local frontend development, set `VITE_FAVICON_PATH` to override this value.
+
 #### `frontend.translation_po_compilation_mode`
 
 {/* erato_toml_config_key: frontend.translation_po_compilation_mode */}

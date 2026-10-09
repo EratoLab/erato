@@ -765,6 +765,7 @@
   "frontend.error_report.show_copy_error_report": {},
   "frontend.error_report.show_verbose_assistant_errors": {},
   "frontend.extra_frame_ancestors.[]": {},
+  "frontend.favicon_path": {},
   "frontend.mask_reasoning_trace_text": {},
   "frontend.max_files": {},
   "frontend.message_feedback_edit_time_limit_seconds": {},
