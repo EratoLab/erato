@@ -5,17 +5,31 @@ import {
   DocumentIcon,
   registerClientToolExecutor,
 } from "@erato/frontend/library";
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
-import { useAvailableActionFacetIds } from "../../core/clientActions/useAvailableActionFacets";
+import {
+  useAvailableActionFacetArgs,
+  useAvailableActionFacetIds,
+} from "../../core/clientActions/useAvailableActionFacets";
+import { AddinSelectionChip } from "../../core/selection/AddinSelectionChip";
+import { useConversationKey } from "../../core/selection/useConversationKey";
+import { useSelectionDismissal } from "../../core/selection/useSelectionDismissal";
 import { useWordDocumentSource } from "../hooks/useWordDocumentSource";
+import { useWordSelection } from "../hooks/useWordSelection";
+import {
+  armWordSelection,
+  wordSelectionStore,
+} from "../hooks/wordSelectionStore";
 import {
   resolveWordActionFacet,
+  resolveWordSelectionFacet,
   WORD_COMPOSE_FACET_ID,
   WORD_AUTHORING_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
+  wordSelectionFacetAvailable,
+  wordSelectionTakesSlot,
 } from "../utils/wordActionFacet";
 import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
 import { checkWordAuthoringBudget } from "../utils/wordAuthoringBudget";
@@ -31,6 +45,11 @@ import {
   WORD_SUBMIT_PLAN_TOOL,
 } from "../utils/wordDocumentSubmission";
 import { captureWordImageAssets } from "../utils/wordImageAssets";
+import {
+  emptySelectionCapture,
+  WORD_SELECTION_REPLACE_SHAPES,
+} from "../utils/wordSelectionAnchor";
+import { captureWordSelection } from "../utils/wordSelectionCapture";
 import { markWordSend } from "../utils/wordSendTiming";
 
 import type {
@@ -78,6 +97,41 @@ export function WordChatInput({
   }
 
   const chipEnabled = isDocumentIncluded && chipAvailable;
+
+  const availableFacetArgs = useAvailableActionFacetArgs();
+  const selectionAvailable = wordSelectionFacetAvailable(
+    availableFacetIds,
+    availableFacetArgs,
+  );
+  useWordSelection(documentIdentity, selectionAvailable);
+  const liveSelection = wordSelectionStore.useSnapshot();
+  const selectionDismissal = useSelectionDismissal(
+    liveSelection.preview?.key ?? "",
+    useConversationKey(chatId, documentIdentity),
+  );
+  const { rearm: rearmSelection } = selectionDismissal;
+  useEffect(
+    () =>
+      wordSelectionStore.subscribeRefresh(({ rearm }) => {
+        if (rearm) rearmSelection();
+      }),
+    [rearmSelection],
+  );
+  const selectionShown =
+    selectionAvailable &&
+    liveSelection.preview !== null &&
+    !selectionDismissal.dismissed;
+  // Until Replace can write a shape, every selection is context only, which an included document keeps out.
+  const selectionMayTakeSlot =
+    !chipEnabled || WORD_SELECTION_REPLACE_SHAPES.size > 0;
+  // A read still pending after the user's last selection change is read at Send as well.
+  const selectionDue =
+    selectionAvailable &&
+    !selectionDismissal.dismissed &&
+    selectionMayTakeSlot &&
+    ((liveSelection.preview !== null && liveSelection.armed) ||
+      liveSelection.pending);
+  const [selectionReadFailed, setSelectionReadFailed] = useState(false);
   const { preview, capture } = useWordDocumentSource({
     enabled: chipEnabled,
     documentIdentity,
@@ -147,6 +201,7 @@ export function WordChatInput({
     ) => {
       if (preparingRef.current) return;
       clearReadSession();
+      setSelectionReadFailed(false);
       const send = (
         actionFacet: ReturnType<typeof resolveWordActionFacet>,
         hostContextIdentity: string | null,
@@ -168,7 +223,7 @@ export function WordChatInput({
         );
       };
 
-      if (!chipEnabled) {
+      if (!chipEnabled && !selectionDue) {
         stagePendingCapture(null);
         send(undefined, null);
         return;
@@ -297,17 +352,55 @@ export function WordChatInput({
         };
       };
 
+      // The selection captured now wins over what the chip showed (D-9).
+      const prepareSelection: AddinSendPreparation["run"] = async (signal) => {
+        const read = await captureWordSelection();
+        if (signal.aborted || contextChanged()) return null;
+        if (read.status === "failed") {
+          setSelectionReadFailed(true);
+          return null;
+        }
+        const selection = read.value;
+        const actionFacet =
+          selection && wordSelectionTakesSlot(selection, chipEnabled)
+            ? resolveWordSelectionFacet({
+                selection,
+                documentName: resolveWordDocumentName(),
+                documentIdentity,
+                availableFacetIds,
+                availableFacetArgs,
+              })
+            : undefined;
+        if (selection && actionFacet) {
+          stagePendingCapture(
+            emptySelectionCapture(documentIdentity, selection),
+          );
+          return { actionFacet, hostContextIdentity: documentIdentity };
+        }
+        if (chipEnabled) return prepareDocument(signal);
+        stagePendingCapture(null);
+        return { actionFacet: undefined, hostContextIdentity: null };
+      };
+
       preparingRef.current = true;
       setPreparing(true);
       send(undefined, null, {
-        label: t({
-          id: "officeAddin.word.send.preparingDocument",
-          message: "Preparing document…",
-        }),
+        label:
+          selectionDue && !chipEnabled
+            ? t({
+                id: "officeAddin.word.send.readingSelection",
+                message: "Reading selection…",
+              })
+            : t({
+                id: "officeAddin.word.send.preparingDocument",
+                message: "Preparing document…",
+              }),
         run: async (signal) => {
           markWordSend("prepare-start");
           try {
-            return await prepareDocument(signal);
+            return await (selectionDue
+              ? prepareSelection(signal)
+              : prepareDocument(signal));
           } finally {
             markWordSend("prepare-end");
             finishPreparing();
@@ -322,6 +415,7 @@ export function WordChatInput({
     },
     [
       authoringAvailable,
+      availableFacetArgs,
       availableFacetIds,
       chatId,
       capture,
@@ -329,6 +423,7 @@ export function WordChatInput({
       chipEnabled,
       clearReadSession,
       documentIdentity,
+      selectionDue,
       stagePendingCapture,
     ],
   );
@@ -349,6 +444,41 @@ export function WordChatInput({
 
   return (
     <>
+      {selectionShown && liveSelection.preview && (
+        <AddinSelectionChip
+          preview={liveSelection.preview.text}
+          metaLabel={selectionMetaLabel(liveSelection.preview.paragraphCount)}
+          note={
+            !selectionMayTakeSlot
+              ? t({
+                  id: "officeAddin.word.selection.notSentWithDocument",
+                  message: "Not sent while the document is included.",
+                })
+              : liveSelection.preview.truncated
+                ? t({
+                    id: "officeAddin.word.selection.truncated",
+                    message:
+                      "Too long to send in full. Only the beginning is sent.",
+                  })
+                : undefined
+          }
+          armed={liveSelection.armed}
+          onUse={armWordSelection}
+          onDismiss={selectionDismissal.dismiss}
+          testId="word-selection-chip"
+        />
+      )}
+      {selectionReadFailed && (
+        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
+          <Alert type="error">
+            {t({
+              id: "officeAddin.word.selection.readFailed",
+              message:
+                "Erato could not read your selection in Word. Your message was not sent.",
+            })}
+          </Alert>
+        </div>
+      )}
       {chipAvailable && (
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
           <Button
@@ -390,6 +520,16 @@ export function WordChatInput({
       />
     </>
   );
+}
+
+function selectionMetaLabel(paragraphCount: number): string {
+  return t({
+    id: "officeAddin.word.selection.meta",
+    message: plural(paragraphCount, {
+      one: "Selected passage · # paragraph",
+      other: "Selected passage · # paragraphs",
+    }),
+  });
 }
 
 function chipLabel(enabled: boolean, preview: WordDocumentPreview): string {

@@ -4038,8 +4038,33 @@ msgstr "Localiser le passage {0}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.meta"
+msgstr "{paragraphCount, plural, one {Passage sélectionné · # paragraphe} other {Passage sélectionné · # paragraphes}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.notSentWithDocument"
+msgstr "Non envoyé tant que le document est inclus."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.readFailed"
+msgstr "Erato n'a pas pu lire votre sélection dans Word. Votre message n'a pas été envoyé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.truncated"
+msgstr "Trop long pour être envoyé en entier. Seul le début est envoyé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.preparingDocument"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.readingSelection"
+msgstr "Lecture de la sélection…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

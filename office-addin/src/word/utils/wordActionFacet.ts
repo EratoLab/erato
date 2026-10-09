@@ -1,10 +1,60 @@
+import { wordSelectionFacetArgs } from "./wordSelectionArgs";
+
 import type { WordDocumentArgs } from "./buildWordDocumentArgs";
+import type { WordSelectionSnapshot } from "./wordSelectionAnchor";
 import type { ActionFacetRequest } from "@erato/frontend/library";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export const WORD_DOCUMENT_REVIEW_FACET_ID = "word_document_review";
 export const WORD_AUTHORING_FACET_ID = "word_document_authoring";
 export const WORD_COMPOSE_FACET_ID = "word_compose";
+export const WORD_SELECTION_FACET_ID = "word_selection";
+
+/** Without selected_text the model would get the request but not the passage. */
+export function wordSelectionFacetAvailable(
+  availableFacetIds: ReadonlySet<string>,
+  availableFacetArgs: ReadonlyMap<string, ReadonlySet<string>>,
+): boolean {
+  return (
+    availableFacetIds.has(WORD_SELECTION_FACET_ID) &&
+    (availableFacetArgs.get(WORD_SELECTION_FACET_ID)?.has("selected_text") ??
+      false)
+  );
+}
+
+/**
+ * A selection the Replace action can write takes the facet slot ahead of the document (D-28). One
+ * that can only be context does not displace an included document (decision 2).
+ */
+export function wordSelectionTakesSlot(
+  selection: WordSelectionSnapshot,
+  documentIncluded: boolean,
+): boolean {
+  return selection.role === "rewrite" || !documentIncluded;
+}
+
+export function resolveWordSelectionFacet(input: {
+  selection: WordSelectionSnapshot;
+  documentName: string;
+  documentIdentity: string;
+  availableFacetIds: ReadonlySet<string>;
+  availableFacetArgs: ReadonlyMap<string, ReadonlySet<string>>;
+}): ActionFacetRequest | undefined {
+  if (
+    !wordSelectionFacetAvailable(
+      input.availableFacetIds,
+      input.availableFacetArgs,
+    )
+  )
+    return undefined;
+  return {
+    id: WORD_SELECTION_FACET_ID,
+    args: wordSelectionFacetArgs(
+      input,
+      input.availableFacetArgs.get(WORD_SELECTION_FACET_ID),
+    ),
+  };
+}
 
 export interface WordActionFacetInput {
   chipEnabled: boolean;

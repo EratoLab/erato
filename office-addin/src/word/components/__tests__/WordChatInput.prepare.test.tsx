@@ -12,6 +12,7 @@ import { WordChatInput } from "../WordChatInput";
 
 import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
+import type * as wordActionFacetModule from "../../utils/wordActionFacet";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const host = vi.hoisted(() => ({
@@ -77,10 +78,8 @@ vi.mock("../../utils/wordDocumentSubmission", () => ({
   createWordDocumentSubmissionExecutor: () => vi.fn(),
 }));
 
-vi.mock("../../utils/wordActionFacet", () => ({
-  WORD_AUTHORING_FACET_ID: "word_document_authoring",
-  WORD_COMPOSE_FACET_ID: "word_compose",
-  WORD_DOCUMENT_REVIEW_FACET_ID: "word_document_review",
+vi.mock("../../utils/wordActionFacet", async (importOriginal) => ({
+  ...(await importOriginal<typeof wordActionFacetModule>()),
   resolveWordActionFacet: (input: {
     documentArgs: unknown;
     authoring?: { issue?: string };
