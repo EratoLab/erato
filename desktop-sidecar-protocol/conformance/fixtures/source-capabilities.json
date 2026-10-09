@@ -1,0 +1,93 @@
+{
+  "sources": [
+    {
+      "sourceId": "a1111111-b222-4333-8444-c55555555555",
+      "sourceKind": "OST",
+      "sourceKey": "source-key-ost",
+      "displayName": "jane@example.com",
+      "product": "outlook",
+      "product_variant": "outlook_classic",
+      "capabilities": {
+        "conversations": true,
+        "attachments": true,
+        "folders": true,
+        "recipients": true,
+        "openInOutlook": true,
+        "documentExport": "complete",
+        "metadataFields": [
+          "kind",
+          "source_id",
+          "mailbox_id",
+          "sender",
+          "sender_email",
+          "file_type",
+          "has_attachments",
+          "folder_path",
+          "to",
+          "cc",
+          "bcc",
+          "correspondents"
+        ]
+      },
+      "locator": { "mailboxId": "11111111-2222-4333-8444-555555555555" },
+      "enabled": true,
+      "discoveryCursor": null,
+      "completedScanId": null,
+      "lastSuccessAt": "2026-10-09T08:00:00Z",
+      "lastErrorCode": null
+    },
+    {
+      "sourceId": "b1111111-b222-4333-8444-c55555555555",
+      "sourceKind": "macOS Hx account",
+      "sourceKey": "source-key-hx",
+      "displayName": "jane@example.com",
+      "product": "outlook",
+      "product_variant": "outlook_new",
+      "capabilities": {
+        "conversations": false,
+        "attachments": false,
+        "folders": false,
+        "recipients": false,
+        "openInOutlook": false,
+        "documentExport": "cachedOnly",
+        "metadataFields": [
+          "kind",
+          "source_id",
+          "mailbox_id",
+          "sender",
+          "sender_email"
+        ]
+      },
+      "locator": { "mailboxId": "21111111-2222-4333-8444-555555555555" },
+      "enabled": true,
+      "discoveryCursor": null,
+      "completedScanId": null,
+      "lastSuccessAt": "2026-10-09T08:00:00Z",
+      "lastErrorCode": null
+    },
+    {
+      "sourceId": "c1111111-b222-4333-8444-c55555555555",
+      "sourceKind": "teams",
+      "sourceKey": "source-key-teams",
+      "displayName": "Example tenant",
+      "product": "teams",
+      "product_variant": "teams_new",
+      "capabilities": {
+        "conversations": false,
+        "attachments": false,
+        "folders": false,
+        "recipients": false,
+        "openInOutlook": false,
+        "documentExport": "cachedOnly",
+        "metadataFields": ["kind", "source_id", "sender", "sender_email"],
+        "futureCapability": true
+      },
+      "locator": { "tenantId": "tenant-1", "userId": "user-1" },
+      "enabled": true,
+      "discoveryCursor": null,
+      "completedScanId": null,
+      "lastSuccessAt": null,
+      "lastErrorCode": null
+    }
+  ]
+}

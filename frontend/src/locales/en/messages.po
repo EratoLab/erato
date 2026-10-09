@@ -2262,6 +2262,11 @@ msgstr "Teams keeps only part of its history on this device, so older messages m
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.partialMailboxCache"
+msgstr "{mailboxCount, plural, one {{mailboxNames} keeps only part of its mail on this device, so older emails may be missing.} other {{mailboxNames} keep only part of their mail on this device, so older emails may be missing.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.requestedBefore"
 msgstr "The search asked for items from {requested}, but the searched period starts later."
 
@@ -5939,6 +5944,11 @@ msgid "sidecar.indexing.localSource"
 msgstr "Local data source"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.mailboxWarnings"
+msgstr "Outlook on this device reported:"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.missingFromLocalCache"
 #~ msgstr "{missingCount, plural, one {# document is unavailable in the local cache.} other {# documents are unavailable in the local cache.}}"
@@ -5952,6 +5962,11 @@ msgstr "Decrease priority for {mailbox}"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.moveUp"
 msgstr "Increase priority for {mailbox}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.newOutlookForMacCache"
+msgstr "New Outlook for Mac keeps only part of your mail on this device, some of it only as a preview"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -6067,6 +6082,16 @@ msgstr "Save indexing settings"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.saveError"
 msgstr "Could not save indexing settings. Please try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.source.newOutlookForMac"
+msgstr "New Outlook for Mac"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.source.newOutlookForWindows"
+msgstr "New Outlook for Windows"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx

@@ -22,7 +22,11 @@ function stubInner(): OutlookMessageFetcher {
 
 interface FakeClientOptions {
   supports?: boolean;
-  mailboxes?: { id: string; emailAddress?: string }[];
+  mailboxes?: {
+    id: string;
+    emailAddress?: string;
+    capabilities?: { conversations?: boolean };
+  }[];
   conversation?: unknown;
 }
 
@@ -150,6 +154,59 @@ describe("createSidecarOutlookMessageFetcher", () => {
 
     expect(await fetcher.fetchConversationMessages("conv-1")).toBe(FALLBACK);
     expect(inner.fetchConversationMessages).toHaveBeenCalledOnce();
+  });
+
+  it("stops asking the sidecar for a store it cannot read as conversations", async () => {
+    const inner = stubInner();
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const client = fakeClient({
+      conversation: {
+        state: "partial",
+        messages: [],
+        warnings: [{ code: "unsupported_source" }],
+      },
+    });
+    const invoke = vi.spyOn(client, "invoke");
+    const fetcher = createSidecarOutlookMessageFetcher(context(client, inner));
+
+    expect(await fetcher.fetchConversationMessages("conv-1")).toBe(FALLBACK);
+    expect(await fetcher.fetchConversationMessages("conv-2")).toBe(FALLBACK);
+    expect(info).toHaveBeenCalledOnce();
+    expect(
+      invoke.mock.calls
+        .map(([method]) => String(method))
+        .filter((method) => method === "outlook.get_conversation.v1"),
+    ).toHaveLength(1);
+    expect(inner.fetchConversationMessages).toHaveBeenCalledTimes(2);
+    info.mockRestore();
+  });
+
+  it("skips the conversation for a mailbox without conversations, for every rebuilt fetcher", async () => {
+    const inner = stubInner();
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const client = fakeClient({
+      mailboxes: [
+        {
+          id: "a".repeat(32),
+          emailAddress: "user@example.test",
+          capabilities: { conversations: false },
+        },
+      ],
+    });
+    const invoke = vi.spyOn(client, "invoke");
+    for (const anchor of ["<a@b>", "<c@d>"]) {
+      const fetcher = createSidecarOutlookMessageFetcher({
+        ...context(client, inner),
+        anchorInternetMessageId: anchor,
+      });
+      expect(await fetcher.fetchConversationMessages("conv")).toBe(FALLBACK);
+    }
+    expect(invoke.mock.calls.map(([method]) => String(method))).toEqual([
+      "outlook.list_mailboxes.v1",
+      "outlook.list_mailboxes.v1",
+    ]);
+    expect(inner.fetchConversationMessages).toHaveBeenCalledTimes(2);
+    info.mockRestore();
   });
 
   it("degrades an attachment with no bytes to a marker + partial, not a full fallback", async () => {

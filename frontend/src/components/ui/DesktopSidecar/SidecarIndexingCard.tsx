@@ -116,7 +116,10 @@ function SidecarIndexingSettings({
         })}
       </p>
     );
-  const { status, mailboxes, sources } = data;
+  const { status, mailboxes, mailboxWarnings, sources } = data;
+  const warningMessages = [
+    ...new Set(mailboxWarnings.map((warning) => warning.message)),
+  ];
   const configuration = status.configuration;
   if (!configuration)
     return (
@@ -302,6 +305,25 @@ function SidecarIndexingSettings({
               );
             })}
           </ul>
+          {warningMessages.length > 0 && (
+            <div
+              role="note"
+              data-testid="sidecar-mailbox-warnings"
+              className="space-y-1 text-xs text-theme-warning-fg"
+            >
+              <p>
+                {t({
+                  id: "sidecar.indexing.mailboxWarnings",
+                  message: "Outlook on this device reported:",
+                })}
+              </p>
+              <ul className="list-disc pl-4">
+                {warningMessages.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           {ordered.some((entry) => entry.product === "teams") && (
             <p className="text-xs text-theme-fg-secondary">
               {/* Older sidecars report one Teams source per cache, not per account. */}

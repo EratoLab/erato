@@ -147,6 +147,11 @@ are:
 method. Error `data` follows `schemas/bootstrap/error-data.schema.json`. Human
 messages MUST NOT contain secrets, filesystem contents, or stack traces.
 
+Methods that read a source's content MAY add `data.sourceError`, an open string
+that says why the content could not be produced (§21). The code and `kind` stay
+what they were without it, so older clients are unaffected. A `-32602` error has
+no protocol `kind`; its `data`, when present, carries only `sourceError`.
+
 ## 7. Validation boundary
 
 The client validates outgoing parameters and incoming results against contracts
@@ -345,6 +350,11 @@ logged-in user's local Outlook installation. When the platform exposes an
 Outlook profile concept, the mailbox includes its `profileName`; standalone
 stores and platforms without profiles omit that field.
 
+A mailbox MAY carry `capabilities` (§21) and `sourceIds`, the IDs of its
+`sources.list.v1` sources. Its `source` names the local storage format; known
+values are `pst`, `ost`, `macOsProfile`, `macOsHxAccount` (new Outlook for Mac)
+and `windowsNewOutlook` (new Outlook for Windows).
+
 Each mailbox has a short opaque `id` that the client MUST return unchanged as
 `mailboxId` to `outlook.list_emails.v1`. The ID MUST be unique among mailboxes
 advertised by one sidecar runtime and stable for that runtime. It SHOULD remain
@@ -362,7 +372,9 @@ steps by `sequence` makes both deliveries render identically.
 
 `outlook.list_emails.v1` returns at most 50 of the newest locally indexed
 messages for the selected mailbox. Results are metadata summaries; neither
-action returns message bodies or attachments. Implementations MUST use
+action returns message bodies or attachments. An email `id` is opaque, contains
+no filesystem path, and is the same for a message in `outlook.list_emails.v1`
+and `outlook.search_emails.v1`. Implementations MUST use
 read-only storage access. A mailbox enumeration MAY succeed partially and
 report inaccessible local sources in `warnings`; a failure to enumerate the
 active platform's Outlook profile is a `sidecar_internal` error.
@@ -624,8 +636,10 @@ unprocessed dated documents older than the range, so `olderPending` plus
 The guarantee: every document dated inside the range, after `from` and up to
 `through`, or with no upper bound when `through` is null, is searchable or
 terminal. `unsearchable` counts the terminal documents inside the range; they
-do not end it. `undated` counts documents without a usable date, in any state;
-they are outside every range.
+do not end it. It also counts searchable documents inside the range whose full
+content is missing from the local cache, such as an email of which only a
+preview is cached: search sees only that preview. `undated` counts documents
+without a usable date, in any state; they are outside every range.
 
 `observedAt` is when the sidecar last confirmed the local store, either at the
 end of a complete enumeration or with a check that found the store unchanged.
@@ -633,10 +647,13 @@ Documents that reach the store after it are unknown until the next enumeration.
 When `through` is null, clients present `observedAt`, not the newest document
 date, as the end of the range: a quiet mailbox would otherwise seem to end at its
 last mail. `inventory` is `localStore` when the sidecar enumerates a complete
-local store (Outlook) and `cacheObservations` when it sees only what the
-application keeps cached (Teams). With `cacheObservations`, older documents may
-never have reached the device, and documents that left the cache stay
-searchable.
+local store (classic Outlook), `syncCache` when it enumerates the complete
+local cache of a synchronizing client (new Outlook for Mac and Windows), and
+`cacheObservations` when it sees only what the application keeps cached
+(Teams). A sync cache holds only part of the server mailbox, and of some
+messages only a preview or a truncated body. With either cache value, older documents may never
+have reached the device; with `cacheObservations`, documents that left the
+cache stay searchable.
 
 No range is claimed until the source has been enumerated completely once. Without
 a claim, `from` and `through` are null, `olderPending` counts every unprocessed
@@ -767,7 +784,9 @@ identifying the document and ideally an externally retrievable URL, and
 identifiers. Both fields are optional in the v1 compatibility schema so current
 clients can communicate with previous sidecars; current sidecars SHOULD include
 them for every returned document. Identifier keys are open-ended and values are
-strings, so adding a new identifier kind does not require a protocol change. The
+strings, so adding a new identifier kind does not require a protocol change.
+A hit MAY name its `sourceId` so clients can apply that source's capabilities
+(§21). `conversationKey` is opaque and contains no filesystem path. The
 response contains result metadata and execution counters; it does not contain
 extracted document contents.
 Search uses a consistent active generation and never creates an index. With no
@@ -868,12 +887,15 @@ files have an empty `contentBase64`.
   Channel messages stay within the anchor's reply chain; chats stay within
   their conversation. Fewer cached neighbors are returned without padding.
 
-Unknown or deleted IDs return `invalid_params`. Missing, truncated, changed,
-unsupported, or unreadable source content returns `sidecar_internal`, without
-silently dropping email attachments or substituting indexed text. Retrieval
-requires local content; it does not download missing content. Exports are
-limited to 47 MiB before the outer base64 encoding to fit the client's 64 MiB
-response limit. Oversized exports return `sidecar_internal`.
+Unknown or deleted IDs return `invalid_params` with `sourceError`
+`document_not_found`. Missing, truncated, changed, unsupported, or unreadable
+source content returns `sidecar_internal`, without silently dropping email
+attachments or substituting indexed text; `sourceError` names the cause when it
+is known (§21). Retrieval requires local content; it does not download missing
+content, so an email of which only a preview is cached fails with
+`missing_from_local_cache`. Exports are limited to 47 MiB before the outer
+base64 encoding to fit the client's 64 MiB response limit. Oversized exports
+return `sidecar_internal` with `export_too_large`.
 
 ## 20. Document external identities and attachment navigation
 
@@ -975,6 +997,54 @@ Consumers construct host-specific actions from recognized, validated identifiers
 after an explicit user action. A missing/unresolvable original does not invalidate
 the uploaded preview. Graph/EWS resolution and mailbox access remain subject to
 the user's current permissions.
+
+## 21. Source capabilities and source errors
+
+`sources.list.v1` sources and `outlook.list_mailboxes.v1` mailboxes MAY carry
+`capabilities` (`schemas/source/source-capabilities.schema.json`): what the
+sidecar can deliver for that source today.
+
+- `conversations`: `outlook.get_conversation.v1` can read its conversations.
+- `attachments`: email attachments are known, indexed and exportable.
+- `folders`: `sources.get_folder_hierarchy.v1` returns its real folder tree.
+- `recipients`: To, Cc and Bcc are known, so recipient filters can match.
+- `openInOutlook`: documents carry identifiers a local Outlook can open.
+- `documentExport`: `complete`, or `cachedOnly` when `sources.get_document.v1`
+  can export only what the application cached on this device.
+- `metadataFields`: the `search.metadata_fields.v1` names the source fills.
+
+An absent object or member means unknown; older sidecars omit them, and clients
+keep their previous behavior. A false value means the feature cannot work for
+that source now. Clients SHOULD NOT offer it, for example a conversation
+reference on a search hit from a source without `conversations`, and SHOULD say
+that it is unavailable rather than present an empty result. A filter on a field
+missing from `metadataFields` cannot match the source's documents, so an empty
+result says nothing about them. `documentExport` is an open string; clients
+treat an unknown value as `cachedOnly`. Capabilities belong to the current ready
+data and can change when the sidecar is upgraded.
+
+Errors of methods that read a source's content MAY carry `data.sourceError`, an
+open string naming the cause. Clients treat an unknown value like its absence.
+
+| `sourceError`              | Code     | Meaning                                                        |
+| -------------------------- | -------- | -------------------------------------------------------------- |
+| `document_not_found`       | `-32602` | The document or conversation anchor is not in the local store  |
+| `missing_from_local_cache` | `-32016` | The content, or all of it but a preview, is not on this device |
+| `source_changed`           | `-32016` | The local store changed during or since indexing               |
+| `unsupported_source`       | `-32016` | The source's storage format does not support this method       |
+| `export_too_large`         | `-32016` | The export exceeds the response limit                          |
+
+Retrying the same request cannot help for `missing_from_local_cache`,
+`unsupported_source` and `export_too_large`; after `document_not_found` or
+`source_changed`, a client searches again for a current ID.
+
+`outlook.get_conversation.v1` returns `document_not_found` when the mailbox
+holds no message with the anchor's Message-ID. For a mailbox whose storage
+format cannot be read as conversations at all, it keeps returning a result
+with `state: "partial"`, no messages and the warning `unsupported_source`.
+`sources.get_folder_hierarchy.v1` returns `unsupported_source` for a source
+without `folders`, not a placeholder root that would read as an empty mailbox;
+an unknown source ID remains `invalid_params`.
 
 Package 0.1.26 leaves all existing method schemas unchanged. Old clients already
 accept new identifier keys in `external_ids`; new clients continue to accept

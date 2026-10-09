@@ -87,11 +87,18 @@ export function LocalSearchCoverageNotice({
   const more = sources.slice(1);
   const requested =
     summary.requestedFrom && formatUtcDay(summary.requestedFrom);
-  const partialTeams = sources.some(
-    (source) =>
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- Protocol document kind.
-      source.partialCache && source.kinds.includes("teams_message"),
-  );
+  const partialCache = (kind: string) =>
+    sources.filter(
+      (source) => source.partialCache && source.kinds.includes(kind),
+    );
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Protocol document kind.
+  const partialTeams = partialCache("teams_message").length > 0;
+  // A collapsed list can hide the cached mailbox, so the caveat names it.
+  const partialMailboxes = partialCache("email").map(numberedLabel);
+  const mailboxNames = new Intl.ListFormat(i18n.locale, {
+    type: "conjunction",
+  }).format(partialMailboxes);
+  const mailboxCount = partialMailboxes.length;
   const Icon = warning ? WarningIcon : InfoIcon;
   const source = first ? sourcePeriod(first) : "";
   const count = more.length;
@@ -152,6 +159,17 @@ export function LocalSearchCoverageNotice({
             {t({
               id: "chat.message.localSearchCoverage.requestedBefore",
               message: `The search asked for items from ${requested}, but the searched period starts later.`,
+            })}
+          </span>
+        )}
+        {mailboxCount > 0 && (
+          <span>
+            {t({
+              id: "chat.message.localSearchCoverage.partialMailboxCache",
+              message: plural(mailboxCount, {
+                one: `${mailboxNames} keeps only part of its mail on this device, so older emails may be missing.`,
+                other: `${mailboxNames} keep only part of their mail on this device, so older emails may be missing.`,
+              }),
             })}
           </span>
         )}

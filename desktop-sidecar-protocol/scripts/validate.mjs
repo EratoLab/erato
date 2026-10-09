@@ -212,7 +212,28 @@ const validators = {
   "outlook.list_emails.v1:result": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json",
   ),
+  "outlook.get_conversation.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json",
+  ),
+  "outlook.get_conversation.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json",
+  ),
+  "sources.list.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json",
+  ),
+  "sources.list.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json",
+  ),
+  "sources.get_document.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json",
+  ),
+  "sources.get_folder_hierarchy.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json",
+  ),
 };
+const validateErrorData = ajv.getSchema(
+  "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/error-data.schema.json",
+);
 const validateEnvelope = ajv.getSchema(
   "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/json-rpc-envelope.schema.json",
 );
@@ -256,6 +277,18 @@ for (const exampleFile of await listFiles(
           )}`,
         );
       }
+    }
+    // Invalid params have no protocol kind; their data may carry sourceError alone.
+    if (
+      message.error?.data !== undefined &&
+      message.error.code !== -32602 &&
+      !validateErrorData?.(message.error.data)
+    ) {
+      throw new Error(
+        `${exampleFile} has invalid error data: ${formatAjvErrors(
+          validateErrorData?.errors,
+        )}`,
+      );
     }
     if ("result" in message) {
       const method = pendingMethods.get(String(message.id));

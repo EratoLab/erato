@@ -1,0 +1,121 @@
+{
+  "name": "Read what each source supports and why its content is unavailable",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "list-sources",
+        "method": "sources.list.v1",
+        "params": {}
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "list-sources",
+        "resultFrom": "../conformance/fixtures/source-capabilities.json"
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "preview-only-email",
+        "method": "sources.get_document.v1",
+        "params": { "documentId": "d1111111-b222-4333-8444-c55555555555" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "preview-only-email",
+        "error": {
+          "code": -32016,
+          "message": "The sidecar could not complete the request.",
+          "data": {
+            "kind": "sidecar_internal",
+            "sourceError": "missing_from_local_cache"
+          }
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "deleted-email",
+        "method": "sources.get_document.v1",
+        "params": { "documentId": "e1111111-b222-4333-8444-c55555555555" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "deleted-email",
+        "error": {
+          "code": -32602,
+          "message": "Invalid method parameters.",
+          "data": { "sourceError": "document_not_found" }
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "hx-conversation",
+        "method": "outlook.get_conversation.v1",
+        "params": {
+          "mailboxId": "21111111222243338444555555555555",
+          "anchor": { "internetMessageId": "<message-1@example.com>" },
+          "maxMessages": 1
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "hx-conversation",
+        "result": {
+          "state": "partial",
+          "messages": [],
+          "warnings": [
+            {
+              "code": "unsupported_source",
+              "message": "Conversation retrieval is unavailable for this mailbox storage format."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "hx-folders",
+        "method": "sources.get_folder_hierarchy.v1",
+        "params": { "sourceId": "b1111111-b222-4333-8444-c55555555555" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "hx-folders",
+        "error": {
+          "code": -32016,
+          "message": "The sidecar could not complete the request.",
+          "data": {
+            "kind": "sidecar_internal",
+            "sourceError": "unsupported_source"
+          }
+        }
+      }
+    }
+  ]
+}

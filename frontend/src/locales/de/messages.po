@@ -2262,6 +2262,11 @@ msgstr "Teams speichert auf diesem Gerät nur einen Teil des Verlaufs, ältere N
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.partialMailboxCache"
+msgstr "{mailboxCount, plural, one {{mailboxNames} speichert auf diesem Gerät nur einen Teil seiner E-Mails, ältere E-Mails können daher fehlen.} other {{mailboxNames} speichern auf diesem Gerät nur einen Teil ihrer E-Mails, ältere E-Mails können daher fehlen.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.requestedBefore"
 msgstr "Gesucht wurde ab {requested}, der durchsuchte Zeitraum beginnt aber später."
 
@@ -5939,6 +5944,11 @@ msgid "sidecar.indexing.localSource"
 msgstr "Lokale Datenquelle"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.mailboxWarnings"
+msgstr "Outlook auf diesem Gerät meldet:"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.missingFromLocalCache"
 #~ msgstr "{missingCount, plural, one {# Dokument ist im lokalen Cache nicht verfügbar.} other {# Dokumente sind im lokalen Cache nicht verfügbar.}}"
@@ -5952,6 +5962,11 @@ msgstr "Priorität für {mailbox} verringern"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.moveUp"
 msgstr "Priorität für {mailbox} erhöhen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.newOutlookForMacCache"
+msgstr "Das neue Outlook für Mac speichert auf diesem Gerät nur einen Teil Ihrer E-Mails, manche davon nur als Vorschau"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -6067,6 +6082,16 @@ msgstr "Indexierungseinstellungen speichern"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.saveError"
 msgstr "Indexierungseinstellungen konnten nicht gespeichert werden. Bitte erneut versuchen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.source.newOutlookForMac"
+msgstr "Neues Outlook für Mac"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.source.newOutlookForWindows"
+msgstr "Neues Outlook für Windows"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx

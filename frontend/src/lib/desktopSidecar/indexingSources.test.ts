@@ -54,6 +54,30 @@ describe("source indexing settings", () => {
     ).toEqual(entries);
   });
 
+  it("knows which Outlook a source or legacy mailbox belongs to", () => {
+    const hx = {
+      ...sourceFixture(sourceId, false),
+      sourceKind: "macOS Hx account",
+    };
+    expect(indexingEntries([mailbox], [hx], configuration)[0].variant).toBe(
+      "newOutlookForMac",
+    );
+    const legacy = indexingEntries([mailbox], undefined, {
+      user_configuration: {},
+      organization_configuration: {},
+    });
+    expect(legacy[0]).toMatchObject({
+      scope: "mailbox",
+      variant: "newOutlookForMac",
+    });
+    expect(
+      indexingEntries([{ ...mailbox, source: "pst" }], undefined, {
+        user_configuration: {},
+        organization_configuration: {},
+      })[0].variant,
+    ).toBe("classic");
+  });
+
   it("marks the sources the sidecar matched to the work account", () => {
     const entries = indexingEntries(
       [mailbox],

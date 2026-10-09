@@ -644,8 +644,11 @@ export { McpAuthorizationToasts } from "@/components/ui/Settings/mcpAuthorizatio
 export { DesktopSidecarClientTools } from "@/providers/DesktopSidecarClientTools";
 export {
   readSidecarConversation,
+  resolveSidecarMailbox,
   resolveSidecarMailboxId,
+  SidecarConversationUnavailableError,
 } from "@/lib/desktopSidecar/mailboxAccess";
+export { sidecarSourceError } from "@/lib/desktopSidecar/sourceCapabilities";
 
 export { Select, type SelectProps } from "@/components/ui/Input/Select";
 export {

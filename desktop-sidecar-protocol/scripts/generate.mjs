@@ -440,6 +440,11 @@ const typeTargets = [
     "OutlookSearchEmailsV1Result",
   ],
   [
+    "schemas/source/source-capabilities.schema.json",
+    "source-capabilities.ts",
+    "SourceCapabilities",
+  ],
+  [
     "schemas/source/source-descriptor.schema.json",
     "source-descriptor.ts",
     "SourceDescriptor",

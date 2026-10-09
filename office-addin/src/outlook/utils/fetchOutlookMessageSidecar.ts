@@ -1,6 +1,8 @@
 import {
   readSidecarConversation,
-  resolveSidecarMailboxId,
+  resolveSidecarMailbox,
+  SidecarConversationUnavailableError,
+  sidecarSourceError,
 } from "@erato/frontend/library";
 
 import type { OutlookMessageFetcher } from "./fetchOutlookMessage";
@@ -51,19 +53,25 @@ interface ConversionProgress {
  * Only `fetchConversationMessages` is overridden; every other capability
  * delegates unchanged. The conversation itself failing (unsupported, no mailbox
  * match, RPC error) falls back to the wrapped fetcher, so the result is never
- * worse than the EWS path. The sidecar carries message bodies and attachment
+ * worse than the EWS path. A mailbox whose store cannot be read as
+ * conversations at all (new Outlook for Mac) goes to that fallback after one
+ * mailbox lookup, since the host rebuilds this fetcher for every selected item. The sidecar carries message bodies and attachment
  * bytes inline in the result; an attachment it could not read arrives with no
  * bytes, degrading just that item to a marker and marking the result `partial`
  * rather than discarding the whole thread.
  */
+let reportedUnsupportedStore = false;
+
 export function createSidecarOutlookMessageFetcher(
   context: SidecarFetcherContext,
 ): OutlookMessageFetcher {
   const { inner, client } = context;
+  let unsupportedStore = false;
   return {
     ...inner,
     fetchConversationMessages: async (conversationId, options) => {
       if (
+        unsupportedStore ||
         !client.supports(GET_CONVERSATION) ||
         !client.supports("outlook.list_mailboxes.v1") ||
         !context.anchorInternetMessageId ||
@@ -76,6 +84,24 @@ export function createSidecarOutlookMessageFetcher(
       } catch (error) {
         if (options?.signal?.aborted) {
           throw error;
+        }
+        if (
+          (error instanceof SidecarConversationUnavailableError &&
+            error.code === "unsupported_source") ||
+          sidecarSourceError(error) === "unsupported_source"
+        ) {
+          unsupportedStore = true;
+          if (!reportedUnsupportedStore) {
+            reportedUnsupportedStore = true;
+            console.info(
+              "The local Outlook store cannot be read as conversations; loading conversations through Exchange instead.",
+            );
+          }
+        } else {
+          console.warn(
+            "Could not load the conversation from the desktop sidecar; loading it through Exchange instead:",
+            error,
+          );
         }
         return inner.fetchConversationMessages(conversationId, options);
       }
@@ -92,18 +118,24 @@ async function fetchConversationViaSidecar(
   const userEmailAddress = context.userEmailAddress!;
   const signal = options?.signal;
 
-  const mailboxId = await resolveSidecarMailboxId(
-    client,
-    userEmailAddress,
-    signal,
-  );
-  if (!mailboxId) {
+  const mailbox = await resolveSidecarMailbox(client, userEmailAddress, signal);
+  if (!mailbox) {
     throw new Error("No local Outlook mailbox matches the signed-in user.");
+  }
+  if (mailbox.capabilities?.conversations === false) {
+    throw new SidecarConversationUnavailableError(
+      "unsupported_source",
+      "The local Outlook store cannot be read as conversations.",
+      { state: "partial" },
+    );
   }
 
   const conversation = await readSidecarConversation(
     client,
-    { mailboxId, anchor: { internetMessageId: anchorInternetMessageId } },
+    {
+      mailboxId: mailbox.id,
+      anchor: { internetMessageId: anchorInternetMessageId },
+    },
     signal,
   );
 

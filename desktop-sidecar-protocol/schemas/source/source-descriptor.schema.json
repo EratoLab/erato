@@ -81,6 +81,9 @@
       "type": "string",
       "description": "Why the source has its default: workAccount, otherAccount, guestAccount, outlookDefault, notOutlookDefault, onlyTeamsAccount or noWorkAccount. Extensible; older sidecars omit it."
     },
+    "capabilities": {
+      "$ref": "./source-capabilities.schema.json"
+    },
     "locator": {
       "type": "object",
       "additionalProperties": true

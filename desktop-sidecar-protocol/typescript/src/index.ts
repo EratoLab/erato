@@ -74,6 +74,7 @@ export type {
   OutlookSearchEmailsV1Params,
   OutlookSearchEmailsV1Result,
   OutlookSearchHit,
+  SourceCapabilities,
   SourceDescriptor,
   SourceFolderHierarchyNode,
   SourcesGetFolderHierarchyV1Params,

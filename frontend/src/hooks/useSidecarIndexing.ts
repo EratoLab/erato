@@ -4,6 +4,7 @@ import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 
 import type {
   IndexingStatusV1Result,
+  OutlookListingWarning,
   OutlookMailbox,
   SidecarConfiguration,
   SourcesListV1Result,
@@ -13,6 +14,8 @@ import type { UseQueryResult } from "@tanstack/react-query";
 interface IndexingData {
   status: IndexingStatusV1Result;
   mailboxes: OutlookMailbox[];
+  /** Local Outlook data that could not be inspected, or looks out of date. */
+  mailboxWarnings: OutlookListingWarning[];
   sources?: SourcesListV1Result["sources"];
 }
 
@@ -44,20 +47,27 @@ export function useSidecarIndexing(): SidecarIndexingState {
     refetchInterval: 5_000,
     queryFn: async ({ signal }) => {
       if (!client) throw new Error("Sidecar unavailable");
-      const [status, { mailboxes }, sourceResult] = await Promise.all([
-        client.invoke(
-          "indexing.status.v1",
-          { includeSourceBreakdowns: true, includeFileTypeBreakdowns: false },
-          { signal },
-        ),
-        client.supports("outlook.list_mailboxes.v1")
-          ? client.invoke("outlook.list_mailboxes.v1", {}, { signal })
-          : Promise.resolve({ mailboxes: [] }),
-        client.supports("sources.list.v1")
-          ? client.invoke("sources.list.v1", {}, { signal })
-          : Promise.resolve(undefined),
-      ]);
-      return { status, mailboxes, sources: sourceResult?.sources };
+      const [status, { mailboxes, warnings }, sourceResult] = await Promise.all(
+        [
+          client.invoke(
+            "indexing.status.v1",
+            { includeSourceBreakdowns: true, includeFileTypeBreakdowns: false },
+            { signal },
+          ),
+          client.supports("outlook.list_mailboxes.v1")
+            ? client.invoke("outlook.list_mailboxes.v1", {}, { signal })
+            : Promise.resolve({ mailboxes: [], warnings: [] }),
+          client.supports("sources.list.v1")
+            ? client.invoke("sources.list.v1", {}, { signal })
+            : Promise.resolve(undefined),
+        ],
+      );
+      return {
+        status,
+        mailboxes,
+        mailboxWarnings: warnings,
+        sources: sourceResult?.sources,
+      };
     },
   });
   const mutation = useMutation({
