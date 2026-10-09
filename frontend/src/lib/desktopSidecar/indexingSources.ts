@@ -4,7 +4,9 @@ import {
   indexingMailboxId,
   orderedMailboxes,
 } from "./indexingConfiguration";
+import { outlookStoreVariant } from "./sourceCapabilities";
 
+import type { OutlookStoreVariant } from "./sourceCapabilities";
 import type {
   OutlookMailbox,
   SidecarConfiguration,
@@ -25,6 +27,8 @@ export interface IndexingEntry {
   id: string;
   scope: "source" | "mailbox";
   product: string;
+  /** Which Outlook, when the sidecar says. */
+  variant?: OutlookStoreVariant;
   name: string | null;
   account?: IndexingAccount;
   /** The sidecar matched this source to the signed-in work account. */
@@ -137,10 +141,15 @@ export function indexingEntries(
     if (mailbox) represented.add(indexingMailboxId(mailbox.id));
     const policy = policies.get(id);
     const account = product === "teams" ? teamsAccount(source) : undefined;
+    const variant =
+      product === "outlook"
+        ? outlookStoreVariant(source.sourceKind)
+        : undefined;
     entries.push({
       id,
       scope: "source",
       product,
+      ...(variant && { variant }),
       // A Teams source is one organisation the person is signed in to.
       name: firstName(
         account ? source.account?.tenantName : undefined,
@@ -158,10 +167,12 @@ export function indexingEntries(
   }
   for (const mailbox of orderedMailboxes(mailboxes, configuration)) {
     if (represented.has(indexingMailboxId(mailbox.id))) continue;
+    const variant = outlookStoreVariant(mailbox.source);
     entries.push({
       id: indexingMailboxId(mailbox.id),
       scope: "mailbox",
       product: "outlook",
+      ...(variant && { variant }),
       name: firstName(mailbox.emailAddress, mailbox.displayName),
       enabled: mailbox.enabled,
       priority: mailbox.priority,

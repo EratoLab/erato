@@ -115,6 +115,7 @@ describe("LocalSearchCoverageNotice", () => {
       expect(notice).toHaveTextContent(
         "Teams keeps only part of its history on this device",
       );
+      expect(notice).not.toHaveTextContent("mailbox keeps only part");
 
       const more = within(notice).getByRole("button", { name: "and 1 more" });
       const teamsLine = `Teams · Contoso Ltd: ${day(teams.from!)} – ${day(teams.to!)}`;
@@ -124,6 +125,16 @@ describe("LocalSearchCoverageNotice", () => {
       expect(within(notice).getByText(teamsLine)).toBeVisible();
     },
   );
+
+  it("says a cached mailbox may miss older emails, and names Teams only for Teams", () => {
+    const newOutlook = { ...outlook, partialCache: true };
+    renderContent([searchPart({ coverage: coverage([newOutlook]) }), answer]);
+    const notice = screen.getByTestId("local-search-coverage-notice");
+    expect(notice).toHaveTextContent(
+      "This mailbox keeps only part of its mail on this device, so older emails may be missing.",
+    );
+    expect(notice).not.toHaveTextContent("Teams keeps only part");
+  });
 
   it("renders nothing without a reported local search", () => {
     renderContent([answer]);

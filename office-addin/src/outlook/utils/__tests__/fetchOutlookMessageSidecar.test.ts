@@ -152,6 +152,31 @@ describe("createSidecarOutlookMessageFetcher", () => {
     expect(inner.fetchConversationMessages).toHaveBeenCalledOnce();
   });
 
+  it("stops asking the sidecar for a store it cannot read as conversations", async () => {
+    const inner = stubInner();
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const client = fakeClient({
+      conversation: {
+        state: "partial",
+        messages: [],
+        warnings: [{ code: "unsupported_source" }],
+      },
+    });
+    const invoke = vi.spyOn(client, "invoke");
+    const fetcher = createSidecarOutlookMessageFetcher(context(client, inner));
+
+    expect(await fetcher.fetchConversationMessages("conv-1")).toBe(FALLBACK);
+    expect(await fetcher.fetchConversationMessages("conv-2")).toBe(FALLBACK);
+    expect(info).toHaveBeenCalledOnce();
+    expect(
+      invoke.mock.calls
+        .map(([method]) => String(method))
+        .filter((method) => method === "outlook.get_conversation.v1"),
+    ).toHaveLength(1);
+    expect(inner.fetchConversationMessages).toHaveBeenCalledTimes(2);
+    info.mockRestore();
+  });
+
   it("degrades an attachment with no bytes to a marker + partial, not a full fallback", async () => {
     const inner = stubInner();
     // The sidecar could not read this attachment: no contentBytes, only a reason.

@@ -30,6 +30,7 @@ const personalId = "bbccddee2233445599aa112233445566";
 const personalUuid = "bbccddee-2233-4455-99aa-112233445566";
 const save = vi.fn<(patch: Partial<SidecarConfiguration>) => Promise<void>>();
 const data = {
+  mailboxWarnings: [],
   mailboxes: [
     {
       id: sharedId,
@@ -414,6 +415,26 @@ describe("mailbox status rendering", () => {
     expect(row.getByText("Indexed Mar 15, 2025 to today")).toBeInTheDocument();
   });
 
+  it("names new Outlook for Mac, explains its cache and shows Outlook's warnings", () => {
+    const warning = {
+      message:
+        "The profile appears to have migrated to new Outlook's Hx store.",
+    };
+    currentData.mailboxWarnings = [warning, warning] as never;
+    currentData.mailboxes[0].source = "macOsHxAccount";
+    const row = renderStatus(withRange({ inventory: "syncCache" }));
+    expect(row.getByText("New Outlook for Mac")).toBeInTheDocument();
+    expect(
+      row.getByText(
+        "New Outlook for Mac keeps only part of your mail on this device, some of it only as a preview",
+      ),
+    ).toBeInTheDocument();
+    const warnings = screen.getByTestId("sidecar-mailbox-warnings");
+    expect(warnings).toHaveTextContent("Outlook on this device reported:");
+    expect(within(warnings).getAllByRole("listitem")).toHaveLength(1);
+    expect(warnings).toHaveTextContent(warning.message);
+  });
+
   it("explains cache-only inventories without Teams wording outside Teams", () => {
     const row = renderStatus(withRange({ inventory: "futureInventory" }));
     expect(
@@ -549,6 +570,7 @@ describe("Teams and Outlook source controls", () => {
       ...vi.mocked(useSidecarIndexing)(),
       data: {
         status,
+        mailboxWarnings: [],
         mailboxes: [data.mailboxes[0]],
         sources: [
           sourceFixture(sourceId, false),

@@ -2221,6 +2221,11 @@ msgstr "Teams przechowuje na tym urządzeniu tylko część historii, więc moż
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.partialMailboxCache"
+msgstr "{partialMailboxes, plural, one {Ta skrzynka pocztowa przechowuje na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.} few {Te skrzynki pocztowe przechowują na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.} other {Te skrzynki pocztowe przechowują na tym urządzeniu tylko część wiadomości, więc może brakować starszych e-maili.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.requestedBefore"
 msgstr "Wyszukiwanie dotyczyło elementów od {requested}, ale przeszukany okres zaczyna się później."
 
@@ -5898,6 +5903,11 @@ msgid "sidecar.indexing.localSource"
 msgstr "Lokalne źródło danych"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.mailboxWarnings"
+msgstr "Outlook na tym urządzeniu zgłosił:"
+
+#. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.missingFromLocalCache"
 #~ msgstr "{missingCount, plural, one {# dokument jest niedostępny w lokalnej pamięci podręcznej.} few {# dokumenty są niedostępne w lokalnej pamięci podręcznej.} many {# dokumentów jest niedostępnych w lokalnej pamięci podręcznej.} other {# dokumentów jest niedostępnych w lokalnej pamięci podręcznej.}}"
@@ -5911,6 +5921,11 @@ msgstr "Zmniejsz priorytet skrzynki {mailbox}"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.moveUp"
 msgstr "Zwiększ priorytet skrzynki {mailbox}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.newOutlookForMacCache"
+msgstr "Nowy Outlook dla komputerów Mac przechowuje na tym urządzeniu tylko część poczty, niektóre wiadomości tylko jako podgląd"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -6026,6 +6041,16 @@ msgstr "Zapisz ustawienia indeksowania"
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.saveError"
 msgstr "Nie udało się zapisać ustawień indeksowania. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.source.newOutlookForMac"
+msgstr "Nowy Outlook dla komputerów Mac"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.source.newOutlookForWindows"
+msgstr "Nowy Outlook dla systemu Windows"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx

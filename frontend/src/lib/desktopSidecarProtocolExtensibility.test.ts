@@ -111,6 +111,21 @@ describe("desktop sidecar protocol extensibility", () => {
       },
     };
     expect(validateSourcesListV1Result({ sources: [teamsSource] })).toBe(true);
+    const capabilities = {
+      conversations: false,
+      folders: false,
+      documentExport: "futureExport",
+      metadataFields: ["kind", "sender"],
+      futureCapability: true,
+    };
+    expect(
+      validateSourcesListV1Result({ sources: [{ ...source, capabilities }] }),
+    ).toBe(true);
+    expect(
+      validateSourcesListV1Result({
+        sources: [{ ...source, capabilities: { conversations: "no" } }],
+      }),
+    ).toBe(false);
     expect(
       validateSourcesListV1Result({
         sources: [{ ...teamsSource, account: { tenantId: "tenant-1" } }],
@@ -138,6 +153,8 @@ describe("desktop sidecar protocol extensibility", () => {
         candidatesScored: 1,
       });
     expect(search([hit])).toBe(true);
+    expect(search([{ ...hit, sourceId: source.sourceId }])).toBe(true);
+    expect(search([{ ...hit, sourceId: "not-a-source" }])).toBe(false);
     expect(search([{ ...hit, editedAt: "yesterday" }])).toBe(false);
     expect(
       search([{ ...hit, conversationKey: "48:notes", selfNote: true }]),

@@ -1115,6 +1115,7 @@ describe("search coverage for the model", () => {
           to: "2026-09-15T12:00:00Z",
           status: "indexing",
           partialCache: false,
+          unsearchable: 15,
           requestedFromBeforeCoverage: false,
         },
         {
@@ -1125,11 +1126,12 @@ describe("search coverage for the model", () => {
           to: "2026-09-15T11:40:00Z",
           status: "newest_pending",
           partialCache: true,
+          unsearchable: 1,
           requestedFromBeforeCoverage: false,
         },
       ],
       notice:
-        "Local search on this device covered Outlook · jane@example.com from 2025-03-14 to 2026-09-15 and Teams · Contoso Ltd (jane@example.com) from 2026-06-02 to 2026-09-15; earlier items were not searched; items in Teams · Contoso Ltd (jane@example.com) after 2026-09-15T11:40:00Z are still being indexed and were not searched; do not conclude that missing items do not exist; more items matched than were returned, so narrow the date range to see the rest.",
+        "Local search on this device covered Outlook · jane@example.com from 2025-03-14 to 2026-09-15 and Teams · Contoso Ltd (jane@example.com) from 2026-06-02 to 2026-09-15; earlier items were not searched; items in Teams · Contoso Ltd (jane@example.com) after 2026-09-15T11:40:00Z are still being indexed and were not searched; Teams · Contoso Ltd (jane@example.com) keeps only part of its history on this device, so items that never reached this device were not searched; within the searched period, 15 items in Outlook · jane@example.com and 1 item in Teams · Contoso Ltd (jane@example.com) are only partly on this device, for example as a preview, or could not be indexed, so their content may be missing; do not conclude that missing items do not exist; more items matched than were returned, so narrow the date range to see the rest.",
     });
     expect(Object.keys(result.coverage)).toEqual([
       "v",

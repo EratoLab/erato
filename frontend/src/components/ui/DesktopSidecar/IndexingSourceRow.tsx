@@ -172,12 +172,22 @@ export function IndexingSourceRow({
   const productLabel =
     entry.product === "teams"
       ? t({ id: "sidecar.indexing.source.teams", message: "Teams" })
-      : entry.product === "outlook"
-        ? t({ id: "sidecar.indexing.source.outlook", message: "Outlook" })
-        : t({
-            id: "sidecar.indexing.localSource",
-            message: "Local data source",
-          });
+      : entry.variant === "newOutlookForMac"
+        ? t({
+            id: "sidecar.indexing.source.newOutlookForMac",
+            message: "New Outlook for Mac",
+          })
+        : entry.variant === "newOutlookForWindows"
+          ? t({
+              id: "sidecar.indexing.source.newOutlookForWindows",
+              message: "New Outlook for Windows",
+            })
+          : entry.product === "outlook"
+            ? t({ id: "sidecar.indexing.source.outlook", message: "Outlook" })
+            : t({
+                id: "sidecar.indexing.localSource",
+                message: "Local data source",
+              });
   return (
     <li className="space-y-3 py-3">
       <div className="flex items-start gap-3">
@@ -321,10 +331,17 @@ export function IndexingSourceRow({
                     message:
                       "Teams keeps only recently opened chats on this device",
                   })
-                : t({
-                    id: "sidecar.indexing.cachedOnly",
-                    message: "Only items cached on this device can be indexed",
-                  })}
+                : entry.variant === "newOutlookForMac"
+                  ? t({
+                      id: "sidecar.indexing.newOutlookForMacCache",
+                      message:
+                        "New Outlook for Mac keeps only part of your mail on this device, some of it only as a preview",
+                    })
+                  : t({
+                      id: "sidecar.indexing.cachedOnly",
+                      message:
+                        "Only items cached on this device can be indexed",
+                    })}
             </p>
           )}
           {entry.editable && (
