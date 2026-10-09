@@ -3117,6 +3117,11 @@ pub struct FrontendConfig {
     // and are served from `/public/common/custom-theme/<THEME_NAME>`.
     pub theme: Option<String>,
 
+    // Browser URL for the favicon. Defaults to `/favicon.svg`, which resolves
+    // the theme favicon or the bundled default.
+    #[serde(default = "default_favicon_path")]
+    pub favicon_path: String,
+
     // Additional values to inject into the frontend environment as global variables.
     // This is a dictionary where each value can be a string or a map (string key, string value).
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
@@ -3251,6 +3256,7 @@ impl Default for FrontendConfig {
             web_frontend_bundle_path: default_web_frontend_bundle_path(),
             translation_po_compilation_mode: Default::default(),
             theme: None,
+            favicon_path: default_favicon_path(),
             additional_environment: HashMap::new(),
             component_kits: Default::default(),
             error_report: Default::default(),
@@ -3281,6 +3287,24 @@ impl Default for FrontendConfig {
 #[cfg(test)]
 mod frontend_config_tests {
     use super::FrontendConfig;
+
+    #[test]
+    fn favicon_path_defaults_to_existing_route_and_can_be_overridden() {
+        for config in [
+            FrontendConfig::default(),
+            serde_json::from_str("{}").unwrap(),
+        ] {
+            assert_eq!(config.favicon_path, "/favicon.svg");
+        }
+        let config: FrontendConfig = serde_json::from_value(serde_json::json!({
+            "favicon_path": "/public/common/custom-theme/acme/icon.png"
+        }))
+        .unwrap();
+        assert_eq!(
+            config.favicon_path,
+            "/public/common/custom-theme/acme/icon.png"
+        );
+    }
 
     #[test]
     fn reduced_ui_controls_default_on_and_can_be_disabled() {
@@ -3328,6 +3352,10 @@ mod frontend_config_tests {
 
 fn default_max_files_per_message() -> usize {
     10
+}
+
+fn default_favicon_path() -> String {
+    "/favicon.svg".to_string()
 }
 
 impl FrontendConfig {

@@ -33,6 +33,7 @@ describe("themeConfig", () => {
     frontendPublicBasePath: "/public/common",
     commonPublicBasePath: "/public/common",
     themeCustomerName: null,
+    faviconPath: "/favicon.svg",
     themePath: null,
     themeConfigPath: null,
     themeLogoPath: null,

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { env } from "@/app/env";
 import { useTabChatActivity } from "@/hooks/chat/useTabChatActivity";
 import {
   shouldBlink,
@@ -9,7 +10,11 @@ import {
   type BlinkHandle,
 } from "@/lib/favicon/blinkDriver";
 import { composeBadgedIcon } from "@/lib/favicon/composeBadgedIcon";
-import { applyIconHref, restoreIconLinks } from "@/lib/favicon/iconLinkManager";
+import {
+  applyIconHref,
+  configureIconLinks,
+  restoreIconLinks,
+} from "@/lib/favicon/iconLinkManager";
 
 /**
  * Badges the favicon while this tab's chat is generating, awaiting an approval,
@@ -18,6 +23,13 @@ import { applyIconHref, restoreIconLinks } from "@/lib/favicon/iconLinkManager";
  */
 export function TabChatIndicator() {
   const activity = useTabChatActivity();
+  const { faviconPath } = env();
+
+  useEffect(() => {
+    if (faviconPath !== "/favicon.svg") {
+      configureIconLinks(faviconPath);
+    }
+  }, [faviconPath]);
 
   useEffect(() => {
     if (activity === "idle") {

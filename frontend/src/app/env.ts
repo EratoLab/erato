@@ -21,6 +21,7 @@ export type Env = {
   frontendPublicBasePath: string;
   commonPublicBasePath: string;
   themeCustomerName: string | null;
+  faviconPath: string;
   themePath: string | null;
   themeConfigPath: string | null;
   themeLogoPath: string | null;
@@ -94,6 +95,7 @@ declare global {
     FRONTEND_PUBLIC_BASE_PATH?: string;
     COMMON_PUBLIC_BASE_PATH?: string;
     THEME_CUSTOMER_NAME?: string;
+    FAVICON_PATH?: string;
     THEME_PATH?: string;
     THEME_CONFIG_PATH?: string;
     THEME_LOGO_PATH?: string;
@@ -168,6 +170,9 @@ const DEFAULT_MAX_BODY_LIMIT_BYTES = 50 * 1024 * 1024;
 const COMMON_PUBLIC_BASE_PATH = "/public/common";
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const OFFICE_ADDIN_PUBLIC_BASE_PATH = "/public/platform-office-addin";
+// A browser URL, not a user-facing string.
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const DEFAULT_FAVICON_PATH = "/favicon.svg";
 
 function normalizeChatInputEmptyStateLayout(
   value: string | null | undefined,
@@ -500,6 +505,10 @@ export const env = (): Env => {
     themeLogoPath,
     themeLogoDarkPath,
     themeAssistantAvatarPath,
+    faviconPath:
+      import.meta.env.VITE_FAVICON_PATH ??
+      window.FAVICON_PATH ??
+      DEFAULT_FAVICON_PATH,
     disableUpload,
     maxFilesPerMessage,
     disableChatInputAutofocus,

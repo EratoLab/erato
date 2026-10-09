@@ -32,6 +32,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   frontendPublicBasePath: "/public/common",
   commonPublicBasePath: "/public/common",
   themeCustomerName: null,
+  faviconPath: "/favicon.svg",
   themePath: null,
   themeConfigPath: null,
   themeLogoPath: null,
