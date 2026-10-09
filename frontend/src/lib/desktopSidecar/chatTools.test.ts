@@ -890,6 +890,27 @@ describe("sidecar document retrieval", () => {
     },
   );
 
+  it("passes preview and omission warnings to the model", async () => {
+    const warnings = [
+      { code: "body_preview_only", documentId, message: "Only a preview." },
+      {
+        code: "message_omitted",
+        documentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        sourceError: "source_changed",
+      },
+    ];
+    const env = setup({
+      "sources.get_document.v1": { ...document, warnings },
+    });
+    const outcome = await env
+      .tools()
+      .find((item) => item.name === GET_SIDECAR_DOCUMENT_TOOL)!
+      .execute({ ...input, subject_scope: "subject_with_thread" }, context);
+    expect(outcome).toMatchObject({ ok: true, result: { warnings } });
+    const plain = await setupDocument().tool().execute(input, context);
+    expect(plain).not.toHaveProperty("result.warnings");
+  });
+
   it.each(externalIdCases)(
     "uploads the requested document's own EWS ID for both export scopes (%j)",
     async ({ external_ids, expected }) => {
