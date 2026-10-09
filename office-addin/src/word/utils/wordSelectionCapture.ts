@@ -48,6 +48,11 @@ export interface WordSelectionPreview {
   story: WordSelectionStory;
   /** Too long to be sent whole. */
   truncated: boolean;
+  /**
+   * The host, story and shape allow a rewrite. Whether this passage gets one is decided at Send,
+   * once its content and position are checked.
+   */
+  mayRewrite: boolean;
 }
 
 /** A failed read is not "nothing selected": the caller keeps what it had. */
@@ -302,6 +307,7 @@ function lightFacts(
 function previewOf(
   snapshot: WordSelectionSnapshot,
   facts: WordSelectionFacts,
+  support: WordSelectionSupport,
 ): WordSelectionPreview {
   return {
     key: JSON.stringify([
@@ -318,6 +324,10 @@ function previewOf(
     shape: snapshot.shape,
     story: snapshot.story,
     truncated: snapshot.truncated,
+    mayRewrite:
+      support.canRewrite &&
+      snapshot.story === "main" &&
+      WORD_SELECTION_REPLACE_SHAPES.has(snapshot.shape),
   };
 }
 
@@ -360,7 +370,7 @@ export async function describeWordSelection(
         reviewed?.value,
       );
       const snapshot = buildWordSelectionSnapshot(facts, support, "user");
-      return snapshot ? previewOf(snapshot, facts) : null;
+      return snapshot ? previewOf(snapshot, facts, support) : null;
     },
     { timeoutMs },
   );

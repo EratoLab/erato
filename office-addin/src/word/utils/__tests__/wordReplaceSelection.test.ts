@@ -121,7 +121,11 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     });
     const paragraph = await captureOf(host, { p: "PL1" });
     expect(
-      await replaceWordSelection({ capture: paragraph, fenceContent: REWRITE }),
+      await replaceWordSelection({
+        capture: paragraph,
+        fenceContent: REWRITE,
+        enabledShapes: new Set(),
+      }),
     ).toMatchObject({ status: "refused", code: "UNSUPPORTED_CONTENT" });
     expect(host.writeSyncs()).toEqual([]);
   });

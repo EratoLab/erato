@@ -169,9 +169,16 @@ describe("classifyWordSelection: D-10", () => {
     });
   });
 
-  it("keeps every shape context only until it is enabled", () => {
-    expect(WORD_SELECTION_REPLACE_SHAPES.size).toBe(0);
-    for (const selection of [INLINE, PARAGRAPH, MULTI, CELL])
+  it("rewrites whole paragraphs only, keeping every other shape context only", () => {
+    expect([...WORD_SELECTION_REPLACE_SHAPES]).toEqual(["paragraph"]);
+    expect(classifyWordSelection(PARAGRAPH, MAC)).toMatchObject({
+      role: "rewrite",
+    });
+    expect(classifyWordSelection(PARAGRAPH, LTSC_2021)).toMatchObject({
+      role: "context_only",
+      reasonCode: "host_unsupported",
+    });
+    for (const selection of [INLINE, MULTI, CELL])
       expect(classifyWordSelection(selection, MAC)).toMatchObject({
         role: "context_only",
         reasonCode: "shape_not_enabled",
@@ -715,7 +722,7 @@ describe("selection captures", () => {
 
   it("lets Replace run only on a rewrite capture of an enabled shape", () => {
     const rewrite = emptySelectionCapture("doc-1", snapshot(PARAGRAPH));
-    expect(rewritableWordSelection(rewrite)).toBeNull();
+    expect(rewritableWordSelection(rewrite, new Set())).toBeNull();
     expect(rewritableWordSelection(rewrite, REWRITE_SHAPES)).toBe(
       rewrite.selection,
     );

@@ -45,10 +45,7 @@ import {
   WORD_SUBMIT_PLAN_TOOL,
 } from "../utils/wordDocumentSubmission";
 import { captureWordImageAssets } from "../utils/wordImageAssets";
-import {
-  emptySelectionCapture,
-  WORD_SELECTION_REPLACE_SHAPES,
-} from "../utils/wordSelectionAnchor";
+import { emptySelectionCapture } from "../utils/wordSelectionAnchor";
 import { captureWordSelection } from "../utils/wordSelectionCapture";
 import { markWordSend } from "../utils/wordSendTiming";
 
@@ -121,9 +118,11 @@ export function WordChatInput({
     selectionAvailable &&
     liveSelection.preview !== null &&
     !selectionDismissal.dismissed;
-  // Until Replace can write a shape, every selection is context only, which an included document keeps out.
+  const previewMayRewrite = liveSelection.preview?.mayRewrite ?? false;
+  // A context-only selection never displaces an included document, so with the document included
+  // only a selection that may be rewritten, or one still being read, is read again at Send.
   const selectionMayTakeSlot =
-    !chipEnabled || WORD_SELECTION_REPLACE_SHAPES.size > 0;
+    !chipEnabled || previewMayRewrite || liveSelection.pending;
   // A selection the user changed but whose read is still pending is read at Send as well; the
   // dismissal still refers to the previous one then.
   const selectionDue =
@@ -451,18 +450,24 @@ export function WordChatInput({
           preview={liveSelection.preview.text}
           metaLabel={selectionMetaLabel(liveSelection.preview.paragraphCount)}
           note={
-            !selectionMayTakeSlot
+            chipEnabled && !previewMayRewrite
               ? t({
                   id: "officeAddin.word.selection.notSentWithDocument",
                   message: "Not sent while the document is included.",
                 })
-              : liveSelection.preview.truncated
+              : chipEnabled
                 ? t({
-                    id: "officeAddin.word.selection.truncated",
+                    id: "officeAddin.word.selection.insteadOfDocument",
                     message:
-                      "Too long to send in full. Only the beginning is sent.",
+                      "If this passage can be replaced, it is sent instead of the document.",
                   })
-                : undefined
+                : liveSelection.preview.truncated
+                  ? t({
+                      id: "officeAddin.word.selection.truncated",
+                      message:
+                        "Too long to send in full. Only the beginning is sent.",
+                    })
+                  : undefined
           }
           armed={liveSelection.armed}
           onUse={armWordSelection}

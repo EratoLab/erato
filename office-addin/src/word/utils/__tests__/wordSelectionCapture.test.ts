@@ -357,6 +357,7 @@ describe("describeWordSelection", () => {
           shape: "multi_paragraph",
           story: "main",
           truncated: false,
+          mayRewrite: false,
         },
       });
       expect(host.syncCount()).toBe(2);
