@@ -648,10 +648,10 @@ When `through` is null, clients present `observedAt`, not the newest document
 date, as the end of the range: a quiet mailbox would otherwise seem to end at its
 last mail. `inventory` is `localStore` when the sidecar enumerates a complete
 local store (classic Outlook), `syncCache` when it enumerates the complete
-local cache of a synchronizing client (new Outlook for Mac), and
+local cache of a synchronizing client (new Outlook for Mac and Windows), and
 `cacheObservations` when it sees only what the application keeps cached
 (Teams). A sync cache holds only part of the server mailbox, and of some
-messages only a preview. With either cache value, older documents may never
+messages only a preview or a truncated body. With either cache value, older documents may never
 have reached the device; with `cacheObservations`, documents that left the
 cache stay searchable.
 
