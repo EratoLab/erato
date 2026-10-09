@@ -144,13 +144,13 @@ export interface WordSelectionFacts {
   isEmpty: boolean;
   /** Word.BodyType of the story holding the selection, outside any table ("MainDoc", "Header", ...). */
   storyType: string;
-  /** Word's selection.text; the only text read on a host that cannot rewrite. */
+  /** Word's selection.text. */
   selectionText: string;
   /** The selection is a picture or a shape, without text. */
   objectOnly: boolean;
   /** "whole" when every table the selection touches is covered completely. */
   tables: "none" | "whole" | "partial";
-  /** In story order; empty on a host that cannot rewrite. */
+  /** In story order; ids are unknown on a host that cannot rewrite, and identity texts stand in. */
   paragraphs: readonly WordSelectionParagraphFacts[];
   /** Into the first paragraph's rangeText. */
   startOffset: number;
@@ -163,6 +163,11 @@ export interface WordSelectionFacts {
   pictureBeforeSpan: boolean;
   /** The style font of every covered paragraph could be read. */
   styleFontResolved: boolean;
+  /**
+   * The span's hazard scan and style font read ran. The capture runs them only for a shape Replace
+   * may write, so an unchecked span is never rewritten.
+   */
+  spanChecked?: boolean;
   /** A tracked Range was kept as a hint (desktop only). */
   trackedRange?: boolean;
   /**
@@ -400,6 +405,8 @@ function contextOnlyReason(
   if (paragraphs.length > WORD_SELECTION_MAX_PARAGRAPHS)
     return "too_many_paragraphs";
   if (!fitsActionFacetArg(analysis.text)) return "too_large";
+  if (!enabledShapes.has(shape) || !facts.spanChecked)
+    return "shape_not_enabled";
   if (!parts || !anchor || !anchorMatches(facts)) return "position_unknown";
   if (
     shape === "multi_paragraph" &&
@@ -428,7 +435,6 @@ function contextOnlyReason(
     !facts.trackedRange
   )
     return "not_unique";
-  if (!enabledShapes.has(shape)) return "shape_not_enabled";
   return null;
 }
 
@@ -476,23 +482,49 @@ function keepUtf8Tail(value: string, maxBytes: number): string {
 
 const present = (text: string | null): text is string => text !== null;
 
+/** Desktop's getText ends a paragraph's identity text with its mark. */
+const withoutMark = (text: string) => text.replace(/\r$/, "");
+
 /**
  * The paragraph's offset text with its comment marks removed, when that equals the identity text;
  * null when paragraph.text holds more, such as a tracked deletion, which the model must not see.
  */
 function visibleOffsetText(p: WordSelectionParagraphFacts): string | null {
   const visible = p.rangeText.replace(/\u0005/g, "");
-  return visible === p.text.replace(/\r$/, "") ? visible : null;
+  return visible === withoutMark(p.text) ? visible : null;
 }
 
 const removeCommentMarks = (text: string) => text.replace(/\u0005/g, "");
 
+/** Desktop's reviewed text spells out each field as \u0013code\u0014result\u0015; only the result is text. */
+function fieldResults(text: string): string {
+  let previous: string;
+  let out = text;
+  do {
+    previous = out;
+    out = out
+      .replace(
+        /\u0013[^\u0013\u0014\u0015]*\u0014([^\u0013\u0015]*)\u0015/g,
+        "$1",
+      )
+      .replace(/\u0013[^\u0013\u0014\u0015]*\u0015/g, "");
+  } while (out !== previous);
+  return out;
+}
+
 /** What the model is sent as the selected text; the offsets keep counting in rangeText. */
 function modelText(facts: WordSelectionFacts, analysis: Analysis): string {
-  if (!analysis.parts) return analysis.text;
+  const reviewed = () =>
+    removeCommentMarks(fieldResults(facts.reviewedText ?? ""))
+      .replace(/\r\n?/g, "\n")
+      .replace(/\n+$/, "");
+  if (!analysis.parts)
+    return facts.reviewedText === undefined
+      ? removeCommentMarks(analysis.text)
+      : reviewed();
   if (facts.paragraphs.every((p) => visibleOffsetText(p) !== null))
     return removeCommentMarks(analysis.text);
-  return (facts.reviewedText ?? "").replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+  return reviewed();
 }
 
 function surroundings(facts: WordSelectionFacts, analysis: Analysis) {
@@ -510,11 +542,14 @@ function surroundings(facts: WordSelectionFacts, analysis: Analysis) {
       : removeCommentMarks(last.rangeText.slice(facts.endOffset));
   return {
     before: keepUtf8Tail(
-      [...anchor.before.filter(present).reverse(), prefix].join("\n"),
+      [
+        ...anchor.before.filter(present).map(withoutMark).reverse(),
+        prefix,
+      ].join("\n"),
       WORD_SELECTION_CONTEXT_BYTES,
     ),
     after: cutToUtf8Bytes(
-      [suffix, ...anchor.after.filter(present)].join("\n"),
+      [suffix, ...anchor.after.filter(present).map(withoutMark)].join("\n"),
       WORD_SELECTION_CONTEXT_BYTES,
     ),
   };

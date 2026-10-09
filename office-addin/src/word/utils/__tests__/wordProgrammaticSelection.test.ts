@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   consumeProgrammaticSelectionEvent,
   markProgrammaticWordSelection,
+  onProgrammaticWordSelection,
   PROGRAMMATIC_SELECTION_WINDOW_MS,
   resetProgrammaticWordSelectionForTests,
 } from "../wordProgrammaticSelection";
@@ -54,5 +55,16 @@ describe("programmatic Word selection marker", () => {
     expect(consumeProgrammaticSelectionEvent(1_300)).toBe(true);
     kept.cancel();
     expect(consumeProgrammaticSelectionEvent(1_400)).toBe(false);
+  });
+});
+
+describe("programmatic Word selection listeners", () => {
+  it("hears every mark until it unsubscribes", () => {
+    const heard = vi.fn();
+    const stop = onProgrammaticWordSelection(heard);
+    markProgrammaticWordSelection(1_000);
+    stop();
+    markProgrammaticWordSelection(1_100);
+    expect(heard).toHaveBeenCalledTimes(1);
   });
 });

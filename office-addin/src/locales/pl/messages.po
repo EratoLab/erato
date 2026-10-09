@@ -4038,8 +4038,33 @@ msgstr "Znajdź fragment {0}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.meta"
+msgstr "{paragraphCount, plural, one {Zaznaczony fragment · # akapit} few {Zaznaczony fragment · # akapity} many {Zaznaczony fragment · # akapitów} other {Zaznaczony fragment · # akapitu}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.notSentWithDocument"
+msgstr "Nie jest wysyłany, gdy dokument jest dołączony."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.readFailed"
+msgstr "Erato nie mógł odczytać zaznaczenia w programie Word. Wiadomość nie została wysłana."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.truncated"
+msgstr "Za długi, aby wysłać go w całości. Wysyłany jest tylko początek."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.preparingDocument"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.readingSelection"
+msgstr "Odczytywanie zaznaczenia…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

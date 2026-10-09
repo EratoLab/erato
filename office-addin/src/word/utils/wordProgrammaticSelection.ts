@@ -7,6 +7,18 @@ interface Mark {
 
 /** One per select(), oldest first, so two quick selects cannot share one claim. */
 let marks: Mark[] = [];
+const markListeners = new Set<() => void>();
+
+/**
+ * Called on every mark, before the select() it announces is queued, so a live reader can stop
+ * treating the previous selection as the user's before Word moves it.
+ */
+export function onProgrammaticWordSelection(listener: () => void): () => void {
+  markListeners.add(listener);
+  return () => {
+    markListeners.delete(listener);
+  };
+}
 
 export interface ProgrammaticWordSelection {
   /** The select() sync resolved; its event is due within the window from now. */
@@ -24,6 +36,7 @@ export function markProgrammaticWordSelection(
     (other) => now - other.since <= PROGRAMMATIC_SELECTION_WINDOW_MS,
   );
   marks.push(mark);
+  for (const listener of [...markListeners]) listener();
   return {
     selected: (at = Date.now()) => {
       mark.since = Math.max(mark.since, at);

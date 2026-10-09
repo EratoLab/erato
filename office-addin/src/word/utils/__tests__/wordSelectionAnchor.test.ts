@@ -112,6 +112,7 @@ function facts(
     hazards: {},
     pictureBeforeSpan: false,
     styleFontResolved: true,
+    spanChecked: true,
     ...overrides,
   };
 }
@@ -178,6 +179,20 @@ describe("classifyWordSelection: D-10", () => {
     expect(
       classify(INLINE, MAC, new Set<WordSelectionShape>(["paragraph"])),
     ).toMatchObject({ role: "context_only", reasonCode: "shape_not_enabled" });
+  });
+
+  it("rewrites no span whose hazards the capture has not checked", () => {
+    expect(classify({ ...PARAGRAPH, spanChecked: undefined })).toMatchObject({
+      role: "context_only",
+      reasonCode: "shape_not_enabled",
+    });
+    expect(
+      reasonOf({
+        ...PARAGRAPH,
+        spanChecked: false,
+        hazards: { hyperlink: true },
+      }),
+    ).toBe("shape_not_enabled");
   });
 
   it.each([
@@ -628,6 +643,42 @@ describe("buildWordSelectionSnapshot", () => {
       contextBefore: "",
       contextAfter: "",
     });
+  });
+
+  it("sends the reviewed text when the span could not be placed in its paragraphs", () => {
+    const unplaced = {
+      ...PARAGRAPH,
+      selectionText: "Kept deleted words",
+      startOffset: -1,
+      endOffset: -1,
+    };
+    expect(snapshot(unplaced).selectedText).toBe("Kept deleted words");
+    expect(
+      snapshot({ ...unplaced, reviewedText: "Kept\u0005 words\r" })
+        .selectedText,
+    ).toBe("Kept words");
+  });
+
+  it("keeps only the results of the fields desktop's reviewed text spells out", () => {
+    const unplaced = {
+      ...PARAGRAPH,
+      startOffset: -1,
+      endOffset: -1,
+      reviewedText:
+        "See \u0013 REF a \u0014\u0013 PAGE \u00143\u0015 above\u0015 and \u0013 SEQ \u0015done",
+    };
+    expect(snapshot(unplaced).selectedText).toBe("See 3 above and done");
+  });
+
+  it("leaves desktop's paragraph marks out of the context lines", () => {
+    const story = body(["Title\r", "Body text here.\r", "Closing.\r"]);
+    const base = facts(story, { first: 1, start: 5, end: 9 });
+    const built = snapshot({
+      ...base,
+      paragraphs: [{ ...base.paragraphs[0], rangeText: "Body text here." }],
+    });
+    expect(built.contextBefore).toBe("Title\nBody ");
+    expect(built.contextAfter).toBe(" here.\nClosing.");
   });
 
   it("returns nothing when the selection offers no chip", () => {

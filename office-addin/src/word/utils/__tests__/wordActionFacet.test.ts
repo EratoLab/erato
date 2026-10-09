@@ -2,12 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   resolveWordActionFacet,
+  resolveWordSelectionFacet,
   WORD_COMPOSE_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
+  WORD_SELECTION_FACET_ID,
+  wordSelectionFacetAvailable,
+  wordSelectionTakesSlot,
 } from "../wordActionFacet";
+import { WORD_SELECTION_ARG_KEYS } from "../wordSelectionArgs";
 
 import type { WordDocumentArgs } from "../buildWordDocumentArgs";
 import type { WordActionFacetInput } from "../wordActionFacet";
+import type { WordSelectionSnapshot } from "../wordSelectionAnchor";
 
 /** Arguments must match the configured facet: extra keys fail validation; missing values leave placeholders. */
 const ALLOWED_ARGS: Record<string, string[]> = {
@@ -130,5 +136,108 @@ describe("resolveWordActionFacet", () => {
     const second = resolveWordActionFacet(input());
     expect(first).toEqual(second);
     expect(second?.args?.document_text).toBe("[1] Revenue grew.");
+  });
+});
+
+describe("word_selection", () => {
+  const selection: WordSelectionSnapshot = {
+    role: "context_only",
+    reasonCode: "shape_not_enabled",
+    shape: "inline",
+    story: "main",
+    origin: "user",
+    selectedText: "lima mike",
+    truncated: false,
+    paragraphCount: 1,
+    paragraphs: [
+      {
+        id: "p1",
+        text: "Kilo lima mike.",
+        rangeText: "Kilo lima mike.",
+        index: 0,
+        styleName: "Normal",
+      },
+    ],
+    startOffset: 5,
+    endOffset: 14,
+    occurrence: 0,
+    anchor: null,
+    contextBefore: "Kilo ",
+    contextAfter: ".",
+  };
+  const advertised = new Set([WORD_SELECTION_FACET_ID]);
+  const allArgs = new Map([
+    [WORD_SELECTION_FACET_ID, new Set<string>(WORD_SELECTION_ARG_KEYS)],
+  ]);
+  const resolve = (
+    overrides: Partial<Parameters<typeof resolveWordSelectionFacet>[0]> = {},
+  ) =>
+    resolveWordSelectionFacet({
+      selection,
+      documentName: "Plan.docx",
+      documentIdentity: "doc-1",
+      availableFacetIds: advertised,
+      availableFacetArgs: allArgs,
+      ...overrides,
+    });
+
+  it("is offered only when advertised with selected_text", () => {
+    expect(wordSelectionFacetAvailable(advertised, allArgs)).toBe(true);
+    expect(wordSelectionFacetAvailable(new Set(), allArgs)).toBe(false);
+    expect(wordSelectionFacetAvailable(advertised, new Map())).toBe(false);
+    expect(
+      wordSelectionFacetAvailable(
+        advertised,
+        new Map([[WORD_SELECTION_FACET_ID, new Set(["document_name"])]]),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    ["rewrite", false, true],
+    ["rewrite", true, true],
+    ["context_only", false, true],
+    ["context_only", true, false],
+  ] as const)(
+    "a %s selection with the document included=%s takes the slot: %s",
+    (role, documentIncluded, takes) => {
+      expect(
+        wordSelectionTakesSlot({ ...selection, role }, documentIncluded),
+      ).toBe(takes);
+    },
+  );
+
+  it("fills every advertised key and nothing else", () => {
+    expect(resolve()).toEqual({
+      id: WORD_SELECTION_FACET_ID,
+      args: {
+        document_name: "Plan.docx",
+        document_identity: "doc-1",
+        selected_text: "lima mike",
+        selection_role: "context_only",
+        context_reason: "shape_not_enabled",
+        selection_shape: "inline",
+        selection_story: "main",
+        paragraph_count: "1",
+        style_names: "Normal",
+        context_before: "Kilo ",
+        context_after: ".",
+        truncated: "false",
+      },
+    });
+    expect(
+      resolve({
+        availableFacetArgs: new Map([
+          [WORD_SELECTION_FACET_ID, new Set(["selected_text", "text_version"])],
+        ]),
+      }),
+    ).toEqual({
+      id: WORD_SELECTION_FACET_ID,
+      args: { selected_text: "lima mike" },
+    });
+  });
+
+  it("is not sent when the server does not advertise it", () => {
+    expect(resolve({ availableFacetIds: new Set() })).toBeUndefined();
   });
 });
