@@ -3,8 +3,17 @@ import { wordParagraphId } from "./wordParagraphIds";
 import { wordParagraphAnchor } from "./wordParagraphResolver";
 import { WORD_SELECTION_TEXT_OPTIONS } from "./wordReviewLocation";
 import { runWordGuarded } from "./wordRunGuard";
-import { buildWordSelectionSnapshot } from "./wordSelectionAnchor";
+import {
+  buildWordSelectionSnapshot,
+  classifyWordSelection,
+  WORD_SELECTION_REPLACE_SHAPES,
+} from "./wordSelectionAnchor";
 import { wordSelectionSupport } from "./wordSelectionSupport";
+import {
+  evaluateParagraphSpan,
+  queueParagraphSpanChecks,
+  readWordStory,
+} from "./wordSelectionTarget";
 
 import type { WordParagraphEntry } from "./wordParagraphResolver";
 import type {
@@ -374,11 +383,8 @@ async function readBody(
   context: Word.RequestContext,
   read: SelectionRead,
 ): Promise<BodyRead> {
-  const body = context.document.body.paragraphs;
-  body.load("items/uniqueLocalId,items/text");
-  await context.sync();
-  const texts = body.items.map((p) => p.getText(WORD_SELECTION_TEXT_OPTIONS));
-  const ids = body.items.map((p) => wordParagraphId(p.uniqueLocalId));
+  const story = await readWordStory(context);
+  const ids = story.entries.map((entry) => entry.id);
   const idCounts = new Map<string, number>();
   for (const id of ids) if (id) idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
   const selectedIds = read.paragraphs.map((p) =>
@@ -389,8 +395,8 @@ async function readBody(
     ? []
     : read.paragraphs.map((p) => {
         const whole = p.getRange("Whole");
-        return body.items.flatMap((candidate, j) =>
-          candidate.text === p.text
+        return story.items.flatMap((candidate, j) =>
+          story.rangeTexts[j] === p.text
             ? [
                 {
                   j,
@@ -402,11 +408,8 @@ async function readBody(
             : [],
         );
       });
-  await context.sync();
-  const entries = body.items.map((_, j) => ({
-    id: ids[j],
-    text: texts[j].value,
-  }));
+  if (!byId) await context.sync();
+  const { entries } = story;
   const positions = byId
     ? selectedIds.map((id) => ids.indexOf(id))
     : compared.map((candidates) => {
@@ -436,6 +439,7 @@ function consecutive(
 export async function captureWordSelection(
   origin: WordSelectionOrigin = "user",
   timeoutMs = WORD_SELECTION_CAPTURE_TIMEOUT_MS,
+  enabledShapes: ReadonlySet<WordSelectionShape> = WORD_SELECTION_REPLACE_SHAPES,
 ): Promise<WordSelectionRead<WordSelectionSnapshot>> {
   const support = currentWordSelectionSupport();
   const result = await runWordGuarded(
@@ -544,7 +548,39 @@ export async function captureWordSelection(
             : null,
         ...(reviewed ? { reviewedText: reviewed.value } : {}),
       };
-      return buildWordSelectionSnapshot(facts, support, origin);
+      // The span checks cost an OOXML read (0.5 s and more on the web), so they run only when
+      // nothing else keeps the selection context only.
+      const unchecked = classifyWordSelection(facts, support, enabledShapes);
+      if (
+        unchecked.role !== "context_only" ||
+        unchecked.reasonCode !== "shape_not_enabled" ||
+        !enabledShapes.has(unchecked.shape) ||
+        unchecked.shape !== "paragraph"
+      )
+        return buildWordSelectionSnapshot(
+          facts,
+          support,
+          origin,
+          enabledShapes,
+        );
+      const checks = queueParagraphSpanChecks(read.paragraphs[0]);
+      await context.sync();
+      const spanCheck = evaluateParagraphSpan(
+        checks(),
+        read.paragraphs[0].style,
+        support,
+      );
+      return buildWordSelectionSnapshot(
+        {
+          ...facts,
+          hazards: spanCheck.hazards,
+          styleFontResolved: spanCheck.styleFontResolved,
+          spanChecked: true,
+        },
+        support,
+        origin,
+        enabledShapes,
+      );
     },
     { timeoutMs },
   );

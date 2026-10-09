@@ -15,7 +15,10 @@ import type {
   MockSelectionTarget,
   WordSelectionHostOptions,
 } from "../../../test/mocks/word/selectionHost";
-import type { WordSelectionSnapshot } from "../wordSelectionAnchor";
+import type {
+  WordSelectionShape,
+  WordSelectionSnapshot,
+} from "../wordSelectionAnchor";
 
 const HOSTS = ["mac", "pc", "web"] as const;
 
@@ -446,3 +449,88 @@ describe("describeWordSelection", () => {
     hang.release();
   });
 });
+
+describe.each(HOSTS)(
+  "captureWordSelection with whole paragraphs enabled on %s",
+  (flavour) => {
+    const PARAGRAPHS = new Set<WordSelectionShape>(["paragraph"]);
+    const capture = async (
+      target: MockSelectionTarget,
+      document: MockSelectionDocument = SV2_MAIN_DOCUMENT,
+    ) => {
+      const host = installWordSelectionHost(document, { host: flavour });
+      host.select(target);
+      const read = await captureWordSelection("user", 15_000, PARAGRAPHS);
+      if (read.status !== "ok") throw new Error("capture failed");
+      return { host, selection: read.value };
+    };
+
+    it("offers a plain whole paragraph for rewriting", async () => {
+      const { selection } = await capture({ p: "PL1" });
+      expect(selection).toMatchObject({
+        role: "rewrite",
+        reasonCode: null,
+        shape: "paragraph",
+      });
+    });
+
+    it.each([
+      ["MX1", "hyperlink"],
+      ["FD1", "field"],
+      ["HT1", "hidden_text"],
+      ["TC1", "tracked_changes"],
+      ["CM1", "comment_mark"],
+      ["FN1", "note_reference"],
+      ["PC1", "inline_picture"],
+      ["RT1", "complex_script_format"],
+    ] as const)("keeps %s context only (%s)", async (p, reasonCode) => {
+      const { selection } = await capture({ p });
+      expect(selection).toMatchObject({
+        role: "context_only",
+        // The web's selection text shows a picture as a space that paragraph.text lacks, so the
+        // span is not placed as a whole paragraph there.
+        reasonCode:
+          flavour === "web" && p === "PC1" ? "shape_not_enabled" : reasonCode,
+      });
+    });
+
+    it("takes a mixed toggle from the paragraph style and refuses a partial colour", async () => {
+      const document: MockSelectionDocument = {
+        body: [
+          "Intro.",
+          {
+            runs: ["Mixed ", { text: "bold", font: { bold: true } }, " words."],
+          },
+          {
+            runs: [
+              "Part ",
+              { text: "red", font: { color: "#C00000" } },
+              " words.",
+            ],
+          },
+          "Outro.",
+        ],
+      };
+      expect(
+        (await capture({ paragraph: 1 }, document)).selection,
+      ).toMatchObject({
+        role: "rewrite",
+      });
+      expect(
+        (await capture({ paragraph: 2 }, document)).selection,
+      ).toMatchObject({
+        role: "context_only",
+        reasonCode: "mixed_formatting",
+      });
+    });
+
+    it("reads no OOXML for a shape that is not enabled", async () => {
+      const { host, selection } = await capture({
+        p: "PL1",
+        text: "lima mike",
+      });
+      expect(selection).toMatchObject({ reasonCode: "shape_not_enabled" });
+      expect(host.calls()).not.toContain("Paragraph.getOoxml");
+    });
+  },
+);

@@ -181,18 +181,21 @@ describe("classifyWordSelection: D-10", () => {
     ).toMatchObject({ role: "context_only", reasonCode: "shape_not_enabled" });
   });
 
-  it("rewrites no span whose hazards the capture has not checked", () => {
+  it("rewrites no span whose content the capture has not checked", () => {
     expect(classify({ ...PARAGRAPH, spanChecked: undefined })).toMatchObject({
       role: "context_only",
       reasonCode: "shape_not_enabled",
     });
     expect(
-      reasonOf({
-        ...PARAGRAPH,
-        spanChecked: false,
-        hazards: { hyperlink: true },
-      }),
+      reasonOf({ ...PARAGRAPH, spanChecked: false, styleFontResolved: false }),
     ).toBe("shape_not_enabled");
+  });
+
+  it("still names a reason its text shows when the span is unchecked", () => {
+    const story = body(["Intro", "Note\u0002 here.", "Outro"]);
+    expect(
+      reasonOf({ ...facts(story, { first: 1 }), spanChecked: false }),
+    ).toBe("note_reference");
   });
 
   it.each([

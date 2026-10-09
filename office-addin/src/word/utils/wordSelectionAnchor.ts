@@ -164,8 +164,8 @@ export interface WordSelectionFacts {
   /** The style font of every covered paragraph could be read. */
   styleFontResolved: boolean;
   /**
-   * The span's hazard scan and style font read ran. The capture runs them only for a shape Replace
-   * may write, so an unchecked span is never rewritten.
+   * The span's hazard scan and style font read ran. The capture runs them only when nothing else
+   * keeps the selection context only, and an unchecked span is never rewritten.
    */
   spanChecked?: boolean;
   /** A tracked Range was kept as a hint (desktop only). */
@@ -405,8 +405,7 @@ function contextOnlyReason(
   if (paragraphs.length > WORD_SELECTION_MAX_PARAGRAPHS)
     return "too_many_paragraphs";
   if (!fitsActionFacetArg(analysis.text)) return "too_large";
-  if (!enabledShapes.has(shape) || !facts.spanChecked)
-    return "shape_not_enabled";
+  if (!enabledShapes.has(shape)) return "shape_not_enabled";
   if (!parts || !anchor || !anchorMatches(facts)) return "position_unknown";
   if (
     shape === "multi_paragraph" &&
@@ -417,7 +416,10 @@ function contextOnlyReason(
   if (hazard) return hazard;
   if (facts.pictureBeforeSpan && support.picturesShiftOffsets)
     return "web_picture_offset";
-  if (support.styleFontSource === null || !facts.styleFontResolved)
+  if (
+    facts.spanChecked &&
+    (support.styleFontSource === null || !facts.styleFontResolved)
+  )
     return "style_font_unavailable";
   if (analysis.occurrence < 0) return "position_unknown";
   // paragraph.text shows text the model must not see and no reviewed text came with the capture.
@@ -435,6 +437,8 @@ function contextOnlyReason(
     !facts.trackedRange
   )
     return "not_unique";
+  // Every other check passed; the span's own content was not looked at yet.
+  if (!facts.spanChecked) return "shape_not_enabled";
   return null;
 }
 
