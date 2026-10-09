@@ -4137,6 +4137,11 @@ msgstr "Erato no pudo leer tu selección en Word, así que tu mensaje no se envi
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.cellParagraphs"
+msgstr "Selecciona un solo párrafo de esta celda de la tabla para que se reemplace. Varios párrafos de una celda solo se usan como contexto."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.content"
 msgstr "Este pasaje contiene un enlace, un campo, un comentario, una nota, una imagen u otro contenido que una reescritura perdería."
 
@@ -4149,6 +4154,11 @@ msgstr "Este pasaje tiene un formato que una reescritura no podría conservar."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.host"
 msgstr "Esta versión de Word no puede reemplazar un pasaje seleccionado."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.nestedTable"
+msgstr "El texto de una tabla dentro de otra tabla solo se usa como contexto."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4173,7 +4183,7 @@ msgstr "El texto de encabezados, pies de página, notas y cuadros de texto solo 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.table"
-msgstr "Selecciona un párrafo fuera de la tabla para que se pueda reemplazar. Las tablas solo se usan como contexto."
+msgstr "Selecciona texto en una sola celda de la tabla para que se reemplace. Una selección que abarca varias celdas solo se usa como contexto."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

@@ -4137,6 +4137,11 @@ msgstr "Erato could not read your selection in Word, so your message was not sen
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.cellParagraphs"
+msgstr "Select one paragraph in this table cell to have it replaced. Several paragraphs in one cell are only used as context."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.content"
 msgstr "This passage holds a link, field, comment, note, picture or other content a rewrite would lose."
 
@@ -4149,6 +4154,11 @@ msgstr "This passage has formatting a rewrite could not keep."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.host"
 msgstr "This version of Word cannot replace a selected passage."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.nestedTable"
+msgstr "Text in a table inside another table is only used as context."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4173,7 +4183,7 @@ msgstr "Text in headers, footers, notes and text boxes is only used as context."
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.table"
-msgstr "Select one paragraph outside the table to have it replaced. Tables are only used as context."
+msgstr "Select text in one table cell to have it replaced. A selection across several cells is only used as context."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

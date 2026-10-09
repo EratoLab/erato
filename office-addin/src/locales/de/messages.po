@@ -4137,6 +4137,11 @@ msgstr "Erato konnte Ihre Auswahl in Word nicht lesen, daher wurde Ihre Nachrich
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.cellParagraphs"
+msgstr "Wählen Sie einen einzelnen Absatz in dieser Tabellenzelle aus, damit er ersetzt werden kann. Mehrere Absätze in einer Zelle werden nur als Kontext verwendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.content"
 msgstr "Diese Passage enthält einen Link, ein Feld, einen Kommentar, eine Fußnote, ein Bild oder andere Inhalte, die bei einer Umformulierung verloren gingen."
 
@@ -4149,6 +4154,11 @@ msgstr "Diese Passage hat Formatierungen, die eine Umformulierung nicht erhalten
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.host"
 msgstr "Diese Word-Version kann keine ausgewählte Passage ersetzen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.nestedTable"
+msgstr "Text in einer Tabelle innerhalb einer anderen Tabelle wird nur als Kontext verwendet."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4173,7 +4183,7 @@ msgstr "Text in Kopf- und Fußzeilen, Fußnoten und Textfeldern wird nur als Kon
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.table"
-msgstr "Wählen Sie einen Absatz außerhalb der Tabelle aus, damit er ersetzt werden kann. Tabellen werden nur als Kontext verwendet."
+msgstr "Wählen Sie Text in einer einzelnen Tabellenzelle aus, damit er ersetzt werden kann. Eine Auswahl über mehrere Zellen wird nur als Kontext verwendet."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

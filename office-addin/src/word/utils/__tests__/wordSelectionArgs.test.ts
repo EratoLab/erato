@@ -157,6 +157,51 @@ describe("wordSelectionFacetArgs", () => {
     });
   });
 
+  it.each([
+    [
+      "several paragraphs",
+      [null, null],
+      "multi_paragraph",
+      "Heading text\nBody",
+    ],
+    ["one table cell", ["r0c0"], "table_cell", "Heading text"],
+  ] as const)("offers %s for rewriting", (_, cells, shape, selectedText) => {
+    const covered = cells.map((cell, i) => ({
+      ...story[i + 1],
+      rangeText: story[i + 1].text,
+      index: i + 1,
+      styleName: "Normal",
+      tableNestingLevel: cell ? 1 : 0,
+      cell,
+    }));
+    const snapshot = buildWordSelectionSnapshot(
+      {
+        isEmpty: false,
+        storyType: "MainDoc",
+        selectionText: selectedText.replace("\n", "\r"),
+        objectOnly: false,
+        tables: cells[0] ? "partial" : "none",
+        paragraphs: covered,
+        startOffset: 0,
+        endOffset: covered.length > 1 ? 4 : covered[0].rangeText.length,
+        anchor: wordParagraphAnchor(story, 1, covered.length),
+        hazards: {},
+        pictureBeforeSpan: false,
+        styleFontResolved: true,
+        spanChecked: true,
+      },
+      wordSelectionSupport(() => true, "Mac"),
+      "user",
+    );
+    if (!snapshot) throw new Error("no snapshot");
+    expect(args(snapshot)).toMatchObject({
+      selected_text: selectedText,
+      selection_role: "rewrite",
+      context_reason: "",
+      selection_shape: shape,
+    });
+  });
+
   it("drops keys the server does not advertise", () => {
     const allowed = new Set(
       WORD_SELECTION_ARG_KEYS.filter(

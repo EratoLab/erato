@@ -71,12 +71,22 @@ export function wordSelectionReasonText(
       });
     case "whole_table":
     case "multi_cell":
-    case "nested_table":
-    case "cell_multi_paragraph":
       return t({
         id: "officeAddin.word.selection.reason.table",
         message:
-          "Select one paragraph outside the table to have it replaced. Tables are only used as context.",
+          "Select text in one table cell to have it replaced. A selection across several cells is only used as context.",
+      });
+    case "nested_table":
+      return t({
+        id: "officeAddin.word.selection.reason.nestedTable",
+        message:
+          "Text in a table inside another table is only used as context.",
+      });
+    case "cell_multi_paragraph":
+      return t({
+        id: "officeAddin.word.selection.reason.cellParagraphs",
+        message:
+          "Select one paragraph in this table cell to have it replaced. Several paragraphs in one cell are only used as context.",
       });
     case "too_many_paragraphs":
     case "too_large":

@@ -169,25 +169,53 @@ describe("classifyWordSelection: D-10", () => {
     });
   });
 
-  it("rewrites whole paragraphs and inline spans, keeping every other shape context only", () => {
-    expect([...WORD_SELECTION_REPLACE_SHAPES]).toEqual(["paragraph", "inline"]);
-    for (const selection of [PARAGRAPH, INLINE])
+  it("rewrites every shape but a table by default", () => {
+    expect([...WORD_SELECTION_REPLACE_SHAPES]).toEqual([
+      "paragraph",
+      "inline",
+      "multi_paragraph",
+      "table_cell",
+    ]);
+    for (const selection of [PARAGRAPH, INLINE, MULTI, CELL])
       expect(classifyWordSelection(selection, MAC)).toMatchObject({
         role: "rewrite",
       });
-    expect(classifyWordSelection(INLINE, LTSC_2021)).toMatchObject({
+    expect(classifyWordSelection(MULTI, LTSC_2021)).toMatchObject({
       role: "context_only",
       reasonCode: "host_unsupported",
     });
     for (const selection of [MULTI, CELL])
-      expect(classifyWordSelection(selection, MAC)).toMatchObject({
+      expect(
+        classify(selection, MAC, new Set<WordSelectionShape>(["paragraph"])),
+      ).toMatchObject({
         role: "context_only",
         reasonCode: "shape_not_enabled",
       });
-    expect(
-      classify(INLINE, MAC, new Set<WordSelectionShape>(["paragraph"])),
-    ).toMatchObject({ role: "context_only", reasonCode: "shape_not_enabled" });
   });
+
+  it.each([
+    [
+      "several paragraphs of one cell",
+      ["r0c0", "r0c0"],
+      1,
+      "cell_multi_paragraph",
+    ],
+    ["a nested table's cell", ["r0c0"], 2, "nested_table"],
+    ["two cells", ["r0c0", "r0c1"], 1, "multi_cell"],
+  ] as const)(
+    "keeps %s context only with every shape enabled by default",
+    (_, cells, nesting, reasonCode) => {
+      const selection = inCells(
+        facts(DOC, { first: 1, last: cells.length }),
+        [...cells],
+        nesting,
+      );
+      expect(classifyWordSelection(selection, MAC)).toMatchObject({
+        role: "context_only",
+        reasonCode,
+      });
+    },
+  );
 
   it("rewrites no span whose content the capture has not checked", () => {
     expect(classify({ ...PARAGRAPH, spanChecked: undefined })).toMatchObject({

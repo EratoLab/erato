@@ -43,7 +43,12 @@ export const WORD_SELECTION_CONTEXT_BYTES = 4_096;
  * host; until then an otherwise eligible selection is sent as context only.
  */
 export const WORD_SELECTION_REPLACE_SHAPES: ReadonlySet<WordSelectionShape> =
-  new Set<WordSelectionShape>(["paragraph", "inline"]);
+  new Set<WordSelectionShape>([
+    "paragraph",
+    "inline",
+    "multi_paragraph",
+    "table_cell",
+  ]);
 
 /** Why a selection is sent as context only; the card maps each code to its own V2-4 message. */
 export const WORD_SELECTION_REASON_CODES = [

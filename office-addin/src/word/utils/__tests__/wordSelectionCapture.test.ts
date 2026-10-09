@@ -98,6 +98,8 @@ describe.each(HOSTS)("captureWordSelection on %s", (flavour) => {
       to: { p: "MP3", text: "MP3 Multi" },
     });
     expect(selection).toMatchObject({
+      role: "rewrite",
+      reasonCode: null,
       shape: "multi_paragraph",
       paragraphCount: 3,
       selectedText:
@@ -156,10 +158,14 @@ describe.each(HOSTS)("captureWordSelection on %s", (flavour) => {
   it("records one table cell", async () => {
     const selection = await captureOf({ table: 0, cell: [1, 1] });
     expect(selection).toMatchObject({
+      role: "rewrite",
       shape: "table_cell",
       selectedText: "CB2 Cell B2 text",
-      reasonCode: "shape_not_enabled",
+      reasonCode: null,
     });
+    expect(selection!.paragraphs).toEqual([
+      expect.objectContaining({ tableNestingLevel: 1 }),
+    ]);
   });
 
   it.each([
@@ -367,7 +373,7 @@ describe("describeWordSelection", () => {
           shape: "multi_paragraph",
           story: "main",
           truncated: false,
-          mayRewrite: false,
+          mayRewrite: true,
         },
       });
       expect(host.syncCount()).toBe(2);

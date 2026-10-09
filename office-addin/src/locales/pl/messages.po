@@ -4137,6 +4137,11 @@ msgstr "Erato nie mógł odczytać zaznaczenia w programie Word, więc wiadomoś
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.cellParagraphs"
+msgstr "Zaznacz jeden akapit w tej komórce tabeli, aby go zastąpić. Kilka akapitów w jednej komórce jest używanych tylko jako kontekst."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.content"
 msgstr "Ten fragment zawiera link, pole, komentarz, przypis, obraz lub inną treść, którą przeredagowanie by utraciło."
 
@@ -4149,6 +4154,11 @@ msgstr "Ten fragment ma formatowanie, którego przeredagowanie nie mogłoby zach
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.host"
 msgstr "Ta wersja programu Word nie może zastąpić zaznaczonego fragmentu."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.nestedTable"
+msgstr "Tekst w tabeli umieszczonej w innej tabeli jest używany tylko jako kontekst."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4173,7 +4183,7 @@ msgstr "Tekst w nagłówkach, stopkach, przypisach i polach tekstowych jest uży
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.table"
-msgstr "Zaznacz akapit poza tabelą, aby można go było zastąpić. Tabele są używane tylko jako kontekst."
+msgstr "Zaznacz tekst w jednej komórce tabeli, aby go zastąpić. Zaznaczenie obejmujące kilka komórek jest używane tylko jako kontekst."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
