@@ -77,8 +77,8 @@ ractor_actors = { version = "0.5.0", default-features = false, features = ["time
 cron = "0.16.0"
 
 # Dependencies: LLM / GenAI
-# Upstream f928db3 + retained fork patches and Gemini streaming/replay ID fixes.
-genai = { version = "0.7.0-rc.2-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "c27b71383b0ff7366dec85009c4fce09229a1d2c" }
+# Upstream v0.7.0-rc.4 + retained fork patches and Gemini streaming/replay ID fixes.
+genai = { version = "0.7.0-rc.4", git = "https://github.com/EratoLab/rust-genai.git", branch = "fork-2026-10-09" }
 tiktoken-rs = "0.12.0"
 
 # Dependencies: MCP
