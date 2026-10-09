@@ -22,4 +22,30 @@ describe("document retrieval contract", () => {
     for (const contentBase64 of ["A", "AA", "AA=", "!!!!", "AAAA\n"])
       expect(result({ ...metadata, contentBase64 })).toBe(false);
   });
+  it("accepts open export warnings and rejects malformed ones", () => {
+    const exported = {
+      filename: "thread.eml",
+      mimeType: "message/rfc822",
+      contentBase64: "",
+    };
+    const warning = { code: "message_omitted", documentId };
+    expect(
+      result({
+        ...exported,
+        warnings: [
+          { code: "body_preview_only", documentId, message: "Preview only." },
+          { ...warning, sourceError: "source_changed", future: true },
+          { code: "future_code" },
+        ],
+      }),
+    ).toBe(true);
+    for (const malformed of [
+      { documentId },
+      { ...warning, code: "" },
+      { ...warning, documentId: "message-1" },
+      { ...warning, sourceError: "" },
+      { ...warning, message: "" },
+    ])
+      expect(result({ ...exported, warnings: [malformed] })).toBe(false);
+  });
 });

@@ -15,6 +15,16 @@ export interface SourcesGetDocumentV1Result {
   contentBase64: string;
   external_ids?: DocumentExternalIds;
   topLevelParent?: TopLevelParent;
+  /**
+   * Parts of the export that are only a cached preview or were omitted. Known codes include body_preview_only and message_omitted.
+   */
+  warnings?: {
+    code: string;
+    message?: string;
+    documentId?: string;
+    sourceError?: string;
+    [k: string]: unknown;
+  }[];
   [k: string]: unknown;
 }
 /**

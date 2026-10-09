@@ -26790,7 +26790,7 @@ return errors === 0;
 
 export const validateOutlookGetConversationV1Result = validate122;
 const schema152 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json","title":"OutlookGetConversationV1Result","description":"The messages of the anchored conversation, oldest first, with bodies and attachment bytes carried inline.","type":"object","required":["state","messages"],"properties":{"state":{"description":"Completeness of the conversation. ok means every message and byte reference was produced; partial means some were omitted (see warnings), for example because maxMessages was reached or an attachment could not be read.","type":"string","minLength":1,"maxLength":32},"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"messages":{"type":"array","items":{"$ref":"../outlook/conversation-message.schema.json"}},"warnings":{"type":"array","items":{"$ref":"../outlook/conversation-warning.schema.json"}}},"additionalProperties":true};
-const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-warning.schema.json","title":"OutlookConversationWarning","description":"A part of a conversation that could not be represented fully, without hiding the rest.","type":"object","required":["code"],"properties":{"code":{"description":"Stable machine-readable warning code. Known values include truncated, attachment_unavailable, embedded_attachments_omitted, and unsupported_source. unsupported_source means the mailbox's store cannot be read as conversations at all: the result has no messages and retrying cannot help.","type":"string","minLength":1,"maxLength":128},"message":{"type":"string","minLength":1,"maxLength":4096},"internetMessageId":{"description":"The message the warning is about, when it is message-scoped.","type":"string","maxLength":32768}},"additionalProperties":true};
+const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-warning.schema.json","title":"OutlookConversationWarning","description":"A part of a conversation that could not be represented fully, without hiding the rest.","type":"object","required":["code"],"properties":{"code":{"description":"Stable machine-readable warning code. Known values include truncated, attachment_unavailable, embedded_attachments_omitted, body_preview_only, body_unavailable, body_truncated, and unsupported_source. body_preview_only means the message's body is only the preview its application cached. unsupported_source means the mailbox's store cannot be read as conversations at all: the result has no messages and retrying cannot help.","type":"string","minLength":1,"maxLength":128},"message":{"type":"string","minLength":1,"maxLength":4096},"internetMessageId":{"description":"The message the warning is about, when it is message-scoped.","type":"string","maxLength":32768}},"additionalProperties":true};
 const schema153 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json","title":"OutlookConversationMessage","description":"One message of an Outlook conversation, with its body and attachment bytes carried inline.","type":"object","required":["attachments"],"properties":{"internetMessageId":{"type":"string","maxLength":32768},"subject":{"type":"string","maxLength":32768},"from":{"$ref":"../outlook/message-recipient.schema.json"},"to":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"cc":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"sentAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"isDraft":{"description":"True when the message is an unsent draft.","type":"boolean"},"conversationIndex":{"description":"Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.","type":"string","maxLength":8192},"body":{"$ref":"../outlook/message-body.schema.json"},"attachments":{"type":"array","items":{"$ref":"../outlook/attachment-reference.schema.json"}},"external_ids":{"$ref":"../source/external-ids.schema.json"}},"additionalProperties":true};
 const schema154 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-recipient.schema.json","title":"OutlookMessageRecipient","description":"One recipient of an Outlook message.","type":"object","properties":{"name":{"description":"Display name, when present.","type":"string","maxLength":4096},"emailAddress":{"description":"SMTP address. Omitted when only a non-routable Exchange address is stored locally.","type":"string","maxLength":4096}},"additionalProperties":true};
 const schema157 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-body.schema.json","title":"OutlookMessageBody","description":"A message body carried inline in the JSON-RPC result. The sidecar decodes the stored bytes to text using the message code page before sending.","type":"object","required":["contentType","content"],"properties":{"contentType":{"description":"Media type of the body, for example text/html or text/plain.","type":"string","maxLength":256},"content":{"description":"The decoded body text.","type":"string"}},"additionalProperties":true};
@@ -30765,7 +30765,7 @@ return errors === 0;
 }
 
 export const validateSourcesGetDocumentV1Result = validate146;
-const schema180 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json","title":"SourcesGetDocumentV1Result","type":"object","properties":{"filename":{"type":"string","minLength":1},"mimeType":{"type":"string","minLength":1},"contentBase64":{"type":"string","pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"required":["filename","mimeType","contentBase64"],"additionalProperties":true};
+const schema180 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json","title":"SourcesGetDocumentV1Result","type":"object","properties":{"filename":{"type":"string","minLength":1},"mimeType":{"type":"string","minLength":1},"contentBase64":{"type":"string","pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"},"warnings":{"description":"Parts of the export that are only a cached preview or were omitted. Known codes include body_preview_only and message_omitted.","type":"array","items":{"type":"object","required":["code"],"properties":{"code":{"type":"string","minLength":1,"maxLength":128},"message":{"type":"string","minLength":1,"maxLength":4096},"documentId":{"type":"string","format":"uuid"},"sourceError":{"type":"string","minLength":1,"maxLength":128}},"additionalProperties":true}}},"required":["filename","mimeType","contentBase64"],"additionalProperties":true};
 
 function validate146(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json" */;
@@ -30984,14 +30984,185 @@ vErrors = vErrors === null ? validate80.errors : vErrors.concat(validate80.error
 errors = vErrors.length;
 }
 }
-}
-else {
-const err17 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data.warnings !== undefined){
+let data8 = data.warnings;
+if(Array.isArray(data8)){
+const len1 = data8.length;
+for(let i1=0; i1<len1; i1++){
+let data9 = data8[i1];
+if(data9 && typeof data9 == "object" && !Array.isArray(data9)){
+if(data9.code === undefined){
+const err17 = {instancePath:instancePath+"/warnings/" + i1,schemaPath:"#/properties/warnings/items/required",keyword:"required",params:{missingProperty: "code"},message:"must have required property '"+"code"+"'"};
 if(vErrors === null){
 vErrors = [err17];
 }
 else {
 vErrors.push(err17);
+}
+errors++;
+}
+if(data9.code !== undefined){
+let data10 = data9.code;
+if(typeof data10 === "string"){
+if(func2(data10) > 128){
+const err18 = {instancePath:instancePath+"/warnings/" + i1+"/code",schemaPath:"#/properties/warnings/items/properties/code/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(vErrors === null){
+vErrors = [err18];
+}
+else {
+vErrors.push(err18);
+}
+errors++;
+}
+if(func2(data10) < 1){
+const err19 = {instancePath:instancePath+"/warnings/" + i1+"/code",schemaPath:"#/properties/warnings/items/properties/code/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err19];
+}
+else {
+vErrors.push(err19);
+}
+errors++;
+}
+}
+else {
+const err20 = {instancePath:instancePath+"/warnings/" + i1+"/code",schemaPath:"#/properties/warnings/items/properties/code/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err20];
+}
+else {
+vErrors.push(err20);
+}
+errors++;
+}
+}
+if(data9.message !== undefined){
+let data11 = data9.message;
+if(typeof data11 === "string"){
+if(func2(data11) > 4096){
+const err21 = {instancePath:instancePath+"/warnings/" + i1+"/message",schemaPath:"#/properties/warnings/items/properties/message/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+if(vErrors === null){
+vErrors = [err21];
+}
+else {
+vErrors.push(err21);
+}
+errors++;
+}
+if(func2(data11) < 1){
+const err22 = {instancePath:instancePath+"/warnings/" + i1+"/message",schemaPath:"#/properties/warnings/items/properties/message/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err22];
+}
+else {
+vErrors.push(err22);
+}
+errors++;
+}
+}
+else {
+const err23 = {instancePath:instancePath+"/warnings/" + i1+"/message",schemaPath:"#/properties/warnings/items/properties/message/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err23];
+}
+else {
+vErrors.push(err23);
+}
+errors++;
+}
+}
+if(data9.documentId !== undefined){
+let data12 = data9.documentId;
+if(typeof data12 === "string"){
+if(!(formats0.test(data12))){
+const err24 = {instancePath:instancePath+"/warnings/" + i1+"/documentId",schemaPath:"#/properties/warnings/items/properties/documentId/format",keyword:"format",params:{format: "uuid"},message:"must match format \""+"uuid"+"\""};
+if(vErrors === null){
+vErrors = [err24];
+}
+else {
+vErrors.push(err24);
+}
+errors++;
+}
+}
+else {
+const err25 = {instancePath:instancePath+"/warnings/" + i1+"/documentId",schemaPath:"#/properties/warnings/items/properties/documentId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err25];
+}
+else {
+vErrors.push(err25);
+}
+errors++;
+}
+}
+if(data9.sourceError !== undefined){
+let data13 = data9.sourceError;
+if(typeof data13 === "string"){
+if(func2(data13) > 128){
+const err26 = {instancePath:instancePath+"/warnings/" + i1+"/sourceError",schemaPath:"#/properties/warnings/items/properties/sourceError/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(vErrors === null){
+vErrors = [err26];
+}
+else {
+vErrors.push(err26);
+}
+errors++;
+}
+if(func2(data13) < 1){
+const err27 = {instancePath:instancePath+"/warnings/" + i1+"/sourceError",schemaPath:"#/properties/warnings/items/properties/sourceError/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err27];
+}
+else {
+vErrors.push(err27);
+}
+errors++;
+}
+}
+else {
+const err28 = {instancePath:instancePath+"/warnings/" + i1+"/sourceError",schemaPath:"#/properties/warnings/items/properties/sourceError/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err28];
+}
+else {
+vErrors.push(err28);
+}
+errors++;
+}
+}
+}
+else {
+const err29 = {instancePath:instancePath+"/warnings/" + i1,schemaPath:"#/properties/warnings/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err29];
+}
+else {
+vErrors.push(err29);
+}
+errors++;
+}
+}
+}
+else {
+const err30 = {instancePath:instancePath+"/warnings",schemaPath:"#/properties/warnings/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err30];
+}
+else {
+vErrors.push(err30);
+}
+errors++;
+}
+}
+}
+else {
+const err31 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err31];
+}
+else {
+vErrors.push(err31);
 }
 errors++;
 }

@@ -776,6 +776,25 @@ describe("shared desktop sidecar tools", () => {
     });
   });
 
+  it("marks messages of which only a cached preview is available", async () => {
+    const data = conversation();
+    const reply = conversation().messages[0];
+    reply.internetMessageId = "<reply@example.test>";
+    reply.attachments = [];
+    data.messages.push(reply);
+    data.state = "partial";
+    data.warnings = [
+      { code: "body_preview_only", internetMessageId: reply.internetMessageId },
+    ];
+    const env = setup({ "outlook.get_conversation.v1": data });
+    const outcome = await env.tools()[1].execute(anchor, context);
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: { messages: [{}, { bodyPreviewOnly: true }] },
+    });
+    expect(outcome).not.toHaveProperty("result.messages.0.bodyPreviewOnly");
+  });
+
   it("does no work for an aborted call", async () => {
     const env = setup({});
     const signal = AbortSignal.abort();
@@ -889,6 +908,27 @@ describe("sidecar document retrieval", () => {
       expect(env.request).toHaveBeenCalledTimes(1);
     },
   );
+
+  it("passes preview and omission warnings to the model", async () => {
+    const warnings = [
+      { code: "body_preview_only", documentId, message: "Only a preview." },
+      {
+        code: "message_omitted",
+        documentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        sourceError: "source_changed",
+      },
+    ];
+    const env = setup({
+      "sources.get_document.v1": { ...document, warnings },
+    });
+    const outcome = await env
+      .tools()
+      .find((item) => item.name === GET_SIDECAR_DOCUMENT_TOOL)!
+      .execute({ ...input, subject_scope: "subject_with_thread" }, context);
+    expect(outcome).toMatchObject({ ok: true, result: { warnings } });
+    const plain = await setupDocument().tool().execute(input, context);
+    expect(plain).not.toHaveProperty("result.warnings");
+  });
 
   it.each(externalIdCases)(
     "uploads the requested document's own EWS ID for both export scopes (%j)",

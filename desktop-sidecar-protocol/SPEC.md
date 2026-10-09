@@ -863,7 +863,9 @@ runs continue to return their results directly without writing runtime history.
 optional `subject_scope` (`subject`, the default, or `subject_with_thread`).
 No filesystem path or source locator is accepted from clients. The result is
 `{ filename, mimeType, contentBase64 }`, using standard padded base64; empty
-files have an empty `contentBase64`.
+files have an empty `contentBase64`. An optional `warnings` array names parts
+of the export that are only a preview or were omitted; each entry has a `code`,
+and may have `message`, `documentId` and `sourceError`.
 
 - Files, including email attachments, return their original payload bytes.
   Thread scope has no effect on files. Storage containers are decoded.
@@ -873,7 +875,15 @@ files have an empty `contentBase64`.
   matching the Office add-in's `synthesizeThreadEml` representation. Members
   are ordered chronologically and scoped to the same source and mailbox.
   Missing thread identity selects only the subject. The thread covers catalog
-  members, not uncached server-side history.
+  members, not uncached server-side history. A member other than the subject
+  that cannot be read is omitted: a leading `text/plain` part lists it, and a
+  `message_omitted` warning carries its `documentId` and, when known, its
+  `sourceError`. Only a failure of the subject fails a thread export.
+- A new Outlook for Mac (`macOsHxAccount`) email of which only a preview is
+  cached exports that preview as its `text/plain` body, beginning with a
+  bracketed note that it is a preview. The message carries the header
+  `X-Erato-Body: preview`, and the result a `body_preview_only` warning. In a
+  thread export, the leading `text/plain` part names such members too.
 - Teams messages return `application/json` (`teams-chat.json`) using the frontend
   `TeamsTranscriptIndex` version 1 structure from
   `frontend/src/utils/teams/teamsTranscriptIndex.ts`: `version`, `exportedAt`,
@@ -892,8 +902,10 @@ Unknown or deleted IDs return `invalid_params` with `sourceError`
 source content returns `sidecar_internal`, without silently dropping email
 attachments or substituting indexed text; `sourceError` names the cause when it
 is known (§21). Retrieval requires local content; it does not download missing
-content, so an email of which only a preview is cached fails with
-`missing_from_local_cache`. Exports are limited to 47 MiB before the outer
+content. An email whose body is not completely cached fails with
+`missing_from_local_cache`, including a preview-only or truncated email from any
+other source. Sidecars before protocol 0.1.37 fail that way for new Outlook for
+Mac previews too. Exports are limited to 47 MiB before the outer
 base64 encoding to fit the client's 64 MiB response limit. Oversized exports
 return `sidecar_internal` with `export_too_large`.
 
