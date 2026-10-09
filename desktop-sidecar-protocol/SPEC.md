@@ -879,9 +879,9 @@ and may have `message`, `documentId` and `sourceError`.
   that cannot be read is omitted: a leading `text/plain` part lists it, and a
   `message_omitted` warning carries its `documentId` and, when known, its
   `sourceError`. Only a failure of the subject fails a thread export.
-- For a source whose `documentExport` is `cachedOnly`, an email of which only a
-  preview is cached exports that preview as its `text/plain` body, beginning with
-  a bracketed note that it is a preview. The message carries the header
+- A new Outlook for Mac (`macOsHxAccount`) email of which only a preview is
+  cached exports that preview as its `text/plain` body, beginning with a
+  bracketed note that it is a preview. The message carries the header
   `X-Erato-Body: preview`, and the result a `body_preview_only` warning. In a
   thread export, the leading `text/plain` part names such members too.
 - Teams messages return `application/json` (`teams-chat.json`) using the frontend
@@ -902,9 +902,10 @@ Unknown or deleted IDs return `invalid_params` with `sourceError`
 source content returns `sidecar_internal`, without silently dropping email
 attachments or substituting indexed text; `sourceError` names the cause when it
 is known (§21). Retrieval requires local content; it does not download missing
-content. An email of which not even a preview is cached fails with
-`missing_from_local_cache`; older sidecars fail that way for preview-only emails
-too. Exports are limited to 47 MiB before the outer
+content. An email whose body is not completely cached fails with
+`missing_from_local_cache`, including a preview-only or truncated email from any
+other source. Sidecars before protocol 0.1.37 fail that way for new Outlook for
+Mac previews too. Exports are limited to 47 MiB before the outer
 base64 encoding to fit the client's 64 MiB response limit. Oversized exports
 return `sidecar_internal` with `export_too_large`.
 

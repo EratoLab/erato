@@ -776,6 +776,25 @@ describe("shared desktop sidecar tools", () => {
     });
   });
 
+  it("marks messages of which only a cached preview is available", async () => {
+    const data = conversation();
+    const reply = conversation().messages[0];
+    reply.internetMessageId = "<reply@example.test>";
+    reply.attachments = [];
+    data.messages.push(reply);
+    data.state = "partial";
+    data.warnings = [
+      { code: "body_preview_only", internetMessageId: reply.internetMessageId },
+    ];
+    const env = setup({ "outlook.get_conversation.v1": data });
+    const outcome = await env.tools()[1].execute(anchor, context);
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: { messages: [{}, { bodyPreviewOnly: true }] },
+    });
+    expect(outcome).not.toHaveProperty("result.messages.0.bodyPreviewOnly");
+  });
+
   it("does no work for an aborted call", async () => {
     const env = setup({});
     const signal = AbortSignal.abort();
