@@ -492,6 +492,23 @@ describe.each(HOSTS)(
       },
     );
 
+    it("refuses when a copy of its paragraph appeared right above the one its ID names", async () => {
+      const host = install();
+      const capture = await captureSpan(host, { p: "PL1", text: "lima mike" });
+      // Where Word moved the ID onto a copy split off below (office-js #5784), the document reads
+      // the same as this: the original, then the paragraph holding the ID.
+      host.insertParagraphs(
+        { p: "PL1" },
+        ["PL1 Plain paragraph kilo lima mike november oscar papa."],
+        "Before",
+      );
+      expect(await replaceSpan(capture, "kilo")).toMatchObject({
+        status: "refused",
+        code: "AMBIGUOUS_TARGET",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
     it("refuses a span Word's search can no longer pinpoint and writes nothing", async () => {
       const host = install();
       const capture = await captureSpan(host, { p: "PL1", text: "lima mike" });
@@ -986,6 +1003,53 @@ describe.each(HOSTS)(
         );
       },
     );
+
+    it("never writes a nested table's cell, even when its capture is forced to rewrite", async () => {
+      const host = install({
+        body: [
+          "Intro.",
+          {
+            table: [
+              [[{ table: [["NT1 Nested cell text."]] }], "NO1 Outer cell."],
+            ],
+          },
+          "Outro.",
+        ],
+      });
+      host.select({ p: "NT1" });
+      const read = await captureWordSelection("user", 15_000, ALL);
+      if (read.status !== "ok" || !read.value) throw new Error("no capture");
+      expect(read.value).toMatchObject({
+        role: "context_only",
+        reasonCode: "nested_table",
+        shape: "table_cell",
+      });
+      const forced = emptySelectionCapture("doc", {
+        ...read.value,
+        role: "rewrite",
+        reasonCode: null,
+      });
+      expect(await replaceAll(forced, "NT1 Never written.")).toMatchObject({
+        status: "refused",
+        code: "UNSUPPORTED_CONTENT",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it("confirms a cell written under Track Changes, though desktop's getText ends it with a tab", async () => {
+      const host = install();
+      const capture = await captureAll(
+        host,
+        { table: 0, cell: [1, 1] },
+        "table_cell",
+      );
+      host.setTrackingMode("TrackAll");
+      expect(await replaceAll(capture, "CB2 New cell text")).toMatchObject({
+        status: "applied",
+        trackingOn: true,
+        backups: null,
+      });
+    });
 
     it("refuses a cell edited since Send and writes nothing", async () => {
       const host = install();

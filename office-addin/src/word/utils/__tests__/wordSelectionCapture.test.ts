@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   installWordSelectionHost,
@@ -8,6 +8,7 @@ import {
 import {
   captureWordSelection,
   describeWordSelection,
+  WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
 } from "../wordSelectionCapture";
 
 import type {
@@ -23,6 +24,7 @@ import type {
 const HOSTS = ["mac", "pc", "web"] as const;
 
 afterEach(() => {
+  vi.useRealTimers();
   uninstallWordSelectionHost();
   delete window.WORD_FORCE_NO_PARAGRAPH_IDS;
 });
@@ -349,6 +351,48 @@ describe("captureWordSelection when Word does not answer", () => {
     expect(await read).toEqual({ status: "failed" });
     hang.release();
   });
+});
+
+describe("captureWordSelection of many paragraphs on the web", () => {
+  const FORTY = { body: Array.from({ length: 42 }, (_, i) => `Line ${i}.`) };
+  const SHAPES = new Set<WordSelectionShape>(["multi_paragraph"]);
+  const BASE_MS = 1_000;
+  const BUDGET_MS = BASE_MS + 40 * WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH;
+  /** The span checks' sync, counted from the start of a capture on a fresh host. */
+  const spanCheckSync = async () => {
+    const host = installWordSelectionHost(FORTY, { host: "web" });
+    host.select({ paragraph: 0, to: { paragraph: 39 } });
+    const before = host.syncCount();
+    await captureWordSelection("user", BASE_MS, SHAPES);
+    const entry = host
+      .syncLog()
+      .find((sync) =>
+        sync.commands.some((command) => command.endsWith(".getOoxml")),
+      );
+    uninstallWordSelectionHost();
+    if (!entry) throw new Error("no span checks");
+    return entry.index - before;
+  };
+
+  it.each([
+    ["finishes", BUDGET_MS - 1, { status: "ok" }],
+    ["fails", BUDGET_MS, { status: "failed" }],
+  ] as const)(
+    "gives the span checks of 40 paragraphs time beyond the base timeout, and %s at the end of it",
+    async (_, wait, expected) => {
+      const offset = await spanCheckSync();
+      const host = installWordSelectionHost(FORTY, { host: "web" });
+      host.select({ paragraph: 0, to: { paragraph: 39 } });
+      vi.useFakeTimers();
+      const hang = host.hangSync({ at: host.syncCount() + offset });
+      const read = captureWordSelection("user", BASE_MS, SHAPES);
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(wait);
+      hang.release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await read).toMatchObject(expected);
+    },
+  );
 });
 
 describe("describeWordSelection", () => {

@@ -94,25 +94,37 @@ function byId(
 ): WordParagraphResolution | undefined {
   if (anchor.paragraphs.some((p) => !p.id)) return undefined;
   const index = new Map<string, number>();
+  const repeated = new Set<string>();
   live.forEach((p, i) => {
-    if (p.id) index.set(p.id, i);
+    if (!p.id) return;
+    if (index.has(p.id)) repeated.add(p.id);
+    index.set(p.id, i);
   });
+  if (anchor.paragraphs.some((p) => repeated.has(p.id!)))
+    return { refused: "ambiguous" };
   const positions = anchor.paragraphs.map((p) => index.get(p.id!) ?? -1);
   if (positions.some((position) => position < 0)) return undefined;
-  return positions.every(
+  const intact = positions.every(
     (position, i) =>
       (i === 0 || position === positions[i - 1] + 1) &&
       live[position].text === anchor.paragraphs[i].text,
-  )
-    ? { positions }
-    : { refused: "changed" };
+  );
+  if (!intact) return { refused: "changed" };
+  // Word hands a paragraph's ID to the paragraph split off below it (Return at its end,
+  // insertParagraph "After", office-js #5784). With the same text now right above, the ID may have
+  // moved onto a copy, which looks just like a copy pasted above the original.
+  const first = positions[0];
+  const text = anchor.paragraphs[0].text;
+  if (first > 0 && live[first - 1].text === text && anchor.before[0] !== text)
+    return { refused: "ambiguous" };
+  return { positions };
 }
 
 /**
  * A surviving ID is decisive: if its paragraph changed, a copy of the old text elsewhere must not
- * take its place. Without one, the span with its capture-time context must occur exactly once now.
- * A second occurrence refuses rather than widening the context, because a copied block and the
- * original are indistinguishable by text.
+ * take its place, nor where it may have moved onto a copy of its text. Without one, the span with
+ * its capture-time context must occur exactly once now. A second occurrence refuses rather than
+ * widening the context, because a copied block and the original are indistinguishable by text.
  */
 export function resolveWordParagraphs(
   anchor: WordParagraphAnchor,

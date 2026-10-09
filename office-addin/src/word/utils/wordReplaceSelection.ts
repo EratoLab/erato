@@ -138,10 +138,14 @@ async function readBack(
   )
     return null;
   const matches = written.positions.every((position, i) => {
-    const text = written.trackingOn
-      ? withoutMark(story.entries[position]?.text ?? "")
-      : story.rangeTexts[position];
-    return text === written.expected[i];
+    if (!written.trackingOn)
+      return story.rangeTexts[position] === written.expected[i];
+    const text = withoutMark(story.entries[position]?.text ?? "");
+    // Desktop's getText ends the last paragraph of a cell with the cell separator.
+    return (
+      text === written.expected[i] ||
+      (written.cellTables[i] !== null && text === `${written.expected[i]}\t`)
+    );
   });
   if (!matches) return null;
   const first = written.positions[0];

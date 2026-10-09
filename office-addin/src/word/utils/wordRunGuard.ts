@@ -14,6 +14,8 @@ export interface WordRunGuard {
    * caller has been told the run timed out, nothing may be written. */
   beforeWrite(): void;
   beforeSelect(): void;
+  /** Moves the deadline `ms` later, once the run knows its work; not after a timeout. */
+  extendTimeout(ms: number): void;
 }
 
 export interface WordGuardedResult<T> {
@@ -35,6 +37,14 @@ export function runWordGuarded<T>(
 ): Promise<WordGuardedResult<T>> {
   let aborted = false;
   let writeQueued = false;
+  let finished = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let deadline = Date.now() + options.timeoutMs;
+  let onTimeout = () => {};
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => onTimeout(), Math.max(0, deadline - Date.now()));
+  };
   const guard: WordRunGuard = {
     get aborted() {
       return aborted;
@@ -48,6 +58,11 @@ export function runWordGuarded<T>(
     },
     beforeSelect() {
       if (aborted) throw new WordRunAborted();
+    },
+    extendTimeout(ms: number) {
+      if (aborted || finished) return;
+      deadline += ms;
+      arm();
     },
   };
 
@@ -73,16 +88,19 @@ export function runWordGuarded<T>(
   );
 
   return new Promise((resolve) => {
-    const timer = setTimeout(() => {
+    onTimeout = () => {
       aborted = true;
       resolve({ outcome: "timeout", writeQueued, settled });
-    }, options.timeoutMs);
+    };
+    arm();
     run.then(
       (value) => {
+        finished = true;
         clearTimeout(timer);
         resolve({ outcome: "ok", value, writeQueued, settled });
       },
       (error: unknown) => {
+        finished = true;
         clearTimeout(timer);
         resolve({ outcome: "error", error, writeQueued, settled });
       },

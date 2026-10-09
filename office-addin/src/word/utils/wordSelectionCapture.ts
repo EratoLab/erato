@@ -37,6 +37,11 @@ import type { WordSelectionSupport } from "./wordSelectionSupport";
 
 export const WORD_SELECTION_DESCRIBE_TIMEOUT_MS = 5_000;
 export const WORD_SELECTION_CAPTURE_TIMEOUT_MS = 15_000;
+/**
+ * Added to the capture's timeout per covered paragraph once its span checks are known to run. Word
+ * for the web takes about 0.42 s per paragraph for them, so 40 paragraphs outlast the base timeout.
+ */
+export const WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH = 500;
 
 /** Kept for the chip, which shows less. */
 const PREVIEW_MAX_CHARACTERS = 400;
@@ -443,7 +448,7 @@ export async function captureWordSelection(
 ): Promise<WordSelectionRead<WordSelectionSnapshot>> {
   const support = currentWordSelectionSupport();
   const result = await runWordGuarded(
-    async (context) => {
+    async (context, guard) => {
       if (!support.canRewrite) {
         const read = await readSelection(
           context,
@@ -569,8 +574,13 @@ export async function captureWordSelection(
         );
       // Every covered paragraph is checked whole, in one sync: its OOXML, controls and fields.
       const covered = read.paragraphs;
+      guard.extendTimeout(
+        covered.length * WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+      );
       const parts = wordSelectionPartOffsets(facts);
-      const checks = covered.map(queueParagraphSpanChecks);
+      const checks = covered.map((paragraph) =>
+        queueParagraphSpanChecks(paragraph, paragraph.tableNestingLevel > 0),
+      );
       const sections = queueWordSections(context);
       // Replace finds a part by Word's search, so the capture makes sure the hits line up now.
       const dryRuns = parts.map((part, i) => {

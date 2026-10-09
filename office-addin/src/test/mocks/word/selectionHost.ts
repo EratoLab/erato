@@ -126,6 +126,11 @@ export interface WordSelectionHostOptions {
   sectionBreaks?: readonly string[];
   /** Search matches straight and curly quotes alike, as Word's Find does. */
   searchMatchesQuoteVariants?: boolean;
+  /**
+   * getOoxml() of a paragraph that ends a cell returns its whole table row, as Word for Mac and
+   * Word PC do (ERMAIN-928 block 3). Defaults to true off the web.
+   */
+  cellParagraphOoxmlIsRow?: boolean;
 }
 
 /** Rewrites the hits a search returns; the hits are opaque, so it can only reorder, drop or repeat. */
@@ -1139,7 +1144,7 @@ export function installWordSelectionHost(
       deleted: !!(
         options.IncludeTextMarkedAsDeleted ?? options.includeTextMarkedAsDeleted
       ),
-    }) + (web ? "" : "\r");
+    }) + (web ? "" : paraOf(mark).cellEnd ? "\t" : "\r");
   /**
    * Range.getReviewedText("Current") without tracked deletions, or "Original" without tracked
    * insertions. Word for Mac (2026-10-09) also showed hidden text and spelled out each field as
@@ -1900,6 +1905,46 @@ export function installWordSelectionHost(
       ),
       `</pkg:package>`,
     ].join("");
+  };
+
+  /**
+   * The whole row around a paragraph that ends its cell, with the empty paragraph Word puts after a
+   * table, as desktop Word returns it; null elsewhere.
+   */
+  const rowOoxmlOf = (b: Bounds): string | null => {
+    const { story: st } = b;
+    const para = paraOf(st.tokens[b.e - 1]);
+    const path = para.cells;
+    const cell = path[path.length - 1];
+    if (!cell || !para.cellEnd) return null;
+    const depth = path.length - 1;
+    const inRow = allMarks(st).filter((k) => {
+      const other = paraOf(st.tokens[k]).cells;
+      return (
+        other.length === path.length &&
+        other[depth].table === cell.table &&
+        other[depth].row === cell.row
+      );
+    });
+    const bodyOf = (xml: string) =>
+      /<w:body>([\s\S]*)<\/w:body>/.exec(xml)?.[1] ?? "";
+    const columns = new Map<number, string>();
+    for (const k of inRow) {
+      const col = paraOf(st.tokens[k]).cells[depth].col;
+      const xml = bodyOf(
+        ooxmlOf({ story: st, s: paragraphStart(st, k), e: k + 1 }),
+      );
+      columns.set(col, (columns.get(col) ?? "") + xml);
+    }
+    const row = [...columns.entries()]
+      .sort(([a], [z]) => a - z)
+      .map(([, xml]) => `<w:tc><w:tcPr/>${xml}</w:tc>`)
+      .join("");
+    return ooxmlOf(b).replace(
+      /<w:body>[\s\S]*<\/w:body>/,
+      () =>
+        `<w:body><w:tbl><w:tblPr/><w:tblGrid/><w:tr>${row}</w:tr></w:tbl><w:p/></w:body>`,
+    );
   };
 
   interface ParsedParagraph {
@@ -3482,9 +3527,14 @@ export function installWordSelectionHost(
     };
     obj.getOoxml = () => {
       method("getOoxml");
-      return clientResult(ctx, obj, `${type}.getOoxml`, () =>
-        ooxmlOf(target.whole()),
-      );
+      return clientResult(ctx, obj, `${type}.getOoxml`, () => {
+        const whole = target.whole();
+        const row =
+          type === "Paragraph" && (options.cellParagraphOoxmlIsRow ?? !web)
+            ? rowOoxmlOf(whole)
+            : null;
+        return row ?? ooxmlOf(whole);
+      });
     };
     obj.select = () => {
       method("select");

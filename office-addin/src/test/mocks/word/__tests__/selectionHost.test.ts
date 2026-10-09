@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { wordCellParagraphOoxml } from "../../../../word/utils/wordSelectionSpan";
 import {
   installWordSelectionHost,
   SV2_MAIN_DOCUMENT,
@@ -617,6 +618,14 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
       const mx1Backup = mx1.getOoxml();
       const cellBackup = cell.getOoxml();
       await context.sync();
+      // Desktop answers with the whole row (ERMAIN-928 block 3); the cell's own paragraph is cut out.
+      expect(cellBackup.value.includes("CA2 Cell A2 text")).toBe(desktop);
+      const cellOwn = wordCellParagraphOoxml(
+        cellBackup.value,
+        1,
+        "CB2 Cell B2 text",
+      );
+      expect(cellOwn).not.toContain("CA2 Cell A2 text");
       (await firstHit(context, "MX1", "Alpha bravo")).insertText(
         "ALPHA",
         "Replace",
@@ -624,7 +633,7 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
       (await firstHit(context, "CB2", "B2")).insertText("BEE", "Replace");
       await context.sync();
       mx1.insertOoxml(mx1Backup.value, "Replace");
-      cell.insertOoxml(cellBackup.value, "Replace");
+      cell.insertOoxml(cellOwn, "Replace");
       await context.sync();
     });
     expect(

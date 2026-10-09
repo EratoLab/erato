@@ -453,6 +453,12 @@ function contextOnlyReason(
     return "too_many_paragraphs";
   if (!fitsActionFacetArg(analysis.text)) return "too_large";
   if (!enabledShapes.has(shape)) return "shape_not_enabled";
+  // Desktop's selection text holds a section or page break (\f) where its paragraph texts have
+  // none, so the offsets cannot be placed; the mark, not the position, is the reason.
+  const marked = parts
+    ? null
+    : wordSelectionHazardReason({}, [facts.selectionText], support);
+  if (marked) return marked;
   if (!parts || !anchor || !anchorMatches(facts)) return "position_unknown";
   if (
     shape === "multi_paragraph" &&

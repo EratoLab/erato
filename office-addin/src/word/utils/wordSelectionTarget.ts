@@ -22,6 +22,7 @@ import {
 import { buildWordSelectionRanges } from "./wordSelectionRange";
 import {
   scanWordSelectionSpan,
+  wordCellParagraphOoxml,
   wordSelectionStyleToggles,
 } from "./wordSelectionSpan";
 import { currentWordSelectionSupport } from "./wordSelectionSupport";
@@ -79,12 +80,19 @@ export interface WordParagraphSpanChecks {
 /**
  * A whole paragraph's own OOXML, which is both the hazard scan's input and the Undo backup, and the
  * content controls and fields the OOXML can miss around it (PF3). All are reads Word for the web
- * leaves the document unchanged by: no range inside the paragraph is built.
+ * leaves the document unchanged by: no range inside the paragraph is built. `inCell` tells it to
+ * find which cell the paragraph is in, so its own OOXML can be cut out of a whole row.
  */
 export function queueParagraphSpanChecks(
   paragraph: Word.Paragraph,
+  inCell = false,
 ): () => WordParagraphSpanChecks {
   const ooxml = paragraph.getOoxml();
+  const cell = inCell ? paragraph.parentTableCellOrNullObject : null;
+  if (cell) {
+    cell.load("cellIndex");
+    paragraph.load("text");
+  }
   const controls = paragraph.contentControls;
   controls.load("items/id");
   const parent = paragraph.parentContentControlOrNullObject;
@@ -95,7 +103,10 @@ export function queueParagraphSpanChecks(
   const revisions = paragraph.getTrackedChanges();
   revisions.load("items/type");
   return () => ({
-    ooxml: ooxml.value,
+    ooxml:
+      cell && !cell.isNullObject
+        ? wordCellParagraphOoxml(ooxml.value, cell.cellIndex, paragraph.text)
+        : ooxml.value,
     objectHazards: {
       ...(controls.items.length > 0 || !parent.isNullObject
         ? { contentControl: true }
@@ -220,6 +231,15 @@ export type WordSelectionProof =
     }
   | { refused: WordSelectionReplaceCode };
 
+/**
+ * A cell's paragraph only in a table at the top level, as the capture allows; a nested cell is
+ * context only, so a forced Replace must not reach it either.
+ */
+const provableNesting = (selection: WordSelectionSnapshot) =>
+  selection.paragraphs.every(
+    (p) => p.tableNestingLevel === (selection.shape === "table_cell" ? 1 : 0),
+  );
+
 /** How many paragraphs each shape this proof can build covers. */
 function provableCount(shape: WordSelectionShape, count: number): boolean {
   switch (shape) {
@@ -246,7 +266,8 @@ export async function proveWordSelectionTarget(
 ): Promise<WordSelectionProof> {
   if (
     !enabledShapes.has(selection.shape) ||
-    !provableCount(selection.shape, selection.paragraphs.length)
+    !provableCount(selection.shape, selection.paragraphs.length) ||
+    !provableNesting(selection)
   )
     return { refused: "UNSUPPORTED_CONTENT" };
   const story = await readWordStory(context);
@@ -320,7 +341,10 @@ export function queueTargetVerification(
           ? queueWordCellTable(paragraph)
           : null,
       text: paragraph.getText(WORD_SELECTION_TEXT_OPTIONS),
-      checks: queueParagraphSpanChecks(paragraph),
+      checks: queueParagraphSpanChecks(
+        paragraph,
+        captured[i].tableNestingLevel > 0,
+      ),
     };
   });
   return () => ({

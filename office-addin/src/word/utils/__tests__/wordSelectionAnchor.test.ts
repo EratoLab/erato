@@ -517,6 +517,26 @@ describe("classifyWordSelection: hosts and edges", () => {
     );
   });
 
+  it("names a section break between the paragraphs rather than the position it hides", () => {
+    const story = body([
+      "Intro",
+      "End of a section.",
+      "Next section.",
+      "Outro",
+    ]);
+    // Desktop's selection text has \f where the first paragraph's mark ends the section.
+    const across = {
+      ...facts(story, { first: 1, last: 2 }),
+      selectionText: "End of a section.\fNext section.",
+      startOffset: -1,
+      endOffset: -1,
+    };
+    expect(reasonOf(across)).toBe("special_character");
+    expect(reasonOf({ ...across, selectionText: "End of a.\rNext" })).toBe(
+      "position_unknown",
+    );
+  });
+
   it("refuses a span the model would see no text of, or Word's search could not find", () => {
     const story = body(["Intro", "Kept words here.", "x^2 grows.", "Outro"]);
     const shown = {
