@@ -1501,6 +1501,47 @@ msgid "chat.attachments.toggle"
 msgstr "Alternar adjuntos"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/CompactionSuggestion.tsx
+msgid "chat.compaction.action"
+msgstr "Compactar historial del chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.description"
+msgstr "Las próximas respuestas usarán un resumen de este chat. Algunos detalles pueden perderse."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.error"
+msgstr "No se pudo compactar el historial del chat. Inténtalo de nuevo; si el chat ha cambiado, actualízalo primero."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.hideSummary"
+msgstr "Ocultar resumen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.marker"
+msgstr "Historial del chat compactado. Se conservaron {after} de {before} tokens estimados ({percent} %) y {retainedFiles} de {totalFiles} archivos."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.compaction.pending"
+msgstr "Compactando historial del chat…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CompactionMarker.tsx
+msgid "chat.compaction.showSummary"
+msgstr "Mostrar resumen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/CompactionSuggestion.tsx
+msgid "chat.compaction.suggestion"
+msgstr "Este chat se acerca a su límite de contexto. Compáctalo para continuar con un resumen. Algunos detalles pueden perderse."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Conversación de chat"

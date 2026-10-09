@@ -151,6 +151,12 @@
   "caches.file_contents_cache_mb": {},
   "caches.file_processing_parallelism": {},
   "caches.token_count_cache_mb": {},
+  "chat_history_compaction.chat_provider_id": {},
+  "chat_history_compaction.enabled": {},
+  "chat_history_compaction.mode": {},
+  "chat_history_compaction.target_compaction_token_limit_percentage": {},
+  "chat_history_compaction.trigger_mode": {},
+  "chat_history_compaction.trigger_on_token_limit_threshold_percentage": {},
   "chat_provider.additional_request_headers.[]": {
     "hide_in_docs": true
   },

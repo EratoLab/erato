@@ -810,7 +810,7 @@ async fn find_latest_message_id(
     Ok(message.map(|m| m.id))
 }
 
-async fn count_tokens_for_chat_request(
+pub(crate) async fn count_tokens_for_chat_request(
     app_state: &AppState,
     chat_request: &ChatRequest,
 ) -> Result<usize, String> {

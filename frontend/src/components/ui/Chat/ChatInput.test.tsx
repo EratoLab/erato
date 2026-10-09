@@ -37,6 +37,7 @@ import type {
 } from "react";
 
 const mockUseChatContext = vi.fn();
+const mockUseChatCompaction = vi.fn();
 const mockUseUploadFeature = vi.fn();
 const mockUseChatInputFeature = vi.fn();
 const mockUseAudioTranscriptionFeature = vi.fn();
@@ -109,6 +110,10 @@ vi.mock("@/hooks/audio/useAudioDictationRecorder", () => ({
 vi.mock("@/hooks/audio/useAudioTranscriptionRecorder", () => ({
   useAudioTranscriptionRecorder: (...args: unknown[]) =>
     mockUseAudioTranscriptionRecorder(...args),
+}));
+
+vi.mock("@/hooks/chat/useChatCompaction", () => ({
+  useChatCompaction: () => mockUseChatCompaction(),
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -309,6 +314,12 @@ vi.mock("../icons", () => ({
 describe("ChatInput", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockUseChatCompaction.mockReturnValue({
+      available: false,
+      isPending: false,
+      compact: vi.fn(),
+      error: null,
+    });
     componentRegistry.ChatInputAttachmentPreview = null;
     componentRegistry.ChatTopLeftAccessory = null;
     vi.stubGlobal("localStorage", {
@@ -680,6 +691,50 @@ describe("ChatInput", () => {
 
     expect(createSubmitHandler.mock.calls.at(-1)?.[3]).toBe(true);
     expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("manual compaction preserves the draft and blocks submission while pending", async () => {
+    const compact = vi.fn();
+    mockUseChatCompaction.mockReturnValue({
+      available: true,
+      isPending: false,
+      compact,
+      error: null,
+    });
+    const queryClient = new QueryClient();
+    const { i18n } = await import("@lingui/core");
+    const onSendMessage = vi.fn();
+    const element = () => (
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput
+            chatId="chat-1"
+            previousMessageId="tip-1"
+            onSendMessage={onSendMessage}
+          />
+        </I18nProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(element());
+    const textarea = screen.getByPlaceholderText("Type a message...");
+    fireEvent.change(textarea, { target: { value: "unsent draft" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Compact chat history" }),
+    );
+    expect(compact).toHaveBeenCalledOnce();
+    expect(textarea).toHaveValue("unsent draft");
+    mockUseChatCompaction.mockReturnValue({
+      available: true,
+      isPending: true,
+      compact,
+      error: null,
+    });
+    rerender(element());
+    expect(textarea).toBeDisabled();
+    expect(textarea).toHaveValue("unsent draft");
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(screen.getByText("Compacting chat history…")).toBeInTheDocument();
   });
 
   describe("mid-stream facet persistence (ERMAIN-466)", () => {

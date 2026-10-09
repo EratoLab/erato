@@ -32,6 +32,7 @@ import {
 } from "@/hooks/chat/store/messageQueueStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useBrowsableMcpServers } from "@/hooks/chat/useBrowsableMcpServers";
+import { useChatCompaction } from "@/hooks/chat/useChatCompaction";
 import { useChatDisabledMcpServers } from "@/hooks/chat/useChatDisabledMcpServers";
 import { useChatDisabledMcpTools } from "@/hooks/chat/useChatDisabledMcpTools";
 import { useChatMcpWriteTools } from "@/hooks/chat/useChatMcpWriteTools";
@@ -607,6 +608,7 @@ export const ChatInput = ({
   })();
 
   // Use the custom hook for chat input handling
+
   const {
     attachedFiles,
     fileError,
@@ -1492,6 +1494,18 @@ export const ChatInput = ({
   // fresh values every render so that `formRef.current?.requestSubmit()`
   // (fired from a post-commit effect) sees the just-committed state.
   // Memoizing this silently breaks auto-send.
+  const compaction = useChatCompaction({
+    chatId,
+    previousMessageId,
+    chatProviderId: selectedModel?.chat_provider_id,
+    selectedFacetIds,
+    disabled: disabled || isLoading || isPendingResponse,
+  });
+  const compactionDescription = t({
+    id: "chat.compaction.description",
+    message:
+      "Future replies will use a summary of this chat. Some details may be lost.",
+  });
   const handleSubmit = createSubmitHandler(
     message,
     attachedFiles,
@@ -1588,6 +1602,7 @@ export const ChatInput = ({
     },
     isLoading ||
       isPendingResponse ||
+      compaction.isPending ||
       // Refused before the handler clears the draft, so it survives.
       isComposerBlocked ||
       hasIncompleteAudioTranscription ||
@@ -1760,8 +1775,9 @@ export const ChatInput = ({
 
   // Split so the composer stays live during generation (ERMAIN-466): only
   // sendLocked gates Send/Enter; composeLocked gates the draft surfaces.
-  const sendLocked = isLoading || isPendingResponse;
+  const sendLocked = isLoading || isPendingResponse || compaction.isPending;
   const composeLocked =
+    compaction.isPending ||
     disabled ||
     isUploading ||
     isFileButtonProcessing ||
@@ -2617,8 +2633,28 @@ export const ChatInput = ({
           previousMessageId={previousMessageId}
           chatProviderId={selectedModel?.chat_provider_id}
           disabled={composeLocked}
+          onCompact={compaction.available ? compaction.compact : undefined}
+          compactionPending={compaction.isPending}
           onLimitExceeded={handleMessageTokenLimitExceeded}
         />
+
+        {compaction.error && (
+          <Alert type="error" geometryVariant="message">
+            {t({
+              id: "chat.compaction.error",
+              message:
+                "Could not compact chat history. Please retry; if the chat changed, refresh it first.",
+            })}
+          </Alert>
+        )}
+        {compaction.isPending && (
+          <Alert type="info" geometryVariant="message">
+            {t({
+              id: "chat.compaction.pending",
+              message: "Compacting chat history…",
+            })}
+          </Alert>
+        )}
 
         {/* Budget warning - shows when user approaches spending limit */}
         <BudgetWarning />
@@ -2981,6 +3017,28 @@ export const ChatInput = ({
               {showControls &&
                 (useUnifiedMobileMenu ? (
                   <ChatInputAddControls
+                    compactionSection={
+                      compaction.available
+                        ? {
+                            id: "compaction",
+                            // Menu placement is an internal key.
+                            // eslint-disable-next-line lingui/no-unlocalized-strings
+                            placement: "belowTools",
+                            items: [
+                              {
+                                id: "compact",
+                                label: t({
+                                  id: "chat.compaction.action",
+                                  message: "Compact chat history",
+                                }),
+                                description: compactionDescription,
+                                onSelect: compaction.compact,
+                                disabled: compaction.isPending,
+                              },
+                            ],
+                          }
+                        : undefined
+                    }
                     canUpload={canUploadFiles}
                     upload={{
                       message,
@@ -3007,6 +3065,20 @@ export const ChatInput = ({
                   />
                 ) : (
                   <>
+                    {compaction.available && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={compaction.isPending}
+                        onClick={compaction.compact}
+                        title={compactionDescription}
+                      >
+                        {t({
+                          id: "chat.compaction.action",
+                          message: "Compact chat history",
+                        })}
+                      </Button>
+                    )}
                     {/* File Upload Button with Token Check */}
                     {handleFileAttachments && uploadEnabled && (
                       <FileUploadWithTokenCheck

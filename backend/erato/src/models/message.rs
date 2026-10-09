@@ -548,6 +548,7 @@ pub struct ContentPartToolRejection {
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "content_type")]
 pub enum ContentPart {
+    CompactionMarker(ContentPartCompactionMarker),
     Text(ContentPartText),
     Reasoning(ContentPartReasoning),
     ToolUse(ToolUse),
@@ -579,6 +580,50 @@ pub enum ContentPart {
     /// The history walk keeps it (unlike the directive markers above, which
     /// are request-scoped) so later turns can still see what came back.
     TaskResult(ContentPartTaskResult),
+}
+
+/// A durable context boundary. Its replacement snapshot is authoritative;
+/// this metadata is only for display and retry identification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartCompactionMarker {
+    pub version: u8,
+    pub mode: String,
+    pub operation_id: Uuid,
+    pub summarizer_chat_provider_id: String,
+    pub target_chat_provider_id: String,
+    pub before_tokens: usize,
+    pub after_tokens: usize,
+    pub before_files: usize,
+    pub after_files: usize,
+    pub retained_file_ids: Vec<Uuid>,
+    pub dropped_file_ids: Vec<Uuid>,
+}
+
+pub fn compaction_marker(
+    message: &messages::Model,
+) -> Result<Option<ContentPartCompactionMarker>, Report> {
+    let parsed = MessageSchema::validate(&message.raw_message)?;
+    for part in parsed.content {
+        if let ContentPart::CompactionMarker(marker) = part {
+            if marker.version != 1
+                || marker.mode != "summarize"
+                || message.generation_input_messages.is_none()
+            {
+                return Err(eyre!("Unsupported or incomplete compaction checkpoint"));
+            }
+            if parsed.role != MessageRole::Assistant {
+                return Err(eyre!("Compaction checkpoint must be an assistant message"));
+            }
+            serde_json::from_value::<GenerationInputMessages>(
+                message
+                    .generation_input_messages
+                    .clone()
+                    .expect("checked above"),
+            )?;
+            return Ok(Some(marker));
+        }
+    }
+    Ok(None)
 }
 
 /// The durable stop predicate shared by generation tails and child envelopes.
@@ -840,7 +885,8 @@ impl MessageSchema {
                 // would let a delegated run write the chat's title.
                 ContentPart::ActionFacetMarker(_)
                 | ContentPart::DelegationPreambleMarker(_)
-                | ContentPart::TaskResult(_) => None,
+                | ContentPart::TaskResult(_)
+                | ContentPart::CompactionMarker(_) => None,
             })
             .collect::<Vec<&str>>()
             .join(" ")
@@ -1402,6 +1448,11 @@ pub async fn get_message_by_id(
 pub fn get_generation_chat_provider_id_from_message(
     message: &messages::Model,
 ) -> Result<Option<String>, Report> {
+    // The checkpoint's generation parameters identify the auxiliary provider
+    // for token accounting. Conversation model selection must retain its target.
+    if let Some(marker) = compaction_marker(message)? {
+        return Ok(Some(marker.target_chat_provider_id));
+    }
     if let Some(generation_params_json) = &message.generation_parameters {
         let generation_params: GenerationParameters =
             serde_json::from_value(generation_params_json.clone()).map_err(|e| {
@@ -1700,7 +1751,8 @@ impl InputMessage {
             // template and inside the untrusted-data frame.
             ContentPart::ActionFacetMarker(_)
             | ContentPart::DelegationPreambleMarker(_)
-            | ContentPart::TaskResult(_) => String::new(),
+            | ContentPart::TaskResult(_)
+            | ContentPart::CompactionMarker(_) => String::new(),
         }
     }
 }

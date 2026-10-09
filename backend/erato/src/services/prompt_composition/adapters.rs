@@ -370,3 +370,42 @@ fn get_mime_type_from_extension(filename: &str) -> String {
         "application/octet-stream".to_string()
     }
 }
+
+/// Unsaved draft/checkpoint overlays used by estimates and compaction. All
+/// ancestry access, including reasoning replay, sees the same overlay.
+pub(crate) struct OverlayMessageRepository<'a> {
+    pub base: DatabaseMessageRepository<'a>,
+    pub overlays: std::collections::HashMap<Uuid, messages::Model>,
+}
+
+#[async_trait]
+impl MessageRepository for OverlayMessageRepository<'_> {
+    async fn get_message_by_id(&self, id: &Uuid) -> Result<messages::Model, Report> {
+        if let Some(message) = self.overlays.get(id) {
+            return Ok(message.clone());
+        }
+        self.base.get_message_by_id(id).await
+    }
+    async fn get_generation_input_messages(
+        &self,
+        id: &Uuid,
+        limit: usize,
+    ) -> Result<Vec<messages::Model>, Report> {
+        let mut rows = Vec::new();
+        let mut cursor = Some(*id);
+        let mut visited = std::collections::HashSet::new();
+        while let Some(id) = cursor {
+            if rows.len() >= limit {
+                break;
+            }
+            if !visited.insert(id) {
+                return Err(eyre::eyre!("Cycle in message lineage"));
+            }
+            let row = self.get_message_by_id(&id).await?;
+            cursor = row.previous_message_id;
+            rows.push(row);
+        }
+        rows.reverse();
+        Ok(rows)
+    }
+}

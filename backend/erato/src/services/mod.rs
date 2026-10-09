@@ -1,4 +1,5 @@
 pub mod background_tasks;
+pub mod chat_history_compaction;
 pub mod client_actions;
 pub mod client_tools;
 pub mod config_redaction;

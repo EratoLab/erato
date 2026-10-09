@@ -1,8 +1,10 @@
 import { t } from "@lingui/core/macro";
 import { useEffect } from "react";
 
+import { env } from "@/app/env";
 import { useTokenUsageWithFiles } from "@/hooks/chat/useTokenUsageWithFiles";
 
+import { CompactionSuggestion } from "./CompactionSuggestion";
 import { TokenUsageWarning } from "../Feedback/ChatWarnings/TokenUsageWarning";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -33,6 +35,8 @@ interface ChatInputTokenUsageProps {
   onLimitExceeded?: (isExceeded: boolean) => void;
   /** Character threshold before triggering token estimation (default: 150) */
   estimateThreshold?: number;
+  onCompact?: () => void;
+  compactionPending?: boolean;
   /** CSS class name for the container */
   className?: string;
 }
@@ -52,6 +56,8 @@ export const ChatInputTokenUsage: React.FC<ChatInputTokenUsageProps> = ({
   onLimitExceeded,
   estimateThreshold = 150,
   className,
+  onCompact,
+  compactionPending,
 }) => {
   // Use the token usage hook
   const { tokenUsageEstimation, clearEstimation, exceedsLimit } =
@@ -64,7 +70,7 @@ export const ChatInputTokenUsage: React.FC<ChatInputTokenUsageProps> = ({
       previousMessageId,
       chatProviderId,
       disabled,
-      estimateThreshold,
+      estimateThreshold: onCompact && previousMessageId ? 0 : estimateThreshold,
     });
 
   // Notify parent when limit is exceeded
@@ -102,10 +108,24 @@ export const ChatInputTokenUsage: React.FC<ChatInputTokenUsageProps> = ({
           ))}
         </ul>
       )}
-      <TokenUsageWarning
-        estimation={tokenUsageEstimation}
-        onDismiss={clearEstimation}
-      />
+      {onCompact && (
+        <CompactionSuggestion
+          estimation={tokenUsageEstimation}
+          onCompact={onCompact}
+          pending={compactionPending}
+        />
+      )}
+      {!(
+        onCompact &&
+        tokenUsageEstimation.tokenUsage &&
+        tokenUsageEstimation.usagePercentage * 100 >=
+          (env().chatHistoryCompactionThresholdPercentage ?? 80)
+      ) && (
+        <TokenUsageWarning
+          estimation={tokenUsageEstimation}
+          onDismiss={clearEstimation}
+        />
+      )}
     </div>
   );
 };

@@ -47,6 +47,8 @@ export type Env = {
   assistantsMaxFiles?: number;
   starterPromptsEnabled: boolean;
   promptOptimizerEnabled: boolean;
+  chatHistoryCompactionEnabled?: boolean;
+  chatHistoryCompactionThresholdPercentage?: number;
   userPreferencesEnabled: boolean;
   userPreferencesDataTabEnabled: boolean;
   mcpServersTabEnabled: boolean;
@@ -117,6 +119,8 @@ declare global {
     ASSISTANTS_MAX_FILES?: number;
     STARTER_PROMPTS_ENABLED?: boolean;
     PROMPT_OPTIMIZER_ENABLED?: boolean;
+    CHAT_HISTORY_COMPACTION_ENABLED?: boolean;
+    CHAT_HISTORY_COMPACTION_THRESHOLD_PERCENTAGE?: number;
     USER_PREFERENCES_ENABLED?: boolean;
     USER_PREFERENCES_DATA_TAB_ENABLED?: boolean;
     MCP_SERVERS_TAB_ENABLED?: boolean;
@@ -503,6 +507,12 @@ export const env = (): Env => {
     assistantsMaxFiles,
     starterPromptsEnabled,
     promptOptimizerEnabled,
+    chatHistoryCompactionEnabled:
+      import.meta.env.VITE_CHAT_HISTORY_COMPACTION_ENABLED === "true"
+        ? true
+        : (window.CHAT_HISTORY_COMPACTION_ENABLED ?? false),
+    chatHistoryCompactionThresholdPercentage:
+      window.CHAT_HISTORY_COMPACTION_THRESHOLD_PERCENTAGE ?? 80,
     userPreferencesEnabled,
     userPreferencesDataTabEnabled,
     mcpServersTabEnabled,
