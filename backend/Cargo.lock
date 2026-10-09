@@ -3370,8 +3370,8 @@ dependencies = [
 
 [[package]]
 name = "genai"
-version = "0.7.0-rc.2-WIP"
-source = "git+https://github.com/EratoLab/rust-genai.git?rev=c27b71383b0ff7366dec85009c4fce09229a1d2c#c27b71383b0ff7366dec85009c4fce09229a1d2c"
+version = "0.7.0-rc.4"
+source = "git+https://github.com/EratoLab/rust-genai.git?branch=fork-2026-10-09#32949b873d80dc2996036ce3ca6f259124d24ad7"
 dependencies = [
  "base64 0.23.1",
  "bytes",
