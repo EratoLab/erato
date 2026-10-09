@@ -138,3 +138,44 @@ describe.each(HOSTS)("wordSelectionStyleToggles on %s", (host) => {
     ).toBeNull();
   });
 });
+
+describe("scanWordSelectionSpan on content it does not know", () => {
+  const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+  const M = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+  const pkg = (paragraph: string) =>
+    `<pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"><pkg:part pkg:name="/word/document.xml"><pkg:xmlData><w:document xmlns:w="${W}" xmlns:m="${M}"><w:body>${paragraph}<w:sectPr/></w:body></w:document></pkg:xmlData></pkg:part></pkg:package>`;
+  const run = (text: string) => `<w:r><w:t>${text}</w:t></w:r>`;
+
+  it("finds nothing in plain runs with Word's own marks and last-edit bookmark", () => {
+    expect(
+      scanWordSelectionSpan(
+        pkg(
+          `<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr><w:bookmarkStart w:id="0" w:name="_GoBack"/>${run("Plain")}<w:proofErr w:type="spellStart"/><w:r><w:tab/><w:t>words</w:t></w:r><w:bookmarkEnd w:id="0"/></w:p>`,
+        ),
+      ).hazards,
+    ).toEqual({});
+  });
+
+  it.each([
+    [
+      "an equation",
+      `<w:p>${run("Area is ")}<m:oMath><m:r><m:t>πr²</m:t></m:r></m:oMath></w:p>`,
+    ],
+    [
+      "a cross-reference bookmark",
+      `<w:p><w:bookmarkStart w:id="1" w:name="_Toc123"/>${run("Heading")}<w:bookmarkEnd w:id="1"/></w:p>`,
+    ],
+    [
+      "ruby text",
+      `<w:p><w:r><w:ruby><w:rt>${run("ka")}</w:rt><w:rubyBase>${run("漢")}</w:rubyBase></w:ruby></w:r></w:p>`,
+    ],
+    [
+      "a permission range",
+      `<w:p><w:permStart w:id="2"/>${run("Locked")}<w:permEnd w:id="2"/></w:p>`,
+    ],
+  ])("keeps %s context only", (_, paragraph) => {
+    expect(scanWordSelectionSpan(pkg(paragraph)).hazards).toMatchObject({
+      breakOrSymbol: true,
+    });
+  });
+});

@@ -229,7 +229,7 @@ export async function replaceWordSelection(args: {
   };
 }
 
-export type WordSelectionRevertResult =
+export type WordSelectionRevertStatus =
   | "reverted"
   /** The written text changed since, so restoring would overwrite later work. */
   | "stale"
@@ -237,6 +237,13 @@ export type WordSelectionRevertResult =
   | "failed"
   /** The restore was written but could not be confirmed. */
   | "unverified";
+
+export interface WordSelectionRevertResult {
+  status: WordSelectionRevertStatus;
+  timedOut: boolean;
+  /** Resolves once Word's run has ended, which after a timeout may be much later. */
+  settled: Promise<void>;
+}
 
 /**
  * Restores the paragraph a Replace wrote from its OOXML before the write, only while it still
@@ -263,22 +270,34 @@ export async function revertWordSelection(
     },
     { timeoutMs: WORD_REVERT_SELECTION_TIMEOUT_MS },
   );
+  const { settled } = run;
+  const timedOut = run.outcome === "timeout";
   if (run.outcome !== "ok" || !run.value) {
     if (run.outcome === "error")
       console.warn(
         "[erato] Word selection undo failed:",
         wordErrorText(run.error),
       );
-    return run.writeQueued ? "unverified" : "failed";
+    return {
+      status: run.writeQueued ? "unverified" : "failed",
+      timedOut,
+      settled,
+    };
   }
   const value = run.value;
-  if (value === "stale" || value === "tracking") return value;
+  if (value === "stale" || value === "tracking")
+    return { status: value, timedOut, settled };
   const check = await runWordGuarded(
     async (context) => readWordStory(context),
     { timeoutMs: WORD_REVERT_SELECTION_TIMEOUT_MS },
   );
-  return check.outcome === "ok" &&
-    check.value?.rangeTexts[value.position] === backup.rangeText
-    ? "reverted"
-    : "unverified";
+  return {
+    status:
+      check.outcome === "ok" &&
+      check.value?.rangeTexts[value.position] === backup.rangeText
+        ? "reverted"
+        : "unverified",
+    timedOut,
+    settled,
+  };
 }

@@ -45,9 +45,13 @@ export interface WordWriteContextValue {
    * Ends the operation once a run that timed out has really ended, the document changes, or the
    * ceiling passes. A write it queued may still land until then.
    */
-  holdOperationUntil: (settled: Promise<void>, ceilingMs?: number) => void;
-  /** A held run has not ended yet. */
-  hostNotResponding: boolean;
+  holdOperationUntil: (
+    settled: Promise<void>,
+    owner: string,
+    ceilingMs?: number,
+  ) => void;
+  /** The card whose run is held: it has not ended yet, so Word is not responding. */
+  heldOperationOwner: string | null;
   /** Puts a request back into the composer, focused. */
   restoreRequest: (message: string) => void;
   locationGeneration: number;
@@ -67,7 +71,7 @@ const WordWriteContext = createContext<WordWriteContextValue>({
   beginOperation: () => false,
   endOperation: () => {},
   holdOperationUntil: () => {},
-  hostNotResponding: false,
+  heldOperationOwner: null,
   restoreRequest: () => {},
   locationGeneration: 0,
   invalidateLocations: () => {},
@@ -113,12 +117,18 @@ export function WordWriteProvider({
     operationRef.current = false;
     setOperationInProgress(false);
   }, []);
-  const [hostNotResponding, setHostNotResponding] = useState(false);
+  const [heldOperationOwner, setHeldOperationOwner] = useState<string | null>(
+    null,
+  );
   const releaseHoldRef = useRef<(() => void) | undefined>(undefined);
   const holdOperationUntil = useCallback(
-    (settled: Promise<void>, ceilingMs = WORD_OPERATION_CEILING_MS) => {
+    (
+      settled: Promise<void>,
+      owner: string,
+      ceilingMs = WORD_OPERATION_CEILING_MS,
+    ) => {
       releaseHoldRef.current?.();
-      setHostNotResponding(true);
+      setHeldOperationOwner(owner);
       let released = false;
       const release = () => {
         if (released) return;
@@ -126,7 +136,7 @@ export function WordWriteProvider({
         clearTimeout(timer);
         if (releaseHoldRef.current === release)
           releaseHoldRef.current = undefined;
-        setHostNotResponding(false);
+        setHeldOperationOwner(null);
         endOperation();
       };
       const timer = setTimeout(release, ceilingMs);
@@ -153,7 +163,7 @@ export function WordWriteProvider({
       beginOperation,
       endOperation,
       holdOperationUntil,
-      hostNotResponding,
+      heldOperationOwner,
       restoreRequest,
       locationGeneration,
       invalidateLocations,
@@ -168,7 +178,7 @@ export function WordWriteProvider({
       beginOperation,
       endOperation,
       holdOperationUntil,
-      hostNotResponding,
+      heldOperationOwner,
       restoreRequest,
       locationGeneration,
       invalidateLocations,

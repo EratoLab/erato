@@ -44,6 +44,22 @@ const STRUCTURE: Readonly<Record<string, keyof WordSelectionHazards>> = {
   customXml: "unsupportedFormatting",
 };
 
+/**
+ * The only paragraph content a rewrite keeps: plain runs of text and tabs, and the marks Word writes
+ * on its own. Anything else (an equation, a bookmark, ruby text, a permission range, content from
+ * another namespace) would be lost or broken by Replace, so the span is context only.
+ */
+const PLAIN_CONTENT = new Set([
+  "r",
+  "t",
+  "tab",
+  "proofErr",
+  "lastRenderedPageBreak",
+]);
+
+/** Word's own "last edit" bookmark, which it moves freely. */
+const WORD_BOOKMARK = "_GoBack";
+
 /** Run properties Word writes on its own that change nothing a rewrite must keep. */
 const BENIGN_RUN_PROPERTIES = new Set(["lang", "noProof"]);
 
@@ -264,6 +280,50 @@ const SPAN_PROPERTIES: readonly WordSelectionSpanProperty[] = [
   "size",
 ];
 
+/**
+ * Flags every element of the span's paragraphs that is not plain content. Paragraph and run
+ * properties are read separately; a known structure gets its own hazard, and anything unknown,
+ * including other namespaces, counts as content the rewrite would lose.
+ */
+function scanStructure(body: Element, hazards: WordSelectionHazards): void {
+  const bookmarks = new Map<string, string>();
+  const visit = (element: Element) => {
+    for (const child of Array.from(element.children)) {
+      const name = child.localName;
+      if (child.namespaceURI === W && (name === "pPr" || name === "rPr")) {
+        if (
+          name === "pPr" &&
+          child.getElementsByTagNameNS(W, "pPrChange").length
+        )
+          hazards.trackedChange = true;
+        continue;
+      }
+      if (child.namespaceURI === W && name === "bookmarkStart") {
+        const id = attr(child, "id") ?? "";
+        const bookmark = attr(child, "name") ?? "";
+        bookmarks.set(id, bookmark);
+        if (bookmark !== WORD_BOOKMARK) hazards.breakOrSymbol = true;
+        continue;
+      }
+      if (child.namespaceURI === W && name === "bookmarkEnd") {
+        if (bookmarks.get(attr(child, "id") ?? "") !== WORD_BOOKMARK)
+          hazards.breakOrSymbol = true;
+        continue;
+      }
+      const known = child.namespaceURI === W ? STRUCTURE[name] : undefined;
+      if (known) hazards[known] = true;
+      else if (child.namespaceURI !== W || !PLAIN_CONTENT.has(name))
+        hazards.breakOrSymbol = true;
+      visit(child);
+    }
+  };
+  for (const child of Array.from(body.children)) {
+    if (child.namespaceURI === W && child.localName === "sectPr") continue;
+    if (child.namespaceURI === W && child.localName === "p") visit(child);
+    else hazards.breakOrSymbol = true;
+  }
+}
+
 export interface WordSelectionSpanScan {
   hazards: WordSelectionHazards;
   format: WordSelectionSpanFormat;
@@ -280,10 +340,7 @@ export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
   const hazards: WordSelectionHazards = {};
   if (!parts?.body)
     return { hazards: { unsupportedFormatting: true }, format: {} };
-  for (const element of Array.from(parts.body.getElementsByTagNameNS(W, "*"))) {
-    const hazard = STRUCTURE[element.localName];
-    if (hazard) hazards[hazard] = true;
-  }
+  scanStructure(parts.body, hazards);
   const runs = Array.from(parts.body.getElementsByTagNameNS(W, "r")).filter(
     (run) => run.parentElement?.localName !== "del",
   );

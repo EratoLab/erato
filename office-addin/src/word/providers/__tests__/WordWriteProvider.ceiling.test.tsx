@@ -30,7 +30,7 @@ function holdWith(settled: Promise<void>) {
   act(() => {
     expect(host.beginOperation()).toBe(true);
   });
-  act(() => host.holdOperationUntil(settled));
+  act(() => host.holdOperationUntil(settled, "card-1"));
 }
 
 describe("WordWriteProvider operation ceiling", () => {
@@ -41,7 +41,7 @@ describe("WordWriteProvider operation ceiling", () => {
     render(providerFor("doc"));
     holdWith(new Promise<void>(() => {}));
     expect(host.operationInProgress).toBe(true);
-    expect(host.hostNotResponding).toBe(true);
+    expect(host.heldOperationOwner).toBe("card-1");
     expect(host.beginOperation()).toBe(false);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(WORD_OPERATION_CEILING_MS - 1);
@@ -51,7 +51,7 @@ describe("WordWriteProvider operation ceiling", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(host.operationInProgress).toBe(false);
-    expect(host.hostNotResponding).toBe(false);
+    expect(host.heldOperationOwner).toBeNull();
   });
 
   it("releases once Word's run ends", async () => {
@@ -70,6 +70,6 @@ describe("WordWriteProvider operation ceiling", () => {
     holdWith(new Promise<void>(() => {}));
     view.rerender(providerFor("other-doc"));
     expect(host.operationInProgress).toBe(false);
-    expect(host.hostNotResponding).toBe(false);
+    expect(host.heldOperationOwner).toBeNull();
   });
 });

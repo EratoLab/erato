@@ -253,7 +253,7 @@ export function WordSelectionCard({
     beginOperation,
     endOperation,
     holdOperationUntil,
-    hostNotResponding,
+    heldOperationOwner,
     restoreRequest,
   } = useWordWrite();
   const [decisions, setDecisions] = useClientActionDecisions(
@@ -376,8 +376,15 @@ export function WordSelectionCard({
         outcome.timedOut
       ) {
         held = true;
-        holdOperationUntil(outcome.settled);
+        holdOperationUntil(outcome.settled, batchKey);
       }
+      // An earlier Undo would restore a paragraph as it was before this write, which this card's
+      // single slot no longer promises.
+      if (
+        outcome.status === "unverified" ||
+        (outcome.status === "applied" && !outcome.backup)
+      )
+        setRevertSlot(null);
       if (outcome.status === "applied") {
         if (outcome.backup && messageId)
           setRevertSlot({
@@ -466,37 +473,43 @@ export function WordSelectionCard({
     if (!slot || !beginOperation()) return;
     setRevertConfirmation(false);
     updateReview(batchKey, { status: "reverting", revertStale: undefined });
+    let held = false;
     try {
       const reverted = await revertWordSelection(
         { ooxml: slot.ooxml, rangeText: slot.selection.rangeText },
         slot.selection.written,
       );
-      if (reverted === "stale" || reverted === "tracking") {
+      if (reverted.timedOut) {
+        held = true;
+        holdOperationUntil(reverted.settled, batchKey);
+      }
+      if (reverted.status === "stale" || reverted.status === "tracking") {
         updateReview(batchKey, {
           status: "done",
-          revertStale: reverted === "tracking" ? "tracking" : "changed",
+          revertStale: reverted.status === "tracking" ? "tracking" : "changed",
           detailsExpanded: true,
         });
         return;
       }
-      if (reverted === "failed") {
+      if (reverted.status === "failed") {
         updateReview(batchKey, { status: "done", detailsExpanded: true });
         return;
       }
       setRevertSlot(null);
       wordSelectionStore.requestRefresh();
       updateReview(batchKey, {
-        status: reverted === "reverted" ? "reverted" : "revert-failed",
+        status: reverted.status === "reverted" ? "reverted" : "revert-failed",
         detailsExpanded: false,
       });
     } finally {
-      endOperation();
+      if (!held) endOperation();
     }
   }, [
     slot,
     beginOperation,
     updateReview,
     batchKey,
+    holdOperationUntil,
     setRevertSlot,
     endOperation,
   ]);
@@ -560,7 +573,7 @@ export function WordSelectionCard({
 
   const applied = result?.status === "applied" ? result : undefined;
   const statusMessage =
-    hostNotResponding &&
+    heldOperationOwner === batchKey &&
     (applying || review.status === "error" || review.status === "write-failed")
       ? notRespondingText()
       : review.revertStale && review.status !== "reverting"

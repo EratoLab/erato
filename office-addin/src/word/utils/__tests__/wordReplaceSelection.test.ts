@@ -226,9 +226,11 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     const result = await replace(capture);
     if (result.status !== "applied" || !result.backup)
       throw new Error("not applied");
-    expect(await revertWordSelection(result.backup, result.written)).toBe(
-      "reverted",
-    );
+    expect(
+      await revertWordSelection(result.backup, result.written),
+    ).toMatchObject({
+      status: "reverted",
+    });
     expect(
       host.paragraphs().map(({ text, style, runs }) => ({ text, style, runs })),
     ).toEqual(before.map(({ text, style, runs }) => ({ text, style, runs })));
@@ -237,9 +239,11 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     if (again.status !== "applied" || !again.backup)
       throw new Error("not applied");
     host.insertText({ p: "PL1", text: "shorter" }, "SHORTER");
-    expect(await revertWordSelection(again.backup, again.written)).toBe(
-      "stale",
-    );
+    expect(
+      await revertWordSelection(again.backup, again.written),
+    ).toMatchObject({
+      status: "stale",
+    });
   });
 
   it("refuses to undo under Track Changes", async () => {
@@ -249,9 +253,11 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     if (result.status !== "applied" || !result.backup)
       throw new Error("not applied");
     host.setTrackingMode("TrackAll");
-    expect(await revertWordSelection(result.backup, result.written)).toBe(
-      "tracking",
-    );
+    expect(
+      await revertWordSelection(result.backup, result.written),
+    ).toMatchObject({
+      status: "tracking",
+    });
   });
 });
 

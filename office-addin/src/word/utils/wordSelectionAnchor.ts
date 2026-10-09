@@ -136,7 +136,10 @@ export interface WordSelectionHazards {
    * them would copy the first character's twin onto the whole rewrite.
    */
   complexScriptTwin?: boolean;
-  /** A page or column break (w:br type page or column), w:sym, or a non-breaking or optional hyphen. */
+  /**
+   * A break, w:sym, a non-breaking or optional hyphen, or any other paragraph content that is not
+   * plain text (an equation, a bookmark, ruby text, a permission range).
+   */
   breakOrSymbol?: boolean;
 }
 
