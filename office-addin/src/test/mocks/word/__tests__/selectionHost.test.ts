@@ -193,6 +193,38 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     ]);
   });
 
+  it("reviews a range without tracked deletions, or without insertions for the original (not measured)", async () => {
+    const host = install();
+    host.select({ p: "TC1", text: "inserted", to: { p: "TC1", text: "end" } });
+    const reviewed = await Word.run(async (context) => {
+      const selection = context.document.getSelection();
+      const current = selection.getReviewedText("Current");
+      const original = selection.getReviewedText("Original");
+      await context.sync();
+      return [current.value, original.value];
+    });
+    expect(reviewed).toEqual([
+      "inserted words kept end",
+      "kept deleted words end",
+    ]);
+  });
+
+  it("gives a table's whole range, from its first cell to its last row end", async () => {
+    install();
+    const relations = await Word.run(async (context) => {
+      const paragraph = await tagged(context, "CB2");
+      const whole =
+        paragraph.parentTableCellOrNullObject.parentTable.getRange("Whole");
+      const first = (await tagged(context, "CA1")).getRange("Whole");
+      const after = (await tagged(context, "RP1")).getRange("Whole");
+      const inside = first.compareLocationWith(whole);
+      const outside = after.compareLocationWith(whole);
+      await context.sync();
+      return [inside.value, outside.value];
+    });
+    expect(relations).toEqual(["InsideStart", "AdjacentAfter"]);
+  });
+
   it("SV2:55-56 counts an inline picture in web prefix offsets but not in paragraph.text", async () => {
     const host = install();
     host.select({ p: "PC1", text: "after picture" });

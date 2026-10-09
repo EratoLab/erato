@@ -1,0 +1,374 @@
+import { afterEach, describe, expect, it } from "vitest";
+
+import {
+  installWordSelectionHost,
+  SV2_MAIN_DOCUMENT,
+  uninstallWordSelectionHost,
+} from "../../../test/mocks/word/selectionHost";
+import {
+  captureWordSelection,
+  describeWordSelection,
+} from "../wordSelectionCapture";
+
+import type {
+  MockSelectionDocument,
+  MockSelectionTarget,
+  WordSelectionHostOptions,
+} from "../../../test/mocks/word/selectionHost";
+import type { WordSelectionSnapshot } from "../wordSelectionAnchor";
+
+const HOSTS = ["mac", "pc", "web"] as const;
+
+afterEach(() => {
+  uninstallWordSelectionHost();
+  delete window.WORD_FORCE_NO_PARAGRAPH_IDS;
+});
+
+async function captured(): Promise<WordSelectionSnapshot | null> {
+  const read = await captureWordSelection();
+  if (read.status !== "ok") throw new Error("capture failed");
+  return read.value;
+}
+
+describe.each(HOSTS)("captureWordSelection on %s", (flavour) => {
+  const install = (
+    document: MockSelectionDocument = SV2_MAIN_DOCUMENT,
+    options: WordSelectionHostOptions = {},
+  ) => installWordSelectionHost(document, { host: flavour, ...options });
+  const captureOf = async (
+    target: MockSelectionTarget,
+    document?: MockSelectionDocument,
+  ) => {
+    install(document).select(target);
+    return captured();
+  };
+
+  it("records inline text with its offsets, its paragraph's identity and the anchor", async () => {
+    const selection = await captureOf({ p: "PL1", text: "lima mike" });
+    expect(selection).toMatchObject({
+      role: "context_only",
+      reasonCode: "shape_not_enabled",
+      shape: "inline",
+      story: "main",
+      origin: "user",
+      selectedText: "lima mike",
+      paragraphCount: 1,
+      startOffset: 25,
+      endOffset: 34,
+      occurrence: 0,
+      truncated: false,
+    });
+    expect(selection!.paragraphs).toEqual([
+      expect.objectContaining({
+        rangeText: "PL1 Plain paragraph kilo lima mike november oscar papa.",
+        index: 2,
+        styleName: "Normal",
+      }),
+    ]);
+    expect(selection!.anchor).toMatchObject({ window: 0 });
+    expect(selection!.anchor!.paragraphs[0].id).toBeTruthy();
+    expect(selection!.contextBefore).toBe(
+      "H1 Selection probe heading\nMX1 Alpha bravo charlie delta echo foxtrot link golf 2026-10-06 hotel india.\nPL1 Plain paragraph kilo ",
+    );
+    expect(selection!.contextAfter).toBe(
+      " november oscar papa.\nLI1 List item quebec romeo.\nLI2 List item sierra tango.\nMP1 Multi paragraph uniform victor whiskey.",
+    );
+  });
+
+  it.each(["Content", "Whole"] as const)(
+    "records a whole paragraph selected as its %s range",
+    async (part) => {
+      const selection = await captureOf({ p: "PL1", part });
+      expect(selection).toMatchObject({
+        shape: "paragraph",
+        selectedText: "PL1 Plain paragraph kilo lima mike november oscar papa.",
+        startOffset: 0,
+        endOffset: 55,
+      });
+    },
+  );
+
+  it("records several paragraphs as one line each", async () => {
+    const selection = await captureOf({
+      p: "MP1",
+      text: "victor whiskey.",
+      to: { p: "MP3", text: "MP3 Multi" },
+    });
+    expect(selection).toMatchObject({
+      shape: "multi_paragraph",
+      paragraphCount: 3,
+      selectedText:
+        "victor whiskey.\nMP2 Multi paragraph uniform xray yankee.\nMP3 Multi",
+      startOffset: 28,
+      endOffset: 9,
+    });
+    expect(selection!.paragraphs.map((p) => p.index)).toEqual([5, 6, 7]);
+  });
+
+  it.each([
+    [0, 4],
+    [1, 23],
+    [2, 42],
+  ])(
+    "tells occurrence %i of a repeated passage apart by Word's search hits",
+    async (occ, start) => {
+      const host = install();
+      host.select({ p: "RP1", text: "Repeated word one.", occ });
+      const selection = await captured();
+      expect(selection).toMatchObject({ startOffset: start, occurrence: occ });
+      expect(host.calls()).toContain("Paragraph.search");
+    },
+  );
+
+  it("reads no search for a passage that occurs once", async () => {
+    const host = install();
+    host.select({ p: "PL1", text: "lima mike" });
+    await captured();
+    expect(host.calls()).not.toContain("Paragraph.search");
+  });
+
+  it("leaves a repeated passage unplaced when Word's search cannot take it", async () => {
+    const repeated = "x^y ".repeat(2);
+    const selection = await captureOf(
+      { paragraph: 0, text: "x^y", occ: 1 },
+      { body: [repeated] },
+    );
+    expect(selection).toMatchObject({
+      selectedText: "x^y",
+      startOffset: -1,
+      reasonCode: "shape_not_enabled",
+    });
+  });
+
+  it("records one table cell", async () => {
+    const selection = await captureOf({ table: 0, cell: [1, 1] });
+    expect(selection).toMatchObject({
+      shape: "table_cell",
+      selectedText: "CB2 Cell B2 text",
+      reasonCode: "shape_not_enabled",
+    });
+  });
+
+  it.each([
+    ["a whole table", { table: 0, tableWhole: true }, "whole_table"],
+    [
+      "two cells",
+      { table: 0, cell: [0, 0], to: { table: 0, cell: [0, 1] } },
+      "multi_cell",
+    ],
+  ] as const)("sends %s as context only", async (_, target, reasonCode) => {
+    expect(await captureOf(target)).toMatchObject({
+      role: "context_only",
+      shape: "table",
+      reasonCode,
+    });
+  });
+
+  it.each([
+    ["header", { story: "header", p: "HD1" }, "header"],
+    [
+      "footnote",
+      { story: "footnote", text: "Footnote body" },
+      // The web reports a footnote's body as a NoteItem (SV2:129-132).
+      flavour === "web" ? "note" : "footnote",
+    ],
+    ["text box", { story: "textbox", p: "TB1" }, "text_box"],
+  ] as const)(
+    "sends text in a %s as context only",
+    async (_, target, story) => {
+      const selection = await captureOf(target);
+      expect(selection).toMatchObject({
+        role: "context_only",
+        reasonCode: "other_story",
+        story,
+      });
+      expect(selection!.anchor).toBeNull();
+      expect(selection!.selectedText).not.toBe("");
+    },
+  );
+
+  it.each([
+    ["a collapsed cursor", { p: "PL1", collapse: "Start" }],
+    ["a picture", { picture: 0 }],
+    ["a comment balloon", { story: "comment", text: "Probe comment" }],
+    [
+      "body text into part of a table",
+      { p: "PC1", to: { table: 0, cell: [0, 0] } },
+    ],
+  ] as const)("offers nothing for %s", async (_, target) => {
+    expect(await captureOf(target)).toBeNull();
+  });
+
+  it("never sends tracked deletions to the model", async () => {
+    const selection = await captureOf({
+      p: "TC1",
+      text: "kept",
+      to: { p: "TC1", text: "end words" },
+    });
+    expect(selection!.selectedText).toBe("kept end words");
+  });
+
+  it("drops comment marks from the text sent", async () => {
+    const selection = await captureOf({
+      p: "CM1",
+      text: "anchor phrase",
+      to: { p: "CM1", text: "after" },
+    });
+    expect(selection!.selectedText).toBe("anchor phrase after");
+  });
+
+  it("places paragraphs without IDs by comparing ranges", async () => {
+    window.WORD_FORCE_NO_PARAGRAPH_IDS = true;
+    const host = install();
+    host.select({ p: "PL1", text: "lima mike" });
+    const selection = await captured();
+    expect(selection!.paragraphs[0]).toMatchObject({ id: null, index: 2 });
+    expect(selection!.anchor).toMatchObject({ window: 0 });
+    expect(host.calls()).toContain("Range.compareLocationWith");
+  });
+
+  it("places the right copy of a duplicated paragraph without IDs", async () => {
+    const document: MockSelectionDocument = {
+      body: ["Intro one.", "Same text.", "Middle.", "Same text.", "End."],
+    };
+    install(document, { nullParagraphIds: true }).select({
+      paragraph: 3,
+      text: "Same",
+    });
+    const selection = await captured();
+    expect(selection!.paragraphs[0]).toMatchObject({ id: null, index: 3 });
+    expect(selection!.anchor).toMatchObject({ window: 1 });
+  });
+
+  it("writes nothing and builds no range inside a paragraph", async () => {
+    const host = install();
+    const before = host.paragraphs();
+    for (const target of [
+      { p: "HT1", text: "before", to: { p: "HT1", text: "after" } },
+      { p: "RT1", text: "ABC" },
+      { p: "RP1", text: "Repeated word one.", occ: 1 },
+      { p: "MX1", text: "bravo", to: { p: "PL1", text: "kilo" } },
+      { table: 0, cell: [0, 1] },
+    ] as const) {
+      host.select(target);
+      expect(await captured()).not.toBeNull();
+    }
+    expect(host.paragraphs()).toEqual(before);
+    expect(host.writeSyncs()).toEqual([]);
+    expect(host.calls()).not.toContain("Range.expandTo");
+    expect(host.calls()).not.toContain("Paragraph.expandTo");
+  });
+});
+
+describe("captureWordSelection across requirement levels", () => {
+  it("sends LTSC 2021's selection text without reading paragraph texts it cannot", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+      host: "pc",
+      requirements: "ltsc2021",
+    });
+    host.select({ p: "PL1", text: "lima mike" });
+    const selection = await captured();
+    expect(selection).toMatchObject({
+      role: "context_only",
+      reasonCode: "host_unsupported",
+      selectedText: "lima mike",
+      paragraphs: [],
+      anchor: null,
+    });
+    expect(host.calls()).not.toContain("Paragraph.getText");
+    expect(host.calls()).not.toContain("Range.getReviewedText");
+  });
+
+  it("places LTSC 2024's paragraphs, which have no IDs", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+      host: "pc",
+      requirements: "ltsc2024",
+    });
+    host.select({ p: "PL1", text: "lima mike" });
+    const selection = await captured();
+    expect(selection).toMatchObject({ reasonCode: "shape_not_enabled" });
+    expect(selection!.paragraphs[0]).toMatchObject({ id: null, index: 2 });
+  });
+});
+
+describe("captureWordSelection when Word does not answer", () => {
+  it("reports a failure, never a partial snapshot", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT);
+    host.select({ p: "PL1", text: "lima mike" });
+    const hang = host.hangSync({ at: 2 });
+    const read = captureWordSelection("user", 20);
+    await hang.reached;
+    expect(await read).toEqual({ status: "failed" });
+    hang.release();
+  });
+});
+
+describe("describeWordSelection", () => {
+  it.each(HOSTS)(
+    "shows what would be sent on %s in one sync, without reading the body",
+    async (flavour) => {
+      const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        host: flavour,
+      });
+      host.select({
+        p: "MP1",
+        text: "victor whiskey.",
+        to: { p: "MP2", text: "MP2 Multi" },
+      });
+      const read = await describeWordSelection();
+      expect(read).toEqual({
+        status: "ok",
+        value: {
+          key: expect.any(String),
+          text: "victor whiskey.\nMP2 Multi",
+          paragraphCount: 2,
+          shape: "multi_paragraph",
+          story: "main",
+          truncated: false,
+        },
+      });
+      expect(host.syncCount()).toBe(1);
+      expect(host.calls()).not.toContain("Paragraph.getText");
+    },
+  );
+
+  it("gives the same text in another paragraph a new key", async () => {
+    const host = installWordSelectionHost({
+      body: ["One same words.", "Two same words."],
+    });
+    const keyOf = async (paragraph: number) => {
+      host.select({ paragraph, text: "same words" });
+      const read = await describeWordSelection();
+      return read.status === "ok" ? read.value?.key : undefined;
+    };
+    expect(await keyOf(0)).not.toBe(await keyOf(1));
+  });
+
+  it("reads the cells of a table selection", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, { host: "web" });
+    host.select({ table: 0, tableWhole: true });
+    const read = await describeWordSelection();
+    expect(read).toMatchObject({
+      status: "ok",
+      value: { shape: "table", paragraphCount: 4 },
+    });
+  });
+
+  it("offers nothing for a collapsed cursor", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT);
+    host.select({ p: "PL1", collapse: "End" });
+    expect(await describeWordSelection()).toEqual({
+      status: "ok",
+      value: null,
+    });
+  });
+
+  it("reports a failure when Word does not answer", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT);
+    const hang = host.hangSync();
+    const read = describeWordSelection(20);
+    await hang.reached;
+    expect(await read).toEqual({ status: "failed" });
+    hang.release();
+  });
+});

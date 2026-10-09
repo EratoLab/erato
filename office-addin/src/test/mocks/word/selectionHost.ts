@@ -262,6 +262,8 @@ export const WORD_SELECTION_API_SETS: Readonly<
   "Range.contentControls": ["WordApi", "1.1"],
   "Range.parentContentControlOrNullObject": ["WordApi", "1.3"],
   "Range.fields": ["WordApi", "1.4"],
+  "Range.getReviewedText": ["WordApi", "1.4"],
+  "Table.getRange": ["WordApi", "1.3"],
 };
 
 const OTHER_AUTHOR = "Other Author";
@@ -1124,6 +1126,38 @@ export function installWordSelectionHost(
         options.IncludeTextMarkedAsDeleted ?? options.includeTextMarkedAsDeleted
       ),
     }) + (web ? "" : "\r");
+  /**
+   * Range.getReviewedText("Current") without tracked deletions, or "Original" without tracked
+   * insertions; other content as getText shows it. Not measured natively: the separators follow
+   * Range.text.
+   */
+  const reviewedText = (b: Bounds, version: string) => {
+    const { story: st, s, e } = b;
+    const original = version === "Original";
+    let out = "";
+    for (let i = s; i < e; i += 1) {
+      const t = st.tokens[i];
+      if (isInline(t)) {
+        if (t.kind === "char" && (original ? t.run.ins : t.run.del)) continue;
+        out += inlineText(st, t, paraAt(st, i), {
+          hidden: false,
+          deleted: original,
+        });
+        continue;
+      }
+      if (t.kind === "mark") {
+        const next = i + 1 < e ? st.tokens[i + 1] : undefined;
+        out += !paraOf(t).cellEnd
+          ? "\r"
+          : web
+            ? "\r"
+            : next?.kind === "rowEnd"
+              ? ""
+              : "\t";
+      } else if (t.kind === "rowEnd") out += web ? "" : "\r\n";
+    }
+    return out;
+  };
   const plainText = (st: Story, from: number, to: number) => {
     let out = "";
     for (let i = from; i < to; i += 1) {
@@ -2966,6 +3000,25 @@ export function installWordSelectionHost(
     nav(cell, "parentTable", () => {
       const table: Obj = {};
       register(table, ctx, "Table", cell);
+      table.getRange = () => {
+        calls.push("Table.getRange");
+        return makeRange(ctx, table, "Table.getRange", () => {
+          gate("Table.getRange");
+          const story = ref!.story;
+          const t = need().table;
+          const marks = allMarks(story).filter((m) =>
+            paraOf(story.tokens[m]).cells.some((c) => c.table === t),
+          );
+          const ends = story.tokens.flatMap((x, i) =>
+            x.kind === "rowEnd" && x.table === t ? [i] : [],
+          );
+          return {
+            story,
+            s: paragraphStart(story, marks[0]),
+            e: ends[ends.length - 1] + 1,
+          };
+        });
+      };
       defineProps(table, ctx, "Table", {
         nestingLevel: { get: () => need().table.nesting },
         rowCount: {
@@ -3359,6 +3412,13 @@ export function installWordSelectionHost(
       method("delete");
       enqueue(ctx, obj, `${type}.delete`, true, () => {
         writeTokens(target.whole(), []);
+      });
+    };
+    obj.getReviewedText = (version: string = "Current") => {
+      method("getReviewedText");
+      return clientResult(ctx, obj, `${type}.getReviewedText`, () => {
+        gate("Range.getReviewedText");
+        return reviewedText(target.whole(), version);
       });
     };
     obj.getTrackedChanges = () => {
