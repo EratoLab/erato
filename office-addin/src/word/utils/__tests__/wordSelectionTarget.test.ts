@@ -9,7 +9,10 @@ import {
   consumeProgrammaticSelectionEvent,
   resetProgrammaticWordSelectionForTests,
 } from "../wordProgrammaticSelection";
-import { captureWordSelection , currentWordSelectionSupport } from "../wordSelectionCapture";
+import {
+  captureWordSelection,
+  currentWordSelectionSupport,
+} from "../wordSelectionCapture";
 import {
   checkTargetVerification,
   proveWordSelectionTarget,

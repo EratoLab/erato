@@ -2954,6 +2954,11 @@ msgid "officeAddin.word.clientActions.insertAtCursor"
 msgstr "Text an der Cursorposition einfügen"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.clientActions.replaceSelection"
+msgstr "Ausgewählte Passage ersetzen"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Endet nach"
@@ -3634,6 +3639,7 @@ msgstr "Die vorgeschlagenen Änderungen sind unvollständig oder ungültig. Bitt
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.review.keepText"
 msgstr "Aktuellen Text behalten"
 
@@ -3644,11 +3650,13 @@ msgstr "Spätere Änderungen in Word sind hier nicht enthalten."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.locationChanged"
 msgstr "Diese Passage wurde verändert oder verschoben. Ihre genaue Position kann nicht mehr geprüft werden."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.locationUnavailable"
 msgstr "Position nicht verfügbar"
 
@@ -3776,6 +3784,7 @@ msgstr "Dokumentinhalt auf den Stand direkt vor diesem Stapel zurücksetzen? Wur
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.selected"
 msgstr "Passage in Word markiert. Dies kann die Einfügeposition einer späteren Aktion verändern."
 
@@ -4037,9 +4046,69 @@ msgid "officeAddin.word.scoped.locate"
 msgstr "Textpassage {0} anzeigen"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.appliedTracked"
+msgstr "Die Änderungsnachverfolgung ist aktiv, daher ist die Ersetzung eine nachverfolgte Änderung. Lehnen Sie sie in Word ab, um sie rückgängig zu machen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.comparisonLabel"
+msgstr "Auswahl bei der Anfrage → vorgeschlagener Ersatz"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.consent"
+msgstr "Ausgewählte Passage ersetzen?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copied"
+msgstr "Vorschlag kopiert."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copy"
+msgstr "Vorschlag kopieren"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copyFailed"
+msgstr "Kopieren fehlgeschlagen. Markieren Sie den Text und kopieren Sie ihn selbst."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.failed"
+msgstr "Word hat die Änderung nicht angenommen. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.insteadOfDocument"
+msgstr "Wenn diese Passage ersetzt werden kann, wird sie statt des Dokuments gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.invalid"
+msgstr "Der Vorschlag ist leer oder enthält Zeichen, die Word nicht als Text übernimmt. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.lineCount"
+msgstr "Der Vorschlag hat nicht genau eine Zeile pro ausgewähltem Absatz. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.meta"
 msgstr "{paragraphCount, plural, one {Ausgewählte Passage · # Absatz} other {Ausgewählte Passage · # Absätze}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.noCapture"
+msgstr "Dieser Bereich enthält die Passage nicht mehr, für die diese Antwort geschrieben wurde. Kopieren Sie den Vorschlag oder wählen Sie die Passage aus und fragen Sie erneut."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.notResponding"
+msgstr "Word reagiert nicht. Laden Sie den Add-in-Bereich neu, wenn das anhält."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4047,14 +4116,169 @@ msgid "officeAddin.word.selection.notSentWithDocument"
 msgstr "Wird nicht gesendet, solange das Dokument einbezogen ist."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.otherDocument"
+msgstr "Diese Antwort wurde für eine Passage in einem anderen Dokument geschrieben und kann hier nicht ersetzt werden."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.preparing"
+msgstr "Umformulierung wird vorbereitet…"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato konnte Ihre Auswahl in Word nicht lesen. Ihre Nachricht wurde nicht gesendet."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.content"
+msgstr "Diese Passage enthält einen Link, ein Feld, einen Kommentar, eine Fußnote, ein Bild oder andere Inhalte, die bei einer Umformulierung verloren gingen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.formatting"
+msgstr "Diese Passage hat Formatierungen, die eine Umformulierung nicht erhalten könnte."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.host"
+msgstr "Diese Word-Version kann keine ausgewählte Passage ersetzen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.position"
+msgstr "Erato kann diese Passage im Dokument nicht eindeutig finden und sie daher nicht sicher ersetzen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.shape"
+msgstr "Erato kann bisher nur einen ganzen Absatz ersetzen. Wählen Sie den ganzen Absatz aus, damit er ersetzt werden kann."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.size"
+msgstr "Diese Auswahl ist zu lang, um sie auf einmal zu ersetzen. Wählen Sie eine kürzere Passage aus."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.story"
+msgstr "Text in Kopf- und Fußzeilen, Fußnoten und Textfeldern wird nur als Kontext verwendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.table"
+msgstr "Wählen Sie einen Absatz außerhalb der Tabelle aus, damit er ersetzt werden kann. Tabellen werden nur als Kontext verwendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.tracked"
+msgstr "Nehmen Sie die nachverfolgten Änderungen in dieser Passage zuerst an oder lehnen Sie sie ab, und wählen Sie sie dann erneut aus."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.webPicture"
+msgstr "In Word für das Web kann Text nach einem Bild im selben Absatz nicht ersetzt werden."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.replace"
+msgstr "Ersetzen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.selection.replaced"
+msgstr "Die ausgewählte Passage wurde ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.restore"
+msgstr "Passage wiederherstellen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertFailed"
+msgstr "Die Passage konnte nicht sicher wiederhergestellt werden. Prüfen Sie sie in Word; das Rückgängigmachen in Word kann noch helfen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reverting"
+msgstr "Passage wird wiederhergestellt…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertStale"
+msgstr "Die Passage hat sich nach dem Ersetzen geändert. Rückgängig wurde nicht ausgeführt, weil spätere Änderungen verloren gingen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTitle"
+msgstr "Passage wiederherstellen?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTracking"
+msgstr "Rückgängig wurde nicht ausgeführt, weil die Änderungsnachverfolgung aktiv ist. Lehnen Sie die Änderung stattdessen in Word ab."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarning"
+msgstr "Die Passage so wiederherstellen, wie sie vor diesem Ersetzen war? Es wird nichts wiederhergestellt, wenn sie sich seitdem geändert hat."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.scope"
+msgstr "Ersetzen schreibt nur in die Passage, die Sie ausgewählt haben, und nur, wenn sie seit Ihrer Anfrage unverändert ist."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordShowInWordButton.tsx
+msgid "officeAddin.word.selection.showUnavailable"
+msgstr "Word hat die Passage nicht ausgewählt. Versuchen Sie es gleich noch einmal."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.stale"
+msgstr "Diese Passage hat sich nach Ihrer Anfrage geändert. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.timedOut"
+msgstr "Word hat nicht rechtzeitig geantwortet. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.title"
+msgstr "Umformulierung der ausgewählten Passage"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.truncated"
 msgstr "Zu lang, um vollständig gesendet zu werden. Nur der Anfang wird gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.selection.unchanged"
+msgstr "Der Vorschlag entspricht der Passage. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.undoReplaced"
+msgstr "Wenn Sie eine weitere Änderung anwenden, ist dieses Rückgängig nicht mehr verfügbar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.unsupported"
+msgstr "Die Passage enthält jetzt Inhalte oder Formatierungen, die bei einer Umformulierung verloren gingen. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.unverified"
+msgstr "Word hat die Passage möglicherweise ersetzt, aber das Ergebnis konnte nicht geprüft werden. Sehen Sie sich das Dokument an, bevor Sie fortfahren; das Rückgängigmachen in Word entfernt die Änderung."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.useCurrent"
+msgstr "Aktuelle Auswahl verwenden"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4075,6 +4299,11 @@ msgstr "Fügt Text ohne Nachfrage an der aktuellen Cursorposition ein. Für dies
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysPlan"
 msgstr "Wendet die vollständige Überarbeitung ohne Nachfrage an, sofern das Dokument noch der geprüften Quelle entspricht. Die Erato-Wiederherstellung ist verfügbar, solange das angewendete Dokument unverändert bleibt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.alwaysReplaceSelection"
+msgstr "Ersetzt die ausgewählte Passage ohne Nachfrage, aber nur, wenn sie seit Ihrer Anfrage unverändert ist. Rückgängig ist verfügbar, solange die Änderungsnachverfolgung aus ist."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

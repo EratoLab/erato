@@ -2954,6 +2954,11 @@ msgid "officeAddin.word.clientActions.insertAtCursor"
 msgstr "Wstaw tekst w miejscu kursora"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.clientActions.replaceSelection"
+msgstr "Zastąp zaznaczony fragment"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Kończy się po"
@@ -3634,6 +3639,7 @@ msgstr "Proponowane zmiany są niekompletne lub nieprawidłowe. Poproś o popraw
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.review.keepText"
 msgstr "Zachowaj bieżący tekst"
 
@@ -3644,11 +3650,13 @@ msgstr "Późniejsze zmiany w Word nie są tu uwzględnione."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.locationChanged"
 msgstr "Ten fragment zmienił się lub został przeniesiony. Nie można już sprawdzić jego dokładnego położenia."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.locationUnavailable"
 msgstr "Położenie niedostępne"
 
@@ -3776,6 +3784,7 @@ msgstr "Przywrócić treść dokumentu do stanu sprzed tej partii zmian? Nic nie
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.selected"
 msgstr "Zaznaczono fragment w Wordzie. Może to zmienić miejsce wstawiania przy późniejszej czynności."
 
@@ -4037,9 +4046,69 @@ msgid "officeAddin.word.scoped.locate"
 msgstr "Znajdź fragment {0}"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.appliedTracked"
+msgstr "Śledzenie zmian jest włączone, więc zastąpienie jest śledzoną zmianą. Odrzuć ją w programie Word, aby ją cofnąć."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.comparisonLabel"
+msgstr "Zaznaczenie w chwili prośby → proponowane zastąpienie"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.consent"
+msgstr "Zastąpić zaznaczony fragment?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copied"
+msgstr "Skopiowano propozycję."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copy"
+msgstr "Kopiuj propozycję"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copyFailed"
+msgstr "Kopiowanie nie powiodło się. Zaznacz tekst i skopiuj go samodzielnie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.failed"
+msgstr "Word nie przyjął zmiany. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.insteadOfDocument"
+msgstr "Jeśli ten fragment można zastąpić, zostanie wysłany zamiast dokumentu."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.invalid"
+msgstr "Propozycja jest pusta albo zawiera znaki, których Word nie zachowuje jako tekstu. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.lineCount"
+msgstr "Propozycja nie ma po jednym wierszu na każdy zaznaczony akapit. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.meta"
 msgstr "{paragraphCount, plural, one {Zaznaczony fragment · # akapit} few {Zaznaczony fragment · # akapity} many {Zaznaczony fragment · # akapitów} other {Zaznaczony fragment · # akapitu}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.noCapture"
+msgstr "Ten panel nie zawiera już fragmentu, dla którego napisano tę odpowiedź. Skopiuj propozycję albo zaznacz fragment i zapytaj ponownie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.notResponding"
+msgstr "Word nie odpowiada. Jeśli to się utrzymuje, załaduj ponownie panel dodatku."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4047,14 +4116,169 @@ msgid "officeAddin.word.selection.notSentWithDocument"
 msgstr "Nie jest wysyłany, gdy dokument jest dołączony."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.otherDocument"
+msgstr "Tę odpowiedź napisano dla fragmentu innego dokumentu, więc nie można go tu zastąpić."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.preparing"
+msgstr "Przygotowywanie przeredagowania…"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato nie mógł odczytać zaznaczenia w programie Word. Wiadomość nie została wysłana."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.content"
+msgstr "Ten fragment zawiera link, pole, komentarz, przypis, obraz lub inną treść, którą przeredagowanie by utraciło."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.formatting"
+msgstr "Ten fragment ma formatowanie, którego przeredagowanie nie mogłoby zachować."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.host"
+msgstr "Ta wersja programu Word nie może zastąpić zaznaczonego fragmentu."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.position"
+msgstr "Erato nie może dokładnie zlokalizować tego fragmentu w dokumencie, więc nie może go bezpiecznie zastąpić."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.shape"
+msgstr "Na razie Erato może zastąpić tylko cały akapit. Zaznacz cały akapit, aby można go było zastąpić."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.size"
+msgstr "To zaznaczenie jest zbyt długie, aby zastąpić je naraz. Zaznacz krótszy fragment."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.story"
+msgstr "Tekst w nagłówkach, stopkach, przypisach i polach tekstowych jest używany tylko jako kontekst."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.table"
+msgstr "Zaznacz akapit poza tabelą, aby można go było zastąpić. Tabele są używane tylko jako kontekst."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.tracked"
+msgstr "Najpierw zaakceptuj lub odrzuć śledzone zmiany w tym fragmencie, a potem zaznacz go ponownie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.webPicture"
+msgstr "W programie Word dla sieci Web nie można zastąpić tekstu znajdującego się za obrazem w tym samym akapicie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.replace"
+msgstr "Zastąp"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.selection.replaced"
+msgstr "Zastąpiono zaznaczony fragment."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.restore"
+msgstr "Przywróć fragment"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertFailed"
+msgstr "Nie udało się z pewnością przywrócić fragmentu. Sprawdź go w programie Word; cofanie w programie Word może jeszcze pomóc."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reverting"
+msgstr "Przywracanie fragmentu…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertStale"
+msgstr "Fragment zmienił się po zastąpieniu. Cofnięcie nie zostało wykonane, ponieważ usunęłoby późniejsze zmiany."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTitle"
+msgstr "Przywrócić fragment?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTracking"
+msgstr "Cofnięcie nie zostało wykonane, ponieważ śledzenie zmian jest włączone. Zamiast tego odrzuć zmianę w programie Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarning"
+msgstr "Przywrócić fragment do stanu sprzed tego zastąpienia? Nic nie zostanie przywrócone, jeśli od tamtej pory się zmienił."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.scope"
+msgstr "Zastąpienie zapisuje tylko w zaznaczonym przez ciebie fragmencie i tylko wtedy, gdy nie zmienił się od twojej prośby."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordShowInWordButton.tsx
+msgid "officeAddin.word.selection.showUnavailable"
+msgstr "Word nie zaznaczył fragmentu. Spróbuj ponownie za chwilę."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.stale"
+msgstr "Ten fragment zmienił się po twojej prośbie. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.timedOut"
+msgstr "Word nie odpowiedział na czas. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.title"
+msgstr "Przeredagowanie zaznaczonego fragmentu"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.truncated"
 msgstr "Za długi, aby wysłać go w całości. Wysyłany jest tylko początek."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.selection.unchanged"
+msgstr "Propozycja jest taka sama jak fragment. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.undoReplaced"
+msgstr "Zastosowanie kolejnej zmiany kończy możliwość tego cofnięcia."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.unsupported"
+msgstr "Fragment zawiera teraz treść lub formatowanie, które przeredagowanie by utraciło. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.unverified"
+msgstr "Word mógł zastąpić fragment, ale nie udało się sprawdzić wyniku. Przejrzyj dokument, zanim przejdziesz dalej; cofanie w programie Word usuwa zmianę."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.useCurrent"
+msgstr "Użyj bieżącego zaznaczenia"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4075,6 +4299,11 @@ msgstr "Wstawia tekst w bieżącym miejscu kursora bez pytania. Ta czynność ni
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysPlan"
 msgstr "Stosuje pełną nową wersję bez pytania, tylko jeśli dokument nadal odpowiada przejrzanemu źródłu. Cofnięcie w Erato jest dostępne, dopóki zastosowany dokument pozostaje niezmieniony."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.alwaysReplaceSelection"
+msgstr "Zastępuje zaznaczony fragment bez pytania, tylko jeśli nie zmienił się od twojej prośby. Cofnięcie jest dostępne, dopóki śledzenie zmian jest wyłączone."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

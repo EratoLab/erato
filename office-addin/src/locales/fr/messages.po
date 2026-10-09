@@ -2954,6 +2954,11 @@ msgid "officeAddin.word.clientActions.insertAtCursor"
 msgstr "Insérer le texte à la position du curseur"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.clientActions.replaceSelection"
+msgstr "Remplacer le passage sélectionné"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Se termine après"
@@ -3634,6 +3639,7 @@ msgstr "Les modifications proposées sont incomplètes ou invalides. Demandez un
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.review.keepText"
 msgstr "Conserver le texte actuel"
 
@@ -3644,11 +3650,13 @@ msgstr "Les modifications ultérieures dans Word ne sont pas reflétées ici."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.locationChanged"
 msgstr "Ce passage a changé ou a été déplacé. Sa position exacte ne peut plus être vérifiée."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.locationUnavailable"
 msgstr "Position indisponible"
 
@@ -3776,6 +3784,7 @@ msgstr "Restaurer le corps du document à son état juste avant ce lot ? Rien n�
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
+#: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.review.selected"
 msgstr "Passage sélectionné dans Word. Cela peut modifier la position d’insertion d’une action ultérieure."
 
@@ -4037,9 +4046,69 @@ msgid "officeAddin.word.scoped.locate"
 msgstr "Localiser le passage {0}"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.appliedTracked"
+msgstr "Le suivi des modifications est activé : le remplacement est donc une modification suivie. Refusez-la dans Word pour l'annuler."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.comparisonLabel"
+msgstr "Sélection au moment de la demande → remplacement proposé"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.consent"
+msgstr "Remplacer le passage sélectionné ?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copied"
+msgstr "Proposition copiée."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copy"
+msgstr "Copier la proposition"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.copyFailed"
+msgstr "La copie a échoué. Sélectionnez le texte et copiez-le vous-même."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.failed"
+msgstr "Word n'a pas accepté la modification. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.insteadOfDocument"
+msgstr "Si ce passage peut être remplacé, il est envoyé à la place du document."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.invalid"
+msgstr "La proposition est vide ou contient des caractères que Word ne conserve pas comme texte. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.lineCount"
+msgstr "La proposition ne comporte pas une ligne par paragraphe sélectionné. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.meta"
 msgstr "{paragraphCount, plural, one {Passage sélectionné · # paragraphe} other {Passage sélectionné · # paragraphes}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.noCapture"
+msgstr "Ce volet ne contient plus le passage pour lequel cette réponse a été écrite. Copiez la proposition, ou sélectionnez le passage et redemandez."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.notResponding"
+msgstr "Word ne répond pas. Rechargez le volet du complément si cela persiste."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4047,14 +4116,169 @@ msgid "officeAddin.word.selection.notSentWithDocument"
 msgstr "Non envoyé tant que le document est inclus."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.otherDocument"
+msgstr "Cette réponse a été écrite pour un passage d'un autre document : elle ne peut pas être remplacée ici."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.preparing"
+msgstr "Préparation de la réécriture…"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato n'a pas pu lire votre sélection dans Word. Votre message n'a pas été envoyé."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.content"
+msgstr "Ce passage contient un lien, un champ, un commentaire, une note, une image ou un autre contenu qu'une réécriture perdrait."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.formatting"
+msgstr "Ce passage a une mise en forme qu'une réécriture ne pourrait pas conserver."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.host"
+msgstr "Cette version de Word ne peut pas remplacer un passage sélectionné."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.position"
+msgstr "Erato ne peut pas localiser précisément ce passage dans le document : il ne peut donc pas le remplacer en toute sécurité."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.shape"
+msgstr "Pour l'instant, Erato ne peut remplacer qu'un paragraphe entier. Sélectionnez le paragraphe entier pour qu'il soit remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.size"
+msgstr "Cette sélection est trop longue pour être remplacée en une fois. Sélectionnez un passage plus court."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.story"
+msgstr "Le texte des en-têtes, pieds de page, notes et zones de texte sert uniquement de contexte."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.table"
+msgstr "Sélectionnez un paragraphe hors du tableau pour qu'il soit remplacé. Les tableaux servent uniquement de contexte."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.tracked"
+msgstr "Acceptez ou refusez d'abord les modifications suivies de ce passage, puis sélectionnez-le à nouveau."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.webPicture"
+msgstr "Dans Word pour le web, le texte qui suit une image dans le même paragraphe ne peut pas être remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.replace"
+msgstr "Remplacer"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.selection.replaced"
+msgstr "Le passage sélectionné a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.restore"
+msgstr "Restaurer le passage"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertFailed"
+msgstr "Le passage n'a pas pu être restauré avec certitude. Vérifiez-le dans Word ; l'annulation de Word peut encore aider."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reverting"
+msgstr "Restauration du passage…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertStale"
+msgstr "Le passage a changé après le remplacement. L'annulation n'a pas été exécutée, car elle supprimerait des modifications ultérieures."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTitle"
+msgstr "Restaurer le passage ?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTracking"
+msgstr "L'annulation n'a pas été exécutée, car le suivi des modifications est activé. Refusez plutôt la modification dans Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarning"
+msgstr "Restaurer le passage tel qu'il était avant ce remplacement ? Rien n'est restauré s'il a changé depuis."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.scope"
+msgstr "Le remplacement n'écrit que dans le passage que vous avez sélectionné, et seulement s'il n'a pas changé depuis votre demande."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordShowInWordButton.tsx
+msgid "officeAddin.word.selection.showUnavailable"
+msgstr "Word n'a pas sélectionné le passage. Réessayez dans un instant."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.stale"
+msgstr "Ce passage a changé après votre demande. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.timedOut"
+msgstr "Word n'a pas répondu à temps. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.title"
+msgstr "Réécriture du passage sélectionné"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.truncated"
 msgstr "Trop long pour être envoyé en entier. Seul le début est envoyé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.selection.unchanged"
+msgstr "La proposition correspond au passage. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.undoReplaced"
+msgstr "Appliquer une autre modification met fin à cette annulation."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.unsupported"
+msgstr "Le passage contient maintenant du contenu ou une mise en forme qu'une réécriture perdrait. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.unverified"
+msgstr "Word a peut-être remplacé le passage, mais le résultat n'a pas pu être vérifié. Regardez le document avant de continuer ; l'annulation de Word supprime la modification."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.useCurrent"
+msgstr "Utiliser la sélection actuelle"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4075,6 +4299,11 @@ msgstr "Insère le texte à la position actuelle du curseur sans demander. Cette
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysPlan"
 msgstr "Applique la réécriture complète sans demander, uniquement si le document correspond toujours à la source examinée. Le rétablissement Erato reste disponible tant que le document appliqué n’a pas changé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.alwaysReplaceSelection"
+msgstr "Remplace le passage sélectionné sans demander, uniquement s'il n'a pas changé depuis votre demande. L'annulation est disponible tant que le suivi des modifications est désactivé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

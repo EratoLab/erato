@@ -140,6 +140,13 @@ const notRespondingText = () =>
     message: "Word is not responding. Reload the add-in pane if this persists.",
   });
 
+const trackedText = () =>
+  t({
+    id: "officeAddin.word.selection.appliedTracked",
+    message:
+      "Track Changes is on, so the replacement is a tracked change. Reject it in Word to undo it.",
+  });
+
 const staleText = () =>
   t({
     id: "officeAddin.word.selection.stale",
@@ -153,13 +160,7 @@ function resultText(
 ): string | undefined {
   switch (result.status) {
     case "applied":
-      return tracking
-        ? t({
-            id: "officeAddin.word.selection.appliedTracked",
-            message:
-              "Track Changes is on, so the replacement is a tracked change. Reject it in Word to undo it.",
-          })
-        : undefined;
+      return tracking ? trackedText() : undefined;
     case "unchanged":
       return undefined;
     case "failed":
@@ -651,7 +652,12 @@ export function WordSelectionCard({
         )
       }
       receipt={
-        <WordReviewReceipt review={review} kind="selection" title={title} />
+        <WordReviewReceipt
+          review={review}
+          kind="selection"
+          title={title}
+          note={applied?.trackingOn ? trackedText() : ""}
+        />
       }
       footer={
         <>

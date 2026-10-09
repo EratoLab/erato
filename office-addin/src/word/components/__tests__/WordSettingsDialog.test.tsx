@@ -149,6 +149,29 @@ describe("WordSettingsDialog", () => {
     ).toBeInTheDocument();
   });
 
+  it("explains Always allow for replacing a selected passage", () => {
+    mockUseActionFacetClientActions.mockReturnValue(
+      new Map([
+        [
+          "word_selection",
+          {
+            displayName: "Word selection",
+            clientActions: ["word.replace_selection"],
+            presentation: "auto_prompt",
+            alwaysAskActions: [],
+          },
+        ],
+      ]),
+    );
+    render(<WordSettingsDialog isOpen onClose={() => {}} />);
+    expect(
+      screen.getByText(
+        /Replaces the selected passage without asking, only if it is unchanged since your request/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/a single Revert undoes the batch/)).toBeNull();
+  });
+
   describe("compatibility mode", () => {
     const wordHost = () =>
       vi.stubGlobal("Office", {
