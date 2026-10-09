@@ -30,7 +30,7 @@ export interface WordApplyProgress {
 
 /** Logged at debug level so stage costs can be measured on real hosts. */
 export function trackWordApply(
-  kind: "plan" | "edits",
+  kind: "plan" | "edits" | "selection",
   onStage?: (stage: WordApplyStage) => void,
 ): WordApplyProgress {
   const started = globalThis.performance.now();
