@@ -246,6 +246,41 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     });
   });
 
+  it("reports an Undo that left an extra paragraph as unverified", async () => {
+    const host = install();
+    const result = await replace(await captureOf(host, { p: "PL1" }));
+    if (result.status !== "applied" || !result.backup)
+      throw new Error("not applied");
+    const backup = {
+      ...result.backup,
+      ooxml: result.backup.ooxml.replace("</w:body>", "<w:p/></w:body>"),
+    };
+    expect(await revertWordSelection(backup, result.written)).toMatchObject({
+      status: "unverified",
+    });
+  });
+
+  it("refuses a paragraph that ended a section since Send, and an Undo once it does", async () => {
+    const host = install();
+    const capture = await captureOf(host, { p: "PL1" });
+    host.setSectionBreaks(["PL1"]);
+    const before = host.paragraphs();
+    expect(await replace(capture)).toMatchObject({
+      status: "refused",
+      code: "UNSUPPORTED_CONTENT",
+    });
+    expect(host.paragraphs()).toEqual(before);
+
+    host.setSectionBreaks([]);
+    const result = await replace(capture);
+    if (result.status !== "applied" || !result.backup)
+      throw new Error("not applied");
+    host.setSectionBreaks(["PL1"]);
+    expect(
+      await revertWordSelection(result.backup, result.written),
+    ).toMatchObject({ status: "stale" });
+  });
+
   it("refuses to undo under Track Changes", async () => {
     const host = install();
     const capture = await captureOf(host, { p: "PL1" });

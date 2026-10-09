@@ -4128,7 +4128,7 @@ msgstr "Przygotowywanie przeredagowania…"
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
-msgstr "Erato nie mógł odczytać zaznaczenia w programie Word. Wiadomość nie została wysłana."
+msgstr "Erato nie mógł odczytać zaznaczenia w programie Word, więc wiadomość nie została wysłana. Wyślij ją ponownie lub odrzuć zaznaczenie, aby wysłać ją bez niego."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4207,8 +4207,18 @@ msgstr "Przywracanie fragmentu…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertNotRun"
+msgstr "Word nie przyjął zmiany. Fragment nie został przywrócony; spróbuj cofnąć ponownie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertStale"
 msgstr "Fragment zmienił się po zastąpieniu. Cofnięcie nie zostało wykonane, ponieważ usunęłoby późniejsze zmiany."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTimedOut"
+msgstr "Word nie odpowiedział na czas. Fragment nie został przywrócony; spróbuj cofnąć ponownie."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

@@ -258,6 +258,51 @@ describe("WordSelectionCard", () => {
     expect(screen.queryByTestId("word-selection-undo")).toBeNull();
   });
 
+  it("says an Undo Word rejected restored nothing, and keeps Undo", async () => {
+    const capture = await captureOf(host, { p: "PL1" });
+    renderCard({ capture });
+    fireEvent.click(replaceButton()!);
+    await screen.findByText("Replaced the selected passage.");
+    host.run.mockRejectedValueOnce(new Error("GeneralException"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restore passage" }));
+    await screen.findByText(
+      "Word did not accept the change. The passage was not restored; try Undo again.",
+    );
+    expect(host.paragraphs()[2].text).toBe(PROPOSAL);
+    expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
+  });
+
+  it("says Word is not responding during a timed-out Undo, then that nothing was restored", async () => {
+    const capture = await captureOf(host, { p: "PL1" });
+    renderCard({ capture });
+    fireEvent.click(replaceButton()!);
+    await screen.findByText("Replaced the selected passage.");
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    const hang = host.hangSync({ at: host.syncCount() + 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restore passage" }));
+    await act(async () => {
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(
+      screen.getByText(
+        "Word is not responding. Reload the add-in pane if this persists.",
+      ),
+    ).toBeInTheDocument();
+    await act(async () => {
+      hang.release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(
+      screen.getByText(
+        "Word did not answer in time. The passage was not restored; try Undo again.",
+      ),
+    ).toBeInTheDocument();
+    expect(host.paragraphs()[2].text).toBe(PROPOSAL);
+  });
+
   it("points to Reject in Word under Track Changes and offers no Undo", async () => {
     const capture = await captureOf(host, { p: "PL1" });
     host.setTrackingMode("TrackAll");

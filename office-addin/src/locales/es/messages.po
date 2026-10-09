@@ -4128,7 +4128,7 @@ msgstr "Preparando la reescritura…"
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
-msgstr "Erato no pudo leer tu selección en Word. Tu mensaje no se envió."
+msgstr "Erato no pudo leer tu selección en Word, así que tu mensaje no se envió. Envíalo de nuevo o descarta la selección para enviarlo sin ella."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4207,8 +4207,18 @@ msgstr "Restaurando el pasaje…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertNotRun"
+msgstr "Word no aceptó el cambio. No se restauró el pasaje; vuelve a intentar Deshacer."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertStale"
 msgstr "El pasaje cambió después de reemplazarlo. No se ejecutó Deshacer porque eliminaría cambios posteriores."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTimedOut"
+msgstr "Word no respondió a tiempo. No se restauró el pasaje; vuelve a intentar Deshacer."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

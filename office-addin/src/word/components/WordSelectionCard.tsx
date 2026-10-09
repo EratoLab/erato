@@ -153,6 +153,46 @@ const staleText = () =>
     message: "This passage changed after your request. Nothing was replaced.",
   });
 
+/** The message for the card's last Undo while it runs or when it did not plainly succeed. */
+function revertText(review: WordReviewState): string | undefined {
+  if (review.status === "reverting")
+    return t({
+      id: "officeAddin.word.selection.reverting",
+      message: "Restoring the passage…",
+    });
+  if (review.revertFailed === "timed-out")
+    return t({
+      id: "officeAddin.word.selection.revertTimedOut",
+      message:
+        "Word did not answer in time. The passage was not restored; try Undo again.",
+    });
+  if (review.revertFailed === "failed")
+    return t({
+      id: "officeAddin.word.selection.revertNotRun",
+      message:
+        "Word did not accept the change. The passage was not restored; try Undo again.",
+    });
+  if (review.revertStale === "changed")
+    return t({
+      id: "officeAddin.word.selection.revertStale",
+      message:
+        "The passage changed after it was replaced. Undo was not run because it would remove later edits.",
+    });
+  if (review.revertStale === "tracking")
+    return t({
+      id: "officeAddin.word.selection.revertTracking",
+      message:
+        "Undo was not run because Track Changes is on. Reject the change in Word instead.",
+    });
+  if (review.status === "revert-failed")
+    return t({
+      id: "officeAddin.word.selection.revertFailed",
+      message:
+        "The passage could not be restored with certainty. Check it in Word; Word's own Undo may still help.",
+    });
+  return undefined;
+}
+
 /** The message for a Replace that did not plainly succeed. */
 function resultText(
   result: WordReplaceSelectionResult,
@@ -472,7 +512,11 @@ export function WordSelectionCard({
   const handleRevert = useCallback(async () => {
     if (!slot || !beginOperation()) return;
     setRevertConfirmation(false);
-    updateReview(batchKey, { status: "reverting", revertStale: undefined });
+    updateReview(batchKey, {
+      status: "reverting",
+      revertStale: undefined,
+      revertFailed: undefined,
+    });
     let held = false;
     try {
       const reverted = await revertWordSelection(
@@ -492,7 +536,11 @@ export function WordSelectionCard({
         return;
       }
       if (reverted.status === "failed") {
-        updateReview(batchKey, { status: "done", detailsExpanded: true });
+        updateReview(batchKey, {
+          status: "done",
+          revertFailed: reverted.timedOut ? "timed-out" : "failed",
+          detailsExpanded: true,
+        });
         return;
       }
       setRevertSlot(null);
@@ -573,65 +621,46 @@ export function WordSelectionCard({
 
   const applied = result?.status === "applied" ? result : undefined;
   const statusMessage =
-    heldOperationOwner === batchKey &&
-    (applying || review.status === "error" || review.status === "write-failed")
+    heldOperationOwner === batchKey
       ? notRespondingText()
-      : review.revertStale && review.status !== "reverting"
-        ? review.revertStale === "changed"
-          ? t({
-              id: "officeAddin.word.selection.revertStale",
-              message:
-                "The passage changed after it was replaced. Undo was not run because it would remove later edits.",
-            })
-          : t({
-              id: "officeAddin.word.selection.revertTracking",
-              message:
-                "Undo was not run because Track Changes is on. Reject the change in Word instead.",
-            })
-        : review.status === "reverting"
-          ? t({
-              id: "officeAddin.word.selection.reverting",
-              message: "Restoring the passage…",
-            })
-          : review.status === "revert-failed"
-            ? t({
-                id: "officeAddin.word.selection.revertFailed",
-                message:
-                  "The passage could not be restored with certainty. Check it in Word; Word's own Undo may still help.",
-              })
-            : review.status === "denied"
-              ? wordDeniedText()
-              : result
-                ? resultText(result, applied?.trackingOn ?? false)
-                : !capture
-                  ? t({
-                      id: "officeAddin.word.selection.noCapture",
-                      message:
-                        "This pane no longer holds the passage this answer was written for. Copy the proposal, or select the passage and ask again.",
-                    })
-                  : !gate.allowed
-                    ? t({
-                        id: "officeAddin.word.selection.otherDocument",
-                        message:
-                          "This answer was written for a passage in another document, so it cannot be replaced here.",
-                      })
-                    : selection && !rewritable
-                      ? wordSelectionReasonText(selection.reasonCode)
-                      : replacement && "refused" in replacement
-                        ? resultText(
-                            {
-                              status: "refused",
-                              code: replacement.refused,
-                              settled: Promise.resolve(),
-                            },
-                            false,
-                          )
-                        : undefined;
+      : (revertText(review) ??
+        (review.status === "denied"
+          ? wordDeniedText()
+          : result
+            ? resultText(result, applied?.trackingOn ?? false)
+            : !capture
+              ? t({
+                  id: "officeAddin.word.selection.noCapture",
+                  message:
+                    "This pane no longer holds the passage this answer was written for. Copy the proposal, or select the passage and ask again.",
+                })
+              : !gate.allowed
+                ? t({
+                    id: "officeAddin.word.selection.otherDocument",
+                    message:
+                      "This answer was written for a passage in another document, so it cannot be replaced here.",
+                  })
+                : selection && !rewritable
+                  ? wordSelectionReasonText(selection.reasonCode)
+                  : replacement && "refused" in replacement
+                    ? resultText(
+                        {
+                          status: "refused",
+                          code: replacement.refused,
+                          settled: Promise.resolve(),
+                        },
+                        false,
+                      )
+                    : undefined));
   const completed =
     review.status === "done" ||
     review.status === "denied" ||
     review.status === "reverted";
-  const collapsed = completed && !review.detailsExpanded && !review.revertStale;
+  const collapsed =
+    completed &&
+    !review.detailsExpanded &&
+    !review.revertStale &&
+    !review.revertFailed;
   const canReplace = gate.allowed && idle && offeredActions.length > 0;
   const showTarget = () =>
     show(() =>

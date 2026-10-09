@@ -64,12 +64,4 @@ describe("WordWriteProvider operation ceiling", () => {
     });
     expect(host.operationInProgress).toBe(false);
   });
-
-  it("releases at once when another document opens", () => {
-    const view = render(providerFor("doc"));
-    holdWith(new Promise<void>(() => {}));
-    view.rerender(providerFor("other-doc"));
-    expect(host.operationInProgress).toBe(false);
-    expect(host.heldOperationOwner).toBeNull();
-  });
 });

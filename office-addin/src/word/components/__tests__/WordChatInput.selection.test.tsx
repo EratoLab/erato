@@ -286,7 +286,7 @@ describe("WordChatInput with a Word selection", () => {
     });
     expect(await result).toBeNull();
     expect(screen.getByRole("alert").textContent).toBe(
-      "Erato could not read your selection in Word. Your message was not sent.",
+      "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
     );
     act(() => prepare.onAbandoned?.());
     expect(staged.at(-1)).toBeNull();

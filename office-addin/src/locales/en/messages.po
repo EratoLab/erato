@@ -4128,7 +4128,7 @@ msgstr "Preparing rewrite…"
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
-msgstr "Erato could not read your selection in Word. Your message was not sent."
+msgstr "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4207,8 +4207,18 @@ msgstr "Restoring the passage…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertNotRun"
+msgstr "Word did not accept the change. The passage was not restored; try Undo again."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertStale"
 msgstr "The passage changed after it was replaced. Undo was not run because it would remove later edits."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTimedOut"
+msgstr "Word did not answer in time. The passage was not restored; try Undo again."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

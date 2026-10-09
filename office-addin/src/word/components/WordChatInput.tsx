@@ -481,7 +481,7 @@ export function WordChatInput({
             {t({
               id: "officeAddin.word.selection.readFailed",
               message:
-                "Erato could not read your selection in Word. Your message was not sent.",
+                "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
             })}
           </Alert>
         </div>

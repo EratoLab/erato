@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -145,8 +144,6 @@ export function WordWriteProvider({
     },
     [endOperation],
   );
-  // Another document cannot receive the late write.
-  useEffect(() => releaseHoldRef.current?.(), [documentIdentity]);
   const invalidateLocations = useCallback(
     () => setLocationGeneration((value) => value + 1),
     [],

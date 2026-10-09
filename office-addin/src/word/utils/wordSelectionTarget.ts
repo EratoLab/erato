@@ -80,6 +80,9 @@ export function queueParagraphSpanChecks(
   parent.load("id");
   const fields = paragraph.fields;
   fields.load("items/code");
+  // Includes a revision of the paragraph mark, which the web's paragraph OOXML does not show.
+  const revisions = paragraph.getTrackedChanges();
+  revisions.load("items/type");
   return () => ({
     ooxml: ooxml.value,
     objectHazards: {
@@ -87,8 +90,43 @@ export function queueParagraphSpanChecks(
         ? { contentControl: true }
         : {}),
       ...(fields.items.length > 0 ? { field: true } : {}),
+      ...(revisions.items.length > 0 ? { trackedChange: true } : {}),
     },
   });
+}
+
+/** The sections wordParagraphEndsSection reads, loaded by the caller's next sync. */
+export function queueWordSections(
+  context: Word.RequestContext,
+): Word.SectionCollection {
+  const sections = context.document.sections;
+  sections.load("items");
+  return sections;
+}
+
+/**
+ * True when the paragraph ends a section other than the last, so its mark holds the section break:
+ * an Undo, which restores the paragraph from its OOXML, could move or drop it. Word for Mac's
+ * paragraph OOXML leaves that sectPr out, so it is found through the sections instead. Only a
+ * document with several sections needs another sync.
+ */
+export async function wordParagraphEndsSection(
+  context: Word.RequestContext,
+  sections: Word.SectionCollection,
+  paragraph: Word.Paragraph,
+): Promise<boolean> {
+  if (sections.items.length < 2) return false;
+  const whole = paragraph.getRange("Whole");
+  const relations = sections.items
+    .slice(0, -1)
+    .map((section) =>
+      section.body.paragraphs
+        .getLast()
+        .getRange("Whole")
+        .compareLocationWith(whole),
+    );
+  await context.sync();
+  return relations.some((relation) => relation.value === "Equal");
 }
 
 export interface WordParagraphSpanEvaluation {

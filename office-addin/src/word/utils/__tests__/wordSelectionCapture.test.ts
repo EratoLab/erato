@@ -525,6 +525,23 @@ describe.each(HOSTS)(
       });
     });
 
+    it("keeps a paragraph that ends a section context only, and the rest of the body rewritable", async () => {
+      const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        host: flavour,
+        sectionBreaks: ["MP1"],
+      });
+      host.select({ p: "MP1" });
+      expect(
+        await captureWordSelection("user", 15_000, PARAGRAPHS),
+      ).toMatchObject({
+        value: { role: "context_only", reasonCode: "special_character" },
+      });
+      host.select({ p: "PL1" });
+      expect(
+        await captureWordSelection("user", 15_000, PARAGRAPHS),
+      ).toMatchObject({ value: { role: "rewrite", story: "main" } });
+    });
+
     it("reads no OOXML for a shape that is not enabled", async () => {
       const { host, selection } = await capture({
         p: "PL1",

@@ -281,6 +281,19 @@ const SPAN_PROPERTIES: readonly WordSelectionSpanProperty[] = [
 ];
 
 /**
+ * The paragraph mark: a tracked insertion, deletion or format change of it (a paragraph split or
+ * joined under Track Changes) is a revision a rewrite cannot settle, and a section break on it
+ * would go wherever an Undo restores the paragraph. The web's single-paragraph OOXML has no pPr,
+ * so the object model is checked as well.
+ */
+function scanParagraphMark(pPr: Element, hazards: WordSelectionHazards): void {
+  const has = (name: string) => pPr.getElementsByTagNameNS(W, name).length > 0;
+  if (["ins", "del", "rPrChange", "pPrChange"].some(has))
+    hazards.trackedChange = true;
+  if (has("sectPr")) hazards.breakOrSymbol = true;
+}
+
+/**
  * Flags every element of the span's paragraphs that is not plain content. Paragraph and run
  * properties are read separately; a known structure gets its own hazard, and anything unknown,
  * including other namespaces, counts as content the rewrite would lose.
@@ -290,14 +303,11 @@ function scanStructure(body: Element, hazards: WordSelectionHazards): void {
   const visit = (element: Element) => {
     for (const child of Array.from(element.children)) {
       const name = child.localName;
-      if (child.namespaceURI === W && (name === "pPr" || name === "rPr")) {
-        if (
-          name === "pPr" &&
-          child.getElementsByTagNameNS(W, "pPrChange").length
-        )
-          hazards.trackedChange = true;
+      if (child.namespaceURI === W && name === "pPr") {
+        scanParagraphMark(child, hazards);
         continue;
       }
+      if (child.namespaceURI === W && name === "rPr") continue;
       if (child.namespaceURI === W && name === "bookmarkStart") {
         const id = attr(child, "id") ?? "";
         const bookmark = attr(child, "name") ?? "";

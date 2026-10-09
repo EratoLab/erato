@@ -12,7 +12,9 @@ import {
   checkTargetVerification,
   proveWordSelectionTarget,
   queueTargetVerification,
+  queueWordSections,
   readWordStory,
+  wordParagraphEndsSection,
 } from "./wordSelectionTarget";
 
 import type { WordApplyStage } from "./wordApplyProgress";
@@ -74,8 +76,8 @@ interface Written {
   backups: string[];
 }
 
-/** Desktop's getText keeps the paragraph or cell mark the written line lacks. */
-const withoutMark = (text: string) => text.replace(/[\r\t\u0007]$/u, "");
+/** Desktop's getText keeps the paragraph mark the written line lacks; Replace never writes a cell. */
+const withoutMark = (text: string) => text.replace(/\r$/, "");
 
 function setFont(range: Word.Range, font: WordSelectionFont): void {
   const target = range.font as unknown as Record<string, unknown>;
@@ -155,9 +157,14 @@ export async function replaceWordSelection(args: {
     Written | { refused: WordSelectionRefusal } | null
   >(
     async (context, guard) => {
+      const sections = queueWordSections(context);
       const proof = await proveWordSelectionTarget(context, selection);
       if ("refused" in proof)
         return { refused: proof.refused as WordSelectionRefusal };
+      // A section break may have been added after Send; the final read below cannot see it.
+      for (const paragraph of proof.paragraphs)
+        if (await wordParagraphEndsSection(context, sections, paragraph))
+          return { refused: "UNSUPPORTED_CONTENT" };
       const verify = queueTargetVerification(context, proof.paragraphs);
       await context.sync();
       const check = checkTargetVerification(selection, verify(), support);
@@ -254,19 +261,32 @@ export async function revertWordSelection(
   backup: WordSelectionBackup,
   written: WordSelectionWritten,
 ): Promise<WordSelectionRevertResult> {
-  const run = await runWordGuarded<{ position: number } | "stale" | "tracking">(
+  const run = await runWordGuarded<
+    | { position: number; paragraphs: number; sections: number }
+    | "stale"
+    | "tracking"
+  >(
     async (context, guard) => {
       context.document.load("changeTrackingMode");
+      const sections = queueWordSections(context);
       const story = await readWordStory(context);
       if (context.document.changeTrackingMode !== "Off") return "tracking";
       const resolved = resolveWordParagraphs(written.anchor, story.entries);
       if ("refused" in resolved) return "stale";
       const position = resolved.positions[0];
       if (story.rangeTexts[position] !== written.rangeTexts[0]) return "stale";
+      if (
+        await wordParagraphEndsSection(context, sections, story.items[position])
+      )
+        return "stale";
       guard.beforeWrite();
       story.items[position].insertOoxml(backup.ooxml, "Replace");
       await context.sync();
-      return { position };
+      return {
+        position,
+        paragraphs: story.items.length,
+        sections: sections.items.length,
+      };
     },
     { timeoutMs: WORD_REVERT_SELECTION_TIMEOUT_MS },
   );
@@ -288,15 +308,24 @@ export async function revertWordSelection(
   if (value === "stale" || value === "tracking")
     return { status: value, timedOut, settled };
   const check = await runWordGuarded(
-    async (context) => readWordStory(context),
+    async (context) => {
+      const sections = context.document.sections;
+      sections.load("items");
+      const story = await readWordStory(context);
+      return { story, sections: sections.items.length };
+    },
     { timeoutMs: WORD_REVERT_SELECTION_TIMEOUT_MS },
   );
+  // A restore that added a paragraph or a section, as insertOoxml can at the end of a body or a
+  // section, did not give the paragraph back as it was.
+  const restored =
+    check.outcome === "ok" &&
+    !!check.value &&
+    check.value.story.rangeTexts[value.position] === backup.rangeText &&
+    check.value.story.items.length === value.paragraphs &&
+    check.value.sections === value.sections;
   return {
-    status:
-      check.outcome === "ok" &&
-      check.value?.rangeTexts[value.position] === backup.rangeText
-        ? "reverted"
-        : "unverified",
+    status: restored ? "reverted" : "unverified",
     timedOut,
     settled,
   };

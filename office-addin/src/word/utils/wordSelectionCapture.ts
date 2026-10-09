@@ -12,7 +12,9 @@ import { wordSelectionSupport } from "./wordSelectionSupport";
 import {
   evaluateParagraphSpan,
   queueParagraphSpanChecks,
+  queueWordSections,
   readWordStory,
+  wordParagraphEndsSection,
 } from "./wordSelectionTarget";
 
 import type { WordParagraphEntry } from "./wordParagraphResolver";
@@ -84,6 +86,8 @@ async function storyTypeOf(
 ): Promise<string> {
   let current = body;
   for (;;) {
+    // Word for Mac reports body text as a Section body once a document has a second section.
+    if (current.type === "Section") return "MainDoc";
     if (current.type !== "TableCell") return current.type;
     const parent = current.parentBodyOrNullObject;
     parent.load("type");
@@ -574,7 +578,13 @@ export async function captureWordSelection(
           enabledShapes,
         );
       const checks = queueParagraphSpanChecks(read.paragraphs[0]);
+      const sections = queueWordSections(context);
       await context.sync();
+      const endsSection = await wordParagraphEndsSection(
+        context,
+        sections,
+        read.paragraphs[0],
+      );
       const spanCheck = evaluateParagraphSpan(
         checks(),
         read.paragraphs[0].style,
@@ -583,7 +593,9 @@ export async function captureWordSelection(
       return buildWordSelectionSnapshot(
         {
           ...facts,
-          hazards: spanCheck.hazards,
+          hazards: endsSection
+            ? { ...spanCheck.hazards, breakOrSymbol: true }
+            : spanCheck.hazards,
           styleFontResolved: spanCheck.styleFontResolved,
           spanChecked: true,
         },

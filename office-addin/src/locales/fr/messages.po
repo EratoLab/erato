@@ -4128,7 +4128,7 @@ msgstr "Préparation de la réécriture…"
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
-msgstr "Erato n'a pas pu lire votre sélection dans Word. Votre message n'a pas été envoyé."
+msgstr "Erato n'a pas pu lire votre sélection dans Word, votre message n'a donc pas été envoyé. Renvoyez-le, ou ignorez la sélection pour l'envoyer sans elle."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4207,8 +4207,18 @@ msgstr "Restauration du passage…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertNotRun"
+msgstr "Word n'a pas accepté la modification. Le passage n'a pas été restauré ; réessayez d'annuler."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertStale"
 msgstr "Le passage a changé après le remplacement. L'annulation n'a pas été exécutée, car elle supprimerait des modifications ultérieures."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTimedOut"
+msgstr "Word n'a pas répondu à temps. Le passage n'a pas été restauré ; réessayez d'annuler."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

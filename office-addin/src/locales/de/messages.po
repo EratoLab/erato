@@ -4128,7 +4128,7 @@ msgstr "Umformulierung wird vorbereitet…"
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
-msgstr "Erato konnte Ihre Auswahl in Word nicht lesen. Ihre Nachricht wurde nicht gesendet."
+msgstr "Erato konnte Ihre Auswahl in Word nicht lesen, daher wurde Ihre Nachricht nicht gesendet. Senden Sie sie erneut oder verwerfen Sie die Auswahl, um ohne sie zu senden."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4207,8 +4207,18 @@ msgstr "Passage wird wiederhergestellt…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertNotRun"
+msgstr "Word hat die Änderung nicht angenommen. Die Passage wurde nicht wiederhergestellt; versuchen Sie Rückgängig erneut."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertStale"
 msgstr "Die Passage hat sich nach dem Ersetzen geändert. Rückgängig wurde nicht ausgeführt, weil spätere Änderungen verloren gingen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertTimedOut"
+msgstr "Word hat nicht rechtzeitig geantwortet. Die Passage wurde nicht wiederhergestellt; versuchen Sie Rückgängig erneut."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

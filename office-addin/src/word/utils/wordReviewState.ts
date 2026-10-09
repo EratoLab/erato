@@ -41,6 +41,8 @@ export interface WordReviewState {
   /** Paragraph edits: why the last Revert was refused. `tracking` stays the mode at Apply, which
    * decides whether Word holds revisions of this batch to reject. */
   revertStale?: "tracking" | "changed";
+  /** A selection Undo that wrote nothing; its backup stays so Undo can be tried again. */
+  revertFailed?: "failed" | "timed-out";
   /** A selection Replace: its result, which decides the card's message, locator and Undo. */
   selection?: WordReplaceSelectionResult;
 }

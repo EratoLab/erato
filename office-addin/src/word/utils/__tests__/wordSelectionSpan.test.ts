@@ -178,4 +178,31 @@ describe("scanWordSelectionSpan on content it does not know", () => {
       breakOrSymbol: true,
     });
   });
+
+  it.each([
+    ["an inserted", `<w:rPr><w:ins w:id="3" w:author="A"/></w:rPr>`],
+    ["a deleted", `<w:rPr><w:del w:id="3" w:author="A"/></w:rPr>`],
+    [
+      "a reformatted",
+      `<w:rPr><w:b/><w:rPrChange w:id="3" w:author="A"><w:rPr/></w:rPrChange></w:rPr>`,
+    ],
+    [
+      "a restyled",
+      `<w:pStyle w:val="Heading1"/><w:pPrChange w:id="3" w:author="A"><w:pPr/></w:pPrChange>`,
+    ],
+  ])("reports %s paragraph mark as a tracked change", (_, pPr) => {
+    expect(
+      scanWordSelectionSpan(
+        pkg(`<w:p><w:pPr>${pPr}</w:pPr>${run("Split")}</w:p>`),
+      ).hazards,
+    ).toEqual({ trackedChange: true });
+  });
+
+  it("keeps a paragraph that holds a section break context only", () => {
+    expect(
+      scanWordSelectionSpan(
+        pkg(`<w:p><w:pPr><w:sectPr/></w:pPr>${run("Last of a section")}</w:p>`),
+      ).hazards,
+    ).toEqual({ breakOrSymbol: true });
+  });
 });

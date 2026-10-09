@@ -122,6 +122,8 @@ export interface WordSelectionHostOptions {
   trackingMode?: MockTrackingMode;
   styles?: Readonly<Record<string, MockSelectionStyle>>;
   url?: string;
+  /** Body paragraph tags, in document order, whose mark ends a section. */
+  sectionBreaks?: readonly string[];
 }
 
 export interface MockRunSummary {
@@ -200,6 +202,8 @@ export interface WordSelectionHost {
   setParagraphStyle(target: MockSelectionTarget, style: string): void;
   format(target: MockSelectionTarget, run: MockSelectionRun): void;
   setTrackingMode(mode: MockTrackingMode): void;
+  /** Body paragraph tags, in document order, whose mark ends a section. */
+  setSectionBreaks(tags: readonly string[]): void;
   trackingMode(): MockTrackingMode;
   revisions(): MockRevision[];
   rejectAllRevisions(): void;
@@ -1018,9 +1022,11 @@ export function installWordSelectionHost(
     textbox: story("textbox", documentSpec.textBox),
     comment: story("comment", documentSpec.comments),
   };
+  let sectionBreaks = options.sectionBreaks ?? [];
   const storyType = (s: Story) =>
     ({
-      body: "MainDoc",
+      // Word for Mac reports body text as a Section body once a document has a second section.
+      body: flavour === "mac" && sectionBreaks.length ? "Section" : "MainDoc",
       header: "Header",
       footer: "Footer",
       footnote: web ? "NoteItem" : "Footnote",
@@ -3494,6 +3500,53 @@ export function installWordSelectionHost(
     nav(doc, "body", () =>
       makeBody(ctx, doc, () => ({ story: stories.body, cells: [] }), false),
     );
+    // A section that ends before the body does offers only its last paragraph; the last section's
+    // body is the main body.
+    nav(doc, "sections", () => {
+      const { list } = collection(
+        ctx,
+        doc,
+        "SectionCollection",
+        (): (Token | null)[] => [
+          ...sectionBreaks.map(
+            (tag) =>
+              stories.body.tokens[findParagraph(stories.body, { p: tag })],
+          ),
+          null,
+        ],
+        (end) => {
+          const section: Obj = {};
+          register(section, ctx, "Section", list);
+          nav(section, "body", () => {
+            if (!end)
+              return makeBody(
+                ctx,
+                section,
+                () => ({ story: stories.body, cells: [] }),
+                false,
+              );
+            const body: Obj = {};
+            register(body, ctx, "Body", section);
+            const paragraphs: Obj = {};
+            register(paragraphs, ctx, "ParagraphCollection", body);
+            paragraphs.getLast = () =>
+              makeParagraph(
+                ctx,
+                paragraphs,
+                "ParagraphCollection.getLast",
+                () => ({
+                  story: stories.body,
+                  mark: end,
+                }),
+              );
+            nav(body, "paragraphs", () => paragraphs);
+            return body;
+          });
+          return section;
+        },
+      );
+      return list;
+    });
     defineProps(doc, ctx, "Document", {
       changeTrackingMode: {
         get: () => trackingMode,
@@ -3945,6 +3998,9 @@ export function installWordSelectionHost(
     },
     setTrackingMode: (mode) => {
       trackingMode = mode;
+    },
+    setSectionBreaks: (tags) => {
+      sectionBreaks = tags;
     },
     trackingMode: () => trackingMode,
     revisions: () =>
