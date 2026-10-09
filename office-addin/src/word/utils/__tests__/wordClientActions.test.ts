@@ -32,12 +32,18 @@ beforeEach(() => {
 });
 
 describe("the Word client-action registry", () => {
-  it("holds the three v1 actions, each bound to its facet and fence", () => {
+  it("holds the v1 actions and the selection Replace, each bound to its facet and fence", () => {
     expect([...WORD_CLIENT_ACTIONS.keys()]).toEqual([
       "word.apply_document_plan",
       "word.apply_edits",
       "word.insert_at_cursor",
+      "word.replace_selection",
     ]);
+    expect(WORD_CLIENT_ACTIONS.get("word.replace_selection")).toMatchObject({
+      facetIds: ["word_selection"],
+      fenceLanguage: "erato-word-replace",
+      promptScope: "word-selection",
+    });
     expect(WORD_CLIENT_ACTIONS.get("word.apply_edits")).toMatchObject({
       facetIds: ["word_document_review", "word_document_authoring"],
       fenceLanguage: WORD_EDITS_FENCE,
@@ -66,7 +72,8 @@ describe("the Word client-action registry", () => {
         "word.apply_ooxml_package",
       ]),
     ).toEqual([]);
-    expect(isImplementedClientAction("word.replace_selection")).toBe(false);
+    expect(isImplementedClientAction("word.replace_selection")).toBe(true);
+    expect(isImplementedClientAction("word.add_comment")).toBe(false);
     expect(isImplementedClientAction("outlook.reply")).toBe(false);
   });
 
@@ -109,7 +116,7 @@ describe("offerable actions", () => {
   });
 
   it("ignores an advertised action that is not in the registry", () => {
-    expect(offerableWordClientActions(["word.replace_selection"])).toEqual([]);
+    expect(offerableWordClientActions(["word.add_comment"])).toEqual([]);
   });
 
   it("additionally gates on the facet the registry entry names", () => {

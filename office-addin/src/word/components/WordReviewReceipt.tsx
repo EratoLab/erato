@@ -22,6 +22,16 @@ export const wordInsertedText = () =>
   });
 export const wordUndoneText = (title: string) =>
   t({ id: "officeAddin.word.planReceipt.undone", message: `Undone: ${title}` });
+export const wordReplacedText = () =>
+  t({
+    id: "officeAddin.word.selection.replaced",
+    message: "Replaced the selected passage.",
+  });
+export const wordReplaceUnchangedText = () =>
+  t({
+    id: "officeAddin.word.selection.unchanged",
+    message: "The proposal matches the passage. Nothing was replaced.",
+  });
 export const wordAutomaticText = () =>
   t({
     id: "officeAddin.word.review.automatic",
@@ -36,7 +46,7 @@ export function WordReviewReceipt({
   note = "",
 }: {
   review: WordReviewState;
-  kind: "edits" | "insert" | "plan";
+  kind: "edits" | "insert" | "plan" | "selection";
   /** The card's own title, so the receipt names what was changed or undone. */
   title?: string;
   wholeDocument?: boolean;
@@ -75,9 +85,13 @@ export function WordReviewReceipt({
                   })
                 : kind === "insert"
                   ? wordInsertedText()
-                  : wordEditsAppliedText(
-                      wordEditCounts(review.outcomes).applied,
-                    )}
+                  : kind === "selection"
+                    ? review.selection?.status === "unchanged"
+                      ? wordReplaceUnchangedText()
+                      : wordReplacedText()
+                    : wordEditsAppliedText(
+                        wordEditCounts(review.outcomes).applied,
+                      )}
       </strong>
       {outcome === "verified" && (
         <span className="word-review__hint">{wordPlanVerifiedText()}</span>

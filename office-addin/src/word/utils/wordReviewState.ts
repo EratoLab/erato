@@ -4,6 +4,7 @@ import type {
   WordDocumentDiagnostic,
 } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
+import type { WordReplaceSelectionResult } from "./wordReplaceSelection";
 import type { WordReviewAnchor, WordTrackingMode } from "./wordReviewLocation";
 import type { WordWriteBlockReason } from "./wordWriteGate";
 import type {
@@ -40,6 +41,8 @@ export interface WordReviewState {
   /** Paragraph edits: why the last Revert was refused. `tracking` stays the mode at Apply, which
    * decides whether Word holds revisions of this batch to reject. */
   revertStale?: "tracking" | "changed";
+  /** A selection Replace: its result, which decides the card's message, locator and Undo. */
+  selection?: WordReplaceSelectionResult;
 }
 export const EMPTY_WORD_REVIEW: WordReviewState = {
   status: "idle",
