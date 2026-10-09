@@ -10,6 +10,7 @@ import {
 } from "../../../test/mocks/word/selectionHost";
 import {
   markProgrammaticWordSelection,
+  PROGRAMMATIC_SELECTION_WINDOW_MS,
   resetProgrammaticWordSelectionForTests,
 } from "../../utils/wordProgrammaticSelection";
 import { WORD_SELECTION_DESCRIBE_TIMEOUT_MS } from "../../utils/wordSelectionCapture";
@@ -187,6 +188,52 @@ describe("useWordSelection", () => {
       preview: { text: "zulu" },
       origin: "user",
       armed: true,
+    });
+  });
+
+  it("disarms the moment Erato marks its own select, before Word moves the selection", async () => {
+    mount();
+    await settle();
+    act(() => {
+      markProgrammaticWordSelection();
+    });
+    expect(state()).toMatchObject({
+      preview: { text: "lima mike" },
+      armed: false,
+      pending: false,
+    });
+  });
+
+  it("stays unarmed when the read after Erato's select fails", async () => {
+    mount();
+    await settle();
+    host.hangSync();
+    act(() => {
+      markProgrammaticWordSelection();
+    });
+    act(() => host.select({ p: "MP1", text: "victor" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        WORD_SELECTION_DEBOUNCE_MS + WORD_SELECTION_DESCRIBE_TIMEOUT_MS,
+      );
+    });
+    expect(state()).toMatchObject({ armed: false, pending: false });
+  });
+
+  it("reads Erato's selection even when its event never comes", async () => {
+    mount();
+    await settle();
+    act(() => {
+      markProgrammaticWordSelection();
+    });
+    host.select({ p: "MP1", text: "victor" }, { event: false });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROGRAMMATIC_SELECTION_WINDOW_MS);
+    });
+    expect(state()).toMatchObject({
+      preview: { text: "victor" },
+      origin: "erato",
+      armed: false,
     });
   });
 

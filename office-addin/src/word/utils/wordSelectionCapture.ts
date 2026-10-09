@@ -57,6 +57,8 @@ export function currentWordSelectionSupport(): WordSelectionSupport {
 interface SelectionRead {
   selection: Word.Range;
   text: string;
+  /** getReviewedText("Current"), read in the same sync where WordApi 1.4 is available. */
+  reviewedText?: string;
   isEmpty: boolean;
   storyType: string;
   objectOnly: boolean;
@@ -86,9 +88,13 @@ async function storyTypeOf(
 async function readSelection(
   context: Word.RequestContext,
   paragraphProperties: string,
+  withReviewedText = false,
 ): Promise<SelectionRead> {
   const selection = context.document.getSelection();
   selection.load("text,isEmpty");
+  const reviewed = withReviewedText
+    ? selection.getReviewedText("Current")
+    : null;
   const body = selection.parentBody;
   body.load("type");
   const paragraphs = selection.paragraphs;
@@ -99,6 +105,7 @@ async function readSelection(
   return {
     selection,
     text: selection.text,
+    ...(reviewed ? { reviewedText: reviewed.value } : {}),
     isEmpty: selection.isEmpty,
     storyType: await storyTypeOf(context, body),
     // A selected picture reads as "" on desktop and " " on the web (SV2:133).
@@ -259,7 +266,8 @@ function lightFacts(
     ...baseFacts(read, tables),
     paragraphs: read.paragraphs.map((p, i) => ({
       id: null,
-      text: p.text,
+      // Without getText, paragraph.text minus the web's comment marks stands in for the identity text.
+      text: p.text.replace(/\u0005/g, ""),
       rangeText: p.text,
       index: -1,
       styleName: "",
@@ -268,6 +276,9 @@ function lightFacts(
     })),
     startOffset: span?.start ?? -1,
     endOffset: span?.end ?? -1,
+    ...(read.reviewedText === undefined
+      ? {}
+      : { reviewedText: read.reviewedText }),
   };
 }
 
@@ -307,6 +318,7 @@ export async function describeWordSelection(
       const read = await readSelection(
         context,
         "items/text,items/tableNestingLevel",
+        support.trackingMode,
       );
       const tables = queueTableFacts(read);
       if (tables) await context.sync();
@@ -405,20 +417,12 @@ export async function captureWordSelection(
         const read = await readSelection(
           context,
           "items/text,items/tableNestingLevel",
+          support.trackingMode,
         );
         const tables = queueTableFacts(read);
-        const reviewed = support.trackingMode
-          ? read.selection.getReviewedText("Current")
-          : null;
-        if (tables || reviewed) await context.sync();
+        if (tables) await context.sync();
         return buildWordSelectionSnapshot(
-          {
-            ...baseFacts(read, tables?.() ?? null),
-            paragraphs: [],
-            startOffset: -1,
-            endOffset: -1,
-            ...(reviewed ? { reviewedText: reviewed.value } : {}),
-          },
+          lightFacts(read, tables?.() ?? null),
           support,
           origin,
         );

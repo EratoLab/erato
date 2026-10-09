@@ -272,11 +272,26 @@ describe("captureWordSelection across requirement levels", () => {
       role: "context_only",
       reasonCode: "host_unsupported",
       selectedText: "lima mike",
-      paragraphs: [],
       anchor: null,
     });
+    expect(selection!.paragraphs).toEqual([
+      expect.objectContaining({ id: null, index: -1 }),
+    ]);
     expect(host.calls()).not.toContain("Paragraph.getText");
     expect(host.calls()).not.toContain("Range.getReviewedText");
+  });
+
+  it("keeps a table cell on LTSC 2021, which cannot rewrite it", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+      host: "pc",
+      requirements: "ltsc2021",
+    });
+    host.select({ table: 0, cell: [0, 1] });
+    expect(await captured()).toMatchObject({
+      reasonCode: "host_unsupported",
+      shape: "table_cell",
+      selectedText: "CB1 Cell B1 text",
+    });
   });
 
   it("places LTSC 2024's paragraphs, which have no IDs", async () => {
@@ -329,6 +344,35 @@ describe("describeWordSelection", () => {
       });
       expect(host.syncCount()).toBe(1);
       expect(host.calls()).not.toContain("Paragraph.getText");
+    },
+  );
+
+  it.each(HOSTS)(
+    "shows on %s the text Send sends, without comment marks or tracked deletions",
+    async (flavour) => {
+      const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        host: flavour,
+      });
+      const shown = async (target: MockSelectionTarget) => {
+        host.select(target);
+        const read = await describeWordSelection();
+        return read.status === "ok" ? read.value?.text : undefined;
+      };
+      expect(
+        await shown({
+          p: "CM1",
+          text: "anchor",
+          to: { p: "CM1", text: "after" },
+        }),
+      ).toBe("anchor phrase after");
+      expect(await shown({ p: "CM1", text: "Commented" })).toBe("Commented");
+      expect(
+        await shown({
+          p: "TC1",
+          text: "kept",
+          to: { p: "TC1", text: "end words" },
+        }),
+      ).toBe("kept end words");
     },
   );
 

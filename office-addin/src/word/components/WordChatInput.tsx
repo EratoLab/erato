@@ -124,12 +124,14 @@ export function WordChatInput({
   // Until Replace can write a shape, every selection is context only, which an included document keeps out.
   const selectionMayTakeSlot =
     !chipEnabled || WORD_SELECTION_REPLACE_SHAPES.size > 0;
-  // A read still pending after the user's last selection change is read at Send as well.
+  // A selection the user changed but whose read is still pending is read at Send as well; the
+  // dismissal still refers to the previous one then.
   const selectionDue =
     selectionAvailable &&
-    !selectionDismissal.dismissed &&
     selectionMayTakeSlot &&
-    ((liveSelection.preview !== null && liveSelection.armed) ||
+    ((liveSelection.preview !== null &&
+      liveSelection.armed &&
+      !selectionDismissal.dismissed) ||
       liveSelection.pending);
   const [selectionReadFailed, setSelectionReadFailed] = useState(false);
   const { preview, capture } = useWordDocumentSource({

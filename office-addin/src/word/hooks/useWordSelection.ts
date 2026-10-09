@@ -2,7 +2,11 @@ import { useEffect } from "react";
 
 import { EMPTY_WORD_SELECTION, wordSelectionStore } from "./wordSelectionStore";
 import { subscribeToOfficeSelectionChanged } from "../../hooks/officeSelectionChangedBroker";
-import { consumeProgrammaticSelectionEvent } from "../utils/wordProgrammaticSelection";
+import {
+  consumeProgrammaticSelectionEvent,
+  onProgrammaticWordSelection,
+  PROGRAMMATIC_SELECTION_WINDOW_MS,
+} from "../utils/wordProgrammaticSelection";
 import { describeWordSelection } from "../utils/wordSelectionCapture";
 
 import type { WordSelectionOrigin } from "../utils/wordSelectionAnchor";
@@ -35,7 +39,11 @@ export function useWordSelection(
       if (!active || readSequence !== sequence) return;
       const current = wordSelectionStore.getSnapshot();
       if (result.status === "failed") {
-        publish({ ...current, pending: false });
+        publish({
+          ...current,
+          armed: origin === "user" && current.armed,
+          pending: false,
+        });
         return;
       }
       publish({
@@ -73,6 +81,18 @@ export function useWordSelection(
         publish(EMPTY_WORD_SELECTION);
       },
     });
+    // Erato is about to move the selection: until its event is read, Send must not take the passage
+    // Word then holds for the user's. The read also runs if the event never comes.
+    const stopMarks = onProgrammaticWordSelection(() => {
+      if (!active) return;
+      publish({
+        ...wordSelectionStore.getSnapshot(),
+        origin: "erato",
+        armed: false,
+        pending: false,
+      });
+      schedule("erato", PROGRAMMATIC_SELECTION_WINDOW_MS);
+    });
     const stopRefresh = wordSelectionStore.subscribeRefresh(({ rearm }) => {
       if (active)
         schedule(rearm ? "user" : wordSelectionStore.getSnapshot().origin, 0);
@@ -83,6 +103,7 @@ export function useWordSelection(
       active = false;
       clearTimeout(timer);
       unsubscribe();
+      stopMarks();
       stopRefresh();
       publish(EMPTY_WORD_SELECTION);
     };

@@ -144,13 +144,13 @@ export interface WordSelectionFacts {
   isEmpty: boolean;
   /** Word.BodyType of the story holding the selection, outside any table ("MainDoc", "Header", ...). */
   storyType: string;
-  /** Word's selection.text; the only text read on a host that cannot rewrite. */
+  /** Word's selection.text. */
   selectionText: string;
   /** The selection is a picture or a shape, without text. */
   objectOnly: boolean;
   /** "whole" when every table the selection touches is covered completely. */
   tables: "none" | "whole" | "partial";
-  /** In story order; empty on a host that cannot rewrite. */
+  /** In story order; ids and identity texts are unknown on a host that cannot rewrite. */
   paragraphs: readonly WordSelectionParagraphFacts[];
   /** Into the first paragraph's rangeText. */
   startOffset: number;
@@ -502,7 +502,8 @@ function modelText(facts: WordSelectionFacts, analysis: Analysis): string {
     removeCommentMarks(facts.reviewedText ?? "")
       .replace(/\r\n?/g, "\n")
       .replace(/\n+$/, "");
-  if (!analysis.parts)
+  // Unplaced in the body, the identity texts are unproven, so Word's reviewed text is the better read.
+  if (!analysis.parts || (!facts.anchor && facts.reviewedText !== undefined))
     return facts.reviewedText === undefined
       ? removeCommentMarks(analysis.text)
       : reviewed();

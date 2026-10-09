@@ -302,6 +302,26 @@ describe("WordChatInput with a Word selection", () => {
     expect(result?.actionFacet?.args?.selected_text).toBe("victor");
   });
 
+  it("never sends the passage Erato is about to select as the user's", async () => {
+    await renderInput();
+    act(() => {
+      markProgrammaticWordSelection();
+    });
+    word.select({ p: "MP1", text: "victor" }, { event: false });
+    send();
+    expect(lastSend()[11]).toBeUndefined();
+    expect(lastSend()[4]).toBeUndefined();
+  });
+
+  it("reads a new selection at Send while the old one is still dismissed", async () => {
+    await renderInput();
+    fireEvent.click(screen.getByLabelText("Dismiss selection"));
+    act(() => word.select({ p: "MP2", text: "xray" }));
+    send();
+    const result = await prepared();
+    expect(result?.actionFacet?.args?.selected_text).toBe("xray");
+  });
+
   it("keeps a dismissal while a new chat gets its ID, and re-arms in another chat", async () => {
     const view = await renderInput(null);
     fireEvent.click(screen.getByLabelText("Dismiss selection"));
