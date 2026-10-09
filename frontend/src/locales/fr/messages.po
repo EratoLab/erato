@@ -1634,18 +1634,18 @@ msgstr "Déposez pour téléverser"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputTokenUsage.tsx
-msgid "chat.files.full_included"
-msgstr "Contenu intégral inclus"
+#~ msgid "chat.files.full_included"
+#~ msgstr "Contenu intégral inclus"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputTokenUsage.tsx
-msgid "chat.files.preview_included"
-msgstr "Aperçu inclus — une partie du contenu est omise"
+#~ msgid "chat.files.preview_included"
+#~ msgstr "Aperçu inclus — une partie du contenu est omise"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputTokenUsage.tsx
-msgid "chat.files.reference_only"
-msgstr "Référence uniquement — le contenu du fichier est omis"
+#~ msgid "chat.files.reference_only"
+#~ msgstr "Référence uniquement — le contenu du fichier est omis"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
