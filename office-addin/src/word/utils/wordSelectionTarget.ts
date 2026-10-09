@@ -7,16 +7,22 @@ import {
 import { runWordGuarded } from "./wordRunGuard";
 import {
   resolveWordSelection,
+  WORD_SELECTION_REPLACE_SHAPES,
   wordSelectionHazardReason,
+  wordSelectionPartOffsets,
+  wordSelectionParts,
 } from "./wordSelectionAnchor";
 import {
   WORD_SELECTION_TOGGLE_PROPERTIES,
+  wordSelectionEdgeOnly,
   wordSelectionTargetFormat,
 } from "./wordSelectionFormatting";
+import { buildWordSelectionRanges } from "./wordSelectionRange";
 import {
   scanWordSelectionSpan,
   wordSelectionStyleToggles,
 } from "./wordSelectionSpan";
+import { currentWordSelectionSupport } from "./wordSelectionSupport";
 
 import type {
   WordParagraphAnchor,
@@ -25,9 +31,12 @@ import type {
 import type {
   WordSelectionHazards,
   WordSelectionReplaceCode,
+  WordSelectionShape,
   WordSelectionSnapshot,
 } from "./wordSelectionAnchor";
 import type { WordSelectionTargetFormat } from "./wordSelectionFormatting";
+import type { WordSelectionRangePart } from "./wordSelectionRange";
+import type { WordSelectionSpanSlice } from "./wordSelectionSpan";
 import type { WordSelectionSupport } from "./wordSelectionSupport";
 
 export const WORD_SELECTION_SHOW_TIMEOUT_MS = 10_000;
@@ -136,18 +145,24 @@ export interface WordParagraphSpanEvaluation {
   format: WordSelectionTargetFormat | null;
 }
 
-/** The rewrite checks of one whole paragraph and the font its rewrite gets. */
+/**
+ * The rewrite checks of one paragraph and the font its rewrite gets. The hazards always cover the
+ * whole paragraph; with a slice, the font comes from the slice and the runs next to it.
+ */
 export function evaluateParagraphSpan(
   checks: WordParagraphSpanChecks,
   styleName: string,
   support: WordSelectionSupport,
+  slice?: WordSelectionSpanSlice,
 ): WordParagraphSpanEvaluation {
-  const scan = scanWordSelectionSpan(checks.ooxml);
+  const scan = scanWordSelectionSpan(checks.ooxml, slice);
   const hazards = { ...scan.hazards, ...checks.objectHazards };
-  const mixedToggle = WORD_SELECTION_TOGGLE_PROPERTIES.some(
-    (property) => scan.format[property]?.state === "mixed",
+  const needsStyle = WORD_SELECTION_TOGGLE_PROPERTIES.some(
+    (property) =>
+      scan.format[property]?.state === "mixed" ||
+      wordSelectionEdgeOnly(scan.format, scan.edges, property),
   );
-  const style = mixedToggle
+  const style = needsStyle
     ? wordSelectionStyleToggles(checks.ooxml, styleName)
     : {};
   if (!style || support.styleFontSource === null)
@@ -156,6 +171,7 @@ export function evaluateParagraphSpan(
     scan.format,
     style,
     support.bidiSetters,
+    scan.edges,
   );
   return {
     hazards: format.unresolved.length
@@ -167,18 +183,36 @@ export function evaluateParagraphSpan(
 }
 
 export type WordSelectionProof =
-  | { paragraphs: Word.Paragraph[]; positions: number[]; story: WordStoryRead }
+  | {
+      paragraphs: Word.Paragraph[];
+      positions: number[];
+      story: WordStoryRead;
+      /** Per covered paragraph, what a write targets. */
+      parts: WordSelectionRangePart[];
+    }
   | { refused: WordSelectionReplaceCode };
+
+/** The shapes whose target this proof can build. */
+const PROVABLE_SHAPES: ReadonlySet<WordSelectionShape> = new Set([
+  "paragraph",
+  "inline",
+]);
 
 /**
  * Finds the captured paragraphs again: the resolver over the live body, then their offset text.
- * Only whole paragraphs can be targeted, so no range is built inside one.
+ * A part of a paragraph is then pinpointed in it by Word's search (wordSelectionRange).
  */
 export async function proveWordSelectionTarget(
   context: Word.RequestContext,
   selection: WordSelectionSnapshot,
+  support: WordSelectionSupport = currentWordSelectionSupport(),
+  enabledShapes: ReadonlySet<WordSelectionShape> = WORD_SELECTION_REPLACE_SHAPES,
 ): Promise<WordSelectionProof> {
-  if (selection.shape !== "paragraph" || selection.paragraphs.length !== 1)
+  if (
+    !enabledShapes.has(selection.shape) ||
+    !PROVABLE_SHAPES.has(selection.shape) ||
+    selection.paragraphs.length !== 1
+  )
     return { refused: "UNSUPPORTED_CONTENT" };
   const story = await readWordStory(context);
   const resolved = resolveWordSelection(
@@ -187,10 +221,27 @@ export async function proveWordSelectionTarget(
     story.rangeTexts,
   );
   if ("refused" in resolved) return resolved;
+  const paragraphs = resolved.positions.map(
+    (position) => story.items[position],
+  );
+  const offsets = wordSelectionPartOffsets(selection);
+  const built = await buildWordSelectionRanges(
+    context,
+    paragraphs.map((paragraph, i) => ({
+      paragraph,
+      rangeText: selection.paragraphs[i].rangeText,
+      start: offsets[i].start,
+      end: offsets[i].end,
+      ...(i === 0 ? { occurrence: selection.occurrence } : {}),
+    })),
+    support,
+  );
+  if ("refused" in built) return built;
   return {
-    paragraphs: resolved.positions.map((position) => story.items[position]),
+    paragraphs,
     positions: resolved.positions,
     story,
+    parts: built.parts,
   };
 }
 
@@ -199,6 +250,9 @@ export interface WordTargetVerification {
     text: string;
     rangeText: string;
     style: string;
+    tableNestingLevel: number;
+    /** The built part range's text; null where the paragraph itself is the target. */
+    partText: string | null;
     checks: WordParagraphSpanChecks;
   }[];
   trackingMode: string;
@@ -210,22 +264,26 @@ export interface WordTargetVerification {
  */
 export function queueTargetVerification(
   context: Word.RequestContext,
-  paragraphs: readonly Word.Paragraph[],
+  parts: readonly WordSelectionRangePart[],
 ): () => WordTargetVerification {
   context.document.load("changeTrackingMode");
-  const queued = paragraphs.map((paragraph) => {
-    paragraph.load("text,style");
+  const queued = parts.map((part) => {
+    const { paragraph } = part;
+    paragraph.load("text,style,tableNestingLevel");
+    if (part.kind === "part") part.range.load("text");
     return {
-      paragraph,
+      part,
       text: paragraph.getText(WORD_SELECTION_TEXT_OPTIONS),
       checks: queueParagraphSpanChecks(paragraph),
     };
   });
   return () => ({
-    paragraphs: queued.map(({ paragraph, text, checks }) => ({
+    paragraphs: queued.map(({ part, text, checks }) => ({
       text: text.value,
-      rangeText: paragraph.text,
-      style: paragraph.style,
+      rangeText: part.paragraph.text,
+      style: part.paragraph.style,
+      tableNestingLevel: part.paragraph.tableNestingLevel,
+      partText: part.kind === "part" ? part.range.text : null,
       checks: checks(),
     })),
     trackingMode: String(context.document.changeTrackingMode),
@@ -255,15 +313,30 @@ export function checkTargetVerification(
     return (
       live.text === captured.text &&
       live.rangeText === captured.rangeText &&
-      live.style === captured.styleName
+      live.style === captured.styleName &&
+      live.tableNestingLevel === captured.tableNestingLevel
     );
   });
   if (!unchanged) return { refused: "TARGET_TEXT_MISMATCH" };
   if (trackingMode !== "Off" && !/^Track/.test(trackingMode))
     return { refused: "UNSUPPORTED_CONTENT" };
+  const offsets = wordSelectionPartOffsets(selection);
+  const expected = wordSelectionParts(selection);
+  if (
+    paragraphs.some(
+      (live, i) => !offsets[i].whole && live.partText !== expected[i],
+    )
+  )
+    return { refused: "TARGET_RANGE_UNPROVEN" };
   const formats: WordSelectionTargetFormat[] = [];
-  for (const live of paragraphs) {
-    const evaluated = evaluateParagraphSpan(live.checks, live.style, support);
+  for (const [i, live] of paragraphs.entries()) {
+    const { start, end, whole } = offsets[i];
+    const evaluated = evaluateParagraphSpan(
+      live.checks,
+      live.style,
+      support,
+      whole ? undefined : { start, end, rangeText: live.rangeText },
+    );
     if (
       wordSelectionHazardReason(evaluated.hazards, [live.text], support) ||
       !evaluated.styleFontResolved ||
@@ -286,15 +359,14 @@ export type WordSelectionShowResult =
   | "unavailable";
 
 async function showResolved(
-  resolve: (context: Word.RequestContext) => Promise<Word.Paragraph | null>,
+  resolve: (context: Word.RequestContext) => Promise<Word.Range | null>,
 ): Promise<WordSelectionShowResult> {
   const result = await runWordGuarded(
     async (context, guard) => {
-      const paragraph = await resolve(context);
-      if (!paragraph) return "changed" as const;
+      const range = await resolve(context);
+      if (!range) return "changed" as const;
       guard.beforeSelect();
-      // One paragraph's own Content range: the select Word for the web leaves unchanged (ERMAIN-932).
-      await selectWordRange(context, paragraph.getRange("Content"));
+      await selectWordRange(context, range);
       return "selected" as const;
     },
     { timeoutMs: WORD_SELECTION_SHOW_TIMEOUT_MS },
@@ -307,17 +379,31 @@ const identityMatches = (
   current: string | null | undefined,
 ): boolean => !!current && expected === current;
 
+/**
+ * A part's search hit, or one paragraph's own Content range: the selects Word for the web leaves
+ * unchanged (preflight impact 1, ERMAIN-932).
+ */
+const rangeOf = (part: WordSelectionRangePart): Word.Range =>
+  part.kind === "part" ? part.range : part.paragraph.getRange("Content");
+
 /** Selects the passage captured at Send, once it is proven unchanged. */
 export function showWordSelection(
   selection: WordSelectionSnapshot,
   identity: string,
   currentIdentity: string | null | undefined,
+  /** Tests only: the shapes the proof accepts. */
+  enabledShapes?: ReadonlySet<WordSelectionShape>,
 ): Promise<WordSelectionShowResult> {
   if (!identityMatches(identity, currentIdentity))
     return Promise.resolve("identity-mismatch");
   return showResolved(async (context) => {
-    const proof = await proveWordSelectionTarget(context, selection);
-    return "refused" in proof ? null : proof.paragraphs[0];
+    const proof = await proveWordSelectionTarget(
+      context,
+      selection,
+      currentWordSelectionSupport(),
+      enabledShapes,
+    );
+    return "refused" in proof ? null : rangeOf(proof.parts[0]);
   });
 }
 
@@ -326,9 +412,17 @@ export interface WordSelectionWritten {
   anchor: WordParagraphAnchor;
   /** paragraph.text right after the write. */
   rangeTexts: readonly string[];
+  /** Where the written text starts in the first paragraph's rangeText. */
+  startOffset: number;
+  /** Where it ends in the last paragraph's rangeText, exclusive. */
+  endOffset: number;
 }
 
-/** Selects the paragraph a Replace wrote, while it still holds the written text. */
+/**
+ * Selects the passage a Replace wrote, while its paragraph still holds the written text. Where
+ * Word's search cannot pinpoint the written part again, the paragraph stands in; only a write
+ * needs the part proven.
+ */
 export function showWrittenWordSelection(
   written: WordSelectionWritten,
   identity: string,
@@ -341,8 +435,23 @@ export function showWrittenWordSelection(
     const resolved = resolveWordParagraphs(written.anchor, story.entries);
     if ("refused" in resolved) return null;
     const position = resolved.positions[0];
-    return story.rangeTexts[position] === written.rangeTexts[0]
-      ? story.items[position]
-      : null;
+    const rangeText = written.rangeTexts[0];
+    if (story.rangeTexts[position] !== rangeText) return null;
+    const paragraph = story.items[position];
+    const built = await buildWordSelectionRanges(
+      context,
+      [
+        {
+          paragraph,
+          rangeText,
+          start: written.startOffset,
+          end: written.endOffset,
+        },
+      ],
+      currentWordSelectionSupport(),
+    );
+    return "refused" in built
+      ? paragraph.getRange("Content")
+      : rangeOf(built.parts[0]);
   });
 }

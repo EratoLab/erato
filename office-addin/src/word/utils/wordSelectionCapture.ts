@@ -1,4 +1,3 @@
-import { wordHostPlatform } from "./wordHostPlatform";
 import { wordParagraphId } from "./wordParagraphIds";
 import { wordParagraphAnchor } from "./wordParagraphResolver";
 import { WORD_SELECTION_TEXT_OPTIONS } from "./wordReviewLocation";
@@ -7,8 +6,15 @@ import {
   buildWordSelectionSnapshot,
   classifyWordSelection,
   WORD_SELECTION_REPLACE_SHAPES,
+  wordSelectionPartOffsets,
 } from "./wordSelectionAnchor";
-import { wordSelectionSupport } from "./wordSelectionSupport";
+import {
+  queueWordSearch,
+  searchStartsOf,
+  wordSearchable,
+  wordSearchHitAt,
+} from "./wordSelectionRange";
+import { currentWordSelectionSupport } from "./wordSelectionSupport";
 import {
   evaluateParagraphSpan,
   queueParagraphSpanChecks,
@@ -33,8 +39,12 @@ export const WORD_SELECTION_CAPTURE_TIMEOUT_MS = 15_000;
 
 /** Kept for the chip, which shows less. */
 const PREVIEW_MAX_CHARACTERS = 400;
-/** Desktop search throws from 300 characters (PF5). */
-const SEARCH_MAX_CHARACTERS = 255;
+
+/** The shapes whose single paragraph the capture can check for a rewrite. */
+const SPAN_CHECKED_SHAPES: ReadonlySet<WordSelectionShape> = new Set([
+  "paragraph",
+  "inline",
+]);
 
 /** What the composer chip shows of the live selection. */
 export interface WordSelectionPreview {
@@ -61,14 +71,6 @@ export interface WordSelectionPreview {
 export type WordSelectionRead<T> =
   | { status: "ok"; value: T | null }
   | { status: "failed" };
-
-export function currentWordSelectionSupport(): WordSelectionSupport {
-  const requirements = globalThis.Office?.context?.requirements;
-  return wordSelectionSupport(
-    (name, version) => requirements?.isSetSupported(name, version) ?? false,
-    wordHostPlatform(),
-  );
-}
 
 interface SelectionRead {
   selection: Word.Range;
@@ -174,18 +176,6 @@ function startsOf(haystack: string, needle: string): number[] {
   return found;
 }
 
-/** Left to right without overlap, as Word's search reports matches (PF5). */
-function searchStartsOf(haystack: string, needle: string): number[] {
-  const found: number[] = [];
-  for (
-    let at = haystack.indexOf(needle);
-    at !== -1;
-    at = haystack.indexOf(needle, at + needle.length)
-  )
-    found.push(at);
-  return found;
-}
-
 type SpanOffsets =
   | { start: number; end: number }
   /** The covered text occurs more than once in its paragraph; Word's search must tell which. */
@@ -232,13 +222,6 @@ function spanOffsets(
         end: parts[last].length,
       }
     : null;
-}
-
-function searchable(part: string): boolean {
-  // Word's search reads ^ as a special-character code and cannot match control characters.
-  return (
-    part.length <= SEARCH_MAX_CHARACTERS && !/[\^\u0000-\u001F]/.test(part)
-  );
 }
 
 function baseFacts(
@@ -497,7 +480,11 @@ export async function captureWordSelection(
       const rangeTexts = read.paragraphs.map((p) => p.text);
       let offsets = spanOffsets(read.text, rangeTexts);
       let hits: Word.RangeCollection | null = null;
-      if (offsets && "candidates" in offsets && searchable(offsets.part)) {
+      if (
+        offsets &&
+        "candidates" in offsets &&
+        wordSearchable(offsets.part, support.searchMaxCharacters)
+      ) {
         hits = read.paragraphs[0].search(offsets.part, { matchCase: true });
         hits.load("items");
       }
@@ -569,7 +556,7 @@ export async function captureWordSelection(
         unchecked.role !== "context_only" ||
         unchecked.reasonCode !== "shape_not_enabled" ||
         !enabledShapes.has(unchecked.shape) ||
-        unchecked.shape !== "paragraph"
+        !SPAN_CHECKED_SHAPES.has(unchecked.shape)
       )
         return buildWordSelectionSnapshot(
           facts,
@@ -577,18 +564,39 @@ export async function captureWordSelection(
           origin,
           enabledShapes,
         );
-      const checks = queueParagraphSpanChecks(read.paragraphs[0]);
+      const paragraph = read.paragraphs[0];
+      const rangeText = rangeTexts[0];
+      const [part] = wordSelectionPartOffsets(facts);
+      const checks = queueParagraphSpanChecks(paragraph);
       const sections = queueWordSections(context);
+      // Replace finds a part by Word's search, so the capture makes sure the hits line up now.
+      const dryRun =
+        !part.whole &&
+        wordSearchable(
+          rangeText.slice(part.start, part.end),
+          support.searchMaxCharacters,
+        )
+          ? queueWordSearch(paragraph, rangeText.slice(part.start, part.end))
+          : null;
       await context.sync();
+      const searchMismatch =
+        dryRun !== null &&
+        (await wordSearchHitAt(
+          context,
+          dryRun,
+          { paragraph, rangeText, start: part.start, end: part.end },
+          false,
+        )) === null;
       const endsSection = await wordParagraphEndsSection(
         context,
         sections,
-        read.paragraphs[0],
+        paragraph,
       );
       const spanCheck = evaluateParagraphSpan(
         checks(),
-        read.paragraphs[0].style,
+        paragraph.style,
         support,
+        part.whole ? undefined : { ...part, rangeText },
       );
       return buildWordSelectionSnapshot(
         {
@@ -598,6 +606,7 @@ export async function captureWordSelection(
             : spanCheck.hazards,
           styleFontResolved: spanCheck.styleFontResolved,
           spanChecked: true,
+          ...(searchMismatch ? { searchMismatch } : {}),
         },
         support,
         origin,

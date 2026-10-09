@@ -92,6 +92,46 @@ describe("selection editing privacy", () => {
     expect(logged().filter((line) => line.includes(SENTINEL))).toEqual([]);
   });
 
+  it("logs no document text when an inline span's range build, replace, undo or show fails", async () => {
+    const INLINE = new Set<WordSelectionShape>(["paragraph", "inline"]);
+    host.select({ paragraph: 1, text: `${SENTINEL} secret` });
+    const read = await captureWordSelection("user", 15_000, INLINE);
+    if (read.status !== "ok" || !read.value) throw new Error("no capture");
+    expect(read.value.role).toBe("rewrite");
+    const capture = emptySelectionCapture("doc", read.value);
+    const applied = await replaceWordSelection({
+      capture,
+      fenceContent: `${SENTINEL} kept`,
+      enabledShapes: INLINE,
+    });
+    if (applied.status !== "applied" || !applied.backup)
+      throw new Error("not applied");
+    await revertWordSelection(applied.backup, applied.written);
+
+    const stopSearch = host.onSearch(() => {
+      throw officeError();
+    });
+    await showWordSelection(read.value, "doc", "doc", INLINE);
+    await replaceWordSelection({
+      capture,
+      fenceContent: `${SENTINEL} again`,
+      enabledShapes: INLINE,
+    });
+    stopSearch();
+    const stop = failEverySync();
+    await showWordSelection(read.value, "doc", "doc", INLINE);
+    await replaceWordSelection({
+      capture,
+      fenceContent: `${SENTINEL} again`,
+      enabledShapes: INLINE,
+    });
+    await revertWordSelection(applied.backup, applied.written);
+    stop();
+
+    expect(logged().length).toBeGreaterThan(0);
+    expect(logged().filter((line) => line.includes(SENTINEL))).toEqual([]);
+  });
+
   it("logs no document text from the live reader when its reads fail", async () => {
     vi.useFakeTimers();
     try {

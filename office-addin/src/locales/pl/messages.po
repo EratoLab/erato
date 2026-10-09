@@ -4126,6 +4126,11 @@ msgid "officeAddin.word.selection.preparing"
 msgstr "Przygotowywanie przeredagowania…"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.rangeUnproven"
+msgstr "Word nie mógł dokładnie zlokalizować fragmentu w jego akapicie. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato nie mógł odczytać zaznaczenia w programie Word, więc wiadomość nie została wysłana. Wyślij ją ponownie lub odrzuć zaznaczenie, aby wysłać ją bez niego."

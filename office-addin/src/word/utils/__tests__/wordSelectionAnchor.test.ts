@@ -253,7 +253,7 @@ describe("classifyWordSelection: D-10", () => {
     ["\u000E", "special_character"],
     ["\u001E", "special_character"],
     ["\u001F", "special_character"],
-  ])("finds the mark %j in the span's text", (mark, reason) => {
+  ])("finds the mark %j anywhere in the span's paragraph", (mark, reason) => {
     const story = body(["Intro", `Before ${mark} inside`, "Outro"]);
     expect(reasonOf(facts(story, { first: 1 }))).toBe(reason);
     expect(
@@ -264,7 +264,42 @@ describe("classifyWordSelection: D-10", () => {
           { reviewedText: "Before" },
         ),
       ),
-    ).toBeNull();
+    ).toBe(reason);
+  });
+
+  it("keeps a span whose runs do not spell its paragraph's text context only", () => {
+    expect(reasonOf({ ...INLINE, hazards: { textMismatch: true } })).toBe(
+      "position_unknown",
+    );
+  });
+
+  it("keeps a span context only when Word's search did not line up at capture", () => {
+    expect(reasonOf({ ...INLINE, searchMismatch: true })).toBe(
+      "position_unknown",
+    );
+  });
+
+  it.each([
+    ["longer than Word's search takes", "x".repeat(256), 0, 256],
+    ["holding a tab", "Name:\tvalue", 0, 8],
+  ])(
+    "keeps a part %s context only on the web, where only one search hit can reach it",
+    (_, text, start, end) => {
+      const story = body(["Intro", `${text} and more words.`, "Outro"]);
+      const part = facts(story, { first: 1, start, end });
+      expect(reasonOf(part, WEB)).toBe("position_unknown");
+      expect(reasonOf(part, MAC)).toBeNull();
+      expect(reasonOf(part, PC)).toBeNull();
+      // The paragraph itself is the target of a whole-paragraph Replace, so no search is needed.
+      expect(reasonOf(facts(story, { first: 1 }), WEB)).toBeNull();
+    },
+  );
+
+  it("keeps a multi-paragraph selection with a long partial edge on the web context only", () => {
+    const story = body(["Intro", `${"y".repeat(300)} end.`, "Next words."]);
+    const multi = facts(story, { first: 1, last: 2, start: 2, end: 4 });
+    expect(reasonOf(multi, WEB)).toBe("position_unknown");
+    expect(reasonOf(multi, MAC)).toBeNull();
   });
 
   it("sends a whole table as context only", () => {
@@ -509,6 +544,7 @@ describe("buildWordSelectionSnapshot", () => {
           rangeText: DOC[1].text,
           index: 1,
           styleName: "Normal",
+          tableNestingLevel: 0,
         },
       ],
       startOffset: 4,

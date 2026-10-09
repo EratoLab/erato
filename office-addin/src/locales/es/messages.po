@@ -4126,6 +4126,11 @@ msgid "officeAddin.word.selection.preparing"
 msgstr "Preparando la reescritura…"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.rangeUnproven"
+msgstr "Word no pudo localizar el pasaje con exactitud dentro de su párrafo. No se reemplazó nada."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato no pudo leer tu selección en Word, así que tu mensaje no se envió. Envíalo de nuevo o descarta la selección para enviarlo sin ella."

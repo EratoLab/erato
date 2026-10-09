@@ -27,8 +27,20 @@ const SELECTION: WordSelectionSnapshot = {
   truncated: false,
   paragraphCount: 2,
   paragraphs: [
-    { ...story[1], rangeText: story[1].text, index: 1, styleName: "Heading 1" },
-    { ...story[2], rangeText: story[2].text, index: 2, styleName: "Normal" },
+    {
+      ...story[1],
+      rangeText: story[1].text,
+      index: 1,
+      styleName: "Heading 1",
+      tableNestingLevel: 0,
+    },
+    {
+      ...story[2],
+      rangeText: story[2].text,
+      index: 2,
+      styleName: "Normal",
+      tableNestingLevel: 0,
+    },
   ],
   startOffset: 0,
   endOffset: 9,

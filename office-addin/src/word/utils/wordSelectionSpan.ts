@@ -1,5 +1,6 @@
 import type { WordSelectionHazards } from "./wordSelectionAnchor";
 import type {
+  WordSelectionEdgeFormat,
   WordSelectionFont,
   WordSelectionFontValue,
   WordSelectionRunProperty,
@@ -337,6 +338,36 @@ function scanStructure(body: Element, hazards: WordSelectionHazards): void {
 export interface WordSelectionSpanScan {
   hazards: WordSelectionHazards;
   format: WordSelectionSpanFormat;
+  /** The direct values of the runs on either side of a slice; empty for a whole paragraph. */
+  edges: WordSelectionEdgeFormat[];
+}
+
+/** The part of a paragraph a scan formats, in paragraph.text offsets. */
+export interface WordSelectionSpanSlice {
+  start: number;
+  /** Exclusive. */
+  end: number;
+  /** paragraph.text, which the runs' text must spell exactly for the offsets to hold. */
+  rangeText: string;
+}
+
+/** Each character of the runs' text, w:tab as "\t", with the run that holds it. */
+function runCharacters(runs: readonly Element[]) {
+  const owners: number[] = [];
+  let text = "";
+  runs.forEach((run, index) => {
+    for (const child of children(run)) {
+      const piece =
+        child.localName === "t"
+          ? (child.textContent ?? "")
+          : child.localName === "tab"
+            ? "\t"
+            : "";
+      text += piece;
+      for (let k = 0; k < piece.length; k += 1) owners.push(index);
+    }
+  });
+  return { text, owners };
 }
 
 /**
@@ -344,12 +375,18 @@ export interface WordSelectionSpanScan {
  * values. The paragraph mark's properties are not part of the span. Some wrappers (a hyperlink or
  * content control around the span, a field around its result) are missing from a span's own OOXML
  * (PF3), so the object model is checked as well. An unreadable package fails closed.
+ *
+ * With a slice, the hazards still cover the whole paragraph, but the format comes from the slice's
+ * characters only, and the runs touching it are returned as its edges.
  */
-export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
+export function scanWordSelectionSpan(
+  ooxml: string,
+  slice?: WordSelectionSpanSlice,
+): WordSelectionSpanScan {
   const parts = packageParts(ooxml);
   const hazards: WordSelectionHazards = {};
   if (!parts?.body)
-    return { hazards: { unsupportedFormatting: true }, format: {} };
+    return { hazards: { unsupportedFormatting: true }, format: {}, edges: [] };
   scanStructure(parts.body, hazards);
   const runs = Array.from(parts.body.getElementsByTagNameNS(W, "r")).filter(
     (run) => run.parentElement?.localName !== "del",
@@ -359,9 +396,12 @@ export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
   );
   if (texts.some((text) => COMPLEX_SCRIPT.test(text)))
     hazards.complexScript = true;
-  const formats = runs
-    .filter((run) => children(run, "t").length > 0)
-    .map((run) => runFormat(children(run, "rPr")[0], hazards));
+  const runFormats = runs.map((run) =>
+    children(run, "t").length > 0
+      ? runFormat(children(run, "rPr")[0], hazards)
+      : null,
+  );
+  const formats = runFormats.filter((f): f is RunFormat => f !== null);
   for (const format of formats)
     if (
       twinDiffers(format.boldTwin, format.bold) ||
@@ -370,9 +410,23 @@ export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
       twinDiffers(format.csFont, format.latinFont)
     )
       hazards.complexScript = true;
+  let spanFormats = formats;
+  const edges: WordSelectionEdgeFormat[] = [];
+  if (slice) {
+    const { text, owners } = runCharacters(runs);
+    if (text !== slice.rangeText) hazards.textMismatch = true;
+    const inSlice = new Set(owners.slice(slice.start, slice.end));
+    spanFormats = runFormats.filter(
+      (f, index): f is RunFormat => f !== null && inSlice.has(index),
+    );
+    for (const at of [slice.start - 1, slice.end]) {
+      const edge = at >= 0 ? runFormats[owners[at]] : undefined;
+      if (edge) edges.push(edge.values);
+    }
+  }
   const format: WordSelectionSpanFormat = {};
   for (const property of SPAN_PROPERTIES) {
-    const value = spanProperty(formats, property);
+    const value = spanProperty(spanFormats, property);
     if (value) format[property] = value;
   }
   const mixedWithTwin = (
@@ -380,13 +434,13 @@ export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
     twin: "boldTwin" | "italicTwin",
   ) =>
     format[latin]?.state === "mixed" &&
-    formats.some((f) => f[twin] !== undefined && f[twin] === f[latin]);
+    spanFormats.some((f) => f[twin] !== undefined && f[twin] === f[latin]);
   if (
     mixedWithTwin("bold", "boldTwin") ||
     mixedWithTwin("italic", "italicTwin")
   )
     hazards.complexScriptTwin = true;
-  return { hazards, format };
+  return { hazards, format, edges };
 }
 
 /**

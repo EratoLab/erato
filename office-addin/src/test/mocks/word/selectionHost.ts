@@ -124,7 +124,12 @@ export interface WordSelectionHostOptions {
   url?: string;
   /** Body paragraph tags, in document order, whose mark ends a section. */
   sectionBreaks?: readonly string[];
+  /** Search matches straight and curly quotes alike, as Word's Find does. */
+  searchMatchesQuoteVariants?: boolean;
 }
+
+/** Rewrites the hits a search returns; the hits are opaque, so it can only reorder, drop or repeat. */
+export type MockSearchHook = <T>(hits: readonly T[], needle: string) => T[];
 
 export interface MockRunSummary {
   text: string;
@@ -214,6 +219,8 @@ export interface WordSelectionHost {
   /** Runs before the queued commands of every sync; edits made here race the batch. */
   beforeSync(hook: (index: number) => void): () => void;
   afterSync(hook: (index: number) => void): () => void;
+  /** Applies to every search until removed. */
+  onSearch(hook: MockSearchHook): () => void;
   /**
    * Holds a sync (the next one, or the one with index `at`) until released. By default its
    * commands run on release; "immediately" runs them first, as a host whose reply is late.
@@ -1023,6 +1030,7 @@ export function installWordSelectionHost(
     comment: story("comment", documentSpec.comments),
   };
   let sectionBreaks = options.sectionBreaks ?? [];
+  const searchHooks = new Set<MockSearchHook>();
   const storyType = (s: Story) =>
     ({
       // Word for Mac reports body text as a Section body once a document has a second section.
@@ -1220,6 +1228,10 @@ export function installWordSelectionHost(
       );
     // Word reads "^" as the start of a special-character code, never as itself.
     if (!needle || needle.includes("^")) return [];
+    const searched = (value: string) =>
+      options.searchMatchesQuoteVariants
+        ? value.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+        : value;
     const { story: st, s, e } = b;
     let text = "";
     const owner: number[] = [];
@@ -1241,8 +1253,8 @@ export function installWordSelectionHost(
       text += piece;
       for (let k = 0; k < piece.length; k += 1) owner.push(i);
     }
-    const hay = matchCase ? text : text.toLowerCase();
-    const pin = matchCase ? needle : needle.toLowerCase();
+    const hay = searched(matchCase ? text : text.toLowerCase());
+    const pin = searched(matchCase ? needle : needle.toLowerCase());
     const hits: Bounds[] = [];
     for (
       let at = hay.indexOf(pin);
@@ -1263,7 +1275,10 @@ export function installWordSelectionHost(
         hit = { ...hit, e: hit.e + 1 };
       hits.push(hit);
     }
-    return hits;
+    return [...searchHooks].reduce<Bounds[]>(
+      (current, hook) => hook(current, needle),
+      hits,
+    );
   };
 
   const tracked = () => trackingMode !== "Off";
@@ -4039,6 +4054,10 @@ export function installWordSelectionHost(
     afterSync: (hook) => {
       afterHooks.add(hook);
       return () => afterHooks.delete(hook);
+    },
+    onSearch: (hook) => {
+      searchHooks.add(hook);
+      return () => searchHooks.delete(hook);
     },
     hangSync: (hangOptions = {}) => {
       let reached: (index: number) => void = () => {};

@@ -58,6 +58,11 @@ export type WordSelectionSpanFormat = Partial<
   Record<WordSelectionSpanProperty, WordSelectionRunProperty>
 >;
 
+/** The properties a run next to the span sets directly, with their values. */
+export type WordSelectionEdgeFormat = Partial<
+  Record<WordSelectionSpanProperty, WordSelectionFontValue>
+>;
+
 export interface WordSelectionTargetFormat {
   /** To set on the range insertText returns; anything left out keeps what the host writes. */
   font: WordSelectionFont;
@@ -69,14 +74,31 @@ export interface WordSelectionTargetFormat {
 }
 
 /**
+ * A property the span leaves to the style but a run touching it sets directly: text inserted
+ * inside a paragraph may take the neighbour's formatting, which the plain span did not have.
+ */
+export function wordSelectionEdgeOnly(
+  span: WordSelectionSpanFormat,
+  edges: readonly WordSelectionEdgeFormat[],
+  property: WordSelectionSpanProperty,
+): boolean {
+  return (
+    span[property] === undefined &&
+    edges.some((edge) => edge[property] !== undefined)
+  );
+}
+
+/**
  * Re-sets only what the span sets directly. A mixed toggle takes the paragraph style's value,
  * because desktop would copy the first character's and the web writes none; a mixed colour,
  * highlight, font or size has no such value (automatic colour cannot be set), so it is unresolved.
+ * A property set only on a run next to the span is treated as mixed.
  */
 export function wordSelectionTargetFormat(
   span: WordSelectionSpanFormat,
   style: WordSelectionFont,
   bidiSetters: boolean,
+  edges: readonly WordSelectionEdgeFormat[] = [],
 ): WordSelectionTargetFormat {
   const font: WordSelectionFont = {};
   const unresolved: WordSelectionSpanProperty[] = [];
@@ -86,7 +108,8 @@ export function wordSelectionTargetFormat(
       font[property] = run.value;
       continue;
     }
-    if (run?.state !== "mixed") continue;
+    if (run?.state !== "mixed" && !wordSelectionEdgeOnly(span, edges, property))
+      continue;
     const value = isToggle(property) ? style[property] : undefined;
     if (value === undefined || value === null) {
       unresolved.push(property);

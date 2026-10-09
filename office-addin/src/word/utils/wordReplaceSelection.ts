@@ -5,9 +5,13 @@ import {
   wordParagraphAnchor,
 } from "./wordParagraphResolver";
 import { runWordGuarded } from "./wordRunGuard";
-import { rewritableWordSelection } from "./wordSelectionAnchor";
-import { currentWordSelectionSupport } from "./wordSelectionCapture";
+import {
+  rewritableWordSelection,
+  wordSelectionPartOffsets,
+  wordSelectionParts,
+} from "./wordSelectionAnchor";
 import { splitWordSelectionReplacement } from "./wordSelectionEdit";
+import { currentWordSelectionSupport } from "./wordSelectionSupport";
 import {
   checkTargetVerification,
   proveWordSelectionTarget,
@@ -71,9 +75,12 @@ const SETTLED = Promise.resolve();
 
 interface Written {
   positions: number[];
-  lines: string[];
+  /** Each paragraph's whole text once written: its text before and after the part kept. */
+  expected: string[];
   trackingOn: boolean;
   backups: string[];
+  startOffset: number;
+  endOffset: number;
 }
 
 /** Desktop's getText keeps the paragraph mark the written line lacks; Replace never writes a cell. */
@@ -103,7 +110,7 @@ async function readBack(
     const text = written.trackingOn
       ? withoutMark(story.entries[position]?.text ?? "")
       : story.rangeTexts[position];
-    return text === written.lines[i];
+    return text === written.expected[i];
   });
   if (!matches) return null;
   const first = written.positions[0];
@@ -111,6 +118,8 @@ async function readBack(
   return {
     anchor: wordParagraphAnchor(story.entries, first, last),
     rangeTexts: written.positions.map((position) => story.rangeTexts[position]),
+    startOffset: written.startOffset,
+    endOffset: written.endOffset,
   };
 }
 
@@ -149,6 +158,8 @@ export async function replaceWordSelection(args: {
   if ("refused" in replacement)
     return { status: "refused", code: replacement.refused, settled: SETTLED };
   const { lines } = replacement;
+  const covered = wordSelectionParts(selection);
+  const offsets = wordSelectionPartOffsets(selection);
   const support = currentWordSelectionSupport();
   const progress = trackWordApply("selection", args.onStage);
   progress.stage("checking");
@@ -158,36 +169,52 @@ export async function replaceWordSelection(args: {
   >(
     async (context, guard) => {
       const sections = queueWordSections(context);
-      const proof = await proveWordSelectionTarget(context, selection);
+      const proof = await proveWordSelectionTarget(
+        context,
+        selection,
+        support,
+        args.enabledShapes,
+      );
       if ("refused" in proof)
         return { refused: proof.refused as WordSelectionRefusal };
       // A section break may have been added after Send; the final read below cannot see it.
       for (const paragraph of proof.paragraphs)
         if (await wordParagraphEndsSection(context, sections, paragraph))
           return { refused: "UNSUPPORTED_CONTENT" };
-      const verify = queueTargetVerification(context, proof.paragraphs);
+      const verify = queueTargetVerification(context, proof.parts);
       await context.sync();
       const check = checkTargetVerification(selection, verify(), support);
       if ("refused" in check)
         return { refused: check.refused as WordSelectionRefusal };
-      const changed = proof.paragraphs
-        .map((paragraph, i) => ({ paragraph, i }))
-        .filter(({ i }) => lines[i] !== selection.paragraphs[i].rangeText);
+      const changed = proof.parts
+        .map((part, i) => ({ part, i }))
+        .filter(({ i }) => lines[i] !== covered[i]);
       if (changed.length === 0) return null;
       // Nothing may be awaited between this check and the write sync.
       guard.beforeWrite();
       progress.stage("writing");
-      for (const { paragraph, i } of changed.reverse())
+      for (const { part, i } of changed.reverse())
         setFont(
-          paragraph.insertText(lines[i], "Replace"),
+          (part.kind === "part" ? part.range : part.paragraph).insertText(
+            lines[i],
+            "Replace",
+          ),
           check.formats[i].font,
         );
       await context.sync();
+      const last = lines.length - 1;
       return {
         positions: proof.positions,
-        lines,
+        expected: selection.paragraphs.map(
+          ({ rangeText }, i) =>
+            rangeText.slice(0, offsets[i].start) +
+            lines[i] +
+            rangeText.slice(offsets[i].end),
+        ),
         trackingOn: check.trackingOn,
         backups: check.backups,
+        startOffset: offsets[0].start,
+        endOffset: offsets[last].start + lines[last].length,
       };
     },
     { timeoutMs: args.timeoutMs ?? WORD_REPLACE_SELECTION_TIMEOUT_MS },

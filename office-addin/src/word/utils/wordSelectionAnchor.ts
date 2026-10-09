@@ -2,6 +2,7 @@ import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
 import { resolveWordParagraphs } from "./wordParagraphResolver";
 import { fitWordSelectionText } from "./wordSelectionArgs";
 import { WORD_CONTROL_CHARACTER } from "./wordSelectionEdit";
+import { wordSearchable } from "./wordSelectionRange";
 import {
   fitsActionFacetArg,
   utf8ByteLength,
@@ -87,6 +88,8 @@ export const WORD_SELECTION_REPLACE_CODES = [
   "UNSUPPORTED_CONTENT",
   "PARAGRAPH_COUNT_MISMATCH",
   "INVALID_REPLACEMENT",
+  /** The paragraph is proven, but Word's search could not pinpoint the passage inside it. */
+  "TARGET_RANGE_UNPROVEN",
   "UNVERIFIED_AFTER_WRITE",
 ] as const;
 
@@ -141,6 +144,8 @@ export interface WordSelectionHazards {
    * plain text (an equation, a bookmark, ruby text, a permission range).
    */
   breakOrSymbol?: boolean;
+  /** The runs' text does not spell paragraph.text, so offsets into it cannot be mapped onto runs. */
+  textMismatch?: boolean;
 }
 
 export interface WordSelectionFacts {
@@ -174,6 +179,11 @@ export interface WordSelectionFacts {
   /** A tracked Range was kept as a hint (desktop only). */
   trackedRange?: boolean;
   /**
+   * Word's search hits for a covered part did not line up with the paragraph text's matches at
+   * capture, so Replace could not pinpoint the part either.
+   */
+  searchMismatch?: boolean;
+  /**
    * The selection's getReviewedText("Current"), without tracked deletions. The model is sent this
    * when paragraph.text holds text that getText leaves out, as on PC and the web.
    */
@@ -187,6 +197,8 @@ export interface WordSelectionParagraph {
   /** A hint only: a paragraph inserted above moves it without changing the target. */
   index: number;
   styleName: string;
+  /** 0 outside tables. */
+  tableNestingLevel: number;
 }
 
 export interface WordSelectionSnapshot {
@@ -257,6 +269,28 @@ export function wordSelectionParts(selection: WordSelectionSnapshot): string[] {
     selection.startOffset,
     selection.endOffset,
   );
+}
+
+export interface WordSelectionPartOffsets {
+  start: number;
+  /** Exclusive. */
+  end: number;
+  /** The part is the paragraph's whole text, so the paragraph itself is the target. */
+  whole: boolean;
+}
+
+/** Where each covered paragraph's part lies in its rangeText. */
+export function wordSelectionPartOffsets(selection: {
+  paragraphs: readonly { rangeText: string }[];
+  startOffset: number;
+  endOffset: number;
+}): WordSelectionPartOffsets[] {
+  const last = selection.paragraphs.length - 1;
+  return selection.paragraphs.map((p, i) => {
+    const start = i === 0 ? selection.startOffset : 0;
+    const end = i === last ? selection.endOffset : p.rangeText.length;
+    return { start, end, whole: start === 0 && end === p.rangeText.length };
+  });
 }
 
 function offsetsValid(facts: WordSelectionFacts): boolean {
@@ -390,6 +424,7 @@ export function wordSelectionHazardReason(
       !support.twinsFollowLatin)
   )
     return "complex_script_format";
+  if (hazards.textMismatch) return "position_unknown";
   return null;
 }
 
@@ -419,7 +454,12 @@ function contextOnlyReason(
     (parts[0] === "" || parts[parts.length - 1] === "")
   )
     return "empty_edge_paragraph";
-  const hazard = wordSelectionHazardReason(facts.hazards, parts, support);
+  // A mark anywhere in a covered paragraph counts: the span checks judge whole paragraphs too.
+  const hazard = wordSelectionHazardReason(
+    facts.hazards,
+    paragraphs.map((p) => p.rangeText),
+    support,
+  );
   if (hazard) return hazard;
   if (facts.pictureBeforeSpan && support.picturesShiftOffsets)
     return "web_picture_offset";
@@ -437,6 +477,17 @@ function contextOnlyReason(
     return "position_unknown";
   // Word's search reads ^ as a special-character code, so it could not find the span again.
   if (analysis.text.includes("^")) return "position_unknown";
+  // Word for the web finds a part of a paragraph only as one search hit for its whole text.
+  if (
+    !support.prefixRanges &&
+    wordSelectionPartOffsets(facts).some(
+      (offsets, i) =>
+        !offsets.whole &&
+        !wordSearchable(parts[i], support.searchMaxCharacters),
+    )
+  )
+    return "position_unknown";
+  if (facts.searchMismatch) return "position_unknown";
   // Capture step 6: without a unique text window, only a hint can find the paragraphs again.
   if (
     anchor.window === null &&
@@ -585,12 +636,13 @@ export function buildWordSelectionSnapshot(
     truncated: fitted.truncated,
     paragraphCount: facts.paragraphs.length || analysis.text.split("\n").length,
     paragraphs: facts.paragraphs.map(
-      ({ id, text, rangeText, index, styleName }) => ({
+      ({ id, text, rangeText, index, styleName, tableNestingLevel }) => ({
         id,
         text,
         rangeText,
         index,
         styleName,
+        tableNestingLevel,
       }),
     ),
     startOffset: facts.startOffset,

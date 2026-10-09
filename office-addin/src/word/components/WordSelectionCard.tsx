@@ -239,6 +239,12 @@ function resultText(
             message:
               "The proposal is empty or holds characters Word does not keep as text. Nothing was replaced.",
           });
+        case "TARGET_RANGE_UNPROVEN":
+          return t({
+            id: "officeAddin.word.selection.rangeUnproven",
+            message:
+              "Word could not pinpoint the passage inside its paragraph. Nothing was replaced.",
+          });
         default:
           return staleText();
       }
@@ -266,6 +272,7 @@ const isStale = (result: WordReplaceSelectionResult | undefined) =>
     "TARGET_NOT_FOUND",
     "AMBIGUOUS_TARGET",
     "HINT_CONFLICT",
+    "TARGET_RANGE_UNPROVEN",
   ].includes(result.code);
 
 /**

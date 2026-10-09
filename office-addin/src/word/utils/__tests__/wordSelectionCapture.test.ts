@@ -552,3 +552,133 @@ describe.each(HOSTS)(
     });
   },
 );
+
+describe.each(HOSTS)(
+  "captureWordSelection with inline spans enabled on %s",
+  (flavour) => {
+    const INLINE = new Set<WordSelectionShape>(["paragraph", "inline"]);
+    const LONG = `LG1 ${Array.from({ length: 70 }, (_, i) => `term${i}`).join(" ")}.`;
+    const document: MockSelectionDocument = {
+      body: [
+        ...SV2_MAIN_DOCUMENT.body,
+        LONG,
+        "QV1 Say 'quoted' and ‘quoted’ again.",
+        {
+          runs: [
+            "BN1 Plain ",
+            { text: "bold", font: { bold: true } },
+            " words then ",
+            { text: "red", font: { color: "#C00000" } },
+            " end.",
+          ],
+        },
+      ],
+    };
+    const capture = async (
+      target: MockSelectionTarget,
+      options: WordSelectionHostOptions = {},
+    ) => {
+      const host = installWordSelectionHost(document, {
+        host: flavour,
+        ...options,
+      });
+      host.select(target);
+      const read = await captureWordSelection("user", 15_000, INLINE);
+      if (read.status !== "ok") throw new Error("capture failed");
+      return { host, selection: read.value };
+    };
+
+    it.each([
+      ["a unique passage", { p: "PL1", text: "lima mike" }],
+      ["a repeated passage", { p: "RP1", text: "Repeated word one.", occ: 1 }],
+      ["a passage at the paragraph's start", { p: "PL1", text: "PL1 Plain" }],
+      ["a passage at its end", { p: "PL1", text: "papa." }],
+      ["a passage right before a bold word", { p: "BN1", text: "Plain " }],
+    ] as const)("offers %s for rewriting", async (_, target) => {
+      const { selection } = await capture(target);
+      expect(selection).toMatchObject({
+        role: "rewrite",
+        reasonCode: null,
+        shape: "inline",
+      });
+    });
+
+    it.each([
+      ["a link and a field", "MX1", "golf", "hyperlink"],
+      ["hidden text", "HT1", "after words", "hidden_text"],
+      ["a comment", "CM1", "after comment", "comment_mark"],
+      ["a footnote reference", "FN1", "continues", "note_reference"],
+      ["a picture", "PC1", "after picture", "inline_picture"],
+      ["a field", "FD1", "after words", "field"],
+    ] as const)(
+      "keeps a span next to %s in its paragraph context only",
+      async (_, p, text, reasonCode) => {
+        const { selection } = await capture({ p, text });
+        expect(selection).toMatchObject({
+          role: "context_only",
+          shape: "inline",
+          reasonCode,
+        });
+      },
+    );
+
+    it("keeps a span next to a red word context only, since the rewrite could take its colour", async () => {
+      const { selection } = await capture({ p: "BN1", text: " end." });
+      expect(selection).toMatchObject({
+        role: "context_only",
+        reasonCode: "mixed_formatting",
+      });
+    });
+
+    it("searches the span at capture and keeps it context only when Find also matches a quote variant", async () => {
+      const straight = await capture(
+        { p: "QV1", text: "'quoted'" },
+        { searchMatchesQuoteVariants: true },
+      );
+      expect(straight.selection).toMatchObject({
+        role: "context_only",
+        reasonCode: "position_unknown",
+      });
+      expect(straight.host.calls()).toContain("Paragraph.search");
+      expect(
+        (await capture({ p: "QV1", text: "'quoted'" })).selection,
+      ).toMatchObject({ role: "rewrite" });
+    });
+
+    it("rewrites a span longer than Word's search only on desktop", async () => {
+      const { selection } = await capture({
+        p: "LG1",
+        text: LONG.slice(4, 304),
+      });
+      expect(selection).toMatchObject(
+        flavour === "web"
+          ? { role: "context_only", reasonCode: "position_unknown" }
+          : { role: "rewrite", shape: "inline" },
+      );
+    });
+
+    it("writes nothing and builds no range inside a paragraph", async () => {
+      const host = installWordSelectionHost(document, { host: flavour });
+      const before = host.paragraphs();
+      const ooxml = host.ooxml({ p: "MX1" });
+      for (const target of [
+        { p: "PL1", text: "lima mike" },
+        { p: "RP1", text: "Repeated word one.", occ: 1 },
+        { p: "MX1", text: "golf" },
+        { p: "HT1", text: "after" },
+        { p: "LG1", text: LONG.slice(4, 304) },
+      ] as const) {
+        host.select(target);
+        expect(
+          await captureWordSelection("user", 15_000, INLINE),
+        ).toMatchObject({ status: "ok" });
+      }
+      expect(host.paragraphs()).toEqual(before);
+      expect(host.ooxml({ p: "MX1" })).toBe(ooxml);
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.calls().filter((call) => call.endsWith(".expandTo"))).toEqual(
+        [],
+      );
+    });
+  },
+);

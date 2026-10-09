@@ -68,7 +68,75 @@ describe.each(HOSTS)("scanWordSelectionSpan on %s", (host) => {
     );
 
   it("finds nothing in a plain paragraph", () => {
-    expect(scan({ p: "PL1" })).toEqual({ hazards: {}, format: {} });
+    expect(scan({ p: "PL1" })).toEqual({
+      hazards: {},
+      format: {},
+      edges: [],
+    });
+  });
+
+  describe("with a slice", () => {
+    const SLICED: MockSelectionDocument = {
+      body: [
+        {
+          runs: [
+            "SL first ",
+            { text: "bold", font: { bold: true } },
+            " last\twords.",
+          ],
+        },
+      ],
+    };
+    const TEXT = "SL first bold last\twords.";
+    const sliced = (start: number, end: number, rangeText = TEXT) =>
+      scanWordSelectionSpan(
+        installWordSelectionHost(SLICED, { host }).ooxml({ p: "SL" }),
+        { start, end, rangeText },
+      );
+
+    it("formats a plain word by its own runs and returns the bold run after it as an edge", () => {
+      const result = sliced(3, 9);
+      expect(result.hazards).toEqual({});
+      expect(result.format.bold).toBeUndefined();
+      expect(result.edges).toEqual([
+        {},
+        expect.objectContaining({ bold: true }),
+      ]);
+    });
+
+    it("gives a slice inside the bold run direct bold", () => {
+      expect(sliced(10, 12).format.bold).toEqual({
+        state: "direct",
+        value: true,
+      });
+    });
+
+    it("gives a slice half over the bold run mixed bold", () => {
+      expect(sliced(6, 11).format.bold).toEqual({ state: "mixed" });
+    });
+
+    it("counts a tab as one character", () => {
+      const result = sliced(18, 20);
+      expect(result.hazards).toEqual({});
+      expect(result.edges).toEqual([{}, {}]);
+    });
+
+    it("flags runs whose text does not spell the paragraph's text", () => {
+      expect(sliced(3, 9, "SL first bold last words.").hazards).toEqual({
+        textMismatch: true,
+      });
+    });
+
+    it("judges the hazards of the whole paragraph, not only the slice", () => {
+      const mixed = SV2_MAIN_DOCUMENT.body[1];
+      const result = scanWordSelectionSpan(
+        installWordSelectionHost({ body: [mixed] }, { host }).ooxml({
+          p: "MX1",
+        }),
+        { start: 0, end: 3, rangeText: "MX1" },
+      );
+      expect(result.hazards).toMatchObject({ hyperlink: true, field: true });
+    });
   });
 
   it.each([
