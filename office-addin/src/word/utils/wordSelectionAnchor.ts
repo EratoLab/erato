@@ -150,7 +150,7 @@ export interface WordSelectionFacts {
   objectOnly: boolean;
   /** "whole" when every table the selection touches is covered completely. */
   tables: "none" | "whole" | "partial";
-  /** In story order; ids and identity texts are unknown on a host that cannot rewrite. */
+  /** In story order; ids are unknown on a host that cannot rewrite, and identity texts stand in. */
   paragraphs: readonly WordSelectionParagraphFacts[];
   /** Into the first paragraph's rangeText. */
   startOffset: number;
@@ -496,14 +496,29 @@ function visibleOffsetText(p: WordSelectionParagraphFacts): string | null {
 
 const removeCommentMarks = (text: string) => text.replace(/\u0005/g, "");
 
+/** Desktop's reviewed text spells out each field as \u0013code\u0014result\u0015; only the result is text. */
+function fieldResults(text: string): string {
+  let previous: string;
+  let out = text;
+  do {
+    previous = out;
+    out = out
+      .replace(
+        /\u0013[^\u0013\u0014\u0015]*\u0014([^\u0013\u0015]*)\u0015/g,
+        "$1",
+      )
+      .replace(/\u0013[^\u0013\u0014\u0015]*\u0015/g, "");
+  } while (out !== previous);
+  return out;
+}
+
 /** What the model is sent as the selected text; the offsets keep counting in rangeText. */
 function modelText(facts: WordSelectionFacts, analysis: Analysis): string {
   const reviewed = () =>
-    removeCommentMarks(facts.reviewedText ?? "")
+    removeCommentMarks(fieldResults(facts.reviewedText ?? ""))
       .replace(/\r\n?/g, "\n")
       .replace(/\n+$/, "");
-  // Unplaced in the body, the identity texts are unproven, so Word's reviewed text is the better read.
-  if (!analysis.parts || (!facts.anchor && facts.reviewedText !== undefined))
+  if (!analysis.parts)
     return facts.reviewedText === undefined
       ? removeCommentMarks(analysis.text)
       : reviewed();

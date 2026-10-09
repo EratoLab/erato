@@ -57,8 +57,6 @@ export function currentWordSelectionSupport(): WordSelectionSupport {
 interface SelectionRead {
   selection: Word.Range;
   text: string;
-  /** getReviewedText("Current"), read in the same sync where WordApi 1.4 is available. */
-  reviewedText?: string;
   isEmpty: boolean;
   storyType: string;
   objectOnly: boolean;
@@ -88,13 +86,9 @@ async function storyTypeOf(
 async function readSelection(
   context: Word.RequestContext,
   paragraphProperties: string,
-  withReviewedText = false,
 ): Promise<SelectionRead> {
   const selection = context.document.getSelection();
   selection.load("text,isEmpty");
-  const reviewed = withReviewedText
-    ? selection.getReviewedText("Current")
-    : null;
   const body = selection.parentBody;
   body.load("type");
   const paragraphs = selection.paragraphs;
@@ -105,7 +99,6 @@ async function readSelection(
   return {
     selection,
     text: selection.text,
-    ...(reviewed ? { reviewedText: reviewed.value } : {}),
     isEmpty: selection.isEmpty,
     storyType: await storyTypeOf(context, body),
     // A selected picture reads as "" on desktop and " " on the web (SV2:133).
@@ -248,9 +241,27 @@ function baseFacts(
   };
 }
 
+/**
+ * paragraph.text on PC and the web holds tracked deletions that getText leaves out. Word's reviewed
+ * text then replaces it for the model, though on desktop it also spells out hidden text, field
+ * codes and content-control marks, so it is read only then.
+ */
+function showsDeletedText(
+  rangeTexts: readonly string[],
+  identities: readonly string[],
+): boolean {
+  return rangeTexts.some(
+    (text, i) =>
+      text.replace(/\u0005/g, "") !== identities[i].replace(/\r$/, ""),
+  );
+}
+
+/** Without identity texts (no getText), paragraph.text minus the web's comment marks stands in. */
 function lightFacts(
   read: SelectionRead,
   tables: TableFacts | null,
+  identities?: readonly string[],
+  reviewedText?: string,
 ): WordSelectionFacts {
   const rangeTexts = read.paragraphs.map((p) => p.text);
   const offsets = spanOffsets(read.text, rangeTexts);
@@ -266,8 +277,7 @@ function lightFacts(
     ...baseFacts(read, tables),
     paragraphs: read.paragraphs.map((p, i) => ({
       id: null,
-      // Without getText, paragraph.text minus the web's comment marks stands in for the identity text.
-      text: p.text.replace(/\u0005/g, ""),
+      text: identities?.[i] ?? p.text.replace(/\u0005/g, ""),
       rangeText: p.text,
       index: -1,
       styleName: "",
@@ -276,9 +286,7 @@ function lightFacts(
     })),
     startOffset: span?.start ?? -1,
     endOffset: span?.end ?? -1,
-    ...(read.reviewedText === undefined
-      ? {}
-      : { reviewedText: read.reviewedText }),
+    ...(reviewedText === undefined ? {} : { reviewedText }),
   };
 }
 
@@ -318,11 +326,30 @@ export async function describeWordSelection(
       const read = await readSelection(
         context,
         "items/text,items/tableNestingLevel",
-        support.trackingMode,
       );
       const tables = queueTableFacts(read);
-      if (tables) await context.sync();
-      const facts = lightFacts(read, tables?.() ?? null);
+      // As at Send, so the chip shows the text Send would send.
+      const identities = support.canRewrite
+        ? read.paragraphs.map((p) => p.getText(WORD_SELECTION_TEXT_OPTIONS))
+        : null;
+      if (tables || identities) await context.sync();
+      const texts = identities?.map((text) => text.value);
+      const reviewed =
+        texts &&
+        support.trackingMode &&
+        showsDeletedText(
+          read.paragraphs.map((p) => p.text),
+          texts,
+        )
+          ? read.selection.getReviewedText("Current")
+          : null;
+      if (reviewed) await context.sync();
+      const facts = lightFacts(
+        read,
+        tables?.() ?? null,
+        texts,
+        reviewed?.value,
+      );
       const snapshot = buildWordSelectionSnapshot(facts, support, "user");
       return snapshot ? previewOf(snapshot, facts) : null;
     },
@@ -417,12 +444,20 @@ export async function captureWordSelection(
         const read = await readSelection(
           context,
           "items/text,items/tableNestingLevel",
-          support.trackingMode,
         );
         const tables = queueTableFacts(read);
-        if (tables) await context.sync();
+        const unplaced =
+          spanOffsets(
+            read.text,
+            read.paragraphs.map((p) => p.text),
+          ) === null;
+        const reviewed =
+          unplaced && support.trackingMode
+            ? read.selection.getReviewedText("Current")
+            : null;
+        if (tables || reviewed) await context.sync();
         return buildWordSelectionSnapshot(
-          lightFacts(read, tables?.() ?? null),
+          lightFacts(read, tables?.() ?? null, undefined, reviewed?.value),
           support,
           origin,
         );
@@ -484,12 +519,12 @@ export async function captureWordSelection(
           };
         },
       );
-      // paragraph.text on PC and the web holds tracked deletions that getText leaves out.
-      const hidesText = paragraphs.some(
-        (p) => p.rangeText.replace(/\u0005/g, "") !== p.text.replace(/\r$/, ""),
+      const deleted = showsDeletedText(
+        paragraphs.map((p) => p.rangeText),
+        paragraphs.map((p) => p.text),
       );
       const reviewed =
-        (hidesText || !span) && support.trackingMode
+        (deleted || !span) && support.trackingMode
           ? read.selection.getReviewedText("Current")
           : null;
       if (reviewed) await context.sync();

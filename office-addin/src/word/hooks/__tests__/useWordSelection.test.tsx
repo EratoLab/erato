@@ -79,7 +79,9 @@ describe("useWordSelection", () => {
   it("reads once after a burst of selection events", async () => {
     mount();
     await settle();
-    const before = host.syncCount();
+    const reads = () =>
+      host.calls().filter((call) => call === "Document.getSelection").length;
+    const before = reads();
     act(() => {
       host.select({ p: "PL1", text: "kilo" });
       host.select({ p: "PL1", text: "kilo lima" });
@@ -87,7 +89,7 @@ describe("useWordSelection", () => {
     });
     expect(state().pending).toBe(true);
     await settle();
-    expect(host.syncCount() - before).toBe(1);
+    expect(reads() - before).toBe(1);
     expect(shown()).toBe("oscar papa");
   });
 

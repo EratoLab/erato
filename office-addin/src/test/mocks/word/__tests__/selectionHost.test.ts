@@ -8,6 +8,7 @@ import {
 
 import type {
   MockSelectionDocument,
+  MockSelectionTarget,
   WordRequirementFlavour,
   WordSelectionHostFlavour,
 } from "../selectionHost";
@@ -193,20 +194,39 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
     ]);
   });
 
-  it("reviews a range without tracked deletions, or without insertions for the original (not measured)", async () => {
+  it("reviews a range without tracked deletions, or without insertions for the original", async () => {
     const host = install();
-    host.select({ p: "TC1", text: "inserted", to: { p: "TC1", text: "end" } });
-    const reviewed = await Word.run(async (context) => {
-      const selection = context.document.getSelection();
-      const current = selection.getReviewedText("Current");
-      const original = selection.getReviewedText("Original");
-      await context.sync();
-      return [current.value, original.value];
-    });
-    expect(reviewed).toEqual([
-      "inserted words kept end",
-      "kept deleted words end",
-    ]);
+    const review = async (target: MockSelectionTarget) => {
+      host.select(target);
+      return Word.run(async (context) => {
+        const selection = context.document.getSelection();
+        const current = selection.getReviewedText("Current");
+        const original = selection.getReviewedText("Original");
+        await context.sync();
+        return [current.value, original.value];
+      });
+    };
+    expect(
+      await review({
+        p: "TC1",
+        text: "inserted",
+        to: { p: "TC1", text: "end" },
+      }),
+    ).toEqual(["inserted words kept end", "kept deleted words end"]);
+    const field = desktop
+      ? '\u0013DATE \\@ "yyyy-MM-dd"\u00142026-10-06\u0015'
+      : "2026-10-06";
+    expect(
+      (
+        await review({
+          p: "FD1",
+          text: "before",
+          to: { p: "HT1", text: "after" },
+        })
+      )[0],
+    ).toBe(
+      `before ${field} field after words.\rHT1 Hidden before SECRET hidden after`,
+    );
   });
 
   it("gives a table's whole range, from its first cell to its last row end", async () => {

@@ -1128,23 +1128,35 @@ export function installWordSelectionHost(
     }) + (web ? "" : "\r");
   /**
    * Range.getReviewedText("Current") without tracked deletions, or "Original" without tracked
-   * insertions; other content as getText shows it. Not measured natively: the separators follow
-   * Range.text.
+   * insertions. Word for Mac (2026-10-09) also showed hidden text and spelled out each field as
+   * \u0013code\u0014result\u0015; PC is assumed to match, and the web to show what getText does.
+   * Content-control marks are not modelled. The separators follow Range.text.
    */
   const reviewedText = (b: Bounds, version: string) => {
     const { story: st, s, e } = b;
     const original = version === "Original";
     let out = "";
+    let field: FieldState | undefined;
+    const closeField = () => {
+      if (field) out += "\u0015";
+      field = undefined;
+    };
     for (let i = s; i < e; i += 1) {
       const t = st.tokens[i];
       if (isInline(t)) {
         if (t.kind === "char" && (original ? t.run.ins : t.run.del)) continue;
+        if (!web && t.run.field !== field) {
+          closeField();
+          if (t.run.field) out += `\u0013${t.run.field.code}\u0014`;
+          field = t.run.field;
+        }
         out += inlineText(st, t, paraAt(st, i), {
-          hidden: false,
+          hidden: true,
           deleted: original,
         });
         continue;
       }
+      closeField();
       if (t.kind === "mark") {
         const next = i + 1 < e ? st.tokens[i + 1] : undefined;
         out += !paraOf(t).cellEnd
@@ -1156,6 +1168,7 @@ export function installWordSelectionHost(
               : "\t";
       } else if (t.kind === "rowEnd") out += web ? "" : "\r\n";
     }
+    closeField();
     return out;
   };
   const plainText = (st: Story, from: number, to: number) => {

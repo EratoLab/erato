@@ -208,6 +208,20 @@ describe.each(HOSTS)("captureWordSelection on %s", (flavour) => {
     expect(selection!.selectedText).toBe("kept end words");
   });
 
+  it("keeps field results, not codes, when tracked deletions make it send reviewed text", async () => {
+    const selection = await captureOf({
+      p: "FD1",
+      text: "before",
+      to: { p: "TC1", text: "end words" },
+    });
+    expect(selection!.selectedText).toBe(
+      flavour === "mac"
+        ? "before 2026-10-06 field after words.\nHT1 Hidden before hidden after words.\nTC1 Tracked inserted words kept end words"
+        : // PC and the web read reviewed text there, which shows hidden text.
+          "before 2026-10-06 field after words.\nHT1 Hidden before SECRET hidden after words.\nTC1 Tracked inserted words kept end words",
+    );
+  });
+
   it("drops comment marks from the text sent", async () => {
     const selection = await captureOf({
       p: "CM1",
@@ -320,7 +334,7 @@ describe("captureWordSelection when Word does not answer", () => {
 
 describe("describeWordSelection", () => {
   it.each(HOSTS)(
-    "shows what would be sent on %s in one sync, without reading the body",
+    "shows what would be sent on %s, reading only the selected paragraphs",
     async (flavour) => {
       const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
         host: flavour,
@@ -342,8 +356,10 @@ describe("describeWordSelection", () => {
           truncated: false,
         },
       });
-      expect(host.syncCount()).toBe(1);
-      expect(host.calls()).not.toContain("Paragraph.getText");
+      expect(host.syncCount()).toBe(2);
+      expect(
+        host.calls().filter((call) => call === "Paragraph.getText"),
+      ).toHaveLength(2);
     },
   );
 
@@ -375,6 +391,20 @@ describe("describeWordSelection", () => {
       ).toBe("kept end words");
     },
   );
+
+  it("reads one sync on a host without getText", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+      host: "pc",
+      requirements: "ltsc2021",
+    });
+    host.select({ p: "PL1", text: "lima mike" });
+    expect(await describeWordSelection()).toMatchObject({
+      status: "ok",
+      value: { text: "lima mike" },
+    });
+    expect(host.syncCount()).toBe(1);
+    expect(host.calls()).not.toContain("Paragraph.getText");
+  });
 
   it("gives the same text in another paragraph a new key", async () => {
     const host = installWordSelectionHost({

@@ -659,6 +659,17 @@ describe("buildWordSelectionSnapshot", () => {
     ).toBe("Kept words");
   });
 
+  it("keeps only the results of the fields desktop's reviewed text spells out", () => {
+    const unplaced = {
+      ...PARAGRAPH,
+      startOffset: -1,
+      endOffset: -1,
+      reviewedText:
+        "See \u0013 REF a \u0014\u0013 PAGE \u00143\u0015 above\u0015 and \u0013 SEQ \u0015done",
+    };
+    expect(snapshot(unplaced).selectedText).toBe("See 3 above and done");
+  });
+
   it("leaves desktop's paragraph marks out of the context lines", () => {
     const story = body(["Title\r", "Body text here.\r", "Closing.\r"]);
     const base = facts(story, { first: 1, start: 5, end: 9 });
