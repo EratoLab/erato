@@ -27,6 +27,10 @@ export interface SearchQueryV1Result {
      */
     senderEmail?: string | null;
     mailboxId: string | null;
+    /**
+     * The source of the document, as in sources.list.v1, so clients can apply that source's capabilities. Older sidecars omit it.
+     */
+    sourceId?: string;
     date: number | null;
     /**
      * Unix seconds of the last edit Teams reported for a Teams message. Reactions and read state are not edits. Omitted when the message was never edited.

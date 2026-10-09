@@ -5,7 +5,7 @@
  */
 export interface OutlookConversationWarning {
   /**
-   * Stable machine-readable warning code. Known values include truncated, attachment_unavailable, and embedded_attachments_omitted.
+   * Stable machine-readable warning code. Known values include truncated, attachment_unavailable, embedded_attachments_omitted, and unsupported_source. unsupported_source means the mailbox's store cannot be read as conversations at all: the result has no messages and retrying cannot help.
    */
   code: string;
   message?: string;

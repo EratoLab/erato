@@ -1536,7 +1536,7 @@
         "inventory": {
           "type": "string",
           "minLength": 1,
-          "description": "localStore when the sidecar enumerates a complete local store, cacheObservations when it sees only what the application cached. Extensible."
+          "description": "localStore when the sidecar enumerates a complete local store, syncCache when it enumerates the complete local cache of a synchronizing client, cacheObservations when it sees only what the application cached. Extensible; clients treat unknown values as cacheObservations."
         },
         "unavailableReason": {
           "anyOf": [

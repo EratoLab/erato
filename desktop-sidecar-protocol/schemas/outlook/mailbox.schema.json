@@ -28,10 +28,22 @@
       "maxLength": 1024
     },
     "source": {
-      "description": "Implementation-defined local Outlook storage source. Known values include pst, ost, macOsProfile, and windowsOutlook.",
+      "description": "Implementation-defined local Outlook storage source. Known values include pst, ost, macOsProfile, macOsHxAccount (new Outlook for Mac), and windowsNewOutlook (new Outlook for Windows).",
       "type": "string",
       "minLength": 1,
       "maxLength": 128
+    },
+    "sourceIds": {
+      "description": "IDs of this mailbox's sources in sources.list.v1. Older sidecars omit it.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "maxItems": 1024
+    },
+    "capabilities": {
+      "$ref": "../source/source-capabilities.schema.json"
     }
   },
   "additionalProperties": true

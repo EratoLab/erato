@@ -63,7 +63,7 @@ export interface IndexingStopV1Result {
  */
 export interface SidecarConfiguration {
   /**
-   * Mailbox indexing overrides. Priority is explicit and independent of array order: lower numbers are processed first, with mailbox ID as a deterministic tie-breaker. Unlisted mailboxes remain enabled with priority 9007199254740991. Null inherits the other layer; an empty array explicitly uses defaults. Mailbox IDs must be unique. Disabling stops new discovery and processing but retains existing searchable data; in-flight work may finish.
+   * Legacy compatibility view of source indexing policies. Mailbox writes map to all associated sources; use indexing_sources for new clients. Disabled source data is retained but excluded from search. Priority is explicit and independent of array order: lower numbers are processed first, with mailbox ID as a deterministic tie-breaker. Unlisted mailboxes remain enabled with priority 9007199254740991. Null inherits the other layer; an empty array explicitly uses defaults. Mailbox IDs must be unique.
    */
   indexing_mailboxes?:
     | {
@@ -361,7 +361,7 @@ export interface IndexedRange {
    */
   dateBasis: string;
   /**
-   * localStore when the sidecar enumerates a complete local store, cacheObservations when it sees only what the application cached. Extensible.
+   * localStore when the sidecar enumerates a complete local store, syncCache when it enumerates the complete local cache of a synchronizing client, cacheObservations when it sees only what the application cached. Extensible; clients treat unknown values as cacheObservations.
    */
   inventory: string;
   /**

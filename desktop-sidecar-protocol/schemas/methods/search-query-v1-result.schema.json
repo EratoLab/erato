@@ -43,6 +43,11 @@
           "mailboxId": {
             "type": ["string", "null"]
           },
+          "sourceId": {
+            "description": "The source of the document, as in sources.list.v1, so clients can apply that source's capabilities. Older sidecars omit it.",
+            "type": "string",
+            "format": "uuid"
+          },
           "date": {
             "type": ["integer", "null"]
           },
