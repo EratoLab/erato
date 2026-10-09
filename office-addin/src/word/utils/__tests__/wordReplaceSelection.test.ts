@@ -79,7 +79,7 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     expect(host.syncCount() - syncsBefore).toBeGreaterThan(1);
     if (result.status !== "applied") throw new Error("not applied");
     expect(result.written.rangeTexts).toEqual([REWRITE]);
-    expect(result.backup?.rangeText).toBe(before[2].text);
+    expect(result.backups?.[0].rangeText).toBe(before[2].text);
   });
 
   it("joins the lines of a single-paragraph rewrite", async () => {
@@ -206,7 +206,7 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     expect(await replace(capture)).toMatchObject({
       status: "applied",
       trackingOn: true,
-      backup: null,
+      backups: null,
     });
     expect(
       host
@@ -224,10 +224,10 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     const capture = await captureOf(host, { p: "PL1" });
     const before = host.paragraphs();
     const result = await replace(capture);
-    if (result.status !== "applied" || !result.backup)
+    if (result.status !== "applied" || !result.backups)
       throw new Error("not applied");
     expect(
-      await revertWordSelection(result.backup, result.written),
+      await revertWordSelection(result.backups, result.written),
     ).toMatchObject({
       status: "reverted",
     });
@@ -236,11 +236,11 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     ).toEqual(before.map(({ text, style, runs }) => ({ text, style, runs })));
 
     const again = await replace(await captureOf(host, { p: "PL1" }));
-    if (again.status !== "applied" || !again.backup)
+    if (again.status !== "applied" || !again.backups)
       throw new Error("not applied");
     host.insertText({ p: "PL1", text: "shorter" }, "SHORTER");
     expect(
-      await revertWordSelection(again.backup, again.written),
+      await revertWordSelection(again.backups, again.written),
     ).toMatchObject({
       status: "stale",
     });
@@ -249,13 +249,15 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
   it("reports an Undo that left an extra paragraph as unverified", async () => {
     const host = install();
     const result = await replace(await captureOf(host, { p: "PL1" }));
-    if (result.status !== "applied" || !result.backup)
+    if (result.status !== "applied" || !result.backups)
       throw new Error("not applied");
-    const backup = {
-      ...result.backup,
-      ooxml: result.backup.ooxml.replace("</w:body>", "<w:p/></w:body>"),
-    };
-    expect(await revertWordSelection(backup, result.written)).toMatchObject({
+    const backups = [
+      {
+        ...result.backups[0],
+        ooxml: result.backups[0].ooxml.replace("</w:body>", "<w:p/></w:body>"),
+      },
+    ];
+    expect(await revertWordSelection(backups, result.written)).toMatchObject({
       status: "unverified",
     });
   });
@@ -273,11 +275,11 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
 
     host.setSectionBreaks([]);
     const result = await replace(capture);
-    if (result.status !== "applied" || !result.backup)
+    if (result.status !== "applied" || !result.backups)
       throw new Error("not applied");
     host.setSectionBreaks(["PL1"]);
     expect(
-      await revertWordSelection(result.backup, result.written),
+      await revertWordSelection(result.backups, result.written),
     ).toMatchObject({ status: "stale" });
   });
 
@@ -285,11 +287,11 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     const host = install();
     const capture = await captureOf(host, { p: "PL1" });
     const result = await replace(capture);
-    if (result.status !== "applied" || !result.backup)
+    if (result.status !== "applied" || !result.backups)
       throw new Error("not applied");
     host.setTrackingMode("TrackAll");
     expect(
-      await revertWordSelection(result.backup, result.written),
+      await revertWordSelection(result.backups, result.written),
     ).toMatchObject({
       status: "tracking",
     });
@@ -423,7 +425,7 @@ describe.each(HOSTS)(
         startOffset: 26,
         endOffset: 35,
       });
-      expect(result.backup?.rangeText).toBe(
+      expect(result.backups?.[0].rangeText).toBe(
         "BN1 Plain bold words then the plain end.",
       );
     });
@@ -554,7 +556,7 @@ describe.each(HOSTS)(
       expect(await replaceSpan(capture, "kilo two")).toMatchObject({
         status: "applied",
         trackingOn: true,
-        backup: null,
+        backups: null,
       });
       expect(
         host
@@ -575,13 +577,451 @@ describe.each(HOSTS)(
         await captureSpan(host, { p: "BN1", text: "the plain" }),
         "a simpler",
       );
-      if (result.status !== "applied" || !result.backup)
+      if (result.status !== "applied" || !result.backups)
         throw new Error("not applied");
       expect(
-        await revertWordSelection(result.backup, result.written),
+        await revertWordSelection(result.backups, result.written),
       ).toMatchObject({ status: "reverted" });
       // insertOoxml gives the restored paragraph a new ID.
       expect({ ...paragraphOf(host, "BN1"), id: before.id }).toEqual(before);
+    });
+  },
+);
+
+describe.each(HOSTS)(
+  "replaceWordSelection of several paragraphs and a cell on %s",
+  (flavour) => {
+    const ALL = new Set<WordSelectionShape>([
+      "paragraph",
+      "inline",
+      "multi_paragraph",
+      "table_cell",
+    ]);
+    const DOCUMENT: MockSelectionDocument = {
+      body: [
+        ...SV2_MAIN_DOCUMENT.body,
+        { runs: "HM1 Heading start words.", style: "Heading 2" },
+        { runs: "HM2 Listed item words.", style: "List Paragraph", list: true },
+      ],
+    };
+    const SPAN = {
+      p: "MP1",
+      text: "victor whiskey.",
+      to: { p: "MP3", text: "MP3 Multi" },
+    } as const;
+    const install = (document: MockSelectionDocument = DOCUMENT) =>
+      installWordSelectionHost(document, { host: flavour });
+    const captureAll = async (
+      host: WordSelectionHost,
+      target: MockSelectionTarget,
+      shape: WordSelectionShape,
+    ) => {
+      host.select(target);
+      const read = await captureWordSelection("user", 15_000, ALL);
+      if (read.status !== "ok" || !read.value) throw new Error("no capture");
+      expect(read.value).toMatchObject({ role: "rewrite", shape });
+      return emptySelectionCapture("doc", read.value);
+    };
+    const replaceAll = (
+      capture: WordSelectionCapture,
+      fenceContent: string,
+      timeoutMs?: number,
+    ) =>
+      replaceWordSelection({
+        capture,
+        fenceContent,
+        enabledShapes: ALL,
+        timeoutMs,
+      });
+    const texts = (host: WordSelectionHost) =>
+      host.paragraphs().map((p) => p.text);
+    const REWRITE_MP = "victor yankee.\nMP2 Changed middle.\nMP3 Several";
+    /** The syncs a Replace of SPAN runs before its write, measured on a fresh host. */
+    const syncsBeforeWrite = async () => {
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      const before = host.syncCount();
+      await replaceAll(capture, REWRITE_MP);
+      const [write] = host.writeSyncs();
+      uninstallWordSelectionHost();
+      return write.index - before;
+    };
+
+    it("writes each changed paragraph's part in one sync, last to first, and nothing else", async () => {
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      host.select({ p: "PL1", text: "kilo" });
+      const before = host.paragraphs();
+      const result = await replaceAll(capture, REWRITE_MP);
+      expect(result).toMatchObject({ status: "applied", trackingOn: false });
+      expect(host.writeSyncs()).toHaveLength(1);
+      const writes = host
+        .writeSyncs()[0]
+        .writes.filter((write) => write.endsWith(".insertText"));
+      expect(writes).toHaveLength(3);
+      const after = host.paragraphs();
+      expect(after.slice(5, 8).map((p) => p.text)).toEqual([
+        "MP1 Multi paragraph uniform victor yankee.",
+        "MP2 Changed middle.",
+        "MP3 Several paragraph uniform zulu omega.",
+      ]);
+      expect([...after.slice(0, 5), ...after.slice(8)]).toEqual([
+        ...before.slice(0, 5),
+        ...before.slice(8),
+      ]);
+      expect(host.selectionText()).toBe("kilo");
+      if (result.status !== "applied") throw new Error("not applied");
+      expect(result.written).toMatchObject({
+        rangeTexts: after.slice(5, 8).map((p) => p.text),
+        startOffset: 28,
+        endOffset: 11,
+      });
+      expect(result.backups?.map((backup) => backup.position)).toEqual([
+        0, 1, 2,
+      ]);
+    });
+
+    it("writes the paragraphs from the last to the first", async () => {
+      const host = install();
+      const capture = await captureAll(
+        host,
+        { p: "MP1", to: { p: "MP2", text: "MP2 Multi" } },
+        "multi_paragraph",
+      );
+      expect(
+        await replaceAll(capture, "MP1 First rewritten.\nMP2 Second"),
+      ).toMatchObject({ status: "applied" });
+      const [write] = host.writeSyncs();
+      expect(
+        write.writes.filter((command) => command.endsWith(".insertText")),
+      ).toEqual(["Range.insertText", "Paragraph.insertText"]);
+    });
+
+    it("skips an unchanged middle line and backs up only what it wrote", async () => {
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      const result = await replaceAll(
+        capture,
+        "victor yankee.\nMP2 Multi paragraph uniform xray yankee.\nMP3 Several",
+      );
+      expect(
+        host
+          .writeSyncs()[0]
+          .writes.filter((write) => write.endsWith(".insertText")),
+      ).toHaveLength(2);
+      if (result.status !== "applied") throw new Error("not applied");
+      expect(result.backups?.map((backup) => backup.position)).toEqual([0, 2]);
+    });
+
+    it("keeps heading and list styles", async () => {
+      const host = install();
+      const capture = await captureAll(
+        host,
+        {
+          p: "HM1",
+          text: "start words.",
+          to: { p: "HM2", text: "HM2 Listed" },
+        },
+        "multi_paragraph",
+      );
+      expect(
+        await replaceAll(capture, "opening words.\nHM2 Numbered"),
+      ).toMatchObject({ status: "applied" });
+      const [heading, item] = host.paragraphs().slice(-2);
+      expect(heading).toMatchObject({
+        text: "HM1 Heading opening words.",
+        style: "Heading 2",
+      });
+      expect(item).toMatchObject({
+        text: "HM2 Numbered item words.",
+        style: "List Paragraph",
+        list: true,
+      });
+    });
+
+    it("empties a paragraph for an empty line but never removes it", async () => {
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      const count = host.paragraphs().length;
+      expect(
+        await replaceAll(capture, "victor yankee.\n\nMP3 Several"),
+      ).toMatchObject({ status: "applied" });
+      expect(host.paragraphs()).toHaveLength(count);
+      expect(host.paragraphs()[6].text).toBe("");
+    });
+
+    it("refuses a reply with another number of lines and writes nothing", async () => {
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      const callsBefore = host.calls().length;
+      expect(
+        await replaceAll(capture, "victor yankee.\nMP3 Several"),
+      ).toMatchObject({ status: "refused", code: "PARAGRAPH_COUNT_MISMATCH" });
+      expect(host.calls().slice(callsBefore)).toEqual([]);
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it("refuses a span whose partial edge Word's search can no longer pinpoint", async () => {
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      host.onSearch((hits) => [...hits, ...hits]);
+      expect(await replaceAll(capture, REWRITE_MP)).toMatchObject({
+        status: "refused",
+        code: "TARGET_RANGE_UNPROVEN",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it("refuses a span whose paragraphs ended a section since Send", async () => {
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      host.setSectionBreaks(["MP2"]);
+      expect(await replaceAll(capture, REWRITE_MP)).toMatchObject({
+        status: "refused",
+        code: "UNSUPPORTED_CONTENT",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it("reports unverified, never applied, when a covered paragraph was edited outside the span between the final read and the write", async () => {
+      const offset = await syncsBeforeWrite();
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      const writeSync = host.syncCount() + offset;
+      host.beforeSync((index) => {
+        if (index === writeSync)
+          host.insertText({ p: "MP1", text: "uniform" }, "UNIFORM");
+      });
+      expect(await replaceAll(capture, REWRITE_MP)).toMatchObject({
+        status: "unverified",
+      });
+    });
+
+    it("reports unverified, never applied, when a paragraph appeared elsewhere between the final read and the write", async () => {
+      const offset = await syncsBeforeWrite();
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      const writeSync = host.syncCount() + offset;
+      host.beforeSync((index) => {
+        if (index === writeSync)
+          host.insertParagraphs({ p: "HM2" }, ["Typed at the end."], "After");
+      });
+      expect(await replaceAll(capture, REWRITE_MP)).toMatchObject({
+        status: "unverified",
+      });
+      expect(texts(host).slice(5, 8)).toEqual([
+        "MP1 Multi paragraph uniform victor yankee.",
+        "MP2 Changed middle.",
+        "MP3 Several paragraph uniform zulu omega.",
+      ]);
+    });
+
+    it("leaves the document untouched when the final read does not answer", async () => {
+      const offset = await syncsBeforeWrite();
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      const before = texts(host);
+      vi.useFakeTimers();
+      const hang = host.hangSync({ at: host.syncCount() + offset - 1 });
+      const result = replaceAll(capture, REWRITE_MP, 1_000);
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await result).toMatchObject({ status: "failed", timedOut: true });
+      hang.release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.writeSyncs()).toEqual([]);
+      expect(texts(host)).toEqual(before);
+    });
+
+    it("reports a write whose reply never came as unverified", async () => {
+      const offset = await syncsBeforeWrite();
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      vi.useFakeTimers();
+      const hang = host.hangSync({
+        at: host.syncCount() + offset,
+        execute: "immediately",
+      });
+      const result = replaceAll(capture, REWRITE_MP, 1_000);
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await result).toMatchObject({
+        status: "unverified",
+        timedOut: true,
+      });
+      hang.release();
+    });
+
+    it("writes deletions and insertions of the covered parts only under Track Changes", async () => {
+      const host = install();
+      const capture = await captureAll(host, SPAN, "multi_paragraph");
+      host.setTrackingMode("TrackAll");
+      expect(await replaceAll(capture, REWRITE_MP)).toMatchObject({
+        status: "applied",
+        trackingOn: true,
+        backups: null,
+      });
+      expect(
+        host
+          .revisions()
+          .filter((revision) => revision.author !== "Other Author")
+          .filter((revision) => revision.type !== "Formatted")
+          .map(({ type, text }) => [type, text])
+          .sort(),
+      ).toEqual(
+        [
+          ["Added", "victor yankee."],
+          ["Added", "MP2 Changed middle."],
+          ["Added", "MP3 Several"],
+          ["Deleted", "victor whiskey."],
+          ["Deleted", "MP2 Multi paragraph uniform xray yankee."],
+          ["Deleted", "MP3 Multi"],
+        ].sort(),
+      );
+    });
+
+    it("undoes every written paragraph in one sync, verified in another run", async () => {
+      const host = install();
+      const before = host.paragraphs();
+      const result = await replaceAll(
+        await captureAll(host, SPAN, "multi_paragraph"),
+        REWRITE_MP,
+      );
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      const syncsBefore = host.writeSyncs().length;
+      expect(
+        await revertWordSelection(result.backups, result.written),
+      ).toMatchObject({ status: "reverted" });
+      const restores = host.writeSyncs().slice(syncsBefore);
+      expect(restores).toHaveLength(1);
+      expect(
+        restores[0].writes.filter((write) => write.endsWith(".insertOoxml")),
+      ).toHaveLength(3);
+      expect(
+        host
+          .syncLog()
+          .some(
+            (entry) =>
+              entry.index > restores[0].index &&
+              entry.context !== restores[0].context,
+          ),
+      ).toBe(true);
+      // insertOoxml gives each restored paragraph a new ID.
+      expect(host.paragraphs().map(({ id: _, ...rest }) => rest)).toEqual(
+        before.map(({ id: _, ...rest }) => rest),
+      );
+    });
+
+    it("refuses to undo once any written paragraph changed again", async () => {
+      const host = install();
+      const result = await replaceAll(
+        await captureAll(host, SPAN, "multi_paragraph"),
+        REWRITE_MP,
+      );
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      host.insertText({ p: "MP2", text: "middle" }, "centre");
+      const writes = host.writeSyncs().length;
+      expect(
+        await revertWordSelection(result.backups, result.written),
+      ).toMatchObject({ status: "stale" });
+      expect(host.writeSyncs()).toHaveLength(writes);
+    });
+
+    it("reports an Undo that left an extra paragraph as unverified", async () => {
+      const host = install();
+      const result = await replaceAll(
+        await captureAll(host, SPAN, "multi_paragraph"),
+        REWRITE_MP,
+      );
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      const backups = result.backups.map((backup, i) =>
+        i === 1
+          ? {
+              ...backup,
+              ooxml: backup.ooxml.replace("</w:body>", "<w:p/></w:body>"),
+            }
+          : backup,
+      );
+      expect(await revertWordSelection(backups, result.written)).toMatchObject({
+        status: "unverified",
+      });
+    });
+
+    it.each([
+      [
+        "whole",
+        { table: 0, cell: [1, 1] },
+        "CB2 New cell text",
+        "CB2 New cell text",
+      ],
+      ["in part", { p: "CB2", text: "B2 text" }, "B9 text", "CB2 Cell B9 text"],
+    ] as const)(
+      "replaces a cell's paragraph %s, leaves the other cells, and undoes it exactly",
+      async (_, target, fence, expected) => {
+        const host = install();
+        const before = host.paragraphs();
+        const result = await replaceAll(
+          await captureAll(host, target, "table_cell"),
+          fence,
+        );
+        expect(result).toMatchObject({ status: "applied" });
+        expect(host.writeSyncs()).toHaveLength(1);
+        const after = host.paragraphs();
+        expect(after).toHaveLength(before.length);
+        const cell = after.findIndex((p) => p.text === expected);
+        expect(after[cell].nesting).toBe(1);
+        expect(after.filter((_, i) => i !== cell)).toEqual(
+          before.filter((_, i) => i !== cell),
+        );
+        if (result.status !== "applied" || !result.backups)
+          throw new Error("not applied");
+        expect(
+          await revertWordSelection(result.backups, result.written),
+        ).toMatchObject({ status: "reverted" });
+        expect(host.paragraphs().map(({ id: _, ...rest }) => rest)).toEqual(
+          before.map(({ id: _, ...rest }) => rest),
+        );
+      },
+    );
+
+    it("refuses a cell edited since Send and writes nothing", async () => {
+      const host = install();
+      const capture = await captureAll(
+        host,
+        { table: 0, cell: [1, 1] },
+        "table_cell",
+      );
+      host.insertText({ p: "CB2", text: "B2" }, "BB2");
+      expect(await replaceAll(capture, "CB2 New")).toMatchObject({
+        status: "refused",
+        code: "TARGET_TEXT_MISMATCH",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it("reports unverified when a restore changed the cell's table", async () => {
+      const host = install();
+      const result = await replaceAll(
+        await captureAll(host, { table: 0, cell: [1, 1] }, "table_cell"),
+        "CB2 New cell text",
+      );
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      const [backup] = result.backups;
+      expect(
+        await revertWordSelection(
+          [
+            {
+              ...backup,
+              ooxml: backup.ooxml.replace("</w:body>", "<w:p/></w:body>"),
+            },
+          ],
+          result.written,
+        ),
+      ).toMatchObject({ status: "unverified" });
     });
   },
 );

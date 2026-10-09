@@ -9,6 +9,8 @@ import {
   consumeProgrammaticSelectionEvent,
   resetProgrammaticWordSelectionForTests,
 } from "../wordProgrammaticSelection";
+import { replaceWordSelection } from "../wordReplaceSelection";
+import { emptySelectionCapture } from "../wordSelectionAnchor";
 import { captureWordSelection } from "../wordSelectionCapture";
 import { currentWordSelectionSupport } from "../wordSelectionSupport";
 import {
@@ -16,6 +18,7 @@ import {
   proveWordSelectionTarget,
   queueTargetVerification,
   showWordSelection,
+  showWrittenWordSelection,
   WORD_SELECTION_SHOW_TIMEOUT_MS,
 } from "../wordSelectionTarget";
 
@@ -32,6 +35,12 @@ import type {
 const HOSTS = ["mac", "pc", "web"] as const;
 const PARAGRAPHS = new Set<WordSelectionShape>(["paragraph"]);
 const INLINE = new Set<WordSelectionShape>(["paragraph", "inline"]);
+const ALL = new Set<WordSelectionShape>([
+  "paragraph",
+  "inline",
+  "multi_paragraph",
+  "table_cell",
+]);
 
 afterEach(() => {
   vi.useRealTimers();
@@ -62,6 +71,18 @@ async function captureSpan(
   return read.value;
 }
 
+async function captureAny(
+  host: WordSelectionHost,
+  target: MockSelectionTarget,
+  shape: WordSelectionShape,
+): Promise<WordSelectionSnapshot> {
+  host.select(target);
+  const read = await captureWordSelection("user", 15_000, ALL);
+  if (read.status !== "ok" || !read.value) throw new Error("no capture");
+  expect(read.value).toMatchObject({ role: "rewrite", shape });
+  return read.value;
+}
+
 async function prove(
   selection: WordSelectionSnapshot,
   shapes: ReadonlySet<WordSelectionShape> = PARAGRAPHS,
@@ -75,12 +96,17 @@ async function prove(
       shapes,
     );
     if ("refused" in proof) return proof;
-    const verify = queueTargetVerification(context, proof.parts);
+    const verify = queueTargetVerification(
+      context,
+      proof.parts,
+      selection.paragraphs,
+    );
     await context.sync();
     const [part] = proof.parts;
     return {
       positions: proof.positions,
       part: part.kind === "part" ? part.part : null,
+      kinds: proof.parts.map((each) => each.kind),
       check: checkTargetVerification(selection, verify(), support),
     };
   });
@@ -345,3 +371,264 @@ describe("showWordSelection", () => {
     expect(host.selectionText()).toBe("xray");
   });
 });
+
+const MULTI_SPAN = {
+  p: "MP1",
+  text: "victor whiskey.",
+  to: { p: "MP3", text: "MP3 Multi" },
+} as const;
+
+describe.each(HOSTS)(
+  "proveWordSelectionTarget for several paragraphs and a cell on %s",
+  (flavour) => {
+    const install = () =>
+      installWordSelectionHost(SV2_MAIN_DOCUMENT, { host: flavour });
+
+    it("proves each covered paragraph, with part ranges for the partial edges", async () => {
+      const host = install();
+      const selection = await captureAny(host, MULTI_SPAN, "multi_paragraph");
+      host.insertParagraphs({ p: "H1" }, ["New paragraph above."], "After");
+      host.select({ p: "PL1", text: "kilo" });
+      expect(await prove(selection, ALL)).toMatchObject({
+        positions: [6, 7, 8],
+        part: "victor whiskey.",
+        kinds: ["part", "whole", "part"],
+        check: {
+          trackingOn: false,
+          backups: [
+            expect.stringContaining("MP1"),
+            expect.stringContaining("MP2"),
+            expect.stringContaining("MP3"),
+          ],
+          cellTables: [null, null, null],
+        },
+      });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it.each([
+      [
+        "in the unselected start of the first paragraph",
+        "MP1",
+        "uniform",
+        "UNIFORM",
+      ],
+      ["in the unselected end of the last paragraph", "MP3", "zulu", "ZULU"],
+      ["in a middle paragraph", "MP2", "xray", "XRAY"],
+    ] as const)("refuses a span edited %s", async (_, p, text, replacement) => {
+      const host = install();
+      const selection = await captureAny(host, MULTI_SPAN, "multi_paragraph");
+      host.insertText({ p, text }, replacement);
+      expect(await prove(selection, ALL)).toEqual({
+        refused: "TARGET_TEXT_MISMATCH",
+      });
+    });
+
+    it.each([true, false])(
+      "refuses a span with a paragraph inserted inside it (IDs: %s)",
+      async (ids) => {
+        if (!ids) window.WORD_FORCE_NO_PARAGRAPH_IDS = true;
+        const host = install();
+        const selection = await captureAny(host, MULTI_SPAN, "multi_paragraph");
+        host.insertParagraphs({ p: "MP1" }, ["Typed inside."], "After");
+        const proven = await prove(selection, ALL);
+        expect(["TARGET_TEXT_MISMATCH", "TARGET_NOT_FOUND"]).toContain(
+          "refused" in proven ? proven.refused : null,
+        );
+        expect(host.writeSyncs()).toEqual([]);
+      },
+    );
+
+    it("proves a cell's paragraph whole or in part, and reads its table", async () => {
+      const host = install();
+      const whole = await captureAny(
+        host,
+        { table: 0, cell: [1, 1] },
+        "table_cell",
+      );
+      expect(await prove(whole, ALL)).toMatchObject({
+        kinds: ["whole"],
+        check: { cellTables: [{ nesting: 1, rows: 2, cells: 4 }] },
+      });
+      const part = await captureAny(
+        host,
+        { p: "CB2", text: "B2" },
+        "table_cell",
+      );
+      expect(await prove(part, ALL)).toMatchObject({
+        part: "B2",
+        kinds: ["part"],
+      });
+    });
+
+    it("refuses a cell edited since Send, and leaves a neighbouring cell's edit alone", async () => {
+      const host = install();
+      const selection = await captureAny(
+        host,
+        { table: 0, cell: [1, 1] },
+        "table_cell",
+      );
+      host.insertText({ p: "CA2", text: "A2" }, "AA2");
+      expect(await prove(selection, ALL)).toMatchObject({ kinds: ["whole"] });
+      host.insertText({ p: "CB2", text: "B2" }, "BB2");
+      expect(await prove(selection, ALL)).toEqual({
+        refused: "TARGET_TEXT_MISMATCH",
+      });
+    });
+
+    it("refuses an inline span or several paragraphs while their shape is not enabled", async () => {
+      const host = install();
+      const selection = await captureAny(host, MULTI_SPAN, "multi_paragraph");
+      expect(await prove(selection, INLINE)).toEqual({
+        refused: "UNSUPPORTED_CONTENT",
+      });
+    });
+  },
+);
+
+describe("checkTargetVerification of a cell", () => {
+  it("refuses a cell paragraph that left its cell or moved into a nested table", async () => {
+    const host = installWordSelectionHost(SV2_MAIN_DOCUMENT);
+    const selection = await captureAny(
+      host,
+      { table: 0, cell: [1, 1] },
+      "table_cell",
+    );
+    const verification = await Word.run(async (context) => {
+      const proof = await proveWordSelectionTarget(
+        context,
+        selection,
+        currentWordSelectionSupport(),
+        ALL,
+      );
+      if ("refused" in proof) throw new Error("not proven");
+      const verify = queueTargetVerification(
+        context,
+        proof.parts,
+        selection.paragraphs,
+      );
+      await context.sync();
+      return verify();
+    });
+    const support = currentWordSelectionSupport();
+    const [live] = verification.paragraphs;
+    expect(
+      checkTargetVerification(selection, verification, support),
+    ).toMatchObject({
+      formats: [expect.anything()],
+    });
+    for (const changed of [
+      { ...live, tableNestingLevel: 2 },
+      { ...live, tableNestingLevel: 0, inCell: false },
+      { ...live, inCell: false },
+    ])
+      expect(
+        checkTargetVerification(
+          selection,
+          { ...verification, paragraphs: [changed] },
+          support,
+        ),
+      ).toEqual({ refused: "TARGET_TEXT_MISMATCH" });
+  });
+});
+
+describe.each(HOSTS)(
+  "showWordSelection of several paragraphs on %s",
+  (flavour) => {
+    /** Runs the web rewrites when a range across paragraphs is selected or read (ERMAIN-932). */
+    const DOCUMENT: MockSelectionDocument = {
+      body: [
+        "Intro.",
+        {
+          runs: [
+            { text: "SM1 Bold", font: { bold: true } },
+            " start words here.",
+          ],
+        },
+        "SM2 Middle words.",
+        {
+          runs: [
+            "SM3 End words then ",
+            { text: "large", font: { size: 14 } },
+            " tail.",
+          ],
+        },
+        "Outro.",
+      ],
+    };
+    const SPAN = {
+      p: "SM1",
+      text: "start words here.",
+      to: { p: "SM3", text: "SM3 End" },
+    } as const;
+
+    it(
+      flavour === "web"
+        ? "selects only the first part and leaves the document unchanged"
+        : "selects the whole span",
+      async () => {
+        const host = installWordSelectionHost(DOCUMENT, { host: flavour });
+        const selection = await captureAny(host, SPAN, "multi_paragraph");
+        host.select({ p: "SM2", text: "Middle" });
+        const before = [1, 2, 3].map((paragraph) => host.ooxml({ paragraph }));
+        expect(await showWordSelection(selection, "doc", "doc", ALL)).toBe(
+          "selected",
+        );
+        expect([1, 2, 3].map((paragraph) => host.ooxml({ paragraph }))).toEqual(
+          before,
+        );
+        expect(consumeProgrammaticSelectionEvent()).toBe(true);
+        expect(host.selectionText()).toBe(
+          flavour === "web"
+            ? "start words here."
+            : "start words here.\rSM2 Middle words.\rSM3 End",
+        );
+        expect(host.writeSyncs()).toEqual([]);
+        if (flavour === "web")
+          expect(
+            host.calls().filter((call) => call.endsWith(".expandTo")),
+          ).toEqual([]);
+      },
+    );
+
+    it("selects what a Replace wrote, and reports a passage edited since as changed", async () => {
+      const host = installWordSelectionHost(DOCUMENT, { host: flavour });
+      const selection = await captureAny(host, SPAN, "multi_paragraph");
+      const result = await replaceWordSelection({
+        capture: emptySelectionCapture("doc", selection),
+        fenceContent: "opening words.\nSM2 Centre words.\nSM3 Final",
+        enabledShapes: ALL,
+      });
+      if (result.status !== "applied") throw new Error("not applied");
+      host.select({ paragraph: 0 });
+      expect(await showWrittenWordSelection(result.written, "doc", "doc")).toBe(
+        "selected",
+      );
+      expect(host.selectionText()).toBe(
+        flavour === "web"
+          ? "opening words."
+          : "opening words.\rSM2 Centre words.\rSM3 Final",
+      );
+      host.insertText({ p: "SM2", text: "Centre" }, "Center");
+      expect(await showWrittenWordSelection(result.written, "doc", "doc")).toBe(
+        "changed",
+      );
+    });
+
+    it("never selects after its proof timed out", async () => {
+      const host = installWordSelectionHost(DOCUMENT, { host: flavour });
+      const selection = await captureAny(host, SPAN, "multi_paragraph");
+      host.select({ p: "SM2", text: "Middle" });
+      vi.useFakeTimers();
+      const hang = host.hangSync();
+      const shown = showWordSelection(selection, "doc", "doc", ALL);
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(WORD_SELECTION_SHOW_TIMEOUT_MS);
+      expect(await shown).toBe("unavailable");
+      hang.release();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(host.calls()).not.toContain("Range.select");
+      expect(host.selectionText()).toBe("Middle");
+    });
+  },
+);

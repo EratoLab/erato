@@ -692,3 +692,240 @@ describe.each(HOSTS)(
     });
   },
 );
+
+describe.each(HOSTS)(
+  "captureWordSelection with every shape enabled on %s",
+  (flavour) => {
+    const ALL = new Set<WordSelectionShape>([
+      "paragraph",
+      "inline",
+      "multi_paragraph",
+      "table_cell",
+    ]);
+    const LONG = `LG2 ${"y".repeat(300)} end.`;
+    const document: MockSelectionDocument = {
+      body: [
+        ...SV2_MAIN_DOCUMENT.body,
+        LONG,
+        "NX1 Next paragraph words.",
+        "QM1 Before the quote.",
+        "'x' then ‘x’ end.",
+        {
+          table: [
+            [
+              ["CP1 First cell paragraph.", "CP2 Second cell paragraph."],
+              "CQ1 Other cell.",
+            ],
+          ],
+        },
+        {
+          table: [
+            [[{ table: [["NT1 Nested cell text."]] }], "NO1 Outer cell."],
+          ],
+        },
+        "AF1 After the tables.",
+      ],
+    };
+    const capture = async (
+      target: MockSelectionTarget,
+      options: WordSelectionHostOptions = {},
+    ) => {
+      const host = installWordSelectionHost(document, {
+        host: flavour,
+        ...options,
+      });
+      host.select(target);
+      const read = await captureWordSelection("user", 15_000, ALL);
+      if (read.status !== "ok") throw new Error("capture failed");
+      return { host, selection: read.value };
+    };
+
+    it.each([
+      [
+        "several paragraphs with partial edges",
+        {
+          p: "MP1",
+          text: "victor whiskey.",
+          to: { p: "MP3", text: "MP3 Multi" },
+        },
+        "multi_paragraph",
+      ],
+      [
+        "several whole paragraphs",
+        { p: "LI1", to: { p: "LI2" } },
+        "multi_paragraph",
+      ],
+      ["a whole cell", { table: 0, cell: [1, 1] }, "table_cell"],
+      ["part of a cell", { p: "CB2", text: "Cell B2" }, "table_cell"],
+    ] as const)("offers %s for rewriting", async (_, target, shape) => {
+      const { selection } = await capture(target);
+      expect(selection).toMatchObject({
+        role: "rewrite",
+        reasonCode: null,
+        shape,
+      });
+    });
+
+    it("checks every covered paragraph's OOXML in one sync", async () => {
+      const { host, selection } = await capture({
+        p: "MP1",
+        text: "victor whiskey.",
+        to: { p: "MP3", text: "MP3 Multi" },
+      });
+      expect(selection?.role).toBe("rewrite");
+      const reads = host
+        .syncLog()
+        .filter((entry) => entry.commands.includes("Paragraph.getOoxml"));
+      expect(reads).toHaveLength(1);
+      expect(
+        reads[0].commands.filter((command) => command === "Paragraph.getOoxml"),
+      ).toHaveLength(3);
+    });
+
+    it.each([
+      [
+        "a link in its first paragraph",
+        { p: "MX1", text: "india.", to: { p: "PL1", text: "PL1 Plain" } },
+        "hyperlink",
+      ],
+      [
+        "a footnote reference in its last paragraph",
+        {
+          p: "CM1",
+          text: "after comment.",
+          to: { p: "FN1", text: "FN1 Footnote" },
+        },
+        "note_reference",
+      ],
+      [
+        "a field in a middle paragraph",
+        { p: "MP3", text: "omega.", to: { p: "HT1", text: "HT1 Hidden" } },
+        "field",
+      ],
+    ] as const)(
+      "keeps several paragraphs with %s context only",
+      async (_, target, reasonCode) => {
+        const { selection } = await capture(target);
+        expect(selection).toMatchObject({
+          role: "context_only",
+          shape: "multi_paragraph",
+          reasonCode,
+        });
+      },
+    );
+
+    it("keeps several paragraphs across a section end context only", async () => {
+      const { selection } = await capture(
+        {
+          p: "MP1",
+          text: "victor whiskey.",
+          to: { p: "MP3", text: "MP3 Multi" },
+        },
+        { sectionBreaks: ["MP2"] },
+      );
+      expect(selection).toMatchObject({
+        role: "context_only",
+        reasonCode: "special_character",
+      });
+    });
+
+    it("searches the last paragraph's part too, keeping the span context only when Find also matches a quote variant there", async () => {
+      const target = {
+        p: "QM1",
+        text: "quote.",
+        to: { paragraph: 23, text: "'x'" },
+      } as const;
+      expect(
+        (await capture(target, { searchMatchesQuoteVariants: true })).selection,
+      ).toMatchObject({ role: "context_only", reasonCode: "position_unknown" });
+      expect((await capture(target)).selection).toMatchObject({
+        role: "rewrite",
+        selectedText: "quote.\n'x'",
+      });
+    });
+
+    it("rewrites a long partial edge only on desktop", async () => {
+      const { selection } = await capture({
+        p: "LG2",
+        text: "y".repeat(300),
+        to: { p: "NX1", text: "NX1 Next" },
+      });
+      expect(selection).toMatchObject(
+        flavour === "web"
+          ? { role: "context_only", reasonCode: "position_unknown" }
+          : { role: "rewrite", shape: "multi_paragraph" },
+      );
+    });
+
+    it.each([
+      [
+        "two paragraphs of one cell",
+        { p: "CP1", to: { p: "CP2" } },
+        "cell_multi_paragraph",
+      ],
+      ["a nested table's cell", { p: "NT1" }, "nested_table"],
+      [
+        "two cells",
+        { table: 0, cell: [0, 0], to: { table: 0, cell: [0, 1] } },
+        "multi_cell",
+      ],
+      ["a whole table", { table: 0, tableWhole: true }, "whole_table"],
+    ] as const)("keeps %s context only", async (_, target, reasonCode) => {
+      const { selection } = await capture(target);
+      expect(selection).toMatchObject({ role: "context_only", reasonCode });
+    });
+
+    it("offers nothing for body text running into part of a table", async () => {
+      const { selection } = await capture({
+        p: "PC1",
+        to: { table: 0, cell: [0, 0] },
+      });
+      expect(selection).toBeNull();
+    });
+
+    it("keeps 41 paragraphs context only", async () => {
+      const host = installWordSelectionHost(
+        { body: Array.from({ length: 42 }, (_, i) => `Line ${i}.`) },
+        { host: flavour },
+      );
+      host.select({ paragraph: 0, to: { paragraph: 40 } });
+      expect(await captureWordSelection("user", 15_000, ALL)).toMatchObject({
+        value: { role: "context_only", reasonCode: "too_many_paragraphs" },
+      });
+      host.select({ paragraph: 0, to: { paragraph: 39 } });
+      expect(await captureWordSelection("user", 15_000, ALL)).toMatchObject({
+        value: { role: "rewrite", paragraphCount: 40 },
+      });
+    });
+
+    it("writes nothing and builds no range inside a paragraph", async () => {
+      const host = installWordSelectionHost(document, { host: flavour });
+      const before = host.paragraphs();
+      const ooxml = [1, 5, 6, 7].map((paragraph) => host.ooxml({ paragraph }));
+      for (const target of [
+        {
+          p: "MP1",
+          text: "victor whiskey.",
+          to: { p: "MP3", text: "MP3 Multi" },
+        },
+        { p: "MX1", text: "india.", to: { p: "PL1", text: "PL1 Plain" } },
+        { p: "LG2", text: "y".repeat(300), to: { p: "NX1", text: "NX1 Next" } },
+        { table: 0, cell: [1, 1] },
+        { p: "CB2", text: "Cell B2" },
+      ] as const) {
+        host.select(target);
+        expect(await captureWordSelection("user", 15_000, ALL)).toMatchObject({
+          status: "ok",
+        });
+      }
+      expect(host.paragraphs()).toEqual(before);
+      expect(
+        [1, 5, 6, 7].map((paragraph) => host.ooxml({ paragraph })),
+      ).toEqual(ooxml);
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.calls().filter((call) => call.endsWith(".expandTo"))).toEqual(
+        [],
+      );
+    });
+  },
+);

@@ -16,9 +16,11 @@ import {
   checkTargetVerification,
   proveWordSelectionTarget,
   queueTargetVerification,
+  queueWordCellTable,
   queueWordSections,
   readWordStory,
-  wordParagraphEndsSection,
+  sameCellTable,
+  wordParagraphsEndingSection,
 } from "./wordSelectionTarget";
 
 import type { WordApplyStage } from "./wordApplyProgress";
@@ -30,6 +32,7 @@ import type {
 } from "./wordSelectionAnchor";
 import type { WordSelectionFont } from "./wordSelectionFormatting";
 import type {
+  WordCellTable,
   WordSelectionWritten,
   WordStoryRead,
 } from "./wordSelectionTarget";
@@ -38,11 +41,15 @@ import type {
 export const WORD_REPLACE_SELECTION_TIMEOUT_MS = 30_000;
 export const WORD_REVERT_SELECTION_TIMEOUT_MS = 30_000;
 
-/** Undo of a Replace while Track Changes was off: the paragraph's own OOXML before the write. */
+/** Undo of a Replace while Track Changes was off: a written paragraph's own OOXML before the write. */
 export interface WordSelectionBackup {
+  /** Index among the paragraphs the Replace covered. */
+  position: number;
   ooxml: string;
   /** paragraph.text before the write, which the restore must give back. */
   rangeText: string;
+  /** 0 outside tables; a restore in a cell must leave its table's rows and cells as they were. */
+  tableNestingLevel: number;
 }
 
 export type WordSelectionRefusal = Exclude<
@@ -54,8 +61,11 @@ export type WordReplaceSelectionResult = (
   | {
       status: "applied";
       written: WordSelectionWritten;
-      /** Null under Track Changes: Word's Reject undoes the write there. */
-      backup: WordSelectionBackup | null;
+      /**
+       * One per paragraph written, in document order. Null under Track Changes: Word's Reject
+       * undoes the write there.
+       */
+      backups: WordSelectionBackup[] | null;
       trackingOn: boolean;
     }
   /** The proposal equals the passage, so there was nothing to write. */
@@ -77,14 +87,18 @@ interface Written {
   positions: number[];
   /** Each paragraph's whole text once written: its text before and after the part kept. */
   expected: string[];
+  /** The story's paragraph count before the write, which a Replace never changes. */
+  paragraphCount: number;
+  /** Per covered paragraph in a table cell, its table before the write. */
+  cellTables: (WordCellTable | null)[];
   trackingOn: boolean;
-  backups: string[];
+  backups: WordSelectionBackup[];
   startOffset: number;
   endOffset: number;
 }
 
-/** Desktop's getText keeps the paragraph mark the written line lacks; Replace never writes a cell. */
-const withoutMark = (text: string) => text.replace(/\r$/, "");
+/** Desktop's getText keeps the paragraph or cell mark the written line lacks. */
+const withoutMark = (text: string) => text.replace(/[\r\u0007]$/, "");
 
 function setFont(range: Word.Range, font: WordSelectionFont): void {
   const target = range.font as unknown as Record<string, unknown>;
@@ -101,11 +115,28 @@ async function readBack(
   written: Written,
 ): Promise<WordSelectionWritten | null> {
   const result = await runWordGuarded(
-    async (context) => readWordStory(context),
+    async (context) => {
+      const story = await readWordStory(context);
+      const cells = written.cellTables.map((before, i) => {
+        const paragraph = story.items[written.positions[i]];
+        return before && paragraph ? queueWordCellTable(paragraph) : null;
+      });
+      if (cells.some(Boolean)) await context.sync();
+      return { story, cells: cells.map((cell) => cell?.() ?? null) };
+    },
     { timeoutMs: WORD_REPLACE_SELECTION_TIMEOUT_MS },
   );
   if (result.outcome !== "ok" || !result.value) return null;
-  const story: WordStoryRead = result.value;
+  const story: WordStoryRead = result.value.story;
+  const { cells } = result.value;
+  if (story.items.length !== written.paragraphCount) return null;
+  if (
+    written.cellTables.some((before, i) => {
+      const after = cells[i];
+      return before !== null && (!after || !sameCellTable(before, after));
+    })
+  )
+    return null;
   const matches = written.positions.every((position, i) => {
     const text = written.trackingOn
       ? withoutMark(story.entries[position]?.text ?? "")
@@ -178,10 +209,17 @@ export async function replaceWordSelection(args: {
       if ("refused" in proof)
         return { refused: proof.refused as WordSelectionRefusal };
       // A section break may have been added after Send; the final read below cannot see it.
-      for (const paragraph of proof.paragraphs)
-        if (await wordParagraphEndsSection(context, sections, paragraph))
-          return { refused: "UNSUPPORTED_CONTENT" };
-      const verify = queueTargetVerification(context, proof.parts);
+      const ends = await wordParagraphsEndingSection(
+        context,
+        sections,
+        proof.paragraphs,
+      );
+      if (ends.some(Boolean)) return { refused: "UNSUPPORTED_CONTENT" };
+      const verify = queueTargetVerification(
+        context,
+        proof.parts,
+        selection.paragraphs,
+      );
       await context.sync();
       const check = checkTargetVerification(selection, verify(), support);
       if ("refused" in check)
@@ -193,7 +231,8 @@ export async function replaceWordSelection(args: {
       // Nothing may be awaited between this check and the write sync.
       guard.beforeWrite();
       progress.stage("writing");
-      for (const { part, i } of changed.reverse())
+      // Last to first, so no write moves a paragraph a later one targets: one sync, one Undo step.
+      for (const { part, i } of [...changed].reverse())
         setFont(
           (part.kind === "part" ? part.range : part.paragraph).insertText(
             lines[i],
@@ -211,8 +250,15 @@ export async function replaceWordSelection(args: {
             lines[i] +
             rangeText.slice(offsets[i].end),
         ),
+        paragraphCount: proof.story.items.length,
+        cellTables: check.cellTables,
         trackingOn: check.trackingOn,
-        backups: check.backups,
+        backups: changed.map(({ i }) => ({
+          position: i,
+          ooxml: check.backups[i],
+          rangeText: selection.paragraphs[i].rangeText,
+          tableNestingLevel: selection.paragraphs[i].tableNestingLevel,
+        })),
         startOffset: offsets[0].start,
         endOffset: offsets[last].start + lines[last].length,
       };
@@ -252,12 +298,7 @@ export async function replaceWordSelection(args: {
   return {
     status: "applied",
     written,
-    backup: value.trackingOn
-      ? null
-      : {
-          ooxml: value.backups[0],
-          rangeText: selection.paragraphs[0].rangeText,
-        },
+    backups: value.trackingOn ? null : value.backups,
     trackingOn: value.trackingOn,
     settled,
   };
@@ -280,16 +321,22 @@ export interface WordSelectionRevertResult {
 }
 
 /**
- * Restores the paragraph a Replace wrote from its OOXML before the write, only while it still
- * holds exactly the written text. The restore shows only in a later Word.run on the web (PF4), so
- * it is verified in one.
+ * Restores the paragraphs a Replace wrote from their OOXML before the write, only while every
+ * covered paragraph still holds exactly the written text. All are restored in one sync, last to
+ * first, so Word's own Undo takes them back in one step too. The restore shows only in a later
+ * Word.run on the web (PF4), so it is verified in one.
  */
 export async function revertWordSelection(
-  backup: WordSelectionBackup,
+  backups: readonly WordSelectionBackup[],
   written: WordSelectionWritten,
 ): Promise<WordSelectionRevertResult> {
   const run = await runWordGuarded<
-    | { position: number; paragraphs: number; sections: number }
+    | {
+        positions: number[];
+        paragraphs: number;
+        sections: number;
+        cellTables: (WordCellTable | null)[];
+      }
     | "stale"
     | "tracking"
   >(
@@ -300,19 +347,40 @@ export async function revertWordSelection(
       if (context.document.changeTrackingMode !== "Off") return "tracking";
       const resolved = resolveWordParagraphs(written.anchor, story.entries);
       if ("refused" in resolved) return "stale";
-      const position = resolved.positions[0];
-      if (story.rangeTexts[position] !== written.rangeTexts[0]) return "stale";
+      const { positions } = resolved;
       if (
-        await wordParagraphEndsSection(context, sections, story.items[position])
+        backups.length === 0 ||
+        positions.length !== written.rangeTexts.length ||
+        positions.some(
+          (position, i) => story.rangeTexts[position] !== written.rangeTexts[i],
+        ) ||
+        backups.some((backup) => positions[backup.position] === undefined)
       )
         return "stale";
+      const targets = backups.map((backup) => ({
+        backup,
+        paragraph: story.items[positions[backup.position]],
+      }));
+      const ends = await wordParagraphsEndingSection(
+        context,
+        sections,
+        targets.map(({ paragraph }) => paragraph),
+      );
+      if (ends.some(Boolean)) return "stale";
+      const cells = targets.map(({ backup, paragraph }) =>
+        backup.tableNestingLevel > 0 ? queueWordCellTable(paragraph) : null,
+      );
+      if (cells.some(Boolean)) await context.sync();
+      const cellTables = cells.map((cell) => cell?.() ?? null);
       guard.beforeWrite();
-      story.items[position].insertOoxml(backup.ooxml, "Replace");
+      for (const { backup, paragraph } of [...targets].reverse())
+        paragraph.insertOoxml(backup.ooxml, "Replace");
       await context.sync();
       return {
-        position,
+        positions,
         paragraphs: story.items.length,
         sections: sections.items.length,
+        cellTables,
       };
     },
     { timeoutMs: WORD_REVERT_SELECTION_TIMEOUT_MS },
@@ -339,18 +407,37 @@ export async function revertWordSelection(
       const sections = context.document.sections;
       sections.load("items");
       const story = await readWordStory(context);
-      return { story, sections: sections.items.length };
+      const cells = backups.map((backup, i) => {
+        const paragraph = story.items[value.positions[backup.position]];
+        return value.cellTables[i] && paragraph
+          ? queueWordCellTable(paragraph)
+          : null;
+      });
+      if (cells.some(Boolean)) await context.sync();
+      return {
+        story,
+        sections: sections.items.length,
+        cellTables: cells.map((cell) => cell?.() ?? null),
+      };
     },
     { timeoutMs: WORD_REVERT_SELECTION_TIMEOUT_MS },
   );
-  // A restore that added a paragraph or a section, as insertOoxml can at the end of a body or a
-  // section, did not give the paragraph back as it was.
+  // A restore that added a paragraph or a section, as insertOoxml can at the end of a body, a
+  // section or a cell, did not give the paragraphs back as they were.
+  const after = check.outcome === "ok" ? check.value : undefined;
   const restored =
-    check.outcome === "ok" &&
-    !!check.value &&
-    check.value.story.rangeTexts[value.position] === backup.rangeText &&
-    check.value.story.items.length === value.paragraphs &&
-    check.value.sections === value.sections;
+    !!after &&
+    after.story.items.length === value.paragraphs &&
+    after.sections === value.sections &&
+    backups.every((backup, i) => {
+      const before = value.cellTables[i];
+      const cell = after.cellTables[i];
+      return (
+        after.story.rangeTexts[value.positions[backup.position]] ===
+          backup.rangeText &&
+        (before === null || (!!cell && sameCellTable(before, cell)))
+      );
+    });
   return {
     status: restored ? "reverted" : "unverified",
     timedOut,

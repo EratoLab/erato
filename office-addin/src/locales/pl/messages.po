@@ -4242,6 +4242,11 @@ msgstr "Przywrócić fragment do stanu sprzed tego zastąpienia? Nic nie zostani
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarningParagraphs"
+msgstr "Przywrócić każdy akapit fragmentu do stanu sprzed tego zastąpienia? Nic nie zostanie przywrócone, jeśli którykolwiek z nich od tamtej pory się zmienił."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.scope"
 msgstr "Zastąpienie zapisuje tylko w zaznaczonym przez ciebie fragmencie i tylko wtedy, gdy nie zmienił się od twojej prośby."
 

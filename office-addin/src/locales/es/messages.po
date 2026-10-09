@@ -4242,6 +4242,11 @@ msgstr "¿Restaurar el pasaje tal como estaba antes de este reemplazo? No se res
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarningParagraphs"
+msgstr "¿Restaurar cada párrafo del pasaje tal como estaba antes de este reemplazo? No se restaura nada si alguno de ellos cambió desde entonces."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.scope"
 msgstr "Reemplazar solo escribe en el pasaje que seleccionaste, y solo si no cambió desde tu solicitud."
 

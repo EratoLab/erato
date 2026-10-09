@@ -429,19 +429,19 @@ export function WordSelectionCard({
       // single slot no longer promises.
       if (
         outcome.status === "unverified" ||
-        (outcome.status === "applied" && !outcome.backup)
+        (outcome.status === "applied" && !outcome.backups?.length)
       )
         setRevertSlot(null);
       if (outcome.status === "applied") {
-        if (outcome.backup && messageId)
+        if (outcome.backups?.length && messageId)
           setRevertSlot({
             messageId,
             batchKey,
             identity: live.capture.identity,
-            ooxml: outcome.backup.ooxml,
+            ooxml: outcome.backups[0].ooxml,
             selection: {
               written: outcome.written,
-              rangeText: outcome.backup.rangeText,
+              backups: outcome.backups,
             },
           });
         wordSelectionStore.requestRefresh();
@@ -527,7 +527,7 @@ export function WordSelectionCard({
     let held = false;
     try {
       const reverted = await revertWordSelection(
-        { ooxml: slot.ooxml, rangeText: slot.selection.rangeText },
+        slot.selection.backups,
         slot.selection.written,
       );
       if (reverted.timedOut) {
@@ -826,11 +826,17 @@ export function WordSelectionCard({
               })}
             >
               <strong>
-                {t({
-                  id: "officeAddin.word.selection.revertWarning",
-                  message:
-                    "Restore the passage as it was before this Replace? Nothing is restored if it changed since.",
-                })}
+                {slot && slot.selection.backups.length > 1
+                  ? t({
+                      id: "officeAddin.word.selection.revertWarningParagraphs",
+                      message:
+                        "Restore every paragraph of the passage as it was before this Replace? Nothing is restored if any of them changed since.",
+                    })
+                  : t({
+                      id: "officeAddin.word.selection.revertWarning",
+                      message:
+                        "Restore the passage as it was before this Replace? Nothing is restored if it changed since.",
+                    })}
               </strong>
               <div className="word-review__actions">
                 <Button

@@ -9,6 +9,7 @@ import {
 
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 
+import type { WordSelectionBackup } from "../utils/wordReplaceSelection";
 import type { WordReviewState } from "../utils/wordReviewState";
 import type { WordSelectionWritten } from "../utils/wordSelectionTarget";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
@@ -21,9 +22,12 @@ export interface WordRevertSlot {
   ooxml: string;
   batchKey?: string;
   afterFingerprint?: string;
-  /** A Replace of a selected paragraph: what it wrote, which Undo must still find unchanged, and
-   * the paragraph's text before it. */
-  selection?: { written: WordSelectionWritten; rangeText: string };
+  /** A Replace of a selected passage: what it wrote, which Undo must still find unchanged, and the
+   * written paragraphs as they were before it. `ooxml` holds the first backup's. */
+  selection?: {
+    written: WordSelectionWritten;
+    backups: readonly WordSelectionBackup[];
+  };
 }
 
 /** How long a run that outlived its timeout may keep every Word card waiting. */

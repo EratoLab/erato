@@ -20,12 +20,13 @@ import {
   queueParagraphSpanChecks,
   queueWordSections,
   readWordStory,
-  wordParagraphEndsSection,
+  wordParagraphsEndingSection,
 } from "./wordSelectionTarget";
 
 import type { WordParagraphEntry } from "./wordParagraphResolver";
 import type {
   WordSelectionFacts,
+  WordSelectionHazards,
   WordSelectionOrigin,
   WordSelectionParagraphFacts,
   WordSelectionShape,
@@ -40,10 +41,12 @@ export const WORD_SELECTION_CAPTURE_TIMEOUT_MS = 15_000;
 /** Kept for the chip, which shows less. */
 const PREVIEW_MAX_CHARACTERS = 400;
 
-/** The shapes whose single paragraph the capture can check for a rewrite. */
+/** The shapes whose covered paragraphs the capture can check for a rewrite. */
 const SPAN_CHECKED_SHAPES: ReadonlySet<WordSelectionShape> = new Set([
   "paragraph",
   "inline",
+  "multi_paragraph",
+  "table_cell",
 ]);
 
 /** What the composer chip shows of the live selection. */
@@ -430,8 +433,8 @@ function consecutive(
  * and, in the main story, the anchor a later Replace proves. Every read is one Word for the web
  * measured as leaving the document unchanged (preflight impact 1): a selected passage that occurs
  * more than once in its paragraph is told apart by search hits compared with the selection, not
- * by prefix ranges. The span's hazard scan and style font are rewrite checks and are not read
- * here, so the snapshot is context only. A timeout or error never yields a partial snapshot.
+ * by prefix ranges. The rewrite checks read every covered paragraph whole, and only for an
+ * enabled shape nothing else keeps context only. A timeout or error never yields a partial snapshot.
  */
 export async function captureWordSelection(
   origin: WordSelectionOrigin = "user",
@@ -564,47 +567,67 @@ export async function captureWordSelection(
           origin,
           enabledShapes,
         );
-      const paragraph = read.paragraphs[0];
-      const rangeText = rangeTexts[0];
-      const [part] = wordSelectionPartOffsets(facts);
-      const checks = queueParagraphSpanChecks(paragraph);
+      // Every covered paragraph is checked whole, in one sync: its OOXML, controls and fields.
+      const covered = read.paragraphs;
+      const parts = wordSelectionPartOffsets(facts);
+      const checks = covered.map(queueParagraphSpanChecks);
       const sections = queueWordSections(context);
       // Replace finds a part by Word's search, so the capture makes sure the hits line up now.
-      const dryRun =
-        !part.whole &&
-        wordSearchable(
-          rangeText.slice(part.start, part.end),
-          support.searchMaxCharacters,
-        )
-          ? queueWordSearch(paragraph, rangeText.slice(part.start, part.end))
+      const dryRuns = parts.map((part, i) => {
+        const text = rangeTexts[i].slice(part.start, part.end);
+        return !part.whole && wordSearchable(text, support.searchMaxCharacters)
+          ? queueWordSearch(covered[i], text)
           : null;
+      });
       await context.sync();
-      const searchMismatch =
-        dryRun !== null &&
-        (await wordSearchHitAt(
-          context,
-          dryRun,
-          { paragraph, rangeText, start: part.start, end: part.end },
-          false,
-        )) === null;
-      const endsSection = await wordParagraphEndsSection(
+      let searchMismatch = false;
+      for (const [i, hits] of dryRuns.entries())
+        if (
+          hits &&
+          !(await wordSearchHitAt(
+            context,
+            hits,
+            {
+              paragraph: covered[i],
+              rangeText: rangeTexts[i],
+              start: parts[i].start,
+              end: parts[i].end,
+            },
+            false,
+          ))
+        )
+          searchMismatch = true;
+      const endsSection = await wordParagraphsEndingSection(
         context,
         sections,
-        paragraph,
+        covered,
       );
-      const spanCheck = evaluateParagraphSpan(
-        checks(),
-        paragraph.style,
-        support,
-        part.whole ? undefined : { ...part, rangeText },
+      const spanChecks = covered.map((paragraph, i) =>
+        evaluateParagraphSpan(
+          checks[i](),
+          paragraph.style,
+          support,
+          parts[i].whole
+            ? undefined
+            : {
+                start: parts[i].start,
+                end: parts[i].end,
+                rangeText: rangeTexts[i],
+              },
+        ),
+      );
+      const hazards: WordSelectionHazards = Object.assign(
+        {},
+        ...spanChecks.map((check) => check.hazards),
+        endsSection.some(Boolean) ? { breakOrSymbol: true } : {},
       );
       return buildWordSelectionSnapshot(
         {
           ...facts,
-          hazards: endsSection
-            ? { ...spanCheck.hazards, breakOrSymbol: true }
-            : spanCheck.hazards,
-          styleFontResolved: spanCheck.styleFontResolved,
+          hazards,
+          styleFontResolved: spanChecks.every(
+            (check) => check.styleFontResolved,
+          ),
           spanChecked: true,
           ...(searchMismatch ? { searchMismatch } : {}),
         },

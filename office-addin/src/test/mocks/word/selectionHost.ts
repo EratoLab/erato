@@ -2608,17 +2608,43 @@ export function installWordSelectionHost(
    * Preflight impact 1: on Word for the web, reading or selecting an expandTo range within one
    * paragraph rewrites the runs it covers. A prefix or point range unhides hidden text, drops
    * cs-only bCs and szCs, gives a lone sz its szCs and drops rtl; the paragraph's own
-   * Whole.expandTo(Whole) does the last three only. A range over several paragraphs is safe. The
-   * re-spaced field instruction is not modelled.
+   * Whole.expandTo(Whole) does the last three only. Selecting a range over several paragraphs, or
+   * reading its OOXML, rewrites its first and last paragraph instead (PF impact 1, rows 89 and
+   * 95-98): bCs and szCs twins are added, a bCs-only run loses it and rtl is dropped; hidden text
+   * stays hidden. The re-spaced field instruction is not modelled.
    */
   const changeOnWebRead = (
     ctx: Ctx,
     range: Obj,
     bounds: () => Bounds | undefined,
   ) => {
-    const change = () => {
+    const changeEnds = (b: Bounds, marks: readonly number[]) => {
+      const first = marks[0];
+      const last = marks[marks.length - 1];
+      const ends = [
+        [paragraphStart(b.story, first), first],
+        [paragraphStart(b.story, last), last],
+      ];
+      for (const [from, to] of ends)
+        for (let i = from; i < to; i += 1) {
+          const t = b.story.tokens[i];
+          if (t.kind !== "char") continue;
+          const font: MockSelectionFont = { ...t.run.font };
+          if (font.bold === undefined) delete font.boldBidirectional;
+          else font.boldBidirectional ??= font.bold;
+          if (font.size !== undefined) font.sizeBidirectional ??= font.size;
+          delete font.rtl;
+          t.run = { ...t.run, font };
+        }
+    };
+    const change = (name: string) => () => {
       const b = bounds();
-      if (!b || marksIn(b.story, b.s, b.e).length > 1) return;
+      if (!b) return;
+      const marks = marksIn(b.story, b.s, b.e);
+      if (marks.length > 1) {
+        if (name !== "load") changeEnds(b, marks);
+        return;
+      }
       const cover = b.story.tokens
         .slice(b.s, b.e)
         .some((t) => t.kind === "mark");
@@ -2640,7 +2666,7 @@ export function installWordSelectionHost(
       const read = range[name] as (...args: unknown[]) => unknown;
       range[name] = (...args: unknown[]) => {
         const result = read(...args);
-        enqueue(ctx, range, `Range.${name}`, false, change);
+        enqueue(ctx, range, `Range.${name}`, false, change(name));
         return result;
       };
     }
@@ -3053,6 +3079,35 @@ export function installWordSelectionHost(
           };
         });
       };
+      nav(table, "rows", () => {
+        const { list } = collection(
+          ctx,
+          table,
+          "TableRowCollection",
+          () => {
+            const t = need().table;
+            const story = ref!.story;
+            const rows = new Map<number, Set<number>>();
+            for (const m of allMarks(story))
+              for (const c of paraOf(story.tokens[m]).cells)
+                if (c.table === t) {
+                  const cols = rows.get(c.row) ?? new Set<number>();
+                  cols.add(c.col);
+                  rows.set(c.row, cols);
+                }
+            return [...rows.values()].map((cols) => cols.size);
+          },
+          (cellCount) => {
+            const row: Obj = {};
+            register(row, ctx, "TableRow", table);
+            defineProps(row, ctx, "TableRow", {
+              cellCount: { get: () => cellCount },
+            });
+            return row;
+          },
+        );
+        return list;
+      });
       defineProps(table, ctx, "Table", {
         nestingLevel: { get: () => need().table.nesting },
         rowCount: {
@@ -3181,6 +3236,11 @@ export function installWordSelectionHost(
         const cells = commonCells(b);
         return cells.length ? { story: b.story, cells } : null;
       }),
+    );
+    nav(
+      obj,
+      "parentTableOrNullObject",
+      () => (obj.parentTableCellOrNullObject as Obj).parentTable as Obj,
     );
     nav(obj, "inlinePictures", () => {
       const { list } = collection(

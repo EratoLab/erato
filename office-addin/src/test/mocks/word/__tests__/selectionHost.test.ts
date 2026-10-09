@@ -1060,10 +1060,33 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
       );
     });
 
-    it("changes nothing for a range over several paragraphs", async () => {
+    it("rewrites the end paragraphs of a range over several paragraphs the web selects or reads as OOXML", async () => {
+      const across = (se1: Word.Paragraph, se2: Word.Paragraph) =>
+        se1.getRange("Content").expandTo(se2.getRange("Content"));
+      const rewritten = desktop
+        ? ORIGINAL
+        : [
+            { text: "SE1 " },
+            { text: "hidden ", font: { hidden: true } },
+            { text: "szcs ", font: { sizeBidirectional: 14 } },
+            { text: "bcs " },
+            { text: "both ", font: { bold: true, boldBidirectional: true } },
+            { text: "size ", font: { size: 14, sizeBidirectional: 14 } },
+            { text: "rtl end." },
+          ];
       expect(
         await runsAfter((se1, _end, se2) => {
-          se1.getRange("Whole").expandTo(se2.getRange("Whole")).getOoxml();
+          across(se1, se2).getOoxml();
+        }),
+      ).toEqual(rewritten);
+      expect(
+        await runsAfter((se1, _end, se2) => {
+          across(se1, se2).select();
+        }),
+      ).toEqual(rewritten);
+      expect(
+        await runsAfter((se1, _end, se2) => {
+          across(se1, se2).load("text");
         }),
       ).toEqual(ORIGINAL);
     });

@@ -113,6 +113,44 @@ describe.each(HOSTS)("buildWordSelectionRanges on %s", (flavour) => {
     expect(host.calls()).not.toContain("Paragraph.search");
   });
 
+  it("builds several paragraphs one by one: a suffix, whole paragraphs and a prefix, never across them", async () => {
+    const host = install();
+    const before = ["MP1", "MP2", "MP3"].map((p) => host.ooxml({ p }));
+    const built = await Word.run(async (context) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items/text");
+      await context.sync();
+      const covered = ["MP1", "MP2", "MP3"].map(
+        (tag) => paragraphs.items.find((p) => p.text.startsWith(`${tag} `))!,
+      );
+      const result = await buildWordSelectionRanges(
+        context,
+        covered.map((paragraph, i) => ({
+          paragraph,
+          rangeText: paragraph.text,
+          start: i === 0 ? 28 : 0,
+          end: i === 2 ? 9 : paragraph.text.length,
+          ...(i === 0 ? { occurrence: 0 } : {}),
+        })),
+        currentWordSelectionSupport(),
+      );
+      if ("refused" in result) return result;
+      const texts = result.parts.map((part) => {
+        if (part.kind === "whole") return null;
+        part.range.load("text");
+        return part.range;
+      });
+      await context.sync();
+      return texts.map((range) => range?.text ?? "whole");
+    });
+    expect(built).toEqual(["victor whiskey.", "whole", "MP3 Multi"]);
+    expect(["MP1", "MP2", "MP3"].map((p) => host.ooxml({ p }))).toEqual(before);
+    if (flavour === "web")
+      expect(host.calls().filter((call) => call.endsWith(".expandTo"))).toEqual(
+        [],
+      );
+  });
+
   it("refuses an occurrence that is not the one captured", async () => {
     const host = install();
     expect(await build("RP1", 23, 41, 2)).toEqual({

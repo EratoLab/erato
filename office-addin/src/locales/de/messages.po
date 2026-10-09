@@ -4242,6 +4242,11 @@ msgstr "Die Passage so wiederherstellen, wie sie vor diesem Ersetzen war? Es wir
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarningParagraphs"
+msgstr "Jeden Absatz der Passage so wiederherstellen, wie er vor diesem Ersetzen war? Es wird nichts wiederhergestellt, wenn sich einer davon seitdem geändert hat."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.scope"
 msgstr "Ersetzen schreibt nur in die Passage, die Sie ausgewählt haben, und nur, wenn sie seit Ihrer Anfrage unverändert ist."
 
