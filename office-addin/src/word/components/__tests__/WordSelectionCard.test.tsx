@@ -22,6 +22,7 @@ import {
   WORD_REPLACE_SELECTION_TIMEOUT_MS,
   WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
   WORD_REVERT_SELECTION_TIMEOUT_MS,
+  WORD_WEB_REVERT_MAX_PARAGRAPHS,
 } from "../../utils/wordReplaceSelection";
 import { emptySelectionCapture } from "../../utils/wordSelectionAnchor";
 import {
@@ -412,8 +413,8 @@ describe("WordSelectionCard", () => {
   });
 
   it.each([
-    [10, true],
-    [11, false],
+    [WORD_WEB_REVERT_MAX_PARAGRAPHS, true],
+    [WORD_WEB_REVERT_MAX_PARAGRAPHS + 1, false],
   ] as const)(
     "on the web, offers Erato's Undo after replacing %i paragraphs: %s",
     async (count, offered) => {
@@ -446,7 +447,7 @@ describe("WordSelectionCard", () => {
       expect(!!screen.queryByTestId("word-selection-undo")).toBe(offered);
       expect(
         !!screen.queryByText(
-          "To undo this Replace, use Word's own Undo in the document (Ctrl+Z, or ⌘Z on a Mac). In Word for the web, Erato's Undo covers up to 10 paragraphs.",
+          `To undo this Replace, use Word's own Undo in the document (Ctrl+Z, or ⌘Z on a Mac). In Word for the web, Erato's Undo covers up to ${WORD_WEB_REVERT_MAX_PARAGRAPHS} paragraphs.`,
         ),
       ).toBe(!offered);
     },

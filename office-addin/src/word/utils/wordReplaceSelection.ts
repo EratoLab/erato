@@ -53,11 +53,11 @@ export const WORD_REVERT_SELECTION_TIMEOUT_MS = 30_000;
  */
 export const WORD_REVERT_SELECTION_MS_PER_PARAGRAPH = 1_000;
 /**
- * Word for the web restores about one paragraph per 1-2 s and outlasted the restore's budget at 40
- * (ERMAIN-928 block 3 gate), while its own Undo reverted all 40 in one step. Beyond this span the
- * card points to Word's Undo instead.
+ * Word for the web restores about 4.4-5 s per paragraph, so 10 outlasted the restore's budget
+ * natively, while its own Undo reverted 11 in one step in 0.6 s. Beyond this span the card points
+ * to Word's Undo instead.
  */
-export const WORD_WEB_REVERT_MAX_PARAGRAPHS = 10;
+export const WORD_WEB_REVERT_MAX_PARAGRAPHS = 5;
 
 export function isWordRevertOffered(
   paragraphs: number,
