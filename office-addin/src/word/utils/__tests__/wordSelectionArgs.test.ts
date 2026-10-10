@@ -178,7 +178,7 @@ describe("wordSelectionFacetArgs", () => {
       {
         isEmpty: false,
         storyType: "MainDoc",
-        selectionText: selectedText.replace("\n", "\r"),
+        selectionText: selectedText.replaceAll("\n", "\r"),
         objectOnly: false,
         tables: cells[0] ? "partial" : "none",
         paragraphs: covered,
