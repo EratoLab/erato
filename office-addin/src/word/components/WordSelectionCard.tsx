@@ -131,6 +131,18 @@ export function wordSelectionReasonText(
         message:
           "This passage holds a link, field, comment, note, picture or other content a rewrite would lose.",
       });
+    case "bookmark":
+      return t({
+        id: "officeAddin.word.selection.reason.bookmark",
+        message:
+          "This passage holds a bookmark, such as one a table of contents or a cross-reference uses, which a rewrite could break.",
+      });
+    case "mixed_script":
+      return t({
+        id: "officeAddin.word.selection.reason.script",
+        message:
+          "This passage has superscript or subscript characters, as in m² or CO₂, which a rewrite would turn into normal text.",
+      });
     case "unsupported_formatting":
     case "mixed_formatting":
     case "complex_script_format":
@@ -375,7 +387,6 @@ const isStale = (result: WordReplaceSelectionResult | undefined) =>
     "TARGET_TEXT_MISMATCH",
     "TARGET_NOT_FOUND",
     "AMBIGUOUS_TARGET",
-    "HINT_CONFLICT",
     "TARGET_RANGE_UNPROVEN",
   ].includes(result.code);
 
@@ -909,6 +920,15 @@ export function WordSelectionCard({
                     "Replace writes only onto the passage you selected, and only if it is unchanged since your request.",
                 })}
               </p>
+              {rewritable?.flattensEmphasis && (
+                <p className="word-review__hint">
+                  {t({
+                    id: "officeAddin.word.selection.flattensEmphasis",
+                    message:
+                      "After Replace, bold, italic, underlined or struck-through words in this passage take the paragraph's usual formatting.",
+                  })}
+                </p>
+              )}
               {!confirmCard && (
                 <WordApplyButton
                   applying={applying}

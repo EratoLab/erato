@@ -4096,6 +4096,11 @@ msgid "officeAddin.word.selection.failed"
 msgstr "Word n'a pas accepté la modification. Rien n'a été remplacé."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.flattensEmphasis"
+msgstr "Après le remplacement, les mots en gras, en italique, soulignés ou barrés de ce passage prennent la mise en forme habituelle du paragraphe."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Si ce passage peut être remplacé, il est envoyé à la place du document."
@@ -4207,6 +4212,11 @@ msgstr "Erato n'a pas pu lire votre sélection dans Word, votre message n'a donc
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmark"
+msgstr "Ce passage contient un signet, comme ceux qu'utilisent une table des matières ou un renvoi, qu'une réécriture pourrait casser."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.cellParagraphs"
 msgstr "Sélectionnez un seul paragraphe de cette cellule du tableau pour le faire remplacer. Plusieurs paragraphes d'une même cellule servent uniquement de contexte."
 
@@ -4239,6 +4249,11 @@ msgstr "Le texte d'un tableau placé dans un autre tableau sert uniquement de co
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato ne peut pas localiser précisément ce passage dans le document : il ne peut donc pas le remplacer en toute sécurité."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.script"
+msgstr "Ce passage contient des caractères en exposant ou en indice, comme dans m² ou CO₂, qu'une réécriture transformerait en texte normal."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

@@ -4096,6 +4096,11 @@ msgid "officeAddin.word.selection.failed"
 msgstr "Word hat die Änderung nicht angenommen. Es wurde nichts ersetzt."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.flattensEmphasis"
+msgstr "Nach dem Ersetzen erhalten fett, kursiv, unterstrichen oder durchgestrichen formatierte Wörter in dieser Passage die übliche Formatierung des Absatzes."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Wenn diese Passage ersetzt werden kann, wird sie statt des Dokuments gesendet."
@@ -4207,6 +4212,11 @@ msgstr "Erato konnte Ihre Auswahl in Word nicht lesen, daher wurde Ihre Nachrich
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmark"
+msgstr "Diese Passage enthält eine Textmarke, etwa eine, die ein Inhaltsverzeichnis oder ein Querverweis verwendet. Eine Umformulierung könnte sie zerstören."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.cellParagraphs"
 msgstr "Wählen Sie einen einzelnen Absatz in dieser Tabellenzelle aus, damit er ersetzt werden kann. Mehrere Absätze in einer Zelle werden nur als Kontext verwendet."
 
@@ -4239,6 +4249,11 @@ msgstr "Text in einer Tabelle innerhalb einer anderen Tabelle wird nur als Konte
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato kann diese Passage im Dokument nicht eindeutig finden und sie daher nicht sicher ersetzen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.script"
+msgstr "Diese Passage enthält hoch- oder tiefgestellte Zeichen, wie in m² oder CO₂, die eine Umformulierung zu normalem Text machen würde."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

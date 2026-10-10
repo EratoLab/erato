@@ -4096,6 +4096,11 @@ msgid "officeAddin.word.selection.failed"
 msgstr "Word nie przyjął zmiany. Niczego nie zastąpiono."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.flattensEmphasis"
+msgstr "Po zastąpieniu pogrubione, pochylone, podkreślone lub przekreślone słowa w tym fragmencie przyjmą zwykłe formatowanie akapitu."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Jeśli ten fragment można zastąpić, zostanie wysłany zamiast dokumentu."
@@ -4207,6 +4212,11 @@ msgstr "Erato nie mógł odczytać zaznaczenia w programie Word, więc wiadomoś
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmark"
+msgstr "Ten fragment zawiera zakładkę, np. taką, której używa spis treści lub odsyłacz, a przeredagowanie mogłoby ją uszkodzić."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.cellParagraphs"
 msgstr "Zaznacz jeden akapit w tej komórce tabeli, aby go zastąpić. Kilka akapitów w jednej komórce jest używanych tylko jako kontekst."
 
@@ -4239,6 +4249,11 @@ msgstr "Tekst w tabeli umieszczonej w innej tabeli jest używany tylko jako kont
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato nie może dokładnie zlokalizować tego fragmentu w dokumencie, więc nie może go bezpiecznie zastąpić."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.script"
+msgstr "Ten fragment zawiera znaki w indeksie górnym lub dolnym, jak w m² lub CO₂, które przeredagowanie zamieniłoby w zwykły tekst."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

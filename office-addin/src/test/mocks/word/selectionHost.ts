@@ -65,6 +65,11 @@ export interface MockSelectionRun {
   footnote?: boolean;
   /** The reference mark at the end of a comment's range. */
   comment?: boolean;
+  /**
+   * Bookmark name; consecutive runs with the same name form one bookmark around their text, its
+   * bookmarkStart and bookmarkEnd inside the paragraph's own w:p as BM0 measured.
+   */
+  bookmark?: string;
 }
 
 export interface MockSelectionParagraphSpec {
@@ -141,6 +146,7 @@ export interface MockRunSummary {
   object?: "picture" | "footnote" | "comment";
   font?: MockSelectionFont;
   rStyle?: string;
+  bookmark?: string;
   link?: string;
   field?: string;
   sdt?: string;
@@ -585,9 +591,15 @@ interface FieldState {
 interface SdtState {
   tag: string;
 }
+interface BookmarkState {
+  name: string;
+  id: number;
+}
 interface RunState {
   font: MockSelectionFont;
   rStyle?: string;
+  /** Not a wrapper: its start and end sit between runs. Overlapping bookmarks are not modelled. */
+  bookmark?: BookmarkState;
   link?: LinkState;
   field?: FieldState;
   sdt?: SdtState;
@@ -841,6 +853,11 @@ export function installWordSelectionHost(
   let trackingMode: MockTrackingMode = options.trackingMode ?? "Off";
   let idSeed = 0;
   let revisionSeed = 0;
+  let bookmarkSeed = 0;
+  const bookmarkState = (name: string): BookmarkState => {
+    bookmarkSeed += 1;
+    return { name, id: bookmarkSeed };
+  };
 
   const styleTable = new Map<string, StyleDef>(
     BUILT_IN_STYLES.map((def) => [def.name, def]),
@@ -942,6 +959,12 @@ export function installWordSelectionHost(
             : same("sdt")
               ? previous?.state.sdt
               : { tag: run.sdt },
+        bookmark:
+          run.bookmark === undefined
+            ? undefined
+            : same("bookmark")
+              ? previous?.state.bookmark
+              : bookmarkState(run.bookmark),
         ins:
           run.inserted === undefined
             ? undefined
@@ -1671,6 +1694,16 @@ export function installWordSelectionHost(
     let link: LinkState | undefined;
     let rev: Revision | undefined;
     let field: FieldState | undefined;
+    let bookmark: BookmarkState | undefined;
+    const moveBookmark = (next: BookmarkState | undefined) => {
+      if (next === bookmark) return;
+      if (bookmark) out.push(`<w:bookmarkEnd w:id="${bookmark.id}"/>`);
+      if (next)
+        out.push(
+          `<w:bookmarkStart w:id="${next.id}" w:name="${esc(next.name)}"/>`,
+        );
+      bookmark = next;
+    };
     const closeFrom = (depth: number) => {
       if (field && depth <= 3) {
         out.push(`<w:r><w:fldChar w:fldCharType="end"/></w:r>`);
@@ -1724,6 +1757,7 @@ export function installWordSelectionHost(
           `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${esc(field.code)} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`,
         );
       }
+      moveBookmark(t.run.bookmark);
       const props = runProperties(t.run);
       if (t.kind !== "char") {
         objectSeed += 1;
@@ -1749,6 +1783,7 @@ export function installWordSelectionHost(
           u.run.link !== t.run.link ||
           (u.run.ins ?? u.run.del) !== tRev ||
           u.run.field !== t.run.field ||
+          u.run.bookmark !== t.run.bookmark ||
           runKey(u) !== runKey(t)
         )
           break;
@@ -1759,6 +1794,7 @@ export function installWordSelectionHost(
       i = j;
     }
     closeFrom(0);
+    moveBookmark(undefined);
     return out.join("");
   };
   const paragraphXml = (
@@ -2096,6 +2132,8 @@ export function installWordSelectionHost(
       const tokens: Token[] = [];
       let fieldCode: string | undefined;
       let complexField: FieldState | undefined;
+      const bookmarks = new Map<string, BookmarkState>();
+      let bookmark: BookmarkState | undefined;
       type Context = Pick<RunState, "link" | "sdt" | "ins" | "del" | "field">;
       const parseRun = (r: Element, context: Context) => {
         const rPr = childW(r, "rPr");
@@ -2104,6 +2142,7 @@ export function installWordSelectionHost(
         const base: RunState = {
           font,
           rStyle,
+          bookmark,
           link: context.link,
           sdt: context.sdt,
           ins: context.ins,
@@ -2217,6 +2256,15 @@ export function installWordSelectionHost(
               break;
             case "smartTag":
               walk(node, context);
+              break;
+            case "bookmarkStart": {
+              bookmark = bookmarkState(attrW(node, "name") ?? "");
+              bookmarks.set(attrW(node, "id") ?? "", bookmark);
+              break;
+            }
+            case "bookmarkEnd":
+              if (bookmarks.get(attrW(node, "id") ?? "") === bookmark)
+                bookmark = undefined;
               break;
             default:
               break;
@@ -4007,6 +4055,7 @@ export function installWordSelectionHost(
           : { object: t.kind as MockRunSummary["object"] }),
         ...(Object.keys(font).length ? { font } : {}),
         ...(t.run.rStyle ? { rStyle: t.run.rStyle } : {}),
+        ...(t.run.bookmark ? { bookmark: t.run.bookmark.name } : {}),
         ...(t.run.link ? { link: t.run.link.url } : {}),
         ...(t.run.field ? { field: t.run.field.code } : {}),
         ...(t.run.sdt ? { sdt: t.run.sdt.tag } : {}),
@@ -4143,6 +4192,10 @@ export function installWordSelectionHost(
       const field =
         runSpec.field === undefined ? undefined : { code: runSpec.field };
       const sdt = runSpec.sdt === undefined ? undefined : { tag: runSpec.sdt };
+      const bookmark =
+        runSpec.bookmark === undefined
+          ? undefined
+          : bookmarkState(runSpec.bookmark);
       for (let i = b.s; i < b.e; i += 1) {
         const t = b.story.tokens[i];
         if (!isInline(t)) continue;
@@ -4157,6 +4210,7 @@ export function installWordSelectionHost(
           link: link ?? t.run.link,
           field: field ?? t.run.field,
           sdt: sdt ?? t.run.sdt,
+          bookmark: bookmark ?? t.run.bookmark,
         };
       }
     },

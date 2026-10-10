@@ -24,6 +24,7 @@ import {
   readWordParagraphItems,
 } from "./wordSelectionItems";
 import { buildWordSelectionRanges } from "./wordSelectionRange";
+import { wordPartFormatLoss } from "./wordSelectionRewrite";
 import {
   scanWordSelectionSpan,
   wordCellParagraphOoxml,
@@ -121,19 +122,40 @@ export function queueParagraphSpanChecks(
   });
 }
 
+/** The rewrite checks of one paragraph written whole as OOXML because it keeps items. */
+export interface WordKeptParagraphEvaluation {
+  hazards: WordSelectionHazards;
+  flattensEmphasis: boolean;
+}
+
 /**
- * What still keeps a paragraph with kept items from being rewritten: its whole OOXML is written, so
- * its formatting is kept as it is, but a revision or complex-script text is not.
+ * What still keeps a paragraph with kept items from being rewritten: a revision, complex-script
+ * text, or formatting its part's rewrite would drop, as the plain path refuses it (mixed colour,
+ * highlight, font, size or character style, and superscript or subscript). Only the part's own
+ * text runs are judged; the rest of the paragraph is written as it was.
  */
-export function keptItemHazards(
+export function evaluateKeptParagraph(
   checks: WordParagraphSpanChecks,
-): WordSelectionHazards {
+  part: WordSelectionSpanSlice,
+): WordKeptParagraphEvaluation {
   const { hazards } = scanWordSelectionSpan(checks.ooxml);
+  const loss = wordPartFormatLoss(
+    checks.ooxml,
+    part.rangeText,
+    part.start,
+    part.end,
+  );
   return {
-    ...(hazards.complexScript ? { complexScript: true } : {}),
-    ...(hazards.trackedChange || checks.objectHazards.trackedChange
-      ? { trackedChange: true }
-      : {}),
+    hazards: {
+      ...(hazards.complexScript ? { complexScript: true } : {}),
+      ...(hazards.trackedChange || checks.objectHazards.trackedChange
+        ? { trackedChange: true }
+        : {}),
+      ...(loss === null ? { unsupportedFormatting: true } : {}),
+      ...(loss?.other ? { mixedFormatting: true } : {}),
+      ...(loss?.script ? { mixedScript: true } : {}),
+    },
+    flattensEmphasis: !!loss?.emphasis,
   };
 }
 
@@ -202,7 +224,16 @@ export interface WordParagraphSpanEvaluation {
   styleFontResolved: boolean;
   /** Null when the style font was needed but not found. */
   format: WordSelectionTargetFormat | null;
+  /** A mixed bold, italic, underline or strikethrough the rewrite gives the style's value. */
+  flattensEmphasis: boolean;
 }
+
+const EMPHASIS_PROPERTIES = [
+  "bold",
+  "italic",
+  "underline",
+  "strikeThrough",
+] as const;
 
 /**
  * The rewrite checks of one paragraph and the font its rewrite gets. The hazards always cover the
@@ -224,8 +255,16 @@ export function evaluateParagraphSpan(
   const style = needsStyle
     ? wordSelectionStyleToggles(checks.ooxml, styleName)
     : {};
+  const flattensEmphasis = EMPHASIS_PROPERTIES.some(
+    (property) => scan.format[property]?.state === "mixed",
+  );
   if (!style || support.styleFontSource === null)
-    return { hazards, styleFontResolved: false, format: null };
+    return {
+      hazards,
+      styleFontResolved: false,
+      format: null,
+      flattensEmphasis,
+    };
   const format = wordSelectionTargetFormat(
     scan.format,
     style,
@@ -238,6 +277,7 @@ export function evaluateParagraphSpan(
       : hazards,
     styleFontResolved: true,
     format,
+    flattensEmphasis,
   };
 }
 
@@ -418,6 +458,9 @@ export function checkTargetVerification(
   const keeps = selection.paragraphs.some((p) => p.kept);
   // Word would redline a paragraph written as OOXML whole, its items inside the revision.
   if (keeps && trackingMode !== "Off") return { refused: "TRACKED_ITEMS" };
+  // Emphasis a rewrite would lose, though the card did not say so at Send: it was added since.
+  const unannounced = (evaluated: { flattensEmphasis: boolean }) =>
+    evaluated.flattensEmphasis && !selection.flattensEmphasis;
   const offsets = wordSelectionPartOffsets(selection);
   const expected = wordSelectionParts(selection);
   if (
@@ -447,8 +490,15 @@ export function checkTargetVerification(
           : null;
       if (marked?.text !== kept.text)
         return { refused: "TARGET_TEXT_MISMATCH" };
-      const hazards = keptItemHazards(live.checks);
-      if (hazards.trackedChange || hazards.complexScript)
+      const evaluated = evaluateKeptParagraph(live.checks, {
+        start,
+        end,
+        rangeText: live.rangeText,
+      });
+      if (
+        wordSelectionHazardReason(evaluated.hazards, [], support) ||
+        unannounced(evaluated)
+      )
         return { refused: "UNSUPPORTED_CONTENT" };
       formats.push(null);
       continue;
@@ -462,7 +512,8 @@ export function checkTargetVerification(
     if (
       wordSelectionHazardReason(evaluated.hazards, [live.text], support) ||
       !evaluated.styleFontResolved ||
-      !evaluated.format
+      !evaluated.format ||
+      unannounced(evaluated)
     )
       return { refused: "UNSUPPORTED_CONTENT" };
     formats.push(evaluated.format);

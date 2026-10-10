@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { readWordParagraphItems } from "../wordSelectionItems";
-import { rewriteWordParagraphPart } from "../wordSelectionRewrite";
+import {
+  rewriteWordParagraphPart,
+  wordPartFormatLoss,
+} from "../wordSelectionRewrite";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const pkg = (paragraph: string) =>
@@ -230,6 +233,129 @@ describe("rewriteWordParagraphPart", () => {
   it("refuses a paragraph that no longer spells the captured text", () => {
     expect(
       rewriteWordParagraphPart(pkg(fd), "FD1 changed", 0, 11, ["x"]),
+    ).toBeNull();
+  });
+});
+
+describe("wordPartFormatLoss", () => {
+  const NONE = { emphasis: false, script: false, other: false };
+  const loss = (paragraph: string, text: string, start = 0, end?: number) =>
+    wordPartFormatLoss(pkg(paragraph), text, start, end ?? text.length);
+  const pageField = field(" PAGE ", "3");
+
+  it("finds nothing to lose in text formatted alike, uniform colour and character style included", () => {
+    expect(
+      loss(
+        p(
+          run(
+            "All red ",
+            '<w:rStyle w:val="Strong"/><w:color w:val="C00000"/>',
+          ),
+          pageField,
+          run(" words", '<w:rStyle w:val="Strong"/><w:color w:val="C00000"/>'),
+        ),
+        "All red 3 words",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it.each([
+    ["colour", '<w:color w:val="C00000"/>'],
+    ["highlight", '<w:highlight w:val="yellow"/>'],
+    ["font", '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>'],
+    ["size", '<w:sz w:val="28"/>'],
+    ["character style", '<w:rStyle w:val="Strong"/>'],
+  ])("loses a %s on part of the text", (_, props) => {
+    expect(
+      loss(
+        p(run("Part "), run("marked", props), run(" text"), pageField),
+        "Part marked text3",
+      ),
+    ).toEqual({ ...NONE, other: true });
+  });
+
+  it("tells superscript and emphasis on part of the text apart from the rest", () => {
+    expect(
+      loss(
+        p(
+          run("Area m"),
+          run("2", '<w:vertAlign w:val="superscript"/>'),
+          pageField,
+        ),
+        "Area m23",
+      ),
+    ).toEqual({ ...NONE, script: true });
+    expect(
+      loss(
+        p(run("Plain "), run("bold", "<w:b/>"), run(" words"), pageField),
+        "Plain bold words3",
+      ),
+    ).toEqual({ ...NONE, emphasis: true });
+  });
+
+  it("judges only the selected part of the paragraph", () => {
+    const text = "Plain words red3";
+    const paragraph = p(
+      run("Plain words "),
+      run("red", '<w:color w:val="C00000"/>'),
+      pageField,
+    );
+    expect(loss(paragraph, text, 0, 11)).toEqual(NONE);
+    expect(loss(paragraph, text)).toEqual({ ...NONE, other: true });
+  });
+
+  it("keeps pieces formatted differently from each other, each written with its own runs", () => {
+    expect(
+      loss(
+        p(
+          run("Red words ", '<w:color w:val="C00000"/>'),
+          pageField,
+          run(" blue words", '<w:color w:val="0000FF"/>'),
+        ),
+        "Red words 3 blue words",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it("does not count a link's Hyperlink style, a field's result or a note reference against the text", () => {
+    expect(
+      loss(
+        p(
+          run("Alpha "),
+          `<w:hyperlink r:id="rId3">${run("link", '<w:rStyle w:val="Hyperlink"/>')}</w:hyperlink>`,
+          run(" golf "),
+          `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> DATE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run("2026", '<w:b/><w:color w:val="C00000"/>')}<w:r><w:fldChar w:fldCharType="end"/></w:r>`,
+          `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>`,
+          run(" end."),
+        ),
+        "Alpha link golf 2026\u0002 end.",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it("ignores what changes nothing a reader sees", () => {
+    expect(
+      loss(
+        p(
+          run("Spelled ", '<w:lang w:val="en-GB"/><w:noProof/>'),
+          run("auto ", '<w:color w:val="auto"/><w:highlight w:val="none"/>'),
+          run("hinted ", '<w:rFonts w:hint="eastAsia"/>'),
+          run("level", '<w:vertAlign w:val="baseline"/>'),
+          pageField,
+        ),
+        "Spelled auto hinted level3",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it("is null for a part that cuts through a field", () => {
+    expect(
+      wordPartFormatLoss(
+        pkg(p(run("Page "), field(" PAGE ", "12"), run(" of"))),
+        "Page 12 of",
+        0,
+        6,
+      ),
     ).toBeNull();
   });
 });

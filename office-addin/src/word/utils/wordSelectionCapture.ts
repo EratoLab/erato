@@ -21,8 +21,8 @@ import {
 } from "./wordSelectionRange";
 import { currentWordSelectionSupport } from "./wordSelectionSupport";
 import {
+  evaluateKeptParagraph,
   evaluateParagraphSpan,
-  keptItemHazards,
   queueParagraphSpanChecks,
   queueWordSections,
   readWordStory,
@@ -649,6 +649,11 @@ export async function captureWordSelection(
         sections,
         covered,
       );
+      const slices = covered.map((_, i) => ({
+        start: parts[i].start,
+        end: parts[i].end,
+        rangeText: rangeTexts[i],
+      }));
       const spanChecks = covered.map((paragraph, i) =>
         kept[i] !== null
           ? null
@@ -656,21 +661,19 @@ export async function captureWordSelection(
               reads[i],
               paragraph.style,
               support,
-              parts[i].whole
-                ? undefined
-                : {
-                    start: parts[i].start,
-                    end: parts[i].end,
-                    rangeText: rangeTexts[i],
-                  },
+              parts[i].whole ? undefined : slices[i],
             ),
+      );
+      const keptChecks = covered.map((_, i) =>
+        kept[i] === null ? null : evaluateKeptParagraph(reads[i], slices[i]),
       );
       const hazards: WordSelectionHazards = Object.assign(
         {},
-        ...spanChecks.map((check, i) =>
-          check ? check.hazards : keptItemHazards(reads[i]),
-        ),
+        ...spanChecks.map((check, i) => (check ?? keptChecks[i])!.hazards),
         endsSection.some(Boolean) ? { breakOrSymbol: true } : {},
+      );
+      const flattensEmphasis = [...spanChecks, ...keptChecks].some(
+        (check) => check?.flattensEmphasis,
       );
       return buildWordSelectionSnapshot(
         {
@@ -682,6 +685,7 @@ export async function captureWordSelection(
           kept,
           spanChecked: true,
           ...(searchMismatch ? { searchMismatch } : {}),
+          ...(flattensEmphasis ? { flattensEmphasis } : {}),
         },
         support,
         origin,
