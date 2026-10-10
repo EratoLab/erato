@@ -2,6 +2,7 @@ import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
 import { resolveWordParagraphs } from "./wordParagraphResolver";
 import { fitWordSelectionText } from "./wordSelectionArgs";
 import { WORD_CONTROL_CHARACTER } from "./wordSelectionEdit";
+import { WORD_MARKER } from "./wordSelectionItems";
 import { searchStartsOf, wordSearchable } from "./wordSelectionRange";
 import {
   fitsActionFacetArg,
@@ -12,7 +13,11 @@ import type {
   WordParagraphAnchor,
   WordParagraphEntry,
 } from "./wordParagraphResolver";
-import type { WordMarkedPart, WordKeptMarker } from "./wordSelectionItems";
+import type {
+  WordKeptItemKind,
+  WordKeptMarker,
+  WordMarkedPart,
+} from "./wordSelectionItems";
 import type { WordSelectionSupport } from "./wordSelectionSupport";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
@@ -212,7 +217,11 @@ export interface WordSelectionParagraph {
   text: string;
   rangeText: string;
   /** Its part with markers for the items it keeps, written whole as OOXML; absent otherwise. */
-  kept?: { text: string; markers: readonly WordKeptMarker[] };
+  kept?: {
+    text: string;
+    markers: readonly WordKeptMarker[];
+    kinds: readonly WordKeptItemKind[];
+  };
   /** A hint only: a paragraph inserted above moves it without changing the target. */
   index: number;
   styleName: string;
@@ -733,7 +742,15 @@ export function buildWordSelectionSnapshot(
           index,
           styleName,
           tableNestingLevel,
-          ...(kept ? { kept: { text: kept.text, markers: kept.markers } } : {}),
+          ...(kept
+            ? {
+                kept: {
+                  text: kept.text,
+                  markers: kept.markers,
+                  kinds: kept.kinds ?? [],
+                },
+              }
+            : {}),
         };
       },
     ),
@@ -894,4 +911,53 @@ export function resolveWordSelection(
   )
     ? { positions }
     : { refused: "TARGET_TEXT_MISMATCH" };
+}
+
+const WORD_CONTROL_CHARACTER_GLOBAL = new RegExp(
+  WORD_CONTROL_CHARACTER.source,
+  "g",
+);
+
+/** The reason a kept item's kind gave before items could be kept (D-10). */
+const KEPT_ITEM_REASON: Readonly<
+  Record<WordKeptItemKind, WordSelectionReasonCode>
+> = {
+  field: "field",
+  link: "hyperlink",
+  note: "note_reference",
+  comment: "comment_mark",
+  picture: "inline_picture",
+  break: "line_break",
+  control: "content_control",
+};
+
+/**
+ * The selection as context only, with each marker replaced by what its item shows, for a server
+ * whose word_selection facet does not explain markers yet (no kept_items argument).
+ */
+export function wordSelectionWithoutKeptItems(
+  selection: WordSelectionSnapshot,
+): WordSelectionSnapshot {
+  const kept = selection.paragraphs.filter((p) => p.kept);
+  if (selection.role !== "rewrite" || kept.length === 0) return selection;
+  const shows = new Map<number, string>();
+  for (const p of kept)
+    for (const marker of p.kept!.markers)
+      if (marker.end === "point")
+        shows.set(
+          marker.number,
+          marker.shows.replace(WORD_CONTROL_CHARACTER_GLOBAL, ""),
+        );
+  const kind = kept[0].kept!.kinds[0] ?? "field";
+  return {
+    ...selection,
+    role: "context_only",
+    reasonCode: KEPT_ITEM_REASON[kind],
+    selectedText: selection.selectedText.replace(
+      WORD_MARKER,
+      (marker, close: string, number: string) =>
+        close ? "" : (shows.get(Number(number)) ?? ""),
+    ),
+    paragraphs: selection.paragraphs.map(({ kept: _kept, ...p }) => p),
+  };
 }

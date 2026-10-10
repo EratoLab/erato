@@ -29,6 +29,7 @@ import {
   WORD_AUTHORING_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
   wordSelectionFacetAvailable,
+  wordSelectionForFacets,
   wordSelectionTakesSlot,
 } from "../utils/wordActionFacet";
 import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
@@ -361,7 +362,8 @@ export function WordChatInput({
           setSelectionReadFailed(true);
           return null;
         }
-        const selection = read.value;
+        const selection =
+          read.value && wordSelectionForFacets(read.value, availableFacetArgs);
         const actionFacet =
           selection && wordSelectionTakesSlot(selection, chipEnabled)
             ? resolveWordSelectionFacet({

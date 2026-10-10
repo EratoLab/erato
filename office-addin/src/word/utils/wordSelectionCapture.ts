@@ -467,7 +467,7 @@ function keptParts(
     );
     if (!marked) return "cut";
     next = marked.next;
-    return marked;
+    return { ...marked, kinds: [...new Set(items.items.map((i) => i.kind))] };
   });
 }
 

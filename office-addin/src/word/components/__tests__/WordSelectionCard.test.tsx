@@ -269,6 +269,36 @@ describe("WordSelectionCard", () => {
     expect(host.writeSyncs()).toEqual([]);
   });
 
+  it("shows a kept field by its text and replaces around it", async () => {
+    const capture = await captureOf(host, { p: "FD1" });
+    renderCard({
+      capture,
+      content: "FD1 Feld vor \u27E61\u27E7 Feld danach.",
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Original" }));
+    expect(
+      screen.getByText("FD1 Field before [2026-10-06] field after words."),
+    ).toBeInTheDocument();
+    fireEvent.click(replaceButton()!);
+    await screen.findByText("Replaced the selected passage.");
+    expect(host.paragraphs().find((p) => p.text.startsWith("FD1"))?.text).toBe(
+      "FD1 Feld vor 2026-10-06 Feld danach.",
+    );
+    expect(host.ooxml({ p: "FD1" })).toContain("DATE");
+  });
+
+  it("says a proposal that lost a kept item's marker would delete it, and offers no Replace", async () => {
+    const capture = await captureOf(host, { p: "FD1" });
+    renderCard({ capture, content: "FD1 Feld vor Feld danach." });
+    expect(
+      screen.getByText(
+        "The proposal lost or moved a field, link, note or comment of the passage, so it would delete or misplace it. Nothing was replaced.",
+      ),
+    ).toBeInTheDocument();
+    expect(replaceButton()).toBeNull();
+    expect(host.writeSyncs()).toEqual([]);
+  });
+
   it("replaces only the selected passage inside its paragraph", async () => {
     const capture = await captureOf(host, {
       p: "RP1",

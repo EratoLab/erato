@@ -538,6 +538,8 @@ export interface WordMarkedPart {
   text: string;
   markers: WordKeptMarker[];
   next: number;
+  /** Every kind of item the whole paragraph keeps, inside the part or not. */
+  kinds?: readonly WordKeptItemKind[];
 }
 
 export const WORD_MARKER = /\u27E6(\/?)(\d+)\u27E7/g;

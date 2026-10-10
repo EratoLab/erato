@@ -4097,8 +4097,48 @@ msgstr "Propozycja jest pusta albo zawiera znaki, których Word nie zachowuje ja
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.break"
+msgstr "podział wiersza"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.comment"
+msgstr "komentarz"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.control"
+msgstr "formant zawartości"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.field"
+msgstr "pole"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.link"
+msgstr "link"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.note"
+msgstr "przypis"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.picture"
+msgstr "obraz"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.lineCount"
 msgstr "Propozycja nie ma po jednym wierszu na każdy zaznaczony akapit. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.markersChanged"
+msgstr "Propozycja zgubiła lub przesunęła pole, link, przypis lub komentarz z fragmentu, więc usunęłaby go lub umieściła w złym miejscu. Niczego nie zastąpiono."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4174,6 +4214,11 @@ msgstr "Ten fragment ma formatowanie, którego przeredagowanie nie mogłoby zach
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.host"
 msgstr "Ta wersja programu Word nie może zastąpić zaznaczonego fragmentu."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.itemCut"
+msgstr "To zaznaczenie zaczyna się lub kończy wewnątrz pola albo innego elementu, który Word zachowuje w całości. Zaznacz cały element lub tekst wokół niego, aby można go było zastąpić."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4304,6 +4349,11 @@ msgstr "Word nie odpowiedział na czas. Niczego nie zastąpiono."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.title"
 msgstr "Przeredagowanie zaznaczonego fragmentu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.trackedItems"
+msgstr "Śledzenie zmian jest włączone, a ten fragment zawiera pola, linki, przypisy lub komentarze, które śledzona zmiana oznaczyłaby jako zmienione. Wyłącz śledzenie zmian, aby go zastąpić. Niczego nie zastąpiono."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

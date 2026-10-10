@@ -45,7 +45,11 @@ import {
   wordSelectionOf,
 } from "../utils/wordSelectionAnchor";
 import { captureWordSelection } from "../utils/wordSelectionCapture";
-import { splitWordSelectionReplacement } from "../utils/wordSelectionEdit";
+import {
+  splitWordSelectionReplacement,
+  wordSelectionLinePieces,
+} from "../utils/wordSelectionEdit";
+import { WORD_MARKER } from "../utils/wordSelectionItems";
 import {
   showWordSelection,
   showWrittenWordSelection,
@@ -61,7 +65,9 @@ import type { WordReviewState } from "../utils/wordReviewState";
 import type {
   WordSelectionCapture,
   WordSelectionReasonCode,
+  WordSelectionSnapshot,
 } from "../utils/wordSelectionAnchor";
+import type { WordKeptItemKind } from "../utils/wordSelectionItems";
 
 /** V2-4: why this selection can only be context, one message per kind of reason. */
 export function wordSelectionReasonText(
@@ -139,6 +145,12 @@ export function wordSelectionReasonText(
         message:
           "In Word for the web, text after a picture in the same paragraph cannot be replaced.",
       });
+    case "item_cut":
+      return t({
+        id: "officeAddin.word.selection.reason.itemCut",
+        message:
+          "This selection starts or ends inside a field or another item Word keeps whole. Select the whole item, or the text around it, to have it replaced.",
+      });
     case "shape_not_enabled":
       return t({
         id: "officeAddin.word.selection.reason.shape",
@@ -150,6 +162,60 @@ export function wordSelectionReasonText(
         id: "officeAddin.word.selection.reason.position",
         message:
           "Erato cannot pinpoint this passage in the document, so it cannot replace it safely.",
+      });
+  }
+}
+
+/** What the card shows for each kept item's marker, so the comparison reads as text. */
+function wordKeptMarkersShown(
+  text: string,
+  selection: WordSelectionSnapshot,
+): string {
+  const markers = new Map(
+    selection.paragraphs.flatMap((p) =>
+      (p.kept?.markers ?? []).map((m) => [m.number, m] as const),
+    ),
+  );
+  return text.replace(WORD_MARKER, (marker, close: string, number: string) => {
+    const kept = markers.get(Number(number));
+    if (!kept) return marker;
+    const name = keptItemName(kept.kind);
+    if (close) return `[/${name}]`;
+    const shows = kept.shows.replace(/[\u0000-\u001F]/g, "");
+    return kept.end === "point" && shows ? `[${shows}]` : `[${name}]`;
+  });
+}
+
+function keptItemName(kind: WordKeptItemKind): string {
+  switch (kind) {
+    case "field":
+      return t({
+        id: "officeAddin.word.selection.item.field",
+        message: "field",
+      });
+    case "link":
+      return t({ id: "officeAddin.word.selection.item.link", message: "link" });
+    case "note":
+      return t({ id: "officeAddin.word.selection.item.note", message: "note" });
+    case "comment":
+      return t({
+        id: "officeAddin.word.selection.item.comment",
+        message: "comment",
+      });
+    case "picture":
+      return t({
+        id: "officeAddin.word.selection.item.picture",
+        message: "picture",
+      });
+    case "break":
+      return t({
+        id: "officeAddin.word.selection.item.break",
+        message: "line break",
+      });
+    case "control":
+      return t({
+        id: "officeAddin.word.selection.item.control",
+        message: "content control",
       });
   }
 }
@@ -265,6 +331,18 @@ function resultText(
             message:
               "This passage now appears more than once, so Erato can't tell which one you meant. Nothing was replaced.",
           });
+        case "MARKERS_CHANGED":
+          return t({
+            id: "officeAddin.word.selection.markersChanged",
+            message:
+              "The proposal lost or moved a field, link, note or comment of the passage, so it would delete or misplace it. Nothing was replaced.",
+          });
+        case "TRACKED_ITEMS":
+          return t({
+            id: "officeAddin.word.selection.trackedItems",
+            message:
+              "Track Changes is on, and this passage holds fields, links, notes or comments that a tracked rewrite would mark as changed. Turn Track Changes off to replace it. Nothing was replaced.",
+          });
         case "TARGET_RANGE_UNPROVEN":
           return t({
             id: "officeAddin.word.selection.rangeUnproven",
@@ -361,17 +439,17 @@ export function WordSelectionCard({
     expectedIdentity: artifact?.itemIdentity,
     currentIdentity: documentIdentity,
   });
-  const replacement = useMemo(
-    () =>
-      rewritable
-        ? splitWordSelectionReplacement(
-            content,
-            rewritable.shape,
-            rewritable.paragraphCount,
-          )
-        : null,
-    [content, rewritable],
-  );
+  const replacement = useMemo(() => {
+    if (!rewritable) return null;
+    const split = splitWordSelectionReplacement(
+      content,
+      rewritable.shape,
+      rewritable.paragraphCount,
+    );
+    if ("refused" in split) return split;
+    const pieces = wordSelectionLinePieces(rewritable.paragraphs, split.lines);
+    return "refused" in pieces ? pieces : split;
+  }, [content, rewritable]);
   const proposal =
     replacement && "lines" in replacement
       ? replacement.lines.join("\n")
@@ -1027,8 +1105,14 @@ export function WordSelectionCard({
           })}
         </p>
         <TextComparison
-          original={selection?.selectedText ?? null}
-          proposed={proposal}
+          original={
+            selection
+              ? wordKeptMarkersShown(selection.selectedText, selection)
+              : null
+          }
+          proposed={
+            selection ? wordKeptMarkersShown(proposal, selection) : proposal
+          }
         />
       </WordReviewHeader>
     </WordReviewCard>

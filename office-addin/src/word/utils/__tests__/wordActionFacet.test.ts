@@ -224,6 +224,7 @@ describe("word_selection", () => {
         context_before: "Kilo ",
         context_after: ".",
         truncated: "false",
+        kept_items: "",
       },
     });
     expect(

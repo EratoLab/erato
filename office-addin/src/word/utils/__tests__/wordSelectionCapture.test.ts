@@ -708,7 +708,10 @@ describe.each(HOSTS)(
           reasonCode: null,
           selectedText: text,
         });
-        expect(selection!.paragraphs[0].kept).toEqual({ text, markers: [] });
+        expect(selection!.paragraphs[0].kept).toMatchObject({
+          text,
+          markers: [],
+        });
       },
     );
 

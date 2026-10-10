@@ -63,7 +63,7 @@ const args = (
   );
 
 describe("wordSelectionFacetArgs", () => {
-  it("pins the owner-frozen argument keys", () => {
+  it("pins the owner-frozen argument keys, extended only by appending", () => {
     expect(WORD_SELECTION_ARG_KEYS).toEqual([
       "document_name",
       "document_identity",
@@ -77,6 +77,7 @@ describe("wordSelectionFacetArgs", () => {
       "context_before",
       "context_after",
       "truncated",
+      "kept_items",
     ]);
   });
 
@@ -94,6 +95,7 @@ describe("wordSelectionFacetArgs", () => {
       context_before: "Intro\n",
       context_after: "\nOutro",
       truncated: "false",
+      kept_items: "",
     });
     expect(
       args(SELECTION, new Set([...WORD_SELECTION_ARG_KEYS, "text_version"])),

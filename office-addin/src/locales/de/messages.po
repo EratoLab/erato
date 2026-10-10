@@ -4097,8 +4097,48 @@ msgstr "Der Vorschlag ist leer oder enthält Zeichen, die Word nicht als Text ü
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.break"
+msgstr "Zeilenumbruch"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.comment"
+msgstr "Kommentar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.control"
+msgstr "Inhaltssteuerelement"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.field"
+msgstr "Feld"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.link"
+msgstr "Link"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.note"
+msgstr "Fußnote"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.picture"
+msgstr "Bild"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.lineCount"
 msgstr "Der Vorschlag hat nicht genau eine Zeile pro ausgewähltem Absatz. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.markersChanged"
+msgstr "Der Vorschlag hat ein Feld, einen Link, eine Fußnote oder einen Kommentar der Passage verloren oder verschoben und würde es löschen oder falsch platzieren. Es wurde nichts ersetzt."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4174,6 +4214,11 @@ msgstr "Diese Passage hat Formatierungen, die eine Umformulierung nicht erhalten
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.host"
 msgstr "Diese Word-Version kann keine ausgewählte Passage ersetzen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.itemCut"
+msgstr "Diese Auswahl beginnt oder endet innerhalb eines Feldes oder eines anderen Elements, das Word als Ganzes behält. Wählen Sie das ganze Element oder den Text darum aus, damit er ersetzt werden kann."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4304,6 +4349,11 @@ msgstr "Word hat nicht rechtzeitig geantwortet. Es wurde nichts ersetzt."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.title"
 msgstr "Umformulierung der ausgewählten Passage"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.trackedItems"
+msgstr "Die Änderungsnachverfolgung ist aktiv, und diese Passage enthält Felder, Links, Fußnoten oder Kommentare, die eine nachverfolgte Ersetzung als geändert markieren würde. Schalten Sie die Änderungsnachverfolgung aus, um sie zu ersetzen. Es wurde nichts ersetzt."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
