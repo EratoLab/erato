@@ -57,6 +57,7 @@ import {
 } from "../utils/wordSelectionTarget";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
+import type { WordRevertSlot } from "../providers/WordWriteProvider";
 import type {
   WordClientAction,
   WordClientActionEntry,
@@ -240,33 +241,54 @@ const staleText = () =>
     message: "This passage changed after your request. Nothing was replaced.",
   });
 
+/** How another version from the same answer leaves the document: its Undo here, or in Word. */
+type SiblingRemoval = "undo" | "reject" | "word";
+
 /** Another version from the same answer is, or may be, in the document. */
-function siblingHintText(tracked: boolean): string {
-  return tracked
-    ? t({
-        id: "officeAddin.word.selection.siblingAppliedTracked",
-        message:
-          "Another version from this answer is in the document. Reject it in Word to use this one instead.",
-      })
-    : t({
+function siblingHintText(removal: SiblingRemoval): string {
+  switch (removal) {
+    case "undo":
+      return t({
         id: "officeAddin.word.selection.siblingApplied",
         message:
           "Another version from this answer is in the document. Undo it to use this one instead.",
       });
+    case "reject":
+      return t({
+        id: "officeAddin.word.selection.siblingAppliedTracked",
+        message:
+          "Another version from this answer is in the document. Reject it in Word to use this one instead.",
+      });
+    case "word":
+      return t({
+        id: "officeAddin.word.selection.siblingAppliedWord",
+        message:
+          "Another version from this answer is in the document. Remove it in Word, for example with Word's own Undo, to use this one instead.",
+      });
+  }
 }
 
-function siblingRefusedText(tracked: boolean): string {
-  return tracked
-    ? t({
-        id: "officeAddin.word.selection.siblingRefusedTracked",
-        message:
-          "Another version from this answer was applied to this passage. Reject it in Word, then choose Replace again. Nothing was replaced.",
-      })
-    : t({
+function siblingRefusedText(removal: SiblingRemoval): string {
+  switch (removal) {
+    case "undo":
+      return t({
         id: "officeAddin.word.selection.siblingRefused",
         message:
           "Another version from this answer was applied to this passage. Undo it, then choose Replace again. Nothing was replaced.",
       });
+    case "reject":
+      return t({
+        id: "officeAddin.word.selection.siblingRefusedTracked",
+        message:
+          "Another version from this answer was applied to this passage. Reject it in Word, then choose Replace again. Nothing was replaced.",
+      });
+    case "word":
+      return t({
+        id: "officeAddin.word.selection.siblingRefusedWord",
+        message:
+          "Another version from this answer was applied to this passage. Remove it in Word, for example with Word's own Undo, then choose Replace again. Nothing was replaced.",
+      });
+  }
 }
 
 /** The message for the card's last Undo while it runs or when it did not plainly succeed. */
@@ -405,6 +427,26 @@ const holdsPassage = (review: WordReviewState) =>
   (review.status === "write-failed" &&
     review.selection?.status === "unverified");
 
+/** Erato's Undo removes a sibling only while it still holds the single revert slot and was not
+ * refused; past that, only Word can, and Ask again stays the way forward. */
+function siblingRemovalOf(
+  key: string,
+  review: WordReviewState,
+  slot: WordRevertSlot | null,
+  identity: string | null,
+): SiblingRemoval {
+  if (review.selection?.status === "applied" && review.selection.trackingOn)
+    return "reject";
+  return slot?.selection &&
+    slot.batchKey === key &&
+    slot.identity === identity &&
+    isWordRevertOffered(slot.selection.backups.length) &&
+    !review.revertStale &&
+    !review.revertFailed
+    ? "undo"
+    : "word";
+}
+
 const isStale = (result: WordReplaceSelectionResult | undefined) =>
   result?.status === "refused" &&
   [
@@ -456,16 +498,26 @@ export function WordSelectionCard({
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
   const review = reviews.get(batchKey) ?? EMPTY_WORD_REVIEW;
   const result = review.selection;
+  const messageCapture = messageId
+    ? capturesByAssistantMessageId.get(messageId)
+    : undefined;
+  // A version written onto a copy the user picked holds another passage, so it is not counted.
   const sibling = useMemo(() => {
-    if (!messageId) return undefined;
+    if (!messageId || !messageCapture) return undefined;
     const versions = `${messageId}:${entry.action}:`;
     for (const [key, other] of reviews)
-      if (key !== batchKey && key.startsWith(versions) && holdsPassage(other))
-        return other;
+      if (
+        key !== batchKey &&
+        key.startsWith(versions) &&
+        other.capture === messageCapture &&
+        holdsPassage(other)
+      )
+        return { key, review: other };
     return undefined;
-  }, [reviews, messageId, entry.action, batchKey]);
-  const siblingTracked =
-    sibling?.selection?.status === "applied" && sibling.selection.trackingOn;
+  }, [reviews, messageId, messageCapture, entry.action, batchKey]);
+  const siblingRemoval =
+    sibling &&
+    siblingRemovalOf(sibling.key, sibling.review, revertSlot, documentIdentity);
   const severalVersions = useMemo(
     () => countWordReplaceFences(extractTextFromContent(message?.content)) > 1,
     [message?.content],
@@ -477,9 +529,7 @@ export function WordSelectionCard({
   const [revertConfirmation, setRevertConfirmation] = useState(false);
   const [copyNote, setCopyNote] = useState("");
   const [actionNote, setActionNote] = useState("");
-  const capture =
-    (messageId ? capturesByAssistantMessageId.get(messageId) : undefined) ??
-    review.capture;
+  const capture = messageCapture ?? review.capture;
   const selection = wordSelectionOf(capture);
   const rewritable = rewritableWordSelection(capture);
   const enforcedAskActions = useMemo(
@@ -565,11 +615,9 @@ export function WordSelectionCard({
           updateReview(batchKey, { status: "error", applyStage: undefined });
           return false;
         }
-        if (
-          sibling &&
-          outcome.status === "refused" &&
-          outcome.code === "TARGET_TEXT_MISMATCH"
-        ) {
+        // Any stale refusal here comes from the sibling's write. Without paragraph IDs it shows as
+        // AMBIGUOUS_TARGET for a copy elsewhere, whose pick would write onto that copy.
+        if (sibling && target === sibling.review.capture && isStale(outcome)) {
           updateReview(batchKey, {
             status: "idle",
             applyStage: undefined,
@@ -880,15 +928,12 @@ export function WordSelectionCard({
     );
 
   const applied = result?.status === "applied" ? result : undefined;
-  const siblingRefused =
-    review.refusedForSibling && sibling
-      ? siblingRefusedText(siblingTracked)
-      : undefined;
+  const refusedRemoval = review.refusedForSibling ? siblingRemoval : undefined;
   const statusMessage =
     heldOperationOwner === batchKey
       ? notRespondingText()
       : (revertText(review) ??
-        siblingRefused ??
+        (refusedRemoval && siblingRefusedText(refusedRemoval)) ??
         (review.status === "denied"
           ? wordDeniedText()
           : result
@@ -932,6 +977,9 @@ export function WordSelectionCard({
     result.code === "AMBIGUOUS_TARGET" &&
     gate.allowed &&
     offeredActions.length > 0;
+  const askAgain =
+    (isStale(result) && !ambiguous) ||
+    (!!refusedRemoval && refusedRemoval !== "undo");
   const revertOffered =
     !slot || isWordRevertOffered(slot.selection.backups.length);
   const showTarget = () =>
@@ -984,9 +1032,9 @@ export function WordSelectionCard({
                     "Replace writes only onto the passage you selected, and only if it is unchanged since your request.",
                 })}
               </p>
-              {sibling && !review.refusedForSibling && (
+              {siblingRemoval && !review.refusedForSibling && (
                 <p className="word-review__hint">
-                  {siblingHintText(siblingTracked)}
+                  {siblingHintText(siblingRemoval)}
                 </p>
               )}
               {!confirmCard && (
@@ -1064,7 +1112,7 @@ export function WordSelectionCard({
                 })}
               </Button>
             )}
-            {isStale(result) && !ambiguous && (
+            {askAgain && (
               <Button
                 type="button"
                 variant="secondary"

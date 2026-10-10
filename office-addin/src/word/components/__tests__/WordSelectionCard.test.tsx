@@ -190,6 +190,18 @@ const SIBLING_HINT =
   "Another version from this answer is in the document. Undo it to use this one instead.";
 const SIBLING_REFUSED =
   "Another version from this answer was applied to this passage. Undo it, then choose Replace again. Nothing was replaced.";
+const SIBLING_HINT_WORD =
+  "Another version from this answer is in the document. Remove it in Word, for example with Word's own Undo, to use this one instead.";
+const SIBLING_REFUSED_WORD =
+  "Another version from this answer was applied to this passage. Remove it in Word, for example with Word's own Undo, then choose Replace again. Nothing was replaced.";
+const SIBLING_REFUSED_TRACKED =
+  "Another version from this answer was applied to this passage. Reject it in Word, then choose Replace again. Nothing was replaced.";
+const AMBIGUOUS =
+  "This passage now appears more than once, so Erato can't tell which one you meant. Nothing was replaced.";
+const askAgain = (index: number) =>
+  card(index).queryByRole("button", {
+    name: "Ask again with current selection",
+  });
 
 describe("WordSelectionCard", () => {
   let host: WordSelectionHost;
@@ -699,14 +711,119 @@ describe("WordSelectionCard", () => {
         ),
       ).toBeInTheDocument();
       fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
-      await card(1).findByText(
-        "Another version from this answer was applied to this passage. Reject it in Word, then choose Replace again. Nothing was replaced.",
-      );
+      await card(1).findByText(SIBLING_REFUSED_TRACKED);
       expect(host.writeSyncs()).toHaveLength(1);
 
       host.rejectAllRevisions();
       fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
       await card(1).findByText("Replaced the selected passage.");
+    });
+
+    it("keeps Ask again under Track Changes, where Erato cannot undo the other version once Word accepted it", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      host.setTrackingMode("TrackAll");
+      const { restoreRequest } = renderCard({
+        capture,
+        versions: [SHORTER, BRIEFER],
+      });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText("Replaced the selected passage.");
+      host.acceptAllRevisions();
+
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText(SIBLING_REFUSED_TRACKED);
+      expect(host.writeSyncs()).toHaveLength(1);
+      expect(host.paragraphs()[2].text).toBe(SHORTER);
+      expect(card(0).queryByTestId("word-selection-undo")).toBeNull();
+      fireEvent.click(askAgain(1)!);
+      expect(restoreRequest).toHaveBeenCalledWith(REQUEST);
+    });
+
+    it("points to Word's own Undo and keeps Ask again once the other version's Undo was refused for later edits", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      const { restoreRequest } = renderCard({
+        capture,
+        versions: [SHORTER, BRIEFER],
+      });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText("Replaced the selected passage.");
+      host.insertText({ p: "PL1", text: "shorter" }, "SHORTER");
+      fireEvent.click(card(0).getByRole("button", { name: "Undo" }));
+      fireEvent.click(card(0).getByRole("button", { name: "Restore passage" }));
+      await card(0).findByText(
+        "The passage changed after it was replaced. Undo was not run because it would remove later edits.",
+      );
+      expect(card(1).getByText(SIBLING_HINT_WORD)).toBeInTheDocument();
+
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText(SIBLING_REFUSED_WORD);
+      expect(host.writeSyncs()).toHaveLength(1);
+      expect(card(1).getByRole("button", { name: "Replace" })).toBeEnabled();
+      fireEvent.click(askAgain(1)!);
+      expect(restoreRequest).toHaveBeenCalledWith(REQUEST);
+    });
+
+    it("without paragraph IDs, refuses another version rather than offer a copy elsewhere, and replaces after the first one's Undo", async () => {
+      uninstallWordSelectionHost();
+      host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        nullParagraphIds: true,
+      });
+      const original = host.paragraphs()[2].text;
+      host.insertParagraphs({ p: "MP3" }, [original], "After");
+      const capture = await captureOf(host, { paragraph: 2 });
+      renderCard({ capture, versions: [SHORTER, BRIEFER] });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText("Replaced the selected passage.");
+
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText(SIBLING_REFUSED);
+      expect(host.writeSyncs()).toHaveLength(1);
+      expect(host.paragraphs()[8].text).toBe(original);
+      expect(
+        card(1).queryByRole("button", { name: "Replace selected passage" }),
+      ).toBeNull();
+      expect(askAgain(1)).toBeNull();
+
+      await undo(0);
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText("Replaced the selected passage.");
+      expect([host.paragraphs()[2].text, host.paragraphs()[8].text]).toEqual([
+        BRIEFER,
+        original,
+      ]);
+    });
+
+    it("keeps another version's pick when the first was written onto a copy the user picked", async () => {
+      uninstallWordSelectionHost();
+      host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        nullParagraphIds: true,
+      });
+      const capture = await captureOf(host, { p: "PL1" });
+      const original = host.paragraphs()[2].text;
+      host.insertParagraphs({ p: "PL1" }, [original, original], "After");
+      renderCard({ capture, versions: [SHORTER, BRIEFER] });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText(AMBIGUOUS);
+      host.select({ paragraph: 3 });
+      fireEvent.click(
+        card(0).getByRole("button", { name: "Replace selected passage" }),
+      );
+      await card(0).findByText("Replaced the selected passage.");
+      expect(card(1).queryByText(SIBLING_HINT)).toBeNull();
+
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText(AMBIGUOUS);
+      host.select({ paragraph: 4 });
+      fireEvent.click(
+        card(1).getByRole("button", { name: "Replace selected passage" }),
+      );
+      await card(1).findByText("Replaced the selected passage.");
+      expect(
+        host
+          .paragraphs()
+          .slice(2, 5)
+          .map((p) => p.text),
+      ).toEqual([original, SHORTER, BRIEFER]);
     });
 
     it.each([

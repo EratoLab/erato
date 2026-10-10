@@ -4357,6 +4357,11 @@ msgstr "Otra versión de esta respuesta está en el documento. Recházala en Wor
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingAppliedWord"
+msgstr "Otra versión de esta respuesta está en el documento. Quítala en Word, por ejemplo con el Deshacer de Word, para usar esta en su lugar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.siblingRefused"
 msgstr "Otra versión de esta respuesta se aplicó a este pasaje. Deshazla y vuelve a elegir Reemplazar. No se reemplazó nada."
 
@@ -4364,6 +4369,11 @@ msgstr "Otra versión de esta respuesta se aplicó a este pasaje. Deshazla y vue
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.siblingRefusedTracked"
 msgstr "Otra versión de esta respuesta se aplicó a este pasaje. Recházala en Word y vuelve a elegir Reemplazar. No se reemplazó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefusedWord"
+msgstr "Otra versión de esta respuesta se aplicó a este pasaje. Quítala en Word, por ejemplo con el Deshacer de Word, y vuelve a elegir Reemplazar. No se reemplazó nada."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

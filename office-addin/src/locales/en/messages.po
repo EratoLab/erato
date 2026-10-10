@@ -4357,6 +4357,11 @@ msgstr "Another version from this answer is in the document. Reject it in Word t
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingAppliedWord"
+msgstr "Another version from this answer is in the document. Remove it in Word, for example with Word's own Undo, to use this one instead."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.siblingRefused"
 msgstr "Another version from this answer was applied to this passage. Undo it, then choose Replace again. Nothing was replaced."
 
@@ -4364,6 +4369,11 @@ msgstr "Another version from this answer was applied to this passage. Undo it, t
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.siblingRefusedTracked"
 msgstr "Another version from this answer was applied to this passage. Reject it in Word, then choose Replace again. Nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefusedWord"
+msgstr "Another version from this answer was applied to this passage. Remove it in Word, for example with Word's own Undo, then choose Replace again. Nothing was replaced."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

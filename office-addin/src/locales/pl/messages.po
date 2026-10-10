@@ -4357,6 +4357,11 @@ msgstr "Inna wersja z tej odpowiedzi jest w dokumencie. Odrzuć ją w programie 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingAppliedWord"
+msgstr "Inna wersja z tej odpowiedzi jest w dokumencie. Usuń ją w programie Word, na przykład za pomocą funkcji Cofnij programu Word, aby użyć tej wersji."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.siblingRefused"
 msgstr "Inna wersja z tej odpowiedzi została zastosowana do tego fragmentu. Cofnij ją, a następnie ponownie wybierz Zastąp. Niczego nie zastąpiono."
 
@@ -4364,6 +4369,11 @@ msgstr "Inna wersja z tej odpowiedzi została zastosowana do tego fragmentu. Cof
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.siblingRefusedTracked"
 msgstr "Inna wersja z tej odpowiedzi została zastosowana do tego fragmentu. Odrzuć ją w programie Word, a następnie ponownie wybierz Zastąp. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefusedWord"
+msgstr "Inna wersja z tej odpowiedzi została zastosowana do tego fragmentu. Usuń ją w programie Word, na przykład za pomocą funkcji Cofnij programu Word, a następnie ponownie wybierz Zastąp. Niczego nie zastąpiono."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
