@@ -893,9 +893,12 @@ and may have `message`, `documentId` and `sourceError`. Known codes include
   `documentId`, or the email's when the attachment is not indexed. An
   attachment that cannot be read or would exceed the size limit is left out
   the same way, with a `sourceError` naming the cause when it is known. An
-  email whose attachments Outlook has not listed on this device gets one such
-  warning with the email's `documentId`, and `sourceError`
-  `missing_from_local_cache` when they are not synced. In a thread export, the
+  email whose header says it has file attachments but whose attachment list is
+  not on this device gets one such warning with the email's `documentId`, and
+  `sourceError` `missing_from_local_cache` when Outlook has not synced the
+  list. The header flag does not count inline images, so an email whose list
+  is not on this device and whose only attachments are inline images is
+  exported without them and without such a warning. In a thread export, the
   leading `text/plain` part names left-out attachments too. Exporting an
   uncached attachment's own document fails with `missing_from_local_cache`.
 - Teams messages return `application/json` (`teams-chat.json`) using the frontend
@@ -916,7 +919,8 @@ Unknown or deleted IDs return `invalid_params` with `sourceError`
 source content returns `sidecar_internal`, without silently dropping email
 attachments or substituting indexed text; `sourceError` names the cause when it
 is known (§21). Only new Outlook for Mac emails leave attachments out, each with
-a warning, as described above; an email of any other source fails instead.
+a warning except for the inline images described above; an email of any other
+source fails instead.
 Retrieval requires local content; it does not download missing content. An
 email whose body is not completely cached fails with
 `missing_from_local_cache`, including a preview-only or truncated email from any

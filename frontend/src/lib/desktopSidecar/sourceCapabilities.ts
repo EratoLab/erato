@@ -33,7 +33,7 @@ const SOURCE_ERROR_NOTICES: Record<string, string> = {
   document_not_found:
     "The item is no longer in the local index on this device. Search again for a current documentId; do not reuse this one.",
   missing_from_local_cache:
-    "Only part of this item, such as a preview, is cached on this device, so it cannot be retrieved. Do not retry. Use the search hit's metadata and tell the user that the full content is not available on this device.",
+    "This item's content, or all of it but a preview, is not cached on this device, so it cannot be retrieved. Do not retry. Use the search hit's metadata and tell the user that the full content is not available on this device.",
   source_changed:
     "The item changed on this device since it was indexed. Search again and retry once with the new documentId.",
   unsupported_source:
