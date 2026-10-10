@@ -4096,6 +4096,11 @@ msgid "officeAddin.word.selection.failed"
 msgstr "Word nie przyjął zmiany. Niczego nie zastąpiono."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.flattensEmphasis"
+msgstr "Po zastąpieniu pogrubione, pochylone, podkreślone lub przekreślone słowa w tym fragmencie przyjmą zwykłe formatowanie akapitu."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Jeśli ten fragment można zastąpić, zostanie wysłany zamiast dokumentu."
@@ -4182,6 +4187,11 @@ msgstr "Zaznaczony tekst nie jest dokładnie fragmentem z Twojej prośby. Niczeg
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickEmphasis"
+msgstr "Zaznaczony fragment zawiera pogrubione, pochylone, podkreślone lub przekreślone słowa, których nie było we fragmencie z Twojej prośby. Zastąpienie usunęłoby to formatowanie, więc niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.pickHint"
 msgstr "Zaznacz w programie Word fragment, o który chodzi, a następnie wybierz Zastąp zaznaczony fragment. Zostanie zastąpiony tylko wtedy, gdy jego tekst jest dokładnie taki sam."
 
@@ -4204,6 +4214,11 @@ msgstr "Word nie mógł dokładnie zlokalizować fragmentu w jego akapicie. Nicz
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato nie mógł odczytać zaznaczenia w programie Word, więc wiadomość nie została wysłana. Wyślij ją ponownie lub odrzuć zaznaczenie, aby wysłać ją bez niego."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmark"
+msgstr "Ten fragment zawiera zakładkę, np. taką, której używa spis treści lub odsyłacz, a przeredagowanie mogłoby ją uszkodzić."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4239,6 +4254,11 @@ msgstr "Tekst w tabeli umieszczonej w innej tabeli jest używany tylko jako kont
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato nie może dokładnie zlokalizować tego fragmentu w dokumencie, więc nie może go bezpiecznie zastąpić."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.script"
+msgstr "Ten fragment zawiera znaki w indeksie górnym lub dolnym, jak w m² lub CO₂, które przeredagowanie zamieniłoby w zwykły tekst."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
