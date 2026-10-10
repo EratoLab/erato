@@ -100,6 +100,7 @@ async function prove(
       context,
       proof.parts,
       selection.paragraphs,
+      support,
     );
     await context.sync();
     const [part] = proof.parts;
@@ -509,6 +510,7 @@ describe.each(HOSTS)(
           context,
           proof.parts,
           selection.paragraphs,
+          currentWordSelectionSupport(),
         );
         await context.sync();
         return verify();
@@ -550,6 +552,7 @@ describe("checkTargetVerification of a cell", () => {
         context,
         proof.parts,
         selection.paragraphs,
+        currentWordSelectionSupport(),
       );
       await context.sync();
       return verify();

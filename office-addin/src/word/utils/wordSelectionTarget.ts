@@ -22,10 +22,13 @@ import {
 import {
   markWordSelectionPart,
   readWordParagraphItems,
+  wordParagraphElement,
 } from "./wordSelectionItems";
 import { buildWordSelectionRanges } from "./wordSelectionRange";
+import { wordPartFormatLoss } from "./wordSelectionRewrite";
 import {
   scanWordSelectionSpan,
+  WORD_BOOKMARK,
   wordCellParagraphOoxml,
   wordSelectionStyleToggles,
 } from "./wordSelectionSpan";
@@ -45,6 +48,8 @@ import type { WordSelectionTargetFormat } from "./wordSelectionFormatting";
 import type { WordSelectionRangePart } from "./wordSelectionRange";
 import type { WordSelectionSpanSlice } from "./wordSelectionSpan";
 import type { WordSelectionSupport } from "./wordSelectionSupport";
+
+const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 export const WORD_SELECTION_SHOW_TIMEOUT_MS = 10_000;
 
@@ -79,6 +84,8 @@ export async function readWordStory(
 export interface WordParagraphSpanChecks {
   ooxml: string;
   objectHazards: WordSelectionHazards;
+  /** Range.getBookmarks, other than Word's own _GoBack; null where they are not listed. */
+  bookmarks: string[] | null;
 }
 
 /**
@@ -86,12 +93,19 @@ export interface WordParagraphSpanChecks {
  * content controls and fields the OOXML can miss around it (PF3). All are reads Word for the web
  * leaves the document unchanged by: no range inside the paragraph is built. `inCell` tells it to
  * find which cell the paragraph is in, so its own OOXML can be cut out of a whole row.
+ * `listBookmarks` also lists its bookmarks, where the OOXML is not known to show them all.
  */
 export function queueParagraphSpanChecks(
   paragraph: Word.Paragraph,
   inCell = false,
+  listBookmarks = false,
 ): () => WordParagraphSpanChecks {
   const ooxml = paragraph.getOoxml();
+  // Adjacent ones too: one that starts or ends right at the text's edge, or an empty one there,
+  // may move or go when the text is rewritten.
+  const bookmarks = listBookmarks
+    ? paragraph.getRange("Content").getBookmarks(true, true)
+    : null;
   const cell = inCell ? paragraph.parentTableCellOrNullObject : null;
   if (cell) {
     cell.load("cellIndex");
@@ -118,22 +132,61 @@ export function queueParagraphSpanChecks(
       ...(fields.items.length > 0 ? { field: true } : {}),
       ...(revisions.items.length > 0 ? { trackedChange: true } : {}),
     },
+    bookmarks:
+      bookmarks?.value.filter((name) => name !== WORD_BOOKMARK) ?? null,
   });
 }
 
+/** The bookmarks Range.getBookmarks listed that the paragraph's own OOXML does not show. */
+function bookmarksHidden(checks: WordParagraphSpanChecks): boolean {
+  if (!checks.bookmarks?.length) return false;
+  const shown = new Set(
+    Array.from(
+      wordParagraphElement(checks.ooxml)?.paragraph.getElementsByTagNameNS(
+        W,
+        "bookmarkStart",
+      ) ?? [],
+    ).map((start) => start.getAttributeNS(W, "name")),
+  );
+  return checks.bookmarks.some((name) => !shown.has(name));
+}
+
+/** The rewrite checks of one paragraph written whole as OOXML because it keeps items. */
+export interface WordKeptParagraphEvaluation {
+  hazards: WordSelectionHazards;
+  flattensEmphasis: boolean;
+}
+
 /**
- * What still keeps a paragraph with kept items from being rewritten: its whole OOXML is written, so
- * its formatting is kept as it is, but a revision or complex-script text is not.
+ * What still keeps a paragraph with kept items from being rewritten: a revision, a bookmark its
+ * OOXML left out, complex-script text, or formatting its part's rewrite would drop, as the plain
+ * path refuses it (mixed colour, highlight, font, size or character style, and superscript or
+ * subscript). Only the part's own text runs are judged; the rest of the paragraph is written as it
+ * was, its bookmarks included.
  */
-export function keptItemHazards(
+export function evaluateKeptParagraph(
   checks: WordParagraphSpanChecks,
-): WordSelectionHazards {
+  part: WordSelectionSpanSlice,
+): WordKeptParagraphEvaluation {
   const { hazards } = scanWordSelectionSpan(checks.ooxml);
+  const loss = wordPartFormatLoss(
+    checks.ooxml,
+    part.rangeText,
+    part.start,
+    part.end,
+  );
   return {
-    ...(hazards.complexScript ? { complexScript: true } : {}),
-    ...(hazards.trackedChange || checks.objectHazards.trackedChange
-      ? { trackedChange: true }
-      : {}),
+    hazards: {
+      ...(hazards.complexScript ? { complexScript: true } : {}),
+      ...(hazards.trackedChange || checks.objectHazards.trackedChange
+        ? { trackedChange: true }
+        : {}),
+      ...(bookmarksHidden(checks) ? { bookmark: true } : {}),
+      ...(loss === null ? { unsupportedFormatting: true } : {}),
+      ...(loss?.other ? { mixedFormatting: true } : {}),
+      ...(loss?.script ? { mixedScript: true } : {}),
+    },
+    flattensEmphasis: !!loss?.emphasis,
   };
 }
 
@@ -202,7 +255,16 @@ export interface WordParagraphSpanEvaluation {
   styleFontResolved: boolean;
   /** Null when the style font was needed but not found. */
   format: WordSelectionTargetFormat | null;
+  /** A mixed bold, italic, underline or strikethrough the rewrite gives the style's value. */
+  flattensEmphasis: boolean;
 }
+
+const EMPHASIS_PROPERTIES = [
+  "bold",
+  "italic",
+  "underline",
+  "strikeThrough",
+] as const;
 
 /**
  * The rewrite checks of one paragraph and the font its rewrite gets. The hazards always cover the
@@ -215,7 +277,11 @@ export function evaluateParagraphSpan(
   slice?: WordSelectionSpanSlice,
 ): WordParagraphSpanEvaluation {
   const scan = scanWordSelectionSpan(checks.ooxml, slice);
-  const hazards = { ...scan.hazards, ...checks.objectHazards };
+  const hazards = {
+    ...scan.hazards,
+    ...checks.objectHazards,
+    ...(checks.bookmarks?.length ? { bookmark: true } : {}),
+  };
   const needsStyle = WORD_SELECTION_TOGGLE_PROPERTIES.some(
     (property) =>
       scan.format[property]?.state === "mixed" ||
@@ -224,8 +290,16 @@ export function evaluateParagraphSpan(
   const style = needsStyle
     ? wordSelectionStyleToggles(checks.ooxml, styleName)
     : {};
+  const flattensEmphasis = EMPHASIS_PROPERTIES.some(
+    (property) => scan.format[property]?.state === "mixed",
+  );
   if (!style || support.styleFontSource === null)
-    return { hazards, styleFontResolved: false, format: null };
+    return {
+      hazards,
+      styleFontResolved: false,
+      format: null,
+      flattensEmphasis,
+    };
   const format = wordSelectionTargetFormat(
     scan.format,
     style,
@@ -238,6 +312,7 @@ export function evaluateParagraphSpan(
       : hazards,
     styleFontResolved: true,
     format,
+    flattensEmphasis,
   };
 }
 
@@ -349,6 +424,7 @@ export function queueTargetVerification(
   context: Word.RequestContext,
   parts: readonly WordSelectionRangePart[],
   captured: readonly { tableNestingLevel: number }[],
+  support: WordSelectionSupport,
 ): () => WordTargetVerification {
   context.document.load("changeTrackingMode");
   const queued = parts.map((part, i) => {
@@ -365,6 +441,7 @@ export function queueTargetVerification(
       checks: queueParagraphSpanChecks(
         paragraph,
         captured[i].tableNestingLevel > 0,
+        support.listsBookmarks,
       ),
     };
   });
@@ -418,6 +495,9 @@ export function checkTargetVerification(
   const keeps = selection.paragraphs.some((p) => p.kept);
   // Word would redline a paragraph written as OOXML whole, its items inside the revision.
   if (keeps && trackingMode !== "Off") return { refused: "TRACKED_ITEMS" };
+  // Emphasis a rewrite would lose, though the card did not say so at Send: it was added since.
+  const unannounced = (evaluated: { flattensEmphasis: boolean }) =>
+    evaluated.flattensEmphasis && !selection.flattensEmphasis;
   const offsets = wordSelectionPartOffsets(selection);
   const expected = wordSelectionParts(selection);
   if (
@@ -447,8 +527,15 @@ export function checkTargetVerification(
           : null;
       if (marked?.text !== kept.text)
         return { refused: "TARGET_TEXT_MISMATCH" };
-      const hazards = keptItemHazards(live.checks);
-      if (hazards.trackedChange || hazards.complexScript)
+      const evaluated = evaluateKeptParagraph(live.checks, {
+        start,
+        end,
+        rangeText: live.rangeText,
+      });
+      if (
+        wordSelectionHazardReason(evaluated.hazards, [], support) ||
+        unannounced(evaluated)
+      )
         return { refused: "UNSUPPORTED_CONTENT" };
       formats.push(null);
       continue;
@@ -462,7 +549,8 @@ export function checkTargetVerification(
     if (
       wordSelectionHazardReason(evaluated.hazards, [live.text], support) ||
       !evaluated.styleFontResolved ||
-      !evaluated.format
+      !evaluated.format ||
+      unannounced(evaluated)
     )
       return { refused: "UNSUPPORTED_CONTENT" };
     formats.push(evaluated.format);

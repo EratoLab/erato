@@ -355,6 +355,69 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     expect(host.writeSyncs()).toEqual([]);
   });
 
+  it.each([
+    ["a colour", "FD1", { font: { color: "#C00000" } }],
+    ["a character style", "FD1", { rStyle: "Strong" }],
+    ["superscript", "FD1", { font: { superscript: true } }],
+    ["bold the card did not announce", "FD1", { font: { bold: true } }],
+    ["superscript", "PL1", { font: { superscript: true } }],
+    ["bold the card did not announce", "PL1", { font: { bold: true } }],
+    ["a bookmark", "PL1", { bookmark: "Intro938" }],
+  ] as const)(
+    "refuses once %s was put on part of %s since Send, and writes nothing",
+    async (_, p, format) => {
+      const host = install();
+      const capture = await captureOf(host, { p });
+      expect(capture.selection).toMatchObject({ role: "rewrite" });
+      expect(capture.selection?.flattensEmphasis).toBeUndefined();
+      host.format({ p, text: p === "PL1" ? "lima mike" : "before" }, format);
+      const before = host.ooxml({ p });
+      expect(
+        await replace(
+          capture,
+          p === "PL1" ? REWRITE : "FD1 Feld vor \u27E61\u27E7 Feld danach.",
+        ),
+      ).toMatchObject({ status: "refused", code: "UNSUPPORTED_CONTENT" });
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.ooxml({ p })).toBe(before);
+    },
+  );
+
+  it("flattens bold on part of a passage the card announced, with or without kept items", async () => {
+    const host = install({
+      body: [
+        "Intro.",
+        { runs: ["Mixed ", { text: "bold", font: { bold: true } }, " words."] },
+        {
+          runs: [
+            "Kept ",
+            { text: "bold", font: { bold: true } },
+            " ",
+            { text: "3", field: "PAGE" },
+            " end.",
+          ],
+        },
+        "Outro.",
+      ],
+    });
+    const plain = await captureOf(host, { paragraph: 1 });
+    const kept = await captureOf(host, { paragraph: 2 });
+    expect(plain.selection?.flattensEmphasis).toBe(true);
+    expect(kept.selection?.flattensEmphasis).toBe(true);
+    expect(await replace(plain, "Now plain words.")).toMatchObject({
+      status: "applied",
+    });
+    expect(await replace(kept, "Kept plain \u27E61\u27E7 end.")).toMatchObject({
+      status: "applied",
+    });
+    const [, plainAfter, keptAfter] = host.paragraphs();
+    expect(plainAfter.runs.some((run) => run.font?.bold)).toBe(false);
+    expect(keptAfter.text).toBe("Kept plain 3 end.");
+    expect(
+      keptAfter.runs.filter((run) => !run.field).some((run) => run.font?.bold),
+    ).toBe(false);
+  });
+
   it("refuses to undo under Track Changes", async () => {
     const host = install();
     const capture = await captureOf(host, { p: "PL1" });
@@ -425,6 +488,213 @@ describe("replaceWordSelection on the web", () => {
       status: "applied",
     });
   });
+});
+
+describe.each(HOSTS)(
+  "replaceWordSelection of a paragraph with bookmarks on %s",
+  (flavour) => {
+    const HEADING = {
+      runs: [{ text: "H1 Selection probe heading", bookmark: "_Toc938001" }],
+      style: "Heading 1",
+    };
+    const STACKED = {
+      runs: [{ text: "H2 Scope", bookmark: ["_Toc938003", "_Ref938004"] }],
+      style: "Heading 2",
+    };
+    const CAPTION = {
+      runs: [
+        { text: "Figure ", bookmark: "_Ref938005" },
+        { text: "1", field: "SEQ Figure", bookmark: "_Ref938005" },
+        ": Sales by region.",
+      ],
+    };
+    const USER = {
+      runs: [
+        "PB Plain kilo ",
+        { text: "lima mike", bookmark: "Intro938" },
+        " papa.",
+      ],
+    };
+    const install = () =>
+      installWordSelectionHost(
+        { body: ["Intro.", HEADING, STACKED, CAPTION, USER, "Outro."] },
+        { host: flavour },
+      );
+    const covered = (host: WordSelectionHost, paragraph: number) => {
+      const { runs } = host.paragraphs()[paragraph];
+      return runs.map(({ text, bookmarks }) => [text, bookmarks ?? []]);
+    };
+    const INLINE = new Set<WordSelectionShape>(["paragraph", "inline"]);
+    const captureInline = async (
+      host: WordSelectionHost,
+      target: MockSelectionTarget,
+    ) => {
+      host.select(target);
+      const read = await captureWordSelection("user", 15_000, INLINE);
+      if (read.status !== "ok" || !read.value) throw new Error("no capture");
+      return emptySelectionCapture("doc", read.value);
+    };
+
+    it.each([
+      [
+        "a heading inside its table of contents bookmark",
+        1,
+        "H1 A shorter heading",
+        [["H1 A shorter heading", ["_Toc938001"]]],
+      ],
+      [
+        "a heading inside both its bookmarks",
+        2,
+        "H2 Purpose",
+        [["H2 Purpose", ["_Toc938003", "_Ref938004"]]],
+      ],
+      [
+        "a caption, its bookmark still around the label and its field",
+        3,
+        "Abbildung \u27E61\u27E7: Umsatz nach Region.",
+        [
+          ["Abbildung ", ["_Ref938005"]],
+          ["1", ["_Ref938005"]],
+          [": Umsatz nach Region.", []],
+        ],
+      ],
+    ] as const)(
+      "rewrites %s and undoes it exactly",
+      async (_, paragraph, rewrite, after) => {
+        const host = install();
+        const before = host.paragraphs();
+        const capture = await captureOf(host, { paragraph });
+        expect(capture.selection).toMatchObject({ role: "rewrite" });
+        const result = await replace(capture, rewrite);
+        expect(result).toMatchObject({ status: "applied" });
+        expect(covered(host, paragraph)).toEqual(after);
+        expect(host.paragraphs()[paragraph].style).toBe(
+          before[paragraph].style,
+        );
+        expect(others(host.paragraphs(), "PB")).toHaveLength(5);
+        if (result.status !== "applied" || !result.backups)
+          throw new Error("not applied");
+        expect(
+          await revertWordSelection(result.backups, result.written),
+        ).toMatchObject({ status: "reverted" });
+        expect(
+          host
+            .paragraphs()
+            .map(({ text, style, runs }) => ({ text, style, runs })),
+        ).toEqual(
+          before.map(({ text, style, runs }) => ({ text, style, runs })),
+        );
+      },
+    );
+
+    it.each([
+      [
+        "a word inside a heading's bookmark",
+        { p: "H1", text: "probe" },
+        "test",
+        1,
+        [["H1 Selection test heading", ["_Toc938001"]]],
+      ],
+      [
+        "words before a bookmark",
+        { p: "PB", text: "Plain kilo" },
+        "Short",
+        4,
+        [
+          ["PB Short ", []],
+          ["lima mike", ["Intro938"]],
+          [" papa.", []],
+        ],
+      ],
+      [
+        "exactly the bookmarked words",
+        { p: "PB", text: "lima mike" },
+        "Lima und Mike",
+        4,
+        [
+          ["PB Plain kilo ", []],
+          ["Lima und Mike", ["Intro938"]],
+          [" papa.", []],
+        ],
+      ],
+    ] as const)(
+      "rewrites %s and leaves the bookmark over the same text",
+      async (_, target, rewrite, paragraph, after) => {
+        const host = install();
+        const result = await replaceWordSelection({
+          capture: await captureInline(host, target),
+          fenceContent: rewrite,
+          enabledShapes: INLINE,
+        });
+        expect(result).toMatchObject({ status: "applied" });
+        expect(covered(host, paragraph)).toEqual(after);
+      },
+    );
+
+    it("reports unverified when the heading's bookmark moved by the read-back", async () => {
+      const host = install();
+      const capture = await captureOf(host, { p: "H1" });
+      let moved = false;
+      // In the read-back's run: the web applies an OOXML write only once its own run has ended.
+      host.beforeSync(() => {
+        if (host.writeSyncs().length === 1 && !moved) {
+          moved = true;
+          host.clearBookmarks({ p: "H1", text: "H1 " });
+        }
+      });
+      expect(await replace(capture, "H1 A shorter heading")).toMatchObject({
+        status: "unverified",
+      });
+    });
+
+    it("refuses a heading with a bookmark under Track Changes and writes nothing", async () => {
+      const host = install();
+      const capture = await captureOf(host, { p: "H1" });
+      host.setTrackingMode("TrackAll");
+      expect(await replace(capture, "H1 A shorter heading")).toMatchObject({
+        status: "refused",
+        code: "TRACKED_ITEMS",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+  },
+);
+
+describe("replaceWordSelection on Mac when its OOXML leaves out bookmarks", () => {
+  it.each([
+    [
+      "a heading's whole text",
+      "H1",
+      "H1 Selection probe heading",
+      "H1 Shorter heading",
+    ],
+    ["two words of a plain paragraph", "PL1", "lima mike", REWRITE],
+    [
+      "a paragraph that keeps a field",
+      "FD1",
+      "before",
+      "FD1 Feld vor \u27E61\u27E7 Feld danach.",
+    ],
+  ] as const)(
+    "refuses once a bookmark was put on %s since Send, and writes nothing",
+    async (_, p, text, rewrite) => {
+      const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        host: "mac",
+        ooxmlOmitsBookmarks: true,
+      });
+      const capture = await captureOf(host, { p });
+      expect(capture.selection).toMatchObject({ role: "rewrite" });
+      host.format({ p, text }, { bookmark: "_Toc938001" });
+      expect(host.ooxml({ p })).not.toContain("bookmark");
+      const before = host.paragraphs();
+      expect(await replace(capture, rewrite)).toMatchObject({
+        status: "refused",
+        code: "UNSUPPORTED_CONTENT",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.paragraphs()).toEqual(before);
+    },
+  );
 });
 
 describe.each(HOSTS)(

@@ -102,6 +102,7 @@ const KEPT_ITEM_NAMES: Readonly<Record<WordKeptItemKind, string>> = {
   picture: "a picture",
   break: "a line break",
   control: "a content control",
+  bookmark: "a bookmark",
 };
 
 /**

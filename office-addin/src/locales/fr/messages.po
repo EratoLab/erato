@@ -4096,6 +4096,11 @@ msgid "officeAddin.word.selection.failed"
 msgstr "Word n'a pas accepté la modification. Rien n'a été remplacé."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.flattensEmphasis"
+msgstr "Après le remplacement, les mots en gras, en italique, soulignés ou barrés de ce passage prennent la mise en forme habituelle du paragraphe."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Si ce passage peut être remplacé, il est envoyé à la place du document."
@@ -4104,6 +4109,11 @@ msgstr "Si ce passage peut être remplacé, il est envoyé à la place du docume
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.invalid"
 msgstr "La proposition est vide ou contient des caractères que Word ne conserve pas comme texte. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.bookmark"
+msgstr "signet"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4182,6 +4192,11 @@ msgstr "Le texte sélectionné n'est pas exactement le passage de votre demande.
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickEmphasis"
+msgstr "Le passage sélectionné contient des mots en gras, en italique, soulignés ou barrés que le passage de votre demande n'avait pas. Le remplacement supprimerait cette mise en forme, donc rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.pickHint"
 msgstr "Sélectionnez dans Word le passage voulu, puis choisissez Remplacer le passage sélectionné. Il n'est remplacé que si son texte est exactement le même."
 
@@ -4204,6 +4219,16 @@ msgstr "Word n'a pas pu localiser précisément le passage dans son paragraphe. 
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato n'a pas pu lire votre sélection dans Word, votre message n'a donc pas été envoyé. Renvoyez-le, ou ignorez la sélection pour l'envoyer sans elle."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmark"
+msgstr "Ce passage contient un signet, comme ceux qu'utilisent une table des matières ou un renvoi, qu'une réécriture pourrait casser."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmarkCut"
+msgstr "Un signet, comme ceux vers lesquels pointe un renvoi, commence ou se termine à l'intérieur de cette sélection, et une réécriture ne saurait pas où le placer. Sélectionnez exactement le texte du signet, ou seulement du texte avant ou après, pour qu'il soit remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4239,6 +4264,11 @@ msgstr "Le texte d'un tableau placé dans un autre tableau sert uniquement de co
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato ne peut pas localiser précisément ce passage dans le document : il ne peut donc pas le remplacer en toute sécurité."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.script"
+msgstr "Ce passage contient des caractères en exposant ou en indice, comme dans m² ou CO₂, qu'une réécriture transformerait en texte normal."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4393,7 +4423,7 @@ msgstr "Réécriture du passage sélectionné"
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.trackedItems"
-msgstr "Le suivi des modifications est activé, et ce passage contient des champs, liens, notes ou commentaires qu'une réécriture suivie marquerait comme modifiés. Désactivez le suivi des modifications pour le remplacer. Rien n'a été remplacé."
+msgstr "Le suivi des modifications est activé, et ce passage contient des champs, liens, notes, commentaires ou signets : une réécriture suivie marquerait donc tout son paragraphe comme modifié. Désactivez le suivi des modifications pour le remplacer. Rien n'a été remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

@@ -1,5 +1,6 @@
 import {
   alignWordParagraph,
+  wordBookmarkRanges,
   wordKeptItemsShape,
   wordParagraphElement,
   wordPartBoundaries,
@@ -7,6 +8,7 @@ import {
 
 import type {
   WordAlignedParagraph,
+  WordKeptItem,
   WordPartBoundary,
 } from "./wordSelectionItems";
 
@@ -19,6 +21,8 @@ export interface WordParagraphRewrite {
   ooxml: string;
   /** The paragraph.text the rewritten paragraph must read back as. */
   rangeText: string;
+  /** wordBookmarkRanges of the rewritten paragraph, which it must read back with. */
+  bookmarks: string;
 }
 
 const isW = (node: Node | null, name: string): node is Element =>
@@ -175,6 +179,11 @@ const propKey = (property: Element) =>
     .sort()
     .join(",")}|${new XMLSerializer().serializeToString(property)}`;
 
+const propKeys = (runs: readonly Element[]) =>
+  runs.map(
+    (run) => new Set(Array.from(propsOf(run)?.children ?? []).map(propKey)),
+  );
+
 /**
  * Only the properties every one of a piece's old runs had: a rewrite whose first word was bold
  * would otherwise come out bold throughout. A property they did not share is left to the
@@ -183,14 +192,23 @@ const propKey = (property: Element) =>
 function sharedProps(runs: readonly Element[]): Element | undefined {
   const first = propsOf(runs[0]);
   if (!first || runs.length < 2) return first;
-  const keys = runs.map(
-    (run) => new Set(Array.from(propsOf(run)?.children ?? []).map(propKey)),
-  );
+  const keys = propKeys(runs);
   const shared = first.cloneNode(false) as Element;
   for (const property of Array.from(first.children))
     if (keys.every((set) => set.has(propKey(property))))
       shared.appendChild(property.cloneNode(true));
   return shared;
+}
+
+/** The properties sharedProps leaves out: each one some of the runs have and others not. */
+function droppedProps(runs: readonly Element[]): Element[] {
+  if (runs.length < 2) return [];
+  const keys = propKeys(runs);
+  return runs.flatMap((run) =>
+    Array.from(propsOf(run)?.children ?? []).filter(
+      (property) => !keys.every((set) => set.has(propKey(property))),
+    ),
+  );
 }
 
 /** Where text goes that has no old text to take the place of: right before or after a boundary. */
@@ -234,11 +252,79 @@ function slot(
   return { parent: after.parentNode!, before: after.nextSibling };
 }
 
+type Place = { parent: Node; before: Node | null };
+
+const elementFrom = (
+  node: Node | null,
+  step: "previousSibling" | "nextSibling",
+): Element | null => {
+  let at = node;
+  while (at && !(at instanceof Element)) at = at[step];
+  return at;
+};
+
+/**
+ * Moves a place for new text that has no old text to take the place of among the bookmark ends
+ * right beside it. `goesAfter` tells, per bookmark end, whether the text goes after it. Null when
+ * their order leaves no such place.
+ */
+function besideBookmarks(
+  place: Place,
+  goesAfter: ReadonlyMap<Element, boolean>,
+): Place | null {
+  const row: Element[] = [];
+  for (
+    let node = elementFrom(
+      place.before ? place.before.previousSibling : place.parent.lastChild,
+      "previousSibling",
+    );
+    node && goesAfter.has(node);
+    node = elementFrom(node.previousSibling, "previousSibling")
+  )
+    row.unshift(node);
+  for (
+    let node = elementFrom(place.before, "nextSibling");
+    node && goesAfter.has(node);
+    node = elementFrom(node.nextSibling, "nextSibling")
+  )
+    row.push(node);
+  if (row.length === 0) return place;
+  const split = row.findIndex((node) => !goesAfter.get(node));
+  if (split < 0)
+    return { parent: place.parent, before: row.at(-1)!.nextSibling };
+  if (row.slice(split).some((node) => goesAfter.get(node))) return null;
+  return { parent: place.parent, before: row[split] };
+}
+
+/**
+ * Whether each bookmark covers the result's characters as it should: those it covered before, and
+ * the new text of a piece where it covered that piece's old text. New text where there was none
+ * goes inside only the bookmarks that wrap the whole part, never one around just an item beside it.
+ */
+function bookmarksKept(
+  before: readonly WordKeptItem[],
+  after: readonly WordKeptItem[],
+  origins: readonly number[],
+  pieceOrigins: readonly (number | null)[],
+  wraps: (item: WordKeptItem) => boolean,
+): boolean {
+  return before.every((item, i) => {
+    if (item.kind !== "bookmark") return true;
+    const now = after[i];
+    return origins.every((origin, at) => {
+      const old = origin >= 0 ? origin : pieceOrigins[-1 - origin];
+      const covered =
+        old === null ? wraps(item) : item.start <= old && old < item.end;
+      return covered === (now.start <= at && at < now.end);
+    });
+  });
+}
+
 /**
  * The paragraph with its part [start, end) replaced by `pieces`, the text before, between and after
  * the part's markers. Only text is replaced; every item and everything outside the part stays as
  * it was. Null when the paragraph no longer matches the part, or when the result would not read
- * back as the expected text with the same items.
+ * back as the expected text with the same items, each bookmark over the text it should cover.
  */
 export function rewriteWordParagraphPart(
   ooxml: string,
@@ -258,13 +344,31 @@ export function rewriteWordParagraphPart(
   if (!part || pieces.length !== part.boundaries.length + 1) return null;
   const { boundaries, hidden } = part;
   const edges = [start, ...boundaries.map((b) => b.at), end];
+  const wraps = (item: WordKeptItem) => item.start <= start && item.end >= end;
+  const goesAfter = new Map<Element, boolean>();
+  for (const [item, { open, close }] of aligned.spans) {
+    if (item.kind !== "bookmark") continue;
+    if (open) goesAfter.set(open, wraps(item));
+    if (close) goesAfter.set(close, !wraps(item));
+  }
+  // Per character of the result, the old offset it stays at, or -1 - k for piece k's new text.
+  const origins: number[] = [];
+  const keep = (from: number, to: number) => {
+    for (let at = from; at < to; at += 1) origins.push(at);
+  };
+  keep(0, start);
+  const pieceOrigins: (number | null)[] = [];
   let expected = rangeText.slice(0, start);
   for (let k = 0; k < pieces.length; k += 1) {
     const old: Element[] = [];
+    let first: number | null = null;
     for (let at = edges[k]; at < edges[k + 1]; at += 1) {
       const char = aligned.chars[at];
-      if (!hidden.has(at) && char) old.push(char.node);
+      if (hidden.has(at) || !char) continue;
+      old.push(char.node);
+      if (first === null) first = at;
     }
+    pieceOrigins.push(first);
     const text = pieces[k];
     if (old.length) {
       const runs = [...new Set(old.map((node) => node.parentNode as Element))];
@@ -281,23 +385,30 @@ export function rewriteWordParagraphPart(
           : k > 0
             ? slot(aligned, boundaries[k - 1], "after")
             : null;
-      if (!place) return null;
-      place.parent.insertBefore(
-        newRun(doc, text, place.parent, place.before),
-        place.before,
+      const beside = place && besideBookmarks(place, goesAfter);
+      if (!beside) return null;
+      beside.parent.insertBefore(
+        newRun(doc, text, beside.parent, beside.before),
+        beside.before,
       );
     }
     expected += text;
+    for (let at = 0; at < text.length; at += 1) origins.push(-1 - k);
     const boundary = boundaries[k];
     if (!boundary) continue;
-    if (boundary.end === "point") expected += boundary.item.shows;
-    else if (
+    if (boundary.end === "point") {
+      expected += boundary.item.shows;
+      keep(boundary.item.start, boundary.item.end);
+    } else if (
       boundary.end === "close" &&
       boundary.item.kind === "comment" &&
       rangeText[boundary.at] === "\u0005"
-    )
+    ) {
       expected += "\u0005";
+      keep(boundary.at, boundary.at + 1);
+    }
   }
+  keep(end, rangeText.length);
   expected += rangeText.slice(end);
   mergeTexts(paragraph);
   const serialized = new XMLSerializer().serializeToString(doc);
@@ -309,7 +420,97 @@ export function rewriteWordParagraphPart(
   const check = wordParagraphElement(result);
   const reread = check && alignWordParagraph(check.paragraph, expected);
   if (!reread || "refused" in reread) return null;
-  if (wordKeptItemsShape(reread.items) !== wordKeptItemsShape(aligned.items))
+  if (
+    wordKeptItemsShape(reread.items) !== wordKeptItemsShape(aligned.items) ||
+    !bookmarksKept(aligned.items, reread.items, origins, pieceOrigins, wraps)
+  )
     return null;
-  return { ooxml: result, rangeText: expected };
+  return {
+    ooxml: result,
+    rangeText: expected,
+    bookmarks: wordBookmarkRanges(reread.items),
+  };
+}
+
+/** What a rewrite of a part would not keep of its text's formatting, by what it changes. */
+export interface WordPartFormatLoss {
+  /** Bold, italic, underline or strikethrough on part of a piece's text. */
+  emphasis: boolean;
+  /** Superscript or subscript on part of a piece's text. */
+  script: boolean;
+  /** Any other property on part of a piece's text: a colour, highlight, font, size, character style. */
+  other: boolean;
+}
+
+const EMPHASIS = new Set(["b", "bCs", "i", "iCs", "u", "strike"]);
+
+/**
+ * What a dropped property changes. Automatic colour, no highlight, baseline, a font hint alone and
+ * the language marks are let through, as the plain path lets them through.
+ */
+function lossOf(property: Element): keyof WordPartFormatLoss | null {
+  if (property.namespaceURI !== W) return "other";
+  const name = property.localName;
+  const val = property.getAttributeNS(W, "val");
+  if (EMPHASIS.has(name)) return "emphasis";
+  switch (name) {
+    case "lang":
+    case "noProof":
+      return null;
+    case "vertAlign":
+      return val === "superscript" || val === "subscript" ? "script" : null;
+    case "color":
+      return val === "auto" ? null : "other";
+    case "highlight":
+      return val === "none" ? null : "other";
+    case "rFonts":
+      return Array.from(property.attributes).every(
+        (a) => a.localName === "hint" || a.name.startsWith("xmlns"),
+      )
+        ? null
+        : "other";
+    default:
+      return "other";
+  }
+}
+
+/**
+ * What rewriteWordParagraphPart would drop of the part [start, end)'s formatting. It writes each
+ * piece between the part's markers with the properties all of that piece's old text runs share,
+ * so a property on part of one piece is lost, while pieces formatted differently from each other
+ * keep their own. An item's own runs (a field's result, a note reference) are kept as they are and
+ * do not count; a link's text is a piece of its own, so its Hyperlink style is shared. Null when
+ * the paragraph's items cannot be read or the part cuts through one.
+ */
+export function wordPartFormatLoss(
+  ooxml: string,
+  rangeText: string,
+  start: number,
+  end: number,
+): WordPartFormatLoss | null {
+  const parsed = wordParagraphElement(ooxml);
+  if (!parsed) return null;
+  const aligned = alignWordParagraph(parsed.paragraph, rangeText);
+  if ("refused" in aligned) return null;
+  const part = wordPartBoundaries(rangeText, aligned, start, end);
+  if (!part) return null;
+  const edges = [start, ...part.boundaries.map((b) => b.at), end];
+  const loss: WordPartFormatLoss = {
+    emphasis: false,
+    script: false,
+    other: false,
+  };
+  for (let k = 0; k + 1 < edges.length; k += 1) {
+    const runs = new Set<Element>();
+    for (let at = edges[k]; at < edges[k + 1]; at += 1) {
+      const char = aligned.chars[at];
+      if (!part.hidden.has(at) && char)
+        runs.add(char.node.parentNode as Element);
+    }
+    for (const property of droppedProps([...runs])) {
+      const kind = lossOf(property);
+      if (kind) loss[kind] = true;
+    }
+  }
+  return loss;
 }

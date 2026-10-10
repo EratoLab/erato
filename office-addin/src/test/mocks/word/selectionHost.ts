@@ -65,6 +65,13 @@ export interface MockSelectionRun {
   footnote?: boolean;
   /** The reference mark at the end of a comment's range. */
   comment?: boolean;
+  /**
+   * Bookmark name, or several names for bookmarks around the same text; consecutive runs with the
+   * same name form one bookmark around their text, its bookmarkStart and bookmarkEnd inside the
+   * paragraph's own w:p as BM0 measured on Word PC and the web. Word for Mac was not measured;
+   * `ooxmlOmitsBookmarks` models it leaving them out.
+   */
+  bookmark?: string | readonly string[];
 }
 
 export interface MockSelectionParagraphSpec {
@@ -131,6 +138,14 @@ export interface WordSelectionHostOptions {
    * Word PC do (ERMAIN-928 block 3). Defaults to true off the web.
    */
   cellParagraphOoxmlIsRow?: boolean;
+  /** getOoxml() shows no bookmark, as Word for Mac's might: BM0 did not run there. */
+  ooxmlOmitsBookmarks?: boolean;
+  /**
+   * Rewrites what Paragraph.getOoxml() returns, given the paragraph's text, for markup the model
+   * does not hold: the lone end of a bookmark from another paragraph, marks between paragraphs.
+   * What Word returns there was not measured.
+   */
+  paragraphOoxml?: (ooxml: string, text: string) => string;
 }
 
 /** Rewrites the hits a search returns; the hits are opaque, so it can only reorder, drop or repeat. */
@@ -141,6 +156,7 @@ export interface MockRunSummary {
   object?: "picture" | "footnote" | "comment";
   font?: MockSelectionFont;
   rStyle?: string;
+  bookmarks?: string[];
   link?: string;
   field?: string;
   sdt?: string;
@@ -213,6 +229,8 @@ export interface WordSelectionHost {
   ): void;
   setParagraphStyle(target: MockSelectionTarget, style: string): void;
   format(target: MockSelectionTarget, run: MockSelectionRun): void;
+  /** Takes the target's text, at the edge of its bookmarks, out of them, as if they had moved. */
+  clearBookmarks(target: MockSelectionTarget): void;
   setTrackingMode(mode: MockTrackingMode): void;
   /** Body paragraph tags, in document order, whose mark ends a section. */
   setSectionBreaks(tags: readonly string[]): void;
@@ -281,6 +299,7 @@ export const WORD_SELECTION_API_SETS: Readonly<
   "Range.parentContentControlOrNullObject": ["WordApi", "1.3"],
   "Range.fields": ["WordApi", "1.4"],
   "Range.getReviewedText": ["WordApi", "1.4"],
+  "Range.getBookmarks": ["WordApi", "1.4"],
   "Table.getRange": ["WordApi", "1.3"],
 };
 
@@ -585,9 +604,15 @@ interface FieldState {
 interface SdtState {
   tag: string;
 }
+interface BookmarkState {
+  name: string;
+  id: number;
+}
 interface RunState {
   font: MockSelectionFont;
   rStyle?: string;
+  /** Not wrappers: their starts and ends sit between runs, in the order they were opened. */
+  bookmarks?: readonly BookmarkState[];
   link?: LinkState;
   field?: FieldState;
   sdt?: SdtState;
@@ -658,6 +683,11 @@ const isInline = (t: Token | undefined): boolean =>
     t.kind === "comment");
 
 const edgeToken = (): Token => ({ kind: "edge", ch: "", run: { font: {} } });
+
+const sameBookmarks = (
+  a: readonly BookmarkState[] = [],
+  b: readonly BookmarkState[] = [],
+) => a.length === b.length && a.every((bookmark, i) => bookmark === b[i]);
 
 function paraOf(token: Token): ParaState {
   if (!token.para) throw new Error("mock: not a paragraph mark");
@@ -841,6 +871,13 @@ export function installWordSelectionHost(
   let trackingMode: MockTrackingMode = options.trackingMode ?? "Off";
   let idSeed = 0;
   let revisionSeed = 0;
+  let bookmarkSeed = 0;
+  const bookmarkState = (name: string): BookmarkState => {
+    bookmarkSeed += 1;
+    return { name, id: bookmarkSeed };
+  };
+  const namesOf = (names: string | readonly string[]) =>
+    typeof names === "string" ? [names] : names;
 
   const styleTable = new Map<string, StyleDef>(
     BUILT_IN_STYLES.map((def) => [def.name, def]),
@@ -942,6 +979,14 @@ export function installWordSelectionHost(
             : same("sdt")
               ? previous?.state.sdt
               : { tag: run.sdt },
+        bookmarks:
+          run.bookmark === undefined
+            ? undefined
+            : namesOf(run.bookmark).map(
+                (name) =>
+                  previous?.state.bookmarks?.find((b) => b.name === name) ??
+                  bookmarkState(name),
+              ),
         ins:
           run.inserted === undefined
             ? undefined
@@ -1671,6 +1716,18 @@ export function installWordSelectionHost(
     let link: LinkState | undefined;
     let rev: Revision | undefined;
     let field: FieldState | undefined;
+    let bookmarks: readonly BookmarkState[] = [];
+    const moveBookmarks = (next: readonly BookmarkState[] = []) => {
+      for (const ending of bookmarks)
+        if (!next.includes(ending) && !options.ooxmlOmitsBookmarks)
+          out.push(`<w:bookmarkEnd w:id="${ending.id}"/>`);
+      for (const starting of next)
+        if (!bookmarks.includes(starting) && !options.ooxmlOmitsBookmarks)
+          out.push(
+            `<w:bookmarkStart w:id="${starting.id}" w:name="${esc(starting.name)}"/>`,
+          );
+      bookmarks = next;
+    };
     const closeFrom = (depth: number) => {
       if (field && depth <= 3) {
         out.push(`<w:r><w:fldChar w:fldCharType="end"/></w:r>`);
@@ -1699,6 +1756,9 @@ export function installWordSelectionHost(
       else if (tLink !== link) closeFrom(1);
       else if (tRev !== rev) closeFrom(2);
       else if (tField !== field) closeFrom(3);
+      // Between the wrappers that close and those that open, so a bookmark next to a field or
+      // around one stays outside it.
+      moveBookmarks(t.run.bookmarks);
       if (!sdt && tSdt) {
         sdt = tSdt;
         out.push(
@@ -1749,6 +1809,7 @@ export function installWordSelectionHost(
           u.run.link !== t.run.link ||
           (u.run.ins ?? u.run.del) !== tRev ||
           u.run.field !== t.run.field ||
+          !sameBookmarks(u.run.bookmarks, t.run.bookmarks) ||
           runKey(u) !== runKey(t)
         )
           break;
@@ -1759,6 +1820,7 @@ export function installWordSelectionHost(
       i = j;
     }
     closeFrom(0);
+    moveBookmarks();
     return out.join("");
   };
   const paragraphXml = (
@@ -1953,6 +2015,8 @@ export function installWordSelectionHost(
     tokens: Token[];
     style: string;
     list: boolean;
+    /** The paragraph had a w:pPr. */
+    properties: boolean;
     markRun: RunState;
   }
   const parseOoxml = (ooxml: string): ParsedParagraph[] => {
@@ -2096,6 +2160,8 @@ export function installWordSelectionHost(
       const tokens: Token[] = [];
       let fieldCode: string | undefined;
       let complexField: FieldState | undefined;
+      const bookmarks = new Map<string, BookmarkState>();
+      let open: BookmarkState[] = [];
       type Context = Pick<RunState, "link" | "sdt" | "ins" | "del" | "field">;
       const parseRun = (r: Element, context: Context) => {
         const rPr = childW(r, "rPr");
@@ -2104,6 +2170,7 @@ export function installWordSelectionHost(
         const base: RunState = {
           font,
           rStyle,
+          bookmarks: open.length ? [...open] : undefined,
           link: context.link,
           sdt: context.sdt,
           ins: context.ins,
@@ -2218,6 +2285,17 @@ export function installWordSelectionHost(
             case "smartTag":
               walk(node, context);
               break;
+            case "bookmarkStart": {
+              const bookmark = bookmarkState(attrW(node, "name") ?? "");
+              bookmarks.set(attrW(node, "id") ?? "", bookmark);
+              open = [...open, bookmark];
+              break;
+            }
+            case "bookmarkEnd": {
+              const ending = bookmarks.get(attrW(node, "id") ?? "");
+              open = open.filter((bookmark) => bookmark !== ending);
+              break;
+            }
             default:
               break;
           }
@@ -2229,6 +2307,7 @@ export function installWordSelectionHost(
         tokens,
         style: styleId ? nameOf(styleId) : "Normal",
         list: !!childW(pPr, "numPr"),
+        properties: !!pPr,
         markRun: {
           font: {},
           ins: markIns ? revisionOf(markIns, "ins") : undefined,
@@ -2247,13 +2326,15 @@ export function installWordSelectionHost(
     const fresh: Token[] = [];
     parsed.forEach((p, i) => {
       fresh.push(...p.tokens);
+      // BM0: the web keeps a heading's style when its own OOXML, which has no pPr, is written back.
+      const kept = web && !p.properties;
       if (i < parsed.length - 1 || endsWithMark)
         fresh.push(
           markToken(
             {
               id: newId(),
-              style: p.style,
-              list: p.list,
+              style: kept ? around.style : p.style,
+              list: kept ? around.list : p.list,
               cells: around.cells,
               cellEnd: false,
             },
@@ -3535,7 +3616,13 @@ export function installWordSelectionHost(
           type === "Paragraph" && (options.cellParagraphOoxmlIsRow ?? !web)
             ? rowOoxmlOf(whole)
             : null;
-        return row ?? ooxmlOf(whole);
+        const ooxml = row ?? ooxmlOf(whole);
+        return type === "Paragraph" && options.paragraphOoxml
+          ? options.paragraphOoxml(
+              ooxml,
+              plainText(whole.story, whole.s, whole.e),
+            )
+          : ooxml;
       });
     };
     obj.select = () => {
@@ -3565,6 +3652,25 @@ export function installWordSelectionHost(
       return clientResult(ctx, obj, `${type}.getReviewedText`, () => {
         gate("Range.getReviewedText");
         return reviewedText(target.whole(), version);
+      });
+    };
+    // A bookmark is hidden when its name starts with "_"; adjacent ones touch the range's edge.
+    obj.getBookmarks = (includeHidden = false, includeAdjacent = false) => {
+      method("getBookmarks");
+      return clientResult(ctx, obj, `${type}.getBookmarks`, () => {
+        gate("Range.getBookmarks");
+        const b = target.whole();
+        const edge = includeAdjacent ? 1 : 0;
+        const names = new Set<string>();
+        for (
+          let i = Math.max(0, b.s - edge);
+          i < Math.min(b.story.tokens.length, b.e + edge);
+          i += 1
+        ) {
+          for (const { name } of b.story.tokens[i].run.bookmarks ?? [])
+            if (includeHidden || !name.startsWith("_")) names.add(name);
+        }
+        return [...names];
       });
     };
     obj.getTrackedChanges = () => {
@@ -4007,6 +4113,9 @@ export function installWordSelectionHost(
           : { object: t.kind as MockRunSummary["object"] }),
         ...(Object.keys(font).length ? { font } : {}),
         ...(t.run.rStyle ? { rStyle: t.run.rStyle } : {}),
+        ...(t.run.bookmarks
+          ? { bookmarks: t.run.bookmarks.map((b) => b.name) }
+          : {}),
         ...(t.run.link ? { link: t.run.link.url } : {}),
         ...(t.run.field ? { field: t.run.field.code } : {}),
         ...(t.run.sdt ? { sdt: t.run.sdt.tag } : {}),
@@ -4143,6 +4252,7 @@ export function installWordSelectionHost(
       const field =
         runSpec.field === undefined ? undefined : { code: runSpec.field };
       const sdt = runSpec.sdt === undefined ? undefined : { tag: runSpec.sdt };
+      const added = namesOf(runSpec.bookmark ?? []).map(bookmarkState);
       for (let i = b.s; i < b.e; i += 1) {
         const t = b.story.tokens[i];
         if (!isInline(t)) continue;
@@ -4157,7 +4267,17 @@ export function installWordSelectionHost(
           link: link ?? t.run.link,
           field: field ?? t.run.field,
           sdt: sdt ?? t.run.sdt,
+          bookmarks: added.length
+            ? [...(t.run.bookmarks ?? []), ...added]
+            : t.run.bookmarks,
         };
+      }
+    },
+    clearBookmarks: (target) => {
+      const b = resolveTarget(target);
+      for (let i = b.s; i < b.e; i += 1) {
+        const t = b.story.tokens[i];
+        if (isInline(t)) t.run = { ...t.run, bookmarks: undefined };
       }
     },
     setTrackingMode: (mode) => {

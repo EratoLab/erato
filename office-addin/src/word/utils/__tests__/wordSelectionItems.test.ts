@@ -6,6 +6,8 @@ import {
   splitWordMarkedLine,
 } from "../wordSelectionItems";
 
+import type { WordKeptItem } from "../wordSelectionItems";
+
 const pkg = (paragraph: string) =>
   `<?xml version="1.0" standalone="yes"?><pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"><pkg:part pkg:name="/word/document.xml"><pkg:xmlData><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${paragraph}<w:p/></w:body></w:document></pkg:xmlData></pkg:part></pkg:package>`;
 const run = (text: string) =>
@@ -15,6 +17,12 @@ const field = (code: string, result: string) =>
   `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>${code}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run(result)}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
 const comment = (text: string) =>
   `<w:commentRangeStart w:id="0"/>${run(text)}<w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r>`;
+
+const opens = (id: number, name: string) =>
+  `<w:bookmarkStart w:id="${id}" w:name="${name}"/>`;
+const closes = (id: number) => `<w:bookmarkEnd w:id="${id}"/>`;
+const bookmarks = (items: readonly WordKeptItem[]) =>
+  items.map(({ kind, start, end, detail }) => ({ kind, start, end, detail }));
 
 const read = (paragraph: string, rangeText: string) => {
   const result = readWordParagraphItems(pkg(paragraph), rangeText);
@@ -129,11 +137,40 @@ describe("readWordParagraphItems", () => {
       "x",
     ],
     [
-      "a bookmark",
+      "a bookmark inside a field's result",
       p(
-        `<w:bookmarkStart w:id="1" w:name="_Toc1"/>`,
+        `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`,
+        opens(1, "_Ref1"),
+        run("3"),
+        closes(1),
+        `<w:r><w:fldChar w:fldCharType="end"/></w:r>`,
+      ),
+      "3",
+    ],
+    [
+      "a bookmark ending inside a field's code",
+      p(
+        opens(1, "_Ref1"),
+        run("See "),
+        `<w:r><w:fldChar w:fldCharType="begin"/></w:r>`,
+        closes(1),
+        `<w:r><w:instrText> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run("3")}<w:r><w:fldChar w:fldCharType="end"/></w:r>`,
+      ),
+      "See 3",
+    ],
+    [
+      "a bookmark inside a simple field",
+      p(
+        `<w:fldSimple w:instr=" PAGE ">${opens(1, "_Ref1")}${run("3")}${closes(1)}</w:fldSimple>`,
+      ),
+      "3",
+    ],
+    [
+      "a table column's bookmark",
+      p(
+        `<w:bookmarkStart w:id="1" w:name="Column" w:colFirst="0" w:colLast="1"/>`,
         run("x"),
-        `<w:bookmarkEnd w:id="1"/>`,
+        closes(1),
       ),
       "x",
     ],
@@ -141,6 +178,105 @@ describe("readWordParagraphItems", () => {
     expect(readWordParagraphItems(pkg(paragraph), rangeText)).toEqual({
       refused: "unsupported",
     });
+  });
+
+  it.each([
+    ["a table of contents'", "_Toc938001"],
+    ["a cross-reference's", "_Ref938002"],
+    ["a pasted link's", "_Hlk938003"],
+    ["a user's", "Intro938"],
+  ])("reads %s bookmark as an item with its name", (_, name) => {
+    const { items } = read(
+      p(
+        run("PL1 Plain "),
+        opens(4, name),
+        run("lima mike"),
+        closes(4),
+        run("."),
+      ),
+      "PL1 Plain lima mike.",
+    );
+    expect(bookmarks(items)).toEqual([
+      { kind: "bookmark", start: 10, end: 19, detail: name },
+    ]);
+  });
+
+  it("reads stacked and nested bookmarks in the order they start", () => {
+    const { items } = read(
+      p(
+        opens(0, "_Toc1"),
+        opens(1, "_Ref2"),
+        run("H2 Scope and "),
+        opens(2, "Inner"),
+        run("aims"),
+        closes(2),
+        closes(1),
+        closes(0),
+      ),
+      "H2 Scope and aims",
+    );
+    expect(bookmarks(items)).toEqual([
+      { kind: "bookmark", start: 0, end: 17, detail: "_Toc1" },
+      { kind: "bookmark", start: 0, end: 17, detail: "_Ref2" },
+      { kind: "bookmark", start: 13, end: 17, detail: "Inner" },
+    ]);
+  });
+
+  it.each([
+    [
+      "that runs into the next paragraph",
+      p(run("Chapter "), opens(3, "Long"), run("one")),
+      "Chapter one",
+    ],
+    [
+      "that started in an earlier paragraph",
+      p(run("still"), closes(3), run(" after")),
+      "still after",
+    ],
+    [
+      "made on a triple-clicked paragraph, whose end starts the next one",
+      p(closes(3), run("Next paragraph.")),
+      "Next paragraph.",
+    ],
+  ])(
+    "refuses a bookmark %s, since BM0 measured no write of one with a single end",
+    (_, paragraph, rangeText) => {
+      expect(readWordParagraphItems(pkg(paragraph), rangeText)).toEqual({
+        refused: "unsupported",
+      });
+    },
+  );
+
+  it.each([
+    [
+      "a bookmark's",
+      opens(3, "Whole") + p(run("Page "), field(" PAGE ", "3")) + closes(3),
+    ],
+    [
+      "a comment's",
+      `<w:commentRangeStart w:id="3"/>${p(run("Page "), field(" PAGE ", "3"))}`,
+    ],
+  ])(
+    "refuses %s marks between paragraphs, which a rewrite would write back unread",
+    (_, body) => {
+      expect(readWordParagraphItems(pkg(body), "Page 3")).toEqual({
+        refused: "unsupported",
+      });
+      expect(
+        read(p(run("Page "), field(" PAGE ", "3")), "Page 3").items,
+      ).toEqual([expect.objectContaining({ kind: "field", start: 5, end: 6 })]);
+    },
+  );
+
+  it("reads an empty bookmark as a span without text", () => {
+    expect(
+      bookmarks(
+        read(
+          p(run("Here"), opens(5, "Spot"), closes(5), run(" now")),
+          "Here now",
+        ).items,
+      ),
+    ).toEqual([{ kind: "bookmark", start: 4, end: 4, detail: "Spot" }]);
   });
 
   it("lets Word's own last-edit bookmark pass", () => {
@@ -190,6 +326,71 @@ describe("markWordSelectionPart", () => {
       ],
       next: 2,
     });
+  });
+
+  it("never marks a bookmark", () => {
+    const text = "H1 Selection probe heading";
+    const items = read(p(opens(0, "_Toc1"), run(text), closes(0)), text);
+    expect(markWordSelectionPart(text, items, 0, text.length, 3)).toEqual({
+      text,
+      markers: [],
+      next: 3,
+    });
+    expect(markWordSelectionPart(text, items, 13, 18)).toEqual({
+      text: "probe",
+      markers: [],
+      next: 1,
+    });
+  });
+
+  it("refuses a part a bookmark starts or ends strictly inside", () => {
+    const text = "PL1 Plain lima mike papa.";
+    const items = read(
+      p(
+        run("PL1 Plain "),
+        opens(0, "Intro"),
+        run("lima mike"),
+        closes(0),
+        run(" papa."),
+      ),
+      text,
+    );
+    expect(markWordSelectionPart(text, items, 0, text.length)).toBeNull();
+    expect(markWordSelectionPart(text, items, 4, 15)).toBeNull();
+    expect(markWordSelectionPart(text, items, 15, text.length)).toBeNull();
+    expect(markWordSelectionPart(text, items, 10, 19)?.text).toBe("lima mike");
+    expect(markWordSelectionPart(text, items, 4, 9)?.text).toBe("Plain");
+  });
+
+  it("accepts a bookmark end right beside an item the part marks", () => {
+    const text = "Figure 1: Sales.";
+    const items = read(
+      p(
+        opens(0, "_Ref1"),
+        run("Figure "),
+        field(" SEQ Figure ", "1"),
+        closes(0),
+        run(": Sales."),
+      ),
+      text,
+    );
+    expect(markWordSelectionPart(text, items, 0, text.length)).toMatchObject({
+      text: "Figure ⟦1⟧: Sales.",
+      markers: [{ number: 1, kind: "field", end: "point" }],
+    });
+    const before = read(
+      p(
+        run("See "),
+        opens(0, "_Ref1"),
+        field(" REF x ", "7"),
+        closes(0),
+        run("."),
+      ),
+      "See 7.",
+    );
+    expect(markWordSelectionPart("See 7.", before, 0, 6)?.text).toBe(
+      "See ⟦1⟧.",
+    );
   });
 
   it("refuses a part that cuts through a field's result", () => {

@@ -78,8 +78,16 @@ export const WORD_SELECTION_REASON_CODES = [
   "inline_picture",
   "line_break",
   "special_character",
+  /**
+   * A bookmark other than Word's own _GoBack, such as a table of contents' or a cross-reference's,
+   * that a rewrite could not keep: one the paragraph's OOXML leaves out, one inside a field, a table
+   * column's, or one on a host that keeps no items.
+   */
+  "bookmark",
   "unsupported_formatting",
   "mixed_formatting",
+  /** Superscript or subscript on part of the span only, as in m² or CO₂. */
+  "mixed_script",
   "complex_script_format",
   "web_picture_offset",
   "style_font_unavailable",
@@ -87,6 +95,8 @@ export const WORD_SELECTION_REASON_CODES = [
   "shape_not_enabled",
   /** The selection starts or ends inside a field's result, a note reference or a comment's anchor. */
   "item_cut",
+  /** A bookmark starts or ends inside the selection, away from its edges and the items it keeps. */
+  "bookmark_cut",
 ] as const;
 
 export type WordSelectionReasonCode =
@@ -97,7 +107,6 @@ export const WORD_SELECTION_REPLACE_CODES = [
   "TARGET_TEXT_MISMATCH",
   "TARGET_NOT_FOUND",
   "AMBIGUOUS_TARGET",
-  "HINT_CONFLICT",
   "UNSUPPORTED_CONTENT",
   "PARAGRAPH_COUNT_MISMATCH",
   "INVALID_REPLACEMENT",
@@ -141,8 +150,16 @@ export interface WordSelectionHazards {
   commentMark?: boolean;
   /** A character style, or direct run formatting outside the tracked font set. */
   unsupportedFormatting?: boolean;
-  /** wordSelectionTargetFormat left a property unresolved, such as a colour on part of the span. */
+  /**
+   * wordSelectionTargetFormat left a property unresolved, such as a colour on part of the span, or
+   * a kept paragraph's rewrite would drop a property its text has in part only.
+   */
   mixedFormatting?: boolean;
+  /**
+   * Superscript or subscript on part of the span only (m², CO₂, 1st). Both rewrites give the text
+   * one baseline, which changes what it says.
+   */
+  mixedScript?: boolean;
   /**
    * Complex-script run formatting that differs from its Latin twin (bCs vs b, iCs vs i, szCs vs sz,
    * the cs font vs ascii), rtl, or complex-script characters. The rewrite's formatting rule tracks
@@ -158,9 +175,15 @@ export interface WordSelectionHazards {
   complexScriptTwin?: boolean;
   /**
    * A break, w:sym, a non-breaking or optional hyphen, or any other paragraph content that is not
-   * plain text (an equation, a bookmark, ruby text, a permission range).
+   * plain text (an equation, ruby text, a permission range).
    */
   breakOrSymbol?: boolean;
+  /**
+   * A bookmark other than Word's own _GoBack that the rewrite cannot keep. It is invisible, but a
+   * table of contents, a cross-reference or a macro may point to it, and Word deletes it when its
+   * whole text is replaced (BM0).
+   */
+  bookmark?: boolean;
   /** The runs' text does not spell paragraph.text, so offsets into it cannot be mapped onto runs. */
   textMismatch?: boolean;
 }
@@ -193,8 +216,6 @@ export interface WordSelectionFacts {
    * keeps the selection context only, and an unchecked span is never rewritten.
    */
   spanChecked?: boolean;
-  /** A tracked Range was kept as a hint (desktop only). */
-  trackedRange?: boolean;
   /**
    * Word's search hits for a covered part did not line up with the paragraph text's matches at
    * capture, so Replace could not pinpoint the part either.
@@ -207,9 +228,12 @@ export interface WordSelectionFacts {
   reviewedText?: string;
   /**
    * Per covered paragraph, set by the span checks where it holds items to keep: its part with
-   * markers, or "cut" where the part starts or ends inside one; null for a paragraph without items.
+   * markers, "cut" where the part starts or ends inside one, or "bookmark_cut" where a bookmark
+   * starts or ends inside it; null for a paragraph without items.
    */
-  kept?: readonly (WordMarkedPart | "cut" | null)[];
+  kept?: readonly (WordMarkedPart | "cut" | "bookmark_cut" | null)[];
+  /** The span checks found bold, italic, underline or strikethrough a rewrite would not keep. */
+  flattensEmphasis?: boolean;
 }
 
 export interface WordSelectionParagraph {
@@ -253,6 +277,11 @@ export interface WordSelectionSnapshot {
   contextBefore: string;
   /** A first line with the span paragraph's text after it (empty likewise), then the paragraphs after. */
   contextAfter: string;
+  /**
+   * Bold, italic, underline or strikethrough on part of the covered text only, which Replace gives
+   * the paragraph's style. Only on a rewrite; the card says so before Replace.
+   */
+  flattensEmphasis?: true;
 }
 
 /** Frozen at Send. A selection send carries no document paragraphs. */
@@ -417,6 +446,8 @@ export function wordSelectionHazardReason(
 ): WordSelectionReasonCode | null {
   const contains = (mark: string) => parts.some((part) => part.includes(mark));
   if (hazards.trackedChange) return "tracked_changes";
+  // Before the items: the bookmark is what keeps them from being kept.
+  if (hazards.bookmark) return "bookmark";
   if (hazards.hyperlink) return "hyperlink";
   if (hazards.field) return "field";
   if (hazards.contentControl) return "content_control";
@@ -430,6 +461,7 @@ export function wordSelectionHazardReason(
     parts.some((part) => WORD_CONTROL_CHARACTER.test(part))
   )
     return "special_character";
+  if (hazards.mixedScript) return "mixed_script";
   if (hazards.unsupportedFormatting) return "unsupported_formatting";
   if (hazards.mixedFormatting) return "mixed_formatting";
   if (
@@ -476,9 +508,10 @@ function contextOnlyReason(
   )
     return "empty_edge_paragraph";
   if (facts.kept?.includes("cut")) return "item_cut";
+  if (facts.kept?.includes("bookmark_cut")) return "bookmark_cut";
   const keptAt = (i: number) => keptPart(facts, i) !== null;
   if (
-    facts.kept?.some((k) => k !== null && k !== "cut") &&
+    facts.paragraphs.some((_, i) => keptAt(i)) &&
     support.keptItemParagraphs !== null &&
     paragraphs.length > support.keptItemParagraphs
   )
@@ -528,12 +561,8 @@ function contextOnlyReason(
   )
     return "position_unknown";
   if (facts.searchMismatch) return "position_unknown";
-  // Capture step 6: without a unique text window, only a hint can find the paragraphs again.
-  if (
-    anchor.window === null &&
-    !anchor.paragraphs.every((p) => p.id) &&
-    !facts.trackedRange
-  )
+  // Capture step 6: without IDs or a unique text window, the paragraphs cannot be found again.
+  if (anchor.window === null && !anchor.paragraphs.every((p) => p.id))
     return "not_unique";
   // Every other check passed; the span's own content was not looked at yet.
   if (!facts.spanChecked) return "shape_not_enabled";
@@ -611,7 +640,7 @@ const hasItemMarks = (text: string) => /[\u0002\u0005\u000B]/.test(text);
 /** The paragraph's part with markers, where it keeps items. */
 function keptPart(facts: WordSelectionFacts, i: number): WordMarkedPart | null {
   const kept = facts.kept?.[i];
-  return kept && kept !== "cut" ? kept : null;
+  return typeof kept === "object" ? kept : null;
 }
 
 /**
@@ -671,7 +700,7 @@ function modelText(
   // Markers only for a rewrite, which keeps the items; otherwise the items' own text.
   if (
     marked &&
-    facts.kept?.some((k) => k !== null && k !== "cut") &&
+    facts.paragraphs.some((_, i) => keptPart(facts, i) !== null) &&
     facts.paragraphs.every(
       (p, i) => visibleOffsetText(p, keptPart(facts, i) !== null) !== null,
     )
@@ -760,6 +789,7 @@ export function buildWordSelectionSnapshot(
     anchor: facts.anchor,
     contextBefore: before,
     contextAfter: after,
+    ...(rewrite && facts.flattensEmphasis ? { flattensEmphasis: true } : {}),
   };
 }
 
@@ -816,20 +846,12 @@ export function rewritableWordSelection(
     : null;
 }
 
-/** The live position of the first covered paragraph, from a tracked Range. */
-export interface WordSelectionHint {
-  position: number;
-}
-
 export type WordSelectionResolution =
   | { positions: number[] }
   | {
       refused: Extract<
         WordSelectionReplaceCode,
-        | "TARGET_TEXT_MISMATCH"
-        | "TARGET_NOT_FOUND"
-        | "AMBIGUOUS_TARGET"
-        | "HINT_CONFLICT"
+        "TARGET_TEXT_MISMATCH" | "TARGET_NOT_FOUND" | "AMBIGUOUS_TARGET"
       >;
     };
 
@@ -868,34 +890,19 @@ function editedInPlace(
 /**
  * Proves the captured paragraphs in the live story: the paragraph resolver, then the offset text,
  * which must be unchanged too because the span's offsets count in it. The stored index is never
- * consulted. A tracked Range hint must agree with a surviving ID; without IDs it proposes the
- * paragraphs, and their exact text decides.
+ * consulted.
  */
 export function resolveWordSelection(
   selection: WordSelectionSnapshot,
   liveEntries: readonly WordParagraphEntry[],
   liveRangeTexts: readonly string[],
-  hint?: WordSelectionHint,
 ): WordSelectionResolution {
   const { anchor } = selection;
   if (!anchor || anchor.paragraphs.length !== selection.paragraphs.length)
     return { refused: "TARGET_NOT_FOUND" };
   const byId = decidedById(anchor, liveEntries);
   const resolved = resolveWordParagraphs(anchor, liveEntries);
-  let positions = "positions" in resolved ? resolved.positions : null;
-  if (hint && byId && positions && positions[0] !== hint.position)
-    return { refused: "HINT_CONFLICT" };
-  if (hint && !byId) {
-    const proposed = anchor.paragraphs.map((_, i) => hint.position + i);
-    const proven = proposed.every(
-      (position, i) =>
-        liveEntries[position]?.text === anchor.paragraphs[i].text,
-    );
-    if (!proven) return { refused: "TARGET_TEXT_MISMATCH" };
-    if (positions && positions[0] !== hint.position)
-      return { refused: "AMBIGUOUS_TARGET" };
-    positions = proposed;
-  }
+  const positions = "positions" in resolved ? resolved.positions : null;
   if (!positions)
     return {
       refused:
@@ -929,16 +936,18 @@ const KEPT_ITEM_REASON: Readonly<
   picture: "inline_picture",
   break: "line_break",
   control: "content_control",
+  bookmark: "bookmark",
 };
 
 /**
  * The selection as context only, with each marker replaced by what its item shows, for a server
- * whose word_selection facet does not explain markers yet (no kept_items argument).
+ * whose word_selection facet does not explain markers yet (no kept_items argument). A selection
+ * without markers, whose items lie outside it or are only bookmarks, has nothing to explain.
  */
 export function wordSelectionWithoutKeptItems(
   selection: WordSelectionSnapshot,
 ): WordSelectionSnapshot {
-  const kept = selection.paragraphs.filter((p) => p.kept);
+  const kept = selection.paragraphs.filter((p) => p.kept?.markers.length);
   if (selection.role !== "rewrite" || kept.length === 0) return selection;
   const shows = new Map<number, string>();
   for (const p of kept)
@@ -949,8 +958,9 @@ export function wordSelectionWithoutKeptItems(
           marker.shows.replace(WORD_CONTROL_CHARACTER_GLOBAL, ""),
         );
   const kind = kept[0].kept!.kinds[0] ?? "field";
+  const { flattensEmphasis: _flattens, ...rest } = selection;
   return {
-    ...selection,
+    ...rest,
     role: "context_only",
     reasonCode: KEPT_ITEM_REASON[kind],
     selectedText: selection.selectedText.replace(

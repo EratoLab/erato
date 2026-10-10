@@ -133,6 +133,18 @@ export function wordSelectionReasonText(
         message:
           "This passage holds a link, field, comment, note, picture or other content a rewrite would lose.",
       });
+    case "bookmark":
+      return t({
+        id: "officeAddin.word.selection.reason.bookmark",
+        message:
+          "This passage holds a bookmark, such as one a table of contents or a cross-reference uses, which a rewrite could break.",
+      });
+    case "mixed_script":
+      return t({
+        id: "officeAddin.word.selection.reason.script",
+        message:
+          "This passage has superscript or subscript characters, as in m² or CO₂, which a rewrite would turn into normal text.",
+      });
     case "unsupported_formatting":
     case "mixed_formatting":
     case "complex_script_format":
@@ -152,6 +164,12 @@ export function wordSelectionReasonText(
         id: "officeAddin.word.selection.reason.itemCut",
         message:
           "This selection starts or ends inside a field or another item Word keeps whole. Select the whole item, or the text around it, to have it replaced.",
+      });
+    case "bookmark_cut":
+      return t({
+        id: "officeAddin.word.selection.reason.bookmarkCut",
+        message:
+          "A bookmark, such as one a cross-reference points to, starts or ends inside this selection, and a rewrite could not tell where it belongs. Select exactly the bookmarked text, or only text before or after it, to have it replaced.",
       });
     case "shape_not_enabled":
       return t({
@@ -218,6 +236,11 @@ function keptItemName(kind: WordKeptItemKind): string {
       return t({
         id: "officeAddin.word.selection.item.control",
         message: "content control",
+      });
+    case "bookmark":
+      return t({
+        id: "officeAddin.word.selection.item.bookmark",
+        message: "bookmark",
       });
   }
 }
@@ -393,7 +416,7 @@ function resultText(
           return t({
             id: "officeAddin.word.selection.trackedItems",
             message:
-              "Track Changes is on, and this passage holds fields, links, notes or comments that a tracked rewrite would mark as changed. Turn Track Changes off to replace it. Nothing was replaced.",
+              "Track Changes is on, and this passage holds fields, links, notes, comments or bookmarks, so a tracked rewrite would mark its whole paragraph as changed. Turn Track Changes off to replace it. Nothing was replaced.",
           });
         case "TARGET_RANGE_UNPROVEN":
           return t({
@@ -453,7 +476,6 @@ const isStale = (result: WordReplaceSelectionResult | undefined) =>
     "TARGET_TEXT_MISMATCH",
     "TARGET_NOT_FOUND",
     "AMBIGUOUS_TARGET",
-    "HINT_CONFLICT",
     "TARGET_RANGE_UNPROVEN",
   ].includes(result.code);
 
@@ -760,6 +782,16 @@ export function WordSelectionCard({
           message:
             "This answer was written for a passage in another document, so it cannot be replaced here.",
         });
+      // The final check trusts the pick's own flag, but the card announced only the request's.
+      else if (
+        picked.selection.flattensEmphasis &&
+        !rewritable.flattensEmphasis
+      )
+        note = t({
+          id: "officeAddin.word.selection.pickEmphasis",
+          message:
+            "The selected passage has bold, italic, underlined or struck-through words that the passage in your request did not have. Replace would remove that formatting, so nothing was replaced.",
+        });
       else target = live.capture;
     } catch {
       note = unread();
@@ -1032,6 +1064,15 @@ export function WordSelectionCard({
                     "Replace writes only onto the passage you selected, and only if it is unchanged since your request.",
                 })}
               </p>
+              {rewritable?.flattensEmphasis && (
+                <p className="word-review__hint">
+                  {t({
+                    id: "officeAddin.word.selection.flattensEmphasis",
+                    message:
+                      "After Replace, bold, italic, underlined or struck-through words in this passage take the paragraph's usual formatting.",
+                  })}
+                </p>
+              )}
               {siblingRemoval && !review.refusedForSibling && (
                 <p className="word-review__hint">
                   {siblingHintText(siblingRemoval)}

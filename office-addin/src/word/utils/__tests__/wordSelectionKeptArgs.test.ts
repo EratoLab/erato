@@ -57,10 +57,54 @@ describe("kept items for the model", () => {
     });
   });
 
-  it("names the kind of an item outside the selected part when falling back", async () => {
-    const selection = await captured({ p: "FN1", text: "continues" });
+  it("drops the flattened-emphasis notice with the rewrite when falling back", async () => {
+    const selection = await captured({ p: "MX1" });
+    expect(selection.flattensEmphasis).toBe(true);
     expect(
       wordSelectionForFacets(selection, advertised(["selected_text"])),
-    ).toMatchObject({ role: "context_only", reasonCode: "note_reference" });
+    ).not.toHaveProperty("flattensEmphasis");
+  });
+
+  it("keeps a rewrite without markers where the server does not explain them", async () => {
+    const selection = await captured({ p: "FN1", text: "continues" });
+    expect(selection.paragraphs[0].kept?.markers).toEqual([]);
+    expect(
+      wordSelectionForFacets(selection, advertised(["selected_text"])),
+    ).toBe(selection);
+  });
+
+  it("names the first marked item's kind when falling back", async () => {
+    const selection = await captured({ p: "MX1" });
+    expect(
+      wordSelectionForFacets(selection, advertised(["selected_text"])),
+    ).toMatchObject({ role: "context_only", reasonCode: "hyperlink" });
+  });
+
+  it("never mentions a bookmark, which gets no marker", async () => {
+    const host = installWordSelectionHost(
+      {
+        body: [
+          {
+            runs: [
+              { text: "H1 Selection probe heading", bookmark: "_Toc938001" },
+            ],
+            style: "Heading 1",
+          },
+          ...SV2_MAIN_DOCUMENT.body.slice(1),
+        ],
+      },
+      { host: "pc" },
+    );
+    host.select({ p: "H1" });
+    const read = await captureWordSelection();
+    if (read.status !== "ok" || !read.value) throw new Error("no capture");
+    expect(read.value).toMatchObject({
+      role: "rewrite",
+      selectedText: "H1 Selection probe heading",
+    });
+    expect(wordKeptItemsArg(read.value)).toBe("");
+    expect(
+      wordSelectionForFacets(read.value, advertised(["selected_text"])),
+    ).toBe(read.value);
   });
 });

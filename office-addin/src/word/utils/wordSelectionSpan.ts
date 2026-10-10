@@ -47,8 +47,8 @@ const STRUCTURE: Readonly<Record<string, keyof WordSelectionHazards>> = {
 
 /**
  * The only paragraph content a rewrite keeps: plain runs of text and tabs, and the marks Word writes
- * on its own. Anything else (an equation, a bookmark, ruby text, a permission range, content from
- * another namespace) would be lost or broken by Replace, so the span is context only.
+ * on its own. Anything else (an equation, ruby text, a permission range, content from another
+ * namespace) would be lost or broken by Replace, so the span is context only.
  */
 const PLAIN_CONTENT = new Set([
   "r",
@@ -59,7 +59,7 @@ const PLAIN_CONTENT = new Set([
 ]);
 
 /** Word's own "last edit" bookmark, which it moves freely. */
-const WORD_BOOKMARK = "_GoBack";
+export const WORD_BOOKMARK = "_GoBack";
 
 /** Run properties Word writes on its own that change nothing a rewrite must keep. */
 const BENIGN_RUN_PROPERTIES = new Set(["lang", "noProof"]);
@@ -309,6 +309,21 @@ function scanParagraphMark(pPr: Element, hazards: WordSelectionHazards): void {
  */
 function scanStructure(body: Element, hazards: WordSelectionHazards): void {
   const bookmarks = new Map<string, string>();
+  /** Whether `child` is a bookmark's start or end; any but Word's own is a hazard. */
+  const bookmarkMark = (child: Element) => {
+    if (child.namespaceURI !== W) return false;
+    if (child.localName === "bookmarkStart") {
+      const id = attr(child, "id") ?? "";
+      const bookmark = attr(child, "name") ?? "";
+      bookmarks.set(id, bookmark);
+      if (bookmark !== WORD_BOOKMARK) hazards.bookmark = true;
+      return true;
+    }
+    if (child.localName !== "bookmarkEnd") return false;
+    if (bookmarks.get(attr(child, "id") ?? "") !== WORD_BOOKMARK)
+      hazards.bookmark = true;
+    return true;
+  };
   const visit = (element: Element) => {
     for (const child of Array.from(element.children)) {
       const name = child.localName;
@@ -317,18 +332,7 @@ function scanStructure(body: Element, hazards: WordSelectionHazards): void {
         continue;
       }
       if (child.namespaceURI === W && name === "rPr") continue;
-      if (child.namespaceURI === W && name === "bookmarkStart") {
-        const id = attr(child, "id") ?? "";
-        const bookmark = attr(child, "name") ?? "";
-        bookmarks.set(id, bookmark);
-        if (bookmark !== WORD_BOOKMARK) hazards.breakOrSymbol = true;
-        continue;
-      }
-      if (child.namespaceURI === W && name === "bookmarkEnd") {
-        if (bookmarks.get(attr(child, "id") ?? "") !== WORD_BOOKMARK)
-          hazards.breakOrSymbol = true;
-        continue;
-      }
+      if (bookmarkMark(child)) continue;
       const known = child.namespaceURI === W ? STRUCTURE[name] : undefined;
       if (known) hazards[known] = true;
       else if (child.namespaceURI !== W || !PLAIN_CONTENT.has(name))
@@ -339,7 +343,11 @@ function scanStructure(body: Element, hazards: WordSelectionHazards): void {
   for (const child of Array.from(body.children)) {
     if (child.namespaceURI === W && child.localName === "sectPr") continue;
     if (child.namespaceURI === W && child.localName === "p") visit(child);
-    else hazards.breakOrSymbol = true;
+    else {
+      // Content between paragraphs; a bookmark's marks there are a bookmark too.
+      bookmarkMark(child);
+      hazards.breakOrSymbol = true;
+    }
   }
 }
 
@@ -432,8 +440,9 @@ function runCharacters(runs: readonly Element[]) {
  * content control around the span, a field around its result) are missing from a span's own OOXML
  * (PF3), so the object model is checked as well. An unreadable package fails closed.
  *
- * With a slice, the hazards still cover the whole paragraph, but the format comes from the slice's
- * characters only, and the runs touching it are returned as its edges.
+ * With a slice, the hazards still cover the whole paragraph, but the format, and the hazards of its
+ * mixed toggles (complexScriptTwin, mixedScript), come from the slice's characters only, and the
+ * runs touching it are returned as its edges.
  */
 export function scanWordSelectionSpan(
   ooxml: string,
@@ -496,6 +505,12 @@ export function scanWordSelectionSpan(
     mixedWithTwin("italic", "italicTwin")
   )
     hazards.complexScriptTwin = true;
+  // An explicit baseline next to unset text is still one baseline.
+  const raisedInPart = (property: "superscript" | "subscript") =>
+    format[property]?.state === "mixed" &&
+    spanFormats.some((f) => f.values[property] === true);
+  if (raisedInPart("superscript") || raisedInPart("subscript"))
+    hazards.mixedScript = true;
   return { hazards, format, edges };
 }
 

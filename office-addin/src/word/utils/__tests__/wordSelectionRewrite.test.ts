@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { readWordParagraphItems } from "../wordSelectionItems";
-import { rewriteWordParagraphPart } from "../wordSelectionRewrite";
+import {
+  rewriteWordParagraphPart,
+  wordPartFormatLoss,
+} from "../wordSelectionRewrite";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const pkg = (paragraph: string) =>
@@ -230,6 +233,367 @@ describe("rewriteWordParagraphPart", () => {
   it("refuses a paragraph that no longer spells the captured text", () => {
     expect(
       rewriteWordParagraphPart(pkg(fd), "FD1 changed", 0, 11, ["x"]),
+    ).toBeNull();
+  });
+});
+
+describe("rewriteWordParagraphPart with bookmarks", () => {
+  const opens = (id: number, name: string) =>
+    `<w:bookmarkStart w:id="${id}" w:name="${name}"/>`;
+  const closes = (id: number) => `<w:bookmarkEnd w:id="${id}"/>`;
+  /** What each bookmark of the result covers. */
+  const covers = (result: { ooxml: string; rangeText: string }) => {
+    const read = readWordParagraphItems(result.ooxml, result.rangeText);
+    if (!("items" in read)) throw new Error(read.refused);
+    return read.items
+      .filter((item) => item.kind === "bookmark")
+      .map((item) => [
+        item.detail,
+        result.rangeText.slice(item.start, item.end),
+      ]);
+  };
+  const heading = "H1 Selection probe heading";
+
+  it("keeps a heading's bookmark around its whole rewritten text", () => {
+    const result = rewrite(
+      p(opens(0, "_Toc1"), run(heading), closes(0)),
+      heading,
+      0,
+      heading.length,
+      ["H1 A shorter heading"],
+    );
+    expect(names(paragraphOf(result.ooxml))).toEqual([
+      "bookmarkStart",
+      '"H1 A shorter heading"',
+      "bookmarkEnd",
+    ]);
+    expect(covers(result)).toEqual([["_Toc1", "H1 A shorter heading"]]);
+  });
+
+  it("keeps a heading's bookmark around it when a word inside is rewritten", () => {
+    const result = rewrite(
+      p(opens(0, "_Toc1"), run(heading), closes(0)),
+      heading,
+      13,
+      18,
+      ["test"],
+    );
+    expect(covers(result)).toEqual([["_Toc1", "H1 Selection test heading"]]);
+  });
+
+  it("keeps stacked table of contents and cross-reference bookmarks around the new text", () => {
+    const result = rewrite(
+      p(
+        opens(0, "_Toc1"),
+        opens(1, "_Ref2"),
+        run("H2 Scope"),
+        closes(1),
+        closes(0),
+      ),
+      "H2 Scope",
+      0,
+      8,
+      ["H2 Purpose"],
+    );
+    expect(covers(result)).toEqual([
+      ["_Toc1", "H2 Purpose"],
+      ["_Ref2", "H2 Purpose"],
+    ]);
+  });
+
+  it("leaves a bookmark outside the part over its own words", () => {
+    const text = "PL1 Plain lima mike papa.";
+    const result = rewrite(
+      p(
+        run("PL1 Plain "),
+        opens(0, "Intro"),
+        run("lima mike"),
+        closes(0),
+        run(" papa."),
+      ),
+      text,
+      4,
+      9,
+      ["Short"],
+    );
+    expect(result.rangeText).toBe("PL1 Short lima mike papa.");
+    expect(covers(result)).toEqual([["Intro", "lima mike"]]);
+  });
+
+  it("keeps a caption's bookmark around its new label and its SEQ field", () => {
+    const result = rewrite(
+      p(
+        opens(0, "_Ref1"),
+        run("Figure "),
+        field(" SEQ Figure ", "1"),
+        closes(0),
+        run(": Sales."),
+      ),
+      "Figure 1: Sales.",
+      0,
+      16,
+      ["Abbildung ", ": Umsatz."],
+    );
+    expect(covers(result)).toEqual([["_Ref1", "Abbildung 1"]]);
+  });
+
+  it("refuses a bookmark that runs into the next paragraph, or came from the previous one", () => {
+    expect(
+      rewriteWordParagraphPart(
+        pkg(p(opens(3, "Long"), run("Chapter one"))),
+        "Chapter one",
+        0,
+        11,
+        ["Kapitel eins"],
+      ),
+    ).toBeNull();
+    expect(
+      rewriteWordParagraphPart(pkg(p(run("still"), closes(3))), "still", 0, 5, [
+        "noch immer",
+      ]),
+    ).toBeNull();
+    expect(
+      rewriteWordParagraphPart(
+        pkg(p(closes(3), run("Next paragraph."))),
+        "Next paragraph.",
+        5,
+        14,
+        ["section"],
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses a paragraph with a bookmark's marks around it, between paragraphs", () => {
+    const page = p(run("Page "), field(" PAGE ", "3"), run(" of the report."));
+    const text = "Page 3 of the report.";
+    expect(rewrite(page, text, 7, 21, ["of the summary."]).rangeText).toBe(
+      "Page 3 of the summary.",
+    );
+    expect(
+      rewriteWordParagraphPart(
+        pkg(opens(3, "Whole") + page + closes(3)),
+        text,
+        7,
+        21,
+        ["of the summary."],
+      ),
+    ).toBeNull();
+  });
+
+  it("puts new text before an item outside the bookmark around just that item", () => {
+    const result = rewrite(
+      p(opens(0, "_Ref1"), field(" SEQ Table ", "4"), closes(0), run(" rest")),
+      "4 rest",
+      0,
+      6,
+      ["Table ", " rest"],
+    );
+    expect(names(paragraphOf(result.ooxml)).slice(0, 2)).toEqual([
+      '"Table "',
+      "bookmarkStart",
+    ]);
+    expect(covers(result)).toEqual([["_Ref1", "4"]]);
+  });
+
+  it("puts new text before an item inside only the bookmark around the whole part", () => {
+    const result = rewrite(
+      p(
+        opens(0, "_Toc1"),
+        opens(1, "_Ref1"),
+        field(" SEQ Table ", "4"),
+        closes(1),
+        run(" rest"),
+        closes(0),
+      ),
+      "4 rest",
+      0,
+      6,
+      ["Table ", " rest"],
+    );
+    expect(covers(result)).toEqual([
+      ["_Toc1", "Table 4 rest"],
+      ["_Ref1", "4"],
+    ]);
+  });
+
+  it("puts new text after an item outside the bookmark around just that item", () => {
+    const result = rewrite(
+      p(
+        run("Total "),
+        opens(0, "_Ref1"),
+        field(" =SUM(ABOVE) ", "9"),
+        closes(0),
+      ),
+      "Total 9",
+      0,
+      7,
+      ["Sum ", " today"],
+    );
+    expect(covers(result)).toEqual([["_Ref1", "9"]]);
+  });
+
+  it("refuses new text where the bookmarks' order leaves it no place", () => {
+    expect(
+      rewriteWordParagraphPart(
+        pkg(
+          p(
+            opens(1, "_Ref1"),
+            opens(0, "_Toc1"),
+            field(" SEQ Table ", "4"),
+            closes(1),
+            run(" rest"),
+            closes(0),
+          ),
+        ),
+        "4 rest",
+        0,
+        6,
+        ["Table ", " rest"],
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses a part a bookmark ends inside", () => {
+    const text = "PL1 Plain lima mike papa.";
+    expect(
+      rewriteWordParagraphPart(
+        pkg(
+          p(
+            run("PL1 Plain "),
+            opens(0, "Intro"),
+            run("lima mike"),
+            closes(0),
+            run(" papa."),
+          ),
+        ),
+        text,
+        0,
+        text.length,
+        ["PL1 Short."],
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("wordPartFormatLoss", () => {
+  const NONE = { emphasis: false, script: false, other: false };
+  const loss = (paragraph: string, text: string, start = 0, end?: number) =>
+    wordPartFormatLoss(pkg(paragraph), text, start, end ?? text.length);
+  const pageField = field(" PAGE ", "3");
+
+  it("finds nothing to lose in text formatted alike, uniform colour and character style included", () => {
+    expect(
+      loss(
+        p(
+          run(
+            "All red ",
+            '<w:rStyle w:val="Strong"/><w:color w:val="C00000"/>',
+          ),
+          pageField,
+          run(" words", '<w:rStyle w:val="Strong"/><w:color w:val="C00000"/>'),
+        ),
+        "All red 3 words",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it.each([
+    ["colour", '<w:color w:val="C00000"/>'],
+    ["highlight", '<w:highlight w:val="yellow"/>'],
+    ["font", '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>'],
+    ["size", '<w:sz w:val="28"/>'],
+    ["character style", '<w:rStyle w:val="Strong"/>'],
+  ])("loses a %s on part of the text", (_, props) => {
+    expect(
+      loss(
+        p(run("Part "), run("marked", props), run(" text"), pageField),
+        "Part marked text3",
+      ),
+    ).toEqual({ ...NONE, other: true });
+  });
+
+  it("tells superscript and emphasis on part of the text apart from the rest", () => {
+    expect(
+      loss(
+        p(
+          run("Area m"),
+          run("2", '<w:vertAlign w:val="superscript"/>'),
+          pageField,
+        ),
+        "Area m23",
+      ),
+    ).toEqual({ ...NONE, script: true });
+    expect(
+      loss(
+        p(run("Plain "), run("bold", "<w:b/>"), run(" words"), pageField),
+        "Plain bold words3",
+      ),
+    ).toEqual({ ...NONE, emphasis: true });
+  });
+
+  it("judges only the selected part of the paragraph", () => {
+    const text = "Plain words red3";
+    const paragraph = p(
+      run("Plain words "),
+      run("red", '<w:color w:val="C00000"/>'),
+      pageField,
+    );
+    expect(loss(paragraph, text, 0, 11)).toEqual(NONE);
+    expect(loss(paragraph, text)).toEqual({ ...NONE, other: true });
+  });
+
+  it("keeps pieces formatted differently from each other, each written with its own runs", () => {
+    expect(
+      loss(
+        p(
+          run("Red words ", '<w:color w:val="C00000"/>'),
+          pageField,
+          run(" blue words", '<w:color w:val="0000FF"/>'),
+        ),
+        "Red words 3 blue words",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it("does not count a link's Hyperlink style, a field's result or a note reference against the text", () => {
+    expect(
+      loss(
+        p(
+          run("Alpha "),
+          `<w:hyperlink r:id="rId3">${run("link", '<w:rStyle w:val="Hyperlink"/>')}</w:hyperlink>`,
+          run(" golf "),
+          `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> DATE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run("2026", '<w:b/><w:color w:val="C00000"/>')}<w:r><w:fldChar w:fldCharType="end"/></w:r>`,
+          `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>`,
+          run(" end."),
+        ),
+        "Alpha link golf 2026\u0002 end.",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it("ignores what changes nothing a reader sees", () => {
+    expect(
+      loss(
+        p(
+          run("Spelled ", '<w:lang w:val="en-GB"/><w:noProof/>'),
+          run("auto ", '<w:color w:val="auto"/><w:highlight w:val="none"/>'),
+          run("hinted ", '<w:rFonts w:hint="eastAsia"/>'),
+          run("level", '<w:vertAlign w:val="baseline"/>'),
+          pageField,
+        ),
+        "Spelled auto hinted level3",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it("is null for a part that cuts through a field", () => {
+    expect(
+      wordPartFormatLoss(
+        pkg(p(run("Page "), field(" PAGE ", "12"), run(" of"))),
+        "Page 12 of",
+        0,
+        6,
+      ),
     ).toBeNull();
   });
 });

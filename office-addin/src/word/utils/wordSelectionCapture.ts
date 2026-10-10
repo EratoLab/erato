@@ -21,8 +21,8 @@ import {
 } from "./wordSelectionRange";
 import { currentWordSelectionSupport } from "./wordSelectionSupport";
 import {
+  evaluateKeptParagraph,
   evaluateParagraphSpan,
-  keptItemHazards,
   queueParagraphSpanChecks,
   queueWordSections,
   readWordStory,
@@ -444,14 +444,15 @@ function consecutive(
 
 /**
  * Per covered paragraph, its part with markers where it holds items to keep (ERMAIN-938): "cut"
- * where the part starts or ends inside one, null where it holds none or its items cannot be read.
+ * where the part starts or ends inside one, "bookmark_cut" where a bookmark starts or ends inside
+ * it, null where it holds none or its items cannot be read.
  */
 function keptParts(
   reads: readonly WordParagraphSpanChecks[],
   rangeTexts: readonly string[],
   parts: readonly { start: number; end: number }[],
   support: WordSelectionSupport,
-): (WordMarkedPart | "cut" | null)[] {
+): (WordMarkedPart | "cut" | "bookmark_cut" | null)[] {
   let next = 1;
   return reads.map((read, i) => {
     if (!support.keepsItems) return null;
@@ -465,9 +466,21 @@ function keptParts(
       parts[i].end,
       next,
     );
-    if (!marked) return "cut";
+    if (!marked) {
+      const visible = {
+        items: items.items.filter((item) => item.kind !== "bookmark"),
+        references: items.references,
+      };
+      const { start, end } = parts[i];
+      return markWordSelectionPart(rangeTexts[i], visible, start, end)
+        ? "bookmark_cut"
+        : "cut";
+    }
     next = marked.next;
-    return { ...marked, kinds: [...new Set(items.items.map((i) => i.kind))] };
+    const kinds = items.items.flatMap((item) =>
+      item.kind === "bookmark" ? [] : [item.kind],
+    );
+    return { ...marked, kinds: [...new Set(kinds)] };
   });
 }
 
@@ -613,7 +626,11 @@ export async function captureWordSelection(
       );
       const parts = wordSelectionPartOffsets(facts);
       const checks = covered.map((paragraph) =>
-        queueParagraphSpanChecks(paragraph, paragraph.tableNestingLevel > 0),
+        queueParagraphSpanChecks(
+          paragraph,
+          paragraph.tableNestingLevel > 0,
+          support.listsBookmarks,
+        ),
       );
       const sections = queueWordSections(context);
       // Replace finds a part by Word's search, so the capture makes sure the hits line up now.
@@ -649,6 +666,11 @@ export async function captureWordSelection(
         sections,
         covered,
       );
+      const slices = covered.map((_, i) => ({
+        start: parts[i].start,
+        end: parts[i].end,
+        rangeText: rangeTexts[i],
+      }));
       const spanChecks = covered.map((paragraph, i) =>
         kept[i] !== null
           ? null
@@ -656,21 +678,19 @@ export async function captureWordSelection(
               reads[i],
               paragraph.style,
               support,
-              parts[i].whole
-                ? undefined
-                : {
-                    start: parts[i].start,
-                    end: parts[i].end,
-                    rangeText: rangeTexts[i],
-                  },
+              parts[i].whole ? undefined : slices[i],
             ),
+      );
+      const keptChecks = covered.map((_, i) =>
+        kept[i] === null ? null : evaluateKeptParagraph(reads[i], slices[i]),
       );
       const hazards: WordSelectionHazards = Object.assign(
         {},
-        ...spanChecks.map((check, i) =>
-          check ? check.hazards : keptItemHazards(reads[i]),
-        ),
+        ...spanChecks.map((check, i) => (check ?? keptChecks[i])!.hazards),
         endsSection.some(Boolean) ? { breakOrSymbol: true } : {},
+      );
+      const flattensEmphasis = [...spanChecks, ...keptChecks].some(
+        (check) => check?.flattensEmphasis,
       );
       return buildWordSelectionSnapshot(
         {
@@ -682,6 +702,7 @@ export async function captureWordSelection(
           kept,
           spanChecked: true,
           ...(searchMismatch ? { searchMismatch } : {}),
+          ...(flattensEmphasis ? { flattensEmphasis } : {}),
         },
         support,
         origin,

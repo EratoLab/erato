@@ -128,6 +128,55 @@ describe.each(HOSTS)("scanWordSelectionSpan on %s", (host) => {
       });
     });
 
+    it("reports superscript on part of a slice, but not a slice all raised or next to one", () => {
+      const raised = (start: number, end: number) =>
+        scanWordSelectionSpan(
+          installWordSelectionHost(
+            {
+              body: [
+                {
+                  runs: [
+                    "SU Area 12 m",
+                    { text: "2", font: { superscript: true } },
+                    " and CO",
+                    { text: "2", font: { subscript: true } },
+                    ".",
+                  ],
+                },
+              ],
+            },
+            { host },
+          ).ooxml({ p: "SU" }),
+          { start, end, rangeText: "SU Area 12 m2 and CO2." },
+        ).hazards;
+      expect(raised(3, 13)).toEqual({ mixedScript: true });
+      expect(raised(14, 21)).toEqual({ mixedScript: true });
+      expect(raised(12, 13)).toEqual({});
+      expect(raised(3, 12)).toEqual({});
+    });
+
+    it("does not take an explicit baseline next to unset text for superscript", () => {
+      const baseline = scanWordSelectionSpan(
+        installWordSelectionHost(
+          {
+            body: [
+              {
+                runs: [
+                  "BL Lowered ",
+                  { text: "back", font: { superscript: false } },
+                  " words.",
+                ],
+              },
+            ],
+          },
+          { host },
+        ).ooxml({ p: "BL" }),
+        { start: 0, end: 22, rangeText: "BL Lowered back words." },
+      );
+      expect(baseline.format.superscript).toEqual({ state: "mixed" });
+      expect(baseline.hazards).toEqual({});
+    });
+
     it("judges the hazards of the whole paragraph, not only the slice", () => {
       const mixed = SV2_MAIN_DOCUMENT.body[1];
       const result = scanWordSelectionSpan(
@@ -231,10 +280,6 @@ describe("scanWordSelectionSpan on content it does not know", () => {
       `<w:p>${run("Area is ")}<m:oMath><m:r><m:t>πr²</m:t></m:r></m:oMath></w:p>`,
     ],
     [
-      "a cross-reference bookmark",
-      `<w:p><w:bookmarkStart w:id="1" w:name="_Toc123"/>${run("Heading")}<w:bookmarkEnd w:id="1"/></w:p>`,
-    ],
-    [
       "ruby text",
       `<w:p><w:r><w:ruby><w:rt>${run("ka")}</w:rt><w:rubyBase>${run("漢")}</w:rubyBase></w:ruby></w:r></w:p>`,
     ],
@@ -246,6 +291,46 @@ describe("scanWordSelectionSpan on content it does not know", () => {
     expect(scanWordSelectionSpan(pkg(paragraph)).hazards).toMatchObject({
       breakOrSymbol: true,
     });
+  });
+
+  it.each([
+    [
+      "a table of contents' bookmark",
+      `<w:p><w:bookmarkStart w:id="0" w:name="_Toc938001"/>${run("Heading")}<w:bookmarkEnd w:id="0"/></w:p>`,
+    ],
+    [
+      "a cross-reference's hidden bookmark",
+      `<w:p><w:bookmarkStart w:id="0" w:name="_Ref938002"/>${run("7. Signatures")}<w:bookmarkEnd w:id="0"/></w:p>`,
+    ],
+    [
+      "a user's bookmark around a word",
+      `<w:p>${run("Plain ")}<w:bookmarkStart w:id="0" w:name="Intro938"/>${run("lima mike")}<w:bookmarkEnd w:id="0"/>${run(" papa.")}</w:p>`,
+    ],
+    [
+      "the end of a bookmark that started in an earlier paragraph",
+      `<w:p>${run("Tail")}<w:bookmarkEnd w:id="4"/></w:p>`,
+    ],
+  ])("reports %s as a bookmark, not as a symbol", (_, paragraph) => {
+    expect(scanWordSelectionSpan(pkg(paragraph)).hazards).toEqual({
+      bookmark: true,
+    });
+  });
+
+  it("reports a bookmark's marks between paragraphs as a bookmark", () => {
+    expect(
+      scanWordSelectionSpan(
+        pkg(
+          `<w:bookmarkStart w:id="3" w:name="Whole"/><w:p>${run("Page")}</w:p><w:bookmarkEnd w:id="3"/>`,
+        ),
+      ).hazards,
+    ).toEqual({ bookmark: true, breakOrSymbol: true });
+    expect(
+      scanWordSelectionSpan(
+        pkg(
+          `<w:bookmarkStart w:id="0" w:name="_GoBack"/><w:p>${run("Page")}</w:p><w:bookmarkEnd w:id="0"/>`,
+        ),
+      ).hazards,
+    ).toEqual({ breakOrSymbol: true });
   });
 
   it.each([

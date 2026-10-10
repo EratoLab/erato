@@ -1,3 +1,5 @@
+import { WORD_BOOKMARK } from "./wordSelectionSpan";
+
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -5,7 +7,8 @@ const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 /**
  * The non-text items a rewrite keeps in place (ERMAIN-938). A field, note reference, picture or
  * line break is one point the text flows around; a link, comment range or content control holds
- * text the rewrite may change between its two ends.
+ * text the rewrite may change between its two ends. A bookmark holds text too, but is invisible:
+ * it gets no marker, so the model never sees it.
  */
 export type WordKeptItemKind =
   | "field"
@@ -14,12 +17,14 @@ export type WordKeptItemKind =
   | "break"
   | "link"
   | "comment"
-  | "control";
+  | "control"
+  | "bookmark";
 
 const SPAN_KINDS: ReadonlySet<WordKeptItemKind> = new Set([
   "link",
   "comment",
   "control",
+  "bookmark",
 ]);
 
 export const isWordKeptSpan = (kind: WordKeptItemKind) => SPAN_KINDS.has(kind);
@@ -36,7 +41,10 @@ export interface WordKeptItem {
   end: number;
   /** What paragraph.text shows of a point: a field's result, "\u0002", "\u000B"; "" for a span. */
   shows: string;
-  /** For the model and the card: a field's code, a link's target; "" when there is nothing to say. */
+  /**
+   * For the model and the card: a field's code, a link's target; "" when there is nothing to say. A
+   * bookmark's name, which only the checks read.
+   */
   detail: string;
   /** Document order, which breaks ties between items at the same offset; a span's start. */
   order: number;
@@ -55,7 +63,11 @@ export const isWordKeptPoint = (item: WordKeptItem) =>
 /** Why a paragraph's items cannot be kept; the selection then stays context only. */
 export type WordKeptItemsRefusal =
   | "unreadable"
-  /** Content no item covers: a tracked change, a symbol, a page break, an equation, ... */
+  /**
+   * Content no item covers: a tracked change, a symbol, a page break, an equation, a bookmark
+   * inside a field, a table column's bookmark, a bookmark that runs into another paragraph,
+   * anything between the package's paragraphs, ...
+   */
   | "unsupported"
   /** The runs and items do not spell paragraph.text, so no offset can be trusted. */
   | "misaligned";
@@ -132,6 +144,16 @@ class Unsupported extends Error {}
  * does not know, it refuses rather than skips, so that an offset never lands on hidden content.
  */
 function events(paragraph: Element): Event[] {
+  // Besides the paragraph, the package holds only Word's empty paragraph and the section's
+  // properties; marks between paragraphs, such as those of a bookmark around whole paragraphs,
+  // would go unread and still be written back.
+  const body = paragraph.parentElement;
+  if (
+    body &&
+    isW(body, "body") &&
+    children(body).some((c) => !isW(c, "p") && !isW(c, "sectPr"))
+  )
+    throw new Unsupported();
   const out: Event[] = [];
   let order = 0;
   const item = (kind: WordKeptItemKind, detail = ""): WordKeptItem => ({
@@ -143,6 +165,7 @@ function events(paragraph: Element): Event[] {
     order: order++,
   });
   const comments = new Map<string, WordKeptItem>();
+  const bookmarks = new Map<string, WordKeptItem>();
   const goBack = new Set<string>();
   // A complex field: its code is not shown, its result is, and nested fields belong to the outer.
   let field: {
@@ -275,6 +298,16 @@ function events(paragraph: Element): Event[] {
         }
         case "fldSimple": {
           if (field) throw new Unsupported();
+          for (const mark of Array.from(
+            child.getElementsByTagNameNS(W, "bookmarkStart"),
+          )) {
+            if (attr(mark, "name") !== WORD_BOOKMARK) throw new Unsupported();
+            goBack.add(attr(mark, "id") ?? "");
+          }
+          for (const mark of Array.from(
+            child.getElementsByTagNameNS(W, "bookmarkEnd"),
+          ))
+            if (!goBack.has(attr(mark, "id") ?? "")) throw new Unsupported();
           const simple = item("field", attr(child, "instr") ?? "");
           const shown = Array.from(child.getElementsByTagNameNS(W, "t"))
             .map((t) => t.textContent ?? "")
@@ -331,21 +364,45 @@ function events(paragraph: Element): Event[] {
           out.push({ type: "close", item: comment, node: child });
           break;
         }
-        case "bookmarkStart":
-          // Word's own "last edit" mark moves freely; any other bookmark is a target text can break.
-          if (attr(child, "name") !== "_GoBack") throw new Unsupported();
-          goBack.add(attr(child, "id") ?? "");
+        case "bookmarkStart": {
+          const id = attr(child, "id") ?? "";
+          const name = attr(child, "name") ?? "";
+          if (name === WORD_BOOKMARK) {
+            goBack.add(id);
+            break;
+          }
+          // Inside a field it marks part of the field's code or result, which is kept whole; a
+          // table column's bookmark covers cells, not text.
+          if (
+            field ||
+            attr(child, "colFirst") !== null ||
+            attr(child, "colLast") !== null
+          )
+            throw new Unsupported();
+          const bookmark = item("bookmark", name);
+          bookmarks.set(id, bookmark);
+          out.push({ type: "open", item: bookmark, node: child });
           break;
-        case "bookmarkEnd":
-          if (!goBack.has(attr(child, "id") ?? "")) throw new Unsupported();
+        }
+        case "bookmarkEnd": {
+          const id = attr(child, "id") ?? "";
+          if (goBack.has(id)) break;
+          const bookmark = bookmarks.get(id);
+          if (field || !bookmark) throw new Unsupported();
+          bookmarks.delete(id);
+          bookmark.closeOrder = order++;
+          out.push({ type: "close", item: bookmark, node: child });
           break;
+        }
         default:
           throw new Unsupported();
       }
     }
   };
   visit(paragraph);
-  if (field) throw new Unsupported();
+  // A bookmark with only one end here, as one that runs into another paragraph has, refuses: BM0
+  // measured bookmarks within one paragraph only, so whether insertOoxml keeps it is not known.
+  if (field || bookmarks.size > 0) throw new Unsupported();
   for (const comment of comments.values())
     if (!out.some((e) => e.type === "close" && e.item === comment))
       comment.openEnded = "end";
@@ -552,9 +609,9 @@ export const wordMarkerText = (
 /**
  * The part [start, end) of a paragraph with its kept items marked. A point is inside when its
  * characters are; one that shows nothing, and each end of a span, only strictly inside, so that a
- * selection of exactly a link's or comment's text keeps the rewrite within it. Null when the part
- * cuts through a point, holds a bracket the markers use, or holds a comment's balloon anchor away
- * from its range's end.
+ * selection of exactly a link's or comment's text keeps the rewrite within it. A bookmark is never
+ * marked. Null when the part cuts through a point, holds a bracket the markers use, holds a
+ * comment's balloon anchor away from its range's end, or has a bookmark start or end inside it.
  */
 export function markWordSelectionPart(
   rangeText: string,
@@ -606,7 +663,8 @@ export interface WordPartBoundary {
 
 /**
  * The items a part [start, end) marks, in order, and the offsets their characters hide. Null when
- * the part cuts through a point, holds a marker bracket, or a comment anchor away from its end.
+ * the part cuts through a point, holds a marker bracket, a comment anchor away from its end, or a
+ * bookmark end anywhere but beside an item it marks.
  */
 export function wordPartBoundaries(
   rangeText: string,
@@ -619,6 +677,7 @@ export function wordPartBoundaries(
   const hidden = new Set<number>();
   const strictly = (at: number) => start < at && at < end;
   for (const item of read.items) {
+    if (item.kind === "bookmark") continue;
     if (isWordKeptPoint(item)) {
       const shows = item.end > item.start;
       const inside = shows
@@ -657,6 +716,27 @@ export function wordPartBoundaries(
     if (rangeText[at] === "\u0005") hidden.add(at);
   }
   boundaries.sort((a, b) => a.at - b.at || a.order - b.order);
+  // A bookmark has no marker, so the model cannot say where it goes in new text: it stays only
+  // where the part's edges or another item pin it.
+  const pinned = new Set<number>();
+  for (const boundary of boundaries) {
+    pinned.add(boundary.at);
+    if (boundary.end === "point") pinned.add(boundary.item.end);
+    else if (
+      boundary.end === "close" &&
+      boundary.item.kind === "comment" &&
+      rangeText[boundary.at] === "\u0005"
+    )
+      pinned.add(boundary.at + 1);
+  }
+  const stays = (at: number) => at <= start || at >= end || pinned.has(at);
+  if (
+    read.items.some(
+      (item) =>
+        item.kind === "bookmark" && !(stays(item.start) && stays(item.end)),
+    )
+  )
+    return null;
   return { boundaries, hidden };
 }
 
@@ -700,7 +780,10 @@ export function splitWordMarkedLine(
   return { pieces };
 }
 
-/** What a write must leave of a paragraph's items: their kinds, shown text and details, in order. */
+/**
+ * What a write must leave of a paragraph's items: their kinds, shown text and details, in order. A
+ * dropped or renamed bookmark changes it too.
+ */
 export const wordKeptItemsShape = (items: readonly WordKeptItem[]) =>
   JSON.stringify(
     items.map(({ kind, shows, detail, openEnded, collapsed }) => ({
@@ -710,4 +793,12 @@ export const wordKeptItemsShape = (items: readonly WordKeptItem[]) =>
       openEnded,
       collapsed,
     })),
+  );
+
+/** Where a paragraph's bookmarks lie, which a write must leave over the text it expects. */
+export const wordBookmarkRanges = (items: readonly WordKeptItem[]) =>
+  JSON.stringify(
+    items.flatMap((item) =>
+      item.kind === "bookmark" ? [[item.start, item.end]] : [],
+    ),
   );
