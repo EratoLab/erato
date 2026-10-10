@@ -865,7 +865,8 @@ No filesystem path or source locator is accepted from clients. The result is
 `{ filename, mimeType, contentBase64 }`, using standard padded base64; empty
 files have an empty `contentBase64`. An optional `warnings` array names parts
 of the export that are only a preview or were omitted; each entry has a `code`,
-and may have `message`, `documentId` and `sourceError`.
+and may have `message`, `documentId` and `sourceError`. Known codes include
+`body_preview_only`, `message_omitted` and `attachment_unavailable`.
 
 - Files, including email attachments, return their original payload bytes.
   Thread scope has no effect on files. Storage containers are decoded.
@@ -884,6 +885,19 @@ and may have `message`, `documentId` and `sourceError`.
   bracketed note that it is a preview. The message carries the header
   `X-Erato-Body: preview`, and the result a `body_preview_only` warning. In a
   thread export, the leading `text/plain` part names such members too.
+- A new Outlook for Mac (`macOsHxAccount`) email, in a single or a thread
+  export, includes the attachments cached on this device, inline ones with
+  their `Content-ID`. An attachment that is not cached is left out instead of
+  failing the export: the result carries an `attachment_unavailable` warning
+  with `sourceError` `missing_from_local_cache` and the attachment's
+  `documentId`, or the email's when the attachment is not indexed. An
+  attachment that cannot be read or would exceed the size limit is left out
+  the same way, with a `sourceError` naming the cause when it is known. An
+  email whose attachments Outlook has not listed on this device gets one such
+  warning with the email's `documentId`, and `sourceError`
+  `missing_from_local_cache` when they are not synced. In a thread export, the
+  leading `text/plain` part names left-out attachments too. Exporting an
+  uncached attachment's own document fails with `missing_from_local_cache`.
 - Teams messages return `application/json` (`teams-chat.json`) using the frontend
   `TeamsTranscriptIndex` version 1 structure from
   `frontend/src/utils/teams/teamsTranscriptIndex.ts`: `version`, `exportedAt`,
@@ -901,13 +915,16 @@ Unknown or deleted IDs return `invalid_params` with `sourceError`
 `document_not_found`. Missing, truncated, changed, unsupported, or unreadable
 source content returns `sidecar_internal`, without silently dropping email
 attachments or substituting indexed text; `sourceError` names the cause when it
-is known (§21). Retrieval requires local content; it does not download missing
-content. An email whose body is not completely cached fails with
+is known (§21). Only new Outlook for Mac emails leave attachments out, each with
+a warning, as described above; an email of any other source fails instead.
+Retrieval requires local content; it does not download missing content. An
+email whose body is not completely cached fails with
 `missing_from_local_cache`, including a preview-only or truncated email from any
 other source. Sidecars before protocol 0.1.37 fail that way for new Outlook for
-Mac previews too. Exports are limited to 47 MiB before the outer
-base64 encoding to fit the client's 64 MiB response limit. Oversized exports
-return `sidecar_internal` with `export_too_large`.
+Mac previews too, and sidecars before 0.1.38 export new Outlook for Mac emails
+without their attachments and without a warning. Exports are limited to 47 MiB
+before the outer base64 encoding to fit the client's 64 MiB response limit.
+Oversized exports return `sidecar_internal` with `export_too_large`.
 
 ## 20. Document external identities and attachment navigation
 
