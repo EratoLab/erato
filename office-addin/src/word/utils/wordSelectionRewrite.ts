@@ -1,4 +1,9 @@
 import {
+  wordFormatRangeCarries,
+  wordFormatRangeProps,
+  wordPartFormatRanges,
+} from "./wordSelectionFormatSpans";
+import {
   alignWordParagraph,
   wordBookmarkRanges,
   wordKeptItemsShape,
@@ -131,15 +136,10 @@ const holdsText = (node: Element) =>
   Array.from(node.children).some((c) => isW(c, "t") || isW(c, "tab"));
 
 /**
- * A new run for text placed where there was none: it takes the properties of the nearest text run
- * beside it, never those of an item's own run (a note reference's superscript, say).
+ * The properties of text placed where there was none: those of the nearest text run beside it,
+ * never those of an item's own run (a note reference's superscript, say).
  */
-function newRun(
-  doc: Document,
-  text: string,
-  parent: Node,
-  before: Node | null,
-) {
+function nearestProps(parent: Node, before: Node | null) {
   const siblings = Array.from(parent.childNodes).filter(
     (n): n is Element => n instanceof Element,
   );
@@ -147,7 +147,7 @@ function newRun(
   const nearest =
     siblings.slice(0, at).reverse().find(holdsText) ??
     siblings.slice(at).find(holdsText);
-  return runWith(doc, text, nearest ? propsOf(nearest) : undefined);
+  return nearest ? propsOf(nearest) : undefined;
 }
 
 const propsOf = (run: Element) =>
@@ -200,15 +200,19 @@ function sharedProps(runs: readonly Element[]): Element | undefined {
   return shared;
 }
 
-/** The properties sharedProps leaves out: each one some of the runs have and others not. */
-function droppedProps(runs: readonly Element[]): Element[] {
-  if (runs.length < 2) return [];
+/** Per run, the properties sharedProps leaves out: each one some of the runs have and others not. */
+function droppedProps(runs: readonly Element[]): Map<Element, Element[]> {
+  const dropped = new Map<Element, Element[]>();
+  if (runs.length < 2) return dropped;
   const keys = propKeys(runs);
-  return runs.flatMap((run) =>
-    Array.from(propsOf(run)?.children ?? []).filter(
-      (property) => !keys.every((set) => set.has(propKey(property))),
-    ),
-  );
+  for (const run of runs)
+    dropped.set(
+      run,
+      Array.from(propsOf(run)?.children ?? []).filter(
+        (property) => !keys.every((set) => set.has(propKey(property))),
+      ),
+    );
+  return dropped;
 }
 
 /** Where text goes that has no old text to take the place of: right before or after a boundary. */
@@ -320,18 +324,28 @@ function bookmarksKept(
   });
 }
 
+/** New text of a piece, inside one of the part's format spans or outside them all. */
+export interface WordRewritePart {
+  text: string;
+  /** The index of its format span among the part's, in their order; null outside them. */
+  span: number | null;
+}
+
 /**
  * The paragraph with its part [start, end) replaced by `pieces`, the text before, between and after
- * the part's markers. Only text is replaced; every item and everything outside the part stays as
- * it was. Null when the paragraph no longer matches the part, or when the result would not read
- * back as the expected text with the same items, each bookmark over the text it should cover.
+ * the part's item markers. Only text is replaced; every item and everything outside the part stays
+ * as it was. A piece given as parts writes the text in one of the part's format spans with that
+ * span's toggles, as its old run had them (ERMAIN-943); the rest of a piece gets the properties all
+ * of its old text runs share. Null when the paragraph no longer matches the part, or when the
+ * result would not read back as the expected text with the same items, each bookmark over the text
+ * it should cover.
  */
 export function rewriteWordParagraphPart(
   ooxml: string,
   rangeText: string,
   start: number,
   end: number,
-  pieces: readonly string[],
+  pieces: readonly (string | readonly WordRewritePart[])[],
 ): WordParagraphRewrite | null {
   const parsed = wordParagraphElement(ooxml);
   if (!parsed) return null;
@@ -343,6 +357,18 @@ export function rewriteWordParagraphPart(
   const part = wordPartBoundaries(rangeText, aligned, start, end);
   if (!part || pieces.length !== part.boundaries.length + 1) return null;
   const { boundaries, hidden } = part;
+  const split = pieces.map((piece) =>
+    typeof piece === "string" ? [{ text: piece, span: null }] : piece,
+  );
+  const ranges = split.some((parts) => parts.some((p) => p.span !== null))
+    ? wordPartFormatRanges(aligned, start, end, part)
+    : [];
+  if (
+    split.some((parts) => parts.some((p) => p.span !== null && !ranges[p.span]))
+  )
+    return null;
+  const props = (base: Element | undefined, { span }: WordRewritePart) =>
+    span === null ? base : wordFormatRangeProps(base, ranges[span]);
   const edges = [start, ...boundaries.map((b) => b.at), end];
   const wraps = (item: WordKeptItem) => item.start <= start && item.end >= end;
   const goesAfter = new Map<Element, boolean>();
@@ -369,14 +395,18 @@ export function rewriteWordParagraphPart(
       if (first === null) first = at;
     }
     pieceOrigins.push(first);
-    const text = pieces[k];
+    const parts = split[k];
+    const text = parts.map((p) => p.text).join("");
     if (old.length) {
       const runs = [...new Set(old.map((node) => node.parentNode as Element))];
+      const base = sharedProps(runs);
       const after = splitRunBefore(old[0]);
-      after.parentNode!.insertBefore(
-        runWith(doc, text, sharedProps(runs)),
-        after,
-      );
+      for (const p of parts)
+        if (p.text)
+          after.parentNode!.insertBefore(
+            runWith(doc, p.text, props(base, p)),
+            after,
+          );
       for (const node of old) node.remove();
     } else if (text) {
       const place =
@@ -387,10 +417,13 @@ export function rewriteWordParagraphPart(
             : null;
       const beside = place && besideBookmarks(place, goesAfter);
       if (!beside) return null;
-      beside.parent.insertBefore(
-        newRun(doc, text, beside.parent, beside.before),
-        beside.before,
-      );
+      const base = nearestProps(beside.parent, beside.before);
+      for (const p of parts)
+        if (p.text)
+          beside.parent.insertBefore(
+            runWith(doc, p.text, props(base, p)),
+            beside.before,
+          );
     }
     expected += text;
     for (let at = 0; at < text.length; at += 1) origins.push(-1 - k);
@@ -478,15 +511,18 @@ function lossOf(property: Element): keyof WordPartFormatLoss | null {
  * What rewriteWordParagraphPart would drop of the part [start, end)'s formatting. It writes each
  * piece between the part's markers with the properties all of that piece's old text runs share,
  * so a property on part of one piece is lost, while pieces formatted differently from each other
- * keep their own. An item's own runs (a field's result, a note reference) are kept as they are and
- * do not count; a link's text is a piece of its own, so its Hyperlink style is shared. Null when
- * the paragraph's items cannot be read or the part cuts through one.
+ * keep their own. With `formatted`, the part's format spans keep their toggles (ERMAIN-943), so
+ * only emphasis outside them, or one a span does not carry, is lost. An item's own runs (a field's
+ * result, a note reference) are kept as they are and do not count; a link's text is a piece of its
+ * own, so its Hyperlink style is shared. Null when the paragraph's items cannot be read or the part
+ * cuts through one.
  */
 export function wordPartFormatLoss(
   ooxml: string,
   rangeText: string,
   start: number,
   end: number,
+  formatted = false,
 ): WordPartFormatLoss | null {
   const parsed = wordParagraphElement(ooxml);
   if (!parsed) return null;
@@ -494,6 +530,9 @@ export function wordPartFormatLoss(
   if ("refused" in aligned) return null;
   const part = wordPartBoundaries(rangeText, aligned, start, end);
   if (!part) return null;
+  const ranges = formatted
+    ? wordPartFormatRanges(aligned, start, end, part)
+    : [];
   const edges = [start, ...part.boundaries.map((b) => b.at), end];
   const loss: WordPartFormatLoss = {
     emphasis: false,
@@ -501,15 +540,27 @@ export function wordPartFormatLoss(
     other: false,
   };
   for (let k = 0; k + 1 < edges.length; k += 1) {
-    const runs = new Set<Element>();
+    const chars: { at: number; run: Element }[] = [];
     for (let at = edges[k]; at < edges[k + 1]; at += 1) {
       const char = aligned.chars[at];
       if (!part.hidden.has(at) && char)
-        runs.add(char.node.parentNode as Element);
+        chars.push({ at, run: char.node.parentNode as Element });
     }
-    for (const property of droppedProps([...runs])) {
-      const kind = lossOf(property);
-      if (kind) loss[kind] = true;
+    const dropped = droppedProps([...new Set(chars.map(({ run }) => run))]);
+    for (const { at, run } of chars) {
+      const range = ranges.find((r) => r.start <= at && at < r.end);
+      for (const property of dropped.get(run) ?? []) {
+        const kind = lossOf(property);
+        if (
+          kind &&
+          !(
+            kind === "emphasis" &&
+            range &&
+            wordFormatRangeCarries(range, property)
+          )
+        )
+          loss[kind] = true;
+      }
     }
   }
   return loss;

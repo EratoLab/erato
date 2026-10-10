@@ -14,16 +14,13 @@ import {
   wordSelectionPartOffsets,
   wordSelectionParts,
 } from "./wordSelectionAnchor";
+import { markWordParagraphOoxml } from "./wordSelectionFormatSpans";
 import {
   WORD_SELECTION_TOGGLE_PROPERTIES,
   wordSelectionEdgeOnly,
   wordSelectionTargetFormat,
 } from "./wordSelectionFormatting";
-import {
-  markWordSelectionPart,
-  readWordParagraphItems,
-  wordParagraphElement,
-} from "./wordSelectionItems";
+import { wordParagraphElement } from "./wordSelectionItems";
 import { buildWordSelectionRanges } from "./wordSelectionRange";
 import { wordPartFormatLoss } from "./wordSelectionRewrite";
 import {
@@ -40,6 +37,7 @@ import type {
 } from "./wordParagraphResolver";
 import type {
   WordSelectionHazards,
+  WordSelectionParagraph,
   WordSelectionReplaceCode,
   WordSelectionShape,
   WordSelectionSnapshot,
@@ -162,11 +160,12 @@ export interface WordKeptParagraphEvaluation {
  * OOXML left out, complex-script text, or formatting its part's rewrite would drop, as the plain
  * path refuses it (mixed colour, highlight, font, size or character style, and superscript or
  * subscript). Only the part's own text runs are judged; the rest of the paragraph is written as it
- * was, its bookmarks included.
+ * was, its bookmarks included. `formatted`: the rewrite keeps the part's format spans.
  */
 export function evaluateKeptParagraph(
   checks: WordParagraphSpanChecks,
   part: WordSelectionSpanSlice,
+  formatted = false,
 ): WordKeptParagraphEvaluation {
   const { hazards } = scanWordSelectionSpan(checks.ooxml);
   const loss = wordPartFormatLoss(
@@ -174,6 +173,7 @@ export function evaluateKeptParagraph(
     part.rangeText,
     part.start,
     part.end,
+    formatted,
   );
   return {
     hazards: {
@@ -255,7 +255,10 @@ export interface WordParagraphSpanEvaluation {
   styleFontResolved: boolean;
   /** Null when the style font was needed but not found. */
   format: WordSelectionTargetFormat | null;
-  /** A mixed bold, italic, underline or strikethrough the rewrite gives the style's value. */
+  /**
+   * A mixed bold, italic, underline or strikethrough the rewrite gives the style's value: no
+   * format span keeps it.
+   */
   flattensEmphasis: boolean;
 }
 
@@ -268,13 +271,16 @@ const EMPHASIS_PROPERTIES = [
 
 /**
  * The rewrite checks of one paragraph and the font its rewrite gets. The hazards always cover the
- * whole paragraph; with a slice, the font comes from the slice and the runs next to it.
+ * whole paragraph; with a slice, the font comes from the slice and the runs next to it. The font
+ * is that of the text outside the part's format spans; `formatted`: the rewrite keeps those spans,
+ * which are every run whose emphasis is mixed.
  */
 export function evaluateParagraphSpan(
   checks: WordParagraphSpanChecks,
   styleName: string,
   support: WordSelectionSupport,
   slice?: WordSelectionSpanSlice,
+  formatted = false,
 ): WordParagraphSpanEvaluation {
   const scan = scanWordSelectionSpan(checks.ooxml, slice);
   const hazards = {
@@ -290,9 +296,11 @@ export function evaluateParagraphSpan(
   const style = needsStyle
     ? wordSelectionStyleToggles(checks.ooxml, styleName)
     : {};
-  const flattensEmphasis = EMPHASIS_PROPERTIES.some(
-    (property) => scan.format[property]?.state === "mixed",
-  );
+  const flattensEmphasis =
+    !formatted &&
+    EMPHASIS_PROPERTIES.some(
+      (property) => scan.format[property]?.state === "mixed",
+    );
   if (!style || support.styleFontSource === null)
     return {
       hazards,
@@ -512,26 +520,32 @@ export function checkTargetVerification(
   const formats: (WordSelectionTargetFormat | null)[] = [];
   for (const [i, live] of paragraphs.entries()) {
     const { start, end, whole } = offsets[i];
-    const kept = selection.paragraphs[i].kept;
-    if (kept) {
-      const items = readWordParagraphItems(live.checks.ooxml, live.rangeText);
-      const marked =
-        "items" in items
-          ? markWordSelectionPart(
-              live.rangeText,
-              items,
-              start,
-              end,
-              kept.markers[0]?.number ?? 1,
-            )
-          : null;
-      if (marked?.text !== kept.text)
-        return { refused: "TARGET_TEXT_MISMATCH" };
-      const evaluated = evaluateKeptParagraph(live.checks, {
+    const { kept, formats: spans } = selection.paragraphs[i];
+    // The part with its markers as it was sent, format spans included, which their emphasis
+    // changed since would move or change.
+    if (kept || spans) {
+      const marked = markWordParagraphOoxml(
+        live.checks.ooxml,
+        live.rangeText,
         start,
         end,
-        rangeText: live.rangeText,
-      });
+        firstMarkerNumber(selection.paragraphs[i]),
+        { items: !!kept, formats: !!spans },
+      );
+      if (
+        !marked ||
+        marked.text !== (kept?.text ?? spans?.text) ||
+        JSON.stringify(marked.formats ?? []) !==
+          JSON.stringify(spans?.spans ?? [])
+      )
+        return { refused: "TARGET_TEXT_MISMATCH" };
+    }
+    if (kept) {
+      const evaluated = evaluateKeptParagraph(
+        live.checks,
+        { start, end, rangeText: live.rangeText },
+        !!spans,
+      );
       if (
         wordSelectionHazardReason(evaluated.hazards, [], support) ||
         unannounced(evaluated)
@@ -545,6 +559,7 @@ export function checkTargetVerification(
       live.style,
       support,
       whole ? undefined : { start, end, rangeText: live.rangeText },
+      !!spans,
     );
     if (
       wordSelectionHazardReason(evaluated.hazards, [live.text], support) ||
@@ -561,6 +576,15 @@ export function checkTargetVerification(
     backups: paragraphs.map((live) => live.checks.ooxml),
     cellTables: paragraphs.map((live) => live.cellTable),
   };
+}
+
+/** The number a paragraph's first marker has, from which marking its part again numbers on. */
+function firstMarkerNumber(paragraph: WordSelectionParagraph): number {
+  const numbers = [
+    ...(paragraph.kept?.markers ?? []).map((marker) => marker.number),
+    ...(paragraph.formats?.spans ?? []).map((span) => span.number),
+  ];
+  return numbers.length ? Math.min(...numbers) : 1;
 }
 
 export type WordSelectionShowResult =

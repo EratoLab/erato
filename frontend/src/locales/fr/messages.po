@@ -6832,6 +6832,46 @@ msgstr "Réécriture du passage sélectionné"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.bold"
+msgstr "gras"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.italic"
+msgstr "italique"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.noStrikethrough"
+msgstr "non barré"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.notBold"
+msgstr "non gras"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.notItalic"
+msgstr "non italique"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.noUnderline"
+msgstr "non souligné"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.strikethrough"
+msgstr "barré"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.underline"
+msgstr "souligné"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
 msgid "wordReview.selection.item.bookmark"
 msgstr "signet"
 

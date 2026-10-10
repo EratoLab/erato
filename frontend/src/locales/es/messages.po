@@ -6832,6 +6832,46 @@ msgstr "Reescritura del pasaje seleccionado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.bold"
+msgstr "negrita"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.italic"
+msgstr "cursiva"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.noStrikethrough"
+msgstr "sin tachado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.notBold"
+msgstr "sin negrita"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.notItalic"
+msgstr "sin cursiva"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.noUnderline"
+msgstr "sin subrayado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.strikethrough"
+msgstr "tachado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.underline"
+msgstr "subrayado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
 msgid "wordReview.selection.item.bookmark"
 msgstr "marcador"
 

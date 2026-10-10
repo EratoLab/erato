@@ -13,6 +13,7 @@ import type {
   WordParagraphAnchor,
   WordParagraphEntry,
 } from "./wordParagraphResolver";
+import type { WordFormatSpan } from "./wordSelectionFormatSpans";
 import type {
   WordKeptItemKind,
   WordKeptMarker,
@@ -232,8 +233,21 @@ export interface WordSelectionFacts {
    * starts or ends inside it; null for a paragraph without items.
    */
   kept?: readonly (WordMarkedPart | "cut" | "bookmark_cut" | null)[];
+  /**
+   * Per covered paragraph, set by the span checks where its part has format spans (ERMAIN-943): its
+   * part with their markers, and those of its kept items where it has a kept part too; null
+   * otherwise.
+   */
+  formats?: readonly (WordFormatPart | null)[];
   /** The span checks found bold, italic, underline or strikethrough a rewrite would not keep. */
   flattensEmphasis?: boolean;
+}
+
+/** A covered part with format spans, as the model sees it. */
+export interface WordFormatPart {
+  /** The part with ⟦n⟧ … ⟦/n⟧ around each format span, and the markers of any kept items. */
+  text: string;
+  spans: readonly WordFormatSpan[];
 }
 
 export interface WordSelectionParagraph {
@@ -246,6 +260,11 @@ export interface WordSelectionParagraph {
     markers: readonly WordKeptMarker[];
     kinds: readonly WordKeptItemKind[];
   };
+  /**
+   * Its part's runs whose bold, italic, underline or strikethrough Replace keeps (ERMAIN-943),
+   * marked ⟦n⟧ … ⟦/n⟧ in `text`, which equals kept.text where both are present; absent otherwise.
+   */
+  formats?: WordFormatPart;
   /** A hint only: a paragraph inserted above moves it without changing the target. */
   index: number;
   styleName: string;
@@ -279,7 +298,8 @@ export interface WordSelectionSnapshot {
   contextAfter: string;
   /**
    * Bold, italic, underline or strikethrough on part of the covered text only, which Replace gives
-   * the paragraph's style. Only on a rewrite; the card says so before Replace.
+   * the paragraph's style: no format span keeps it. Only on a rewrite; the card says so before
+   * Replace.
    */
   flattensEmphasis?: true;
 }
@@ -643,6 +663,10 @@ function keptPart(facts: WordSelectionFacts, i: number): WordMarkedPart | null {
   return typeof kept === "object" ? kept : null;
 }
 
+/** The paragraph's part with markers, where it keeps items or has format spans. */
+const markedPart = (facts: WordSelectionFacts, i: number): string | null =>
+  keptPart(facts, i)?.text ?? facts.formats?.[i]?.text ?? null;
+
 /**
  * The paragraph's offset text with its comment marks removed, when that equals the identity text;
  * null when paragraph.text holds more, such as a tracked deletion, which the model must not see.
@@ -700,13 +724,13 @@ function modelText(
   // Markers only for a rewrite, which keeps the items; otherwise the items' own text.
   if (
     marked &&
-    facts.paragraphs.some((_, i) => keptPart(facts, i) !== null) &&
+    facts.paragraphs.some((_, i) => markedPart(facts, i) !== null) &&
     facts.paragraphs.every(
       (p, i) => visibleOffsetText(p, keptPart(facts, i) !== null) !== null,
     )
   )
     return parts
-      .map((part, i) => keptPart(facts, i)?.text ?? removeCommentMarks(part))
+      .map((part, i) => markedPart(facts, i) ?? removeCommentMarks(part))
       .join("\n");
   if (facts.paragraphs.every((p) => visibleOffsetText(p) !== null))
     return removeCommentMarks(analysis.text);
@@ -764,6 +788,7 @@ export function buildWordSelectionSnapshot(
     paragraphs: facts.paragraphs.map(
       ({ id, text, rangeText, index, styleName, tableNestingLevel }, i) => {
         const kept = rewrite ? keptPart(facts, i) : null;
+        const formats = rewrite ? facts.formats?.[i] : null;
         return {
           id,
           text,
@@ -780,6 +805,7 @@ export function buildWordSelectionSnapshot(
                 },
               }
             : {}),
+          ...(formats ? { formats } : {}),
         };
       },
     ),
@@ -942,13 +968,15 @@ const KEPT_ITEM_REASON: Readonly<
 /**
  * The selection as context only, with each marker replaced by what its item shows, for a server
  * whose word_selection facet does not explain markers yet (no kept_items argument). A selection
- * without markers, whose items lie outside it or are only bookmarks, has nothing to explain.
+ * without item markers, whose items lie outside it or are only bookmarks, has nothing to explain;
+ * it stays a rewrite without its format spans.
  */
 export function wordSelectionWithoutKeptItems(
   selection: WordSelectionSnapshot,
 ): WordSelectionSnapshot {
   const kept = selection.paragraphs.filter((p) => p.kept?.markers.length);
-  if (selection.role !== "rewrite" || kept.length === 0) return selection;
+  if (selection.role !== "rewrite") return selection;
+  if (kept.length === 0) return wordSelectionWithoutFormats(selection);
   const shows = new Map<number, string>();
   for (const p of kept)
     for (const marker of p.kept!.markers)
@@ -968,6 +996,58 @@ export function wordSelectionWithoutKeptItems(
       (marker, close: string, number: string) =>
         close ? "" : (shows.get(Number(number)) ?? ""),
     ),
-    paragraphs: selection.paragraphs.map(({ kept: _kept, ...p }) => p),
+    paragraphs: selection.paragraphs.map(
+      ({ kept: _kept, formats: _formats, ...p }) => p,
+    ),
+  };
+}
+
+/**
+ * The selection without its format spans, as it was before them: Replace gives their text the
+ * formatting the rest of its paragraph shares, and the card says so. The kept items' markers are
+ * numbered again as if the spans had never been marked, as the final check marks them again.
+ */
+export function wordSelectionWithoutFormats(
+  selection: WordSelectionSnapshot,
+): WordSelectionSnapshot {
+  const spans = new Set(
+    selection.paragraphs.flatMap((p) =>
+      (p.formats?.spans ?? []).map((span) => span.number),
+    ),
+  );
+  if (spans.size === 0) return selection;
+  const items = [
+    ...new Set(
+      selection.paragraphs.flatMap((p) =>
+        (p.kept?.markers ?? []).map((marker) => marker.number),
+      ),
+    ),
+  ].sort((a, b) => a - b);
+  const renumbered = new Map(items.map((number, i) => [number, i + 1]));
+  const without = (text: string) =>
+    text.replace(WORD_MARKER, (_marker, close: string, number: string) =>
+      spans.has(Number(number))
+        ? ""
+        : `\u27E6${close}${renumbered.get(Number(number)) ?? number}\u27E7`,
+    );
+  return {
+    ...selection,
+    selectedText: without(selection.selectedText),
+    paragraphs: selection.paragraphs.map(({ formats: _formats, ...p }) =>
+      p.kept
+        ? {
+            ...p,
+            kept: {
+              ...p.kept,
+              text: without(p.kept.text),
+              markers: p.kept.markers.map((marker) => ({
+                ...marker,
+                number: renumbered.get(marker.number) ?? marker.number,
+              })),
+            },
+          }
+        : p,
+    ),
+    flattensEmphasis: true,
   };
 }

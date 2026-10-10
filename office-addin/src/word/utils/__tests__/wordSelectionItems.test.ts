@@ -476,6 +476,13 @@ describe("splitWordMarkedLine", () => {
   it("splits a rewrite at its markers, which may move within the text", () => {
     expect(splitWordMarkedLine("⟦1⟧Hier⟦/1⟧ und ⟦2⟧.", markers)).toEqual({
       pieces: ["", "Hier", " und ", "."],
+      parts: [
+        [],
+        [{ text: "Hier", format: null }],
+        [{ text: " und ", format: null }],
+        [{ text: ".", format: null }],
+      ],
+      dropped: [],
     });
   });
 
@@ -489,5 +496,75 @@ describe("splitWordMarkedLine", () => {
     expect(splitWordMarkedLine(line, markers)).toEqual({
       refused: "MARKERS_CHANGED",
     });
+  });
+});
+
+describe("splitWordMarkedLine with format spans", () => {
+  const items = [{ number: 2, end: "point" as const }];
+  const formats = [1, 3];
+  const split = (line: string) => splitWordMarkedLine(line, items, formats);
+
+  it("cuts each piece at the format markers, numbering each part's span", () => {
+    expect(split("A ⟦1⟧bold⟦/1⟧ word ⟦2⟧ and ⟦3⟧italic⟦/3⟧.")).toEqual({
+      pieces: ["A bold word ", " and italic."],
+      parts: [
+        [
+          { text: "A ", format: null },
+          { text: "bold", format: 1 },
+          { text: " word ", format: null },
+        ],
+        [
+          { text: " and ", format: null },
+          { text: "italic", format: 3 },
+          { text: ".", format: null },
+        ],
+      ],
+      dropped: [],
+    });
+  });
+
+  it("lets a span move, change order and cross an item marker", () => {
+    expect(split("⟦3⟧Kursiv⟦/3⟧ und ⟦1⟧fett ⟦2⟧ hier⟦/1⟧.")).toEqual({
+      pieces: ["Kursiv und fett ", " hier."],
+      parts: [
+        [
+          { text: "Kursiv", format: 3 },
+          { text: " und ", format: null },
+          { text: "fett ", format: 1 },
+        ],
+        [
+          { text: " hier", format: 1 },
+          { text: ".", format: null },
+        ],
+      ],
+      dropped: [],
+    });
+  });
+
+  it("lists a span the rewrite leaves out or leaves empty as dropped", () => {
+    expect(split("A word ⟦2⟧ and ⟦3⟧⟦/3⟧.")).toMatchObject({
+      pieces: ["A word ", " and ."],
+      dropped: [1, 3],
+    });
+  });
+
+  it.each([
+    ["an invented number", "A ⟦4⟧bold⟦/4⟧ ⟦2⟧."],
+    ["a doubled span", "⟦1⟧A⟦/1⟧ ⟦1⟧B⟦/1⟧ ⟦2⟧."],
+    ["a span left open", "⟦1⟧A ⟦2⟧."],
+    ["an end without its start", "A⟦/1⟧ ⟦2⟧."],
+    ["an end before its start", "⟦/1⟧A⟦1⟧ ⟦2⟧."],
+    ["a span inside another", "⟦1⟧A ⟦3⟧B⟦/3⟧⟦/1⟧ ⟦2⟧."],
+    ["a stray bracket inside a span", "⟦1⟧A ⟦⟦/1⟧ ⟦2⟧."],
+  ])("refuses %s", (_, line) => {
+    expect(split(line)).toEqual({ refused: "MARKERS_CHANGED" });
+  });
+
+  it.each([
+    ["a lost item marker", "⟦1⟧A⟦/1⟧ ⟦3⟧B⟦/3⟧."],
+    ["a doubled item marker", "⟦1⟧A⟦/1⟧ ⟦2⟧ ⟦2⟧."],
+    ["an item marker turned into a span", "⟦2⟧A⟦/2⟧."],
+  ])("keeps item markers strict: refuses %s", (_, line) => {
+    expect(split(line)).toEqual({ refused: "MARKERS_CHANGED" });
   });
 });
