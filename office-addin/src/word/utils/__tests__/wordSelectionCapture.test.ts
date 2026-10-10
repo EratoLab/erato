@@ -243,13 +243,13 @@ describe.each(HOSTS)("captureWordSelection on %s", (flavour) => {
     );
   });
 
-  it("drops comment marks from the text sent", async () => {
+  it("marks a comment's anchor in the text sent instead of its control character", async () => {
     const selection = await captureOf({
       p: "CM1",
       text: "anchor phrase",
       to: { p: "CM1", text: "after" },
     });
-    expect(selection!.selectedText).toBe("anchor phrase after");
+    expect(selection!.selectedText).toBe("anchor phrase\u27E61\u27E7 after");
   });
 
   it("places paragraphs without IDs by comparing ranges", async () => {
@@ -536,24 +536,44 @@ describe.each(HOSTS)(
     });
 
     it.each([
-      ["MX1", "hyperlink"],
-      ["FD1", "field"],
       ["HT1", "hidden_text"],
       ["TC1", "tracked_changes"],
-      ["CM1", "comment_mark"],
-      ["FN1", "note_reference"],
-      ["PC1", "inline_picture"],
       ["RT1", "complex_script_format"],
     ] as const)("keeps %s context only (%s)", async (p, reasonCode) => {
       const { selection } = await capture({ p });
-      expect(selection).toMatchObject({
-        role: "context_only",
-        // The web's selection text shows a picture as a space that paragraph.text lacks, so the
-        // span is not placed as a whole paragraph there.
-        reasonCode:
-          flavour === "web" && p === "PC1" ? "shape_not_enabled" : reasonCode,
-      });
+      expect(selection).toMatchObject({ role: "context_only", reasonCode });
     });
+
+    it.each([
+      [
+        "MX1",
+        "MX1 Alpha bravo charlie delta echo foxtrot \u27E61\u27E7link\u27E6/1\u27E7 golf \u27E62\u27E7 hotel india.",
+      ],
+      ["FD1", "FD1 Field before \u27E61\u27E7 field after words."],
+      ["CM1", "CM1 Commented anchor phrase\u27E61\u27E7 after comment."],
+      ["FN1", "FN1 Footnote host sentence\u27E61\u27E7 continues here."],
+      ["PC1", "PC1 Picture: \u27E61\u27E7 after picture."],
+    ] as const)(
+      "offers %s for rewriting with its items marked to stay",
+      async (p, text) => {
+        const { selection } = await capture({ p });
+        if (flavour === "web" && p === "PC1") {
+          // The web's selection text shows a picture as a space that paragraph.text lacks, so the
+          // span is not placed as a whole paragraph there.
+          expect(selection).toMatchObject({
+            role: "context_only",
+            reasonCode: "shape_not_enabled",
+          });
+          return;
+        }
+        expect(selection).toMatchObject({
+          role: "rewrite",
+          reasonCode: null,
+          selectedText: text,
+        });
+        expect(selection!.paragraphs[0].kept?.text).toBe(text);
+      },
+    );
 
     it("takes a mixed toggle from the paragraph style and refuses a partial colour", async () => {
       const document: MockSelectionDocument = {
@@ -663,21 +683,34 @@ describe.each(HOSTS)(
       });
     });
 
+    it("keeps a span next to hidden text in its paragraph context only", async () => {
+      const { selection } = await capture({ p: "HT1", text: "after words" });
+      expect(selection).toMatchObject({
+        role: "context_only",
+        shape: "inline",
+        reasonCode: "hidden_text",
+      });
+    });
+
     it.each([
-      ["a link and a field", "MX1", "golf", "hyperlink"],
-      ["hidden text", "HT1", "after words", "hidden_text"],
-      ["a comment", "CM1", "after comment", "comment_mark"],
-      ["a footnote reference", "FN1", "continues", "note_reference"],
-      ["a picture", "PC1", "after picture", "inline_picture"],
-      ["a field", "FD1", "after words", "field"],
+      ["a link and a field", "MX1", "golf"],
+      ["a comment", "CM1", "after comment"],
+      ["a footnote reference", "FN1", "continues"],
+      ["a picture", "PC1", "after picture"],
+      ["a field", "FD1", "after words"],
     ] as const)(
-      "keeps a span next to %s in its paragraph context only",
-      async (_, p, text, reasonCode) => {
+      "offers a span next to %s for rewriting, its paragraph's items kept",
+      async (_, p, text) => {
         const { selection } = await capture({ p, text });
         expect(selection).toMatchObject({
-          role: "context_only",
+          role: "rewrite",
           shape: "inline",
-          reasonCode,
+          reasonCode: null,
+          selectedText: text,
+        });
+        expect(selection!.paragraphs[0].kept).toMatchObject({
+          text,
+          markers: [],
         });
       },
     );
@@ -847,7 +880,6 @@ describe.each(HOSTS)(
       [
         "a link in its first paragraph",
         { p: "MX1", text: "india.", to: { p: "PL1", text: "PL1 Plain" } },
-        "hyperlink",
       ],
       [
         "a footnote reference in its last paragraph",
@@ -856,24 +888,32 @@ describe.each(HOSTS)(
           text: "after comment.",
           to: { p: "FN1", text: "FN1 Footnote" },
         },
-        "note_reference",
-      ],
-      [
-        "a field in a middle paragraph",
-        { p: "MP3", text: "omega.", to: { p: "HT1", text: "HT1 Hidden" } },
-        "field",
       ],
     ] as const)(
-      "keeps several paragraphs with %s context only",
-      async (_, target, reasonCode) => {
+      "offers several paragraphs with %s for rewriting",
+      async (_, target) => {
         const { selection } = await capture(target);
         expect(selection).toMatchObject({
-          role: "context_only",
+          role: "rewrite",
           shape: "multi_paragraph",
-          reasonCode,
+          reasonCode: null,
         });
       },
     );
+
+    it("keeps several paragraphs context only when one hides text, though another's field is kept", async () => {
+      const { selection } = await capture({
+        p: "MP3",
+        text: "omega.",
+        to: { p: "HT1", text: "HT1 Hidden" },
+      });
+      expect(selection).toMatchObject({
+        role: "context_only",
+        shape: "multi_paragraph",
+        reasonCode: "hidden_text",
+      });
+      expect(selection!.selectedText).not.toContain("SECRET");
+    });
 
     it("keeps several paragraphs across a section end context only", async () => {
       const { selection } = await capture(

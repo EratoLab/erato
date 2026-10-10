@@ -282,7 +282,7 @@ describe("WordChatInput with a Word selection", () => {
   );
 
   it("sends the document when the paragraph turns out to be context only", async () => {
-    word.select({ p: "MX1" });
+    word.select({ p: "HT1" });
     await renderInput();
     fireEvent.click(screen.getByTestId("word-include-document-chip"));
     send();

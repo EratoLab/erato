@@ -4107,8 +4107,48 @@ msgstr "The proposal is empty or holds characters Word does not keep as text. No
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.break"
+msgstr "line break"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.comment"
+msgstr "comment"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.control"
+msgstr "content control"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.field"
+msgstr "field"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.link"
+msgstr "link"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.note"
+msgstr "note"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.picture"
+msgstr "picture"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.lineCount"
 msgstr "The proposal does not have one line per selected paragraph. Nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.markersChanged"
+msgstr "The proposal lost or moved a field, link, note or comment of the passage, so it would delete or misplace it. Nothing was replaced."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4184,6 +4224,11 @@ msgstr "This passage has formatting a rewrite could not keep."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.host"
 msgstr "This version of Word cannot replace a selected passage."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.itemCut"
+msgstr "This selection starts or ends inside a field or another item Word keeps whole. Select the whole item, or the text around it, to have it replaced."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4314,6 +4359,11 @@ msgstr "Word did not answer in time. Nothing was replaced."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.title"
 msgstr "Rewrite of the selected passage"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.trackedItems"
+msgstr "Track Changes is on, and this passage holds fields, links, notes or comments that a tracked rewrite would mark as changed. Turn Track Changes off to replace it. Nothing was replaced."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

@@ -1,3 +1,4 @@
+import { wordSelectionWithoutKeptItems } from "./wordSelectionAnchor";
 import { wordSelectionFacetArgs } from "./wordSelectionArgs";
 
 import type { WordDocumentArgs } from "./buildWordDocumentArgs";
@@ -31,6 +32,20 @@ export function wordSelectionTakesSlot(
   documentIncluded: boolean,
 ): boolean {
   return selection.role === "rewrite" || !documentIncluded;
+}
+
+/**
+ * The selection as the server can take it: a rewrite that keeps items needs the kept_items
+ * argument that explains its markers, and is sent as context only where it is not advertised yet.
+ */
+export function wordSelectionForFacets(
+  selection: WordSelectionSnapshot,
+  availableFacetArgs: ReadonlyMap<string, ReadonlySet<string>>,
+): WordSelectionSnapshot {
+  const allowed = availableFacetArgs.get(WORD_SELECTION_FACET_ID);
+  return allowed?.has("kept_items")
+    ? selection
+    : wordSelectionWithoutKeptItems(selection);
 }
 
 export function resolveWordSelectionFacet(input: {

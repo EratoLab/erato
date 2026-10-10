@@ -10,6 +10,10 @@ import {
   wordSelectionPartOffsets,
 } from "./wordSelectionAnchor";
 import {
+  markWordSelectionPart,
+  readWordParagraphItems,
+} from "./wordSelectionItems";
+import {
   queueWordSearch,
   searchStartsOf,
   wordSearchable,
@@ -18,6 +22,7 @@ import {
 import { currentWordSelectionSupport } from "./wordSelectionSupport";
 import {
   evaluateParagraphSpan,
+  keptItemHazards,
   queueParagraphSpanChecks,
   queueWordSections,
   readWordStory,
@@ -34,7 +39,9 @@ import type {
   WordSelectionSnapshot,
   WordSelectionStory,
 } from "./wordSelectionAnchor";
+import type { WordMarkedPart } from "./wordSelectionItems";
 import type { WordSelectionSupport } from "./wordSelectionSupport";
+import type { WordParagraphSpanChecks } from "./wordSelectionTarget";
 
 export const WORD_SELECTION_DESCRIBE_TIMEOUT_MS = 5_000;
 export const WORD_SELECTION_CAPTURE_TIMEOUT_MS = 15_000;
@@ -436,6 +443,35 @@ function consecutive(
 }
 
 /**
+ * Per covered paragraph, its part with markers where it holds items to keep (ERMAIN-938): "cut"
+ * where the part starts or ends inside one, null where it holds none or its items cannot be read.
+ */
+function keptParts(
+  reads: readonly WordParagraphSpanChecks[],
+  rangeTexts: readonly string[],
+  parts: readonly { start: number; end: number }[],
+  support: WordSelectionSupport,
+): (WordMarkedPart | "cut" | null)[] {
+  let next = 1;
+  return reads.map((read, i) => {
+    if (!support.keepsItems) return null;
+    const items = readWordParagraphItems(read.ooxml, rangeTexts[i]);
+    if (!("items" in items)) return null;
+    if (items.items.length === 0 && items.references.length === 0) return null;
+    const marked = markWordSelectionPart(
+      rangeTexts[i],
+      items,
+      parts[i].start,
+      parts[i].end,
+      next,
+    );
+    if (!marked) return "cut";
+    next = marked.next;
+    return { ...marked, kinds: [...new Set(items.items.map((i) => i.kind))] };
+  });
+}
+
+/**
  * The Send-time read: the selection's paragraphs with their identity texts, the span's offsets
  * and, in the main story, the anchor a later Replace proves. Every read is one Word for the web
  * measured as leaving the document unchanged (preflight impact 1): a selected passage that occurs
@@ -588,10 +624,13 @@ export async function captureWordSelection(
           : null;
       });
       await context.sync();
+      const reads = checks.map((check) => check());
+      const kept = keptParts(reads, rangeTexts, parts, support);
       let searchMismatch = false;
       for (const [i, hits] of dryRuns.entries())
         if (
           hits &&
+          kept[i] === null &&
           !(await wordSearchHitAt(
             context,
             hits,
@@ -611,22 +650,26 @@ export async function captureWordSelection(
         covered,
       );
       const spanChecks = covered.map((paragraph, i) =>
-        evaluateParagraphSpan(
-          checks[i](),
-          paragraph.style,
-          support,
-          parts[i].whole
-            ? undefined
-            : {
-                start: parts[i].start,
-                end: parts[i].end,
-                rangeText: rangeTexts[i],
-              },
-        ),
+        kept[i] !== null
+          ? null
+          : evaluateParagraphSpan(
+              reads[i],
+              paragraph.style,
+              support,
+              parts[i].whole
+                ? undefined
+                : {
+                    start: parts[i].start,
+                    end: parts[i].end,
+                    rangeText: rangeTexts[i],
+                  },
+            ),
       );
       const hazards: WordSelectionHazards = Object.assign(
         {},
-        ...spanChecks.map((check) => check.hazards),
+        ...spanChecks.map((check, i) =>
+          check ? check.hazards : keptItemHazards(reads[i]),
+        ),
         endsSection.some(Boolean) ? { breakOrSymbol: true } : {},
       );
       return buildWordSelectionSnapshot(
@@ -634,8 +677,9 @@ export async function captureWordSelection(
           ...facts,
           hazards,
           styleFontResolved: spanChecks.every(
-            (check) => check.styleFontResolved,
+            (check) => !check || check.styleFontResolved,
           ),
+          kept,
           spanChecked: true,
           ...(searchMismatch ? { searchMismatch } : {}),
         },

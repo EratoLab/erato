@@ -1,0 +1,235 @@
+import { describe, expect, it } from "vitest";
+
+import { readWordParagraphItems } from "../wordSelectionItems";
+import { rewriteWordParagraphPart } from "../wordSelectionRewrite";
+
+const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const pkg = (paragraph: string) =>
+  `<?xml version="1.0" standalone="yes"?><pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"><pkg:part pkg:name="/word/document.xml"><pkg:xmlData><w:document xmlns:w="${W}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${paragraph}<w:p/></w:body></w:document></pkg:xmlData></pkg:part></pkg:package>`;
+const run = (text: string, props = "") =>
+  `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ""}<w:t xml:space="preserve">${text}</w:t></w:r>`;
+const p = (...content: string[]) => `<w:p>${content.join("")}</w:p>`;
+const field = (code: string, result: string) =>
+  `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>${code}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run(result)}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+
+/** The rewritten paragraph's own XML, for asserting on its structure. */
+function paragraphOf(ooxml: string): Element {
+  const doc = new DOMParser().parseFromString(ooxml, "application/xml");
+  return doc.getElementsByTagNameNS(W, "p")[0];
+}
+const names = (element: Element) =>
+  Array.from(element.children).map((c) =>
+    c.localName === "r"
+      ? Array.from(c.children)
+          .filter((x) => x.localName !== "rPr")
+          .map((x) =>
+            x.localName === "t" ? `"${x.textContent}"` : x.localName,
+          )
+          .join("+")
+      : c.localName,
+  );
+
+function rewrite(
+  paragraph: string,
+  rangeText: string,
+  start: number,
+  end: number,
+  pieces: string[],
+) {
+  const result = rewriteWordParagraphPart(
+    pkg(paragraph),
+    rangeText,
+    start,
+    end,
+    pieces,
+  );
+  if (!result) throw new Error("refused");
+  return result;
+}
+
+describe("rewriteWordParagraphPart", () => {
+  const fd = p(
+    run("FD1 before "),
+    field(" DATE ", "2026-10-10"),
+    run(" after."),
+  );
+  const fdText = "FD1 before 2026-10-10 after.";
+
+  it("rewrites the text around a field and keeps the field whole", () => {
+    const result = rewrite(fd, fdText, 4, fdText.length, ["vor ", " nach."]);
+    expect(result.rangeText).toBe("FD1 vor 2026-10-10 nach.");
+    expect(names(paragraphOf(result.ooxml))).toEqual([
+      '"FD1 vor "',
+      "fldChar",
+      "instrText",
+      "fldChar",
+      '"2026-10-10"',
+      "fldChar",
+      '" nach."',
+    ]);
+    expect(readWordParagraphItems(result.ooxml, result.rangeText)).toEqual({
+      items: [
+        expect.objectContaining({
+          kind: "field",
+          shows: "2026-10-10",
+          detail: " DATE ",
+        }),
+      ],
+      references: [],
+    });
+  });
+
+  it("places new text before a field where there was none", () => {
+    const result = rewrite(fd, fdText, 11, fdText.length, ["前 ", " after."]);
+    expect(result.rangeText).toBe("FD1 before 前 2026-10-10 after.");
+    expect(names(paragraphOf(result.ooxml)).slice(0, 2)).toEqual([
+      '"FD1 before 前 "',
+      "fldChar",
+    ]);
+  });
+
+  it("gives a rewrite only the formatting its old text shared, not its first word's", () => {
+    const result = rewrite(
+      p(
+        run("Bold", "<w:b/><w:i/>"),
+        run(" rest", "<w:i/>"),
+        field(" PAGE ", "3"),
+      ),
+      "Bold rest3",
+      0,
+      10,
+      ["Fett und Rest", ""],
+    );
+    const first = paragraphOf(result.ooxml).getElementsByTagNameNS(W, "r")[0];
+    expect(first.textContent).toBe("Fett und Rest");
+    expect(first.getElementsByTagNameNS(W, "b")).toHaveLength(0);
+    expect(first.getElementsByTagNameNS(W, "i")).toHaveLength(1);
+  });
+
+  const mx = p(
+    run("Alpha "),
+    `<w:hyperlink r:id="rId3">${run("foxtrot link", '<w:rStyle w:val="Hyperlink"/>')}</w:hyperlink>`,
+    run(" golf"),
+  );
+  const mxText = "Alpha foxtrot link golf";
+
+  it("rewrites a link's text inside the link, keeping its target", () => {
+    const result = rewrite(mx, mxText, 0, mxText.length, [
+      "Alpha ",
+      "Foxtrott-Link",
+      " Golf",
+    ]);
+    expect(result.rangeText).toBe("Alpha Foxtrott-Link Golf");
+    const link = paragraphOf(result.ooxml).getElementsByTagNameNS(
+      W,
+      "hyperlink",
+    )[0];
+    expect(link.getAttribute("r:id")).toBe("rId3");
+    expect(link.textContent).toBe("Foxtrott-Link");
+  });
+
+  it("keeps a rewrite of exactly a link's text inside the link", () => {
+    const result = rewrite(mx, mxText, 6, 18, ["neuer Link"]);
+    const link = paragraphOf(result.ooxml).getElementsByTagNameNS(
+      W,
+      "hyperlink",
+    )[0];
+    expect(link.textContent).toBe("neuer Link");
+    expect(result.rangeText).toBe("Alpha neuer Link golf");
+  });
+
+  const cm = p(
+    run("CM1 "),
+    `<w:commentRangeStart w:id="0"/>`,
+    run("anchor phrase"),
+    `<w:commentRangeEnd w:id="0"/>`,
+    `<w:r><w:commentReference w:id="0"/></w:r>`,
+    run(" after."),
+  );
+
+  it.each([
+    ["desktop", "CM1 anchor phrase after.", "CM1 Ankerwendung danach."],
+    [
+      "the web",
+      "CM1 anchor phrase\u0005 after.",
+      "CM1 Ankerwendung\u0005 danach.",
+    ],
+  ])(
+    "anchors a comment to exactly its rewritten text on %s",
+    (_, text, expected) => {
+      const result = rewrite(cm, text, 0, text.length, [
+        "CM1 ",
+        "Ankerwendung",
+        " danach.",
+      ]);
+      expect(result.rangeText).toBe(expected);
+      expect(names(paragraphOf(result.ooxml))).toEqual([
+        '"CM1 "',
+        "commentRangeStart",
+        '"Ankerwendung"',
+        "commentRangeEnd",
+        "commentReference",
+        '" danach."',
+      ]);
+    },
+  );
+
+  it("gives text after a footnote reference the text's formatting, not the reference's", () => {
+    const fn = p(
+      run("Host"),
+      `<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>`,
+    );
+    const result = rewrite(fn, "Host\u0002", 0, 5, ["Gast", " hier"]);
+    expect(result.rangeText).toBe("Gast\u0002 hier");
+    const runs = Array.from(
+      paragraphOf(result.ooxml).getElementsByTagNameNS(W, "r"),
+    );
+    expect(runs.at(-1)!.getElementsByTagNameNS(W, "vertAlign")).toHaveLength(0);
+  });
+
+  it("writes a tab as w:tab and keeps formatting outside the part", () => {
+    const result = rewrite(
+      p(run("Bold ", "<w:b/>"), run("plain text")),
+      "Bold plain text",
+      5,
+      15,
+      ["a\tb"],
+    );
+    expect(result.rangeText).toBe("Bold a\tb");
+    expect(names(paragraphOf(result.ooxml))).toEqual([
+      '"Bold "',
+      '"a"+tab+"b"',
+    ]);
+    expect(
+      paragraphOf(result.ooxml).getElementsByTagNameNS(W, "b"),
+    ).toHaveLength(1);
+  });
+
+  it("splits a line break out of its text run and keeps it", () => {
+    const result = rewrite(
+      p(`<w:r><w:t>one</w:t><w:br/><w:t>two</w:t></w:r>`),
+      "one\u000Btwo",
+      0,
+      7,
+      ["eins", "zwei"],
+    );
+    expect(result.rangeText).toBe("eins\u000Bzwei");
+    expect(names(paragraphOf(result.ooxml))).toEqual([
+      '"eins"',
+      "br",
+      '"zwei"',
+    ]);
+  });
+
+  it("refuses pieces that do not match the part's markers", () => {
+    expect(
+      rewriteWordParagraphPart(pkg(fd), fdText, 4, fdText.length, ["only one"]),
+    ).toBeNull();
+  });
+
+  it("refuses a paragraph that no longer spells the captured text", () => {
+    expect(
+      rewriteWordParagraphPart(pkg(fd), "FD1 changed", 0, 11, ["x"]),
+    ).toBeNull();
+  });
+});

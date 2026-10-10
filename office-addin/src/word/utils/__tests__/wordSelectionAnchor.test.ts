@@ -228,11 +228,21 @@ describe("classifyWordSelection: D-10", () => {
     ).toBe("shape_not_enabled");
   });
 
-  it("still names a reason its text shows when the span is unchecked", () => {
+  it("still names a reason its text shows when the span is unchecked, where items are not kept", () => {
+    const story = body(["Intro", "Note\u0002 here.", "Outro"]);
+    expect(
+      reasonOf(
+        { ...facts(story, { first: 1 }), spanChecked: false },
+        { ...MAC, keepsItems: false },
+      ),
+    ).toBe("note_reference");
+  });
+
+  it("leaves an item's mark to the span checks where items may be kept", () => {
     const story = body(["Intro", "Note\u0002 here.", "Outro"]);
     expect(
       reasonOf({ ...facts(story, { first: 1 }), spanChecked: false }),
-    ).toBe("note_reference");
+    ).toBe("shape_not_enabled");
   });
 
   it.each([

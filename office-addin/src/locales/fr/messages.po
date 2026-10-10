@@ -4107,8 +4107,48 @@ msgstr "La proposition est vide ou contient des caractères que Word ne conserve
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.break"
+msgstr "saut de ligne"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.comment"
+msgstr "commentaire"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.control"
+msgstr "contrôle de contenu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.field"
+msgstr "champ"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.link"
+msgstr "lien"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.note"
+msgstr "note"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.picture"
+msgstr "image"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.lineCount"
 msgstr "La proposition ne comporte pas une ligne par paragraphe sélectionné. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.markersChanged"
+msgstr "La proposition a perdu ou déplacé un champ, un lien, une note ou un commentaire du passage, et le supprimerait ou le placerait mal. Rien n'a été remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -4184,6 +4224,11 @@ msgstr "Ce passage a une mise en forme qu'une réécriture ne pourrait pas conse
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.host"
 msgstr "Cette version de Word ne peut pas remplacer un passage sélectionné."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.itemCut"
+msgstr "Cette sélection commence ou se termine à l'intérieur d'un champ ou d'un autre élément que Word conserve en entier. Sélectionnez l'élément entier, ou le texte qui l'entoure, pour qu'il soit remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4314,6 +4359,11 @@ msgstr "Word n'a pas répondu à temps. Rien n'a été remplacé."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.title"
 msgstr "Réécriture du passage sélectionné"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.trackedItems"
+msgstr "Le suivi des modifications est activé, et ce passage contient des champs, liens, notes ou commentaires qu'une réécriture suivie marquerait comme modifiés. Désactivez le suivi des modifications pour le remplacer. Rien n'a été remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

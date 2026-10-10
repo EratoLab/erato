@@ -1,4 +1,5 @@
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
+import { wordMarkerText } from "./wordSelectionItems";
 import {
   ACTION_FACET_ARG_MAX_BYTES,
   advertisedFacetArgs,
@@ -6,6 +7,7 @@ import {
 } from "../../core/clientActions/actionFacetArgs";
 
 import type { WordSelectionSnapshot } from "./wordSelectionAnchor";
+import type { WordKeptItemKind } from "./wordSelectionItems";
 
 /**
  * The word_selection facet's allowed_args, frozen by the owner (decision 1). The subscription
@@ -24,6 +26,7 @@ export const WORD_SELECTION_ARG_KEYS = [
   "context_before",
   "context_after",
   "truncated",
+  "kept_items",
 ] as const;
 
 export type WordSelectionArgKey = (typeof WORD_SELECTION_ARG_KEYS)[number];
@@ -86,6 +89,46 @@ export function wordSelectionFacetArgs(
     context_before: selection.contextBefore,
     context_after: selection.contextAfter,
     truncated: String(selection.truncated || selected.truncated),
+    kept_items: wordKeptItemsArg(selection),
   };
   return advertisedFacetArgs(args, allowedArgs);
+}
+
+const KEPT_ITEM_NAMES: Readonly<Record<WordKeptItemKind, string>> = {
+  field: "a field",
+  link: "a link",
+  note: "a footnote or endnote reference",
+  comment: "a comment",
+  picture: "a picture",
+  break: "a line break",
+  control: "a content control",
+};
+
+/**
+ * One line per marker in selected_text, saying what it stands for: an item the rewrite keeps where
+ * the marker is. Empty when nothing is marked.
+ */
+export function wordKeptItemsArg(selection: WordSelectionSnapshot): string {
+  const lines: string[] = [];
+  const said = new Set<number>();
+  for (const p of selection.paragraphs)
+    for (const marker of p.kept?.markers ?? []) {
+      if (said.has(marker.number)) continue;
+      said.add(marker.number);
+      const name = KEPT_ITEM_NAMES[marker.kind];
+      const both = (p.kept?.markers ?? []).filter(
+        (m) => m.number === marker.number,
+      ).length;
+      const shown = marker.shows.replace(/[\u0000-\u001F]/g, "");
+      lines.push(
+        marker.end === "point"
+          ? `${wordMarkerText(marker)} ${name}${shown ? ` showing "${shown}"` : ""}`
+          : both === 2
+            ? `${wordMarkerText(marker)}…${wordMarkerText({ ...marker, end: "close" })} ${name} around the text between; that text may change`
+            : marker.end === "open"
+              ? `${wordMarkerText(marker)} where ${name} starts; it runs on past the selection`
+              : `${wordMarkerText(marker)} where ${name} that started before the selection ends`,
+      );
+    }
+  return lines.join("\n");
 }
