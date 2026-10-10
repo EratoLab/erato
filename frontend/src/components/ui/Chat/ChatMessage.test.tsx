@@ -1,7 +1,7 @@
 import { I18nProvider } from "@lingui/react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
 
@@ -9,6 +9,7 @@ import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "./ChatMessage";
 import { McpNotices } from "./McpNotices";
 import { AudioTranscriptExcerpt } from "../FileUpload/AudioTranscriptExcerpt";
 import { ActionFacetContext } from "../Message/ActionFacetContext";
+import { setWordLiveCards } from "../WordReview/useWordHistoryMessage";
 
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 import type { Messages } from "@lingui/core";
@@ -914,6 +915,67 @@ describe("ChatMessage", () => {
       expect(messageContentMock).toHaveBeenCalledWith(
         expect.objectContaining({ mentionedAssistants: undefined }),
       );
+    });
+  });
+
+  describe("the Selection quote", () => {
+    afterEach(() => setWordLiveCards(false));
+
+    const renderSelection = async (args: Record<string, string>) => {
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+
+      render(
+        <I18nProvider i18n={i18n}>
+          <ChatMessage
+            message={{
+              id: "msg_user_selection",
+              content: [{ content_type: "text", text: "Shorten it" }],
+              role: "user",
+              sender: "user",
+              authorId: "user_1",
+              createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+              status: "complete",
+              action_facet_args: args,
+            }}
+            controls={() => null}
+            controlsContext={{
+              currentUserId: "user_1",
+              dialogOwnerId: "user_1",
+              isSharedDialog: false,
+            }}
+            onMessageAction={async () => true}
+          />
+        </I18nProvider>,
+      );
+      return screen.getByText("Selection").nextElementSibling!;
+    };
+
+    it("labels a Word selection's markers in the Word pane too", async () => {
+      setWordLiveCards(true);
+      const quote = await renderSelection({
+        selected_text: "Alpha ⟦1⟧link⟦/1⟧ on ⟦2⟧.\nBravo.",
+        kept_items: [
+          "⟦1⟧…⟦/1⟧ a link around the text between; that text may change",
+          '⟦2⟧ a field showing "2026-10-10"',
+        ].join("\n"),
+      });
+
+      expect(quote.textContent).toBe(
+        "Alpha [link]link[/link] on [2026-10-10].\nBravo.",
+      );
+      expect(quote).toHaveClass("whitespace-pre-line");
+    });
+
+    it("keeps the line breaks of an Outlook selection", async () => {
+      const quote = await renderSelection({
+        selected_text: "Hi Anna,\nthanks for the notes.",
+        source_property: "body",
+      });
+
+      expect(quote.textContent).toBe("Hi Anna,\nthanks for the notes.");
+      expect(quote).toHaveClass("whitespace-pre-line");
     });
   });
 
