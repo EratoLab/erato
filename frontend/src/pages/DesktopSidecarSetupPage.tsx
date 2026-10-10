@@ -14,7 +14,9 @@ import { Link } from "react-router-dom";
 
 import { Card } from "@/components/ui/Container/Card";
 import {
+  detectDesktopSidecarArchitecture,
   detectDesktopSidecarClientPlatform,
+  isDesktopSidecarTargetForClient,
   selectBestDesktopSidecarTarget,
 } from "@/lib/desktopSidecarPlatform";
 import { useDistribution } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -63,7 +65,21 @@ function platformIcon(os: string) {
   }
 }
 
-function architectureLabel(architecture: string): string {
+function architectureLabel(os: string, architecture: string): string {
+  if (os === "macos") {
+    switch (architecture) {
+      case "aarch64":
+        return t({
+          id: "desktopSidecar.setup.architecture.appleSilicon",
+          message: "Apple Silicon (M1 or later)",
+        });
+      case "x86_64":
+        return t({
+          id: "desktopSidecar.setup.architecture.intelMac",
+          message: "Intel",
+        });
+    }
+  }
   switch (architecture) {
     case "x86_64":
       return t({
@@ -142,7 +158,7 @@ export default function DesktopSidecarSetupPage() {
     { retry: false, staleTime: Infinity },
   );
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
-  const clientPlatform = useMemo(
+  const reportedPlatform = useMemo(
     () =>
       detectDesktopSidecarClientPlatform(
         window.navigator.userAgent,
@@ -150,13 +166,34 @@ export default function DesktopSidecarSetupPage() {
       ),
     [],
   );
-  const recommendedTarget = useMemo(
+  const [detectedArchitecture, setDetectedArchitecture] = useState<string>();
+  useEffect(() => {
+    let current = true;
+    void detectDesktopSidecarArchitecture(reportedPlatform).then(
+      (architecture) => {
+        if (current) {
+          setDetectedArchitecture(architecture);
+        }
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [reportedPlatform]);
+  const clientPlatform = useMemo(
+    () => ({
+      ...reportedPlatform,
+      architecture: detectedArchitecture ?? reportedPlatform.architecture,
+    }),
+    [detectedArchitecture, reportedPlatform],
+  );
+  const defaultTarget = useMemo(
     () => selectBestDesktopSidecarTarget(data?.targets ?? [], clientPlatform),
     [clientPlatform, data?.targets],
   );
   const selectedTarget =
     data?.targets.find((target) => target.id === selectedTargetId) ??
-    recommendedTarget ??
+    defaultTarget ??
     data?.targets[0];
   const availableOperatingSystems = useMemo(
     () =>
@@ -180,16 +217,12 @@ export default function DesktopSidecarSetupPage() {
       setSelectedTargetId(null);
       return;
     }
-    const target =
-      candidates.find(
-        (candidate) =>
-          candidate.platform.architecture === clientPlatform.architecture,
-      ) ??
-      candidates.find(
-        (candidate) => candidate.platform.architecture === "x86_64",
-      ) ??
-      candidates[0];
-    setSelectedTargetId(target.id);
+    const target = selectBestDesktopSidecarTarget(candidates, {
+      os,
+      architecture:
+        clientPlatform.os === os ? clientPlatform.architecture : undefined,
+    });
+    setSelectedTargetId(target?.id ?? null);
   }
 
   if (isLoading) {
@@ -229,9 +262,19 @@ export default function DesktopSidecarSetupPage() {
     );
   }
 
-  const platformTargets = data.targets.filter(
-    (target) => target.platform.os === selectedTarget.platform.os,
-  );
+  const platformTargets = data.targets
+    .filter((target) => target.platform.os === selectedTarget.platform.os)
+    .sort((left, right) =>
+      selectedTarget.platform.os === "macos"
+        ? Number(right.platform.architecture === "aarch64") -
+          Number(left.platform.architecture === "aarch64")
+        : 0,
+    );
+  const showMacArchitectureHint =
+    selectedTarget.platform.os === "macos" &&
+    !platformTargets.some((target) =>
+      isDesktopSidecarTargetForClient(target, clientPlatform),
+    );
 
   return (
     <SetupFrame>
@@ -302,7 +345,10 @@ export default function DesktopSidecarSetupPage() {
         <div className="mt-4 flex flex-wrap gap-3">
           {platformTargets.map((target) => {
             const selected = selectedTarget.id === target.id;
-            const recommended = recommendedTarget?.id === target.id;
+            const recommended = isDesktopSidecarTargetForClient(
+              target,
+              clientPlatform,
+            );
             return (
               <Card
                 key={target.id}
@@ -318,7 +364,10 @@ export default function DesktopSidecarSetupPage() {
                 bodyClassName="px-4 py-3"
               >
                 <span className="block font-semibold">
-                  {architectureLabel(target.platform.architecture)}
+                  {architectureLabel(
+                    target.platform.os,
+                    target.platform.architecture,
+                  )}
                 </span>
                 <span className="mt-1 block text-xs text-theme-fg-muted">
                   {recommended ? (
@@ -333,6 +382,15 @@ export default function DesktopSidecarSetupPage() {
             );
           })}
         </div>
+        {showMacArchitectureHint ? (
+          <p className="mt-3 max-w-2xl text-sm text-theme-fg-muted">
+            <Trans id="desktopSidecar.setup.architecture.macHint">
+              Not sure which Mac you have? Open the Apple menu and choose About
+              This Mac. &quot;Chip: Apple M…&quot; means Apple Silicon;
+              &quot;Processor: Intel&quot; means Intel.
+            </Trans>
+          </p>
+        ) : null}
       </Card>
 
       <section
@@ -351,7 +409,10 @@ export default function DesktopSidecarSetupPage() {
             </h2>
             <p className="mt-1 text-sm text-theme-fg-muted">
               {platformLabel(selectedTarget.platform.os)} ·{" "}
-              {architectureLabel(selectedTarget.platform.architecture)}
+              {architectureLabel(
+                selectedTarget.platform.os,
+                selectedTarget.platform.architecture,
+              )}
             </p>
           </div>
         </div>

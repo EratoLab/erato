@@ -1,5 +1,7 @@
 import {
+  architectureFromHints,
   detectDesktopSidecarClientPlatform,
+  isDesktopSidecarTargetForClient,
   selectBestDesktopSidecarTarget,
 } from "./desktopSidecarPlatform";
 
@@ -15,6 +17,10 @@ const targets = [
   {
     id: "macos-x86_64",
     platform: { os: "macos", architecture: "x86_64" },
+  },
+  {
+    id: "macos-aarch64",
+    platform: { os: "macos", architecture: "aarch64" },
   },
   {
     id: "linux-x86_64-gnu",
@@ -41,7 +47,46 @@ describe("desktop sidecar platform selection", () => {
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         "MacIntel",
       ),
-    ).toEqual({ os: "macos", architecture: "x86_64" });
+    ).toEqual({ os: "macos", architecture: undefined });
+  });
+
+  it("reads the architecture from client hints and, on a Mac, from WebGL", () => {
+    expect(
+      architectureFromHints("windows", { clientHintArchitecture: "arm" }),
+    ).toBe("aarch64");
+    expect(
+      architectureFromHints("macos", {
+        clientHintArchitecture: "x86",
+        webglRenderer: "Apple M2",
+      }),
+    ).toBe("x86_64");
+    expect(
+      architectureFromHints("macos", {
+        webglRenderer:
+          "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+      }),
+    ).toBe("aarch64");
+    expect(
+      architectureFromHints("macos", {
+        webglRenderer: "Intel(R) Iris(TM) Plus Graphics 655",
+        webglExtensions: ["WEBGL_compressed_texture_astc"],
+      }),
+    ).toBe("x86_64");
+    expect(
+      architectureFromHints("macos", {
+        webglRenderer: "Apple GPU",
+        webglExtensions: ["WEBGL_compressed_texture_astc"],
+      }),
+    ).toBe("aarch64");
+    expect(
+      architectureFromHints("macos", {
+        webglRenderer: "Apple GPU",
+        webglExtensions: ["WEBGL_compressed_texture_s3tc"],
+      }),
+    ).toBeUndefined();
+    expect(
+      architectureFromHints("windows", { webglRenderer: "Apple M1" }),
+    ).toBeUndefined();
   });
 
   it("does not recommend desktop artifacts to mobile clients", () => {
@@ -66,5 +111,19 @@ describe("desktop sidecar platform selection", () => {
         architecture: "aarch64",
       })?.id,
     ).toBe("linux-x86_64-gnu");
+  });
+
+  it("defaults an undetected Mac to Apple Silicon without recommending it", () => {
+    const client = { os: "macos", architecture: undefined };
+    const target = selectBestDesktopSidecarTarget(targets, client);
+
+    expect(target?.id).toBe("macos-aarch64");
+    expect(isDesktopSidecarTargetForClient(target!, client)).toBe(false);
+    expect(
+      isDesktopSidecarTargetForClient(target!, {
+        os: "macos",
+        architecture: "aarch64",
+      }),
+    ).toBe(true);
   });
 });

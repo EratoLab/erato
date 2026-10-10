@@ -2976,8 +2976,23 @@ msgstr "ARM 64-Bit"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.appleSilicon"
+msgstr "Apple Silicon (M1 oder neuer)"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.architecture.heading"
 msgstr "2. Prozessor"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.intelMac"
+msgstr "Intel"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.macHint"
+msgstr "Sie wissen nicht, welchen Mac Sie haben? Öffnen Sie das Apple-Menü und wählen Sie „Über diesen Mac“. „Chip: Apple M…“ bedeutet Apple Silicon, „Prozessor: Intel“ bedeutet Intel."
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
