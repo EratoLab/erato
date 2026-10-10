@@ -107,7 +107,8 @@ const KEPT_ITEM_NAMES: Readonly<Record<WordKeptItemKind, string>> = {
 
 /**
  * One line per marker in selected_text, saying what it stands for: an item the rewrite keeps where
- * the marker is. Empty when nothing is marked.
+ * the marker is. Empty when nothing is marked. The Erato web app parses these lines to label the
+ * markers of a stored chat (frontend wordSelectionReply.ts), so changing them needs both sides.
  */
 export function wordKeptItemsArg(selection: WordSelectionSnapshot): string {
   const lines: string[] = [];

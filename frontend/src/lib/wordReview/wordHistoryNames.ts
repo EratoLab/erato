@@ -4,6 +4,7 @@ export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";
 export const WORD_EDITS_FENCE = "erato-word-edits";
 export const WORD_INSERT_FENCE = "erato-word-insert";
 export const WORD_PLAN_FENCE = "erato-word-document-plan";
+export const WORD_REPLACE_FENCE = "erato-word-replace";
 
 /** The action facets a Word request is sent under. */
 export const WORD_ACTION_FACET_IDS: ReadonlySet<string> = new Set([
@@ -12,4 +13,5 @@ export const WORD_ACTION_FACET_IDS: ReadonlySet<string> = new Set([
   "word_compose",
   "word_document_ooxml",
   "word_ooxml_experiment",
+  "word_selection",
 ]);

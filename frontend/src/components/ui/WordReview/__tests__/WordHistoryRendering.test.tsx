@@ -363,6 +363,161 @@ describe("Word chats shown outside Word", () => {
   });
 });
 
+const KEPT_ITEMS = [
+  "⟦1⟧…⟦/1⟧ a link around the text between; that text may change",
+  '⟦2⟧ a field showing "2026-10-10"',
+].join("\n");
+
+const selectionConversation = (
+  answer: string,
+  args: Record<string, string> = {},
+): Message[] => {
+  const [user, assistant] = wordConversation([text(answer)], "word_selection");
+  user.action_facet_args = {
+    document_name: "Report.docx",
+    selected_text:
+      "MX1 Alpha ⟦1⟧link⟦/1⟧ golf ⟦2⟧ hotel.\nPL1 Plain paragraph kilo.",
+    selection_role: "rewrite",
+    selection_shape: "multi_paragraph",
+    paragraph_count: "2",
+    truncated: "false",
+    kept_items: KEPT_ITEMS,
+    ...args,
+  };
+  return [user, assistant];
+};
+
+const replaceFence = (content: string) =>
+  `\`\`\`erato-word-replace\n${content}\n\`\`\``;
+
+const REWRITE = "MX1 Alpha ⟦1⟧link⟦/1⟧ ⟦2⟧ hotel, shorter.\nPL1 Plain.";
+
+function shownText(card: HTMLElement, view: "Original" | "Proposed") {
+  fireEvent.click(within(card).getByRole("tab", { name: view }));
+  return within(card).getByRole("tabpanel").textContent;
+}
+
+describe("Word selection replies shown outside Word", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  it("shows a Replace fence as a read-only comparison with the selection", async () => {
+    renderChat(selectionConversation(`Tighter:\n\n${replaceFence(REWRITE)}`));
+
+    const card = await screen.findByTestId("word-history-replace");
+    expect(document.querySelector("pre.message-content-code-block")).toBeNull();
+    expect(
+      within(card).getByText("Rewrite of the selected passage"),
+    ).toBeVisible();
+    expect(
+      within(card).getByText("Selection when requested → proposed replacement"),
+    ).toBeVisible();
+    expect(within(card).getByText("From Word · Report.docx")).toBeVisible();
+    expect(
+      within(card).getByText(
+        "Open this chat in Word with the document to apply.",
+      ),
+    ).toBeVisible();
+    expect(shownText(card, "Original")).toBe(
+      "MX1 Alpha [link]link[/link] golf [2026-10-10] hotel.↵\nPL1 Plain paragraph kilo.",
+    );
+    expect(shownText(card, "Proposed")).toBe(
+      "MX1 Alpha [link]link[/link] [2026-10-10] hotel, shorter.↵\nPL1 Plain.",
+    );
+    expect(card.textContent).not.toMatch(/[⟦⟧]/u);
+  });
+
+  it.each([
+    [
+      "context only",
+      { selection_role: "context_only" },
+      "Word could not replace this selection, so only the proposal is shown.",
+    ],
+    [
+      "cut",
+      { truncated: "true" },
+      "The selection was not stored in full, so only the proposal is shown.",
+    ],
+    [
+      "short of its paragraph count",
+      { paragraph_count: "3" },
+      "The selection was not stored in full, so only the proposal is shown.",
+    ],
+  ])(
+    "shows the proposal alone when the selection is %s",
+    async (_case, args, hint) => {
+      renderChat(selectionConversation(replaceFence(REWRITE), args));
+
+      const card = await screen.findByTestId("word-history-replace");
+      expect(within(card).getByText(hint)).toBeVisible();
+      expect(
+        within(card).getByRole("tab", { name: "Original" }),
+      ).toBeDisabled();
+      expect(within(card).getByRole("tabpanel")).toHaveTextContent(
+        "MX1 Alpha [link]link[/link] [2026-10-10] hotel, shorter.",
+      );
+    },
+  );
+
+  it("labels markers by number on both sides without kept_items", async () => {
+    renderChat(
+      selectionConversation(replaceFence(REWRITE), { kept_items: "" }),
+    );
+
+    const card = await screen.findByTestId("word-history-replace");
+    expect(shownText(card, "Original")).toContain(
+      "[item 1]link[/item 1] golf [item 2] hotel.",
+    );
+    expect(shownText(card, "Proposed")).toContain(
+      "[item 1]link[/item 1] [item 2] hotel, shorter.",
+    );
+  });
+
+  it("joins the lines of a single-paragraph reply, as Word would write it", async () => {
+    renderChat(
+      selectionConversation(replaceFence("Alpha\n\nshorter."), {
+        selected_text: "Alpha bravo.",
+        selection_shape: "paragraph",
+        paragraph_count: "1",
+        kept_items: "",
+      }),
+    );
+
+    const card = await screen.findByTestId("word-history-replace");
+    expect(shownText(card, "Proposed")).toBe("Alpha shorter.");
+  });
+
+  it("copies the proposal with each item's own text in place of its markers", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    renderChat(selectionConversation(replaceFence(REWRITE)));
+
+    const card = await screen.findByTestId("word-history-replace");
+    fireEvent.click(within(card).getByRole("button", { name: "Copy text" }));
+    expect(writeText).toHaveBeenCalledWith(
+      "MX1 Alpha link 2026-10-10 hotel, shorter.\nPL1 Plain.",
+    );
+  });
+
+  it("gives each Replace version its own card", async () => {
+    renderChat(
+      selectionConversation(
+        `One:\n\n${replaceFence(REWRITE)}\n\nOr:\n\n${replaceFence("MX1 ⟦1⟧link⟦/1⟧ ⟦2⟧.\nPL1.")}`,
+      ),
+    );
+
+    const cards = await screen.findAllByTestId("word-history-replace");
+    expect(cards).toHaveLength(2);
+    expect(shownText(cards[1], "Proposed")).toBe(
+      "MX1 [link]link[/link] [2026-10-10].↵\nPL1.",
+    );
+  });
+});
+
 describe("Word chats in the Word host", () => {
   const stub = ({ language, content }: HostCardCodeBlockProps) => (
     <div data-testid="host-card" data-language={language}>
@@ -386,6 +541,33 @@ describe("Word chats in the Word host", () => {
       "erato-word-edits",
     );
     expect(screen.queryByTestId("word-history-edits")).toBeNull();
+  });
+
+  it("leaves a Replace fence to the host renderer", () => {
+    componentRegistry.HostCardCodeBlock = stub;
+    renderChat(selectionConversation(replaceFence(REWRITE)), {
+      hostArtifact: {
+        facetId: "word_selection",
+        renderMode: "suggestions",
+        cardFenceLanguages: ["erato-word-replace"],
+      },
+    });
+
+    expect(screen.getByTestId("host-card")).toHaveAttribute(
+      "data-language",
+      "erato-word-replace",
+    );
+    expect(screen.queryByTestId("word-history-replace")).toBeNull();
+  });
+
+  it("cards no unstamped Replace fence once Word declares its live cards", () => {
+    setWordLiveCards(true);
+    renderChat(selectionConversation(replaceFence(REWRITE)));
+
+    expect(screen.queryByTestId("word-history-replace")).toBeNull();
+    expect(
+      document.querySelector("pre.message-content-code-block"),
+    ).toHaveTextContent("⟦1⟧link⟦/1⟧");
   });
 
   it("does not fold or card unstamped Word messages once Word declares its live cards", () => {
