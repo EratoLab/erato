@@ -4057,6 +4057,16 @@ msgstr "Die Änderungsnachverfolgung ist aktiv, daher ist die Ersetzung eine nac
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgain"
+msgstr "Mit aktueller Auswahl erneut fragen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgainNote"
+msgstr "Ihre Anfrage steht wieder im Nachrichtenfeld. Wählen Sie die gemeinte Passage aus und senden Sie sie dann."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.comparisonLabel"
 msgstr "Auswahl bei der Anfrage → vorgeschlagener Ersatz"
 
@@ -4337,8 +4347,8 @@ msgstr "Word hat die Passage möglicherweise ersetzt, aber das Ergebnis konnte n
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
-msgid "officeAddin.word.selection.useCurrent"
-msgstr "Aktuelle Auswahl verwenden"
+#~ msgid "officeAddin.word.selection.useCurrent"
+#~ msgstr "Aktuelle Auswahl verwenden"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

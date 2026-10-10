@@ -346,7 +346,7 @@ export function WordSelectionCard({
   const detailsId = useId();
   const [revertConfirmation, setRevertConfirmation] = useState(false);
   const [copyNote, setCopyNote] = useState("");
-  const [pickNote, setPickNote] = useState("");
+  const [actionNote, setActionNote] = useState("");
   const capture =
     (messageId ? capturesByAssistantMessageId.get(messageId) : undefined) ??
     review.capture;
@@ -527,7 +527,7 @@ export function WordSelectionCard({
   // The same reviewed proposal on the passage the user now selects, never a guess between copies.
   const replaceSelected = useCallback(async () => {
     if (!rewritable || offeredActions.length === 0 || !beginOperation()) return;
-    setPickNote("");
+    setActionNote("");
     const unread = () =>
       t({
         id: "officeAddin.word.selection.pickUnread",
@@ -573,7 +573,7 @@ export function WordSelectionCard({
       return;
     }
     endOperation();
-    setPickNote(note);
+    setActionNote(note);
   }, [
     rewritable,
     offeredActions.length,
@@ -684,6 +684,13 @@ export function WordSelectionCard({
       : "";
     restoreRequest(request ?? "");
     wordSelectionStore.requestRefresh({ rearm: true });
+    setActionNote(
+      t({
+        id: "officeAddin.word.selection.askAgainNote",
+        message:
+          "Your request is back in the message box. Select the passage you mean, then send.",
+      }),
+    );
   };
   const copyProposal = () => {
     setCopyNote("");
@@ -907,8 +914,8 @@ export function WordSelectionCard({
                 onClick={useCurrentSelection}
               >
                 {t({
-                  id: "officeAddin.word.selection.useCurrent",
-                  message: "Use current selection",
+                  id: "officeAddin.word.selection.askAgain",
+                  message: "Ask again with current selection",
                 })}
               </Button>
             )}
@@ -924,9 +931,9 @@ export function WordSelectionCard({
               {copyNote}
             </p>
           )}
-          {pickNote && (
+          {actionNote && (
             <p className="word-review__hint" role="status">
-              {pickNote}
+              {actionNote}
             </p>
           )}
           <WordUndoLine

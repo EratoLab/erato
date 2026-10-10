@@ -94,6 +94,11 @@ export function handleUserMessageSaved(
         // Server-resolved pairs replace the optimistic ones so the mention
         // highlight survives the temp → real message swap.
         mentioned_assistants: serverConfirmedMessage.mentioned_assistants,
+        // The optimistic row has no facet yet, and its selection quote would otherwise wait for the
+        // refetch after the stream.
+        action_facet_id: serverConfirmedMessage.action_facet_id ?? undefined,
+        action_facet_args:
+          serverConfirmedMessage.action_facet_args ?? undefined,
         // The server may anchor the turn below rows this client has not seen —
         // a delivered task result and the turn that reacted to it. Keep the
         // server's answer, or the store's copy of the thread disagrees with

@@ -4057,6 +4057,16 @@ msgstr "Le suivi des modifications est activé : le remplacement est donc une mo
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgain"
+msgstr "Redemander avec la sélection actuelle"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgainNote"
+msgstr "Votre demande est de nouveau dans la zone de message. Sélectionnez le passage voulu, puis envoyez-la."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.comparisonLabel"
 msgstr "Sélection au moment de la demande → remplacement proposé"
 
@@ -4337,8 +4347,8 @@ msgstr "Word a peut-être remplacé le passage, mais le résultat n'a pas pu êt
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
-msgid "officeAddin.word.selection.useCurrent"
-msgstr "Utiliser la sélection actuelle"
+#~ msgid "officeAddin.word.selection.useCurrent"
+#~ msgstr "Utiliser la sélection actuelle"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
