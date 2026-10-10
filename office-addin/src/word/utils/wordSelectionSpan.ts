@@ -1,4 +1,5 @@
 import type { WordSelectionHazards } from "./wordSelectionAnchor";
+import type { WordEmphasis } from "./wordSelectionFormatSpans";
 import type {
   WordSelectionEdgeFormat,
   WordSelectionFont,
@@ -254,6 +255,19 @@ function runFormat(rPr: Element | undefined, hazards: WordSelectionHazards) {
     }
   }
   return format;
+}
+
+/** A run's own bold, italic, underline and strikethrough, read as the span scan reads them. */
+export function wordRunEmphasis(rPr: Element | undefined): WordEmphasis {
+  const { values } = runFormat(rPr, {});
+  const emphasis: WordEmphasis = {};
+  if (typeof values.bold === "boolean") emphasis.bold = values.bold;
+  if (typeof values.italic === "boolean") emphasis.italic = values.italic;
+  if (typeof values.underline === "string")
+    emphasis.underline = values.underline;
+  if (typeof values.strikeThrough === "boolean")
+    emphasis.strikeThrough = values.strikeThrough;
+  return emphasis;
 }
 
 /** A twin that differs from its Latin value is formatting the rewrite could not keep. */

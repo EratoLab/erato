@@ -12,7 +12,11 @@ import {
   WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
   WORD_REVERT_SELECTION_TIMEOUT_MS,
 } from "../wordReplaceSelection";
-import { emptySelectionCapture } from "../wordSelectionAnchor";
+import {
+  emptySelectionCapture,
+  wordSelectionWithoutFormats,
+  wordSelectionWithoutKeptItems,
+} from "../wordSelectionAnchor";
 import {
   captureWordSelection,
   WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
@@ -322,12 +326,16 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     const capture = await captureOf(host, { p: "MX1" });
     const result = await replace(
       capture,
-      "MX1 Alpha Bravo foxtrot \u27E61\u27E7Verweis\u27E6/1\u27E7 golf \u27E62\u27E7 hotel.",
+      "MX1 Alpha \u27E61\u27E7Bravo\u27E6/1\u27E7 foxtrot \u27E63\u27E7Verweis\u27E6/3\u27E7 golf \u27E64\u27E7 hotel.",
     );
     expect(result).toMatchObject({ status: "applied" });
-    expect(host.paragraphs().find((p) => p.text.startsWith("MX1"))?.text).toBe(
+    const after = host.paragraphs().find((p) => p.text.startsWith("MX1"));
+    expect(after?.text).toBe(
       "MX1 Alpha Bravo foxtrot Verweis golf 2026-10-06 hotel.",
     );
+    expect(after?.runs.filter((run) => run.font?.bold)).toEqual([
+      expect.objectContaining({ text: "Bravo" }),
+    ]);
     const ooxml = host.ooxml({ p: "MX1" });
     expect(ooxml).toMatch(
       /<w:hyperlink[^>]*>[\s\S]*Verweis[\s\S]*<\/w:hyperlink>/,
@@ -383,7 +391,7 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     },
   );
 
-  it("flattens bold on part of a passage the card announced, with or without kept items", async () => {
+  it("keeps bold on part of a passage in its format span, with or without kept items", async () => {
     const host = install({
       body: [
         "Intro.",
@@ -402,8 +410,91 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     });
     const plain = await captureOf(host, { paragraph: 1 });
     const kept = await captureOf(host, { paragraph: 2 });
-    expect(plain.selection?.flattensEmphasis).toBe(true);
-    expect(kept.selection?.flattensEmphasis).toBe(true);
+    expect(plain.selection?.flattensEmphasis).toBeUndefined();
+    expect(kept.selection?.flattensEmphasis).toBeUndefined();
+    expect(
+      await replace(plain, "Now \u27E61\u27E7strong\u27E6/1\u27E7 words."),
+    ).toMatchObject({ status: "applied" });
+    expect(
+      await replace(
+        kept,
+        "Kept \u27E61\u27E7strong\u27E6/1\u27E7 \u27E62\u27E7 end.",
+      ),
+    ).toMatchObject({ status: "applied" });
+    const [, plainAfter, keptAfter] = host.paragraphs();
+    const bold = (runs: MockParagraphState["runs"]) =>
+      runs.map((run) => [run.text, !!run.font?.bold]);
+    expect(bold(plainAfter.runs)).toEqual([
+      ["Now ", false],
+      ["strong", true],
+      [" words.", false],
+    ]);
+    expect(keptAfter.text).toBe("Kept strong 3 end.");
+    expect(bold(keptAfter.runs.filter((run) => !run.field))).toEqual([
+      ["Kept ", false],
+      ["strong", true],
+      [" ", false],
+      [" end.", false],
+    ]);
+  });
+
+  it("gives a span the proposal drops the formatting the rest of its text shares", async () => {
+    const host = install({
+      body: [
+        "Intro.",
+        { runs: ["Mixed ", { text: "bold", font: { bold: true } }, " words."] },
+        "Outro.",
+      ],
+    });
+    const capture = await captureOf(host, { paragraph: 1 });
+    expect(await replace(capture, "Now plain words.")).toMatchObject({
+      status: "applied",
+    });
+    expect(host.paragraphs()[1].runs.some((run) => run.font?.bold)).toBe(false);
+  });
+
+  it("flattens bold the card announced once format spans are taken out, numbering kept items again", async () => {
+    const host = install({
+      body: [
+        "Intro.",
+        { runs: ["Mixed ", { text: "bold", font: { bold: true } }, " words."] },
+        {
+          runs: [
+            "Kept ",
+            { text: "bold", font: { bold: true } },
+            " ",
+            { text: "3", field: "PAGE" },
+            " end.",
+          ],
+        },
+        "Outro.",
+      ],
+    });
+    const without = async (paragraph: number) => {
+      const { selection } = await captureOf(host, { paragraph });
+      return emptySelectionCapture(
+        "doc",
+        wordSelectionWithoutFormats(selection!),
+      );
+    };
+    const plain = await without(1);
+    const kept = await without(2);
+    // A server without kept_items gets the same rewrite where no item is marked.
+    expect(
+      wordSelectionWithoutKeptItems(
+        (await captureOf(host, { paragraph: 1 })).selection!,
+      ),
+    ).toEqual(plain.selection);
+    expect(plain.selection).toMatchObject({
+      role: "rewrite",
+      selectedText: "Mixed bold words.",
+      flattensEmphasis: true,
+    });
+    expect(kept.selection).toMatchObject({
+      role: "rewrite",
+      selectedText: "Kept bold \u27E61\u27E7 end.",
+      flattensEmphasis: true,
+    });
     expect(await replace(plain, "Now plain words.")).toMatchObject({
       status: "applied",
     });
@@ -432,6 +523,243 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     });
   });
 });
+
+describe.each(HOSTS)(
+  "replaceWordSelection of format spans on %s",
+  (flavour) => {
+    const MIXED: MockSelectionDocument = {
+      body: [
+        "Intro.",
+        {
+          runs: [
+            "Plain ",
+            { text: "bold", font: { bold: true } },
+            " and ",
+            { text: "slanted", font: { italic: true } },
+            " with ",
+            { text: "under", font: { underline: "Single" } },
+            " and ",
+            { text: "struck", font: { strikeThrough: true } },
+            " end.",
+          ],
+        },
+        {
+          runs: [
+            "See ",
+            { text: "bold", font: { bold: true } },
+            " ",
+            { text: "the ", link: "https://example.com/" },
+            {
+              text: "linked",
+              link: "https://example.com/",
+              font: { bold: true },
+            },
+            " page ",
+            { text: "3", field: "PAGE" },
+            ".",
+          ],
+        },
+        "Outro.",
+      ],
+    };
+    const install = () => installWordSelectionHost(MIXED, { host: flavour });
+    const emphasis = (runs: MockParagraphState["runs"]) =>
+      runs
+        .filter((run) => run.text && !run.field)
+        .map((run) => [
+          run.text,
+          [
+            run.font?.bold && "bold",
+            run.font?.italic && "italic",
+            run.font?.underline && run.font.underline !== "None" && "underline",
+            run.font?.strikeThrough && "strike",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        ]);
+    const PLAIN =
+      "Plain \u27E61\u27E7bold\u27E6/1\u27E7 and \u27E62\u27E7slanted\u27E6/2\u27E7 with \u27E63\u27E7under\u27E6/3\u27E7 and \u27E64\u27E7struck\u27E6/4\u27E7 end.";
+
+    it("sends each emphasised run as a span and writes the plain path in one write sync", async () => {
+      const host = install();
+      const capture = await captureOf(host, { paragraph: 1 });
+      expect(capture.selection?.selectedText).toBe(PLAIN);
+      const others = host.paragraphs().filter((_, i) => i !== 1);
+      const result = await replace(
+        capture,
+        "\u27E64\u27E7Gone\u27E6/4\u27E7 now, \u27E62\u27E7leaning\u27E6/2\u27E7 then \u27E61\u27E7strong\u27E6/1\u27E7 and \u27E63\u27E7lined\u27E6/3\u27E7.",
+      );
+      expect(result).toMatchObject({ status: "applied" });
+      expect(host.writeSyncs()).toHaveLength(1);
+      const after = host.paragraphs();
+      expect(after[1].text).toBe("Gone now, leaning then strong and lined.");
+      expect(emphasis(after[1].runs)).toEqual([
+        ["Gone", "strike"],
+        [" now, ", ""],
+        ["leaning", "italic"],
+        [" then ", ""],
+        ["strong", "bold"],
+        [" and ", ""],
+        ["lined", "underline"],
+        [".", ""],
+      ]);
+      expect(after.filter((_, i) => i !== 1)).toEqual(others);
+      if (result.status !== "applied") throw new Error("not applied");
+      expect(result.written.rangeTexts).toEqual([after[1].text]);
+    });
+
+    it("gives the text after a span the paragraph's formatting, not the span's", async () => {
+      const host = install();
+      await replace(
+        await captureOf(host, { paragraph: 1 }),
+        "A \u27E61\u27E7b\u27E6/1\u27E7 c.",
+      );
+      expect(
+        host.paragraphs()[1].runs.map((run) => [run.text, !!run.font?.bold]),
+      ).toEqual([
+        ["A ", false],
+        ["b", true],
+        [" c.", false],
+      ]);
+    });
+
+    it("restores the formatting with Undo", async () => {
+      const host = install();
+      const before = host.paragraphs();
+      const result = await replace(
+        await captureOf(host, { paragraph: 1 }),
+        "Only \u27E61\u27E7bold\u27E6/1\u27E7 stays.",
+      );
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      expect(
+        await revertWordSelection(result.backups, result.written),
+      ).toMatchObject({ status: "reverted" });
+      expect(host.paragraphs().map(({ runs }) => runs)).toEqual(
+        before.map(({ runs }) => runs),
+      );
+    });
+
+    it("writes the kept path's spans, inside a link too, and keeps the items", async () => {
+      const host = install();
+      const capture = await captureOf(host, { paragraph: 2 });
+      expect(capture.selection?.selectedText).toBe(
+        "See \u27E61\u27E7bold\u27E6/1\u27E7 \u27E62\u27E7the \u27E63\u27E7linked\u27E6/3\u27E7\u27E6/2\u27E7 page \u27E64\u27E7.",
+      );
+      const result = await replace(
+        capture,
+        "Lies \u27E62\u27E7die \u27E63\u27E7verlinkte\u27E6/3\u27E7\u27E6/2\u27E7 \u27E61\u27E7fette\u27E6/1\u27E7 Seite \u27E64\u27E7.",
+      );
+      expect(result).toMatchObject({ status: "applied" });
+      expect(host.writeSyncs()).toHaveLength(1);
+      const after = host.paragraphs()[2];
+      expect(after.text).toBe("Lies die verlinkte fette Seite 3.");
+      expect(emphasis(after.runs)).toEqual([
+        ["Lies ", ""],
+        ["die ", ""],
+        ["verlinkte", "bold"],
+        [" ", ""],
+        ["fette", "bold"],
+        [" Seite ", ""],
+        [".", ""],
+      ]);
+      expect(
+        after.runs.filter((run) => run.link).map((run) => run.text),
+      ).toEqual(["die ", "verlinkte"]);
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      expect(
+        await revertWordSelection(result.backups, result.written),
+      ).toMatchObject({ status: "reverted" });
+      expect(host.paragraphs()[2].runs).toEqual(
+        installWordSelectionHost(MIXED, { host: flavour }).paragraphs()[2].runs,
+      );
+    });
+
+    it("refuses a span the proposal invents and writes nothing", async () => {
+      const host = install();
+      const capture = await captureOf(host, { paragraph: 1 });
+      expect(
+        await replace(capture, "A \u27E69\u27E7new\u27E6/9\u27E7 bold."),
+      ).toMatchObject({ status: "refused", code: "MARKERS_CHANGED" });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it("refuses a passage whose emphasis changed since it was sent", async () => {
+      const host = install();
+      const capture = await captureOf(host, { paragraph: 1 });
+      host.format({ paragraph: 1, text: "Plain" }, { font: { bold: true } });
+      expect(await replace(capture, PLAIN.replace("end", "fin"))).toMatchObject(
+        {
+          status: "refused",
+          code: "TARGET_TEXT_MISMATCH",
+        },
+      );
+      expect(host.writeSyncs()).toEqual([]);
+    });
+
+    it("keeps a span's emphasis on a tracked rewrite of the plain path", async () => {
+      const host = install();
+      const capture = await captureOf(host, { paragraph: 1 });
+      host.setTrackingMode("TrackAll");
+      expect(
+        await replace(capture, "Now \u27E61\u27E7strong\u27E6/1\u27E7 words."),
+      ).toMatchObject({ status: "applied", trackingOn: true });
+      host.acceptAllRevisions();
+      expect(emphasis(host.paragraphs()[1].runs)).toEqual([
+        ["Now ", ""],
+        ["strong", "bold"],
+        [" words.", ""],
+      ]);
+    });
+  },
+);
+
+describe.each(HOSTS)(
+  "replaceWordSelection of an inline span with format spans on %s",
+  (flavour) => {
+    const INLINE = new Set<WordSelectionShape>(["paragraph", "inline"]);
+    it("writes only the span's part, its emphasised word bold", async () => {
+      const host = installWordSelectionHost(
+        {
+          body: [
+            "Intro.",
+            {
+              runs: [
+                "Keep this. Then a ",
+                { text: "bold", font: { bold: true } },
+                " word here. Keep that.",
+              ],
+            },
+          ],
+        },
+        { host: flavour },
+      );
+      host.select({ paragraph: 1, text: "Then a bold word here." });
+      const read = await captureWordSelection("user", 15_000, INLINE);
+      if (read.status !== "ok" || !read.value) throw new Error("no capture");
+      expect(read.value).toMatchObject({
+        role: "rewrite",
+        shape: "inline",
+        selectedText: "Then a \u27E61\u27E7bold\u27E6/1\u27E7 word here.",
+      });
+      const result = await replaceWordSelection({
+        capture: emptySelectionCapture("doc", read.value),
+        fenceContent: "Now a \u27E61\u27E7strong\u27E6/1\u27E7 one.",
+        enabledShapes: INLINE,
+      });
+      expect(result).toMatchObject({ status: "applied" });
+      expect(host.writeSyncs()).toHaveLength(1);
+      expect(
+        host.paragraphs()[1].runs.map((run) => [run.text, !!run.font?.bold]),
+      ).toEqual([
+        ["Keep this. Now a ", false],
+        ["strong", true],
+        [" one. Keep that.", false],
+      ]);
+    });
+  },
+);
 
 describe("replaceWordSelection across hosts", () => {
   it("leaves the same runs on every host", async () => {

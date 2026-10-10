@@ -5,11 +5,13 @@ import {
   SV2_MAIN_DOCUMENT,
   uninstallWordSelectionHost,
 } from "../../../test/mocks/word/selectionHost";
+import { wordKeptItemsArg } from "../wordSelectionArgs";
 import {
   captureWordSelection,
   describeWordSelection,
   WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
 } from "../wordSelectionCapture";
+import { WORD_FORMAT_SPANS_MAX } from "../wordSelectionFormatSpans";
 
 import type {
   MockSelectionDocument,
@@ -547,7 +549,7 @@ describe.each(HOSTS)(
     it.each([
       [
         "MX1",
-        "MX1 Alpha bravo charlie delta echo foxtrot \u27E61\u27E7link\u27E6/1\u27E7 golf \u27E62\u27E7 hotel india.",
+        "MX1 Alpha \u27E61\u27E7bravo\u27E6/1\u27E7 \u27E62\u27E7charlie\u27E6/2\u27E7 delta echo foxtrot \u27E63\u27E7link\u27E6/3\u27E7 golf \u27E64\u27E7 hotel india.",
       ],
       ["FD1", "FD1 Field before \u27E61\u27E7 field after words."],
       ["CM1", "CM1 Commented anchor phrase\u27E61\u27E7 after comment."],
@@ -692,7 +694,7 @@ describe.each(HOSTS)(
       },
     );
 
-    it("tells the card when a rewrite flattens bold, italic, underline or strikethrough on part of the text", async () => {
+    it("marks bold, italic, underline or strikethrough on part of the text as format spans the rewrite keeps", async () => {
       const document: MockSelectionDocument = {
         body: [
           "Intro.",
@@ -714,29 +716,121 @@ describe.each(HOSTS)(
               FIELD,
             ],
           },
+          {
+            runs: [
+              { text: "Under", font: { underline: "Single" } },
+              " and ",
+              { text: "both", font: { bold: true, italic: true } },
+              ".",
+            ],
+          },
           "Outro.",
         ],
       };
       const flag = async (paragraph: number) =>
-        (await capture({ paragraph }, document)).selection;
-      expect(await flag(1)).toMatchObject({
+        (await capture({ paragraph }, document)).selection!;
+      const mixed = await flag(1);
+      expect(mixed).toMatchObject({
         role: "rewrite",
-        flattensEmphasis: true,
+        selectedText: "Mixed \u27E61\u27E7bold\u27E6/1\u27E7 words.",
       });
-      expect((await flag(2))!.flattensEmphasis).toBeUndefined();
+      expect(mixed.flattensEmphasis).toBeUndefined();
+      expect(mixed.paragraphs[0].formats).toEqual({
+        text: "Mixed \u27E61\u27E7bold\u27E6/1\u27E7 words.",
+        spans: [{ number: 1, emphasis: { bold: true } }],
+      });
+      expect(mixed.paragraphs[0].kept).toBeUndefined();
+      const uniform = await flag(2);
+      expect(uniform.flattensEmphasis).toBeUndefined();
+      expect(uniform.paragraphs[0].formats).toBeUndefined();
       // Each piece between kept items keeps the formatting its own text shares.
-      expect((await flag(3))!.flattensEmphasis).toBeUndefined();
-      expect(await flag(4)).toMatchObject({
+      const pieces = await flag(3);
+      expect(pieces.flattensEmphasis).toBeUndefined();
+      expect(pieces.paragraphs[0].formats).toBeUndefined();
+      const struck = await flag(4);
+      expect(struck).toMatchObject({
         role: "rewrite",
-        flattensEmphasis: true,
+        selectedText: "Plain \u27E61\u27E7struck\u27E6/1\u27E7\u27E62\u27E7",
       });
-      expect((await capture({ p: "MX1" })).selection).toMatchObject({
-        role: "rewrite",
-        flattensEmphasis: true,
-      });
+      expect(struck.flattensEmphasis).toBeUndefined();
+      expect(struck.paragraphs[0].kept?.text).toBe(struck.selectedText);
+      expect(struck.paragraphs[0].formats?.spans).toEqual([
+        { number: 1, emphasis: { strikeThrough: true } },
+      ]);
+      expect((await flag(5)).paragraphs[0].formats?.spans).toEqual([
+        { number: 1, emphasis: { underline: "Single" } },
+        { number: 2, emphasis: { bold: true, italic: true } },
+      ]);
       expect(
-        (await capture({ p: "PL1" })).selection!.flattensEmphasis,
+        (await capture({ p: "PL1" })).selection!.paragraphs[0].formats,
       ).toBeUndefined();
+    });
+
+    it("numbers format spans on across paragraphs and kept items, in the order they appear", async () => {
+      installWordSelectionHost(
+        {
+          body: [
+            "Intro.",
+            {
+              runs: [
+                { text: "Bold", font: { bold: true } },
+                " at ",
+                FIELD,
+                " and ",
+                { text: "italic", font: { italic: true } },
+                ".",
+              ],
+            },
+            "Plain middle.",
+            {
+              runs: [
+                "Then ",
+                { text: "struck", font: { strikeThrough: true } },
+              ],
+            },
+            "Outro.",
+          ],
+        },
+        { host: flavour },
+      ).select({ paragraph: 1, to: { paragraph: 3 } });
+      const selection = await captured();
+      expect(selection?.role).toBe("rewrite");
+      expect(selection?.selectedText.split("\n")).toEqual([
+        "\u27E61\u27E7Bold\u27E6/1\u27E7 at \u27E62\u27E7 and \u27E63\u27E7italic\u27E6/3\u27E7.",
+        "Plain middle.",
+        "Then \u27E64\u27E7struck\u27E6/4\u27E7",
+      ]);
+      expect(wordKeptItemsArg(selection!).split("\n")).toEqual([
+        "\u27E61\u27E7\u2026\u27E6/1\u27E7 formatting: bold",
+        '\u27E62\u27E7 a field showing "3"',
+        "\u27E63\u27E7\u2026\u27E6/3\u27E7 formatting: italic",
+        "\u27E64\u27E7\u2026\u27E6/4\u27E7 formatting: strikethrough",
+      ]);
+    });
+
+    it(`flattens the emphasis of a part with more than ${WORD_FORMAT_SPANS_MAX} format spans, as the card says`, async () => {
+      const words = (count: number) =>
+        Array.from({ length: count }, (_, k) => [
+          { text: `w${k}`, font: { bold: true } },
+          " ",
+        ]).flat();
+      const document: MockSelectionDocument = {
+        body: [
+          "Intro.",
+          { runs: ["At the cap: ", ...words(WORD_FORMAT_SPANS_MAX)] },
+          { runs: ["Past the cap: ", ...words(WORD_FORMAT_SPANS_MAX + 1)] },
+          "Outro.",
+        ],
+      };
+      const at = (await capture({ paragraph: 1 }, document)).selection!;
+      expect(at.paragraphs[0].formats?.spans).toHaveLength(
+        WORD_FORMAT_SPANS_MAX,
+      );
+      expect(at.flattensEmphasis).toBeUndefined();
+      const past = (await capture({ paragraph: 2 }, document)).selection!;
+      expect(past).toMatchObject({ role: "rewrite", flattensEmphasis: true });
+      expect(past.paragraphs[0].formats).toBeUndefined();
+      expect(past.selectedText).not.toMatch(/\u27E6/u);
     });
 
     it.each([

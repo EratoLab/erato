@@ -89,6 +89,73 @@ describe("Word selection replies read in the Erato web app", () => {
       });
   });
 
+  it("reads each format span with its emphasis in the add-in's words", () => {
+    const selection = {
+      paragraphs: [
+        {
+          kept: {
+            text: "",
+            markers: [marker(2, "field", "point", "3")],
+            kinds: [],
+          },
+          formats: {
+            text: "",
+            spans: [
+              { number: 1, emphasis: { bold: true, italic: false } },
+              { number: 3, emphasis: { underline: "Double" } },
+            ],
+          },
+        },
+        {
+          formats: {
+            text: "",
+            spans: [
+              { number: 4, emphasis: { underline: "None" } },
+              { number: 5, emphasis: { strikeThrough: true } },
+            ],
+          },
+        },
+      ],
+    } as unknown as WordSelectionSnapshot;
+
+    const notes = parseWordKeptItems(wordKeptItemsArg(selection));
+
+    expect([...notes.entries()]).toEqual([
+      [
+        1,
+        {
+          kind: "format",
+          point: false,
+          shows: "",
+          formatting: ["bold", "not italic"],
+        },
+      ],
+      [2, { kind: "field", point: true, shows: "3" }],
+      [
+        3,
+        { kind: "format", point: false, shows: "", formatting: ["underline"] },
+      ],
+      [
+        4,
+        {
+          kind: "format",
+          point: false,
+          shows: "",
+          formatting: ["no underline"],
+        },
+      ],
+      [
+        5,
+        {
+          kind: "format",
+          point: false,
+          shows: "",
+          formatting: ["strikethrough"],
+        },
+      ],
+    ]);
+  });
+
   it.each<MockSelectionTarget>([
     { p: "MX1" },
     { p: "CM1" },

@@ -17,6 +17,7 @@ import {
   splitWordSelectionReplacement,
   wordSelectionLinePieces,
 } from "./wordSelectionEdit";
+import { wordEmphasisFont } from "./wordSelectionFormatSpans";
 import {
   readWordParagraphItems,
   wordBookmarkRanges,
@@ -47,7 +48,9 @@ import type {
   WordSelectionShape,
   WordSelectionSnapshot,
 } from "./wordSelectionAnchor";
+import type { WordFormatSpan } from "./wordSelectionFormatSpans";
 import type { WordSelectionFont } from "./wordSelectionFormatting";
+import type { WordLinePart } from "./wordSelectionItems";
 import type { WordParagraphRewrite } from "./wordSelectionRewrite";
 import type {
   WordCellTable,
@@ -142,6 +145,39 @@ function setFont(range: Word.Range, font: WordSelectionFont): void {
   for (const [property, value] of Object.entries(font))
     if (value !== undefined && value !== null) target[property] = value;
 }
+
+/**
+ * Writes a line onto a part outside the kept path: its first text replaces the part, and each
+ * further text goes right after the one before, so a format span's text can take its toggles on
+ * top of `font`, the formatting the part's other text gets (ERMAIN-943). All of it is queued for
+ * the one write sync.
+ */
+function writeParts(
+  target: Word.Range | Word.Paragraph,
+  parts: readonly WordLinePart[],
+  font: WordSelectionFont,
+  spans: readonly WordFormatSpan[],
+  bidiSetters: boolean,
+): void {
+  const emphasis = new Map(spans.map((span) => [span.number, span.emphasis]));
+  let written: Word.Range | null = null;
+  for (const { text, format } of parts) {
+    if (!text) continue;
+    written = written
+      ? written.insertText(text, "After")
+      : target.insertText(text, "Replace");
+    const own = format === null ? undefined : emphasis.get(format);
+    setFont(
+      written,
+      own ? { ...font, ...wordEmphasisFont(own, bidiSetters) } : font,
+    );
+  }
+  if (!written) setFont(target.insertText("", "Replace"), font);
+}
+
+/** A paragraph's format span numbers by their index among its spans, as the kept path counts them. */
+const spanIndexes = (paragraph: WordSelectionSnapshot["paragraphs"][number]) =>
+  new Map((paragraph.formats?.spans ?? []).map((span, k) => [span.number, k]));
 
 /**
  * Reads the paragraphs back in a fresh run: same-run reads after a write are wrong on the web
@@ -265,9 +301,10 @@ export async function replaceWordSelection(args: {
   if ("refused" in marked)
     return { status: "refused", code: marked.refused, settled: SETTLED };
   const covered = wordSelectionParts(selection);
-  // What each paragraph's line replaces: the part, or the part with markers where it keeps items.
+  // What each paragraph's line replaces: the part, or the part with markers where it keeps items
+  // or has format spans.
   const current = selection.paragraphs.map(
-    (p, i) => p.kept?.text ?? covered[i],
+    (p, i) => p.kept?.text ?? p.formats?.text ?? covered[i],
   );
   const offsets = wordSelectionPartOffsets(selection);
   const support = currentWordSelectionSupport();
@@ -311,14 +348,20 @@ export async function replaceWordSelection(args: {
       // A paragraph that keeps items is rewritten in its own OOXML, read in this final read.
       const rewrites = new Map<number, WordParagraphRewrite>();
       for (const { i } of changed) {
-        const pieces = marked.pieces[i];
-        if (!pieces) continue;
+        const line = marked.lines[i];
+        if (!line.pieces) continue;
+        const spans = spanIndexes(selection.paragraphs[i]);
         const rewrite = rewriteWordParagraphPart(
           check.backups[i],
           selection.paragraphs[i].rangeText,
           offsets[i].start,
           offsets[i].end,
-          pieces,
+          line.parts.map((parts) =>
+            parts.map(({ text, format }) => ({
+              text,
+              span: format === null ? null : (spans.get(format) ?? null),
+            })),
+          ),
         );
         if (!rewrite) return { refused: "UNSUPPORTED_CONTENT" };
         rewrites.set(i, rewrite);
@@ -331,12 +374,12 @@ export async function replaceWordSelection(args: {
         const rewrite = rewrites.get(i);
         if (rewrite) part.paragraph.insertOoxml(rewrite.ooxml, "Replace");
         else
-          setFont(
-            (part.kind === "part" ? part.range : part.paragraph).insertText(
-              lines[i],
-              "Replace",
-            ),
+          writeParts(
+            part.kind === "part" ? part.range : part.paragraph,
+            marked.lines[i].parts.flat(),
             check.formats[i]!.font,
+            selection.paragraphs[i].formats?.spans ?? [],
+            support.bidiSetters,
           );
       }
       await context.sync();
@@ -346,7 +389,7 @@ export async function replaceWordSelection(args: {
           (kept
             ? rangeText
             : rangeText.slice(0, offsets[i].start) +
-              lines[i] +
+              marked.lines[i].text +
               rangeText.slice(offsets[i].end)),
       );
       const last = lines.length - 1;
