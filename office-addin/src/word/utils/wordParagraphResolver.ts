@@ -15,6 +15,10 @@ export interface WordParagraphAnchor {
   after: readonly (string | null)[];
   /** Context paragraphs per side that made the span unique at capture; null when none did. */
   window: number | null;
+  /** How often each narrower window and each edge paragraph's text occurred at capture. */
+  counts: readonly { needle: readonly (string | null)[]; count: number }[];
+  /** How often the first paragraph's text occurred with the captured context above it. */
+  aboveCount: number;
 }
 
 export type WordParagraphRefusal = "changed" | "ambiguous";
@@ -47,20 +51,30 @@ function pattern(anchor: WordParagraphAnchor, window: number) {
   ];
 }
 
-/** Up to two match starts, as indices into the body padded with a null edge on each side. */
+/** Match starts, up to `limit`, as indices into the body padded with a null edge on each side. */
 function occurrences(
   texts: readonly string[],
   needle: readonly (string | null)[],
+  limit = 2,
 ): number[] {
   const padded = [null, ...texts, null];
   const found: number[] = [];
   for (let start = 0; start + needle.length <= padded.length; start += 1) {
     if (needle.every((text, k) => padded[start + k] === text)) {
       found.push(start);
-      if (found.length === 2) break;
+      if (found.length === limit) break;
     }
   }
   return found;
+}
+
+const countOf = (
+  texts: readonly string[],
+  needle: readonly (string | null)[],
+) => occurrences(texts, needle, Infinity).length;
+
+function above(anchor: Pick<WordParagraphAnchor, "before" | "paragraphs">) {
+  return [...anchor.before].reverse().concat(anchor.paragraphs[0].text);
 }
 
 function widest(anchor: WordParagraphAnchor): number {
@@ -74,17 +88,31 @@ export function wordParagraphAnchor(
   last: number,
 ): WordParagraphAnchor {
   const texts = body.map((p) => p.text);
+  const paragraphs = body.slice(first, last + 1);
+  const before = context(texts, first - 1, -1);
   const anchor: WordParagraphAnchor = {
-    paragraphs: body.slice(first, last + 1),
-    before: context(texts, first - 1, -1),
+    paragraphs,
+    before,
     after: context(texts, last + 1, 1),
     window: null,
+    counts: [],
+    aboveCount: countOf(texts, above({ before, paragraphs })),
   };
+  const counted = (needles: (string | null)[][]) =>
+    needles.map((needle) => ({ needle, count: countOf(texts, needle) }));
+  const edges = [[texts[first]], [texts[last]]];
   for (let window = 0; window <= widest(anchor); window += 1) {
-    if (occurrences(texts, pattern(anchor, window)).length === 1)
-      return { ...anchor, window };
+    if (occurrences(texts, pattern(anchor, window)).length !== 1) continue;
+    return {
+      ...anchor,
+      window,
+      counts: counted([
+        ...edges,
+        ...Array.from({ length: window }, (_, w) => pattern(anchor, w)),
+      ]),
+    };
   }
-  return anchor;
+  return { ...anchor, counts: counted(edges) };
 }
 
 /** Undefined when an ID is missing on either side; the span is then located by its text. */
@@ -121,16 +149,35 @@ function byId(
     (expected, k) =>
       (first - 1 - k < 0 ? null : live[first - 1 - k].text) === expected,
   );
-  if (twinAbove && !contextAbove) return { refused: "ambiguous" };
+  // Above a run of identical twins the context still matches after the ID moved; the original, still
+  // under its own context, then repeats that pattern once more than at capture.
+  const moved =
+    !contextAbove ||
+    countOf(
+      live.map((p) => p.text),
+      above(anchor),
+    ) > anchor.aboveCount;
+  if (twinAbove && moved) return { refused: "ambiguous" };
   return { positions };
+}
+
+function commoner(
+  anchor: WordParagraphAnchor,
+  live: readonly WordParagraphEntry[],
+): boolean {
+  const texts = live.map((p) => p.text);
+  return anchor.counts.some(
+    ({ needle, count }) => countOf(texts, needle) > count,
+  );
 }
 
 /**
  * A surviving ID is decisive: if its paragraph changed, a copy of the old text elsewhere must not
  * take its place, nor where it may have moved onto a copy of its text: with that text above it, the
  * captured context above must still be there. Without one, the span with its capture-time context
- * must occur exactly once now. A second occurrence refuses rather than widening the context,
- * because a copied block and the original are indistinguishable by text.
+ * must occur exactly once now, and the texts it is built from no more often than at capture. A
+ * second occurrence refuses rather than widening the context, because a copied block and the
+ * original are indistinguishable by text.
  */
 export function resolveWordParagraphs(
   anchor: WordParagraphAnchor,
@@ -141,6 +188,10 @@ export function resolveWordParagraphs(
   if (anchor.window === null) return { refused: "ambiguous" };
   const texts = live.map((p) => p.text);
   const found = occurrences(texts, pattern(anchor, anchor.window));
+  // A copy made since capture can take over the captured context (a twin above the span plus a copy
+  // inserted below it), so the one match proves nothing once the text it is built from is commoner.
+  if (found.length === 1 && commoner(anchor, live))
+    return { refused: "ambiguous" };
   if (found.length === 1) {
     const head = found[0] - 1 + Math.min(anchor.window, anchor.before.length);
     return { positions: anchor.paragraphs.map((_, i) => head + i) };

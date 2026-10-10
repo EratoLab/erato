@@ -4047,6 +4047,11 @@ msgstr "Localizar el pasaje {0}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.ambiguous"
+msgstr "Este pasaje aparece ahora más de una vez, así que Erato no puede saber a cuál te referías. No se reemplazó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.appliedTracked"
 msgstr "El control de cambios está activado, así que el reemplazo es un cambio registrado. Recházalo en Word para deshacerlo."
 

@@ -4047,6 +4047,11 @@ msgstr "Znajdź fragment {0}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.ambiguous"
+msgstr "Ten fragment występuje teraz więcej niż raz, więc Erato nie może ustalić, o który chodziło. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.appliedTracked"
 msgstr "Śledzenie zmian jest włączone, więc zastąpienie jest śledzoną zmianą. Odrzuć ją w programie Word, aby ją cofnąć."
 

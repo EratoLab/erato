@@ -4047,6 +4047,11 @@ msgstr "Textpassage {0} anzeigen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.ambiguous"
+msgstr "Diese Passage kommt jetzt mehrfach vor, daher kann Erato nicht erkennen, welche du gemeint hast. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.appliedTracked"
 msgstr "Die Änderungsnachverfolgung ist aktiv, daher ist die Ersetzung eine nachverfolgte Änderung. Lehnen Sie sie in Word ab, um sie rückgängig zu machen."
 
