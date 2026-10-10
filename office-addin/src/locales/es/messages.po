@@ -4127,6 +4127,21 @@ msgstr "Esta respuesta se escribió para un pasaje de otro documento, así que n
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickDifferent"
+msgstr "El texto seleccionado no es exactamente el pasaje de tu solicitud. No se reemplazó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickHint"
+msgstr "Selecciona en Word el pasaje al que te refieres y elige Reemplazar el pasaje seleccionado. Solo se reemplaza si su texto es exactamente el mismo."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickUnread"
+msgstr "Erato no pudo leer tu selección. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.preparing"
 msgstr "Preparando la reescritura…"
 
@@ -4212,6 +4227,11 @@ msgstr "Se reemplazó el pasaje seleccionado."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.replacePicked"
+msgstr "Reemplazar el pasaje seleccionado"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.restore"
 msgstr "Restaurar el pasaje"
 
@@ -4294,6 +4314,11 @@ msgstr "Demasiado largo para enviarlo completo. Solo se envía el principio."
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.selection.unchanged"
 msgstr "La propuesta coincide con el pasaje. No se reemplazó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.undoInWord"
+msgstr "Para deshacer este reemplazo, usa el Deshacer de Word en el documento (Ctrl+Z, o ⌘Z en un Mac). En Word para la web, el Deshacer de Erato abarca hasta {WORD_WEB_REVERT_MAX_PARAGRAPHS} párrafos."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

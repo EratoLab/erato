@@ -1,5 +1,6 @@
 import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
+import { wordHostPlatform } from "./wordHostPlatform";
 import {
   resolveWordParagraphs,
   wordParagraphAnchor,
@@ -26,6 +27,7 @@ import {
 } from "./wordSelectionTarget";
 
 import type { WordApplyStage } from "./wordApplyProgress";
+import type { WordHostPlatform } from "./wordHostPlatform";
 import type {
   WordSelectionCapture,
   WordSelectionReplaceCode,
@@ -50,6 +52,21 @@ export const WORD_REVERT_SELECTION_TIMEOUT_MS = 30_000;
  * web, mostly its write sync; restores of more than 3 paragraphs are not measured there.
  */
 export const WORD_REVERT_SELECTION_MS_PER_PARAGRAPH = 1_000;
+/**
+ * Word for the web restores about 4.4-5 s per paragraph, so 10 outlasted the restore's budget
+ * natively, while its own Undo reverted 11 in one step in 0.6 s. Beyond this span the card points
+ * to Word's Undo instead.
+ */
+export const WORD_WEB_REVERT_MAX_PARAGRAPHS = 5;
+
+export function isWordRevertOffered(
+  paragraphs: number,
+  platform: WordHostPlatform = wordHostPlatform(),
+): boolean {
+  return (
+    platform !== "OfficeOnline" || paragraphs <= WORD_WEB_REVERT_MAX_PARAGRAPHS
+  );
+}
 
 /** Undo of a Replace while Track Changes was off: a written paragraph's own OOXML before the write. */
 export interface WordSelectionBackup {

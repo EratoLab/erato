@@ -32,12 +32,19 @@ import {
   isActionDenied,
   wordClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
-import { revertWordSelection } from "../utils/wordReplaceSelection";
+import {
+  isWordRevertOffered,
+  revertWordSelection,
+  WORD_WEB_REVERT_MAX_PARAGRAPHS,
+} from "../utils/wordReplaceSelection";
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import {
+  emptySelectionCapture,
+  isSameWordPassage,
   rewritableWordSelection,
   wordSelectionOf,
 } from "../utils/wordSelectionAnchor";
+import { captureWordSelection } from "../utils/wordSelectionCapture";
 import { splitWordSelectionReplacement } from "../utils/wordSelectionEdit";
 import {
   showWordSelection,
@@ -51,7 +58,10 @@ import type {
 } from "../utils/wordClientActions";
 import type { WordReplaceSelectionResult } from "../utils/wordReplaceSelection";
 import type { WordReviewState } from "../utils/wordReviewState";
-import type { WordSelectionReasonCode } from "../utils/wordSelectionAnchor";
+import type {
+  WordSelectionCapture,
+  WordSelectionReasonCode,
+} from "../utils/wordSelectionAnchor";
 
 /** V2-4: why this selection can only be context, one message per kind of reason. */
 export function wordSelectionReasonText(
@@ -336,6 +346,7 @@ export function WordSelectionCard({
   const detailsId = useId();
   const [revertConfirmation, setRevertConfirmation] = useState(false);
   const [copyNote, setCopyNote] = useState("");
+  const [pickNote, setPickNote] = useState("");
   const capture =
     (messageId ? capturesByAssistantMessageId.get(messageId) : undefined) ??
     review.capture;
@@ -400,6 +411,89 @@ export function WordSelectionCard({
     review.status === "identity-mismatch";
   const applying = review.status === "applying";
 
+  /** Runs inside an operation the caller began, and ends it. */
+  const replaceOn = useCallback(
+    async (target: WordSelectionCapture): Promise<boolean> => {
+      updateReview(batchKey, {
+        status: "applying",
+        applyStage: "checking",
+        capture: target,
+      });
+      let held = false;
+      try {
+        const run = await entry.execute({
+          fenceContent: content,
+          capture: target,
+          onStage: (applyStage) => updateReview(batchKey, { applyStage }),
+        });
+        const outcome = run.selectionResult;
+        if (!outcome) {
+          updateReview(batchKey, { status: "error", applyStage: undefined });
+          return false;
+        }
+        if (
+          (outcome.status === "failed" || outcome.status === "unverified") &&
+          outcome.timedOut
+        ) {
+          held = true;
+          holdOperationUntil(outcome.settled, batchKey);
+        }
+        // An earlier Undo would restore a paragraph as it was before this write, which this card's
+        // single slot no longer promises.
+        if (
+          outcome.status === "unverified" ||
+          (outcome.status === "applied" && !outcome.backups?.length)
+        )
+          setRevertSlot(null);
+        if (outcome.status === "applied") {
+          if (outcome.backups?.length && messageId)
+            setRevertSlot({
+              messageId,
+              batchKey,
+              identity: target.identity,
+              ooxml: outcome.backups[0].ooxml,
+              selection: {
+                written: outcome.written,
+                backups: outcome.backups,
+              },
+            });
+          wordSelectionStore.requestRefresh();
+        }
+        updateReview(batchKey, {
+          status: statusOf(outcome),
+          applyStage: undefined,
+          detailsExpanded: false,
+          selection: outcome,
+          tracking:
+            outcome.status === "applied" && outcome.trackingOn ? "on" : "off",
+          automatic: isAutomaticWordRun({
+            presentation: artifact?.clientActionPresentation,
+            decisions,
+            facetId,
+            action: entry.action,
+            enforcedAskActions,
+          }),
+        });
+        return outcome.status === "applied";
+      } finally {
+        if (!held) endOperation();
+      }
+    },
+    [
+      updateReview,
+      batchKey,
+      entry,
+      content,
+      holdOperationUntil,
+      messageId,
+      setRevertSlot,
+      artifact,
+      decisions,
+      facetId,
+      enforcedAskActions,
+      endOperation,
+    ],
+  );
   const execute = useCallback(async (): Promise<boolean> => {
     const live = resolveWordWriteGate({
       capture,
@@ -417,70 +511,7 @@ export function WordSelectionCard({
       !beginOperation()
     )
       return false;
-    updateReview(batchKey, {
-      status: "applying",
-      applyStage: "checking",
-      capture: live.capture,
-    });
-    let held = false;
-    try {
-      const run = await entry.execute({
-        fenceContent: content,
-        capture: live.capture,
-        onStage: (applyStage) => updateReview(batchKey, { applyStage }),
-      });
-      const outcome = run.selectionResult;
-      if (!outcome) {
-        updateReview(batchKey, { status: "error", applyStage: undefined });
-        return false;
-      }
-      if (
-        (outcome.status === "failed" || outcome.status === "unverified") &&
-        outcome.timedOut
-      ) {
-        held = true;
-        holdOperationUntil(outcome.settled, batchKey);
-      }
-      // An earlier Undo would restore a paragraph as it was before this write, which this card's
-      // single slot no longer promises.
-      if (
-        outcome.status === "unverified" ||
-        (outcome.status === "applied" && !outcome.backups?.length)
-      )
-        setRevertSlot(null);
-      if (outcome.status === "applied") {
-        if (outcome.backups?.length && messageId)
-          setRevertSlot({
-            messageId,
-            batchKey,
-            identity: live.capture.identity,
-            ooxml: outcome.backups[0].ooxml,
-            selection: {
-              written: outcome.written,
-              backups: outcome.backups,
-            },
-          });
-        wordSelectionStore.requestRefresh();
-      }
-      updateReview(batchKey, {
-        status: statusOf(outcome),
-        applyStage: undefined,
-        detailsExpanded: false,
-        selection: outcome,
-        tracking:
-          outcome.status === "applied" && outcome.trackingOn ? "on" : "off",
-        automatic: isAutomaticWordRun({
-          presentation: artifact?.clientActionPresentation,
-          decisions,
-          facetId,
-          action: entry.action,
-          enforcedAskActions,
-        }),
-      });
-      return outcome.status === "applied";
-    } finally {
-      if (!held) endOperation();
-    }
+    return replaceOn(live.capture);
   }, [
     capture,
     artifact,
@@ -491,14 +522,65 @@ export function WordSelectionCard({
     offeredActions.length,
     idle,
     beginOperation,
-    entry,
-    content,
-    holdOperationUntil,
-    messageId,
-    setRevertSlot,
-    decisions,
-    facetId,
-    enforcedAskActions,
+    replaceOn,
+  ]);
+  // The same reviewed proposal on the passage the user now selects, never a guess between copies.
+  const replaceSelected = useCallback(async () => {
+    if (!rewritable || offeredActions.length === 0 || !beginOperation()) return;
+    setPickNote("");
+    const unread = () =>
+      t({
+        id: "officeAddin.word.selection.pickUnread",
+        message: "Erato could not read your selection. Try again.",
+      });
+    let target: WordSelectionCapture | null = null;
+    let note = "";
+    try {
+      const read = await captureWordSelection();
+      const picked =
+        read.status === "ok" && read.value && documentIdentity
+          ? emptySelectionCapture(documentIdentity, read.value)
+          : null;
+      const live = resolveWordWriteGate({
+        capture: picked ?? undefined,
+        expectedIdentity: artifact?.itemIdentity,
+        currentIdentity: documentIdentity,
+      });
+      if (read.status === "failed") note = unread();
+      else if (
+        !picked?.selection ||
+        !isSameWordPassage(rewritable, picked.selection)
+      )
+        note = t({
+          id: "officeAddin.word.selection.pickDifferent",
+          message:
+            "The selected text is not exactly the passage from your request. Nothing was replaced.",
+        });
+      else if (!rewritableWordSelection(picked))
+        note = wordSelectionReasonText(picked.selection.reasonCode);
+      else if (!live.allowed)
+        note = t({
+          id: "officeAddin.word.selection.otherDocument",
+          message:
+            "This answer was written for a passage in another document, so it cannot be replaced here.",
+        });
+      else target = live.capture;
+    } catch {
+      note = unread();
+    }
+    if (target) {
+      await replaceOn(target);
+      return;
+    }
+    endOperation();
+    setPickNote(note);
+  }, [
+    rewritable,
+    offeredActions.length,
+    beginOperation,
+    documentIdentity,
+    artifact,
+    replaceOn,
     endOperation,
   ]);
   const buildSummary = useCallback(
@@ -685,6 +767,13 @@ export function WordSelectionCard({
     !review.revertStale &&
     !review.revertFailed;
   const canReplace = gate.allowed && idle && offeredActions.length > 0;
+  const ambiguous =
+    result?.status === "refused" &&
+    result.code === "AMBIGUOUS_TARGET" &&
+    gate.allowed &&
+    offeredActions.length > 0;
+  const revertOffered =
+    !slot || isWordRevertOffered(slot.selection.backups.length);
   const showTarget = () =>
     show(() =>
       showWordSelection(rewritable!, capture!.identity, documentIdentity),
@@ -778,6 +867,15 @@ export function WordSelectionCard({
               applyStage={review.applyStage}
             />
           )}
+          {ambiguous && (
+            <p className="word-review__hint">
+              {t({
+                id: "officeAddin.word.selection.pickHint",
+                message:
+                  "Select the one you mean in Word, then choose Replace selected passage. It is replaced only if its text is exactly the same.",
+              })}
+            </p>
+          )}
           <div className="word-review__actions">
             {completed && (
               <WordReviewDetailsToggle
@@ -788,7 +886,20 @@ export function WordSelectionCard({
                 }
               />
             )}
-            {isStale(result) && (
+            {ambiguous && (
+              <Button
+                type="button"
+                variant="primary"
+                disabled={operationInProgress}
+                onClick={() => void replaceSelected()}
+              >
+                {t({
+                  id: "officeAddin.word.selection.replacePicked",
+                  message: "Replace selected passage",
+                })}
+              </Button>
+            )}
+            {isStale(result) && !ambiguous && (
               <Button
                 type="button"
                 variant="secondary"
@@ -813,18 +924,31 @@ export function WordSelectionCard({
               {copyNote}
             </p>
           )}
+          {pickNote && (
+            <p className="word-review__hint" role="status">
+              {pickNote}
+            </p>
+          )}
           <WordUndoLine
-            canRevert={!!slot && review.status === "done"}
+            canRevert={!!slot && review.status === "done" && revertOffered}
             label={wordUndoLabel()}
             disabled={operationInProgress}
             onUndo={() => setRevertConfirmation(true)}
             testId="word-selection-undo"
           />
-          {applied && slot && (
+          {applied && slot && revertOffered && (
             <p className="word-review__hint">
               {t({
                 id: "officeAddin.word.selection.undoReplaced",
                 message: "Applying another change ends this Undo.",
+              })}
+            </p>
+          )}
+          {applied && slot && !revertOffered && review.status === "done" && (
+            <p className="word-review__hint">
+              {t({
+                id: "officeAddin.word.selection.undoInWord",
+                message: `To undo this Replace, use Word's own Undo in the document (Ctrl+Z, or ⌘Z on a Mac). In Word for the web, Erato's Undo covers up to ${WORD_WEB_REVERT_MAX_PARAGRAPHS} paragraphs.`,
               })}
             </p>
           )}

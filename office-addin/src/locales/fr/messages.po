@@ -4127,6 +4127,21 @@ msgstr "Cette réponse a été écrite pour un passage d'un autre document : ell
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickDifferent"
+msgstr "Le texte sélectionné n'est pas exactement le passage de votre demande. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickHint"
+msgstr "Sélectionnez dans Word le passage voulu, puis choisissez Remplacer le passage sélectionné. Il n'est remplacé que si son texte est exactement le même."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickUnread"
+msgstr "Erato n'a pas pu lire votre sélection. Réessayez."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.preparing"
 msgstr "Préparation de la réécriture…"
 
@@ -4212,6 +4227,11 @@ msgstr "Le passage sélectionné a été remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.replacePicked"
+msgstr "Remplacer le passage sélectionné"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.restore"
 msgstr "Restaurer le passage"
 
@@ -4294,6 +4314,11 @@ msgstr "Trop long pour être envoyé en entier. Seul le début est envoyé."
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.selection.unchanged"
 msgstr "La proposition correspond au passage. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.undoInWord"
+msgstr "Pour annuler ce remplacement, utilisez l'annulation de Word dans le document (Ctrl+Z, ou ⌘Z sur Mac). Dans Word pour le web, l'annulation d'Erato couvre jusqu'à {WORD_WEB_REVERT_MAX_PARAGRAPHS} paragraphes."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

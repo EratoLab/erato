@@ -170,7 +170,8 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
           id: "officeAddin.word.clientActions.replaceSelection",
           message: "Replace the selected passage",
         }),
-      // The target is the passage captured at Send, never the model's arguments or the live selection.
+      // The target is the passage captured at Send, or one the user picked with byte-identical text
+      // after an ambiguous refusal; never the model's arguments.
       execute: async ({ fenceContent, capture, onStage }) => {
         const result = await replaceWordSelection({
           capture,
