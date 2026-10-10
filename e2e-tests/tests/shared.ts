@@ -523,6 +523,14 @@ export async function ensureTestScenario(
         return;
       }
 
+      if (process.env.E2E_FIXED_ENVIRONMENT === "true") {
+        throw new Error(
+          `[K3D_SCENARIO] Fixed environment is on '${currentScenario}', ` +
+            `but this test requires '${requiredScenario}'. Deploy or select ` +
+            `the matching isolated environment before running Playwright.`,
+        );
+      }
+
       await test.step(`Switch from '${currentScenario}' to '${requiredScenario}'`, async () => {
         console.log(`[K3D_SCENARIO] 🔄 Switching scenarios...`);
 

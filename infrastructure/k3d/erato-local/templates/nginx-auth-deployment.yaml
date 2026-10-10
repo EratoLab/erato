@@ -20,9 +20,9 @@ spec:
       annotations:
         reloader.stakater.com/auto: "true"
     spec:
-      {{- if .Values.nginxAuth.image.pullSecrets }}
+      {{- if or .Values.nginxAuth.image.pullSecrets .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        {{- toYaml .Values.nginxAuth.image.pullSecrets | nindent 8 }}
+        {{- concat .Values.nginxAuth.image.pullSecrets .Values.global.imagePullSecrets | toYaml | nindent 8 }}
       {{- end }}
       containers:
         - name: nginx-auth

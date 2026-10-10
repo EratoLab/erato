@@ -6,10 +6,26 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-dex
     app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- if eq .Values.erato.deployment.ingressClassName "tailscale" }}
+  annotations:
+    tailscale.com/tags: {{ .Values.erato.deployment.tailscaleTags | default "tag:k8s-observability" | quote }}
+  {{- end }}
 spec:
-  ingressClassName: {{ .Values.dex.ingress.className }}
+  ingressClassName: {{ .Values.erato.deployment.ingressClassName | default .Values.dex.ingress.className }}
+  {{- if or .Values.erato.deployment.tlsSecretName (and (eq .Values.erato.deployment.ingressClassName "tailscale") .Values.erato.deployment.dexTlsHost) }}
+  tls:
+    - hosts:
+        - {{ .Values.erato.deployment.dexTlsHost | default .Values.erato.deployment.dexHost | quote }}
+      {{- if ne .Values.erato.deployment.ingressClassName "tailscale" }}
+      secretName: {{ .Values.erato.deployment.tlsSecretName }}
+      {{- end }}
+  {{- end }}
   rules:
-    - host: {{ .Values.dex.ingress.host }}
+    {{- if ne .Values.erato.deployment.ingressClassName "tailscale" }}
+    - host: {{ .Values.erato.deployment.dexHost | default .Values.dex.ingress.host }}
+    {{- else }}
+    -
+    {{- end }}
       http:
         paths:
           - path: /
@@ -19,4 +35,4 @@ spec:
                 name: {{ .Release.Name }}-dex
                 port:
                   name: http
-{{- end }} 
+{{- end }}

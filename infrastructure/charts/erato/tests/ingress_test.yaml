@@ -99,6 +99,26 @@ tests:
       - isEmpty:
           path: spec.tls
 
+  - it: should use Tailscale MagicDNS TLS without a Secret or host rule
+    set:
+      deployment.ingressClassName: tailscale
+      deployment.ingressTlsHost: app-alice-basic
+      deployment.tailscaleTags: tag:k8s-observability
+    asserts:
+      - equal:
+          path: metadata.annotations["tailscale.com/tags"]
+          value: tag:k8s-observability
+      - equal:
+          path: spec.ingressClassName
+          value: tailscale
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: app-alice-basic
+      - notExists:
+          path: spec.tls[0].secretName
+      - notExists:
+          path: spec.rules[0].host
+
   - it: should include custom annotations
     set:
       ingress.annotations:
