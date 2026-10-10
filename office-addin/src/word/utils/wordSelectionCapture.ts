@@ -9,9 +9,11 @@ import {
   wordIdentityShows,
   wordSelectionPartOffsets,
 } from "./wordSelectionAnchor";
+import { markWordParagraphPart } from "./wordSelectionFormatSpans";
 import {
+  alignWordParagraph,
   markWordSelectionPart,
-  readWordParagraphItems,
+  wordParagraphElement,
 } from "./wordSelectionItems";
 import {
   queueWordSearch,
@@ -31,6 +33,7 @@ import {
 
 import type { WordParagraphEntry } from "./wordParagraphResolver";
 import type {
+  WordFormatPart,
   WordSelectionFacts,
   WordSelectionHazards,
   WordSelectionOrigin,
@@ -443,45 +446,70 @@ function consecutive(
 }
 
 /**
- * Per covered paragraph, its part with markers where it holds items to keep (ERMAIN-938): "cut"
- * where the part starts or ends inside one, "bookmark_cut" where a bookmark starts or ends inside
- * it, null where it holds none or its items cannot be read.
+ * Per covered paragraph, its part with markers. `kept`, where it holds items to keep (ERMAIN-938):
+ * its marked part, "cut" where the part starts or ends inside an item, "bookmark_cut" where a
+ * bookmark starts or ends inside it, null where it holds none or its items cannot be read.
+ * `formats`, where its part has format spans (ERMAIN-943): its marked part and the spans, null
+ * otherwise. Numbers run on across the paragraphs.
  */
-function keptParts(
+function markedParts(
   reads: readonly WordParagraphSpanChecks[],
   rangeTexts: readonly string[],
   parts: readonly { start: number; end: number }[],
   support: WordSelectionSupport,
-): (WordMarkedPart | "cut" | "bookmark_cut" | null)[] {
+): {
+  kept: (WordMarkedPart | "cut" | "bookmark_cut" | null)[];
+  formats: (WordFormatPart | null)[];
+} {
   let next = 1;
-  return reads.map((read, i) => {
-    if (!support.keepsItems) return null;
-    const items = readWordParagraphItems(read.ooxml, rangeTexts[i]);
-    if (!("items" in items)) return null;
-    if (items.items.length === 0 && items.references.length === 0) return null;
-    const marked = markWordSelectionPart(
+  const kept: (WordMarkedPart | "cut" | "bookmark_cut" | null)[] = [];
+  const formats: (WordFormatPart | null)[] = [];
+  reads.forEach((read, i) => {
+    const { start, end } = parts[i];
+    const parsed = wordParagraphElement(read.ooxml);
+    const aligned =
+      parsed && alignWordParagraph(parsed.paragraph, rangeTexts[i]);
+    if (!aligned || "refused" in aligned) {
+      kept.push(null);
+      formats.push(null);
+      return;
+    }
+    const items =
+      support.keepsItems &&
+      (aligned.items.length > 0 || aligned.references.length > 0);
+    const marked = markWordParagraphPart(
+      aligned,
       rangeTexts[i],
-      items,
-      parts[i].start,
-      parts[i].end,
+      start,
+      end,
       next,
+      { items, formats: true },
     );
     if (!marked) {
       const visible = {
-        items: items.items.filter((item) => item.kind !== "bookmark"),
-        references: items.references,
+        items: aligned.items.filter((item) => item.kind !== "bookmark"),
+        references: aligned.references,
       };
-      const { start, end } = parts[i];
-      return markWordSelectionPart(rangeTexts[i], visible, start, end)
-        ? "bookmark_cut"
-        : "cut";
+      kept.push(
+        !items
+          ? null
+          : markWordSelectionPart(rangeTexts[i], visible, start, end)
+            ? "bookmark_cut"
+            : "cut",
+      );
+      formats.push(null);
+      return;
     }
     next = marked.next;
-    const kinds = items.items.flatMap((item) =>
+    const kinds = aligned.items.flatMap((item) =>
       item.kind === "bookmark" ? [] : [item.kind],
     );
-    return { ...marked, kinds: [...new Set(kinds)] };
+    kept.push(items ? { ...marked, kinds: [...new Set(kinds)] } : null);
+    formats.push(
+      marked.formats ? { text: marked.text, spans: marked.formats } : null,
+    );
   });
+  return { kept, formats };
 }
 
 /**
@@ -642,7 +670,7 @@ export async function captureWordSelection(
       });
       await context.sync();
       const reads = checks.map((check) => check());
-      const kept = keptParts(reads, rangeTexts, parts, support);
+      const { kept, formats } = markedParts(reads, rangeTexts, parts, support);
       let searchMismatch = false;
       for (const [i, hits] of dryRuns.entries())
         if (
@@ -679,10 +707,13 @@ export async function captureWordSelection(
               paragraph.style,
               support,
               parts[i].whole ? undefined : slices[i],
+              formats[i] !== null,
             ),
       );
       const keptChecks = covered.map((_, i) =>
-        kept[i] === null ? null : evaluateKeptParagraph(reads[i], slices[i]),
+        kept[i] === null
+          ? null
+          : evaluateKeptParagraph(reads[i], slices[i], formats[i] !== null),
       );
       const hazards: WordSelectionHazards = Object.assign(
         {},
@@ -700,6 +731,7 @@ export async function captureWordSelection(
             (check) => !check || check.styleFontResolved,
           ),
           kept,
+          ...(formats.some(Boolean) ? { formats } : {}),
           spanChecked: true,
           ...(searchMismatch ? { searchMismatch } : {}),
           ...(flattensEmphasis ? { flattensEmphasis } : {}),

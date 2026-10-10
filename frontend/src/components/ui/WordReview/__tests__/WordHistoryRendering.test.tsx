@@ -503,6 +503,39 @@ describe("Word selection replies shown outside Word", () => {
     );
   });
 
+  it("labels format spans by their emphasis and copies the proposal without their markers", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    renderChat(
+      selectionConversation(
+        replaceFence("A ⟦2⟧slanted⟦/2⟧ and ⟦1⟧strong⟦/1⟧ ⟦3⟧ word."),
+        {
+          selected_text: "A ⟦1⟧bold⟦/1⟧ and ⟦2⟧italic⟦/2⟧ ⟦3⟧ word.",
+          selection_shape: "paragraph",
+          paragraph_count: "1",
+          kept_items: [
+            "⟦1⟧…⟦/1⟧ formatting: bold",
+            "⟦2⟧…⟦/2⟧ formatting: italic, underline",
+            '⟦3⟧ a field showing "7"',
+          ].join("\n"),
+        },
+      ),
+    );
+
+    const card = await screen.findByTestId("word-history-replace");
+    expect(shownText(card, "Original")).toBe(
+      "A [bold]bold[/bold] and [italic, underline]italic[/italic, underline] [7] word.",
+    );
+    expect(shownText(card, "Proposed")).toBe(
+      "A [italic, underline]slanted[/italic, underline] and [bold]strong[/bold] [7] word.",
+    );
+    fireEvent.click(within(card).getByRole("button", { name: "Copy text" }));
+    expect(writeText).toHaveBeenCalledWith("A slanted and strong 7 word.");
+  });
+
   it("gives each Replace version its own card", async () => {
     renderChat(
       selectionConversation(

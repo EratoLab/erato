@@ -1,4 +1,5 @@
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
+import { wordEmphasisWords } from "./wordSelectionFormatSpans";
 import { wordMarkerText } from "./wordSelectionItems";
 import {
   ACTION_FACET_ARG_MAX_BYTES,
@@ -107,13 +108,14 @@ const KEPT_ITEM_NAMES: Readonly<Record<WordKeptItemKind, string>> = {
 
 /**
  * One line per marker in selected_text, saying what it stands for: an item the rewrite keeps where
- * the marker is. Empty when nothing is marked. The Erato web app parses these lines to label the
- * markers of a stored chat (frontend wordSelectionReply.ts), so changing them needs both sides.
+ * the marker is, or a format span whose text keeps its formatting (ERMAIN-943). Empty when nothing
+ * is marked. The Erato web app parses these lines to label the markers of a stored chat (frontend
+ * wordSelectionReply.ts), so changing them needs both sides.
  */
 export function wordKeptItemsArg(selection: WordSelectionSnapshot): string {
-  const lines: string[] = [];
+  const lines: { number: number; line: string }[] = [];
   const said = new Set<number>();
-  for (const p of selection.paragraphs)
+  for (const p of selection.paragraphs) {
     for (const marker of p.kept?.markers ?? []) {
       if (said.has(marker.number)) continue;
       said.add(marker.number);
@@ -122,15 +124,26 @@ export function wordKeptItemsArg(selection: WordSelectionSnapshot): string {
         (m) => m.number === marker.number,
       ).length;
       const shown = marker.shows.replace(/[\u0000-\u001F]/g, "");
-      lines.push(
-        marker.end === "point"
-          ? `${wordMarkerText(marker)} ${name}${shown ? ` showing "${shown}"` : ""}`
-          : both === 2
-            ? `${wordMarkerText(marker)}…${wordMarkerText({ ...marker, end: "close" })} ${name} around the text between; that text may change`
-            : marker.end === "open"
-              ? `${wordMarkerText(marker)} where ${name} starts; it runs on past the selection`
-              : `${wordMarkerText(marker)} where ${name} that started before the selection ends`,
-      );
+      lines.push({
+        number: marker.number,
+        line:
+          marker.end === "point"
+            ? `${wordMarkerText(marker)} ${name}${shown ? ` showing "${shown}"` : ""}`
+            : both === 2
+              ? `${wordMarkerText(marker)}…${wordMarkerText({ ...marker, end: "close" })} ${name} around the text between; that text may change`
+              : marker.end === "open"
+                ? `${wordMarkerText(marker)} where ${name} starts; it runs on past the selection`
+                : `${wordMarkerText(marker)} where ${name} that started before the selection ends`,
+      });
     }
-  return lines.join("\n");
+    for (const span of p.formats?.spans ?? [])
+      lines.push({
+        number: span.number,
+        line: `${wordMarkerText({ number: span.number, end: "open" })}…${wordMarkerText({ number: span.number, end: "close" })} formatting: ${wordEmphasisWords(span.emphasis).join(", ")}`,
+      });
+  }
+  return lines
+    .sort((a, b) => a.number - b.number)
+    .map(({ line }) => line)
+    .join("\n");
 }

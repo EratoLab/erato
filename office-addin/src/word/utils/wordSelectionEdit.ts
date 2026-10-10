@@ -1,10 +1,11 @@
-import { splitWordMarkedLine } from "./wordSelectionItems";
+import { splitWordMarkedLine, WORD_MARKER } from "./wordSelectionItems";
 
 import type {
   WordSelectionReplaceCode,
   WordSelectionShape,
 } from "./wordSelectionAnchor";
-import type { WordKeptMarker } from "./wordSelectionItems";
+import type { WordFormatSpan } from "./wordSelectionFormatSpans";
+import type { WordKeptMarker, WordLinePart } from "./wordSelectionItems";
 
 /** Fence tags are case-sensitive and must match the renderer registration. */
 export const WORD_REPLACE_FENCE = "erato-word-replace";
@@ -62,22 +63,58 @@ export function splitWordSelectionReplacement(
     : { refused: "PARAGRAPH_COUNT_MISMATCH" };
 }
 
+/** A covered paragraph's line, split at its markers. */
+export interface WordSelectionLine {
+  /** The line without format markers; without any marker for a paragraph without items. */
+  text: string;
+  /** For a paragraph with kept items: its text before, between and after their markers. */
+  pieces: string[] | null;
+  /** Per piece, its text cut at the format markers, each part with its format span. */
+  parts: WordLinePart[][];
+}
+
 /**
- * Per covered paragraph, its line split at the markers of the items it keeps; null for a paragraph
- * without items, whose line must hold no marker bracket, since it would be written as text.
+ * Per covered paragraph, its line split at the markers of the items it keeps and of its format
+ * spans. A paragraph without items has one piece; its line must hold no other marker bracket, since
+ * it would be written as text. `dropped` lists the format spans the proposal left out or empty.
  */
 export function wordSelectionLinePieces(
   paragraphs: readonly {
     kept?: { markers: readonly Pick<WordKeptMarker, "number" | "end">[] };
+    formats?: { spans: readonly Pick<WordFormatSpan, "number">[] };
   }[],
   lines: readonly string[],
-): { pieces: (string[] | null)[] } | { refused: "MARKERS_CHANGED" } {
-  const pieces: (string[] | null)[] = [];
+):
+  | { lines: WordSelectionLine[]; dropped: number[] }
+  | { refused: "MARKERS_CHANGED" } {
+  const split: WordSelectionLine[] = [];
+  const dropped: number[] = [];
   for (const [i, line] of lines.entries()) {
-    const kept = paragraphs[i]?.kept;
-    const split = splitWordMarkedLine(line, kept?.markers ?? []);
-    if ("refused" in split) return split;
-    pieces.push(kept ? split.pieces : null);
+    const { kept, formats } = paragraphs[i] ?? {};
+    const marked = splitWordMarkedLine(
+      line,
+      kept?.markers ?? [],
+      formats?.spans.map((span) => span.number),
+    );
+    if ("refused" in marked) return marked;
+    split.push({
+      text: withoutFormatMarkers(line, formats?.spans),
+      pieces: kept ? marked.pieces : null,
+      parts: marked.parts,
+    });
+    dropped.push(...marked.dropped);
   }
-  return { pieces };
+  return { lines: split, dropped };
+}
+
+/** `text` without the markers of `spans`. */
+export function withoutFormatMarkers(
+  text: string,
+  spans: readonly Pick<WordFormatSpan, "number">[] | undefined,
+): string {
+  if (!spans?.length) return text;
+  const numbers = new Set(spans.map((span) => span.number));
+  return text.replace(WORD_MARKER, (marker, _close: string, number: string) =>
+    numbers.has(Number(number)) ? "" : marker,
+  );
 }

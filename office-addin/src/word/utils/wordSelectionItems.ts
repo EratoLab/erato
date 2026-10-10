@@ -1,5 +1,10 @@
 import { WORD_BOOKMARK } from "./wordSelectionSpan";
 
+import type {
+  WordFormatRange,
+  WordFormatSpan,
+} from "./wordSelectionFormatSpans";
+
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -591,12 +596,18 @@ export interface WordKeptMarker {
 }
 
 export interface WordMarkedPart {
-  /** The part with ⟦n⟧ in place of each point and ⟦n⟧ … ⟦/n⟧ at each end of a span inside it. */
+  /**
+   * The part with ⟦n⟧ in place of each point and ⟦n⟧ … ⟦/n⟧ at each end of a span inside it, and
+   * ⟦n⟧ … ⟦/n⟧ around each format span.
+   */
   text: string;
+  /** The kept items' markers only. */
   markers: WordKeptMarker[];
   next: number;
   /** Every kind of item the whole paragraph keeps, inside the part or not. */
   kinds?: readonly WordKeptItemKind[];
+  /** The format spans (ERMAIN-943), in the order they appear; absent when there are none. */
+  formats?: WordFormatSpan[];
 }
 
 export const WORD_MARKER = /\u27E6(\/?)(\d+)\u27E7/g;
@@ -612,6 +623,7 @@ export const wordMarkerText = (
  * selection of exactly a link's or comment's text keeps the rewrite within it. A bookmark is never
  * marked. Null when the part cuts through a point, holds a bracket the markers use, holds a
  * comment's balloon anchor away from its range's end, or has a bookmark start or end inside it.
+ * Each of `formats`, which lie between the items' boundaries, gets ⟦n⟧ … ⟦/n⟧ around its text.
  */
 export function markWordSelectionPart(
   rangeText: string,
@@ -619,28 +631,54 @@ export function markWordSelectionPart(
   start: number,
   end: number,
   first = 1,
+  formats: readonly Pick<WordFormatRange, "start" | "end" | "emphasis">[] = [],
 ): WordMarkedPart | null {
   const part = wordPartBoundaries(rangeText, read, start, end);
   if (!part) return null;
   const { boundaries, hidden } = part;
-  const numbers = new Map<WordKeptItem, number>();
+  // A format span lies inside one piece: it ends before the boundary that ends the piece, and
+  // starts after the one that starts it.
+  const marks = [
+    ...boundaries.map((boundary, index) => ({
+      at: boundary.at,
+      rank: 1,
+      index,
+      boundary,
+    })),
+    ...formats.flatMap((range, index) => [
+      { at: range.start, rank: 2, index, range, close: false },
+      { at: range.end, rank: 0, index, range, close: true },
+    ]),
+  ].sort((a, b) => a.at - b.at || a.rank - b.rank || a.index - b.index);
+  const numbers = new Map<object, number>();
   let next = first;
+  const numberOf = (key: object) => {
+    let number = numbers.get(key);
+    if (number === undefined) {
+      number = next++;
+      numbers.set(key, number);
+    }
+    return number;
+  };
   const markers: WordKeptMarker[] = [];
+  const spans: WordFormatSpan[] = [];
   let text = "";
   let cursor = start;
   const flush = (to: number) => {
     for (; cursor < to; cursor += 1)
       if (!hidden.has(cursor)) text += rangeText[cursor];
   };
-  for (const boundary of boundaries) {
-    flush(boundary.at);
-    let number = numbers.get(boundary.item);
-    if (number === undefined) {
-      number = next++;
-      numbers.set(boundary.item, number);
+  for (const mark of marks) {
+    flush(mark.at);
+    if ("range" in mark) {
+      const number = numberOf(mark.range);
+      if (!mark.close) spans.push({ number, emphasis: mark.range.emphasis });
+      text += wordMarkerText({ number, end: mark.close ? "close" : "open" });
+      continue;
     }
+    const { boundary } = mark;
     const marker: WordKeptMarker = {
-      number,
+      number: numberOf(boundary.item),
       kind: boundary.item.kind,
       end: boundary.end,
       shows: boundary.item.shows,
@@ -650,7 +688,7 @@ export function markWordSelectionPart(
     text += wordMarkerText(marker);
   }
   flush(end);
-  return { text, markers, next };
+  return { text, markers, next, ...(spans.length ? { formats: spans } : {}) };
 }
 
 /** One end of an item inside a selected part, where a marker goes. */
@@ -740,44 +778,86 @@ export function wordPartBoundaries(
   return { boundaries, hidden };
 }
 
+/** Text of a rewritten line between two of its markers. */
+export interface WordLinePart {
+  text: string;
+  /** The number of the format span it lies in; null outside every span. */
+  format: number | null;
+}
+
 export type WordMarkedLine =
   | {
-      /** The text before, between and after the markers: one more than there are markers. */
+      /**
+       * The text before, between and after the item markers, without format markers: one more
+       * than there are item markers.
+       */
       pieces: string[];
+      /** Each piece's text cut at the format markers, without empty parts. */
+      parts: WordLinePart[][];
+      /** Format spans the line leaves out or leaves empty, in their order. */
+      dropped: number[];
     }
   | { refused: "MARKERS_CHANGED" };
 
 /**
- * A rewritten line split at its markers. It must hold exactly the part's markers, in their order,
- * and no other bracket: a lost, doubled or moved marker would delete or misplace an item.
+ * A rewritten line split at its markers. It must hold exactly the part's item markers, in their
+ * order, and no other bracket: a lost, doubled or moved marker would delete or misplace an item.
+ * A format span is lenient (ERMAIN-943): its pair may move, change order or go, also across an item
+ * marker, since without it its text only takes the formatting the rest of its piece shares. An
+ * unknown or doubled number, a pair inside another, or an end without its other end is refused.
  */
 export function splitWordMarkedLine(
   line: string,
   markers: readonly Pick<WordKeptMarker, "number" | "end">[],
+  formats: readonly number[] = [],
 ): WordMarkedLine {
-  const pieces: string[] = [];
+  const refused = { refused: "MARKERS_CHANGED" } as const;
+  const known = new Set(formats);
+  const opened = new Set<number>();
+  const written = new Set<number>();
+  const pieces = [""];
+  const parts: WordLinePart[][] = [[]];
+  let open: number | null = null;
   let k = 0;
   let last = 0;
+  const add = (text: string) => {
+    if (!text) return true;
+    if (MARKER_BRACKET.test(text)) return false;
+    pieces[pieces.length - 1] += text;
+    parts[parts.length - 1].push({ text, format: open });
+    if (open !== null) written.add(open);
+    return true;
+  };
   for (const match of line.matchAll(WORD_MARKER)) {
-    const expected = markers[k];
+    if (!add(line.slice(last, match.index))) return refused;
+    last = match.index + match[0].length;
+    const number = Number(match[2]);
     const close = match[1] === "/";
+    if (known.has(number)) {
+      if (close ? open !== number : open !== null || opened.has(number))
+        return refused;
+      opened.add(number);
+      open = close ? null : number;
+      continue;
+    }
+    const expected = markers[k];
     if (
       !expected ||
-      Number(match[2]) !== expected.number ||
+      number !== expected.number ||
       close !== (expected.end === "close")
     )
-      return { refused: "MARKERS_CHANGED" };
-    pieces.push(line.slice(last, match.index));
-    last = match.index + match[0].length;
+      return refused;
+    pieces.push("");
+    parts.push([]);
     k += 1;
   }
-  pieces.push(line.slice(last));
-  if (
-    k !== markers.length ||
-    pieces.some((piece) => MARKER_BRACKET.test(piece))
-  )
-    return { refused: "MARKERS_CHANGED" };
-  return { pieces };
+  if (!add(line.slice(last)) || k !== markers.length || open !== null)
+    return refused;
+  return {
+    pieces,
+    parts,
+    dropped: formats.filter((number) => !written.has(number)),
+  };
 }
 
 /**

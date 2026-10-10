@@ -4101,6 +4101,51 @@ msgid "officeAddin.word.selection.flattensEmphasis"
 msgstr "Nach dem Ersetzen erhalten fett, kursiv, unterstrichen oder durchgestrichen formatierte Wörter in dieser Passage die übliche Formatierung des Absatzes."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.bold"
+msgstr "fett"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.italic"
+msgstr "kursiv"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.noStrikethrough"
+msgstr "nicht durchgestrichen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.notBold"
+msgstr "nicht fett"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.notItalic"
+msgstr "nicht kursiv"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.noUnderline"
+msgstr "nicht unterstrichen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.strikethrough"
+msgstr "durchgestrichen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.underline"
+msgstr "unterstrichen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.formatsDropped"
+msgstr "Der Vorschlag markiert die Formatierung von {dropped} nicht mehr. Wenn diese Wörter noch darin vorkommen, erhalten sie beim Ersetzen die Formatierung des umgebenden Texts."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Wenn diese Passage ersetzt werden kann, wird sie statt des Dokuments gesendet."

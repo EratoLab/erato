@@ -6832,6 +6832,46 @@ msgstr "Umformulierung der ausgewählten Passage"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.bold"
+msgstr "fett"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.italic"
+msgstr "kursiv"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.noStrikethrough"
+msgstr "nicht durchgestrichen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.notBold"
+msgstr "nicht fett"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.notItalic"
+msgstr "nicht kursiv"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.noUnderline"
+msgstr "nicht unterstrichen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.strikethrough"
+msgstr "durchgestrichen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.underline"
+msgstr "unterstrichen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
 msgid "wordReview.selection.item.bookmark"
 msgstr "Textmarke"
 

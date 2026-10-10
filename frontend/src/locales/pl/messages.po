@@ -6832,6 +6832,46 @@ msgstr "Przeredagowanie zaznaczonego fragmentu"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.bold"
+msgstr "pogrubienie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.italic"
+msgstr "kursywa"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.noStrikethrough"
+msgstr "bez przekreślenia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.notBold"
+msgstr "bez pogrubienia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.notItalic"
+msgstr "bez kursywy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.noUnderline"
+msgstr "bez podkreślenia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.strikethrough"
+msgstr "przekreślenie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.format.underline"
+msgstr "podkreślenie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
 msgid "wordReview.selection.item.bookmark"
 msgstr "zakładka"
 

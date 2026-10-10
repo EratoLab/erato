@@ -4101,6 +4101,51 @@ msgid "officeAddin.word.selection.flattensEmphasis"
 msgstr "Après le remplacement, les mots en gras, en italique, soulignés ou barrés de ce passage prennent la mise en forme habituelle du paragraphe."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.bold"
+msgstr "gras"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.italic"
+msgstr "italique"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.noStrikethrough"
+msgstr "non barré"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.notBold"
+msgstr "non gras"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.notItalic"
+msgstr "non italique"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.noUnderline"
+msgstr "non souligné"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.strikethrough"
+msgstr "barré"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.underline"
+msgstr "souligné"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.formatsDropped"
+msgstr "La proposition ne marque plus la mise en forme de {dropped}. Si ces mots y figurent encore, le remplacement leur donne la mise en forme du texte qui les entoure."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Si ce passage peut être remplacé, il est envoyé à la place du document."
