@@ -46,6 +46,7 @@ import {
 } from "../utils/wordSelectionAnchor";
 import { captureWordSelection } from "../utils/wordSelectionCapture";
 import {
+  countWordReplaceFences,
   splitWordSelectionReplacement,
   wordSelectionLinePieces,
 } from "../utils/wordSelectionEdit";
@@ -56,6 +57,7 @@ import {
 } from "../utils/wordSelectionTarget";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
+import type { WordRevertSlot } from "../providers/WordWriteProvider";
 import type {
   WordClientAction,
   WordClientActionEntry,
@@ -239,6 +241,56 @@ const staleText = () =>
     message: "This passage changed after your request. Nothing was replaced.",
   });
 
+/** How another version from the same answer leaves the document: its Undo here, or in Word. */
+type SiblingRemoval = "undo" | "reject" | "word";
+
+/** Another version from the same answer is, or may be, in the document. */
+function siblingHintText(removal: SiblingRemoval): string {
+  switch (removal) {
+    case "undo":
+      return t({
+        id: "officeAddin.word.selection.siblingApplied",
+        message:
+          "Another version from this answer is in the document. Undo it to use this one instead.",
+      });
+    case "reject":
+      return t({
+        id: "officeAddin.word.selection.siblingAppliedTracked",
+        message:
+          "Another version from this answer is in the document. Reject it in Word to use this one instead.",
+      });
+    case "word":
+      return t({
+        id: "officeAddin.word.selection.siblingAppliedWord",
+        message:
+          "Another version from this answer is in the document. Remove it in Word, for example with Word's own Undo, to use this one instead.",
+      });
+  }
+}
+
+function siblingRefusedText(removal: SiblingRemoval): string {
+  switch (removal) {
+    case "undo":
+      return t({
+        id: "officeAddin.word.selection.siblingRefused",
+        message:
+          "Another version from this answer was applied to this passage. Undo it, then choose Replace again. Nothing was replaced.",
+      });
+    case "reject":
+      return t({
+        id: "officeAddin.word.selection.siblingRefusedTracked",
+        message:
+          "Another version from this answer was applied to this passage. Reject it in Word, then choose Replace again. Nothing was replaced.",
+      });
+    case "word":
+      return t({
+        id: "officeAddin.word.selection.siblingRefusedWord",
+        message:
+          "Another version from this answer was applied to this passage. Remove it in Word, for example with Word's own Undo, then choose Replace again. Nothing was replaced.",
+      });
+  }
+}
+
 /** The message for the card's last Undo while it runs or when it did not plainly succeed. */
 function revertText(review: WordReviewState): string | undefined {
   if (review.status === "reverting")
@@ -369,6 +421,32 @@ function statusOf(
   }
 }
 
+/** A Replace whose text is, or may be, in the document. */
+const holdsPassage = (review: WordReviewState) =>
+  (review.status === "done" && review.selection?.status === "applied") ||
+  (review.status === "write-failed" &&
+    review.selection?.status === "unverified");
+
+/** Erato's Undo removes a sibling only while it still holds the single revert slot and was not
+ * refused; past that, only Word can, and Ask again stays the way forward. */
+function siblingRemovalOf(
+  key: string,
+  review: WordReviewState,
+  slot: WordRevertSlot | null,
+  identity: string | null,
+): SiblingRemoval {
+  if (review.selection?.status === "applied" && review.selection.trackingOn)
+    return "reject";
+  return slot?.selection &&
+    slot.batchKey === key &&
+    slot.identity === identity &&
+    isWordRevertOffered(slot.selection.backups.length) &&
+    !review.revertStale &&
+    !review.revertFailed
+    ? "undo"
+    : "word";
+}
+
 const isStale = (result: WordReplaceSelectionResult | undefined) =>
   result?.status === "refused" &&
   [
@@ -415,9 +493,35 @@ export function WordSelectionCard({
   const { messages } = useChatContext();
   const message = messageId ? messages[messageId] : undefined;
   const isGenerating = message?.status === "sending";
+  // Identical versions in one answer share this key and so one review: they write the same text,
+  // so each card shows the other's Replace and Undo.
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
   const review = reviews.get(batchKey) ?? EMPTY_WORD_REVIEW;
   const result = review.selection;
+  const messageCapture = messageId
+    ? capturesByAssistantMessageId.get(messageId)
+    : undefined;
+  // A version written onto a copy the user picked holds another passage, so it is not counted.
+  const sibling = useMemo(() => {
+    if (!messageId || !messageCapture) return undefined;
+    const versions = `${messageId}:${entry.action}:`;
+    for (const [key, other] of reviews)
+      if (
+        key !== batchKey &&
+        key.startsWith(versions) &&
+        other.capture === messageCapture &&
+        holdsPassage(other)
+      )
+        return { key, review: other };
+    return undefined;
+  }, [reviews, messageId, messageCapture, entry.action, batchKey]);
+  const siblingRemoval =
+    sibling &&
+    siblingRemovalOf(sibling.key, sibling.review, revertSlot, documentIdentity);
+  const severalVersions = useMemo(
+    () => countWordReplaceFences(extractTextFromContent(message?.content)) > 1,
+    [message?.content],
+  );
   const cardRef = useWordReviewFocus(
     `${review.status}:${!!review.detailsExpanded}`,
   );
@@ -425,9 +529,7 @@ export function WordSelectionCard({
   const [revertConfirmation, setRevertConfirmation] = useState(false);
   const [copyNote, setCopyNote] = useState("");
   const [actionNote, setActionNote] = useState("");
-  const capture =
-    (messageId ? capturesByAssistantMessageId.get(messageId) : undefined) ??
-    review.capture;
+  const capture = messageCapture ?? review.capture;
   const selection = wordSelectionOf(capture);
   const rewritable = rewritableWordSelection(capture);
   const enforcedAskActions = useMemo(
@@ -478,7 +580,9 @@ export function WordSelectionCard({
       enforcedAskActions,
     ],
   );
+  // With several versions the user picks one, so none is applied or opened for confirmation alone.
   const proposedAction =
+    !severalVersions &&
     artifact?.proposedClientAction &&
     (offeredActions as string[]).includes(artifact.proposedClientAction)
       ? (artifact.proposedClientAction as WordClientAction)
@@ -486,7 +590,8 @@ export function WordSelectionCard({
   const idle =
     review.status === "idle" ||
     review.status === "no-capture" ||
-    review.status === "identity-mismatch";
+    review.status === "identity-mismatch" ||
+    review.status === "reverted";
   const applying = review.status === "applying";
 
   /** Runs inside an operation the caller began, and ends it. */
@@ -496,6 +601,7 @@ export function WordSelectionCard({
         status: "applying",
         applyStage: "checking",
         capture: target,
+        refusedForSibling: undefined,
       });
       let held = false;
       try {
@@ -507,6 +613,17 @@ export function WordSelectionCard({
         const outcome = run.selectionResult;
         if (!outcome) {
           updateReview(batchKey, { status: "error", applyStage: undefined });
+          return false;
+        }
+        // Any stale refusal here comes from the sibling's write. Without paragraph IDs it shows as
+        // AMBIGUOUS_TARGET for a copy elsewhere, whose pick would write onto that copy.
+        if (sibling && target === sibling.review.capture && isStale(outcome)) {
+          updateReview(batchKey, {
+            status: "idle",
+            applyStage: undefined,
+            selection: undefined,
+            refusedForSibling: true,
+          });
           return false;
         }
         if (
@@ -562,6 +679,7 @@ export function WordSelectionCard({
       batchKey,
       entry,
       content,
+      sibling,
       holdOperationUntil,
       messageId,
       setRevertSlot,
@@ -810,10 +928,12 @@ export function WordSelectionCard({
     );
 
   const applied = result?.status === "applied" ? result : undefined;
+  const refusedRemoval = review.refusedForSibling ? siblingRemoval : undefined;
   const statusMessage =
     heldOperationOwner === batchKey
       ? notRespondingText()
       : (revertText(review) ??
+        (refusedRemoval && siblingRefusedText(refusedRemoval)) ??
         (review.status === "denied"
           ? wordDeniedText()
           : result
@@ -857,6 +977,9 @@ export function WordSelectionCard({
     result.code === "AMBIGUOUS_TARGET" &&
     gate.allowed &&
     offeredActions.length > 0;
+  const askAgain =
+    (isStale(result) && !ambiguous) ||
+    (!!refusedRemoval && refusedRemoval !== "undo");
   const revertOffered =
     !slot || isWordRevertOffered(slot.selection.backups.length);
   const showTarget = () =>
@@ -909,6 +1032,11 @@ export function WordSelectionCard({
                     "Replace writes only onto the passage you selected, and only if it is unchanged since your request.",
                 })}
               </p>
+              {siblingRemoval && !review.refusedForSibling && (
+                <p className="word-review__hint">
+                  {siblingHintText(siblingRemoval)}
+                </p>
+              )}
               {!confirmCard && (
                 <WordApplyButton
                   applying={applying}
@@ -984,7 +1112,7 @@ export function WordSelectionCard({
                 })}
               </Button>
             )}
-            {isStale(result) && !ambiguous && (
+            {askAgain && (
               <Button
                 type="button"
                 variant="secondary"

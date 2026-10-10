@@ -4347,6 +4347,36 @@ msgstr "Word hat die Passage nicht ausgewählt. Versuchen Sie es gleich noch ein
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingApplied"
+msgstr "Eine andere Version aus dieser Antwort steht im Dokument. Machen Sie sie rückgängig, um stattdessen diese zu verwenden."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingAppliedTracked"
+msgstr "Eine andere Version aus dieser Antwort steht im Dokument. Lehnen Sie sie in Word ab, um stattdessen diese zu verwenden."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingAppliedWord"
+msgstr "Eine andere Version aus dieser Antwort steht im Dokument. Entfernen Sie sie in Word, zum Beispiel mit dem Rückgängigmachen von Word, um stattdessen diese zu verwenden."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefused"
+msgstr "Eine andere Version aus dieser Antwort wurde auf diese Passage angewendet. Machen Sie sie rückgängig und wählen Sie dann erneut Ersetzen. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefusedTracked"
+msgstr "Eine andere Version aus dieser Antwort wurde auf diese Passage angewendet. Lehnen Sie sie in Word ab und wählen Sie dann erneut Ersetzen. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefusedWord"
+msgstr "Eine andere Version aus dieser Antwort wurde auf diese Passage angewendet. Entfernen Sie sie in Word, zum Beispiel mit dem Rückgängigmachen von Word, und wählen Sie dann erneut Ersetzen. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.stale"
 msgstr "Diese Passage hat sich nach Ihrer Anfrage geändert. Es wurde nichts ersetzt."
 
