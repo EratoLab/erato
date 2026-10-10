@@ -4057,6 +4057,16 @@ msgstr "Track Changes is on, so the replacement is a tracked change. Reject it i
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgain"
+msgstr "Ask again with current selection"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgainNote"
+msgstr "Your request is back in the message box. Select the passage you mean, then send."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.comparisonLabel"
 msgstr "Selection when requested → proposed replacement"
 
@@ -4337,8 +4347,8 @@ msgstr "Word may have replaced the passage, but the result could not be checked.
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
-msgid "officeAddin.word.selection.useCurrent"
-msgstr "Use current selection"
+#~ msgid "officeAddin.word.selection.useCurrent"
+#~ msgstr "Use current selection"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

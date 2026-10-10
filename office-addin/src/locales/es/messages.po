@@ -4057,6 +4057,16 @@ msgstr "El control de cambios está activado, así que el reemplazo es un cambio
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgain"
+msgstr "Volver a preguntar con la selección actual"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgainNote"
+msgstr "Tu solicitud vuelve a estar en el cuadro de mensaje. Selecciona el pasaje al que te refieres y envíala."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.comparisonLabel"
 msgstr "Selección al hacer la solicitud → reemplazo propuesto"
 
@@ -4337,8 +4347,8 @@ msgstr "Puede que Word haya reemplazado el pasaje, pero no se pudo comprobar el 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
-msgid "officeAddin.word.selection.useCurrent"
-msgstr "Usar la selección actual"
+#~ msgid "officeAddin.word.selection.useCurrent"
+#~ msgstr "Usar la selección actual"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

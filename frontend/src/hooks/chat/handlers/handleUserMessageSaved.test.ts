@@ -73,6 +73,30 @@ describe("handleUserMessageSaved", () => {
     });
   });
 
+  it("keeps the action facet the server saved, so its selection shows while the answer streams", () => {
+    seedUserMessages([
+      {
+        id: "temp-user-1",
+        content: [{ content_type: "text", text: "hello" }],
+        role: "user",
+        createdAt: "2026-07-21T09:59:59.000Z",
+        status: "sending",
+      },
+    ]);
+    const event = savedEvent();
+    Object.assign(event.message, {
+      action_facet_id: "word_selection",
+      action_facet_args: { selected_text: "The passage." },
+    });
+
+    handleUserMessageSaved(event, STREAM_KEY);
+
+    expect(userMessagesForKey()[SERVER_ID]).toMatchObject({
+      action_facet_id: "word_selection",
+      action_facet_args: { selected_text: "The passage." },
+    });
+  });
+
   it("inserts the server copy when there is no optimistic message to reconcile", () => {
     handleUserMessageSaved(savedEvent(), STREAM_KEY);
 

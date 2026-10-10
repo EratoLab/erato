@@ -196,7 +196,7 @@ describe("WordSelectionCard", () => {
     expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
   });
 
-  it("says the passage changed and lets the user ask again about the current selection", async () => {
+  it("says the passage changed and puts the request back for the current selection", async () => {
     const capture = await captureOf(host, { p: "PL1" });
     host.insertText({ p: "PL1", text: "kilo" }, "KILO");
     const { restoreRequest } = renderCard({ capture });
@@ -206,12 +206,17 @@ describe("WordSelectionCard", () => {
     );
     expect(host.paragraphs()[2].text).toContain("KILO");
     fireEvent.click(
-      screen.getByRole("button", { name: "Use current selection" }),
+      screen.getByRole("button", { name: "Ask again with current selection" }),
     );
     expect(restoreRequest).toHaveBeenCalledWith(REQUEST);
     expect(wordSelectionStore.requestRefresh).toHaveBeenCalledWith({
       rearm: true,
     });
+    expect(
+      screen.getByText(
+        "Your request is back in the message box. Select the passage you mean, then send.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("says the passage appears more than once and replaces the copy the user selects with the same proposal", async () => {
@@ -229,7 +234,9 @@ describe("WordSelectionCard", () => {
     );
     expect(host.writeSyncs()).toEqual([]);
     expect(
-      screen.queryByRole("button", { name: "Use current selection" }),
+      screen.queryByRole("button", {
+        name: "Ask again with current selection",
+      }),
     ).toBeNull();
 
     host.select({ paragraph: 3 });
@@ -284,7 +291,7 @@ describe("WordSelectionCard", () => {
     expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
   });
 
-  it("says Word could not pinpoint the passage, keeping Copy and Use current selection", async () => {
+  it("says Word could not pinpoint the passage, keeping Copy and Ask again", async () => {
     const capture = await captureOf(host, { p: "PL1", text: "lima mike" });
     host.onSearch((hits) => [...hits, ...hits]);
     const { restoreRequest } = renderCard({ capture });
@@ -297,7 +304,7 @@ describe("WordSelectionCard", () => {
       screen.getByRole("button", { name: "Copy proposal" }),
     ).toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: "Use current selection" }),
+      screen.getByRole("button", { name: "Ask again with current selection" }),
     );
     expect(restoreRequest).toHaveBeenCalledWith(REQUEST);
   });

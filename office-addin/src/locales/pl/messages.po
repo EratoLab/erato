@@ -4057,6 +4057,16 @@ msgstr "Śledzenie zmian jest włączone, więc zastąpienie jest śledzoną zmi
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgain"
+msgstr "Zapytaj ponownie z bieżącym zaznaczeniem"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.askAgainNote"
+msgstr "Twoja prośba jest z powrotem w polu wiadomości. Zaznacz fragment, o który chodzi, a następnie wyślij."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.comparisonLabel"
 msgstr "Zaznaczenie w chwili prośby → proponowane zastąpienie"
 
@@ -4337,8 +4347,8 @@ msgstr "Word mógł zastąpić fragment, ale nie udało się sprawdzić wyniku. 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
-msgid "officeAddin.word.selection.useCurrent"
-msgstr "Użyj bieżącego zaznaczenia"
+#~ msgid "officeAddin.word.selection.useCurrent"
+#~ msgstr "Użyj bieżącego zaznaczenia"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
