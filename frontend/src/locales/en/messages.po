@@ -6805,6 +6805,76 @@ msgstr "Paragraphs {paragraph}–{through}"
 msgid "wordReview.history.partial"
 msgstr "Paragraph {partialOrdinal} was only partly included in the request."
 
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.replaceComparison"
+msgstr "Selection when requested → proposed replacement"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.replaceContextOnly"
+msgstr "Word could not replace this selection, so only the proposal is shown."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.replaceLabel"
+msgstr "Proposed rewrite of a selected passage"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.replaceNotStored"
+msgstr "The selection was not stored in full, so only the proposal is shown."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordHistoryCards.tsx
+msgid "wordReview.history.replaceTitle"
+msgstr "Rewrite of the selected passage"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.bookmark"
+msgstr "bookmark"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.break"
+msgstr "line break"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.comment"
+msgstr "comment"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.control"
+msgstr "content control"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.field"
+msgstr "field"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.link"
+msgstr "link"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.note"
+msgstr "note"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.numbered"
+msgstr "item {number}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordKeptMarkerLabels.ts
+msgid "wordReview.selection.item.picture"
+msgstr "picture"
+
 # ==============================
 # Unstable IDs
 # ==============================

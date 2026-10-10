@@ -407,3 +407,4 @@ export { setWordLiveCards } from "@/components/ui/WordReview/useWordHistoryMessa
 export { useWordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 export { useWordMessageLineage } from "@/components/ui/WordReview/useWordHistoryMessage";
 export type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
+export { wordKeptMarkersLabelled } from "@/components/ui/WordReview/wordKeptMarkerLabels";
