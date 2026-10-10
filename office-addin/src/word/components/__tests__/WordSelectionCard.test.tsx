@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -101,7 +102,10 @@ function renderCard(options: {
   decisions?: Record<string, string>;
   proposed?: boolean;
   content?: string;
+  /** Several versions in one answer, each its own fence and card. */
+  versions?: string[];
 }) {
+  const versions = options.versions ?? [options.content ?? PROPOSAL];
   nextMessageId += 1;
   const messageId = `assistant-${nextMessageId}`;
   mockUseHostArtifact.mockReturnValue({
@@ -126,6 +130,17 @@ function renderCard(options: {
         id: messageId,
         role: "assistant",
         previous_message_id: "user",
+        content: [
+          {
+            content_type: "text",
+            text: versions
+              .map(
+                (version, i) =>
+                  `Version ${i + 1}:\n\n\`\`\`erato-word-replace\n${version}\n\`\`\``,
+              )
+              .join("\n\n"),
+          },
+        ],
       },
     },
     messageOrder: ["user", messageId],
@@ -141,10 +156,13 @@ function renderCard(options: {
       }
       restoreRequest={restoreRequest}
     >
-      <WordHostCardRenderer
-        language="erato-word-replace"
-        content={options.content ?? PROPOSAL}
-      />
+      {versions.map((version, i) => (
+        <WordHostCardRenderer
+          key={i}
+          language="erato-word-replace"
+          content={version}
+        />
+      ))}
     </WordWriteProvider>
   );
   const view = render(element(options.identity ?? IDENTITY), {
@@ -158,6 +176,20 @@ function renderCard(options: {
 }
 
 const replaceButton = () => screen.queryByRole("button", { name: "Replace" });
+const card = (index: number) =>
+  within(screen.getAllByTestId("word-selection-card")[index]);
+const undo = async (index: number) => {
+  fireEvent.click(card(index).getByRole("button", { name: "Undo" }));
+  fireEvent.click(card(index).getByRole("button", { name: "Restore passage" }));
+  await card(index).findByText("Undone: Rewrite of the selected passage");
+};
+
+const SHORTER = "PL1 A shorter plain paragraph.";
+const BRIEFER = "PL1 A brief plain paragraph.";
+const SIBLING_HINT =
+  "Another version from this answer is in the document. Undo it to use this one instead.";
+const SIBLING_REFUSED =
+  "Another version from this answer was applied to this passage. Undo it, then choose Replace again. Nothing was replaced.";
 
 describe("WordSelectionCard", () => {
   let host: WordSelectionHost;
@@ -604,5 +636,156 @@ describe("WordSelectionCard", () => {
     await waitFor(() => expect(host.paragraphs()[2].text).toBe(PROPOSAL));
     await screen.findByText("Replaced the selected passage.");
     expect(host.writeSyncs()).toHaveLength(1);
+  });
+
+  describe("several versions in one answer", () => {
+    it("says another version is in the document, and Replace on it writes nothing and stays available", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      renderCard({ capture, versions: [SHORTER, BRIEFER] });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText("Replaced the selected passage.");
+      expect(card(1).getByText(SIBLING_HINT)).toBeInTheDocument();
+      expect(card(0).queryByText(SIBLING_HINT)).toBeNull();
+
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText(SIBLING_REFUSED);
+      expect(host.writeSyncs()).toHaveLength(1);
+      expect(host.paragraphs()[2].text).toBe(SHORTER);
+      expect(card(1).queryByText(SIBLING_HINT)).toBeNull();
+      expect(
+        card(1).queryByRole("button", {
+          name: "Ask again with current selection",
+        }),
+      ).toBeNull();
+      expect(card(1).getByRole("button", { name: "Replace" })).toBeEnabled();
+    });
+
+    it("replaces with another version after the first one's Undo", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      renderCard({ capture, versions: [SHORTER, BRIEFER] });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText("Replaced the selected passage.");
+      await undo(0);
+      expect(card(1).queryByText(SIBLING_HINT)).toBeNull();
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText("Replaced the selected passage.");
+      expect(host.paragraphs()[2].text).toBe(BRIEFER);
+      expect(card(0).getByText(SIBLING_HINT)).toBeInTheDocument();
+    });
+
+    it("replaces with a version refused while another was in the document once that one is undone", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      renderCard({ capture, versions: [SHORTER, BRIEFER] });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText("Replaced the selected passage.");
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText(SIBLING_REFUSED);
+      await undo(0);
+      expect(card(1).queryByText(SIBLING_REFUSED)).toBeNull();
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText("Replaced the selected passage.");
+      expect(host.paragraphs()[2].text).toBe(BRIEFER);
+    });
+
+    it("points to Reject in Word under Track Changes, and replaces once the change is rejected", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      host.setTrackingMode("TrackAll");
+      renderCard({ capture, versions: [SHORTER, BRIEFER] });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText("Replaced the selected passage.");
+      expect(
+        card(1).getByText(
+          "Another version from this answer is in the document. Reject it in Word to use this one instead.",
+        ),
+      ).toBeInTheDocument();
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText(
+        "Another version from this answer was applied to this passage. Reject it in Word, then choose Replace again. Nothing was replaced.",
+      );
+      expect(host.writeSyncs()).toHaveLength(1);
+
+      host.rejectAllRevisions();
+      fireEvent.click(card(1).getByRole("button", { name: "Replace" }));
+      await card(1).findByText("Replaced the selected passage.");
+    });
+
+    it.each([
+      [1, true],
+      [2, false],
+    ] as const)(
+      "under Always allow, with %i version(s), replaces on its own: %s",
+      async (count, written) => {
+        const capture = await captureOf(host, { p: "PL1" });
+        renderCard({
+          capture,
+          versions: [SHORTER, BRIEFER].slice(0, count),
+          presentation: "auto_prompt",
+          proposed: true,
+          decisions: { [`word_selection/${REPLACE}`]: "always" },
+        });
+        if (written) {
+          await screen.findByText("Replaced the selected passage.");
+          expect(host.paragraphs()[2].text).toBe(SHORTER);
+        } else {
+          await act(() => Promise.resolve());
+          expect(host.writeSyncs()).toEqual([]);
+          expect(
+            screen.getAllByRole("button", { name: "Replace" }),
+          ).toHaveLength(2);
+        }
+      },
+    );
+
+    it.each([
+      [1, true],
+      [2, false],
+    ] as const)(
+      "under ask, with %i version(s), opens the confirmation on its own: %s",
+      async (count, opened) => {
+        const capture = await captureOf(host, { p: "PL1" });
+        renderCard({
+          capture,
+          versions: [SHORTER, BRIEFER].slice(0, count),
+          presentation: "auto_prompt",
+          proposed: true,
+        });
+        await act(() => Promise.resolve());
+        expect(!!screen.queryByTestId("confirmation-card")).toBe(opened);
+        expect(host.writeSyncs()).toEqual([]);
+      },
+    );
+
+    it("replaces again with the same version after its own Undo", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      renderCard({ capture });
+      fireEvent.click(replaceButton()!);
+      await screen.findByText("Replaced the selected passage.");
+      await undo(0);
+      fireEvent.click(replaceButton()!);
+      await screen.findByText("Replaced the selected passage.");
+      expect(host.paragraphs()[2].text).toBe(PROPOSAL);
+      expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
+    });
+
+    it("shows identical versions as one: both replaced, both undone, and the other version applies after", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      renderCard({ capture, versions: [SHORTER, SHORTER, BRIEFER] });
+      fireEvent.click(card(0).getByRole("button", { name: "Replace" }));
+      await card(0).findByText("Replaced the selected passage.");
+      expect(
+        card(1).getByText("Replaced the selected passage."),
+      ).toBeInTheDocument();
+      expect(card(2).getByText(SIBLING_HINT)).toBeInTheDocument();
+
+      await undo(1);
+      expect(
+        card(0).getByText("Undone: Rewrite of the selected passage"),
+      ).toBeInTheDocument();
+      fireEvent.click(card(2).getByRole("button", { name: "Replace" }));
+      await card(2).findByText("Replaced the selected passage.");
+      expect(host.paragraphs()[2].text).toBe(BRIEFER);
+      expect(card(0).getByText(SIBLING_HINT)).toBeInTheDocument();
+      expect(card(1).getByText(SIBLING_HINT)).toBeInTheDocument();
+    });
   });
 });

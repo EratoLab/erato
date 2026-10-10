@@ -4347,6 +4347,26 @@ msgstr "Word no seleccionó el pasaje. Inténtalo de nuevo en un momento."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingApplied"
+msgstr "Otra versión de esta respuesta está en el documento. Deshazla para usar esta en su lugar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingAppliedTracked"
+msgstr "Otra versión de esta respuesta está en el documento. Recházala en Word para usar esta en su lugar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefused"
+msgstr "Otra versión de esta respuesta se aplicó a este pasaje. Deshazla y vuelve a elegir Reemplazar. No se reemplazó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefusedTracked"
+msgstr "Otra versión de esta respuesta se aplicó a este pasaje. Recházala en Word y vuelve a elegir Reemplazar. No se reemplazó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.stale"
 msgstr "Este pasaje cambió después de tu solicitud. No se reemplazó nada."
 

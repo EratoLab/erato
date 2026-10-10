@@ -4347,6 +4347,26 @@ msgstr "Word did not select the passage. Try again in a moment."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingApplied"
+msgstr "Another version from this answer is in the document. Undo it to use this one instead."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingAppliedTracked"
+msgstr "Another version from this answer is in the document. Reject it in Word to use this one instead."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefused"
+msgstr "Another version from this answer was applied to this passage. Undo it, then choose Replace again. Nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.siblingRefusedTracked"
+msgstr "Another version from this answer was applied to this passage. Reject it in Word, then choose Replace again. Nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.stale"
 msgstr "This passage changed after your request. Nothing was replaced."
 
