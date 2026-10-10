@@ -1,4 +1,3 @@
-import { wordHostPlatform } from "./wordHostPlatform";
 import { wordParagraphId } from "./wordParagraphIds";
 import { wordParagraphAnchor } from "./wordParagraphResolver";
 import { WORD_SELECTION_TEXT_OPTIONS } from "./wordReviewLocation";
@@ -7,19 +6,28 @@ import {
   buildWordSelectionSnapshot,
   classifyWordSelection,
   WORD_SELECTION_REPLACE_SHAPES,
+  wordIdentityShows,
+  wordSelectionPartOffsets,
 } from "./wordSelectionAnchor";
-import { wordSelectionSupport } from "./wordSelectionSupport";
+import {
+  queueWordSearch,
+  searchStartsOf,
+  wordSearchable,
+  wordSearchHitAt,
+} from "./wordSelectionRange";
+import { currentWordSelectionSupport } from "./wordSelectionSupport";
 import {
   evaluateParagraphSpan,
   queueParagraphSpanChecks,
   queueWordSections,
   readWordStory,
-  wordParagraphEndsSection,
+  wordParagraphsEndingSection,
 } from "./wordSelectionTarget";
 
 import type { WordParagraphEntry } from "./wordParagraphResolver";
 import type {
   WordSelectionFacts,
+  WordSelectionHazards,
   WordSelectionOrigin,
   WordSelectionParagraphFacts,
   WordSelectionShape,
@@ -30,11 +38,14 @@ import type { WordSelectionSupport } from "./wordSelectionSupport";
 
 export const WORD_SELECTION_DESCRIBE_TIMEOUT_MS = 5_000;
 export const WORD_SELECTION_CAPTURE_TIMEOUT_MS = 15_000;
+/**
+ * Added to the capture's timeout per covered paragraph once its span checks are known to run. Word
+ * for the web takes about 0.42 s per paragraph for them, so 40 paragraphs outlast the base timeout.
+ */
+export const WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH = 500;
 
 /** Kept for the chip, which shows less. */
 const PREVIEW_MAX_CHARACTERS = 400;
-/** Desktop search throws from 300 characters (PF5). */
-const SEARCH_MAX_CHARACTERS = 255;
 
 /** What the composer chip shows of the live selection. */
 export interface WordSelectionPreview {
@@ -61,14 +72,6 @@ export interface WordSelectionPreview {
 export type WordSelectionRead<T> =
   | { status: "ok"; value: T | null }
   | { status: "failed" };
-
-export function currentWordSelectionSupport(): WordSelectionSupport {
-  const requirements = globalThis.Office?.context?.requirements;
-  return wordSelectionSupport(
-    (name, version) => requirements?.isSetSupported(name, version) ?? false,
-    wordHostPlatform(),
-  );
-}
 
 interface SelectionRead {
   selection: Word.Range;
@@ -174,18 +177,6 @@ function startsOf(haystack: string, needle: string): number[] {
   return found;
 }
 
-/** Left to right without overlap, as Word's search reports matches (PF5). */
-function searchStartsOf(haystack: string, needle: string): number[] {
-  const found: number[] = [];
-  for (
-    let at = haystack.indexOf(needle);
-    at !== -1;
-    at = haystack.indexOf(needle, at + needle.length)
-  )
-    found.push(at);
-  return found;
-}
-
 type SpanOffsets =
   | { start: number; end: number }
   /** The covered text occurs more than once in its paragraph; Word's search must tell which. */
@@ -234,13 +225,6 @@ function spanOffsets(
     : null;
 }
 
-function searchable(part: string): boolean {
-  // Word's search reads ^ as a special-character code and cannot match control characters.
-  return (
-    part.length <= SEARCH_MAX_CHARACTERS && !/[\^\u0000-\u001F]/.test(part)
-  );
-}
-
 function baseFacts(
   read: SelectionRead,
   tables: TableFacts | null,
@@ -265,12 +249,18 @@ function baseFacts(
  * codes and content-control marks, so it is read only then.
  */
 function showsDeletedText(
-  rangeTexts: readonly string[],
-  identities: readonly string[],
+  paragraphs: readonly Pick<
+    WordSelectionParagraphFacts,
+    "text" | "rangeText" | "tableNestingLevel"
+  >[],
 ): boolean {
-  return rangeTexts.some(
-    (text, i) =>
-      text.replace(/\u0005/g, "") !== identities[i].replace(/\r$/, ""),
+  return paragraphs.some(
+    (p) =>
+      !wordIdentityShows(
+        p.text,
+        p.rangeText.replace(/\u0005/g, ""),
+        p.tableNestingLevel > 0,
+      ),
   );
 }
 
@@ -361,8 +351,11 @@ export async function describeWordSelection(
         texts &&
         support.trackingMode &&
         showsDeletedText(
-          read.paragraphs.map((p) => p.text),
-          texts,
+          read.paragraphs.map((p, i) => ({
+            text: texts[i],
+            rangeText: p.text,
+            tableNestingLevel: p.tableNestingLevel,
+          })),
         )
           ? read.selection.getReviewedText("Current")
           : null;
@@ -447,8 +440,8 @@ function consecutive(
  * and, in the main story, the anchor a later Replace proves. Every read is one Word for the web
  * measured as leaving the document unchanged (preflight impact 1): a selected passage that occurs
  * more than once in its paragraph is told apart by search hits compared with the selection, not
- * by prefix ranges. The span's hazard scan and style font are rewrite checks and are not read
- * here, so the snapshot is context only. A timeout or error never yields a partial snapshot.
+ * by prefix ranges. The rewrite checks read every covered paragraph whole, and only for an
+ * enabled shape nothing else keeps context only. A timeout or error never yields a partial snapshot.
  */
 export async function captureWordSelection(
   origin: WordSelectionOrigin = "user",
@@ -457,7 +450,7 @@ export async function captureWordSelection(
 ): Promise<WordSelectionRead<WordSelectionSnapshot>> {
   const support = currentWordSelectionSupport();
   const result = await runWordGuarded(
-    async (context) => {
+    async (context, guard) => {
       if (!support.canRewrite) {
         const read = await readSelection(
           context,
@@ -497,7 +490,11 @@ export async function captureWordSelection(
       const rangeTexts = read.paragraphs.map((p) => p.text);
       let offsets = spanOffsets(read.text, rangeTexts);
       let hits: Word.RangeCollection | null = null;
-      if (offsets && "candidates" in offsets && searchable(offsets.part)) {
+      if (
+        offsets &&
+        "candidates" in offsets &&
+        wordSearchable(offsets.part, support.searchMaxCharacters)
+      ) {
         hits = read.paragraphs[0].search(offsets.part, { matchCase: true });
         hits.load("items");
       }
@@ -537,10 +534,7 @@ export async function captureWordSelection(
           };
         },
       );
-      const deleted = showsDeletedText(
-        paragraphs.map((p) => p.rangeText),
-        paragraphs.map((p) => p.text),
-      );
+      const deleted = showsDeletedText(paragraphs);
       const reviewed =
         (deleted || !span) && support.trackingMode
           ? read.selection.getReviewedText("Current")
@@ -568,8 +562,7 @@ export async function captureWordSelection(
       if (
         unchecked.role !== "context_only" ||
         unchecked.reasonCode !== "shape_not_enabled" ||
-        !enabledShapes.has(unchecked.shape) ||
-        unchecked.shape !== "paragraph"
+        !enabledShapes.has(unchecked.shape)
       )
         return buildWordSelectionSnapshot(
           facts,
@@ -577,27 +570,74 @@ export async function captureWordSelection(
           origin,
           enabledShapes,
         );
-      const checks = queueParagraphSpanChecks(read.paragraphs[0]);
+      // Every covered paragraph is checked whole, in one sync: its OOXML, controls and fields.
+      const covered = read.paragraphs;
+      guard.extendTimeout(
+        covered.length * WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+      );
+      const parts = wordSelectionPartOffsets(facts);
+      const checks = covered.map((paragraph) =>
+        queueParagraphSpanChecks(paragraph, paragraph.tableNestingLevel > 0),
+      );
       const sections = queueWordSections(context);
+      // Replace finds a part by Word's search, so the capture makes sure the hits line up now.
+      const dryRuns = parts.map((part, i) => {
+        const text = rangeTexts[i].slice(part.start, part.end);
+        return !part.whole && wordSearchable(text, support.searchMaxCharacters)
+          ? queueWordSearch(covered[i], text)
+          : null;
+      });
       await context.sync();
-      const endsSection = await wordParagraphEndsSection(
+      let searchMismatch = false;
+      for (const [i, hits] of dryRuns.entries())
+        if (
+          hits &&
+          !(await wordSearchHitAt(
+            context,
+            hits,
+            {
+              paragraph: covered[i],
+              rangeText: rangeTexts[i],
+              start: parts[i].start,
+              end: parts[i].end,
+            },
+            false,
+          ))
+        )
+          searchMismatch = true;
+      const endsSection = await wordParagraphsEndingSection(
         context,
         sections,
-        read.paragraphs[0],
+        covered,
       );
-      const spanCheck = evaluateParagraphSpan(
-        checks(),
-        read.paragraphs[0].style,
-        support,
+      const spanChecks = covered.map((paragraph, i) =>
+        evaluateParagraphSpan(
+          checks[i](),
+          paragraph.style,
+          support,
+          parts[i].whole
+            ? undefined
+            : {
+                start: parts[i].start,
+                end: parts[i].end,
+                rangeText: rangeTexts[i],
+              },
+        ),
+      );
+      const hazards: WordSelectionHazards = Object.assign(
+        {},
+        ...spanChecks.map((check) => check.hazards),
+        endsSection.some(Boolean) ? { breakOrSymbol: true } : {},
       );
       return buildWordSelectionSnapshot(
         {
           ...facts,
-          hazards: endsSection
-            ? { ...spanCheck.hazards, breakOrSymbol: true }
-            : spanCheck.hazards,
-          styleFontResolved: spanCheck.styleFontResolved,
+          hazards,
+          styleFontResolved: spanChecks.every(
+            (check) => check.styleFontResolved,
+          ),
           spanChecked: true,
+          ...(searchMismatch ? { searchMismatch } : {}),
         },
         support,
         origin,

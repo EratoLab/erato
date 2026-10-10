@@ -139,7 +139,7 @@ async function isCurrentSelection(
 
 /** Word for the web rewrites the end paragraphs of a multi-paragraph range it selects (ERMAIN-932),
  * so only known desktop hosts select across paragraphs; elsewhere the first paragraph stands in. */
-function selectsAcrossParagraphs(): boolean {
+export function selectsAcrossParagraphs(): boolean {
   const platform = wordHostPlatform();
   return platform === "PC" || platform === "Mac";
 }

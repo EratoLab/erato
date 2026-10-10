@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { wordCellParagraphOoxml } from "../../../../word/utils/wordSelectionSpan";
 import {
   installWordSelectionHost,
   SV2_MAIN_DOCUMENT,
@@ -617,6 +618,14 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
       const mx1Backup = mx1.getOoxml();
       const cellBackup = cell.getOoxml();
       await context.sync();
+      // Desktop answers with the whole row (ERMAIN-928 block 3); the cell's own paragraph is cut out.
+      expect(cellBackup.value.includes("CA2 Cell A2 text")).toBe(desktop);
+      const cellOwn = wordCellParagraphOoxml(
+        cellBackup.value,
+        1,
+        "CB2 Cell B2 text",
+      );
+      expect(cellOwn).not.toContain("CA2 Cell A2 text");
       (await firstHit(context, "MX1", "Alpha bravo")).insertText(
         "ALPHA",
         "Replace",
@@ -624,7 +633,7 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
       (await firstHit(context, "CB2", "B2")).insertText("BEE", "Replace");
       await context.sync();
       mx1.insertOoxml(mx1Backup.value, "Replace");
-      cell.insertOoxml(cellBackup.value, "Replace");
+      cell.insertOoxml(cellOwn, "Replace");
       await context.sync();
     });
     expect(
@@ -1060,10 +1069,33 @@ describe.each(HOSTS)("selection host on %s", (flavour) => {
       );
     });
 
-    it("changes nothing for a range over several paragraphs", async () => {
+    it("rewrites the end paragraphs of a range over several paragraphs the web selects or reads as OOXML", async () => {
+      const across = (se1: Word.Paragraph, se2: Word.Paragraph) =>
+        se1.getRange("Content").expandTo(se2.getRange("Content"));
+      const rewritten = desktop
+        ? ORIGINAL
+        : [
+            { text: "SE1 " },
+            { text: "hidden ", font: { hidden: true } },
+            { text: "szcs ", font: { sizeBidirectional: 14 } },
+            { text: "bcs " },
+            { text: "both ", font: { bold: true, boldBidirectional: true } },
+            { text: "size ", font: { size: 14, sizeBidirectional: 14 } },
+            { text: "rtl end." },
+          ];
       expect(
         await runsAfter((se1, _end, se2) => {
-          se1.getRange("Whole").expandTo(se2.getRange("Whole")).getOoxml();
+          across(se1, se2).getOoxml();
+        }),
+      ).toEqual(rewritten);
+      expect(
+        await runsAfter((se1, _end, se2) => {
+          across(se1, se2).select();
+        }),
+      ).toEqual(rewritten);
+      expect(
+        await runsAfter((se1, _end, se2) => {
+          across(se1, se2).load("text");
         }),
       ).toEqual(ORIGINAL);
     });

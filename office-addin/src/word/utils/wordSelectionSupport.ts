@@ -1,3 +1,5 @@
+import { wordHostPlatform } from "./wordHostPlatform";
+
 import type { WordHostPlatform } from "./wordHostPlatform";
 
 /** `Office.context.requirements.isSetSupported`, passed in so the table needs no Office host. */
@@ -28,6 +30,14 @@ export interface WordSelectionSupport {
    * (SV2:55-56). A host that is not known to be desktop is treated the same way.
    */
   picturesShiftOffsets: boolean;
+  /**
+   * Reading or selecting an expandTo range inside a paragraph leaves the document unchanged, as
+   * measured on Mac and PC. Word for the web rewrites the runs it covers (preflight impact 1), so
+   * there a passage inside a paragraph is found by Word's search alone.
+   */
+  prefixRanges: boolean;
+  /** The longest text Word's search is asked for: desktop throws from 300 characters (PF5). */
+  searchMaxCharacters: number;
   reason: "host_unsupported" | null;
 }
 
@@ -76,6 +86,19 @@ export function wordSelectionSupport(
     twinsFollowLatin: platform === "OfficeOnline",
     trackingMode,
     picturesShiftOffsets: !desktop,
+    prefixRanges: desktop,
+    // Desktop's search fails above about 255-300 characters. The web's returned the right hits up
+    // to 4,000 (block 3 webSearchProbe), but a write or select of a hit over 255 characters is not
+    // measured there, so its longer parts stay context only.
+    searchMaxCharacters: 255,
     reason: canRewrite ? null : "host_unsupported",
   };
+}
+
+export function currentWordSelectionSupport(): WordSelectionSupport {
+  const requirements = globalThis.Office?.context?.requirements;
+  return wordSelectionSupport(
+    (name, version) => requirements?.isSetSupported(name, version) ?? false,
+    wordHostPlatform(),
+  );
 }

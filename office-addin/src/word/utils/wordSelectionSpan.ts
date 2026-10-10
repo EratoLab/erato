@@ -1,5 +1,6 @@
 import type { WordSelectionHazards } from "./wordSelectionAnchor";
 import type {
+  WordSelectionEdgeFormat,
   WordSelectionFont,
   WordSelectionFontValue,
   WordSelectionRunProperty,
@@ -116,9 +117,17 @@ function onOff(element: Element | undefined): boolean | undefined {
   return value === null || !["0", "false", "off"].includes(value);
 }
 
-function packageParts(ooxml: string) {
+function parsePackage(ooxml: string): Document | null {
   const doc = new DOMParser().parseFromString(ooxml, "application/xml");
-  if (doc.getElementsByTagName("parsererror").length) return null;
+  return doc.getElementsByTagName("parsererror").length ? null : doc;
+}
+
+function packageParts(ooxml: string) {
+  const doc = parsePackage(ooxml);
+  return doc ? partsOf(doc) : null;
+}
+
+function partsOf(doc: Document) {
   const parts = Array.from(doc.getElementsByTagNameNS(PKG, "part"));
   const named = (name: string) =>
     parts.find(
@@ -334,9 +343,87 @@ function scanStructure(body: Element, hazards: WordSelectionHazards): void {
   }
 }
 
+const isW = (element: Element, name: string) =>
+  element.namespaceURI === W && element.localName === name;
+
+/**
+ * Word for Mac and Word PC answer getOoxml() of a paragraph that ends a table cell with the whole
+ * table row, every cell included, and an empty paragraph after the table. This cuts the
+ * paragraph's own w:p out of the row and drops that empty paragraph, which a restore would add to
+ * the cell, so the span checks judge, and an Undo restores, that paragraph alone, as on the web.
+ * The OOXML is returned as it is when it holds no such row, or when the last paragraph of the cell
+ * at `cellIndex` does not spell `text`; the scan then finds the table and keeps the span context
+ * only.
+ */
+export function wordCellParagraphOoxml(
+  ooxml: string,
+  cellIndex: number,
+  text: string,
+): string {
+  const doc = parsePackage(ooxml);
+  const body = doc ? partsOf(doc).body : null;
+  if (!doc || !body) return ooxml;
+  const [table, ...rest] = Array.from(body.children).filter(
+    (c) => !isW(c, "sectPr"),
+  );
+  if (!table || !isW(table, "tbl")) return ooxml;
+  if (!rest.every((c) => isW(c, "p") && c.children.length === 0)) return ooxml;
+  const rows = Array.from(table.children).filter(
+    (c) => !isW(c, "tblPr") && !isW(c, "tblGrid"),
+  );
+  if (rows.length !== 1 || !isW(rows[0], "tr")) return ooxml;
+  const cells = Array.from(rows[0].children).filter(
+    (c) => !isW(c, "trPr") && !isW(c, "tblPrEx"),
+  );
+  if (!cells.every((c) => isW(c, "tc"))) return ooxml;
+  const paragraph = cells[cellIndex]?.lastElementChild;
+  if (!paragraph || !isW(paragraph, "p")) return ooxml;
+  const runs = Array.from(paragraph.getElementsByTagNameNS(W, "r")).filter(
+    (run) => run.parentElement?.localName !== "del",
+  );
+  if (runCharacters(runs).text !== text) return ooxml;
+  body.replaceChild(paragraph, table);
+  for (const empty of rest) body.removeChild(empty);
+  const serialized = new XMLSerializer().serializeToString(doc);
+  const declaration = /^\s*<\?xml[^?]*\?>/.exec(ooxml)?.[0];
+  return declaration && !serialized.startsWith("<?xml")
+    ? declaration + serialized
+    : serialized;
+}
+
 export interface WordSelectionSpanScan {
   hazards: WordSelectionHazards;
   format: WordSelectionSpanFormat;
+  /** The direct values of the runs on either side of a slice; empty for a whole paragraph. */
+  edges: WordSelectionEdgeFormat[];
+}
+
+/** The part of a paragraph a scan formats, in paragraph.text offsets. */
+export interface WordSelectionSpanSlice {
+  start: number;
+  /** Exclusive. */
+  end: number;
+  /** paragraph.text, which the runs' text must spell exactly for the offsets to hold. */
+  rangeText: string;
+}
+
+/** Each character of the runs' text, w:tab as "\t", with the run that holds it. */
+function runCharacters(runs: readonly Element[]) {
+  const owners: number[] = [];
+  let text = "";
+  runs.forEach((run, index) => {
+    for (const child of children(run)) {
+      const piece =
+        child.localName === "t"
+          ? (child.textContent ?? "")
+          : child.localName === "tab"
+            ? "\t"
+            : "";
+      text += piece;
+      for (let k = 0; k < piece.length; k += 1) owners.push(index);
+    }
+  });
+  return { text, owners };
 }
 
 /**
@@ -344,12 +431,18 @@ export interface WordSelectionSpanScan {
  * values. The paragraph mark's properties are not part of the span. Some wrappers (a hyperlink or
  * content control around the span, a field around its result) are missing from a span's own OOXML
  * (PF3), so the object model is checked as well. An unreadable package fails closed.
+ *
+ * With a slice, the hazards still cover the whole paragraph, but the format comes from the slice's
+ * characters only, and the runs touching it are returned as its edges.
  */
-export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
+export function scanWordSelectionSpan(
+  ooxml: string,
+  slice?: WordSelectionSpanSlice,
+): WordSelectionSpanScan {
   const parts = packageParts(ooxml);
   const hazards: WordSelectionHazards = {};
   if (!parts?.body)
-    return { hazards: { unsupportedFormatting: true }, format: {} };
+    return { hazards: { unsupportedFormatting: true }, format: {}, edges: [] };
   scanStructure(parts.body, hazards);
   const runs = Array.from(parts.body.getElementsByTagNameNS(W, "r")).filter(
     (run) => run.parentElement?.localName !== "del",
@@ -359,9 +452,12 @@ export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
   );
   if (texts.some((text) => COMPLEX_SCRIPT.test(text)))
     hazards.complexScript = true;
-  const formats = runs
-    .filter((run) => children(run, "t").length > 0)
-    .map((run) => runFormat(children(run, "rPr")[0], hazards));
+  const runFormats = runs.map((run) =>
+    children(run, "t").length > 0
+      ? runFormat(children(run, "rPr")[0], hazards)
+      : null,
+  );
+  const formats = runFormats.filter((f): f is RunFormat => f !== null);
   for (const format of formats)
     if (
       twinDiffers(format.boldTwin, format.bold) ||
@@ -370,9 +466,23 @@ export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
       twinDiffers(format.csFont, format.latinFont)
     )
       hazards.complexScript = true;
+  let spanFormats = formats;
+  const edges: WordSelectionEdgeFormat[] = [];
+  if (slice) {
+    const { text, owners } = runCharacters(runs);
+    if (text !== slice.rangeText) hazards.textMismatch = true;
+    const inSlice = new Set(owners.slice(slice.start, slice.end));
+    spanFormats = runFormats.filter(
+      (f, index): f is RunFormat => f !== null && inSlice.has(index),
+    );
+    for (const at of [slice.start - 1, slice.end]) {
+      const edge = at >= 0 ? runFormats[owners[at]] : undefined;
+      if (edge) edges.push(edge.values);
+    }
+  }
   const format: WordSelectionSpanFormat = {};
   for (const property of SPAN_PROPERTIES) {
-    const value = spanProperty(formats, property);
+    const value = spanProperty(spanFormats, property);
     if (value) format[property] = value;
   }
   const mixedWithTwin = (
@@ -380,13 +490,13 @@ export function scanWordSelectionSpan(ooxml: string): WordSelectionSpanScan {
     twin: "boldTwin" | "italicTwin",
   ) =>
     format[latin]?.state === "mixed" &&
-    formats.some((f) => f[twin] !== undefined && f[twin] === f[latin]);
+    spanFormats.some((f) => f[twin] !== undefined && f[twin] === f[latin]);
   if (
     mixedWithTwin("bold", "boldTwin") ||
     mixedWithTwin("italic", "italicTwin")
   )
     hazards.complexScriptTwin = true;
-  return { hazards, format };
+  return { hazards, format, edges };
 }
 
 /**

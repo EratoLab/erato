@@ -7,6 +7,7 @@ import {
 } from "../../../test/mocks/word/selectionHost";
 import {
   scanWordSelectionSpan,
+  wordCellParagraphOoxml,
   wordSelectionStyleToggles,
 } from "../wordSelectionSpan";
 
@@ -68,7 +69,75 @@ describe.each(HOSTS)("scanWordSelectionSpan on %s", (host) => {
     );
 
   it("finds nothing in a plain paragraph", () => {
-    expect(scan({ p: "PL1" })).toEqual({ hazards: {}, format: {} });
+    expect(scan({ p: "PL1" })).toEqual({
+      hazards: {},
+      format: {},
+      edges: [],
+    });
+  });
+
+  describe("with a slice", () => {
+    const SLICED: MockSelectionDocument = {
+      body: [
+        {
+          runs: [
+            "SL first ",
+            { text: "bold", font: { bold: true } },
+            " last\twords.",
+          ],
+        },
+      ],
+    };
+    const TEXT = "SL first bold last\twords.";
+    const sliced = (start: number, end: number, rangeText = TEXT) =>
+      scanWordSelectionSpan(
+        installWordSelectionHost(SLICED, { host }).ooxml({ p: "SL" }),
+        { start, end, rangeText },
+      );
+
+    it("formats a plain word by its own runs and returns the bold run after it as an edge", () => {
+      const result = sliced(3, 9);
+      expect(result.hazards).toEqual({});
+      expect(result.format.bold).toBeUndefined();
+      expect(result.edges).toEqual([
+        {},
+        expect.objectContaining({ bold: true }),
+      ]);
+    });
+
+    it("gives a slice inside the bold run direct bold", () => {
+      expect(sliced(10, 12).format.bold).toEqual({
+        state: "direct",
+        value: true,
+      });
+    });
+
+    it("gives a slice half over the bold run mixed bold", () => {
+      expect(sliced(6, 11).format.bold).toEqual({ state: "mixed" });
+    });
+
+    it("counts a tab as one character", () => {
+      const result = sliced(18, 20);
+      expect(result.hazards).toEqual({});
+      expect(result.edges).toEqual([{}, {}]);
+    });
+
+    it("flags runs whose text does not spell the paragraph's text", () => {
+      expect(sliced(3, 9, "SL first bold last words.").hazards).toEqual({
+        textMismatch: true,
+      });
+    });
+
+    it("judges the hazards of the whole paragraph, not only the slice", () => {
+      const mixed = SV2_MAIN_DOCUMENT.body[1];
+      const result = scanWordSelectionSpan(
+        installWordSelectionHost({ body: [mixed] }, { host }).ooxml({
+          p: "MX1",
+        }),
+        { start: 0, end: 3, rangeText: "MX1" },
+      );
+      expect(result.hazards).toMatchObject({ hyperlink: true, field: true });
+    });
   });
 
   it.each([
@@ -204,5 +273,88 @@ describe("scanWordSelectionSpan on content it does not know", () => {
         pkg(`<w:p><w:pPr><w:sectPr/></w:pPr>${run("Last of a section")}</w:p>`),
       ).hazards,
     ).toEqual({ breakOrSymbol: true });
+  });
+});
+
+describe("wordCellParagraphOoxml", () => {
+  const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+  const W14 = "http://schemas.microsoft.com/office/word/2010/wordml";
+  const pkg = (body: string) =>
+    `<?xml version="1.0" standalone="yes"?><?mso-application progid="Word.Document"?><pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"><pkg:part pkg:name="/word/document.xml"><pkg:xmlData><w:document xmlns:w="${W}" xmlns:w14="${W14}"><w:body>${body}<w:sectPr><w:cols w:space="720"/></w:sectPr></w:body></w:document></pkg:xmlData></pkg:part></pkg:package>`;
+  const cell = (content: string) =>
+    `<w:tc><w:tcPr><w:tcW w:w="4500" w:type="dxa"/></w:tcPr>${content}</w:tc>`;
+  const paragraph = (text: string) =>
+    `<w:p w14:paraId="25882142"><w:r><w:t>${text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</w:t></w:r></w:p>`;
+  // Word for Mac 16.113's answer for a paragraph that ends a cell (ERMAIN-928 block 3).
+  const row = (
+    cells: string,
+    rows = 1,
+    after = '<w:p w14:paraId="7838ABCE"/>',
+  ) =>
+    pkg(
+      `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/></w:tblPr><w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid>${`<w:tr>${cells}</w:tr>`.repeat(rows)}</w:tbl>${after}`,
+    );
+  const TEXT = "CB2 Cell B2 text <b>";
+  const OWN = `<w:body>${paragraph(TEXT)}<w:sectPr>`;
+  const ROW = row(cell(paragraph("CA2 Cell A2 text")) + cell(paragraph(TEXT)));
+
+  it("cuts the cell's own paragraph out of desktop's whole row, without the empty paragraph after it", () => {
+    const own = wordCellParagraphOoxml(ROW, 1, TEXT);
+    expect(own).toMatch(/^<\?xml version="1.0" standalone="yes"\?>/);
+    expect(own).not.toContain("w:tbl");
+    expect(own).not.toContain("CA2");
+    expect(own).not.toContain("7838ABCE");
+    expect(own).toContain(OWN.replace("<b>", "&lt;b&gt;"));
+    expect(scanWordSelectionSpan(own).hazards).toEqual({});
+    expect(scanWordSelectionSpan(ROW).hazards).toEqual({
+      breakOrSymbol: true,
+    });
+  });
+
+  it("cuts the last of several paragraphs in the cell, which is the one that ends it", () => {
+    const own = wordCellParagraphOoxml(
+      row(
+        cell(paragraph("NA1 Outer cell one")) +
+          cell(paragraph("NA1b Second") + paragraph(TEXT)),
+      ),
+      1,
+      TEXT,
+    );
+    expect(own).toContain(OWN.replace("<b>", "&lt;b&gt;"));
+    expect(own).not.toContain("NA1b");
+  });
+
+  it.each([
+    ["another cell's text", ROW, 0],
+    ["a cell index past the row", ROW, 2],
+    [
+      "a cell ending in a nested table",
+      row(
+        cell(paragraph("CA2")) +
+          cell(
+            `${paragraph(TEXT)}<w:tbl><w:tr>${cell(paragraph(TEXT))}</w:tr></w:tbl>`,
+          ),
+      ),
+      1,
+    ],
+    ["two rows", row(cell(paragraph(TEXT)), 2), 0],
+    [
+      "text after the table",
+      row(cell(paragraph(TEXT)), 1, paragraph("After")),
+      0,
+    ],
+  ])("keeps the row, which the scan refuses, for %s", (_, ooxml, index) => {
+    expect(wordCellParagraphOoxml(ooxml, index, TEXT)).toBe(ooxml);
+  });
+
+  it("leaves a paragraph's own OOXML alone", () => {
+    const own = pkg(paragraph("NA1b Second paragraph in outer cell one."));
+    expect(
+      wordCellParagraphOoxml(
+        own,
+        0,
+        "NA1b Second paragraph in outer cell one.",
+      ),
+    ).toBe(own);
   });
 });

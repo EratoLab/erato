@@ -4126,9 +4126,19 @@ msgid "officeAddin.word.selection.preparing"
 msgstr "Préparation de la réécriture…"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.rangeUnproven"
+msgstr "Word n'a pas pu localiser précisément le passage dans son paragraphe. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato n'a pas pu lire votre sélection dans Word, votre message n'a donc pas été envoyé. Renvoyez-le, ou ignorez la sélection pour l'envoyer sans elle."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.cellParagraphs"
+msgstr "Sélectionnez un seul paragraphe de cette cellule du tableau pour le faire remplacer. Plusieurs paragraphes d'une même cellule servent uniquement de contexte."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4147,13 +4157,18 @@ msgstr "Cette version de Word ne peut pas remplacer un passage sélectionné."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.nestedTable"
+msgstr "Le texte d'un tableau placé dans un autre tableau sert uniquement de contexte."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato ne peut pas localiser précisément ce passage dans le document : il ne peut donc pas le remplacer en toute sécurité."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.shape"
-msgstr "Pour l'instant, Erato ne peut remplacer qu'un paragraphe entier. Sélectionnez le paragraphe entier pour qu'il soit remplacé."
+msgstr "Erato ne peut pas encore remplacer ce type de sélection. Sélectionnez du texte dans un seul paragraphe pour qu'il soit remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4168,7 +4183,7 @@ msgstr "Le texte des en-têtes, pieds de page, notes et zones de texte sert uniq
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.table"
-msgstr "Sélectionnez un paragraphe hors du tableau pour qu'il soit remplacé. Les tableaux servent uniquement de contexte."
+msgstr "Sélectionnez du texte dans une seule cellule du tableau pour le faire remplacer. Une sélection sur plusieurs cellules sert uniquement de contexte."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4234,6 +4249,11 @@ msgstr "L'annulation n'a pas été exécutée, car le suivi des modifications es
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertWarning"
 msgstr "Restaurer le passage tel qu'il était avant ce remplacement ? Rien n'est restauré s'il a changé depuis."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarningParagraphs"
+msgstr "Restaurer chaque paragraphe du passage tel qu'il était avant ce remplacement ? Rien n'est restauré si l'un d'eux a changé depuis."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

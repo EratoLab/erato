@@ -4126,9 +4126,19 @@ msgid "officeAddin.word.selection.preparing"
 msgstr "Preparando la reescritura…"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.rangeUnproven"
+msgstr "Word no pudo localizar el pasaje con exactitud dentro de su párrafo. No se reemplazó nada."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato no pudo leer tu selección en Word, así que tu mensaje no se envió. Envíalo de nuevo o descarta la selección para enviarlo sin ella."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.cellParagraphs"
+msgstr "Selecciona un solo párrafo de esta celda de la tabla para que se reemplace. Varios párrafos de una celda solo se usan como contexto."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4147,13 +4157,18 @@ msgstr "Esta versión de Word no puede reemplazar un pasaje seleccionado."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.nestedTable"
+msgstr "El texto de una tabla dentro de otra tabla solo se usa como contexto."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato no puede localizar este pasaje con exactitud en el documento, así que no puede reemplazarlo con seguridad."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.shape"
-msgstr "Por ahora Erato solo puede reemplazar un párrafo completo. Selecciona el párrafo completo para que se pueda reemplazar."
+msgstr "Erato todavía no puede reemplazar este tipo de selección. Selecciona texto dentro de un solo párrafo para que se pueda reemplazar."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4168,7 +4183,7 @@ msgstr "El texto de encabezados, pies de página, notas y cuadros de texto solo 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.table"
-msgstr "Selecciona un párrafo fuera de la tabla para que se pueda reemplazar. Las tablas solo se usan como contexto."
+msgstr "Selecciona texto en una sola celda de la tabla para que se reemplace. Una selección que abarca varias celdas solo se usa como contexto."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4234,6 +4249,11 @@ msgstr "No se ejecutó Deshacer porque el control de cambios está activado. Rec
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertWarning"
 msgstr "¿Restaurar el pasaje tal como estaba antes de este reemplazo? No se restaura nada si cambió desde entonces."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarningParagraphs"
+msgstr "¿Restaurar cada párrafo del pasaje tal como estaba antes de este reemplazo? No se restaura nada si alguno de ellos cambió desde entonces."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

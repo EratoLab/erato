@@ -1,22 +1,31 @@
 import { wordParagraphId } from "./wordParagraphIds";
 import { resolveWordParagraphs } from "./wordParagraphResolver";
 import {
+  selectsAcrossParagraphs,
   selectWordRange,
   WORD_SELECTION_TEXT_OPTIONS,
 } from "./wordReviewLocation";
 import { runWordGuarded } from "./wordRunGuard";
 import {
   resolveWordSelection,
+  WORD_SELECTION_MAX_PARAGRAPHS,
+  WORD_SELECTION_REPLACE_SHAPES,
   wordSelectionHazardReason,
+  wordSelectionPartOffsets,
+  wordSelectionParts,
 } from "./wordSelectionAnchor";
 import {
   WORD_SELECTION_TOGGLE_PROPERTIES,
+  wordSelectionEdgeOnly,
   wordSelectionTargetFormat,
 } from "./wordSelectionFormatting";
+import { buildWordSelectionRanges } from "./wordSelectionRange";
 import {
   scanWordSelectionSpan,
+  wordCellParagraphOoxml,
   wordSelectionStyleToggles,
 } from "./wordSelectionSpan";
+import { currentWordSelectionSupport } from "./wordSelectionSupport";
 
 import type {
   WordParagraphAnchor,
@@ -25,9 +34,12 @@ import type {
 import type {
   WordSelectionHazards,
   WordSelectionReplaceCode,
+  WordSelectionShape,
   WordSelectionSnapshot,
 } from "./wordSelectionAnchor";
 import type { WordSelectionTargetFormat } from "./wordSelectionFormatting";
+import type { WordSelectionRangePart } from "./wordSelectionRange";
+import type { WordSelectionSpanSlice } from "./wordSelectionSpan";
 import type { WordSelectionSupport } from "./wordSelectionSupport";
 
 export const WORD_SELECTION_SHOW_TIMEOUT_MS = 10_000;
@@ -68,12 +80,19 @@ export interface WordParagraphSpanChecks {
 /**
  * A whole paragraph's own OOXML, which is both the hazard scan's input and the Undo backup, and the
  * content controls and fields the OOXML can miss around it (PF3). All are reads Word for the web
- * leaves the document unchanged by: no range inside the paragraph is built.
+ * leaves the document unchanged by: no range inside the paragraph is built. `inCell` tells it to
+ * find which cell the paragraph is in, so its own OOXML can be cut out of a whole row.
  */
 export function queueParagraphSpanChecks(
   paragraph: Word.Paragraph,
+  inCell = false,
 ): () => WordParagraphSpanChecks {
   const ooxml = paragraph.getOoxml();
+  const cell = inCell ? paragraph.parentTableCellOrNullObject : null;
+  if (cell) {
+    cell.load("cellIndex");
+    paragraph.load("text");
+  }
   const controls = paragraph.contentControls;
   controls.load("items/id");
   const parent = paragraph.parentContentControlOrNullObject;
@@ -84,7 +103,10 @@ export function queueParagraphSpanChecks(
   const revisions = paragraph.getTrackedChanges();
   revisions.load("items/type");
   return () => ({
-    ooxml: ooxml.value,
+    ooxml:
+      cell && !cell.isNullObject
+        ? wordCellParagraphOoxml(ooxml.value, cell.cellIndex, paragraph.text)
+        : ooxml.value,
     objectHazards: {
       ...(controls.items.length > 0 || !parent.isNullObject
         ? { contentControl: true }
@@ -95,7 +117,7 @@ export function queueParagraphSpanChecks(
   });
 }
 
-/** The sections wordParagraphEndsSection reads, loaded by the caller's next sync. */
+/** The sections wordParagraphsEndingSection reads, loaded by the caller's next sync. */
 export function queueWordSections(
   context: Word.RequestContext,
 ): Word.SectionCollection {
@@ -105,29 +127,55 @@ export function queueWordSections(
 }
 
 /**
- * True when the paragraph ends a section other than the last, so its mark holds the section break:
- * an Undo, which restores the paragraph from its OOXML, could move or drop it. Word for Mac's
- * paragraph OOXML leaves that sectPr out, so it is found through the sections instead. Only a
- * document with several sections needs another sync.
+ * Per paragraph, true when it ends a section other than the last, so its mark holds the section
+ * break: an Undo, which restores the paragraph from its OOXML, could move or drop it. Word for
+ * Mac's paragraph OOXML leaves that sectPr out, so it is found through the sections instead. Only
+ * a document with several sections needs another sync, one for all the paragraphs.
  */
-export async function wordParagraphEndsSection(
+export async function wordParagraphsEndingSection(
   context: Word.RequestContext,
   sections: Word.SectionCollection,
-  paragraph: Word.Paragraph,
-): Promise<boolean> {
-  if (sections.items.length < 2) return false;
-  const whole = paragraph.getRange("Whole");
-  const relations = sections.items
+  paragraphs: readonly Word.Paragraph[],
+): Promise<boolean[]> {
+  if (sections.items.length < 2) return paragraphs.map(() => false);
+  const ends = sections.items
     .slice(0, -1)
-    .map((section) =>
-      section.body.paragraphs
-        .getLast()
-        .getRange("Whole")
-        .compareLocationWith(whole),
-    );
+    .map((section) => section.body.paragraphs.getLast().getRange("Whole"));
+  const relations = paragraphs.map((paragraph) => {
+    const whole = paragraph.getRange("Whole");
+    return ends.map((end) => end.compareLocationWith(whole));
+  });
   await context.sync();
-  return relations.some((relation) => relation.value === "Equal");
+  return relations.map((each) =>
+    each.some((relation) => relation.value === "Equal"),
+  );
 }
+
+/** A cell paragraph's table, which a write or a restore must leave with as many rows and cells. */
+export interface WordCellTable {
+  nesting: number;
+  rows: number;
+  cells: number;
+}
+
+/** Queued only. For a paragraph the caller knows to be in a table cell. */
+export function queueWordCellTable(
+  paragraph: Word.Paragraph,
+): () => WordCellTable {
+  paragraph.load("tableNestingLevel");
+  const table = paragraph.parentTableOrNullObject;
+  table.load("rowCount");
+  const rows = table.rows;
+  rows.load("items/cellCount");
+  return () => ({
+    nesting: paragraph.tableNestingLevel,
+    rows: table.rowCount,
+    cells: rows.items.reduce((sum, row) => sum + row.cellCount, 0),
+  });
+}
+
+export const sameCellTable = (a: WordCellTable, b: WordCellTable) =>
+  a.nesting === b.nesting && a.rows === b.rows && a.cells === b.cells;
 
 export interface WordParagraphSpanEvaluation {
   hazards: WordSelectionHazards;
@@ -136,18 +184,24 @@ export interface WordParagraphSpanEvaluation {
   format: WordSelectionTargetFormat | null;
 }
 
-/** The rewrite checks of one whole paragraph and the font its rewrite gets. */
+/**
+ * The rewrite checks of one paragraph and the font its rewrite gets. The hazards always cover the
+ * whole paragraph; with a slice, the font comes from the slice and the runs next to it.
+ */
 export function evaluateParagraphSpan(
   checks: WordParagraphSpanChecks,
   styleName: string,
   support: WordSelectionSupport,
+  slice?: WordSelectionSpanSlice,
 ): WordParagraphSpanEvaluation {
-  const scan = scanWordSelectionSpan(checks.ooxml);
+  const scan = scanWordSelectionSpan(checks.ooxml, slice);
   const hazards = { ...scan.hazards, ...checks.objectHazards };
-  const mixedToggle = WORD_SELECTION_TOGGLE_PROPERTIES.some(
-    (property) => scan.format[property]?.state === "mixed",
+  const needsStyle = WORD_SELECTION_TOGGLE_PROPERTIES.some(
+    (property) =>
+      scan.format[property]?.state === "mixed" ||
+      wordSelectionEdgeOnly(scan.format, scan.edges, property),
   );
-  const style = mixedToggle
+  const style = needsStyle
     ? wordSelectionStyleToggles(checks.ooxml, styleName)
     : {};
   if (!style || support.styleFontSource === null)
@@ -156,6 +210,7 @@ export function evaluateParagraphSpan(
     scan.format,
     style,
     support.bidiSetters,
+    scan.edges,
   );
   return {
     hazards: format.unresolved.length
@@ -167,18 +222,53 @@ export function evaluateParagraphSpan(
 }
 
 export type WordSelectionProof =
-  | { paragraphs: Word.Paragraph[]; positions: number[]; story: WordStoryRead }
+  | {
+      paragraphs: Word.Paragraph[];
+      positions: number[];
+      story: WordStoryRead;
+      /** Per covered paragraph, what a write targets. */
+      parts: WordSelectionRangePart[];
+    }
   | { refused: WordSelectionReplaceCode };
 
 /**
+ * A cell's paragraph only in a table at the top level, as the capture allows; a nested cell is
+ * context only, so a forced Replace must not reach it either.
+ */
+const provableNesting = (selection: WordSelectionSnapshot) =>
+  selection.paragraphs.every(
+    (p) => p.tableNestingLevel === (selection.shape === "table_cell" ? 1 : 0),
+  );
+
+/** How many paragraphs each shape this proof can build covers. */
+function provableCount(shape: WordSelectionShape, count: number): boolean {
+  switch (shape) {
+    case "paragraph":
+    case "inline":
+    case "table_cell":
+      return count === 1;
+    case "multi_paragraph":
+      return count > 1 && count <= WORD_SELECTION_MAX_PARAGRAPHS;
+    default:
+      return false;
+  }
+}
+
+/**
  * Finds the captured paragraphs again: the resolver over the live body, then their offset text.
- * Only whole paragraphs can be targeted, so no range is built inside one.
+ * A part of a paragraph is then pinpointed in it by Word's search (wordSelectionRange).
  */
 export async function proveWordSelectionTarget(
   context: Word.RequestContext,
   selection: WordSelectionSnapshot,
+  support: WordSelectionSupport = currentWordSelectionSupport(),
+  enabledShapes: ReadonlySet<WordSelectionShape> = WORD_SELECTION_REPLACE_SHAPES,
 ): Promise<WordSelectionProof> {
-  if (selection.shape !== "paragraph" || selection.paragraphs.length !== 1)
+  if (
+    !enabledShapes.has(selection.shape) ||
+    !provableCount(selection.shape, selection.paragraphs.length) ||
+    !provableNesting(selection)
+  )
     return { refused: "UNSUPPORTED_CONTENT" };
   const story = await readWordStory(context);
   const resolved = resolveWordSelection(
@@ -187,10 +277,26 @@ export async function proveWordSelectionTarget(
     story.rangeTexts,
   );
   if ("refused" in resolved) return resolved;
+  const paragraphs = resolved.positions.map(
+    (position) => story.items[position],
+  );
+  const offsets = wordSelectionPartOffsets(selection);
+  const built = await buildWordSelectionRanges(
+    context,
+    paragraphs.map((paragraph, i) => ({
+      paragraph,
+      rangeText: selection.paragraphs[i].rangeText,
+      start: offsets[i].start,
+      end: offsets[i].end,
+    })),
+    support,
+  );
+  if ("refused" in built) return built;
   return {
-    paragraphs: resolved.positions.map((position) => story.items[position]),
+    paragraphs,
     positions: resolved.positions,
     story,
+    parts: built.parts,
   };
 }
 
@@ -199,6 +305,11 @@ export interface WordTargetVerification {
     text: string;
     rangeText: string;
     style: string;
+    tableNestingLevel: number;
+    /** The built part range's text; null where the paragraph itself is the target. */
+    partText: string | null;
+    /** Read for a paragraph captured in a table cell only; null elsewhere. */
+    cellTable: WordCellTable | null;
     checks: WordParagraphSpanChecks;
   }[];
   trackingMode: string;
@@ -210,22 +321,35 @@ export interface WordTargetVerification {
  */
 export function queueTargetVerification(
   context: Word.RequestContext,
-  paragraphs: readonly Word.Paragraph[],
+  parts: readonly WordSelectionRangePart[],
+  captured: readonly { tableNestingLevel: number }[],
 ): () => WordTargetVerification {
   context.document.load("changeTrackingMode");
-  const queued = paragraphs.map((paragraph) => {
-    paragraph.load("text,style");
+  const queued = parts.map((part, i) => {
+    const { paragraph } = part;
+    paragraph.load("text,style,tableNestingLevel");
+    if (part.kind === "part") part.range.load("text");
     return {
-      paragraph,
+      part,
+      cellTable:
+        captured[i].tableNestingLevel > 0
+          ? queueWordCellTable(paragraph)
+          : null,
       text: paragraph.getText(WORD_SELECTION_TEXT_OPTIONS),
-      checks: queueParagraphSpanChecks(paragraph),
+      checks: queueParagraphSpanChecks(
+        paragraph,
+        captured[i].tableNestingLevel > 0,
+      ),
     };
   });
   return () => ({
-    paragraphs: queued.map(({ paragraph, text, checks }) => ({
+    paragraphs: queued.map(({ part, cellTable, text, checks }) => ({
       text: text.value,
-      rangeText: paragraph.text,
-      style: paragraph.style,
+      rangeText: part.paragraph.text,
+      style: part.paragraph.style,
+      tableNestingLevel: part.paragraph.tableNestingLevel,
+      partText: part.kind === "part" ? part.range.text : null,
+      cellTable: cellTable?.() ?? null,
       checks: checks(),
     })),
     trackingMode: String(context.document.changeTrackingMode),
@@ -238,6 +362,8 @@ export type WordTargetCheck =
       trackingOn: boolean;
       /** Each covered paragraph's own OOXML, for Undo. */
       backups: string[];
+      /** Per covered paragraph, its table where it is in a cell. */
+      cellTables: (WordCellTable | null)[];
     }
   | { refused: WordSelectionReplaceCode };
 
@@ -255,15 +381,30 @@ export function checkTargetVerification(
     return (
       live.text === captured.text &&
       live.rangeText === captured.rangeText &&
-      live.style === captured.styleName
+      live.style === captured.styleName &&
+      live.tableNestingLevel === captured.tableNestingLevel
     );
   });
   if (!unchanged) return { refused: "TARGET_TEXT_MISMATCH" };
   if (trackingMode !== "Off" && !/^Track/.test(trackingMode))
     return { refused: "UNSUPPORTED_CONTENT" };
+  const offsets = wordSelectionPartOffsets(selection);
+  const expected = wordSelectionParts(selection);
+  if (
+    paragraphs.some(
+      (live, i) => !offsets[i].whole && live.partText !== expected[i],
+    )
+  )
+    return { refused: "TARGET_RANGE_UNPROVEN" };
   const formats: WordSelectionTargetFormat[] = [];
-  for (const live of paragraphs) {
-    const evaluated = evaluateParagraphSpan(live.checks, live.style, support);
+  for (const [i, live] of paragraphs.entries()) {
+    const { start, end, whole } = offsets[i];
+    const evaluated = evaluateParagraphSpan(
+      live.checks,
+      live.style,
+      support,
+      whole ? undefined : { start, end, rangeText: live.rangeText },
+    );
     if (
       wordSelectionHazardReason(evaluated.hazards, [live.text], support) ||
       !evaluated.styleFontResolved ||
@@ -276,6 +417,7 @@ export function checkTargetVerification(
     formats,
     trackingOn: trackingMode !== "Off",
     backups: paragraphs.map((live) => live.checks.ooxml),
+    cellTables: paragraphs.map((live) => live.cellTable),
   };
 }
 
@@ -286,15 +428,14 @@ export type WordSelectionShowResult =
   | "unavailable";
 
 async function showResolved(
-  resolve: (context: Word.RequestContext) => Promise<Word.Paragraph | null>,
+  resolve: (context: Word.RequestContext) => Promise<Word.Range | null>,
 ): Promise<WordSelectionShowResult> {
   const result = await runWordGuarded(
     async (context, guard) => {
-      const paragraph = await resolve(context);
-      if (!paragraph) return "changed" as const;
+      const range = await resolve(context);
+      if (!range) return "changed" as const;
       guard.beforeSelect();
-      // One paragraph's own Content range: the select Word for the web leaves unchanged (ERMAIN-932).
-      await selectWordRange(context, paragraph.getRange("Content"));
+      await selectWordRange(context, range);
       return "selected" as const;
     },
     { timeoutMs: WORD_SELECTION_SHOW_TIMEOUT_MS },
@@ -307,28 +448,65 @@ const identityMatches = (
   current: string | null | undefined,
 ): boolean => !!current && expected === current;
 
+/**
+ * A part's search hit, or one paragraph's own Content range: the selects Word for the web leaves
+ * unchanged (preflight impact 1, ERMAIN-932).
+ */
+const rangeOf = (part: WordSelectionRangePart): Word.Range =>
+  part.kind === "part" ? part.range : part.paragraph.getRange("Content");
+
+/**
+ * Desktop selects from the first paragraph's part to the last's. Word for the web rewrites the end
+ * paragraphs of a range it selects across paragraphs (ERMAIN-932), so callers pass no last there
+ * and the first stands in.
+ */
+const spanOf = (first: Word.Range, last: Word.Range | null) =>
+  last ? first.expandTo(last) : first;
+
 /** Selects the passage captured at Send, once it is proven unchanged. */
 export function showWordSelection(
   selection: WordSelectionSnapshot,
   identity: string,
   currentIdentity: string | null | undefined,
+  /** Tests only: the shapes the proof accepts. */
+  enabledShapes?: ReadonlySet<WordSelectionShape>,
 ): Promise<WordSelectionShowResult> {
   if (!identityMatches(identity, currentIdentity))
     return Promise.resolve("identity-mismatch");
   return showResolved(async (context) => {
-    const proof = await proveWordSelectionTarget(context, selection);
-    return "refused" in proof ? null : proof.paragraphs[0];
+    const proof = await proveWordSelectionTarget(
+      context,
+      selection,
+      currentWordSelectionSupport(),
+      enabledShapes,
+    );
+    if ("refused" in proof) return null;
+    const { parts } = proof;
+    return spanOf(
+      rangeOf(parts[0]),
+      parts.length > 1 && selectsAcrossParagraphs()
+        ? rangeOf(parts[parts.length - 1])
+        : null,
+    );
   });
 }
 
-/** What a Replace left: the written paragraph with its text then, and its neighbours. */
+/** What a Replace left: the written paragraphs with their text then, and their neighbours. */
 export interface WordSelectionWritten {
   anchor: WordParagraphAnchor;
   /** paragraph.text right after the write. */
   rangeTexts: readonly string[];
+  /** Where the written text starts in the first paragraph's rangeText. */
+  startOffset: number;
+  /** Where it ends in the last paragraph's rangeText, exclusive. */
+  endOffset: number;
 }
 
-/** Selects the paragraph a Replace wrote, while it still holds the written text. */
+/**
+ * Selects the passage a Replace wrote, while its paragraphs still hold the written text. Where
+ * Word's search cannot pinpoint a written part again, its paragraph stands in; only a write needs
+ * the part proven.
+ */
 export function showWrittenWordSelection(
   written: WordSelectionWritten,
   identity: string,
@@ -340,9 +518,43 @@ export function showWrittenWordSelection(
     const story = await readWordStory(context);
     const resolved = resolveWordParagraphs(written.anchor, story.entries);
     if ("refused" in resolved) return null;
-    const position = resolved.positions[0];
-    return story.rangeTexts[position] === written.rangeTexts[0]
-      ? story.items[position]
-      : null;
+    const { positions } = resolved;
+    if (
+      positions.length !== written.rangeTexts.length ||
+      positions.some(
+        (position, i) => story.rangeTexts[position] !== written.rangeTexts[i],
+      )
+    )
+      return null;
+    const offsets = wordSelectionPartOffsets({
+      paragraphs: written.rangeTexts.map((rangeText) => ({ rangeText })),
+      startOffset: written.startOffset,
+      endOffset: written.endOffset,
+    });
+    const support = currentWordSelectionSupport();
+    const writtenRange = async (i: number) => {
+      const paragraph = story.items[positions[i]];
+      const built = await buildWordSelectionRanges(
+        context,
+        [
+          {
+            paragraph,
+            rangeText: written.rangeTexts[i],
+            start: offsets[i].start,
+            end: offsets[i].end,
+          },
+        ],
+        support,
+      );
+      return "refused" in built
+        ? paragraph.getRange("Content")
+        : rangeOf(built.parts[0]);
+    };
+    const first = await writtenRange(0);
+    const last =
+      positions.length > 1 && selectsAcrossParagraphs()
+        ? await writtenRange(positions.length - 1)
+        : null;
+    return spanOf(first, last);
   });
 }

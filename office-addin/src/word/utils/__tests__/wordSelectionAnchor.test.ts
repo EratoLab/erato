@@ -169,24 +169,53 @@ describe("classifyWordSelection: D-10", () => {
     });
   });
 
-  it("rewrites whole paragraphs only, keeping every other shape context only", () => {
-    expect([...WORD_SELECTION_REPLACE_SHAPES]).toEqual(["paragraph"]);
-    expect(classifyWordSelection(PARAGRAPH, MAC)).toMatchObject({
-      role: "rewrite",
-    });
-    expect(classifyWordSelection(PARAGRAPH, LTSC_2021)).toMatchObject({
+  it("rewrites every shape but a table by default", () => {
+    expect([...WORD_SELECTION_REPLACE_SHAPES]).toEqual([
+      "paragraph",
+      "inline",
+      "multi_paragraph",
+      "table_cell",
+    ]);
+    for (const selection of [PARAGRAPH, INLINE, MULTI, CELL])
+      expect(classifyWordSelection(selection, MAC)).toMatchObject({
+        role: "rewrite",
+      });
+    expect(classifyWordSelection(MULTI, LTSC_2021)).toMatchObject({
       role: "context_only",
       reasonCode: "host_unsupported",
     });
-    for (const selection of [INLINE, MULTI, CELL])
-      expect(classifyWordSelection(selection, MAC)).toMatchObject({
+    for (const selection of [MULTI, CELL])
+      expect(
+        classify(selection, MAC, new Set<WordSelectionShape>(["paragraph"])),
+      ).toMatchObject({
         role: "context_only",
         reasonCode: "shape_not_enabled",
       });
-    expect(
-      classify(INLINE, MAC, new Set<WordSelectionShape>(["paragraph"])),
-    ).toMatchObject({ role: "context_only", reasonCode: "shape_not_enabled" });
   });
+
+  it.each([
+    [
+      "several paragraphs of one cell",
+      ["r0c0", "r0c0"],
+      1,
+      "cell_multi_paragraph",
+    ],
+    ["a nested table's cell", ["r0c0"], 2, "nested_table"],
+    ["two cells", ["r0c0", "r0c1"], 1, "multi_cell"],
+  ] as const)(
+    "keeps %s context only with every shape enabled by default",
+    (_, cells, nesting, reasonCode) => {
+      const selection = inCells(
+        facts(DOC, { first: 1, last: cells.length }),
+        [...cells],
+        nesting,
+      );
+      expect(classifyWordSelection(selection, MAC)).toMatchObject({
+        role: "context_only",
+        reasonCode,
+      });
+    },
+  );
 
   it("rewrites no span whose content the capture has not checked", () => {
     expect(classify({ ...PARAGRAPH, spanChecked: undefined })).toMatchObject({
@@ -253,7 +282,7 @@ describe("classifyWordSelection: D-10", () => {
     ["\u000E", "special_character"],
     ["\u001E", "special_character"],
     ["\u001F", "special_character"],
-  ])("finds the mark %j in the span's text", (mark, reason) => {
+  ])("finds the mark %j anywhere in the span's paragraph", (mark, reason) => {
     const story = body(["Intro", `Before ${mark} inside`, "Outro"]);
     expect(reasonOf(facts(story, { first: 1 }))).toBe(reason);
     expect(
@@ -264,7 +293,42 @@ describe("classifyWordSelection: D-10", () => {
           { reviewedText: "Before" },
         ),
       ),
-    ).toBeNull();
+    ).toBe(reason);
+  });
+
+  it("keeps a span whose runs do not spell its paragraph's text context only", () => {
+    expect(reasonOf({ ...INLINE, hazards: { textMismatch: true } })).toBe(
+      "position_unknown",
+    );
+  });
+
+  it("keeps a span context only when Word's search did not line up at capture", () => {
+    expect(reasonOf({ ...INLINE, searchMismatch: true })).toBe(
+      "position_unknown",
+    );
+  });
+
+  it.each([
+    ["longer than Word's search takes", "x".repeat(256), 0, 256],
+    ["holding a tab", "Name:\tvalue", 0, 8],
+  ])(
+    "keeps a part %s context only on the web, where only one search hit can reach it",
+    (_, text, start, end) => {
+      const story = body(["Intro", `${text} and more words.`, "Outro"]);
+      const part = facts(story, { first: 1, start, end });
+      expect(reasonOf(part, WEB)).toBe("position_unknown");
+      expect(reasonOf(part, MAC)).toBeNull();
+      expect(reasonOf(part, PC)).toBeNull();
+      // The paragraph itself is the target of a whole-paragraph Replace, so no search is needed.
+      expect(reasonOf(facts(story, { first: 1 }), WEB)).toBeNull();
+    },
+  );
+
+  it("keeps a multi-paragraph selection with a long partial edge on the web context only", () => {
+    const story = body(["Intro", `${"y".repeat(300)} end.`, "Next words."]);
+    const multi = facts(story, { first: 1, last: 2, start: 2, end: 4 });
+    expect(reasonOf(multi, WEB)).toBe("position_unknown");
+    expect(reasonOf(multi, MAC)).toBeNull();
   });
 
   it("sends a whole table as context only", () => {
@@ -453,6 +517,26 @@ describe("classifyWordSelection: hosts and edges", () => {
     );
   });
 
+  it("names a section break between the paragraphs rather than the position it hides", () => {
+    const story = body([
+      "Intro",
+      "End of a section.",
+      "Next section.",
+      "Outro",
+    ]);
+    // Desktop's selection text has \f where the first paragraph's mark ends the section.
+    const across = {
+      ...facts(story, { first: 1, last: 2 }),
+      selectionText: "End of a section.\fNext section.",
+      startOffset: -1,
+      endOffset: -1,
+    };
+    expect(reasonOf(across)).toBe("special_character");
+    expect(reasonOf({ ...across, selectionText: "End of a.\rNext" })).toBe(
+      "position_unknown",
+    );
+  });
+
   it("refuses a span the model would see no text of, or Word's search could not find", () => {
     const story = body(["Intro", "Kept words here.", "x^2 grows.", "Outro"]);
     const shown = {
@@ -509,6 +593,7 @@ describe("buildWordSelectionSnapshot", () => {
           rangeText: DOC[1].text,
           index: 1,
           styleName: "Normal",
+          tableNestingLevel: 0,
         },
       ],
       startOffset: 4,

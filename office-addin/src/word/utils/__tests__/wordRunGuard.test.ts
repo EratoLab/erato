@@ -180,6 +180,38 @@ describe("runWordGuarded", () => {
     await expect(missing.settled).resolves.toBeUndefined();
   });
 
+  it("moves the deadline by an extension, but not past a timeout already reported", async () => {
+    const release = hangSync(host, 2);
+    let late: WordRunGuard | undefined;
+    const pending = runWordGuarded(
+      async (context, guard) => {
+        late = guard;
+        const paragraphs = context.document.body.paragraphs;
+        paragraphs.load("items/uniqueLocalId");
+        await context.sync();
+        guard.extendTimeout(TIMEOUT_MS);
+        await context.sync();
+        return "read";
+      },
+      { timeoutMs: TIMEOUT_MS },
+    );
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS * 1.5);
+    let outcome: string | undefined;
+    void pending.then((result) => {
+      outcome = result.outcome;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS / 2);
+    expect((await pending).outcome).toBe("timeout");
+    late?.extendTimeout(TIMEOUT_MS);
+    expect(late?.aborted).toBe(true);
+    release();
+    await (
+      await pending
+    ).settled;
+  });
+
   it("does not time out a run that settled first", async () => {
     const result = await runWordGuarded(async () => "done", {
       timeoutMs: TIMEOUT_MS,

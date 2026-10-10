@@ -32,6 +32,8 @@ describe("wordSelectionSupport", () => {
         twinsFollowLatin: false,
         trackingMode: true,
         picturesShiftOffsets: false,
+        prefixRanges: true,
+        searchMaxCharacters: 255,
         reason: null,
       });
     },
@@ -47,6 +49,8 @@ describe("wordSelectionSupport", () => {
       twinsFollowLatin: true,
       trackingMode: true,
       picturesShiftOffsets: true,
+      prefixRanges: false,
+      searchMaxCharacters: 255,
       reason: null,
     });
   });
@@ -73,6 +77,8 @@ describe("wordSelectionSupport", () => {
       twinsFollowLatin: false,
       trackingMode: false,
       picturesShiftOffsets: false,
+      prefixRanges: true,
+      searchMaxCharacters: 255,
       reason: "host_unsupported",
     });
   });
@@ -120,6 +126,7 @@ describe("wordSelectionSupport", () => {
       canRewrite: false,
       reason: "host_unsupported",
       picturesShiftOffsets: true,
+      prefixRanges: false,
       styleFontSource: "ooxml",
       twinsFollowLatin: false,
     });

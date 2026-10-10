@@ -72,9 +72,9 @@ describe("selection editing privacy", () => {
       fenceContent: `${SENTINEL} rewritten.`,
       enabledShapes: PARAGRAPHS,
     });
-    if (applied.status !== "applied" || !applied.backup)
+    if (applied.status !== "applied" || !applied.backups)
       throw new Error("not applied");
-    await revertWordSelection(applied.backup, applied.written);
+    await revertWordSelection(applied.backups, applied.written);
 
     const stop = failEverySync();
     await captureWordSelection("user", 15_000, PARAGRAPHS);
@@ -85,7 +85,99 @@ describe("selection editing privacy", () => {
       fenceContent: `${SENTINEL} again.`,
       enabledShapes: PARAGRAPHS,
     });
-    await revertWordSelection(applied.backup, applied.written);
+    await revertWordSelection(applied.backups, applied.written);
+    stop();
+
+    expect(logged().length).toBeGreaterThan(0);
+    expect(logged().filter((line) => line.includes(SENTINEL))).toEqual([]);
+  });
+
+  it("logs no document text when an inline span's range build, replace, undo or show fails", async () => {
+    const INLINE = new Set<WordSelectionShape>(["paragraph", "inline"]);
+    host.select({ paragraph: 1, text: `${SENTINEL} secret` });
+    const read = await captureWordSelection("user", 15_000, INLINE);
+    if (read.status !== "ok" || !read.value) throw new Error("no capture");
+    expect(read.value.role).toBe("rewrite");
+    const capture = emptySelectionCapture("doc", read.value);
+    const applied = await replaceWordSelection({
+      capture,
+      fenceContent: `${SENTINEL} kept`,
+      enabledShapes: INLINE,
+    });
+    if (applied.status !== "applied" || !applied.backups)
+      throw new Error("not applied");
+    await revertWordSelection(applied.backups, applied.written);
+
+    const stopSearch = host.onSearch(() => {
+      throw officeError();
+    });
+    await showWordSelection(read.value, "doc", "doc", INLINE);
+    await replaceWordSelection({
+      capture,
+      fenceContent: `${SENTINEL} again`,
+      enabledShapes: INLINE,
+    });
+    stopSearch();
+    const stop = failEverySync();
+    await showWordSelection(read.value, "doc", "doc", INLINE);
+    await replaceWordSelection({
+      capture,
+      fenceContent: `${SENTINEL} again`,
+      enabledShapes: INLINE,
+    });
+    await revertWordSelection(applied.backups, applied.written);
+    stop();
+
+    expect(logged().length).toBeGreaterThan(0);
+    expect(logged().filter((line) => line.includes(SENTINEL))).toEqual([]);
+  });
+
+  it("logs no document text when a multi-paragraph span's range build, replace, undo or show fails", async () => {
+    const ALL = new Set<WordSelectionShape>([
+      "paragraph",
+      "inline",
+      "multi_paragraph",
+      "table_cell",
+    ]);
+    host.select({
+      paragraph: 0,
+      text: "ro.",
+      to: { paragraph: 1, text: `${SENTINEL} secret` },
+    });
+    const read = await captureWordSelection("user", 15_000, ALL);
+    if (read.status !== "ok" || !read.value) throw new Error("no capture");
+    expect(read.value).toMatchObject({
+      role: "rewrite",
+      shape: "multi_paragraph",
+    });
+    const capture = emptySelectionCapture("doc", read.value);
+    const applied = await replaceWordSelection({
+      capture,
+      fenceContent: `ro.\n${SENTINEL} kept`,
+      enabledShapes: ALL,
+    });
+    if (applied.status !== "applied" || !applied.backups)
+      throw new Error("not applied");
+    await revertWordSelection(applied.backups, applied.written);
+
+    const stopSearch = host.onSearch(() => {
+      throw officeError();
+    });
+    await showWordSelection(read.value, "doc", "doc", ALL);
+    await replaceWordSelection({
+      capture,
+      fenceContent: `ro.\n${SENTINEL} again`,
+      enabledShapes: ALL,
+    });
+    stopSearch();
+    const stop = failEverySync();
+    await showWordSelection(read.value, "doc", "doc", ALL);
+    await replaceWordSelection({
+      capture,
+      fenceContent: `ro.\n${SENTINEL} again`,
+      enabledShapes: ALL,
+    });
+    await revertWordSelection(applied.backups, applied.written);
     stop();
 
     expect(logged().length).toBeGreaterThan(0);

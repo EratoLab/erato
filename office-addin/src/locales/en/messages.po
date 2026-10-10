@@ -4126,9 +4126,19 @@ msgid "officeAddin.word.selection.preparing"
 msgstr "Preparing rewrite…"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.rangeUnproven"
+msgstr "Word could not pinpoint the passage inside its paragraph. Nothing was replaced."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.cellParagraphs"
+msgstr "Select one paragraph in this table cell to have it replaced. Several paragraphs in one cell are only used as context."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4147,13 +4157,18 @@ msgstr "This version of Word cannot replace a selected passage."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.nestedTable"
+msgstr "Text in a table inside another table is only used as context."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato cannot pinpoint this passage in the document, so it cannot replace it safely."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.shape"
-msgstr "Erato can only replace a whole paragraph so far. Select the whole paragraph to have it replaced."
+msgstr "Erato cannot replace this kind of selection yet. Select text within one paragraph to have it replaced."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4168,7 +4183,7 @@ msgstr "Text in headers, footers, notes and text boxes is only used as context."
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.table"
-msgstr "Select one paragraph outside the table to have it replaced. Tables are only used as context."
+msgstr "Select text in one table cell to have it replaced. A selection across several cells is only used as context."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4234,6 +4249,11 @@ msgstr "Undo was not run because Track Changes is on. Reject the change in Word 
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertWarning"
 msgstr "Restore the passage as it was before this Replace? Nothing is restored if it changed since."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarningParagraphs"
+msgstr "Restore every paragraph of the passage as it was before this Replace? Nothing is restored if any of them changed since."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

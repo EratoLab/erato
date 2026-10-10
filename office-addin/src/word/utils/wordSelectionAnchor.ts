@@ -2,6 +2,7 @@ import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
 import { resolveWordParagraphs } from "./wordParagraphResolver";
 import { fitWordSelectionText } from "./wordSelectionArgs";
 import { WORD_CONTROL_CHARACTER } from "./wordSelectionEdit";
+import { searchStartsOf, wordSearchable } from "./wordSelectionRange";
 import {
   fitsActionFacetArg,
   utf8ByteLength,
@@ -42,7 +43,12 @@ export const WORD_SELECTION_CONTEXT_BYTES = 4_096;
  * host; until then an otherwise eligible selection is sent as context only.
  */
 export const WORD_SELECTION_REPLACE_SHAPES: ReadonlySet<WordSelectionShape> =
-  new Set<WordSelectionShape>(["paragraph"]);
+  new Set<WordSelectionShape>([
+    "paragraph",
+    "inline",
+    "multi_paragraph",
+    "table_cell",
+  ]);
 
 /** Why a selection is sent as context only; the card maps each code to its own V2-4 message. */
 export const WORD_SELECTION_REASON_CODES = [
@@ -87,6 +93,8 @@ export const WORD_SELECTION_REPLACE_CODES = [
   "UNSUPPORTED_CONTENT",
   "PARAGRAPH_COUNT_MISMATCH",
   "INVALID_REPLACEMENT",
+  /** The paragraph is proven, but Word's search could not pinpoint the passage inside it. */
+  "TARGET_RANGE_UNPROVEN",
   "UNVERIFIED_AFTER_WRITE",
 ] as const;
 
@@ -141,6 +149,8 @@ export interface WordSelectionHazards {
    * plain text (an equation, a bookmark, ruby text, a permission range).
    */
   breakOrSymbol?: boolean;
+  /** The runs' text does not spell paragraph.text, so offsets into it cannot be mapped onto runs. */
+  textMismatch?: boolean;
 }
 
 export interface WordSelectionFacts {
@@ -174,6 +184,11 @@ export interface WordSelectionFacts {
   /** A tracked Range was kept as a hint (desktop only). */
   trackedRange?: boolean;
   /**
+   * Word's search hits for a covered part did not line up with the paragraph text's matches at
+   * capture, so Replace could not pinpoint the part either.
+   */
+  searchMismatch?: boolean;
+  /**
    * The selection's getReviewedText("Current"), without tracked deletions. The model is sent this
    * when paragraph.text holds text that getText leaves out, as on PC and the web.
    */
@@ -187,6 +202,8 @@ export interface WordSelectionParagraph {
   /** A hint only: a paragraph inserted above moves it without changing the target. */
   index: number;
   styleName: string;
+  /** 0 outside tables. */
+  tableNestingLevel: number;
 }
 
 export interface WordSelectionSnapshot {
@@ -242,12 +259,11 @@ const STORIES: Readonly<Record<string, WordSelectionStory>> = {
 /** The covered part of each paragraph's rangeText. */
 function coveredParts(
   paragraphs: readonly { rangeText: string }[],
-  start: number,
-  end: number,
+  startOffset: number,
+  endOffset: number,
 ): string[] {
-  const last = paragraphs.length - 1;
-  return paragraphs.map((p, i) =>
-    p.rangeText.slice(i === 0 ? start : 0, i === last ? end : undefined),
+  return wordSelectionPartOffsets({ paragraphs, startOffset, endOffset }).map(
+    ({ start, end }, i) => paragraphs[i].rangeText.slice(start, end),
   );
 }
 
@@ -257,6 +273,28 @@ export function wordSelectionParts(selection: WordSelectionSnapshot): string[] {
     selection.startOffset,
     selection.endOffset,
   );
+}
+
+export interface WordSelectionPartOffsets {
+  start: number;
+  /** Exclusive. */
+  end: number;
+  /** The part is the paragraph's whole text, so the paragraph itself is the target. */
+  whole: boolean;
+}
+
+/** Where each covered paragraph's part lies in its rangeText. */
+export function wordSelectionPartOffsets(selection: {
+  paragraphs: readonly { rangeText: string }[];
+  startOffset: number;
+  endOffset: number;
+}): WordSelectionPartOffsets[] {
+  const last = selection.paragraphs.length - 1;
+  return selection.paragraphs.map((p, i) => {
+    const start = i === 0 ? selection.startOffset : 0;
+    const end = i === last ? selection.endOffset : p.rangeText.length;
+    return { start, end, whole: start === 0 && end === p.rangeText.length };
+  });
 }
 
 function offsetsValid(facts: WordSelectionFacts): boolean {
@@ -272,21 +310,6 @@ function offsetsValid(facts: WordSelectionFacts): boolean {
     end <= last.rangeText.length &&
     (paragraphs.length > 1 || start <= end)
   );
-}
-
-/** Non-overlapping, left to right, as Word's search reports matches; -1 when none starts at the offset. */
-function occurrenceAt(haystack: string, needle: string, offset: number) {
-  if (needle === "") return -1;
-  let count = 0;
-  for (
-    let at = haystack.indexOf(needle);
-    at !== -1 && at <= offset;
-    at = haystack.indexOf(needle, at + needle.length)
-  ) {
-    if (at === offset) return count;
-    count += 1;
-  }
-  return -1;
 }
 
 interface Analysis {
@@ -327,8 +350,11 @@ function analyse(facts: WordSelectionFacts): Analysis {
     text,
     shape,
     story: STORIES[facts.storyType] ?? "other",
+    // -1 when no match of Word's search starts at the offset, as inside an overlapping repeat.
     occurrence: parts
-      ? occurrenceAt(paragraphs[0].rangeText, parts[0], facts.startOffset)
+      ? searchStartsOf(paragraphs[0].rangeText, parts[0]).indexOf(
+          facts.startOffset,
+        )
       : -1,
   };
 }
@@ -390,6 +416,7 @@ export function wordSelectionHazardReason(
       !support.twinsFollowLatin)
   )
     return "complex_script_format";
+  if (hazards.textMismatch) return "position_unknown";
   return null;
 }
 
@@ -413,13 +440,24 @@ function contextOnlyReason(
     return "too_many_paragraphs";
   if (!fitsActionFacetArg(analysis.text)) return "too_large";
   if (!enabledShapes.has(shape)) return "shape_not_enabled";
+  // Desktop's selection text holds a section or page break (\f) where its paragraph texts have
+  // none, so the offsets cannot be placed; the mark, not the position, is the reason.
+  const marked = parts
+    ? null
+    : wordSelectionHazardReason({}, [facts.selectionText], support);
+  if (marked) return marked;
   if (!parts || !anchor || !anchorMatches(facts)) return "position_unknown";
   if (
     shape === "multi_paragraph" &&
     (parts[0] === "" || parts[parts.length - 1] === "")
   )
     return "empty_edge_paragraph";
-  const hazard = wordSelectionHazardReason(facts.hazards, parts, support);
+  // A mark anywhere in a covered paragraph counts: the span checks judge whole paragraphs too.
+  const hazard = wordSelectionHazardReason(
+    facts.hazards,
+    paragraphs.map((p) => p.rangeText),
+    support,
+  );
   if (hazard) return hazard;
   if (facts.pictureBeforeSpan && support.picturesShiftOffsets)
     return "web_picture_offset";
@@ -437,6 +475,17 @@ function contextOnlyReason(
     return "position_unknown";
   // Word's search reads ^ as a special-character code, so it could not find the span again.
   if (analysis.text.includes("^")) return "position_unknown";
+  // Word for the web finds a part of a paragraph only as one search hit for its whole text.
+  if (
+    !support.prefixRanges &&
+    wordSelectionPartOffsets(facts).some(
+      (offsets, i) =>
+        !offsets.whole &&
+        !wordSearchable(parts[i], support.searchMaxCharacters),
+    )
+  )
+    return "position_unknown";
+  if (facts.searchMismatch) return "position_unknown";
   // Capture step 6: without a unique text window, only a hint can find the paragraphs again.
   if (
     anchor.window === null &&
@@ -493,8 +542,24 @@ function keepUtf8Tail(value: string, maxBytes: number): string {
 
 const present = (text: string | null): text is string => text !== null;
 
-/** Desktop's getText ends a paragraph's identity text with its mark. */
-const withoutMark = (text: string) => text.replace(/\r$/, "");
+/**
+ * Whether a paragraph's identity text (getText) is exactly `visible`. Desktop's ends with the
+ * paragraph mark, or with "\t" for the paragraph that ends a table cell; the web's has no mark.
+ */
+export function wordIdentityShows(
+  identity: string,
+  visible: string,
+  inCell: boolean,
+): boolean {
+  return (
+    identity === visible ||
+    identity === `${visible}\r` ||
+    (inCell && identity === `${visible}\t`)
+  );
+}
+
+/** A neighbour's identity text for the model's context, without desktop's paragraph or cell mark. */
+const withoutMark = (text: string) => text.replace(/[\r\t]$/, "");
 
 /**
  * The paragraph's offset text with its comment marks removed, when that equals the identity text;
@@ -502,7 +567,9 @@ const withoutMark = (text: string) => text.replace(/\r$/, "");
  */
 function visibleOffsetText(p: WordSelectionParagraphFacts): string | null {
   const visible = p.rangeText.replace(/\u0005/g, "");
-  return visible === withoutMark(p.text) ? visible : null;
+  return wordIdentityShows(p.text, visible, p.tableNestingLevel > 0)
+    ? visible
+    : null;
 }
 
 const removeCommentMarks = (text: string) => text.replace(/\u0005/g, "");
@@ -585,12 +652,13 @@ export function buildWordSelectionSnapshot(
     truncated: fitted.truncated,
     paragraphCount: facts.paragraphs.length || analysis.text.split("\n").length,
     paragraphs: facts.paragraphs.map(
-      ({ id, text, rangeText, index, styleName }) => ({
+      ({ id, text, rangeText, index, styleName, tableNestingLevel }) => ({
         id,
         text,
         rangeText,
         index,
         styleName,
+        tableNestingLevel,
       }),
     ),
     startOffset: facts.startOffset,

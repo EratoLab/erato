@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { utf8ByteLength } from "../../../core/clientActions/actionFacetArgs";
 import { wordParagraphAnchor } from "../wordParagraphResolver";
+import { buildWordSelectionSnapshot } from "../wordSelectionAnchor";
 import {
   fitWordSelectionText,
   WORD_SELECTION_ARG_KEYS,
   wordSelectionFacetArgs,
 } from "../wordSelectionArgs";
+import { wordSelectionSupport } from "../wordSelectionSupport";
 
 import type { WordSelectionSnapshot } from "../wordSelectionAnchor";
 
@@ -27,8 +29,20 @@ const SELECTION: WordSelectionSnapshot = {
   truncated: false,
   paragraphCount: 2,
   paragraphs: [
-    { ...story[1], rangeText: story[1].text, index: 1, styleName: "Heading 1" },
-    { ...story[2], rangeText: story[2].text, index: 2, styleName: "Normal" },
+    {
+      ...story[1],
+      rangeText: story[1].text,
+      index: 1,
+      styleName: "Heading 1",
+      tableNestingLevel: 0,
+    },
+    {
+      ...story[2],
+      rangeText: story[2].text,
+      index: 2,
+      styleName: "Normal",
+      tableNestingLevel: 0,
+    },
   ],
   startOffset: 0,
   endOffset: 9,
@@ -96,6 +110,95 @@ describe("wordSelectionFacetArgs", () => {
     ).toMatchObject({
       selection_role: "context_only",
       context_reason: "hyperlink",
+    });
+  });
+
+  it("offers a passage inside one paragraph for rewriting", () => {
+    const text = "The quick brown fox.";
+    const inline = buildWordSelectionSnapshot(
+      {
+        isEmpty: false,
+        storyType: "MainDoc",
+        selectionText: "quick",
+        objectOnly: false,
+        tables: "none",
+        paragraphs: [
+          {
+            id: "p1",
+            text,
+            rangeText: text,
+            index: 1,
+            styleName: "Normal",
+            tableNestingLevel: 0,
+            cell: null,
+          },
+        ],
+        startOffset: 4,
+        endOffset: 9,
+        anchor: wordParagraphAnchor(
+          [story[0], { id: "p1", text }, story[2]],
+          1,
+          1,
+        ),
+        hazards: {},
+        pictureBeforeSpan: false,
+        styleFontResolved: true,
+        spanChecked: true,
+      },
+      wordSelectionSupport(() => true, "Mac"),
+      "user",
+    );
+    if (!inline) throw new Error("no snapshot");
+    expect(args(inline)).toMatchObject({
+      selected_text: "quick",
+      selection_role: "rewrite",
+      context_reason: "",
+      selection_shape: "inline",
+    });
+  });
+
+  it.each([
+    [
+      "several paragraphs",
+      [null, null],
+      "multi_paragraph",
+      "Heading text\nBody",
+    ],
+    ["one table cell", ["r0c0"], "table_cell", "Heading text"],
+  ] as const)("offers %s for rewriting", (_, cells, shape, selectedText) => {
+    const covered = cells.map((cell, i) => ({
+      ...story[i + 1],
+      rangeText: story[i + 1].text,
+      index: i + 1,
+      styleName: "Normal",
+      tableNestingLevel: cell ? 1 : 0,
+      cell,
+    }));
+    const snapshot = buildWordSelectionSnapshot(
+      {
+        isEmpty: false,
+        storyType: "MainDoc",
+        selectionText: selectedText.replaceAll("\n", "\r"),
+        objectOnly: false,
+        tables: cells[0] ? "partial" : "none",
+        paragraphs: covered,
+        startOffset: 0,
+        endOffset: covered.length > 1 ? 4 : covered[0].rangeText.length,
+        anchor: wordParagraphAnchor(story, 1, covered.length),
+        hazards: {},
+        pictureBeforeSpan: false,
+        styleFontResolved: true,
+        spanChecked: true,
+      },
+      wordSelectionSupport(() => true, "Mac"),
+      "user",
+    );
+    if (!snapshot) throw new Error("no snapshot");
+    expect(args(snapshot)).toMatchObject({
+      selected_text: selectedText,
+      selection_role: "rewrite",
+      context_reason: "",
+      selection_shape: shape,
     });
   });
 

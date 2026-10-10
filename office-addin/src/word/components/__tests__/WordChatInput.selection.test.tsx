@@ -156,7 +156,7 @@ describe("WordChatInput with a Word selection", () => {
     wordSelectionStore.resetForTests();
   });
 
-  it("shows the selection and sends it as context with the word_selection facet", async () => {
+  it("shows the selection and sends it with the word_selection facet", async () => {
     await renderInput();
     expect(chip()?.textContent).toContain("lima mike");
     expect(chip()?.textContent).toContain("Selected passage · 1 paragraph");
@@ -169,8 +169,8 @@ describe("WordChatInput with a Word selection", () => {
         id: "word_selection",
         args: expect.objectContaining({
           selected_text: "lima mike",
-          selection_role: "context_only",
-          context_reason: "shape_not_enabled",
+          selection_role: "rewrite",
+          context_reason: "",
           selection_shape: "inline",
           paragraph_count: "1",
           document_identity: IDENTITY,
@@ -204,6 +204,7 @@ describe("WordChatInput with a Word selection", () => {
   });
 
   it("keeps sending the included document, and says the selection is not sent", async () => {
+    word.select({ table: 0, tableWhole: true });
     await renderInput();
     fireEvent.click(screen.getByTestId("word-include-document-chip"));
     expect(chip()?.textContent).toContain(
@@ -234,6 +235,51 @@ describe("WordChatInput with a Word selection", () => {
     });
     expect(host.capture).not.toHaveBeenCalled();
   });
+
+  it("sends a passage inside a paragraph instead of the included document", async () => {
+    await renderInput();
+    fireEvent.click(screen.getByTestId("word-include-document-chip"));
+    expect(chip()?.textContent).toContain(
+      "If this passage can be replaced, it is sent instead of the document.",
+    );
+    send();
+    const result = await prepared();
+    expect(result?.actionFacet).toMatchObject({
+      id: "word_selection",
+      args: {
+        selected_text: "lima mike",
+        selection_role: "rewrite",
+        selection_shape: "inline",
+      },
+    });
+    expect(host.capture).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "several paragraphs",
+      { p: "MP1", text: "whiskey.", to: { p: "MP2", text: "MP2 Multi" } },
+      "multi_paragraph",
+    ],
+    ["a table cell", { table: 0, cell: [1, 1] }, "table_cell"],
+  ] as const)(
+    "sends %s Erato can replace instead of the included document",
+    async (_, target, shape) => {
+      word.select(target);
+      await renderInput();
+      fireEvent.click(screen.getByTestId("word-include-document-chip"));
+      expect(chip()?.textContent).toContain(
+        "If this passage can be replaced, it is sent instead of the document.",
+      );
+      send();
+      const result = await prepared();
+      expect(result?.actionFacet).toMatchObject({
+        id: "word_selection",
+        args: { selection_role: "rewrite", selection_shape: shape },
+      });
+      expect(host.capture).not.toHaveBeenCalled();
+    },
+  );
 
   it("sends the document when the paragraph turns out to be context only", async () => {
     word.select({ p: "MX1" });

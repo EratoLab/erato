@@ -83,6 +83,113 @@ describe("resolveWordParagraphs", () => {
     expect(resolveWordParagraphs(anchor, live)).toEqual({ refused: "changed" });
   });
 
+  it("refuses when the ID moved onto an identical copy inserted after the target", () => {
+    const anchor = wordParagraphAnchor(body(["A", "Target", "B"]), 1, 1);
+    const live = [
+      { id: "id-1", text: "A" },
+      { id: "fresh", text: "Target" },
+      { id: "id-2", text: "Target" },
+      { id: "id-3", text: "B" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({
+      refused: "ambiguous",
+    });
+  });
+
+  it("refuses the first paragraph of a span whose ID moved onto a copy below it", () => {
+    const anchor = wordParagraphAnchor(body(["A", "One", "Two", "B"]), 1, 2);
+    const live = [
+      { id: "id-1", text: "A" },
+      { id: "fresh", text: "One" },
+      { id: "id-2", text: "One" },
+      { id: "id-3", text: "Two" },
+      { id: "id-4", text: "B" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({
+      refused: "ambiguous",
+    });
+  });
+
+  it("keeps the ID when the copy goes below the target or the twin above was there at capture", () => {
+    const below = wordParagraphAnchor(body(["A", "Target", "B"]), 1, 1);
+    expect(
+      resolveWordParagraphs(below, [
+        { id: "id-1", text: "A" },
+        { id: "id-2", text: "Target" },
+        { id: "copy", text: "Target" },
+        { id: "id-3", text: "B" },
+      ]),
+    ).toEqual({ positions: [1] });
+    const twins = body(["A", "Same", "Same", "B"]);
+    expect(
+      resolveWordParagraphs(wordParagraphAnchor(twins, 2, 2), twins),
+    ).toEqual({ positions: [2] });
+  });
+
+  it("refuses an ID that moved onto a copy below a twin that was there at capture", () => {
+    const anchor = wordParagraphAnchor(body(["A", "Same", "Same", "B"]), 2, 2);
+    const live = [
+      { id: "id-1", text: "A" },
+      { id: "id-2", text: "Same" },
+      { id: "fresh", text: "Same" },
+      { id: "id-3", text: "Same" },
+      { id: "id-4", text: "B" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({
+      refused: "ambiguous",
+    });
+  });
+
+  it.each(["", "Copy:"])(
+    "refuses an ID that moved two paragraphs down onto a copy, past %j",
+    (between) => {
+      const anchor = wordParagraphAnchor(body(["BK04", "BK05", "BK06"]), 1, 1);
+      const live = [
+        { id: "id-1", text: "BK04" },
+        { id: "y", text: "BK05" },
+        { id: "z", text: between },
+        { id: "id-2", text: "BK05" },
+        { id: "id-3", text: "BK06" },
+      ];
+      expect(resolveWordParagraphs(anchor, live)).toEqual({
+        refused: "ambiguous",
+      });
+    },
+  );
+
+  it("keeps the ID with a twin further up only while the context above is unchanged", () => {
+    const doc = body(["Same", "A", "B", "C", "Same", "D"]);
+    const anchor = wordParagraphAnchor(doc, 4, 4);
+    expect(resolveWordParagraphs(anchor, doc)).toEqual({ positions: [4] });
+    expect(
+      resolveWordParagraphs(anchor, [
+        ...doc.slice(0, 5),
+        { id: "copy", text: "Same" },
+        doc[5],
+      ]),
+    ).toEqual({ positions: [4] });
+    expect(
+      resolveWordParagraphs(anchor, [
+        ...doc.slice(0, 3),
+        { id: "id-4", text: "C edited" },
+        ...doc.slice(4),
+      ]),
+    ).toEqual({ refused: "ambiguous" });
+  });
+
+  it("refuses an ID that two live paragraphs share", () => {
+    const anchor = wordParagraphAnchor(body(["A", "Target", "B"]), 1, 1);
+    const live = [
+      { id: "id-1", text: "A" },
+      { id: "id-2", text: "Target" },
+      { id: "id-3", text: "B" },
+      { id: "id-2", text: "Target" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({
+      refused: "ambiguous",
+    });
+  });
+
   it("tells repeated text apart by its neighbours when there are no IDs", () => {
     const doc = body(["P", "Same", "N", "Q", "Same", "R"], false);
     const anchor = wordParagraphAnchor(doc, 4, 4);
@@ -195,14 +302,24 @@ function referenceResolve(
     const positions = anchor.paragraphs.map((p) =>
       live.findIndex((l) => l.id === p.id),
     );
-    if (positions.every((p) => p >= 0))
-      return positions.every(
-        (p, i) =>
-          (i === 0 || p === positions[i - 1] + 1) &&
-          live[p].text === anchor.paragraphs[i].text,
+    if (positions.every((p) => p >= 0)) {
+      if (
+        !positions.every(
+          (p, i) =>
+            (i === 0 || p === positions[i - 1] + 1) &&
+            live[p].text === anchor.paragraphs[i].text,
+        )
       )
-        ? { positions }
-        : { refused: "changed" };
+        return { refused: "changed" };
+      const first = positions[0];
+      const text = anchor.paragraphs[0].text;
+      const twin = live.some((l, i) => i < first && l.text === text);
+      const at = (index: number) => (index < 0 ? null : live[index].text);
+      const context = anchor.before.every(
+        (expected, k) => at(first - 1 - k) === expected,
+      );
+      return twin && !context ? { refused: "ambiguous" } : { positions };
+    }
   }
   if (anchor.window === null) return { refused: "ambiguous" };
   const texts = live.map((p) => p.text);

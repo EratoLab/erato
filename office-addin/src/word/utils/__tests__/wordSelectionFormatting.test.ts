@@ -127,6 +127,43 @@ describe("wordSelectionTargetFormat", () => {
     ).toEqual({ bold: true });
   });
 
+  it("sets a toggle the span leaves alone but a run next to it sets to the style's value", () => {
+    expect(
+      wordSelectionTargetFormat({}, STYLE, false, [{}, { bold: true }]),
+    ).toEqual({ font: { bold: false }, unresolved: [] });
+    expect(
+      wordSelectionTargetFormat({}, STYLE, true, [{ italic: true }]),
+    ).toEqual({
+      font: { italic: false, italicBidirectional: false },
+      unresolved: [],
+    });
+  });
+
+  it.each(WORD_SELECTION_VALUE_PROPERTIES)(
+    "leaves %s unresolved when only a run next to the span sets it",
+    (property) => {
+      expect(
+        wordSelectionTargetFormat({}, STYLE, false, [
+          { [property]: "#C00000" },
+        ]),
+      ).toEqual({ font: {}, unresolved: [property] });
+    },
+  );
+
+  it("lets the span's own direct value win over its edges", () => {
+    expect(
+      wordSelectionTargetFormat(
+        {
+          bold: { state: "direct", value: true },
+          color: { state: "direct", value: "#C00000" },
+        },
+        STYLE,
+        false,
+        [{ bold: false, color: "#0000FF" }],
+      ),
+    ).toEqual({ font: { bold: true, color: "#C00000" }, unresolved: [] });
+  });
+
   it("reports mixed toggles the style gives no value for", () => {
     expect(
       wordSelectionTargetFormat(

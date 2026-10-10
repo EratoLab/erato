@@ -4126,9 +4126,19 @@ msgid "officeAddin.word.selection.preparing"
 msgstr "Umformulierung wird vorbereitet…"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.rangeUnproven"
+msgstr "Word konnte die Passage in ihrem Absatz nicht genau finden. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato konnte Ihre Auswahl in Word nicht lesen, daher wurde Ihre Nachricht nicht gesendet. Senden Sie sie erneut oder verwerfen Sie die Auswahl, um ohne sie zu senden."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.cellParagraphs"
+msgstr "Wählen Sie einen einzelnen Absatz in dieser Tabellenzelle aus, damit er ersetzt werden kann. Mehrere Absätze in einer Zelle werden nur als Kontext verwendet."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4147,13 +4157,18 @@ msgstr "Diese Word-Version kann keine ausgewählte Passage ersetzen."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.nestedTable"
+msgstr "Text in einer Tabelle innerhalb einer anderen Tabelle wird nur als Kontext verwendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato kann diese Passage im Dokument nicht eindeutig finden und sie daher nicht sicher ersetzen."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.shape"
-msgstr "Erato kann bisher nur einen ganzen Absatz ersetzen. Wählen Sie den ganzen Absatz aus, damit er ersetzt werden kann."
+msgstr "Erato kann diese Art von Auswahl noch nicht ersetzen. Wählen Sie Text innerhalb eines Absatzes aus, damit er ersetzt werden kann."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4168,7 +4183,7 @@ msgstr "Text in Kopf- und Fußzeilen, Fußnoten und Textfeldern wird nur als Kon
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.table"
-msgstr "Wählen Sie einen Absatz außerhalb der Tabelle aus, damit er ersetzt werden kann. Tabellen werden nur als Kontext verwendet."
+msgstr "Wählen Sie Text in einer einzelnen Tabellenzelle aus, damit er ersetzt werden kann. Eine Auswahl über mehrere Zellen wird nur als Kontext verwendet."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4234,6 +4249,11 @@ msgstr "Rückgängig wurde nicht ausgeführt, weil die Änderungsnachverfolgung 
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.revertWarning"
 msgstr "Die Passage so wiederherstellen, wie sie vor diesem Ersetzen war? Es wird nichts wiederhergestellt, wenn sie sich seitdem geändert hat."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.revertWarningParagraphs"
+msgstr "Jeden Absatz der Passage so wiederherstellen, wie er vor diesem Ersetzen war? Es wird nichts wiederhergestellt, wenn sich einer davon seitdem geändert hat."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

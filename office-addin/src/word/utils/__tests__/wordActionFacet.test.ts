@@ -156,6 +156,7 @@ describe("word_selection", () => {
         rangeText: "Kilo lima mike.",
         index: 0,
         styleName: "Normal",
+        tableNestingLevel: 0,
       },
     ],
     startOffset: 5,
