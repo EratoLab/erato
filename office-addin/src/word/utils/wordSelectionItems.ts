@@ -62,11 +62,31 @@ export type WordParagraphItems =
     }
   | { refused: WordKeptItemsRefusal };
 
+/** A w:t holding the character at `index`, or a w:tab. */
+interface CharNode {
+  node: Element;
+  index: number;
+}
+
 type Event =
-  | { type: "char"; char: string; field?: WordKeptItem }
-  | { type: "point"; item: WordKeptItem; expect: string | null }
-  | { type: "open" | "close"; item: WordKeptItem }
-  | { type: "reference" };
+  | { type: "char"; char: string; field?: WordKeptItem; at?: CharNode }
+  | {
+      type: "point";
+      item: WordKeptItem;
+      expect: string | null;
+      /** The first and last element the point is made of, children of its container. */
+      first: Element;
+      last: Element;
+    }
+  | {
+      type: "open" | "close";
+      item: WordKeptItem;
+      /** The w:hyperlink or w:sdt, or the comment range mark. */
+      node: Element;
+      /** Where a link's or content control's own text goes. */
+      inner?: Element;
+    }
+  | { type: "reference"; node: Element };
 
 const isW = (element: Element, name?: string) =>
   element.namespaceURI === W && (!name || element.localName === name);
@@ -76,9 +96,17 @@ const attr = (element: Element, name: string) =>
 
 const children = (element: Element) => Array.from(element.children);
 
-function paragraphOf(ooxml: string): Element | null {
+/** The paragraph a getOoxml() package holds, and its document. */
+export function wordParagraphElement(
+  ooxml: string,
+): { doc: Document; paragraph: Element } | null {
   const doc = new DOMParser().parseFromString(ooxml, "application/xml");
   if (doc.getElementsByTagName("parsererror").length) return null;
+  const paragraph = paragraphIn(doc);
+  return paragraph ? { doc, paragraph } : null;
+}
+
+function paragraphIn(doc: Document): Element | null {
   const part =
     Array.from(doc.getElementsByTagNameNS(PKG, "part")).find(
       (p) =>
@@ -111,12 +139,16 @@ function events(paragraph: Element): Event[] {
   const comments = new Map<string, WordKeptItem>();
   const goBack = new Set<string>();
   // A complex field: its code is not shown, its result is, and nested fields belong to the outer.
-  let field: { item: WordKeptItem; depth: number; result: boolean } | null =
-    null;
-  const fieldChar = (type: string | null) => {
+  let field: {
+    item: WordKeptItem;
+    depth: number;
+    result: boolean;
+    first: Element;
+  } | null = null;
+  const fieldChar = (type: string | null, run: Element) => {
     if (type === "begin") {
       if (field) field.depth += 1;
-      else field = { item: item("field"), depth: 1, result: false };
+      else field = { item: item("field"), depth: 1, result: false, first: run };
       return;
     }
     if (!field) throw new Unsupported();
@@ -124,62 +156,89 @@ function events(paragraph: Element): Event[] {
     if (type === "end") {
       field.depth -= 1;
       if (field.depth === 0) {
-        out.push({ type: "point", item: field.item, expect: null });
+        out.push({
+          type: "point",
+          item: field.item,
+          expect: null,
+          first: field.first,
+          last: run,
+        });
         field = null;
       }
     }
   };
-  const text = (value: string) => {
+  const text = (value: string, node: Element) => {
     if (field) {
       if (field.result)
         for (const char of value)
           out.push({ type: "char", char, field: field.item });
       return;
     }
-    for (const char of value) out.push({ type: "char", char });
+    Array.from(value).forEach((char, index) =>
+      out.push({ type: "char", char, at: { node, index } }),
+    );
+  };
+  const point = (
+    kind: WordKeptItemKind,
+    expect: string | null,
+    run: Element,
+  ) => {
+    if (field) throw new Unsupported();
+    out.push({
+      type: "point",
+      item: item(kind),
+      expect,
+      first: run,
+      last: run,
+    });
   };
   const run = (element: Element) => {
     for (const child of children(element)) {
       if (!isW(child)) throw new Unsupported();
       switch (child.localName) {
         case "rPr":
+          // Hidden text shows in paragraph.text on the web only, so no offset could be trusted.
+          if (
+            Array.from(child.children).some((c) =>
+              ["vanish", "specVanish", "webHidden"].includes(c.localName),
+            )
+          )
+            throw new Unsupported();
+          break;
         case "lastRenderedPageBreak":
           break;
         case "t":
-          text(child.textContent ?? "");
+          text(child.textContent ?? "", child);
           break;
         case "tab":
-          text("\t");
+          text("\t", child);
           break;
         case "instrText":
           if (!field) throw new Unsupported();
           if (field.depth === 1) field.item.detail += child.textContent ?? "";
           break;
         case "fldChar":
-          fieldChar(attr(child, "fldCharType"));
+          fieldChar(attr(child, "fldCharType"), element);
           break;
         case "br": {
           const type = attr(child, "type");
           if (type && type !== "textWrapping") throw new Unsupported();
-          if (field) throw new Unsupported();
-          out.push({ type: "point", item: item("break"), expect: "\u000B" });
+          point("break", "\u000B", element);
           break;
         }
         case "footnoteReference":
         case "endnoteReference":
-          if (field) throw new Unsupported();
-          out.push({ type: "point", item: item("note"), expect: "\u0002" });
+          point("note", "\u0002", element);
           break;
         case "commentReference":
           // The balloon's anchor, shown as "\u0005" on the web only.
           if (field) throw new Unsupported();
-          out.push({ type: "reference" });
+          out.push({ type: "reference", node: element });
           break;
         case "drawing":
         case "pict":
         case "object":
-          if (field) throw new Unsupported();
-          out.push({ type: "point", item: item("picture"), expect: null });
+          point("picture", null, element);
           break;
         default:
           throw new Unsupported();
@@ -202,10 +261,10 @@ function events(paragraph: Element): Event[] {
             "link",
             child.getAttributeNS(R, "id") ?? attr(child, "anchor") ?? "",
           );
-          out.push({ type: "open", item: link });
+          out.push({ type: "open", item: link, node: child, inner: child });
           visit(child);
           link.closeOrder = order++;
-          out.push({ type: "close", item: link });
+          out.push({ type: "close", item: link, node: child, inner: child });
           break;
         }
         case "fldSimple": {
@@ -216,7 +275,13 @@ function events(paragraph: Element): Event[] {
             .join("");
           for (const char of shown)
             out.push({ type: "char", char, field: simple });
-          out.push({ type: "point", item: simple, expect: null });
+          out.push({
+            type: "point",
+            item: simple,
+            expect: null,
+            first: child,
+            last: child,
+          });
           break;
         }
         case "sdt": {
@@ -227,16 +292,26 @@ function events(paragraph: Element): Event[] {
           const content = children(child).find((c) => isW(c, "sdtContent"));
           if (!content) throw new Unsupported();
           const control = item("control");
-          out.push({ type: "open", item: control });
+          out.push({
+            type: "open",
+            item: control,
+            node: child,
+            inner: content,
+          });
           visit(content);
           control.closeOrder = order++;
-          out.push({ type: "close", item: control });
+          out.push({
+            type: "close",
+            item: control,
+            node: child,
+            inner: content,
+          });
           break;
         }
         case "commentRangeStart": {
           const comment = item("comment");
           comments.set(attr(child, "id") ?? "", comment);
-          out.push({ type: "open", item: comment });
+          out.push({ type: "open", item: comment, node: child });
           break;
         }
         case "commentRangeEnd": {
@@ -247,7 +322,7 @@ function events(paragraph: Element): Event[] {
             comments.set(id, comment);
           }
           comment.closeOrder = order++;
-          out.push({ type: "close", item: comment });
+          out.push({ type: "close", item: comment, node: child });
           break;
         }
         case "bookmarkStart":
@@ -271,18 +346,32 @@ function events(paragraph: Element): Event[] {
   return out;
 }
 
+/** A paragraph's items and the elements behind its text, as the rewrite needs them. */
+export interface WordAlignedParagraph {
+  items: WordKeptItem[];
+  /** Offsets of comment balloon anchors, which travel with the end of their comment's range. */
+  references: number[];
+  /** Per paragraph.text offset: the w:t or w:tab spelling it, null for an item's character. */
+  chars: (CharNode | null)[];
+  points: Map<WordKeptItem, { first: Element; last: Element }>;
+  spans: Map<
+    WordKeptItem,
+    { open?: Element; close?: Element; inner?: Element }
+  >;
+  /** The run holding each comment balloon anchor, by its offset. */
+  referenceRuns: Map<number, Element>;
+}
+
 /**
- * The items of one paragraph at their paragraph.text offsets, read from its own OOXML. The runs,
- * each item's shown characters and nothing else must spell `rangeText` exactly; a picture shows
- * nothing, a note reference "\u0002", a line break "\u000B", a comment's anchor "\u0005" on the web
- * only, and a field its result.
+ * The items of one paragraph at their paragraph.text offsets. The runs, each item's shown
+ * characters and nothing else must spell `rangeText` exactly; a picture shows nothing, a note
+ * reference "\u0002", a line break "\u000B", a comment's anchor "\u0005" on the web only, and a
+ * field its result.
  */
-export function readWordParagraphItems(
-  ooxml: string,
+export function alignWordParagraph(
+  paragraph: Element,
   rangeText: string,
-): WordParagraphItems {
-  const paragraph = paragraphOf(ooxml);
-  if (!paragraph) return { refused: "unreadable" };
+): WordAlignedParagraph | { refused: WordKeptItemsRefusal } {
   let stream: Event[];
   try {
     stream = events(paragraph);
@@ -290,14 +379,26 @@ export function readWordParagraphItems(
     if (error instanceof Unsupported) return { refused: "unsupported" };
     throw error;
   }
-  const items: WordKeptItem[] = [];
-  const references: number[] = [];
+  const aligned: WordAlignedParagraph = {
+    items: [],
+    references: [],
+    chars: [],
+    points: new Map(),
+    spans: new Map(),
+    referenceRuns: new Map(),
+  };
+  const span = (item: WordKeptItem) => {
+    const known = aligned.spans.get(item) ?? {};
+    aligned.spans.set(item, known);
+    return known;
+  };
   let at = 0;
   for (const event of stream) {
     switch (event.type) {
       case "char":
         if (rangeText[at] !== event.char) return { refused: "misaligned" };
         if (event.field && event.field.start < 0) event.field.start = at;
+        aligned.chars[at] = event.at ?? null;
         at += 1;
         if (event.field) {
           event.field.end = at;
@@ -313,33 +414,60 @@ export function readWordParagraphItems(
           point.start = at;
           point.end = at + 1;
           point.shows = event.expect;
+          aligned.chars[at] = null;
           at += 1;
         } else point.start = point.end = at;
-        items.push(point);
+        aligned.points.set(point, { first: event.first, last: event.last });
+        aligned.items.push(point);
         break;
       }
       case "open":
         event.item.start = at;
         if (event.item.end < 0) event.item.end = at;
-        items.push(event.item);
+        Object.assign(span(event.item), {
+          open: event.node,
+          inner: event.inner,
+        });
+        aligned.items.push(event.item);
         break;
       case "close":
         if (event.item.start < 0) {
           event.item.start = 0;
-          items.push(event.item);
+          aligned.items.push(event.item);
         }
         event.item.end = at;
+        Object.assign(span(event.item), {
+          close: event.node,
+          inner: event.inner,
+        });
         break;
       case "reference":
-        references.push(at);
-        if (rangeText[at] === "\u0005") at += 1;
+        aligned.references.push(at);
+        aligned.referenceRuns.set(at, event.node);
+        if (rangeText[at] === "\u0005") {
+          aligned.chars[at] = null;
+          at += 1;
+        }
         break;
     }
   }
-  for (const item of items)
+  for (const item of aligned.items)
     if (item.openEnded === "end") item.end = rangeText.length;
   if (at !== rangeText.length) return { refused: "misaligned" };
-  return { items: items.sort((a, b) => a.order - b.order), references };
+  aligned.items.sort((a, b) => a.order - b.order);
+  return aligned;
+}
+
+/** The items of one paragraph at their paragraph.text offsets, read from its own OOXML. */
+export function readWordParagraphItems(
+  ooxml: string,
+  rangeText: string,
+): WordParagraphItems {
+  const parsed = wordParagraphElement(ooxml);
+  if (!parsed) return { refused: "unreadable" };
+  const aligned = alignWordParagraph(parsed.paragraph, rangeText);
+  if ("refused" in aligned) return aligned;
+  return { items: aligned.items, references: aligned.references };
 }
 
 /** One kept item inside a selected part, as the model sees it. */
@@ -380,14 +508,59 @@ export function markWordSelectionPart(
   end: number,
   first = 1,
 ): WordMarkedPart | null {
-  if (MARKER_BRACKET.test(rangeText.slice(start, end))) return null;
-  type Boundary = {
-    at: number;
-    order: number;
-    item: WordKeptItem;
-    end: WordKeptMarker["end"];
+  const part = wordPartBoundaries(rangeText, read, start, end);
+  if (!part) return null;
+  const { boundaries, hidden } = part;
+  const numbers = new Map<WordKeptItem, number>();
+  let next = first;
+  const markers: WordKeptMarker[] = [];
+  let text = "";
+  let cursor = start;
+  const flush = (to: number) => {
+    for (; cursor < to; cursor += 1)
+      if (!hidden.has(cursor)) text += rangeText[cursor];
   };
-  const boundaries: Boundary[] = [];
+  for (const boundary of boundaries) {
+    flush(boundary.at);
+    let number = numbers.get(boundary.item);
+    if (number === undefined) {
+      number = next++;
+      numbers.set(boundary.item, number);
+    }
+    const marker: WordKeptMarker = {
+      number,
+      kind: boundary.item.kind,
+      end: boundary.end,
+      shows: boundary.item.shows,
+      detail: boundary.item.detail,
+    };
+    markers.push(marker);
+    text += wordMarkerText(marker);
+  }
+  flush(end);
+  return { text, markers, next };
+}
+
+/** One end of an item inside a selected part, where a marker goes. */
+export interface WordPartBoundary {
+  at: number;
+  order: number;
+  item: WordKeptItem;
+  end: WordKeptMarker["end"];
+}
+
+/**
+ * The items a part [start, end) marks, in order, and the offsets their characters hide. Null when
+ * the part cuts through a point, holds a marker bracket, or a comment anchor away from its end.
+ */
+export function wordPartBoundaries(
+  rangeText: string,
+  read: { items: readonly WordKeptItem[]; references: readonly number[] },
+  start: number,
+  end: number,
+): { boundaries: WordPartBoundary[]; hidden: Set<number> } | null {
+  if (MARKER_BRACKET.test(rangeText.slice(start, end))) return null;
+  const boundaries: WordPartBoundary[] = [];
   const hidden = new Set<number>();
   const strictly = (at: number) => start < at && at < end;
   for (const item of read.items) {
@@ -429,34 +602,7 @@ export function markWordSelectionPart(
     if (rangeText[at] === "\u0005") hidden.add(at);
   }
   boundaries.sort((a, b) => a.at - b.at || a.order - b.order);
-  const numbers = new Map<WordKeptItem, number>();
-  let next = first;
-  const markers: WordKeptMarker[] = [];
-  let text = "";
-  let cursor = start;
-  const flush = (to: number) => {
-    for (; cursor < to; cursor += 1)
-      if (!hidden.has(cursor)) text += rangeText[cursor];
-  };
-  for (const boundary of boundaries) {
-    flush(boundary.at);
-    let number = numbers.get(boundary.item);
-    if (number === undefined) {
-      number = next++;
-      numbers.set(boundary.item, number);
-    }
-    const marker: WordKeptMarker = {
-      number,
-      kind: boundary.item.kind,
-      end: boundary.end,
-      shows: boundary.item.shows,
-      detail: boundary.item.detail,
-    };
-    markers.push(marker);
-    text += wordMarkerText(marker);
-  }
-  flush(end);
-  return { text, markers, next };
+  return { boundaries, hidden };
 }
 
 export type WordMarkedLine =
