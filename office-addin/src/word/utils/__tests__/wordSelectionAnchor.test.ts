@@ -6,6 +6,7 @@ import {
   buildWordSelectionSnapshot,
   classifyWordSelection,
   emptySelectionCapture,
+  isSameWordPassage,
   resolveWordSelection,
   rewritableWordSelection,
   WORD_SELECTION_CONTEXT_BYTES,
@@ -823,6 +824,20 @@ describe("selection captures", () => {
 const rangeTexts = (story: WordParagraphEntry[]) => story.map((p) => p.text);
 const without = (story: WordParagraphEntry[], ids: boolean) =>
   ids ? story : story.map((p) => ({ ...p, id: null }));
+
+describe("isSameWordPassage", () => {
+  it("accepts a pick only with the same covered text, shape and paragraph count", () => {
+    const requested = snapshot(PARAGRAPH);
+    expect(isSameWordPassage(requested, { ...requested })).toBe(true);
+    for (const picked of [
+      { ...requested, selectedText: `${requested.selectedText} ` },
+      { ...requested, shape: "inline" as const },
+      { ...requested, paragraphCount: 2 },
+      { ...requested, truncated: true },
+    ])
+      expect(isSameWordPassage(requested, picked)).toBe(false);
+  });
+});
 
 describe("resolveWordSelection", () => {
   const texts = ["Intro", "Target text", "Outro"];

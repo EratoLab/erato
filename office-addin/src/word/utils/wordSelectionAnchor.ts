@@ -692,6 +692,24 @@ export function emptySelectionCapture(
 }
 
 /**
+ * After an ambiguous refusal the user may pick which of the identical passages they meant. The
+ * reviewed proposal then fits the pick only if its covered text is byte-identical and splits the
+ * same way.
+ */
+export function isSameWordPassage(
+  requested: WordSelectionSnapshot,
+  picked: WordSelectionSnapshot,
+): boolean {
+  return (
+    picked.shape === requested.shape &&
+    picked.paragraphCount === requested.paragraphCount &&
+    !picked.truncated &&
+    !requested.truncated &&
+    picked.selectedText === requested.selectedText
+  );
+}
+
+/**
  * The executor's gate. It reads the capture frozen at Send, never the model's arguments, which the
  * client may have filtered and the model may have invented.
  */

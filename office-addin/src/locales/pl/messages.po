@@ -4127,6 +4127,21 @@ msgstr "Tę odpowiedź napisano dla fragmentu innego dokumentu, więc nie można
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickDifferent"
+msgstr "Zaznaczony tekst nie jest dokładnie fragmentem z Twojej prośby. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickHint"
+msgstr "Zaznacz w programie Word fragment, o który chodzi, a następnie wybierz Zastąp zaznaczony fragment. Zostanie zastąpiony tylko wtedy, gdy jego tekst jest dokładnie taki sam."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickUnread"
+msgstr "Erato nie mógł odczytać zaznaczenia. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.preparing"
 msgstr "Przygotowywanie przeredagowania…"
 
@@ -4212,6 +4227,11 @@ msgstr "Zastąpiono zaznaczony fragment."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.replacePicked"
+msgstr "Zastąp zaznaczony fragment"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.restore"
 msgstr "Przywróć fragment"
 
@@ -4294,6 +4314,11 @@ msgstr "Za długi, aby wysłać go w całości. Wysyłany jest tylko początek."
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.selection.unchanged"
 msgstr "Propozycja jest taka sama jak fragment. Niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.undoInWord"
+msgstr "Aby cofnąć to zastąpienie, użyj funkcji Cofnij programu Word w dokumencie (Ctrl+Z lub ⌘Z na Macu). W programie Word dla sieci Web funkcja Cofnij w Erato obejmuje maksymalnie {WORD_WEB_REVERT_MAX_PARAGRAPHS} akapitów."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

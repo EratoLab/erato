@@ -4127,6 +4127,21 @@ msgstr "This answer was written for a passage in another document, so it cannot 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickDifferent"
+msgstr "The selected text is not exactly the passage from your request. Nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickHint"
+msgstr "Select the one you mean in Word, then choose Replace selected passage. It is replaced only if its text is exactly the same."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickUnread"
+msgstr "Erato could not read your selection. Try again."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.preparing"
 msgstr "Preparing rewrite…"
 
@@ -4212,6 +4227,11 @@ msgstr "Replaced the selected passage."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.replacePicked"
+msgstr "Replace selected passage"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.restore"
 msgstr "Restore passage"
 
@@ -4294,6 +4314,11 @@ msgstr "Too long to send in full. Only the beginning is sent."
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.selection.unchanged"
 msgstr "The proposal matches the passage. Nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.undoInWord"
+msgstr "To undo this Replace, use Word's own Undo in the document (Ctrl+Z, or ⌘Z on a Mac). In Word for the web, Erato's Undo covers up to {WORD_WEB_REVERT_MAX_PARAGRAPHS} paragraphs."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

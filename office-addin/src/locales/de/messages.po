@@ -4127,6 +4127,21 @@ msgstr "Diese Antwort wurde für eine Passage in einem anderen Dokument geschrie
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickDifferent"
+msgstr "Der ausgewählte Text entspricht nicht genau der Passage aus Ihrer Anfrage. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickHint"
+msgstr "Wählen Sie in Word die gemeinte Passage aus und klicken Sie dann auf „Ausgewählte Passage ersetzen“. Sie wird nur ersetzt, wenn ihr Text genau übereinstimmt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickUnread"
+msgstr "Erato konnte Ihre Auswahl nicht lesen. Versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.preparing"
 msgstr "Umformulierung wird vorbereitet…"
 
@@ -4212,6 +4227,11 @@ msgstr "Die ausgewählte Passage wurde ersetzt."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.replacePicked"
+msgstr "Ausgewählte Passage ersetzen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.restore"
 msgstr "Passage wiederherstellen"
 
@@ -4294,6 +4314,11 @@ msgstr "Zu lang, um vollständig gesendet zu werden. Nur der Anfang wird gesende
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.selection.unchanged"
 msgstr "Der Vorschlag entspricht der Passage. Es wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.undoInWord"
+msgstr "Um diese Ersetzung rückgängig zu machen, verwenden Sie im Dokument das Rückgängigmachen von Word (Strg+Z bzw. ⌘Z auf dem Mac). In Word für das Web bietet Erato das Rückgängigmachen für bis zu {WORD_WEB_REVERT_MAX_PARAGRAPHS} Absätze an."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

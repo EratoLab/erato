@@ -213,6 +213,61 @@ describe("WordSelectionCard", () => {
     });
   });
 
+  it("says the passage appears more than once and replaces the copy the user selects with the same proposal", async () => {
+    uninstallWordSelectionHost();
+    host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+      nullParagraphIds: true,
+    });
+    const capture = await captureOf(host, { p: "PL1" });
+    const original = host.paragraphs()[2].text;
+    host.insertParagraphs({ p: "PL1" }, [original], "After");
+    const { restoreRequest } = renderCard({ capture });
+    fireEvent.click(replaceButton()!);
+    await screen.findByText(
+      "This passage now appears more than once, so Erato can't tell which one you meant. Nothing was replaced.",
+    );
+    expect(host.writeSyncs()).toEqual([]);
+    expect(
+      screen.queryByRole("button", { name: "Use current selection" }),
+    ).toBeNull();
+
+    host.select({ paragraph: 3 });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace selected passage" }),
+    );
+    await screen.findByText("Replaced the selected passage.");
+    expect(
+      host
+        .paragraphs()
+        .slice(2, 4)
+        .map((p) => p.text),
+    ).toEqual([original, PROPOSAL]);
+    expect(restoreRequest).not.toHaveBeenCalled();
+    expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
+  });
+
+  it("replaces nothing when the selected text is not exactly the requested passage", async () => {
+    uninstallWordSelectionHost();
+    host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+      nullParagraphIds: true,
+    });
+    const capture = await captureOf(host, { p: "PL1" });
+    host.insertParagraphs({ p: "PL1" }, [host.paragraphs()[2].text], "After");
+    renderCard({ capture });
+    fireEvent.click(replaceButton()!);
+    await screen.findByText(
+      "This passage now appears more than once, so Erato can't tell which one you meant. Nothing was replaced.",
+    );
+    host.select({ p: "MP2" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace selected passage" }),
+    );
+    await screen.findByText(
+      "The selected text is not exactly the passage from your request. Nothing was replaced.",
+    );
+    expect(host.writeSyncs()).toEqual([]);
+  });
+
   it("replaces only the selected passage inside its paragraph", async () => {
     const capture = await captureOf(host, {
       p: "RP1",
@@ -355,6 +410,47 @@ describe("WordSelectionCard", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it.each([
+    [10, true],
+    [11, false],
+  ] as const)(
+    "on the web, offers Erato's Undo after replacing %i paragraphs: %s",
+    async (count, offered) => {
+      uninstallWordSelectionHost();
+      const tags = Array.from(
+        { length: count },
+        (_, i) => `WP${String(i + 1).padStart(2, "0")}`,
+      );
+      host = installWordSelectionHost(
+        {
+          body: [
+            "H0 Heading",
+            ...tags.map((tag) => `${tag} Body text.`),
+            "MP2 xray",
+          ],
+        },
+        { host: "web" },
+      );
+      const capture = await captureOf(host, {
+        p: tags[0],
+        to: { p: tags.at(-1)! },
+      });
+      renderCard({
+        capture,
+        content: tags.map((tag) => `${tag} Shorter.`).join("\n"),
+      });
+      fireEvent.click(replaceButton()!);
+      await screen.findByText("Replaced the selected passage.");
+      expect(host.paragraphs()[count].text).toBe(`${tags.at(-1)} Shorter.`);
+      expect(!!screen.queryByTestId("word-selection-undo")).toBe(offered);
+      expect(
+        !!screen.queryByText(
+          "To undo this Replace, use Word's own Undo in the document (Ctrl+Z, or ⌘Z on a Mac). In Word for the web, Erato's Undo covers up to 10 paragraphs.",
+        ),
+      ).toBe(!offered);
+    },
+  );
 
   it("undoes the Replace exactly", async () => {
     const capture = await captureOf(host, { p: "PL1" });
