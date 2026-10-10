@@ -57,6 +57,14 @@ describe("kept items for the model", () => {
     });
   });
 
+  it("drops the flattened-emphasis notice with the rewrite when falling back", async () => {
+    const selection = await captured({ p: "MX1" });
+    expect(selection.flattensEmphasis).toBe(true);
+    expect(
+      wordSelectionForFacets(selection, advertised(["selected_text"])),
+    ).not.toHaveProperty("flattensEmphasis");
+  });
+
   it("names the kind of an item outside the selected part when falling back", async () => {
     const selection = await captured({ p: "FN1", text: "continues" });
     expect(

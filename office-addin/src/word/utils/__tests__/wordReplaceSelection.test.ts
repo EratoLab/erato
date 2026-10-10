@@ -355,6 +355,69 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     expect(host.writeSyncs()).toEqual([]);
   });
 
+  it.each([
+    ["a colour", "FD1", { font: { color: "#C00000" } }],
+    ["a character style", "FD1", { rStyle: "Strong" }],
+    ["superscript", "FD1", { font: { superscript: true } }],
+    ["bold the card did not announce", "FD1", { font: { bold: true } }],
+    ["superscript", "PL1", { font: { superscript: true } }],
+    ["bold the card did not announce", "PL1", { font: { bold: true } }],
+    ["a bookmark", "PL1", { bookmark: "Intro938" }],
+  ] as const)(
+    "refuses once %s was put on part of %s since Send, and writes nothing",
+    async (_, p, format) => {
+      const host = install();
+      const capture = await captureOf(host, { p });
+      expect(capture.selection).toMatchObject({ role: "rewrite" });
+      expect(capture.selection?.flattensEmphasis).toBeUndefined();
+      host.format({ p, text: p === "PL1" ? "lima mike" : "before" }, format);
+      const before = host.ooxml({ p });
+      expect(
+        await replace(
+          capture,
+          p === "PL1" ? REWRITE : "FD1 Feld vor \u27E61\u27E7 Feld danach.",
+        ),
+      ).toMatchObject({ status: "refused", code: "UNSUPPORTED_CONTENT" });
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.ooxml({ p })).toBe(before);
+    },
+  );
+
+  it("flattens bold on part of a passage the card announced, with or without kept items", async () => {
+    const host = install({
+      body: [
+        "Intro.",
+        { runs: ["Mixed ", { text: "bold", font: { bold: true } }, " words."] },
+        {
+          runs: [
+            "Kept ",
+            { text: "bold", font: { bold: true } },
+            " ",
+            { text: "3", field: "PAGE" },
+            " end.",
+          ],
+        },
+        "Outro.",
+      ],
+    });
+    const plain = await captureOf(host, { paragraph: 1 });
+    const kept = await captureOf(host, { paragraph: 2 });
+    expect(plain.selection?.flattensEmphasis).toBe(true);
+    expect(kept.selection?.flattensEmphasis).toBe(true);
+    expect(await replace(plain, "Now plain words.")).toMatchObject({
+      status: "applied",
+    });
+    expect(await replace(kept, "Kept plain \u27E61\u27E7 end.")).toMatchObject({
+      status: "applied",
+    });
+    const [, plainAfter, keptAfter] = host.paragraphs();
+    expect(plainAfter.runs.some((run) => run.font?.bold)).toBe(false);
+    expect(keptAfter.text).toBe("Kept plain 3 end.");
+    expect(
+      keptAfter.runs.filter((run) => !run.field).some((run) => run.font?.bold),
+    ).toBe(false);
+  });
+
   it("refuses to undo under Track Changes", async () => {
     const host = install();
     const capture = await captureOf(host, { p: "PL1" });
@@ -425,6 +488,43 @@ describe("replaceWordSelection on the web", () => {
       status: "applied",
     });
   });
+});
+
+describe("replaceWordSelection on Mac when its OOXML leaves out bookmarks", () => {
+  it.each([
+    [
+      "a heading's whole text",
+      "H1",
+      "H1 Selection probe heading",
+      "H1 Shorter heading",
+    ],
+    ["two words of a plain paragraph", "PL1", "lima mike", REWRITE],
+    [
+      "a paragraph that keeps a field",
+      "FD1",
+      "before",
+      "FD1 Feld vor \u27E61\u27E7 Feld danach.",
+    ],
+  ] as const)(
+    "refuses once a bookmark was put on %s since Send, and writes nothing",
+    async (_, p, text, rewrite) => {
+      const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        host: "mac",
+        ooxmlOmitsBookmarks: true,
+      });
+      const capture = await captureOf(host, { p });
+      expect(capture.selection).toMatchObject({ role: "rewrite" });
+      host.format({ p, text }, { bookmark: "_Toc938001" });
+      expect(host.ooxml({ p })).not.toContain("bookmark");
+      const before = host.paragraphs();
+      expect(await replace(capture, rewrite)).toMatchObject({
+        status: "refused",
+        code: "UNSUPPORTED_CONTENT",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.paragraphs()).toEqual(before);
+    },
+  );
 });
 
 describe.each(HOSTS)(
