@@ -157,7 +157,7 @@ describe("resolveWordParagraphs", () => {
     },
   );
 
-  it("keeps the ID with a twin further up only while the context above is unchanged", () => {
+  it("keeps the ID with a twin further up only while the paragraph above is the captured one", () => {
     const doc = body(["Same", "A", "B", "C", "Same", "D"]);
     const anchor = wordParagraphAnchor(doc, 4, 4);
     expect(resolveWordParagraphs(anchor, doc)).toEqual({ positions: [4] });
@@ -172,6 +172,13 @@ describe("resolveWordParagraphs", () => {
       resolveWordParagraphs(anchor, [
         ...doc.slice(0, 3),
         { id: "id-4", text: "C edited" },
+        ...doc.slice(4),
+      ]),
+    ).toEqual({ positions: [4] });
+    expect(
+      resolveWordParagraphs(anchor, [
+        ...doc.slice(0, 4),
+        { id: "typed", text: "Typed" },
         ...doc.slice(4),
       ]),
     ).toEqual({ refused: "ambiguous" });
@@ -226,6 +233,33 @@ describe("resolveWordParagraphs", () => {
     });
   });
 
+  it("refuses an ID that moved onto a copy after a paragraph was inserted into the run of twins", () => {
+    const anchor = wordParagraphAnchor(
+      body(["P", "Q", "Q", "Q", "Q", "P"]),
+      4,
+      4,
+    );
+    const live = [
+      { id: "id-1", text: "P" },
+      { id: "id-2", text: "Q" },
+      { id: "fresh", text: "Fresh" },
+      { id: "id-3", text: "Q" },
+      { id: "id-4", text: "Q" },
+      { id: "new", text: "Q" },
+      { id: "id-5", text: "Q" },
+      { id: "id-6", text: "P" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({
+      refused: "ambiguous",
+    });
+  });
+
+  it("keeps the ID under a run of twins when the copy typed below took a new ID", () => {
+    const anchor = wordParagraphAnchor(body(["P", "P", "P", "P"]), 3, 3);
+    const live = [...body(["P", "P", "P", "P"]), { id: "typed", text: "P" }];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({ positions: [3] });
+  });
+
   it("keeps following the ID when the text is pasted elsewhere below", () => {
     const anchor = wordParagraphAnchor(body(["A", "Clause", "B"]), 1, 1);
     const live = [
@@ -235,6 +269,17 @@ describe("resolveWordParagraphs", () => {
       { id: "pasted", text: "Clause" },
     ];
     expect(resolveWordParagraphs(anchor, live)).toEqual({ positions: [1] });
+  });
+
+  it("refuses a span rebuilt elsewhere from a copy of its middle paragraph, without IDs", () => {
+    const anchor = wordParagraphAnchor(body(["P", "Q", "P", "P"], false), 0, 2);
+    expect(anchor.window).toBe(0);
+    expect(
+      resolveWordParagraphs(
+        anchor,
+        body(["P", "Fresh", "Q", "P", "Q", "P"], false),
+      ),
+    ).toEqual({ refused: "ambiguous" });
   });
 
   it("tells repeated text apart by its neighbours when there are no IDs", () => {
@@ -349,7 +394,7 @@ function referenceResolve(
   const texts = live.map((p) => p.text);
   const count = (body: readonly string[], test: (start: number) => boolean) =>
     body.filter((_, start) => test(start)).length;
-  const edges = [anchor.paragraphs[0], anchor.paragraphs.at(-1)!].map(
+  const own = anchor.paragraphs.map(
     (p) => (body: readonly string[]) => (start: number) =>
       body[start] === p.text,
   );
@@ -361,12 +406,7 @@ function referenceResolve(
   const grows = (
     test: (body: readonly string[]) => (start: number) => boolean,
   ) => count(texts, test(texts)) > count(captured, test(captured));
-  const grew = [...edges, ...windows].some(grows);
-  const withContextAbove = (body: readonly string[]) => (start: number) =>
-    body[start] === anchor.paragraphs[0].text &&
-    anchor.before.every(
-      (text, j) => (start - 1 - j === -1 ? null : body[start - 1 - j]) === text,
-    );
+  const grew = [...own, ...windows].some(grows);
   if (anchor.paragraphs.every((p) => p.id)) {
     const positions = anchor.paragraphs.map((p) =>
       live.findIndex((l) => l.id === p.id),
@@ -387,9 +427,10 @@ function referenceResolve(
       const context = anchor.before.every(
         (expected, k) => at(first - 1 - k) === expected,
       );
-      return twin && (!context || grows(withContextAbove))
-        ? { refused: "ambiguous" }
-        : { positions };
+      const moved = anchor.aboveId
+        ? first === 0 || live[first - 1].id !== anchor.aboveId
+        : !context;
+      return twin && moved ? { refused: "ambiguous" } : { positions };
     }
   }
   if (anchor.window === null) return { refused: "ambiguous" };

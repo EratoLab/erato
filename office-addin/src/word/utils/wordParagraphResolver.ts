@@ -15,10 +15,10 @@ export interface WordParagraphAnchor {
   after: readonly (string | null)[];
   /** Context paragraphs per side that made the span unique at capture; null when none did. */
   window: number | null;
-  /** How often each narrower window and each edge paragraph's text occurred at capture. */
+  /** How often each narrower window and each span paragraph's text occurred at capture. */
   counts: readonly { needle: readonly (string | null)[]; count: number }[];
-  /** How often the first paragraph's text occurred with the captured context above it. */
-  aboveCount: number;
+  /** The ID of the paragraph right above the span; null at the body's start or without IDs. */
+  aboveId: string | null;
 }
 
 export type WordParagraphRefusal = "changed" | "ambiguous";
@@ -73,10 +73,6 @@ const countOf = (
   needle: readonly (string | null)[],
 ) => occurrences(texts, needle, Infinity).length;
 
-function above(anchor: Pick<WordParagraphAnchor, "before" | "paragraphs">) {
-  return [...anchor.before].reverse().concat(anchor.paragraphs[0].text);
-}
-
 function widest(anchor: WordParagraphAnchor): number {
   return Math.max(anchor.before.length, anchor.after.length);
 }
@@ -88,31 +84,29 @@ export function wordParagraphAnchor(
   last: number,
 ): WordParagraphAnchor {
   const texts = body.map((p) => p.text);
-  const paragraphs = body.slice(first, last + 1);
-  const before = context(texts, first - 1, -1);
   const anchor: WordParagraphAnchor = {
-    paragraphs,
-    before,
+    paragraphs: body.slice(first, last + 1),
+    before: context(texts, first - 1, -1),
     after: context(texts, last + 1, 1),
     window: null,
     counts: [],
-    aboveCount: countOf(texts, above({ before, paragraphs })),
+    aboveId: body[first - 1]?.id ?? null,
   };
   const counted = (needles: (string | null)[][]) =>
     needles.map((needle) => ({ needle, count: countOf(texts, needle) }));
-  const edges = [[texts[first]], [texts[last]]];
+  const own = [...new Set(texts.slice(first, last + 1))].map((text) => [text]);
   for (let window = 0; window <= widest(anchor); window += 1) {
     if (occurrences(texts, pattern(anchor, window)).length !== 1) continue;
     return {
       ...anchor,
       window,
       counts: counted([
-        ...edges,
+        ...own,
         ...Array.from({ length: window }, (_, w) => pattern(anchor, w)),
       ]),
     };
   }
-  return { ...anchor, counts: counted(edges) };
+  return { ...anchor, counts: counted(own) };
 }
 
 /** Undefined when an ID is missing on either side; the span is then located by its text. */
@@ -140,23 +134,19 @@ function byId(
   if (!intact) return { refused: "changed" };
   // Word hands a paragraph's ID to the paragraph split off below it (Return at its end,
   // insertParagraph "After", office-js #5784), once per Return. So with the target's text anywhere
-  // above, the ID may have moved onto a copy typed one or more paragraphs below the original. That
-  // puts the original, and anything typed in between, where the captured context above was.
+  // above, the ID may have moved onto a copy typed one or more paragraphs below the original. Then
+  // the paragraph right above it is the original or one typed since, never the captured neighbour,
+  // whose ID can only move onto a paragraph inserted between it and the original. Texts cannot tell
+  // this apart under a run of identical twins.
   const first = positions[0];
   const text = anchor.paragraphs[0].text;
   const twinAbove = live.slice(0, first).some((p) => p.text === text);
-  const contextAbove = anchor.before.every(
-    (expected, k) =>
-      (first - 1 - k < 0 ? null : live[first - 1 - k].text) === expected,
-  );
-  // Above a run of identical twins the context still matches after the ID moved; the original, still
-  // under its own context, then repeats that pattern once more than at capture.
-  const moved =
-    !contextAbove ||
-    countOf(
-      live.map((p) => p.text),
-      above(anchor),
-    ) > anchor.aboveCount;
+  const moved = anchor.aboveId
+    ? live[first - 1]?.id !== anchor.aboveId
+    : !anchor.before.every(
+        (expected, k) =>
+          (first - 1 - k < 0 ? null : live[first - 1 - k].text) === expected,
+      );
   if (twinAbove && moved) return { refused: "ambiguous" };
   return { positions };
 }
@@ -174,7 +164,7 @@ function commoner(
 /**
  * A surviving ID is decisive: if its paragraph changed, a copy of the old text elsewhere must not
  * take its place, nor where it may have moved onto a copy of its text: with that text above it, the
- * captured context above must still be there. Without one, the span with its capture-time context
+ * captured neighbour above must still be there. Without one, the span with its capture-time context
  * must occur exactly once now, and the texts it is built from no more often than at capture. A
  * second occurrence refuses rather than widening the context, because a copied block and the
  * original are indistinguishable by text.
