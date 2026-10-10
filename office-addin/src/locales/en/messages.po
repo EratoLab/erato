@@ -4187,6 +4187,11 @@ msgstr "The selected text is not exactly the passage from your request. Nothing 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickEmphasis"
+msgstr "The selected passage has bold, italic, underlined or struck-through words that the passage in your request did not have. Replace would remove that formatting, so nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.pickHint"
 msgstr "Select the one you mean in Word, then choose Replace selected passage. It is replaced only if its text is exactly the same."
 

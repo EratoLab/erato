@@ -653,6 +653,16 @@ export function WordSelectionCard({
           message:
             "This answer was written for a passage in another document, so it cannot be replaced here.",
         });
+      // The final check trusts the pick's own flag, but the card announced only the request's.
+      else if (
+        picked.selection.flattensEmphasis &&
+        !rewritable.flattensEmphasis
+      )
+        note = t({
+          id: "officeAddin.word.selection.pickEmphasis",
+          message:
+            "The selected passage has bold, italic, underlined or struck-through words that the passage in your request did not have. Replace would remove that formatting, so nothing was replaced.",
+        });
       else target = live.capture;
     } catch {
       note = unread();

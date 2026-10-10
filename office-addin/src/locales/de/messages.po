@@ -4187,6 +4187,11 @@ msgstr "Der ausgewählte Text entspricht nicht genau der Passage aus Ihrer Anfra
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickEmphasis"
+msgstr "Die ausgewählte Passage enthält fett, kursiv, unterstrichen oder durchgestrichen formatierte Wörter, die die Passage aus Ihrer Anfrage nicht hatte. Ersetzen würde diese Formatierung entfernen, daher wurde nichts ersetzt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.pickHint"
 msgstr "Wählen Sie in Word die gemeinte Passage aus und klicken Sie dann auf „Ausgewählte Passage ersetzen“. Sie wird nur ersetzt, wenn ihr Text genau übereinstimmt."
 

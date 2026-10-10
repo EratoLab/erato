@@ -820,6 +820,89 @@ describe.each(HOSTS)(
   },
 );
 
+describe("captureWordSelection of bookmarks Word for Mac's OOXML leaves out", () => {
+  const SHAPES = new Set<WordSelectionShape>(["paragraph", "inline"]);
+  const FIELD = { text: "3", field: "PAGE" };
+  const capture = async (
+    body: MockSelectionDocument["body"],
+    target: MockSelectionTarget,
+  ) => {
+    const host = installWordSelectionHost(
+      { body },
+      { host: "mac", ooxmlOmitsBookmarks: true },
+    );
+    host.select(target);
+    const read = await captureWordSelection("user", 15_000, SHAPES);
+    if (read.status !== "ok") throw new Error("capture failed");
+    return { host, selection: read.value };
+  };
+
+  it.each([
+    [
+      "a table of contents' bookmark around a heading",
+      [{ text: "H1 Selection probe heading", bookmark: "_Toc938001" }],
+      { p: "H1" },
+    ],
+    [
+      "a cross-reference's bookmark",
+      [{ text: "R7 Signatures", bookmark: "_Ref938002" }],
+      { p: "R7" },
+    ],
+    [
+      "a user's bookmark, for a passage outside it",
+      ["PB Plain ", { text: "lima mike", bookmark: "Intro938" }, " papa."],
+      { p: "PB", text: "Plain" },
+    ],
+    [
+      "a bookmark next to a field it could keep",
+      ["FB Before ", { text: "marked", bookmark: "Mark938" }, FIELD],
+      { p: "FB" },
+    ],
+  ] as const)(
+    "finds %s through getBookmarks and keeps the selection context only",
+    async (_, runs, target) => {
+      const { host, selection } = await capture(
+        ["Intro.", { runs }, "Outro."],
+        target,
+      );
+      expect(host.ooxml({ p: target.p })).not.toContain("bookmark");
+      expect(host.calls()).toContain("Range.getBookmarks");
+      expect(selection).toMatchObject({
+        role: "context_only",
+        reasonCode: "bookmark",
+      });
+    },
+  );
+
+  it("rewrites a paragraph holding only Word's own last-edit bookmark", async () => {
+    const { selection } = await capture(
+      [
+        "Intro.",
+        { runs: ["GB Edited ", { text: "here", bookmark: "_GoBack" }, "."] },
+        "Outro.",
+      ],
+      { paragraph: 1 },
+    );
+    expect(selection).toMatchObject({ role: "rewrite", reasonCode: null });
+  });
+
+  it.each(HOSTS)(
+    "lists bookmarks only on Mac, since BM0 found them all in the OOXML on PC and the web (%s)",
+    async (flavour) => {
+      const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        host: flavour,
+      });
+      host.select({ p: "PL1" });
+      expect(await captureWordSelection("user", 15_000, SHAPES)).toMatchObject({
+        value: { role: "rewrite" },
+      });
+      expect(host.calls().includes("Range.getBookmarks")).toBe(
+        flavour === "mac",
+      );
+    },
+  );
+});
+
 describe.each(HOSTS)(
   "captureWordSelection with inline spans enabled on %s",
   (flavour) => {

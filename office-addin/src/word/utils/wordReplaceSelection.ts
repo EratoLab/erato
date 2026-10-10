@@ -287,6 +287,7 @@ export async function replaceWordSelection(args: {
         context,
         proof.parts,
         selection.paragraphs,
+        support,
       );
       await context.sync();
       const check = checkTargetVerification(selection, verify(), support);

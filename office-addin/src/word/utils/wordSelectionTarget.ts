@@ -27,6 +27,7 @@ import { buildWordSelectionRanges } from "./wordSelectionRange";
 import { wordPartFormatLoss } from "./wordSelectionRewrite";
 import {
   scanWordSelectionSpan,
+  WORD_BOOKMARK,
   wordCellParagraphOoxml,
   wordSelectionStyleToggles,
 } from "./wordSelectionSpan";
@@ -87,12 +88,19 @@ export interface WordParagraphSpanChecks {
  * content controls and fields the OOXML can miss around it (PF3). All are reads Word for the web
  * leaves the document unchanged by: no range inside the paragraph is built. `inCell` tells it to
  * find which cell the paragraph is in, so its own OOXML can be cut out of a whole row.
+ * `listBookmarks` also lists its bookmarks, where the OOXML is not known to show them all.
  */
 export function queueParagraphSpanChecks(
   paragraph: Word.Paragraph,
   inCell = false,
+  listBookmarks = false,
 ): () => WordParagraphSpanChecks {
   const ooxml = paragraph.getOoxml();
+  // Adjacent ones too: one that starts or ends right at the text's edge, or an empty one there,
+  // may move or go when the text is rewritten.
+  const bookmarks = listBookmarks
+    ? paragraph.getRange("Content").getBookmarks(true, true)
+    : null;
   const cell = inCell ? paragraph.parentTableCellOrNullObject : null;
   if (cell) {
     cell.load("cellIndex");
@@ -118,6 +126,9 @@ export function queueParagraphSpanChecks(
         : {}),
       ...(fields.items.length > 0 ? { field: true } : {}),
       ...(revisions.items.length > 0 ? { trackedChange: true } : {}),
+      ...(bookmarks?.value.some((name) => name !== WORD_BOOKMARK)
+        ? { bookmark: true }
+        : {}),
     },
   });
 }
@@ -129,10 +140,11 @@ export interface WordKeptParagraphEvaluation {
 }
 
 /**
- * What still keeps a paragraph with kept items from being rewritten: a revision, complex-script
- * text, or formatting its part's rewrite would drop, as the plain path refuses it (mixed colour,
- * highlight, font, size or character style, and superscript or subscript). Only the part's own
- * text runs are judged; the rest of the paragraph is written as it was.
+ * What still keeps a paragraph with kept items from being rewritten: a revision, a bookmark its
+ * OOXML left out, complex-script text, or formatting its part's rewrite would drop, as the plain
+ * path refuses it (mixed colour, highlight, font, size or character style, and superscript or
+ * subscript). Only the part's own text runs are judged; the rest of the paragraph is written as it
+ * was.
  */
 export function evaluateKeptParagraph(
   checks: WordParagraphSpanChecks,
@@ -151,6 +163,7 @@ export function evaluateKeptParagraph(
       ...(hazards.trackedChange || checks.objectHazards.trackedChange
         ? { trackedChange: true }
         : {}),
+      ...(checks.objectHazards.bookmark ? { bookmark: true } : {}),
       ...(loss === null ? { unsupportedFormatting: true } : {}),
       ...(loss?.other ? { mixedFormatting: true } : {}),
       ...(loss?.script ? { mixedScript: true } : {}),
@@ -389,6 +402,7 @@ export function queueTargetVerification(
   context: Word.RequestContext,
   parts: readonly WordSelectionRangePart[],
   captured: readonly { tableNestingLevel: number }[],
+  support: WordSelectionSupport,
 ): () => WordTargetVerification {
   context.document.load("changeTrackingMode");
   const queued = parts.map((part, i) => {
@@ -405,6 +419,7 @@ export function queueTargetVerification(
       checks: queueParagraphSpanChecks(
         paragraph,
         captured[i].tableNestingLevel > 0,
+        support.listsBookmarks,
       ),
     };
   });

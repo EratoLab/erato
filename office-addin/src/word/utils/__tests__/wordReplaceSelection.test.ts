@@ -490,6 +490,43 @@ describe("replaceWordSelection on the web", () => {
   });
 });
 
+describe("replaceWordSelection on Mac when its OOXML leaves out bookmarks", () => {
+  it.each([
+    [
+      "a heading's whole text",
+      "H1",
+      "H1 Selection probe heading",
+      "H1 Shorter heading",
+    ],
+    ["two words of a plain paragraph", "PL1", "lima mike", REWRITE],
+    [
+      "a paragraph that keeps a field",
+      "FD1",
+      "before",
+      "FD1 Feld vor \u27E61\u27E7 Feld danach.",
+    ],
+  ] as const)(
+    "refuses once a bookmark was put on %s since Send, and writes nothing",
+    async (_, p, text, rewrite) => {
+      const host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        host: "mac",
+        ooxmlOmitsBookmarks: true,
+      });
+      const capture = await captureOf(host, { p });
+      expect(capture.selection).toMatchObject({ role: "rewrite" });
+      host.format({ p, text }, { bookmark: "_Toc938001" });
+      expect(host.ooxml({ p })).not.toContain("bookmark");
+      const before = host.paragraphs();
+      expect(await replace(capture, rewrite)).toMatchObject({
+        status: "refused",
+        code: "UNSUPPORTED_CONTENT",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.paragraphs()).toEqual(before);
+    },
+  );
+});
+
 describe.each(HOSTS)(
   "replaceWordSelection of an inline span on %s",
   (flavour) => {

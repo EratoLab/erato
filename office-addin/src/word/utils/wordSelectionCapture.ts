@@ -613,7 +613,11 @@ export async function captureWordSelection(
       );
       const parts = wordSelectionPartOffsets(facts);
       const checks = covered.map((paragraph) =>
-        queueParagraphSpanChecks(paragraph, paragraph.tableNestingLevel > 0),
+        queueParagraphSpanChecks(
+          paragraph,
+          paragraph.tableNestingLevel > 0,
+          support.listsBookmarks,
+        ),
       );
       const sections = queueWordSections(context);
       // Replace finds a part by Word's search, so the capture makes sure the hits line up now.

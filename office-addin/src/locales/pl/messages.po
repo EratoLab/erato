@@ -4187,6 +4187,11 @@ msgstr "Zaznaczony tekst nie jest dokładnie fragmentem z Twojej prośby. Niczeg
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickEmphasis"
+msgstr "Zaznaczony fragment zawiera pogrubione, pochylone, podkreślone lub przekreślone słowa, których nie było we fragmencie z Twojej prośby. Zastąpienie usunęłoby to formatowanie, więc niczego nie zastąpiono."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.pickHint"
 msgstr "Zaznacz w programie Word fragment, o który chodzi, a następnie wybierz Zastąp zaznaczony fragment. Zostanie zastąpiony tylko wtedy, gdy jego tekst jest dokładnie taki sam."
 

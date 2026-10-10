@@ -4187,6 +4187,11 @@ msgstr "El texto seleccionado no es exactamente el pasaje de tu solicitud. No se
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickEmphasis"
+msgstr "El pasaje seleccionado tiene palabras en negrita, cursiva, subrayadas o tachadas que el pasaje de tu solicitud no tenía. Reemplazar quitaría ese formato, así que no se reemplazó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.pickHint"
 msgstr "Selecciona en Word el pasaje al que te refieres y elige Reemplazar el pasaje seleccionado. Solo se reemplaza si su texto es exactamente el mismo."
 

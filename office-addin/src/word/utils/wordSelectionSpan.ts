@@ -59,7 +59,7 @@ const PLAIN_CONTENT = new Set([
 ]);
 
 /** Word's own "last edit" bookmark, which it moves freely. */
-const WORD_BOOKMARK = "_GoBack";
+export const WORD_BOOKMARK = "_GoBack";
 
 /** Run properties Word writes on its own that change nothing a rewrite must keep. */
 const BENIGN_RUN_PROPERTIES = new Set(["lang", "noProof"]);

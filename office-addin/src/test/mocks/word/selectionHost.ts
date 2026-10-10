@@ -67,7 +67,8 @@ export interface MockSelectionRun {
   comment?: boolean;
   /**
    * Bookmark name; consecutive runs with the same name form one bookmark around their text, its
-   * bookmarkStart and bookmarkEnd inside the paragraph's own w:p as BM0 measured.
+   * bookmarkStart and bookmarkEnd inside the paragraph's own w:p as BM0 measured on Word PC and the
+   * web. Word for Mac was not measured; `ooxmlOmitsBookmarks` models it leaving them out.
    */
   bookmark?: string;
 }
@@ -136,6 +137,8 @@ export interface WordSelectionHostOptions {
    * Word PC do (ERMAIN-928 block 3). Defaults to true off the web.
    */
   cellParagraphOoxmlIsRow?: boolean;
+  /** getOoxml() shows no bookmark, as Word for Mac's might: BM0 did not run there. */
+  ooxmlOmitsBookmarks?: boolean;
 }
 
 /** Rewrites the hits a search returns; the hits are opaque, so it can only reorder, drop or repeat. */
@@ -287,6 +290,7 @@ export const WORD_SELECTION_API_SETS: Readonly<
   "Range.parentContentControlOrNullObject": ["WordApi", "1.3"],
   "Range.fields": ["WordApi", "1.4"],
   "Range.getReviewedText": ["WordApi", "1.4"],
+  "Range.getBookmarks": ["WordApi", "1.4"],
   "Table.getRange": ["WordApi", "1.3"],
 };
 
@@ -1697,8 +1701,9 @@ export function installWordSelectionHost(
     let bookmark: BookmarkState | undefined;
     const moveBookmark = (next: BookmarkState | undefined) => {
       if (next === bookmark) return;
-      if (bookmark) out.push(`<w:bookmarkEnd w:id="${bookmark.id}"/>`);
-      if (next)
+      if (bookmark && !options.ooxmlOmitsBookmarks)
+        out.push(`<w:bookmarkEnd w:id="${bookmark.id}"/>`);
+      if (next && !options.ooxmlOmitsBookmarks)
         out.push(
           `<w:bookmarkStart w:id="${next.id}" w:name="${esc(next.name)}"/>`,
         );
@@ -3613,6 +3618,26 @@ export function installWordSelectionHost(
       return clientResult(ctx, obj, `${type}.getReviewedText`, () => {
         gate("Range.getReviewedText");
         return reviewedText(target.whole(), version);
+      });
+    };
+    // A bookmark is hidden when its name starts with "_"; adjacent ones touch the range's edge.
+    obj.getBookmarks = (includeHidden = false, includeAdjacent = false) => {
+      method("getBookmarks");
+      return clientResult(ctx, obj, `${type}.getBookmarks`, () => {
+        gate("Range.getBookmarks");
+        const b = target.whole();
+        const edge = includeAdjacent ? 1 : 0;
+        const names = new Set<string>();
+        for (
+          let i = Math.max(0, b.s - edge);
+          i < Math.min(b.story.tokens.length, b.e + edge);
+          i += 1
+        ) {
+          const name = b.story.tokens[i].run.bookmark?.name;
+          if (name !== undefined && (includeHidden || !name.startsWith("_")))
+            names.add(name);
+        }
+        return [...names];
       });
     };
     obj.getTrackedChanges = () => {
