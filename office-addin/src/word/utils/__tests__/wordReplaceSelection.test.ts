@@ -67,6 +67,21 @@ const replace = (
 const others = (paragraphs: MockParagraphState[], except: string) =>
   paragraphs.filter((p) => !p.text.startsWith(except));
 
+const emphasis = (runs: MockParagraphState["runs"]) =>
+  runs
+    .filter((run) => run.text && !run.field)
+    .map((run) => [
+      run.text,
+      [
+        run.font?.bold && "bold",
+        run.font?.italic && "italic",
+        run.font?.underline && run.font.underline !== "None" && "underline",
+        run.font?.strikeThrough && "strike",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    ]);
+
 describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
   const install = (document: MockSelectionDocument = SV2_MAIN_DOCUMENT) =>
     installWordSelectionHost(document, { host: flavour });
@@ -563,20 +578,6 @@ describe.each(HOSTS)(
       ],
     };
     const install = () => installWordSelectionHost(MIXED, { host: flavour });
-    const emphasis = (runs: MockParagraphState["runs"]) =>
-      runs
-        .filter((run) => run.text && !run.field)
-        .map((run) => [
-          run.text,
-          [
-            run.font?.bold && "bold",
-            run.font?.italic && "italic",
-            run.font?.underline && run.font.underline !== "None" && "underline",
-            run.font?.strikeThrough && "strike",
-          ]
-            .filter(Boolean)
-            .join(" "),
-        ]);
     const PLAIN =
       "Plain \u27E61\u27E7bold\u27E6/1\u27E7 and \u27E62\u27E7slanted\u27E6/2\u27E7 with \u27E63\u27E7under\u27E6/3\u27E7 and \u27E64\u27E7struck\u27E6/4\u27E7 end.";
 
@@ -1425,6 +1426,141 @@ describe.each(HOSTS)(
         list: true,
       });
     });
+
+    const BOLD = { text: "strong", font: { bold: true } };
+    const STRUCK = { text: "gone", font: { strikeThrough: true } };
+    const SLANTED = { text: "leaning", font: { italic: true } };
+    const PAGE = { text: "3", field: "PAGE" };
+    it.each([
+      {
+        where: "the last",
+        first: ["MF1 Opening ", BOLD, " words."],
+        last: ["MF3 ", STRUCK, " then page ", PAGE, " and ", SLANTED, " end."],
+        sent: [
+          "MF1 Opening \u27E61\u27E7strong\u27E6/1\u27E7 words.",
+          "MF3 \u27E62\u27E7gone\u27E6/2\u27E7 then page \u27E63\u27E7 and \u27E64\u27E7leaning\u27E6/4\u27E7 end.",
+        ],
+        reply: [
+          "MF1 \u27E61\u27E7Strong\u27E6/1\u27E7 opening words.",
+          "MF3 \u27E64\u27E7Leaning\u27E6/4\u27E7 on page \u27E63\u27E7, then \u27E62\u27E7gone\u27E6/2\u27E7.",
+        ],
+        texts: [
+          "MF1 Strong opening words.",
+          "MF3 Leaning on page 3, then gone.",
+        ],
+        runs: [
+          [
+            ["MF1 ", ""],
+            ["Strong", "bold"],
+            [" opening words.", ""],
+          ],
+          [
+            ["MF3 ", ""],
+            ["Leaning", "italic"],
+            [" on page ", ""],
+            [", then ", ""],
+            ["gone", "strike"],
+            [".", ""],
+          ],
+        ],
+        writes: [
+          "Paragraph.insertOoxml",
+          "Paragraph.insertText",
+          "Paragraph.insertText",
+          "Range.insertText",
+          "Range.insertText",
+        ],
+      },
+      {
+        where: "the first",
+        first: ["MF1 Opening ", BOLD, " see page ", PAGE, " words."],
+        last: ["MF3 ", STRUCK, " and ", SLANTED, " end."],
+        sent: [
+          "MF1 Opening \u27E61\u27E7strong\u27E6/1\u27E7 see page \u27E62\u27E7 words.",
+          "MF3 \u27E63\u27E7gone\u27E6/3\u27E7 and \u27E64\u27E7leaning\u27E6/4\u27E7 end.",
+        ],
+        reply: [
+          "MF1 Page \u27E62\u27E7 opens with \u27E61\u27E7strong\u27E6/1\u27E7 words.",
+          "MF3 \u27E64\u27E7Leaning\u27E6/4\u27E7, then \u27E63\u27E7gone\u27E6/3\u27E7.",
+        ],
+        texts: [
+          "MF1 Page 3 opens with strong words.",
+          "MF3 Leaning, then gone.",
+        ],
+        runs: [
+          [
+            ["MF1 Page ", ""],
+            [" opens with ", ""],
+            ["strong", "bold"],
+            [" words.", ""],
+          ],
+          [
+            ["MF3 ", ""],
+            ["Leaning", "italic"],
+            [", then ", ""],
+            ["gone", "strike"],
+            [".", ""],
+          ],
+        ],
+        writes: [
+          "Paragraph.insertText",
+          "Range.insertText",
+          "Range.insertText",
+          "Range.insertText",
+          "Range.insertText",
+          "Paragraph.insertText",
+          "Paragraph.insertOoxml",
+        ],
+      },
+    ])(
+      "writes format spans in several paragraphs, a field in $where, last to first in one sync",
+      async ({ first, last, sent, reply, texts, runs, writes }) => {
+        const host = install({
+          body: [
+            "Intro.",
+            { runs: first },
+            "MF2 Plain middle words.",
+            { runs: last },
+            "Outro.",
+          ],
+        });
+        const capture = await captureAll(
+          host,
+          { p: "MF1", to: { p: "MF3" } },
+          "multi_paragraph",
+        );
+        expect(capture.selection?.selectedText).toBe(
+          [sent[0], "MF2 Plain middle words.", sent[1]].join("\n"),
+        );
+        const before = host.paragraphs();
+        const result = await replaceAll(
+          capture,
+          [reply[0], "MF2 Changed middle words.", reply[1]].join("\n"),
+        );
+        expect(result).toMatchObject({ status: "applied" });
+        expect(host.writeSyncs()).toHaveLength(1);
+        expect(
+          host
+            .writeSyncs()[0]
+            .writes.filter((write) => /\.insert(Text|Ooxml)$/.test(write)),
+        ).toEqual(writes);
+        const after = host.paragraphs();
+        expect(after.slice(1, 4).map((p) => p.text)).toEqual([
+          texts[0],
+          "MF2 Changed middle words.",
+          texts[1],
+        ]);
+        expect(after.slice(1, 4).map((p) => emphasis(p.runs))).toEqual([
+          runs[0],
+          [["MF2 Changed middle words.", ""]],
+          runs[1],
+        ]);
+        expect(
+          after.flatMap((p) => p.runs.filter((run) => run.field)),
+        ).toMatchObject([{ text: "3", field: "PAGE" }]);
+        expect([after[0], after[4]]).toEqual([before[0], before[4]]);
+      },
+    );
 
     it("empties a paragraph for an empty line but never removes it", async () => {
       const host = install();
