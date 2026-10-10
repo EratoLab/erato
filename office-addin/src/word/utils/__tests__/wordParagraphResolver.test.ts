@@ -157,7 +157,7 @@ describe("resolveWordParagraphs", () => {
     },
   );
 
-  it("keeps the ID with a twin further up only while the context above is unchanged", () => {
+  it("keeps the ID with a twin further up only while the paragraph above is the captured one", () => {
     const doc = body(["Same", "A", "B", "C", "Same", "D"]);
     const anchor = wordParagraphAnchor(doc, 4, 4);
     expect(resolveWordParagraphs(anchor, doc)).toEqual({ positions: [4] });
@@ -174,6 +174,13 @@ describe("resolveWordParagraphs", () => {
         { id: "id-4", text: "C edited" },
         ...doc.slice(4),
       ]),
+    ).toEqual({ positions: [4] });
+    expect(
+      resolveWordParagraphs(anchor, [
+        ...doc.slice(0, 4),
+        { id: "typed", text: "Typed" },
+        ...doc.slice(4),
+      ]),
     ).toEqual({ refused: "ambiguous" });
   });
 
@@ -188,6 +195,91 @@ describe("resolveWordParagraphs", () => {
     expect(resolveWordParagraphs(anchor, live)).toEqual({
       refused: "ambiguous",
     });
+  });
+
+  it("refuses a copy inserted below a target whose twin sits above it, without IDs", () => {
+    const anchor = wordParagraphAnchor(body(["A", "X", "X", "B"], false), 2, 2);
+    expect(anchor.window).toBe(1);
+    expect(
+      resolveWordParagraphs(anchor, body(["A", "X", "X", "X", "B"], false)),
+    ).toEqual({ refused: "ambiguous" });
+  });
+
+  it("refuses a copy of a span's last paragraph inserted inside the span, without IDs", () => {
+    const anchor = wordParagraphAnchor(
+      body(["A", "One", "Two", "B"], false),
+      1,
+      2,
+    );
+    expect(
+      resolveWordParagraphs(
+        anchor,
+        body(["A", "One", "Two", "Two", "B"], false),
+      ),
+    ).toEqual({ refused: "ambiguous" });
+  });
+
+  it("refuses an ID that moved onto a copy below a run of identical twins", () => {
+    const anchor = wordParagraphAnchor(body(["P", "P", "P", "P"]), 3, 3);
+    const live = [
+      { id: "id-1", text: "P" },
+      { id: "id-2", text: "P" },
+      { id: "id-3", text: "P" },
+      { id: "fresh", text: "P" },
+      { id: "id-4", text: "P" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({
+      refused: "ambiguous",
+    });
+  });
+
+  it("refuses an ID that moved onto a copy after a paragraph was inserted into the run of twins", () => {
+    const anchor = wordParagraphAnchor(
+      body(["P", "Q", "Q", "Q", "Q", "P"]),
+      4,
+      4,
+    );
+    const live = [
+      { id: "id-1", text: "P" },
+      { id: "id-2", text: "Q" },
+      { id: "fresh", text: "Fresh" },
+      { id: "id-3", text: "Q" },
+      { id: "id-4", text: "Q" },
+      { id: "new", text: "Q" },
+      { id: "id-5", text: "Q" },
+      { id: "id-6", text: "P" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({
+      refused: "ambiguous",
+    });
+  });
+
+  it("keeps the ID under a run of twins when the copy typed below took a new ID", () => {
+    const anchor = wordParagraphAnchor(body(["P", "P", "P", "P"]), 3, 3);
+    const live = [...body(["P", "P", "P", "P"]), { id: "typed", text: "P" }];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({ positions: [3] });
+  });
+
+  it("keeps following the ID when the text is pasted elsewhere below", () => {
+    const anchor = wordParagraphAnchor(body(["A", "Clause", "B"]), 1, 1);
+    const live = [
+      { id: "id-1", text: "A" },
+      { id: "id-2", text: "Clause" },
+      { id: "id-3", text: "B" },
+      { id: "pasted", text: "Clause" },
+    ];
+    expect(resolveWordParagraphs(anchor, live)).toEqual({ positions: [1] });
+  });
+
+  it("refuses a span rebuilt elsewhere from a copy of its middle paragraph, without IDs", () => {
+    const anchor = wordParagraphAnchor(body(["P", "Q", "P", "P"], false), 0, 2);
+    expect(anchor.window).toBe(0);
+    expect(
+      resolveWordParagraphs(
+        anchor,
+        body(["P", "Fresh", "Q", "P", "Q", "P"], false),
+      ),
+    ).toEqual({ refused: "ambiguous" });
   });
 
   it("tells repeated text apart by its neighbours when there are no IDs", () => {
@@ -297,7 +389,24 @@ function contextMatches(
 function referenceResolve(
   anchor: WordParagraphAnchor,
   live: readonly WordParagraphEntry[],
+  captured: readonly string[],
 ): WordParagraphResolution {
+  const texts = live.map((p) => p.text);
+  const count = (body: readonly string[], test: (start: number) => boolean) =>
+    body.filter((_, start) => test(start)).length;
+  const own = anchor.paragraphs.map(
+    (p) => (body: readonly string[]) => (start: number) =>
+      body[start] === p.text,
+  );
+  const windows = Array.from(
+    { length: anchor.window ?? 0 },
+    (_, w) => (body: readonly string[]) => (start: number) =>
+      contextMatches(body, start, anchor, w),
+  );
+  const grows = (
+    test: (body: readonly string[]) => (start: number) => boolean,
+  ) => count(texts, test(texts)) > count(captured, test(captured));
+  const grew = [...own, ...windows].some(grows);
   if (anchor.paragraphs.every((p) => p.id)) {
     const positions = anchor.paragraphs.map((p) =>
       live.findIndex((l) => l.id === p.id),
@@ -318,14 +427,17 @@ function referenceResolve(
       const context = anchor.before.every(
         (expected, k) => at(first - 1 - k) === expected,
       );
-      return twin && !context ? { refused: "ambiguous" } : { positions };
+      const moved = anchor.aboveId
+        ? first === 0 || live[first - 1].id !== anchor.aboveId
+        : !context;
+      return twin && moved ? { refused: "ambiguous" } : { positions };
     }
   }
   if (anchor.window === null) return { refused: "ambiguous" };
-  const texts = live.map((p) => p.text);
   const starts = texts
     .map((_, start) => start)
     .filter((start) => contextMatches(texts, start, anchor, anchor.window!));
+  if (starts.length === 1 && grew) return { refused: "ambiguous" };
   if (starts.length === 1)
     return { positions: anchor.paragraphs.map((_, i) => starts[0] + i) };
   if (starts.length > 1) return { refused: "ambiguous" };
@@ -370,30 +482,32 @@ const op: fc.Arbitrary<Op> = fc.oneof(
   fc.record({ kind: fc.constant("move" as const), at: fc.nat(), to: fc.nat() }),
   fc.record({ kind: fc.constant("copy" as const), at: fc.nat(), to: fc.nat() }),
 );
-const scenario = fc
-  .record({
-    texts: fc.array(pool, { minLength: 1, maxLength: 9 }),
-    ids: fc.boolean(),
-    first: fc.nat(),
-    length: fc.integer({ min: 1, max: 3 }),
-    ops: fc.array(op, { maxLength: 4 }),
-  })
-  .map(({ texts, ids, first, length, ops }) => {
-    const start = first % texts.length;
-    return {
-      ids,
-      ops,
-      doc: texts.map(
-        (text, i): ModelParagraph => ({
-          key: `k${i}`,
-          id: ids ? `k${i}` : null,
-          text,
-        }),
-      ),
-      first: start,
-      last: Math.min(texts.length - 1, start + length - 1),
-    };
-  });
+const scenarioOf = (texts: fc.Arbitrary<string>) =>
+  fc
+    .record({
+      texts: fc.array(texts, { minLength: 1, maxLength: 9 }),
+      ids: fc.boolean(),
+      first: fc.nat(),
+      length: fc.integer({ min: 1, max: 3 }),
+      ops: fc.array(op, { maxLength: 4 }),
+    })
+    .map(({ texts, ids, first, length, ops }) => {
+      const start = first % texts.length;
+      return {
+        ids,
+        ops,
+        doc: texts.map(
+          (text, i): ModelParagraph => ({
+            key: `k${i}`,
+            id: ids ? `k${i}` : null,
+            text,
+          }),
+        ),
+        first: start,
+        last: Math.min(texts.length - 1, start + length - 1),
+      };
+    });
+const scenario = scenarioOf(pool);
 
 /** Cut and paste gives the paragraph a new ID; a copy is a new paragraph. */
 function mutate(
@@ -454,7 +568,11 @@ describe("resolveWordParagraphs properties", () => {
         );
         const after = live(mutate(doc, ops, ids));
         expect(resolveWordParagraphs(anchor, after)).toEqual(
-          referenceResolve(anchor, after),
+          referenceResolve(
+            anchor,
+            after,
+            doc.map((p) => p.text),
+          ),
         );
       }),
       { numRuns: 3000 },
@@ -494,6 +612,73 @@ describe("resolveWordParagraphs properties", () => {
         );
       }),
       { numRuns: 3000 },
+    );
+  });
+
+  it("never picks a copy while the original is untouched: copies, fresh paragraphs and moved IDs", () => {
+    type CopyOp =
+      | { kind: "fresh"; at: number }
+      | { kind: "copy"; which: number; to: number }
+      | { kind: "copyBlock"; to: number }
+      | { kind: "split"; at: number; same: boolean };
+    const copyOp: fc.Arbitrary<CopyOp> = fc.oneof(
+      fc.record({ kind: fc.constant("fresh" as const), at: fc.nat() }),
+      fc.record({
+        kind: fc.constant("copy" as const),
+        which: fc.nat(),
+        to: fc.nat(),
+      }),
+      fc.record({ kind: fc.constant("copyBlock" as const), to: fc.nat() }),
+      fc.record({
+        kind: fc.constant("split" as const),
+        at: fc.nat(),
+        same: fc.boolean(),
+      }),
+    );
+    fc.assert(
+      fc.property(
+        // Two texts make runs of identical twins, where a moved ID keeps the context above.
+        fc.oneof(scenario, scenarioOf(fc.constantFrom("P", "Q"))),
+        fc.array(copyOp, { maxLength: 4 }),
+        ({ doc, ids, first, last }, ops) => {
+          const anchor = wordParagraphAnchor(live(doc), first, last);
+          const span = doc.slice(first, last + 1);
+          const next = [...doc];
+          let made = 0;
+          const fresh = () => `n${(made += 1)}`;
+          const add = (at: number, text: string, id = fresh()) =>
+            next.splice(at % (next.length + 1), 0, {
+              key: fresh(),
+              id: ids ? id : null,
+              text,
+            });
+          for (const o of ops) {
+            if (o.kind === "fresh") add(o.at, fresh());
+            else if (o.kind === "copy")
+              add(o.to, span[o.which % span.length].text);
+            else if (o.kind === "copyBlock") {
+              const at = o.to % (next.length + 1);
+              span.forEach((p, i) => add(at + i, p.text));
+            } else {
+              // Return at the end of a paragraph: Word hands its ID to the new paragraph below.
+              const i = o.at % next.length;
+              const moved = next[i].id;
+              next[i] = { ...next[i], id: ids ? fresh() : null };
+              next.splice(i + 1, 0, {
+                key: fresh(),
+                id: moved,
+                text: o.same ? next[i].text : fresh(),
+              });
+            }
+          }
+          const result = resolveWordParagraphs(anchor, live(next));
+          if ("refused" in result) return;
+          expect(result.positions.map((p) => next[p].key)).toEqual(
+            span.map((p) => p.key),
+          );
+        },
+      ),
+      { numRuns: 5000 },
     );
   });
 

@@ -4047,6 +4047,11 @@ msgstr "Locate passage {0}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.ambiguous"
+msgstr "This passage now appears more than once, so Erato can't tell which one you meant. Nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.appliedTracked"
 msgstr "Track Changes is on, so the replacement is a tracked change. Reject it in Word to undo it."
 

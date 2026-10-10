@@ -249,6 +249,12 @@ function resultText(
             message:
               "The proposal is empty or holds characters Word does not keep as text. Nothing was replaced.",
           });
+        case "AMBIGUOUS_TARGET":
+          return t({
+            id: "officeAddin.word.selection.ambiguous",
+            message:
+              "This passage now appears more than once, so Erato can't tell which one you meant. Nothing was replaced.",
+          });
         case "TARGET_RANGE_UNPROVEN":
           return t({
             id: "officeAddin.word.selection.rangeUnproven",

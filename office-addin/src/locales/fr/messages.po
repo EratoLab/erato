@@ -4047,6 +4047,11 @@ msgstr "Localiser le passage {0}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.ambiguous"
+msgstr "Ce passage apparaît maintenant plusieurs fois, Erato ne peut donc pas savoir lequel vous vouliez. Rien n'a été remplacé."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.appliedTracked"
 msgstr "Le suivi des modifications est activé : le remplacement est donc une modification suivie. Refusez-la dans Word pour l'annuler."
 
