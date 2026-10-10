@@ -22,13 +22,7 @@ const opens = (id: number, name: string) =>
   `<w:bookmarkStart w:id="${id}" w:name="${name}"/>`;
 const closes = (id: number) => `<w:bookmarkEnd w:id="${id}"/>`;
 const bookmarks = (items: readonly WordKeptItem[]) =>
-  items.map(({ kind, start, end, detail, openEnded }) => ({
-    kind,
-    start,
-    end,
-    detail,
-    ...(openEnded ? { openEnded } : {}),
-  }));
+  items.map(({ kind, start, end, detail }) => ({ kind, start, end, detail }));
 
 const read = (paragraph: string, rangeText: string) => {
   const result = readWordParagraphItems(pkg(paragraph), rangeText);
@@ -228,23 +222,51 @@ describe("readWordParagraphItems", () => {
     ]);
   });
 
-  it("reads a bookmark that starts or ends in another paragraph as open-ended", () => {
-    expect(
-      bookmarks(
-        read(p(run("Chapter "), opens(3, "Long"), run("one")), "Chapter one")
-          .items,
-      ),
-    ).toEqual([
-      { kind: "bookmark", start: 8, end: 11, detail: "Long", openEnded: "end" },
-    ]);
-    expect(
-      bookmarks(
-        read(p(run("still"), closes(3), run(" after")), "still after").items,
-      ),
-    ).toEqual([
-      { kind: "bookmark", start: 0, end: 5, detail: "", openEnded: "start" },
-    ]);
-  });
+  it.each([
+    [
+      "that runs into the next paragraph",
+      p(run("Chapter "), opens(3, "Long"), run("one")),
+      "Chapter one",
+    ],
+    [
+      "that started in an earlier paragraph",
+      p(run("still"), closes(3), run(" after")),
+      "still after",
+    ],
+    [
+      "made on a triple-clicked paragraph, whose end starts the next one",
+      p(closes(3), run("Next paragraph.")),
+      "Next paragraph.",
+    ],
+  ])(
+    "refuses a bookmark %s, since BM0 measured no write of one with a single end",
+    (_, paragraph, rangeText) => {
+      expect(readWordParagraphItems(pkg(paragraph), rangeText)).toEqual({
+        refused: "unsupported",
+      });
+    },
+  );
+
+  it.each([
+    [
+      "a bookmark's",
+      opens(3, "Whole") + p(run("Page "), field(" PAGE ", "3")) + closes(3),
+    ],
+    [
+      "a comment's",
+      `<w:commentRangeStart w:id="3"/>${p(run("Page "), field(" PAGE ", "3"))}`,
+    ],
+  ])(
+    "refuses %s marks between paragraphs, which a rewrite would write back unread",
+    (_, body) => {
+      expect(readWordParagraphItems(pkg(body), "Page 3")).toEqual({
+        refused: "unsupported",
+      });
+      expect(
+        read(p(run("Page "), field(" PAGE ", "3")), "Page 3").items,
+      ).toEqual([expect.objectContaining({ kind: "field", start: 5, end: 6 })]);
+    },
+  );
 
   it("reads an empty bookmark as a span without text", () => {
     expect(

@@ -43,14 +43,14 @@ export interface WordKeptItem {
   shows: string;
   /**
    * For the model and the card: a field's code, a link's target; "" when there is nothing to say. A
-   * bookmark's name, which only the checks read; "" for one that started in an earlier paragraph.
+   * bookmark's name, which only the checks read.
    */
   detail: string;
   /** Document order, which breaks ties between items at the same offset; a span's start. */
   order: number;
   /** A span's end, in the same order. */
   closeOrder?: number;
-  /** A span whose other end lies in another paragraph, as a comment range or bookmark may. */
+  /** A span whose other end lies in another paragraph, as a comment range may. */
   openEnded?: "start" | "end";
   /** A comment without text of its own (a collapsed range, or only its anchor), kept as a point. */
   collapsed?: true;
@@ -65,7 +65,8 @@ export type WordKeptItemsRefusal =
   | "unreadable"
   /**
    * Content no item covers: a tracked change, a symbol, a page break, an equation, a bookmark
-   * inside a field or a table column's bookmark, ...
+   * inside a field, a table column's bookmark, a bookmark that runs into another paragraph,
+   * anything between the package's paragraphs, ...
    */
   | "unsupported"
   /** The runs and items do not spell paragraph.text, so no offset can be trusted. */
@@ -143,6 +144,16 @@ class Unsupported extends Error {}
  * does not know, it refuses rather than skips, so that an offset never lands on hidden content.
  */
 function events(paragraph: Element): Event[] {
+  // Besides the paragraph, the package holds only Word's empty paragraph and the section's
+  // properties; marks between paragraphs, such as those of a bookmark around whole paragraphs,
+  // would go unread and still be written back.
+  const body = paragraph.parentElement;
+  if (
+    body &&
+    isW(body, "body") &&
+    children(body).some((c) => !isW(c, "p") && !isW(c, "sectPr"))
+  )
+    throw new Unsupported();
   const out: Event[] = [];
   let order = 0;
   const item = (kind: WordKeptItemKind, detail = ""): WordKeptItem => ({
@@ -376,12 +387,9 @@ function events(paragraph: Element): Event[] {
         case "bookmarkEnd": {
           const id = attr(child, "id") ?? "";
           if (goBack.has(id)) break;
-          if (field) throw new Unsupported();
-          const bookmark = bookmarks.get(id) ?? item("bookmark");
-          if (!bookmarks.has(id)) {
-            bookmark.openEnded = "start";
-            bookmarks.set(id, bookmark);
-          }
+          const bookmark = bookmarks.get(id);
+          if (field || !bookmark) throw new Unsupported();
+          bookmarks.delete(id);
           bookmark.closeOrder = order++;
           out.push({ type: "close", item: bookmark, node: child });
           break;
@@ -392,10 +400,12 @@ function events(paragraph: Element): Event[] {
     }
   };
   visit(paragraph);
-  if (field) throw new Unsupported();
-  for (const span of [...comments.values(), ...bookmarks.values()])
-    if (!out.some((e) => e.type === "close" && e.item === span))
-      span.openEnded = "end";
+  // A bookmark with only one end here, as one that runs into another paragraph has, refuses: BM0
+  // measured bookmarks within one paragraph only, so whether insertOoxml keeps it is not known.
+  if (field || bookmarks.size > 0) throw new Unsupported();
+  for (const comment of comments.values())
+    if (!out.some((e) => e.type === "close" && e.item === comment))
+      comment.openEnded = "end";
   return out;
 }
 

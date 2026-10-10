@@ -316,6 +316,23 @@ describe("scanWordSelectionSpan on content it does not know", () => {
     });
   });
 
+  it("reports a bookmark's marks between paragraphs as a bookmark", () => {
+    expect(
+      scanWordSelectionSpan(
+        pkg(
+          `<w:bookmarkStart w:id="3" w:name="Whole"/><w:p>${run("Page")}</w:p><w:bookmarkEnd w:id="3"/>`,
+        ),
+      ).hazards,
+    ).toEqual({ bookmark: true, breakOrSymbol: true });
+    expect(
+      scanWordSelectionSpan(
+        pkg(
+          `<w:bookmarkStart w:id="0" w:name="_GoBack"/><w:p>${run("Page")}</w:p><w:bookmarkEnd w:id="0"/>`,
+        ),
+      ).hazards,
+    ).toEqual({ breakOrSymbol: true });
+  });
+
   it.each([
     ["an inserted", `<w:rPr><w:ins w:id="3" w:author="A"/></w:rPr>`],
     ["a deleted", `<w:rPr><w:del w:id="3" w:author="A"/></w:rPr>`],

@@ -250,7 +250,6 @@ describe("rewriteWordParagraphPart with bookmarks", () => {
       .map((item) => [
         item.detail,
         result.rangeText.slice(item.start, item.end),
-        ...(item.openEnded ? [item.openEnded] : []),
       ]);
   };
   const heading = "H1 Selection probe heading";
@@ -338,19 +337,47 @@ describe("rewriteWordParagraphPart with bookmarks", () => {
     expect(covers(result)).toEqual([["_Ref1", "Abbildung 1"]]);
   });
 
-  it("keeps a bookmark that runs into the next paragraph, or came from the previous one", () => {
+  it("refuses a bookmark that runs into the next paragraph, or came from the previous one", () => {
     expect(
-      covers(
-        rewrite(p(opens(3, "Long"), run("Chapter one")), "Chapter one", 0, 11, [
-          "Kapitel eins",
-        ]),
+      rewriteWordParagraphPart(
+        pkg(p(opens(3, "Long"), run("Chapter one"))),
+        "Chapter one",
+        0,
+        11,
+        ["Kapitel eins"],
       ),
-    ).toEqual([["Long", "Kapitel eins", "end"]]);
+    ).toBeNull();
     expect(
-      covers(
-        rewrite(p(run("still"), closes(3)), "still", 0, 5, ["noch immer"]),
+      rewriteWordParagraphPart(pkg(p(run("still"), closes(3))), "still", 0, 5, [
+        "noch immer",
+      ]),
+    ).toBeNull();
+    expect(
+      rewriteWordParagraphPart(
+        pkg(p(closes(3), run("Next paragraph."))),
+        "Next paragraph.",
+        5,
+        14,
+        ["section"],
       ),
-    ).toEqual([["", "noch immer", "start"]]);
+    ).toBeNull();
+  });
+
+  it("refuses a paragraph with a bookmark's marks around it, between paragraphs", () => {
+    const page = p(run("Page "), field(" PAGE ", "3"), run(" of the report."));
+    const text = "Page 3 of the report.";
+    expect(rewrite(page, text, 7, 21, ["of the summary."]).rangeText).toBe(
+      "Page 3 of the summary.",
+    );
+    expect(
+      rewriteWordParagraphPart(
+        pkg(opens(3, "Whole") + page + closes(3)),
+        text,
+        7,
+        21,
+        ["of the summary."],
+      ),
+    ).toBeNull();
   });
 
   it("puts new text before an item outside the bookmark around just that item", () => {

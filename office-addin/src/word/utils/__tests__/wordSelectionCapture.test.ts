@@ -1126,6 +1126,76 @@ describe.each(HOSTS)(
           });
         },
       );
+
+      /** Captures with each paragraph's getOoxml() passed through `edit`. */
+      const editedOoxml = (
+        body: MockSelectionDocument["body"],
+        edit: (ooxml: string, text: string) => string,
+      ) => {
+        const host = installWordSelectionHost(
+          { body: ["Intro.", ...body, "Outro."] },
+          { host: flavour, paragraphOoxml: edit },
+        );
+        return async (target: MockSelectionTarget) => {
+          host.select(target);
+          const read = await captureWordSelection("user", 15_000, INLINE);
+          if (read.status !== "ok") throw new Error("capture failed");
+          return read.value;
+        };
+      };
+
+      it.each([
+        ["a span", { p: "NX", text: "paragraph" }],
+        ["the whole paragraph", { p: "NX" }],
+      ] as const)(
+        "keeps %s context only when the paragraph starts with the end of the previous one's bookmark",
+        async (_, target) => {
+          // A bookmark made on a triple-clicked paragraph takes its mark, so it ends in the next.
+          const captureOf = editedOoxml(
+            ["NX Next paragraph."],
+            (ooxml, text) =>
+              text.startsWith("NX")
+                ? ooxml.replace("<w:p>", '<w:p><w:bookmarkEnd w:id="941"/>')
+                : ooxml,
+          );
+          expect(await captureOf(target)).toMatchObject({
+            role: "context_only",
+            reasonCode: "bookmark",
+          });
+        },
+      );
+
+      it("keeps a paragraph with a bookmark's marks around it, between paragraphs, context only", async () => {
+        let between = false;
+        const captureOf = editedOoxml(
+          [
+            {
+              runs: [
+                "PG Page ",
+                { text: "3", field: "PAGE" },
+                " of the report.",
+              ],
+            },
+          ],
+          (ooxml, text) =>
+            between && text.startsWith("PG")
+              ? ooxml.replace(
+                  /<w:p>[\s\S]*?<\/w:p>/,
+                  (paragraph) =>
+                    `<w:bookmarkStart w:id="941" w:name="Whole941"/>${paragraph}<w:bookmarkEnd w:id="941"/>`,
+                )
+              : ooxml,
+        );
+        expect(await captureOf({ p: "PG" })).toMatchObject({
+          role: "rewrite",
+          paragraphs: [{ kept: { kinds: ["field"] } }],
+        });
+        between = true;
+        expect(await captureOf({ p: "PG" })).toMatchObject({
+          role: "context_only",
+          reasonCode: "bookmark",
+        });
+      });
     });
 
     it("keeps a span next to a red word context only, since the rewrite could take its colour", async () => {

@@ -309,6 +309,21 @@ function scanParagraphMark(pPr: Element, hazards: WordSelectionHazards): void {
  */
 function scanStructure(body: Element, hazards: WordSelectionHazards): void {
   const bookmarks = new Map<string, string>();
+  /** Whether `child` is a bookmark's start or end; any but Word's own is a hazard. */
+  const bookmarkMark = (child: Element) => {
+    if (child.namespaceURI !== W) return false;
+    if (child.localName === "bookmarkStart") {
+      const id = attr(child, "id") ?? "";
+      const bookmark = attr(child, "name") ?? "";
+      bookmarks.set(id, bookmark);
+      if (bookmark !== WORD_BOOKMARK) hazards.bookmark = true;
+      return true;
+    }
+    if (child.localName !== "bookmarkEnd") return false;
+    if (bookmarks.get(attr(child, "id") ?? "") !== WORD_BOOKMARK)
+      hazards.bookmark = true;
+    return true;
+  };
   const visit = (element: Element) => {
     for (const child of Array.from(element.children)) {
       const name = child.localName;
@@ -317,18 +332,7 @@ function scanStructure(body: Element, hazards: WordSelectionHazards): void {
         continue;
       }
       if (child.namespaceURI === W && name === "rPr") continue;
-      if (child.namespaceURI === W && name === "bookmarkStart") {
-        const id = attr(child, "id") ?? "";
-        const bookmark = attr(child, "name") ?? "";
-        bookmarks.set(id, bookmark);
-        if (bookmark !== WORD_BOOKMARK) hazards.bookmark = true;
-        continue;
-      }
-      if (child.namespaceURI === W && name === "bookmarkEnd") {
-        if (bookmarks.get(attr(child, "id") ?? "") !== WORD_BOOKMARK)
-          hazards.bookmark = true;
-        continue;
-      }
+      if (bookmarkMark(child)) continue;
       const known = child.namespaceURI === W ? STRUCTURE[name] : undefined;
       if (known) hazards[known] = true;
       else if (child.namespaceURI !== W || !PLAIN_CONTENT.has(name))
@@ -339,7 +343,11 @@ function scanStructure(body: Element, hazards: WordSelectionHazards): void {
   for (const child of Array.from(body.children)) {
     if (child.namespaceURI === W && child.localName === "sectPr") continue;
     if (child.namespaceURI === W && child.localName === "p") visit(child);
-    else hazards.breakOrSymbol = true;
+    else {
+      // Content between paragraphs; a bookmark's marks there are a bookmark too.
+      bookmarkMark(child);
+      hazards.breakOrSymbol = true;
+    }
   }
 }
 

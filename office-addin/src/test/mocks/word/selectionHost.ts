@@ -140,6 +140,12 @@ export interface WordSelectionHostOptions {
   cellParagraphOoxmlIsRow?: boolean;
   /** getOoxml() shows no bookmark, as Word for Mac's might: BM0 did not run there. */
   ooxmlOmitsBookmarks?: boolean;
+  /**
+   * Rewrites what Paragraph.getOoxml() returns, given the paragraph's text, for markup the model
+   * does not hold: the lone end of a bookmark from another paragraph, marks between paragraphs.
+   * What Word returns there was not measured.
+   */
+  paragraphOoxml?: (ooxml: string, text: string) => string;
 }
 
 /** Rewrites the hits a search returns; the hits are opaque, so it can only reorder, drop or repeat. */
@@ -3610,7 +3616,13 @@ export function installWordSelectionHost(
           type === "Paragraph" && (options.cellParagraphOoxmlIsRow ?? !web)
             ? rowOoxmlOf(whole)
             : null;
-        return row ?? ooxmlOf(whole);
+        const ooxml = row ?? ooxmlOf(whole);
+        return type === "Paragraph" && options.paragraphOoxml
+          ? options.paragraphOoxml(
+              ooxml,
+              plainText(whole.story, whole.s, whole.e),
+            )
+          : ooxml;
       });
     };
     obj.select = () => {
