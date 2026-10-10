@@ -697,3 +697,15 @@ export function splitWordMarkedLine(
     return { refused: "MARKERS_CHANGED" };
   return { pieces };
 }
+
+/** What a write must leave of a paragraph's items: their kinds, shown text and details, in order. */
+export const wordKeptItemsShape = (items: readonly WordKeptItem[]) =>
+  JSON.stringify(
+    items.map(({ kind, shows, detail, openEnded, collapsed }) => ({
+      kind,
+      shows,
+      detail,
+      openEnded,
+      collapsed,
+    })),
+  );

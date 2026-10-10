@@ -10,19 +10,19 @@ import {
   wordSelectionPartOffsets,
 } from "./wordSelectionAnchor";
 import {
+  markWordSelectionPart,
+  readWordParagraphItems,
+} from "./wordSelectionItems";
+import {
   queueWordSearch,
   searchStartsOf,
   wordSearchable,
   wordSearchHitAt,
 } from "./wordSelectionRange";
-import {
-  markWordSelectionPart,
-  readWordParagraphItems,
-} from "./wordSelectionItems";
-import { scanWordSelectionSpan } from "./wordSelectionSpan";
 import { currentWordSelectionSupport } from "./wordSelectionSupport";
 import {
   evaluateParagraphSpan,
+  keptItemHazards,
   queueParagraphSpanChecks,
   queueWordSections,
   readWordStory,
@@ -472,20 +472,6 @@ function keptParts(
 }
 
 /**
- * What still keeps a paragraph with kept items context only: its whole OOXML is written, so its
- * formatting is kept as it is, but a revision or complex-script text is not.
- */
-function keptHazards(read: WordParagraphSpanChecks): WordSelectionHazards {
-  const { hazards } = scanWordSelectionSpan(read.ooxml);
-  return {
-    ...(hazards.complexScript ? { complexScript: true } : {}),
-    ...(hazards.trackedChange || read.objectHazards.trackedChange
-      ? { trackedChange: true }
-      : {}),
-  };
-}
-
-/**
  * The Send-time read: the selection's paragraphs with their identity texts, the span's offsets
  * and, in the main story, the anchor a later Replace proves. Every read is one Word for the web
  * measured as leaving the document unchanged (preflight impact 1): a selected passage that occurs
@@ -682,7 +668,7 @@ export async function captureWordSelection(
       const hazards: WordSelectionHazards = Object.assign(
         {},
         ...spanChecks.map((check, i) =>
-          check ? check.hazards : keptHazards(reads[i]),
+          check ? check.hazards : keptItemHazards(reads[i]),
         ),
         endsSection.some(Boolean) ? { breakOrSymbol: true } : {},
       );

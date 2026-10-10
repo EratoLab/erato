@@ -19,6 +19,10 @@ import {
   wordSelectionEdgeOnly,
   wordSelectionTargetFormat,
 } from "./wordSelectionFormatting";
+import {
+  markWordSelectionPart,
+  readWordParagraphItems,
+} from "./wordSelectionItems";
 import { buildWordSelectionRanges } from "./wordSelectionRange";
 import {
   scanWordSelectionSpan,
@@ -115,6 +119,22 @@ export function queueParagraphSpanChecks(
       ...(revisions.items.length > 0 ? { trackedChange: true } : {}),
     },
   });
+}
+
+/**
+ * What still keeps a paragraph with kept items from being rewritten: its whole OOXML is written, so
+ * its formatting is kept as it is, but a revision or complex-script text is not.
+ */
+export function keptItemHazards(
+  checks: WordParagraphSpanChecks,
+): WordSelectionHazards {
+  const { hazards } = scanWordSelectionSpan(checks.ooxml);
+  return {
+    ...(hazards.complexScript ? { complexScript: true } : {}),
+    ...(hazards.trackedChange || checks.objectHazards.trackedChange
+      ? { trackedChange: true }
+      : {}),
+  };
 }
 
 /** The sections wordParagraphsEndingSection reads, loaded by the caller's next sync. */
@@ -283,12 +303,18 @@ export async function proveWordSelectionTarget(
   const offsets = wordSelectionPartOffsets(selection);
   const built = await buildWordSelectionRanges(
     context,
-    paragraphs.map((paragraph, i) => ({
-      paragraph,
-      rangeText: selection.paragraphs[i].rangeText,
-      start: offsets[i].start,
-      end: offsets[i].end,
-    })),
+    paragraphs.map((paragraph, i) => {
+      const { rangeText, kept } = selection.paragraphs[i];
+      // A paragraph that keeps items is written whole as OOXML; no part range is needed.
+      return kept
+        ? { paragraph, rangeText, start: 0, end: rangeText.length }
+        : {
+            paragraph,
+            rangeText,
+            start: offsets[i].start,
+            end: offsets[i].end,
+          };
+    }),
     support,
   );
   if ("refused" in built) return built;
@@ -358,7 +384,8 @@ export function queueTargetVerification(
 
 export type WordTargetCheck =
   | {
-      formats: WordSelectionTargetFormat[];
+      /** Null for a paragraph that keeps items: its OOXML keeps its formatting as it is. */
+      formats: (WordSelectionTargetFormat | null)[];
       trackingOn: boolean;
       /** Each covered paragraph's own OOXML, for Undo. */
       backups: string[];
@@ -388,17 +415,44 @@ export function checkTargetVerification(
   if (!unchanged) return { refused: "TARGET_TEXT_MISMATCH" };
   if (trackingMode !== "Off" && !/^Track/.test(trackingMode))
     return { refused: "UNSUPPORTED_CONTENT" };
+  const keeps = selection.paragraphs.some((p) => p.kept);
+  // Word would redline a paragraph written as OOXML whole, its items inside the revision.
+  if (keeps && trackingMode !== "Off") return { refused: "TRACKED_ITEMS" };
   const offsets = wordSelectionPartOffsets(selection);
   const expected = wordSelectionParts(selection);
   if (
     paragraphs.some(
-      (live, i) => !offsets[i].whole && live.partText !== expected[i],
+      (live, i) =>
+        !selection.paragraphs[i].kept &&
+        !offsets[i].whole &&
+        live.partText !== expected[i],
     )
   )
     return { refused: "TARGET_RANGE_UNPROVEN" };
-  const formats: WordSelectionTargetFormat[] = [];
+  const formats: (WordSelectionTargetFormat | null)[] = [];
   for (const [i, live] of paragraphs.entries()) {
     const { start, end, whole } = offsets[i];
+    const kept = selection.paragraphs[i].kept;
+    if (kept) {
+      const items = readWordParagraphItems(live.checks.ooxml, live.rangeText);
+      const marked =
+        "items" in items
+          ? markWordSelectionPart(
+              live.rangeText,
+              items,
+              start,
+              end,
+              kept.markers[0]?.number ?? 1,
+            )
+          : null;
+      if (marked?.text !== kept.text)
+        return { refused: "TARGET_TEXT_MISMATCH" };
+      const hazards = keptItemHazards(live.checks);
+      if (hazards.trackedChange || hazards.complexScript)
+        return { refused: "UNSUPPORTED_CONTENT" };
+      formats.push(null);
+      continue;
+    }
     const evaluated = evaluateParagraphSpan(
       live.checks,
       live.style,

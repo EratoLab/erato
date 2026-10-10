@@ -1,12 +1,12 @@
 import {
   alignWordParagraph,
+  wordKeptItemsShape,
   wordParagraphElement,
   wordPartBoundaries,
 } from "./wordSelectionItems";
 
 import type {
   WordAlignedParagraph,
-  WordKeptItem,
   WordPartBoundary,
 } from "./wordSelectionItems";
 
@@ -234,14 +234,6 @@ function slot(
   return { parent: after.parentNode!, before: after.nextSibling };
 }
 
-const shape = (items: readonly WordKeptItem[]) =>
-  items.map(({ kind, shows, detail, openEnded }) => ({
-    kind,
-    shows,
-    detail,
-    openEnded,
-  }));
-
 /**
  * The paragraph with its part [start, end) replaced by `pieces`, the text before, between and after
  * the part's markers. Only text is replaced; every item and everything outside the part stays as
@@ -317,9 +309,7 @@ export function rewriteWordParagraphPart(
   const check = wordParagraphElement(result);
   const reread = check && alignWordParagraph(check.paragraph, expected);
   if (!reread || "refused" in reread) return null;
-  if (
-    JSON.stringify(shape(reread.items)) !== JSON.stringify(shape(aligned.items))
-  )
+  if (wordKeptItemsShape(reread.items) !== wordKeptItemsShape(aligned.items))
     return null;
   return { ooxml: result, rangeText: expected };
 }

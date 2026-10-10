@@ -1,7 +1,10 @@
+import { splitWordMarkedLine } from "./wordSelectionItems";
+
 import type {
   WordSelectionReplaceCode,
   WordSelectionShape,
 } from "./wordSelectionAnchor";
+import type { WordKeptMarker } from "./wordSelectionItems";
 
 /** Fence tags are case-sensitive and must match the renderer registration. */
 export const WORD_REPLACE_FENCE = "erato-word-replace";
@@ -47,4 +50,24 @@ export function splitWordSelectionReplacement(
   return lines.length === paragraphCount
     ? { lines }
     : { refused: "PARAGRAPH_COUNT_MISMATCH" };
+}
+
+/**
+ * Per covered paragraph, its line split at the markers of the items it keeps; null for a paragraph
+ * without items, whose line must hold no marker bracket, since it would be written as text.
+ */
+export function wordSelectionLinePieces(
+  paragraphs: readonly {
+    kept?: { markers: readonly Pick<WordKeptMarker, "number" | "end">[] };
+  }[],
+  lines: readonly string[],
+): { pieces: (string[] | null)[] } | { refused: "MARKERS_CHANGED" } {
+  const pieces: (string[] | null)[] = [];
+  for (const [i, line] of lines.entries()) {
+    const kept = paragraphs[i]?.kept;
+    const split = splitWordMarkedLine(line, kept?.markers ?? []);
+    if ("refused" in split) return split;
+    pieces.push(kept ? split.pieces : null);
+  }
+  return { pieces };
 }

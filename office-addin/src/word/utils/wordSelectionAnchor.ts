@@ -8,11 +8,11 @@ import {
   utf8ByteLength,
 } from "../../core/clientActions/actionFacetArgs";
 
-import type { WordMarkedPart, WordKeptMarker } from "./wordSelectionItems";
 import type {
   WordParagraphAnchor,
   WordParagraphEntry,
 } from "./wordParagraphResolver";
+import type { WordMarkedPart, WordKeptMarker } from "./wordSelectionItems";
 import type { WordSelectionSupport } from "./wordSelectionSupport";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 

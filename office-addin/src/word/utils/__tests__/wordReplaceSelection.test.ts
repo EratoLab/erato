@@ -288,6 +288,73 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     ).toMatchObject({ status: "stale" });
   });
 
+  it("rewrites the text around a field, keeps the field and undoes it exactly", async () => {
+    const host = install();
+    const capture = await captureOf(host, { p: "FD1" });
+    expect(capture.selection?.paragraphs[0].kept?.markers).toEqual([
+      expect.objectContaining({ number: 1, kind: "field", end: "point" }),
+    ]);
+    const before = host.paragraphs();
+    const result = await replace(
+      capture,
+      "FD1 Feld vor \u27E61\u27E7 Feld danach.",
+    );
+    expect(result).toMatchObject({ status: "applied", trackingOn: false });
+    expect(host.writeSyncs()).toHaveLength(1);
+    const after = host.paragraphs();
+    expect(after.find((p) => p.text.startsWith("FD1"))?.text).toBe(
+      "FD1 Feld vor 2026-10-06 Feld danach.",
+    );
+    expect(host.ooxml({ p: "FD1" })).toMatch(/fldCharType="begin"[\s\S]*DATE/);
+    expect(others(after, "FD1")).toEqual(others(before, "FD1"));
+    if (result.status !== "applied" || !result.backups)
+      throw new Error("not applied");
+    expect(
+      await revertWordSelection(result.backups, result.written),
+    ).toMatchObject({ status: "reverted" });
+    expect(
+      host.paragraphs().map(({ text, style, runs }) => ({ text, style, runs })),
+    ).toEqual(before.map(({ text, style, runs }) => ({ text, style, runs })));
+  });
+
+  it("keeps a link and a field while rewriting the link's text", async () => {
+    const host = install();
+    const capture = await captureOf(host, { p: "MX1" });
+    const result = await replace(
+      capture,
+      "MX1 Alpha Bravo foxtrot \u27E61\u27E7Verweis\u27E6/1\u27E7 golf \u27E62\u27E7 hotel.",
+    );
+    expect(result).toMatchObject({ status: "applied" });
+    expect(host.paragraphs().find((p) => p.text.startsWith("MX1"))?.text).toBe(
+      "MX1 Alpha Bravo foxtrot Verweis golf 2026-10-06 hotel.",
+    );
+    const ooxml = host.ooxml({ p: "MX1" });
+    expect(ooxml).toMatch(
+      /<w:hyperlink[^>]*>[\s\S]*Verweis[\s\S]*<\/w:hyperlink>/,
+    );
+    expect(ooxml).toContain("DATE");
+  });
+
+  it("refuses a proposal that lost a kept item's marker and writes nothing", async () => {
+    const host = install();
+    const capture = await captureOf(host, { p: "FD1" });
+    expect(await replace(capture, "FD1 Feld vor Feld danach.")).toMatchObject({
+      status: "refused",
+      code: "MARKERS_CHANGED",
+    });
+    expect(host.writeSyncs()).toEqual([]);
+  });
+
+  it("refuses a passage with kept items under Track Changes and writes nothing", async () => {
+    const host = install();
+    const capture = await captureOf(host, { p: "FD1" });
+    host.setTrackingMode("TrackAll");
+    expect(
+      await replace(capture, "FD1 Feld vor \u27E61\u27E7 Feld danach."),
+    ).toMatchObject({ status: "refused", code: "TRACKED_ITEMS" });
+    expect(host.writeSyncs()).toEqual([]);
+  });
+
   it("refuses to undo under Track Changes", async () => {
     const host = install();
     const capture = await captureOf(host, { p: "PL1" });

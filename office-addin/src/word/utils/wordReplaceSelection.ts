@@ -13,7 +13,15 @@ import {
   wordSelectionParts,
 } from "./wordSelectionAnchor";
 import { WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH } from "./wordSelectionCapture";
-import { splitWordSelectionReplacement } from "./wordSelectionEdit";
+import {
+  splitWordSelectionReplacement,
+  wordSelectionLinePieces,
+} from "./wordSelectionEdit";
+import {
+  readWordParagraphItems,
+  wordKeptItemsShape,
+} from "./wordSelectionItems";
+import { rewriteWordParagraphPart } from "./wordSelectionRewrite";
 import {
   currentWordSelectionSupport,
   WORD_WEB_REVERT_MAX_PARAGRAPHS,
@@ -27,6 +35,7 @@ import {
   readWordStory,
   sameCellTable,
   wordParagraphsEndingSection,
+  queueParagraphSpanChecks,
 } from "./wordSelectionTarget";
 
 import type { WordApplyStage } from "./wordApplyProgress";
@@ -38,6 +47,7 @@ import type {
   WordSelectionSnapshot,
 } from "./wordSelectionAnchor";
 import type { WordSelectionFont } from "./wordSelectionFormatting";
+import type { WordParagraphRewrite } from "./wordSelectionRewrite";
 import type {
   WordCellTable,
   WordSelectionWritten,
@@ -120,6 +130,8 @@ interface Written {
   backups: WordSelectionBackup[];
   startOffset: number;
   endOffset: number;
+  /** Per covered paragraph written as OOXML, its items before the write; null for the others. */
+  items: (string | null)[];
 }
 
 function setFont(range: Word.Range, font: WordSelectionFont): void {
@@ -143,14 +155,38 @@ async function readBack(
         const paragraph = story.items[written.positions[i]];
         return before && paragraph ? queueWordCellTable(paragraph) : null;
       });
-      if (cells.some(Boolean)) await context.sync();
-      return { story, cells: cells.map((cell) => cell?.() ?? null) };
+      const ooxml = written.items.map((items, i) => {
+        const paragraph = story.items[written.positions[i]];
+        return items !== null && paragraph
+          ? queueParagraphSpanChecks(paragraph, written.cellTables[i] !== null)
+          : null;
+      });
+      if (cells.some(Boolean) || ooxml.some(Boolean)) await context.sync();
+      return {
+        story,
+        cells: cells.map((cell) => cell?.() ?? null),
+        items: ooxml.map((checks, i) => {
+          if (!checks) return null;
+          const read = readWordParagraphItems(
+            checks().ooxml,
+            story.rangeTexts[written.positions[i]],
+          );
+          return "items" in read ? wordKeptItemsShape(read.items) : "";
+        }),
+      };
     },
     { timeoutMs: WORD_REPLACE_SELECTION_TIMEOUT_MS },
   );
   if (result.outcome !== "ok" || !result.value) return null;
   const story: WordStoryRead = result.value.story;
   const { cells } = result.value;
+  // Every kept item must still be there, as it was, and nothing in its place.
+  if (
+    written.items.some(
+      (items, i) => items !== null && result.value!.items[i] !== items,
+    )
+  )
+    return null;
   if (story.items.length !== written.paragraphCount) return null;
   if (
     written.cellTables.some((before, i) => {
@@ -214,7 +250,14 @@ export async function replaceWordSelection(args: {
   if ("refused" in replacement)
     return { status: "refused", code: replacement.refused, settled: SETTLED };
   const { lines } = replacement;
+  const marked = wordSelectionLinePieces(selection.paragraphs, lines);
+  if ("refused" in marked)
+    return { status: "refused", code: marked.refused, settled: SETTLED };
   const covered = wordSelectionParts(selection);
+  // What each paragraph's line replaces: the part, or the part with markers where it keeps items.
+  const current = selection.paragraphs.map(
+    (p, i) => p.kept?.text ?? covered[i],
+  );
   const offsets = wordSelectionPartOffsets(selection);
   const support = currentWordSelectionSupport();
   const progress = trackWordApply("selection", args.onStage);
@@ -251,30 +294,53 @@ export async function replaceWordSelection(args: {
         return { refused: check.refused as WordSelectionRefusal };
       const changed = proof.parts
         .map((part, i) => ({ part, i }))
-        .filter(({ i }) => lines[i] !== covered[i]);
+        .filter(({ i }) => lines[i] !== current[i]);
       if (changed.length === 0) return null;
+      // A paragraph that keeps items is rewritten in its own OOXML, read in this final read.
+      const rewrites = new Map<number, WordParagraphRewrite>();
+      for (const { i } of changed) {
+        const pieces = marked.pieces[i];
+        if (!pieces) continue;
+        const rewrite = rewriteWordParagraphPart(
+          check.backups[i],
+          selection.paragraphs[i].rangeText,
+          offsets[i].start,
+          offsets[i].end,
+          pieces,
+        );
+        if (!rewrite) return { refused: "UNSUPPORTED_CONTENT" };
+        rewrites.set(i, rewrite);
+      }
       // Nothing may be awaited between this check and the write sync.
       guard.beforeWrite();
       progress.stage("writing");
       // Last to first, so no write moves a paragraph a later one targets: one sync, one Undo step.
-      for (const { part, i } of [...changed].reverse())
-        setFont(
-          (part.kind === "part" ? part.range : part.paragraph).insertText(
-            lines[i],
-            "Replace",
-          ),
-          check.formats[i].font,
-        );
+      for (const { part, i } of [...changed].reverse()) {
+        const rewrite = rewrites.get(i);
+        if (rewrite) part.paragraph.insertOoxml(rewrite.ooxml, "Replace");
+        else
+          setFont(
+            (part.kind === "part" ? part.range : part.paragraph).insertText(
+              lines[i],
+              "Replace",
+            ),
+            check.formats[i]!.font,
+          );
+      }
       await context.sync();
+      const expected = selection.paragraphs.map(
+        ({ rangeText, kept }, i) =>
+          rewrites.get(i)?.rangeText ??
+          (kept
+            ? rangeText
+            : rangeText.slice(0, offsets[i].start) +
+              lines[i] +
+              rangeText.slice(offsets[i].end)),
+      );
       const last = lines.length - 1;
       return {
         positions: proof.positions,
-        expected: selection.paragraphs.map(
-          ({ rangeText }, i) =>
-            rangeText.slice(0, offsets[i].start) +
-            lines[i] +
-            rangeText.slice(offsets[i].end),
-        ),
+        expected,
         paragraphCount: proof.story.items.length,
         cellTables: check.cellTables,
         trackingOn: check.trackingOn,
@@ -285,7 +351,14 @@ export async function replaceWordSelection(args: {
           tableNestingLevel: selection.paragraphs[i].tableNestingLevel,
         })),
         startOffset: offsets[0].start,
-        endOffset: offsets[last].start + lines[last].length,
+        endOffset:
+          expected[last].length -
+          (selection.paragraphs[last].rangeText.length - offsets[last].end),
+        items: selection.paragraphs.map((p, i) => {
+          if (!rewrites.has(i)) return null;
+          const read = readWordParagraphItems(check.backups[i], p.rangeText);
+          return "items" in read ? wordKeptItemsShape(read.items) : null;
+        }),
       };
     },
     {
