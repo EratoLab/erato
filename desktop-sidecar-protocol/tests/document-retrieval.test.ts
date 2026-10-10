@@ -48,4 +48,39 @@ describe("document retrieval contract", () => {
     ])
       expect(result({ ...exported, warnings: [malformed] })).toBe(false);
   });
+  it("accepts attachments left out of a new Outlook for Mac export", () => {
+    const exported = {
+      filename: "message.eml",
+      mimeType: "message/rfc822",
+      contentBase64: "",
+    };
+    const attachment = {
+      code: "attachment_unavailable",
+      documentId: "00000000-0000-0000-0000-000000000002",
+    };
+    expect(
+      result({
+        ...exported,
+        warnings: [
+          {
+            ...attachment,
+            sourceError: "missing_from_local_cache",
+            message: "An attachment of this email is not included.",
+          },
+          { ...attachment, sourceError: "export_too_large" },
+          {
+            code: "attachment_unavailable",
+            documentId,
+            sourceError: "missing_from_local_cache",
+          },
+          { code: "attachment_unavailable", documentId },
+        ],
+      }),
+    ).toBe(true);
+    for (const malformed of [
+      { ...attachment, sourceError: "" },
+      { ...attachment, documentId: "attachment-1" },
+    ])
+      expect(result({ ...exported, warnings: [malformed] })).toBe(false);
+  });
 });

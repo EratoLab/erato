@@ -42,7 +42,7 @@ export interface OutlookAttachmentReference {
    */
   contentBytes?: string;
   /**
-   * Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.
+   * Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment, and sourceError values such as missing_from_local_cache when the bytes are not cached on this device.
    */
   unavailableReason?: string;
   external_ids?: DocumentExternalIds;

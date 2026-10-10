@@ -196,7 +196,7 @@ describe("source capabilities in the chat tools", () => {
       [
         -32016,
         { kind: "sidecar_internal", sourceError: "missing_from_local_cache" },
-        /^Only part of this item, such as a preview, is cached on this device.*Do not retry/,
+        /^This item's content, or all of it but a preview, is not cached on this device.*Do not retry/,
       ],
       [
         -32602,

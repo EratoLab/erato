@@ -917,6 +917,11 @@ describe("sidecar document retrieval", () => {
         documentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         sourceError: "source_changed",
       },
+      {
+        code: "attachment_unavailable",
+        documentId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        sourceError: "missing_from_local_cache",
+      },
     ];
     const env = setup({
       "sources.get_document.v1": { ...document, warnings },

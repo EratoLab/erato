@@ -39,7 +39,7 @@
       "type": "string"
     },
     "unavailableReason": {
-      "description": "Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.",
+      "description": "Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment, and sourceError values such as missing_from_local_cache when the bytes are not cached on this device.",
       "type": "string",
       "minLength": 1,
       "maxLength": 128
