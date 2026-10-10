@@ -44,7 +44,13 @@ export interface WordKeptItem {
   closeOrder?: number;
   /** A span whose other end lies in another paragraph, as a comment range may. */
   openEnded?: "start" | "end";
+  /** A comment without text of its own (a collapsed range, or only its anchor), kept as a point. */
+  collapsed?: true;
 }
+
+/** Whether an item is placed as one point; a span's two ends are placed apart. */
+export const isWordKeptPoint = (item: WordKeptItem) =>
+  !isWordKeptSpan(item.kind) || item.collapsed === true;
 
 /** Why a paragraph's items cannot be kept; the selection then stays context only. */
 export type WordKeptItemsRefusal =
@@ -86,7 +92,7 @@ type Event =
       /** Where a link's or content control's own text goes. */
       inner?: Element;
     }
-  | { type: "reference"; node: Element };
+  | { type: "reference"; node: Element; order: number };
 
 const isW = (element: Element, name?: string) =>
   element.namespaceURI === W && (!name || element.localName === name);
@@ -233,7 +239,7 @@ function events(paragraph: Element): Event[] {
         case "commentReference":
           // The balloon's anchor, shown as "\u0005" on the web only.
           if (field) throw new Unsupported();
-          out.push({ type: "reference", node: element });
+          out.push({ type: "reference", node: element, order: order++ });
           break;
         case "drawing":
         case "pict":
@@ -392,6 +398,7 @@ export function alignWordParagraph(
     aligned.spans.set(item, known);
     return known;
   };
+  const anchors: { at: number; node: Element; order: number }[] = [];
   let at = 0;
   for (const event of stream) {
     switch (event.type) {
@@ -442,8 +449,7 @@ export function alignWordParagraph(
         });
         break;
       case "reference":
-        aligned.references.push(at);
-        aligned.referenceRuns.set(at, event.node);
+        anchors.push({ at, node: event.node, order: event.order });
         if (rangeText[at] === "\u0005") {
           aligned.chars[at] = null;
           at += 1;
@@ -454,8 +460,55 @@ export function alignWordParagraph(
   for (const item of aligned.items)
     if (item.openEnded === "end") item.end = rangeText.length;
   if (at !== rangeText.length) return { refused: "misaligned" };
+  for (const anchor of anchors) placeAnchor(aligned, anchor, rangeText);
   aligned.items.sort((a, b) => a.order - b.order);
   return aligned;
+}
+
+/**
+ * A comment's balloon anchor travels with the end of the range it closes. Without such a range,
+ * or with a collapsed one, the comment has no text of its own and is kept as one point.
+ */
+function placeAnchor(
+  aligned: WordAlignedParagraph,
+  anchor: { at: number; node: Element; order: number },
+  rangeText: string,
+) {
+  const { at, node, order } = anchor;
+  const range = aligned.items.find(
+    (item) =>
+      item.kind === "comment" &&
+      item.end === at &&
+      item.openEnded !== "end" &&
+      aligned.spans.get(item)?.close,
+  );
+  if (range && range.start < range.end) {
+    aligned.references.push(at);
+    aligned.referenceRuns.set(at, node);
+    return;
+  }
+  const shows = rangeText[at] === "\u0005" ? "\u0005" : "";
+  const point: WordKeptItem = range ?? {
+    kind: "comment",
+    start: at,
+    end: at,
+    shows: "",
+    detail: "",
+    order,
+  };
+  const span = aligned.spans.get(point);
+  aligned.spans.delete(point);
+  aligned.points.set(point, {
+    first: span?.open ?? span?.close ?? node,
+    last: node,
+  });
+  Object.assign(point, {
+    start: at,
+    end: at + shows.length,
+    shows,
+    collapsed: true,
+  });
+  if (!range) aligned.items.push(point);
 }
 
 /** The items of one paragraph at their paragraph.text offsets, read from its own OOXML. */
@@ -564,7 +617,7 @@ export function wordPartBoundaries(
   const hidden = new Set<number>();
   const strictly = (at: number) => start < at && at < end;
   for (const item of read.items) {
-    if (!isWordKeptSpan(item.kind)) {
+    if (isWordKeptPoint(item)) {
       const shows = item.end > item.start;
       const inside = shows
         ? start <= item.start && item.end <= end

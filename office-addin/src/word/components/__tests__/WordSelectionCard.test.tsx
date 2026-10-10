@@ -303,7 +303,7 @@ describe("WordSelectionCard", () => {
   });
 
   it("explains a selection Erato can only use as context and offers no Replace", async () => {
-    const capture = await captureOf(host, { p: "MX1", text: "golf" });
+    const capture = await captureOf(host, { p: "HT1", text: "after words" });
     renderCard({ capture, proposed: true, presentation: "auto_prompt" });
     expect(
       screen.getByText(

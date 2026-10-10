@@ -8,6 +8,7 @@ import {
   utf8ByteLength,
 } from "../../core/clientActions/actionFacetArgs";
 
+import type { WordMarkedPart, WordKeptMarker } from "./wordSelectionItems";
 import type {
   WordParagraphAnchor,
   WordParagraphEntry,
@@ -79,6 +80,8 @@ export const WORD_SELECTION_REASON_CODES = [
   "style_font_unavailable",
   "not_unique",
   "shape_not_enabled",
+  /** The selection starts or ends inside a field's result, a note reference or a comment's anchor. */
+  "item_cut",
 ] as const;
 
 export type WordSelectionReasonCode =
@@ -95,6 +98,10 @@ export const WORD_SELECTION_REPLACE_CODES = [
   "INVALID_REPLACEMENT",
   /** The paragraph is proven, but Word's search could not pinpoint the passage inside it. */
   "TARGET_RANGE_UNPROVEN",
+  /** The proposal lost, doubled or moved a marker of a kept item. */
+  "MARKERS_CHANGED",
+  /** Track Changes is on, and a passage with kept items would be redlined as a whole paragraph. */
+  "TRACKED_ITEMS",
   "UNVERIFIED_AFTER_WRITE",
 ] as const;
 
@@ -193,12 +200,19 @@ export interface WordSelectionFacts {
    * when paragraph.text holds text that getText leaves out, as on PC and the web.
    */
   reviewedText?: string;
+  /**
+   * Per covered paragraph, set by the span checks where it holds items to keep: its part with
+   * markers, or "cut" where the part starts or ends inside one; null for a paragraph without items.
+   */
+  kept?: readonly (WordMarkedPart | "cut" | null)[];
 }
 
 export interface WordSelectionParagraph {
   id: string | null;
   text: string;
   rangeText: string;
+  /** Its part with markers for the items it keeps, written whole as OOXML; absent otherwise. */
+  kept?: { text: string; markers: readonly WordKeptMarker[] };
   /** A hint only: a paragraph inserted above moves it without changing the target. */
   index: number;
   styleName: string;
@@ -452,10 +466,22 @@ function contextOnlyReason(
     (parts[0] === "" || parts[parts.length - 1] === "")
   )
     return "empty_edge_paragraph";
+  if (facts.kept?.includes("cut")) return "item_cut";
+  const keptAt = (i: number) => keptPart(facts, i) !== null;
+  if (
+    facts.kept?.some((k) => k !== null && k !== "cut") &&
+    support.keptItemParagraphs !== null &&
+    paragraphs.length > support.keptItemParagraphs
+  )
+    return "too_many_paragraphs";
   // A mark anywhere in a covered paragraph counts: the span checks judge whole paragraphs too.
+  // Before them, an item's mark may still turn out to be kept, so it is not a reason yet.
+  const mayKeep = support.keepsItems && !facts.spanChecked;
   const hazard = wordSelectionHazardReason(
     facts.hazards,
-    paragraphs.map((p) => p.rangeText),
+    paragraphs.map((p, i) =>
+      keptAt(i) || mayKeep ? withoutItemMarks(p.rangeText) : p.rangeText,
+    ),
     support,
   );
   if (hazard) return hazard;
@@ -470,17 +496,24 @@ function contextOnlyReason(
   // paragraph.text shows text the model must not see and no reviewed text came with the capture.
   if (
     !facts.reviewedText &&
-    !paragraphs.every((p) => visibleOffsetText(p) !== null)
+    !paragraphs.every(
+      (p, i) => visibleOffsetText(p, keptAt(i) || mayKeep) !== null,
+    )
   )
     return "position_unknown";
+  // A paragraph with kept items is written whole, so Word's search never has to find its part.
+  const searched = (i: number) => !keptAt(i);
   // Word's search reads ^ as a special-character code, so it could not find the span again.
-  if (analysis.text.includes("^")) return "position_unknown";
+  if (parts.some((part, i) => searched(i) && part.includes("^")))
+    return "position_unknown";
   // Word for the web finds a part of a paragraph only as one search hit for its whole text.
   if (
     !support.prefixRanges &&
     wordSelectionPartOffsets(facts).some(
       (offsets, i) =>
+        searched(i) &&
         !offsets.whole &&
+        !(mayKeep && hasItemMarks(parts[i])) &&
         !wordSearchable(parts[i], support.searchMaxCharacters),
     )
   )
@@ -561,13 +594,34 @@ export function wordIdentityShows(
 /** A neighbour's identity text for the model's context, without desktop's paragraph or cell mark. */
 const withoutMark = (text: string) => text.replace(/[\r\t]$/, "");
 
+/** The marks kept items leave in paragraph.text: note references, comment anchors, line breaks. */
+const ITEM_MARKS = /[\u0002\u0005\u000B]/g;
+const withoutItemMarks = (text: string) => text.replace(ITEM_MARKS, "");
+const hasItemMarks = (text: string) => /[\u0002\u0005\u000B]/.test(text);
+
+/** The paragraph's part with markers, where it keeps items. */
+function keptPart(facts: WordSelectionFacts, i: number): WordMarkedPart | null {
+  const kept = facts.kept?.[i];
+  return kept && kept !== "cut" ? kept : null;
+}
+
 /**
  * The paragraph's offset text with its comment marks removed, when that equals the identity text;
  * null when paragraph.text holds more, such as a tracked deletion, which the model must not see.
+ * With `items`, a note reference's mark, which getText leaves out, and a line break, which the
+ * web's getText leaves out, count as shown too.
  */
-function visibleOffsetText(p: WordSelectionParagraphFacts): string | null {
+function visibleOffsetText(
+  p: WordSelectionParagraphFacts,
+  items = false,
+): string | null {
+  const inCell = p.tableNestingLevel > 0;
   const visible = p.rangeText.replace(/\u0005/g, "");
-  return wordIdentityShows(p.text, visible, p.tableNestingLevel > 0)
+  if (wordIdentityShows(p.text, visible, inCell)) return visible;
+  if (!items) return null;
+  const noted = visible.replace(/\u0002/g, "");
+  if (wordIdentityShows(p.text, noted, inCell)) return visible;
+  return wordIdentityShows(p.text, noted.replace(/\u000B/g, ""), inCell)
     ? visible
     : null;
 }
@@ -591,7 +645,11 @@ function fieldResults(text: string): string {
 }
 
 /** What the model is sent as the selected text; the offsets keep counting in rangeText. */
-function modelText(facts: WordSelectionFacts, analysis: Analysis): string {
+function modelText(
+  facts: WordSelectionFacts,
+  analysis: Analysis,
+  marked: boolean,
+): string {
   const reviewed = () =>
     removeCommentMarks(fieldResults(facts.reviewedText ?? ""))
       .replace(/\r\n?/g, "\n")
@@ -600,6 +658,18 @@ function modelText(facts: WordSelectionFacts, analysis: Analysis): string {
     return facts.reviewedText === undefined
       ? removeCommentMarks(analysis.text)
       : reviewed();
+  const { parts } = analysis;
+  // Markers only for a rewrite, which keeps the items; otherwise the items' own text.
+  if (
+    marked &&
+    facts.kept?.some((k) => k !== null && k !== "cut") &&
+    facts.paragraphs.every(
+      (p, i) => visibleOffsetText(p, keptPart(facts, i) !== null) !== null,
+    )
+  )
+    return parts
+      .map((part, i) => keptPart(facts, i)?.text ?? removeCommentMarks(part))
+      .join("\n");
   if (facts.paragraphs.every((p) => visibleOffsetText(p) !== null))
     return removeCommentMarks(analysis.text);
   return reviewed();
@@ -610,14 +680,15 @@ function surroundings(facts: WordSelectionFacts, analysis: Analysis) {
   if (!anchor || !analysis.parts) return { before: "", after: "" };
   const first = paragraphs[0];
   const last = paragraphs[paragraphs.length - 1];
+  const items = (i: number) => keptPart(facts, i) !== null;
   const prefix =
-    visibleOffsetText(first) === null
+    visibleOffsetText(first, items(0)) === null
       ? ""
-      : removeCommentMarks(first.rangeText.slice(0, facts.startOffset));
+      : withoutItemMarks(first.rangeText.slice(0, facts.startOffset));
   const suffix =
-    visibleOffsetText(last) === null
+    visibleOffsetText(last, items(paragraphs.length - 1)) === null
       ? ""
-      : removeCommentMarks(last.rangeText.slice(facts.endOffset));
+      : withoutItemMarks(last.rangeText.slice(facts.endOffset));
   return {
     before: keepUtf8Tail(
       [
@@ -643,7 +714,8 @@ export function buildWordSelectionSnapshot(
   const analysis = analyse(facts);
   const classification = classify(facts, support, analysis, enabledShapes);
   if (classification.role === "none") return null;
-  const fitted = fitWordSelectionText(modelText(facts, analysis));
+  const rewrite = classification.role === "rewrite";
+  const fitted = fitWordSelectionText(modelText(facts, analysis, rewrite));
   const { before, after } = surroundings(facts, analysis);
   return {
     ...classification,
@@ -652,14 +724,18 @@ export function buildWordSelectionSnapshot(
     truncated: fitted.truncated,
     paragraphCount: facts.paragraphs.length || analysis.text.split("\n").length,
     paragraphs: facts.paragraphs.map(
-      ({ id, text, rangeText, index, styleName, tableNestingLevel }) => ({
-        id,
-        text,
-        rangeText,
-        index,
-        styleName,
-        tableNestingLevel,
-      }),
+      ({ id, text, rangeText, index, styleName, tableNestingLevel }, i) => {
+        const kept = rewrite ? keptPart(facts, i) : null;
+        return {
+          id,
+          text,
+          rangeText,
+          index,
+          styleName,
+          tableNestingLevel,
+          ...(kept ? { kept: { text: kept.text, markers: kept.markers } } : {}),
+        };
+      },
     ),
     startOffset: facts.startOffset,
     endOffset: facts.endOffset,

@@ -14,7 +14,10 @@ import {
 } from "./wordSelectionAnchor";
 import { WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH } from "./wordSelectionCapture";
 import { splitWordSelectionReplacement } from "./wordSelectionEdit";
-import { currentWordSelectionSupport } from "./wordSelectionSupport";
+import {
+  currentWordSelectionSupport,
+  WORD_WEB_REVERT_MAX_PARAGRAPHS,
+} from "./wordSelectionSupport";
 import {
   checkTargetVerification,
   proveWordSelectionTarget,
@@ -52,12 +55,7 @@ export const WORD_REVERT_SELECTION_TIMEOUT_MS = 30_000;
  * web, mostly its write sync; restores of more than 3 paragraphs are not measured there.
  */
 export const WORD_REVERT_SELECTION_MS_PER_PARAGRAPH = 1_000;
-/**
- * Word for the web restores about 4.4-5 s per paragraph, so 10 outlasted the restore's budget
- * natively, while its own Undo reverted 11 in one step in 0.6 s. Beyond this span the card points
- * to Word's Undo instead.
- */
-export const WORD_WEB_REVERT_MAX_PARAGRAPHS = 5;
+export { WORD_WEB_REVERT_MAX_PARAGRAPHS } from "./wordSelectionSupport";
 
 export function isWordRevertOffered(
   paragraphs: number,

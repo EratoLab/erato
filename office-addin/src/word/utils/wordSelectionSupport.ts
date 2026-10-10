@@ -38,8 +38,25 @@ export interface WordSelectionSupport {
   prefixRanges: boolean;
   /** The longest text Word's search is asked for: desktop throws from 300 characters (PF5). */
   searchMaxCharacters: number;
+  /**
+   * A selection's fields, links, notes, comments, pictures and line breaks can stay in place while
+   * its text is rewritten, its paragraphs written whole as OOXML (ERMAIN-938).
+   */
+  keepsItems: boolean;
+  /**
+   * The most paragraphs such a selection may cover; null for the usual cap. An OOXML write clears
+   * Word for the web's own undo stack (office-js #6423), so there Erato's Undo must cover it all.
+   */
+  keptItemParagraphs: number | null;
   reason: "host_unsupported" | null;
 }
+
+/**
+ * Word for the web restores about 4.4-5 s per paragraph, so 10 outlasted the restore's budget
+ * natively, while its own Undo reverted 11 in one step in 0.6 s. Beyond this span the card points
+ * to Word's Undo instead.
+ */
+export const WORD_WEB_REVERT_MAX_PARAGRAPHS = 5;
 
 /** PF8 checked these on Mac, PC and web. The LTSC limits (2021: WordApi 1.3; 2024: WordApiDesktop 1.1)
  * come from Microsoft's requirement-set tables and were never measured. */
@@ -91,6 +108,8 @@ export function wordSelectionSupport(
     // to 4,000 (block 3 webSearchProbe), but a write or select of a hit over 255 characters is not
     // measured there, so its longer parts stay context only.
     searchMaxCharacters: 255,
+    keepsItems: canRewrite && has(WORD_SELECTION_REQUIREMENTS.ooxml),
+    keptItemParagraphs: desktop ? null : WORD_WEB_REVERT_MAX_PARAGRAPHS,
     reason: canRewrite ? null : "host_unsupported",
   };
 }

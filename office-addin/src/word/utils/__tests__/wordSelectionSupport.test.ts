@@ -34,6 +34,8 @@ describe("wordSelectionSupport", () => {
         picturesShiftOffsets: false,
         prefixRanges: true,
         searchMaxCharacters: 255,
+        keepsItems: true,
+        keptItemParagraphs: null,
         reason: null,
       });
     },
@@ -51,6 +53,8 @@ describe("wordSelectionSupport", () => {
       picturesShiftOffsets: true,
       prefixRanges: false,
       searchMaxCharacters: 255,
+      keepsItems: true,
+      keptItemParagraphs: 5,
       reason: null,
     });
   });
@@ -79,6 +83,8 @@ describe("wordSelectionSupport", () => {
       picturesShiftOffsets: false,
       prefixRanges: true,
       searchMaxCharacters: 255,
+      keepsItems: false,
+      keptItemParagraphs: null,
       reason: "host_unsupported",
     });
   });
