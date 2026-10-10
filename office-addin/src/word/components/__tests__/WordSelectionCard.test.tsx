@@ -454,17 +454,20 @@ describe("WordSelectionCard", () => {
 
   it("says a bookmark, not a link or field, keeps a heading from being replaced", async () => {
     uninstallWordSelectionHost();
-    host = installWordSelectionHost({
-      body: [
-        {
-          runs: [
-            { text: "H1 Selection probe heading", bookmark: "_Toc938001" },
-          ],
-          style: "Heading 1",
-        },
-        ...SV2_MAIN_DOCUMENT.body.slice(1),
-      ],
-    });
+    host = installWordSelectionHost(
+      {
+        body: [
+          {
+            runs: [
+              { text: "H1 Selection probe heading", bookmark: "_Toc938001" },
+            ],
+            style: "Heading 1",
+          },
+          ...SV2_MAIN_DOCUMENT.body.slice(1),
+        ],
+      },
+      { ooxmlOmitsBookmarks: true },
+    );
     const capture = await captureOf(host, { p: "H1" });
     renderCard({ capture });
     expect(
@@ -473,6 +476,12 @@ describe("WordSelectionCard", () => {
       ),
     ).toBeInTheDocument();
     expect(replaceButton()).toBeNull();
+  });
+
+  it("says where a bookmark inside the selection keeps it from being replaced", () => {
+    expect(wordSelectionReasonText("bookmark_cut")).toBe(
+      "A bookmark, such as one a cross-reference points to, starts or ends inside this selection, and a rewrite could not tell where it belongs. Select exactly the bookmarked text, or only text before or after it, to have it replaced.",
+    );
   });
 
   it("says superscript or subscript would turn into normal text", () => {

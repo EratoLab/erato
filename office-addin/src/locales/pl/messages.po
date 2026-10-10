@@ -4112,6 +4112,11 @@ msgstr "Propozycja jest pusta albo zawiera znaki, których Word nie zachowuje ja
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.bookmark"
+msgstr "zakładka"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.item.break"
 msgstr "podział wiersza"
 
@@ -4219,6 +4224,11 @@ msgstr "Erato nie mógł odczytać zaznaczenia w programie Word, więc wiadomoś
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.bookmark"
 msgstr "Ten fragment zawiera zakładkę, np. taką, której używa spis treści lub odsyłacz, a przeredagowanie mogłoby ją uszkodzić."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmarkCut"
+msgstr "Zakładka, np. taka, na którą wskazuje odsyłacz, zaczyna się lub kończy wewnątrz tego zaznaczenia, a przeredagowanie nie wiedziałoby, gdzie ją umieścić. Zaznacz dokładnie tekst zakładki albo tylko tekst przed nią lub po niej, aby można go było zastąpić."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4413,7 +4423,7 @@ msgstr "Przeredagowanie zaznaczonego fragmentu"
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.trackedItems"
-msgstr "Śledzenie zmian jest włączone, a ten fragment zawiera pola, linki, przypisy lub komentarze, które śledzona zmiana oznaczyłaby jako zmienione. Wyłącz śledzenie zmian, aby go zastąpić. Niczego nie zastąpiono."
+msgstr "Śledzenie zmian jest włączone, a ten fragment zawiera pola, linki, przypisy, komentarze lub zakładki, więc śledzona zmiana oznaczyłaby cały jego akapit jako zmieniony. Wyłącz śledzenie zmian, aby go zastąpić. Niczego nie zastąpiono."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

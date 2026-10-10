@@ -22,6 +22,7 @@ import {
 import {
   markWordSelectionPart,
   readWordParagraphItems,
+  wordParagraphElement,
 } from "./wordSelectionItems";
 import { buildWordSelectionRanges } from "./wordSelectionRange";
 import { wordPartFormatLoss } from "./wordSelectionRewrite";
@@ -47,6 +48,8 @@ import type { WordSelectionTargetFormat } from "./wordSelectionFormatting";
 import type { WordSelectionRangePart } from "./wordSelectionRange";
 import type { WordSelectionSpanSlice } from "./wordSelectionSpan";
 import type { WordSelectionSupport } from "./wordSelectionSupport";
+
+const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 export const WORD_SELECTION_SHOW_TIMEOUT_MS = 10_000;
 
@@ -81,6 +84,8 @@ export async function readWordStory(
 export interface WordParagraphSpanChecks {
   ooxml: string;
   objectHazards: WordSelectionHazards;
+  /** Range.getBookmarks, other than Word's own _GoBack; null where they are not listed. */
+  bookmarks: string[] | null;
 }
 
 /**
@@ -126,11 +131,24 @@ export function queueParagraphSpanChecks(
         : {}),
       ...(fields.items.length > 0 ? { field: true } : {}),
       ...(revisions.items.length > 0 ? { trackedChange: true } : {}),
-      ...(bookmarks?.value.some((name) => name !== WORD_BOOKMARK)
-        ? { bookmark: true }
-        : {}),
     },
+    bookmarks:
+      bookmarks?.value.filter((name) => name !== WORD_BOOKMARK) ?? null,
   });
+}
+
+/** The bookmarks Range.getBookmarks listed that the paragraph's own OOXML does not show. */
+function bookmarksHidden(checks: WordParagraphSpanChecks): boolean {
+  if (!checks.bookmarks?.length) return false;
+  const shown = new Set(
+    Array.from(
+      wordParagraphElement(checks.ooxml)?.paragraph.getElementsByTagNameNS(
+        W,
+        "bookmarkStart",
+      ) ?? [],
+    ).map((start) => start.getAttributeNS(W, "name")),
+  );
+  return checks.bookmarks.some((name) => !shown.has(name));
 }
 
 /** The rewrite checks of one paragraph written whole as OOXML because it keeps items. */
@@ -144,7 +162,7 @@ export interface WordKeptParagraphEvaluation {
  * OOXML left out, complex-script text, or formatting its part's rewrite would drop, as the plain
  * path refuses it (mixed colour, highlight, font, size or character style, and superscript or
  * subscript). Only the part's own text runs are judged; the rest of the paragraph is written as it
- * was.
+ * was, its bookmarks included.
  */
 export function evaluateKeptParagraph(
   checks: WordParagraphSpanChecks,
@@ -163,7 +181,7 @@ export function evaluateKeptParagraph(
       ...(hazards.trackedChange || checks.objectHazards.trackedChange
         ? { trackedChange: true }
         : {}),
-      ...(checks.objectHazards.bookmark ? { bookmark: true } : {}),
+      ...(bookmarksHidden(checks) ? { bookmark: true } : {}),
       ...(loss === null ? { unsupportedFormatting: true } : {}),
       ...(loss?.other ? { mixedFormatting: true } : {}),
       ...(loss?.script ? { mixedScript: true } : {}),
@@ -259,7 +277,11 @@ export function evaluateParagraphSpan(
   slice?: WordSelectionSpanSlice,
 ): WordParagraphSpanEvaluation {
   const scan = scanWordSelectionSpan(checks.ooxml, slice);
-  const hazards = { ...scan.hazards, ...checks.objectHazards };
+  const hazards = {
+    ...scan.hazards,
+    ...checks.objectHazards,
+    ...(checks.bookmarks?.length ? { bookmark: true } : {}),
+  };
   const needsStyle = WORD_SELECTION_TOGGLE_PROPERTIES.some(
     (property) =>
       scan.format[property]?.state === "mixed" ||

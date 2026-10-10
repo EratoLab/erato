@@ -78,7 +78,11 @@ export const WORD_SELECTION_REASON_CODES = [
   "inline_picture",
   "line_break",
   "special_character",
-  /** A bookmark other than Word's own _GoBack, such as a table of contents' or a cross-reference's. */
+  /**
+   * A bookmark other than Word's own _GoBack, such as a table of contents' or a cross-reference's,
+   * that a rewrite could not keep: one the paragraph's OOXML leaves out, one inside a field, a table
+   * column's, or one on a host that keeps no items.
+   */
   "bookmark",
   "unsupported_formatting",
   "mixed_formatting",
@@ -91,6 +95,8 @@ export const WORD_SELECTION_REASON_CODES = [
   "shape_not_enabled",
   /** The selection starts or ends inside a field's result, a note reference or a comment's anchor. */
   "item_cut",
+  /** A bookmark starts or ends inside the selection, away from its edges and the items it keeps. */
+  "bookmark_cut",
 ] as const;
 
 export type WordSelectionReasonCode =
@@ -173,9 +179,9 @@ export interface WordSelectionHazards {
    */
   breakOrSymbol?: boolean;
   /**
-   * A bookmark other than Word's own _GoBack. It is invisible, but a table of contents, a
-   * cross-reference or a macro may point to it, and Word deletes it when its whole text is replaced
-   * (BM0).
+   * A bookmark other than Word's own _GoBack that the rewrite cannot keep. It is invisible, but a
+   * table of contents, a cross-reference or a macro may point to it, and Word deletes it when its
+   * whole text is replaced (BM0).
    */
   bookmark?: boolean;
   /** The runs' text does not spell paragraph.text, so offsets into it cannot be mapped onto runs. */
@@ -222,9 +228,10 @@ export interface WordSelectionFacts {
   reviewedText?: string;
   /**
    * Per covered paragraph, set by the span checks where it holds items to keep: its part with
-   * markers, or "cut" where the part starts or ends inside one; null for a paragraph without items.
+   * markers, "cut" where the part starts or ends inside one, or "bookmark_cut" where a bookmark
+   * starts or ends inside it; null for a paragraph without items.
    */
-  kept?: readonly (WordMarkedPart | "cut" | null)[];
+  kept?: readonly (WordMarkedPart | "cut" | "bookmark_cut" | null)[];
   /** The span checks found bold, italic, underline or strikethrough a rewrite would not keep. */
   flattensEmphasis?: boolean;
 }
@@ -439,7 +446,7 @@ export function wordSelectionHazardReason(
 ): WordSelectionReasonCode | null {
   const contains = (mark: string) => parts.some((part) => part.includes(mark));
   if (hazards.trackedChange) return "tracked_changes";
-  // Before the items: a paragraph's items can be kept, but not with a bookmark among them.
+  // Before the items: the bookmark is what keeps them from being kept.
   if (hazards.bookmark) return "bookmark";
   if (hazards.hyperlink) return "hyperlink";
   if (hazards.field) return "field";
@@ -501,9 +508,10 @@ function contextOnlyReason(
   )
     return "empty_edge_paragraph";
   if (facts.kept?.includes("cut")) return "item_cut";
+  if (facts.kept?.includes("bookmark_cut")) return "bookmark_cut";
   const keptAt = (i: number) => keptPart(facts, i) !== null;
   if (
-    facts.kept?.some((k) => k !== null && k !== "cut") &&
+    facts.paragraphs.some((_, i) => keptAt(i)) &&
     support.keptItemParagraphs !== null &&
     paragraphs.length > support.keptItemParagraphs
   )
@@ -632,7 +640,7 @@ const hasItemMarks = (text: string) => /[\u0002\u0005\u000B]/.test(text);
 /** The paragraph's part with markers, where it keeps items. */
 function keptPart(facts: WordSelectionFacts, i: number): WordMarkedPart | null {
   const kept = facts.kept?.[i];
-  return kept && kept !== "cut" ? kept : null;
+  return typeof kept === "object" ? kept : null;
 }
 
 /**
@@ -692,7 +700,7 @@ function modelText(
   // Markers only for a rewrite, which keeps the items; otherwise the items' own text.
   if (
     marked &&
-    facts.kept?.some((k) => k !== null && k !== "cut") &&
+    facts.paragraphs.some((_, i) => keptPart(facts, i) !== null) &&
     facts.paragraphs.every(
       (p, i) => visibleOffsetText(p, keptPart(facts, i) !== null) !== null,
     )
@@ -928,16 +936,18 @@ const KEPT_ITEM_REASON: Readonly<
   picture: "inline_picture",
   break: "line_break",
   control: "content_control",
+  bookmark: "bookmark",
 };
 
 /**
  * The selection as context only, with each marker replaced by what its item shows, for a server
- * whose word_selection facet does not explain markers yet (no kept_items argument).
+ * whose word_selection facet does not explain markers yet (no kept_items argument). A selection
+ * without markers, whose items lie outside it or are only bookmarks, has nothing to explain.
  */
 export function wordSelectionWithoutKeptItems(
   selection: WordSelectionSnapshot,
 ): WordSelectionSnapshot {
-  const kept = selection.paragraphs.filter((p) => p.kept);
+  const kept = selection.paragraphs.filter((p) => p.kept?.markers.length);
   if (selection.role !== "rewrite" || kept.length === 0) return selection;
   const shows = new Map<number, string>();
   for (const p of kept)

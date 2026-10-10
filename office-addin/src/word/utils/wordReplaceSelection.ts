@@ -19,6 +19,7 @@ import {
 } from "./wordSelectionEdit";
 import {
   readWordParagraphItems,
+  wordBookmarkRanges,
   wordKeptItemsShape,
 } from "./wordSelectionItems";
 import { rewriteWordParagraphPart } from "./wordSelectionRewrite";
@@ -132,6 +133,8 @@ interface Written {
   endOffset: number;
   /** Per covered paragraph written as OOXML, its items before the write; null for the others. */
   items: (string | null)[];
+  /** Per covered paragraph written as OOXML, where its bookmarks must lie; null for the others. */
+  bookmarks: (string | null)[];
 }
 
 function setFont(range: Word.Range, font: WordSelectionFont): void {
@@ -171,7 +174,12 @@ async function readBack(
             checks().ooxml,
             story.rangeTexts[written.positions[i]],
           );
-          return "items" in read ? wordKeptItemsShape(read.items) : "";
+          return "items" in read
+            ? {
+                shape: wordKeptItemsShape(read.items),
+                bookmarks: wordBookmarkRanges(read.items),
+              }
+            : null;
         }),
       };
     },
@@ -180,11 +188,14 @@ async function readBack(
   if (result.outcome !== "ok" || !result.value) return null;
   const story: WordStoryRead = result.value.story;
   const { cells } = result.value;
-  // Every kept item must still be there, as it was, and nothing in its place.
+  // Every kept item must still be there, as it was, and nothing in its place; each bookmark over
+  // the text the rewrite put inside it.
   if (
-    written.items.some(
-      (items, i) => items !== null && result.value!.items[i] !== items,
-    )
+    written.items.some((items, i) => {
+      if (items === null) return false;
+      const read = result.value!.items[i];
+      return read?.shape !== items || read.bookmarks !== written.bookmarks[i];
+    })
   )
     return null;
   if (story.items.length !== written.paragraphCount) return null;
@@ -360,6 +371,9 @@ export async function replaceWordSelection(args: {
           const read = readWordParagraphItems(check.backups[i], p.rangeText);
           return "items" in read ? wordKeptItemsShape(read.items) : null;
         }),
+        bookmarks: selection.paragraphs.map(
+          (_, i) => rewrites.get(i)?.bookmarks ?? null,
+        ),
       };
     },
     {

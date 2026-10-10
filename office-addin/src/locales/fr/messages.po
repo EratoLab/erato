@@ -4112,6 +4112,11 @@ msgstr "La proposition est vide ou contient des caractères que Word ne conserve
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.bookmark"
+msgstr "signet"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.item.break"
 msgstr "saut de ligne"
 
@@ -4219,6 +4224,11 @@ msgstr "Erato n'a pas pu lire votre sélection dans Word, votre message n'a donc
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.bookmark"
 msgstr "Ce passage contient un signet, comme ceux qu'utilisent une table des matières ou un renvoi, qu'une réécriture pourrait casser."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmarkCut"
+msgstr "Un signet, comme ceux vers lesquels pointe un renvoi, commence ou se termine à l'intérieur de cette sélection, et une réécriture ne saurait pas où le placer. Sélectionnez exactement le texte du signet, ou seulement du texte avant ou après, pour qu'il soit remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4413,7 +4423,7 @@ msgstr "Réécriture du passage sélectionné"
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.trackedItems"
-msgstr "Le suivi des modifications est activé, et ce passage contient des champs, liens, notes ou commentaires qu'une réécriture suivie marquerait comme modifiés. Désactivez le suivi des modifications pour le remplacer. Rien n'a été remplacé."
+msgstr "Le suivi des modifications est activé, et ce passage contient des champs, liens, notes, commentaires ou signets : une réécriture suivie marquerait donc tout son paragraphe comme modifié. Désactivez le suivi des modifications pour le remplacer. Rien n'a été remplacé."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

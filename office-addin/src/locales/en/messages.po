@@ -4112,6 +4112,11 @@ msgstr "The proposal is empty or holds characters Word does not keep as text. No
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.bookmark"
+msgstr "bookmark"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.item.break"
 msgstr "line break"
 
@@ -4219,6 +4224,11 @@ msgstr "Erato could not read your selection in Word, so your message was not sen
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.bookmark"
 msgstr "This passage holds a bookmark, such as one a table of contents or a cross-reference uses, which a rewrite could break."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmarkCut"
+msgstr "A bookmark, such as one a cross-reference points to, starts or ends inside this selection, and a rewrite could not tell where it belongs. Select exactly the bookmarked text, or only text before or after it, to have it replaced."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4413,7 +4423,7 @@ msgstr "Rewrite of the selected passage"
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.trackedItems"
-msgstr "Track Changes is on, and this passage holds fields, links, notes or comments that a tracked rewrite would mark as changed. Turn Track Changes off to replace it. Nothing was replaced."
+msgstr "Track Changes is on, and this passage holds fields, links, notes, comments or bookmarks, so a tracked rewrite would mark its whole paragraph as changed. Turn Track Changes off to replace it. Nothing was replaced."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

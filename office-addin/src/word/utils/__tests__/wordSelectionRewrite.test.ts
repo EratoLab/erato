@@ -237,6 +237,217 @@ describe("rewriteWordParagraphPart", () => {
   });
 });
 
+describe("rewriteWordParagraphPart with bookmarks", () => {
+  const opens = (id: number, name: string) =>
+    `<w:bookmarkStart w:id="${id}" w:name="${name}"/>`;
+  const closes = (id: number) => `<w:bookmarkEnd w:id="${id}"/>`;
+  /** What each bookmark of the result covers. */
+  const covers = (result: { ooxml: string; rangeText: string }) => {
+    const read = readWordParagraphItems(result.ooxml, result.rangeText);
+    if (!("items" in read)) throw new Error(read.refused);
+    return read.items
+      .filter((item) => item.kind === "bookmark")
+      .map((item) => [
+        item.detail,
+        result.rangeText.slice(item.start, item.end),
+        ...(item.openEnded ? [item.openEnded] : []),
+      ]);
+  };
+  const heading = "H1 Selection probe heading";
+
+  it("keeps a heading's bookmark around its whole rewritten text", () => {
+    const result = rewrite(
+      p(opens(0, "_Toc1"), run(heading), closes(0)),
+      heading,
+      0,
+      heading.length,
+      ["H1 A shorter heading"],
+    );
+    expect(names(paragraphOf(result.ooxml))).toEqual([
+      "bookmarkStart",
+      '"H1 A shorter heading"',
+      "bookmarkEnd",
+    ]);
+    expect(covers(result)).toEqual([["_Toc1", "H1 A shorter heading"]]);
+  });
+
+  it("keeps a heading's bookmark around it when a word inside is rewritten", () => {
+    const result = rewrite(
+      p(opens(0, "_Toc1"), run(heading), closes(0)),
+      heading,
+      13,
+      18,
+      ["test"],
+    );
+    expect(covers(result)).toEqual([["_Toc1", "H1 Selection test heading"]]);
+  });
+
+  it("keeps stacked table of contents and cross-reference bookmarks around the new text", () => {
+    const result = rewrite(
+      p(
+        opens(0, "_Toc1"),
+        opens(1, "_Ref2"),
+        run("H2 Scope"),
+        closes(1),
+        closes(0),
+      ),
+      "H2 Scope",
+      0,
+      8,
+      ["H2 Purpose"],
+    );
+    expect(covers(result)).toEqual([
+      ["_Toc1", "H2 Purpose"],
+      ["_Ref2", "H2 Purpose"],
+    ]);
+  });
+
+  it("leaves a bookmark outside the part over its own words", () => {
+    const text = "PL1 Plain lima mike papa.";
+    const result = rewrite(
+      p(
+        run("PL1 Plain "),
+        opens(0, "Intro"),
+        run("lima mike"),
+        closes(0),
+        run(" papa."),
+      ),
+      text,
+      4,
+      9,
+      ["Short"],
+    );
+    expect(result.rangeText).toBe("PL1 Short lima mike papa.");
+    expect(covers(result)).toEqual([["Intro", "lima mike"]]);
+  });
+
+  it("keeps a caption's bookmark around its new label and its SEQ field", () => {
+    const result = rewrite(
+      p(
+        opens(0, "_Ref1"),
+        run("Figure "),
+        field(" SEQ Figure ", "1"),
+        closes(0),
+        run(": Sales."),
+      ),
+      "Figure 1: Sales.",
+      0,
+      16,
+      ["Abbildung ", ": Umsatz."],
+    );
+    expect(covers(result)).toEqual([["_Ref1", "Abbildung 1"]]);
+  });
+
+  it("keeps a bookmark that runs into the next paragraph, or came from the previous one", () => {
+    expect(
+      covers(
+        rewrite(p(opens(3, "Long"), run("Chapter one")), "Chapter one", 0, 11, [
+          "Kapitel eins",
+        ]),
+      ),
+    ).toEqual([["Long", "Kapitel eins", "end"]]);
+    expect(
+      covers(
+        rewrite(p(run("still"), closes(3)), "still", 0, 5, ["noch immer"]),
+      ),
+    ).toEqual([["", "noch immer", "start"]]);
+  });
+
+  it("puts new text before an item outside the bookmark around just that item", () => {
+    const result = rewrite(
+      p(opens(0, "_Ref1"), field(" SEQ Table ", "4"), closes(0), run(" rest")),
+      "4 rest",
+      0,
+      6,
+      ["Table ", " rest"],
+    );
+    expect(names(paragraphOf(result.ooxml)).slice(0, 2)).toEqual([
+      '"Table "',
+      "bookmarkStart",
+    ]);
+    expect(covers(result)).toEqual([["_Ref1", "4"]]);
+  });
+
+  it("puts new text before an item inside only the bookmark around the whole part", () => {
+    const result = rewrite(
+      p(
+        opens(0, "_Toc1"),
+        opens(1, "_Ref1"),
+        field(" SEQ Table ", "4"),
+        closes(1),
+        run(" rest"),
+        closes(0),
+      ),
+      "4 rest",
+      0,
+      6,
+      ["Table ", " rest"],
+    );
+    expect(covers(result)).toEqual([
+      ["_Toc1", "Table 4 rest"],
+      ["_Ref1", "4"],
+    ]);
+  });
+
+  it("puts new text after an item outside the bookmark around just that item", () => {
+    const result = rewrite(
+      p(
+        run("Total "),
+        opens(0, "_Ref1"),
+        field(" =SUM(ABOVE) ", "9"),
+        closes(0),
+      ),
+      "Total 9",
+      0,
+      7,
+      ["Sum ", " today"],
+    );
+    expect(covers(result)).toEqual([["_Ref1", "9"]]);
+  });
+
+  it("refuses new text where the bookmarks' order leaves it no place", () => {
+    expect(
+      rewriteWordParagraphPart(
+        pkg(
+          p(
+            opens(1, "_Ref1"),
+            opens(0, "_Toc1"),
+            field(" SEQ Table ", "4"),
+            closes(1),
+            run(" rest"),
+            closes(0),
+          ),
+        ),
+        "4 rest",
+        0,
+        6,
+        ["Table ", " rest"],
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses a part a bookmark ends inside", () => {
+    const text = "PL1 Plain lima mike papa.";
+    expect(
+      rewriteWordParagraphPart(
+        pkg(
+          p(
+            run("PL1 Plain "),
+            opens(0, "Intro"),
+            run("lima mike"),
+            closes(0),
+            run(" papa."),
+          ),
+        ),
+        text,
+        0,
+        text.length,
+        ["PL1 Short."],
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("wordPartFormatLoss", () => {
   const NONE = { emphasis: false, script: false, other: false };
   const loss = (paragraph: string, text: string, start = 0, end?: number) =>

@@ -742,39 +742,99 @@ describe.each(HOSTS)(
     it.each([
       [
         "a table of contents' bookmark around a heading",
-        "H1",
-        [{ text: "H1 Selection probe heading", bookmark: "_Toc938001" }],
+        {
+          runs: [
+            { text: "H1 Selection probe heading", bookmark: "_Toc938001" },
+          ],
+          style: "Heading 1",
+        },
       ],
       [
         "a cross-reference's bookmark",
-        "R7",
-        [{ text: "R7 Signatures", bookmark: "_Ref938002" }],
+        { runs: [{ text: "R7 Signatures", bookmark: "_Ref938002" }] },
       ],
       [
+        "a heading's table of contents and cross-reference bookmarks",
+        {
+          runs: [{ text: "H2 Scope", bookmark: ["_Toc938003", "_Ref938004"] }],
+          style: "Heading 2",
+        },
+      ],
+    ] as const)(
+      "rewrites a paragraph holding %s, the bookmark kept and never shown",
+      async (_, paragraph) => {
+        const host = installWordSelectionHost(
+          { body: ["Intro.", paragraph, "Outro."] },
+          { host: flavour },
+        );
+        expect(host.ooxml({ paragraph: 1 })).toContain("<w:bookmarkStart");
+        host.select({ paragraph: 1 });
+        const read = await captureWordSelection("user", 15_000, PARAGRAPHS);
+        if (read.status !== "ok") throw new Error("capture failed");
+        const text = host.paragraphs()[1].text;
+        expect(read.value).toMatchObject({
+          role: "rewrite",
+          reasonCode: null,
+          selectedText: text,
+          paragraphs: [{ kept: { text, markers: [], kinds: [] } }],
+        });
+        expect(read.value!.selectedText).not.toContain("\u27E6");
+      },
+    );
+
+    it.each([
+      [
         "a user's bookmark around two words",
-        "PB",
         ["PB Plain ", { text: "lima mike", bookmark: "Intro938" }, " papa."],
       ],
       [
-        "a bookmark next to a field it could keep",
-        "FB",
+        "a bookmark next to a field",
         ["FB Before ", { text: "marked", bookmark: "Mark938" }, FIELD],
       ],
     ] as const)(
-      "keeps a paragraph holding %s context only and says it holds a bookmark",
-      async (_, tag, runs) => {
-        const host = installWordSelectionHost(
+      "keeps a whole paragraph context only when %s starts inside it",
+      async (_, runs) => {
+        const { selection } = await capture(
+          { paragraph: 1 },
           { body: ["Intro.", { runs }, "Outro."] },
-          { host: flavour },
         );
-        expect(host.ooxml({ p: tag })).toContain("<w:bookmarkStart");
-        host.select({ p: tag });
-        const read = await captureWordSelection("user", 15_000, PARAGRAPHS);
-        expect(read).toMatchObject({
-          value: { role: "context_only", reasonCode: "bookmark" },
+        expect(selection).toMatchObject({
+          role: "context_only",
+          reasonCode: "bookmark_cut",
         });
       },
     );
+
+    it("keeps a caption's field marker when its cross-reference bookmark ends at the field", async () => {
+      const { selection } = await capture(
+        { paragraph: 1 },
+        {
+          body: [
+            "Intro.",
+            {
+              runs: [
+                { text: "Figure ", bookmark: "_Ref938005" },
+                { text: "1", field: "SEQ Figure", bookmark: "_Ref938005" },
+                ": Sales by region.",
+              ],
+            },
+            "Outro.",
+          ],
+        },
+      );
+      expect(selection).toMatchObject({
+        role: "rewrite",
+        selectedText: "Figure \u27E61\u27E7: Sales by region.",
+        paragraphs: [
+          {
+            kept: {
+              markers: [{ number: 1, kind: "field", end: "point" }],
+              kinds: ["field"],
+            },
+          },
+        ],
+      });
+    });
 
     it("rewrites a paragraph holding only Word's own last-edit bookmark", async () => {
       const { selection } = await capture(
@@ -820,7 +880,7 @@ describe.each(HOSTS)(
   },
 );
 
-describe("captureWordSelection of bookmarks Word for Mac's OOXML leaves out", () => {
+describe("captureWordSelection of bookmarks on Word for Mac, which also lists them", () => {
   const SHAPES = new Set<WordSelectionShape>(["paragraph", "inline"]);
   const FIELD = { text: "3", field: "PAGE" };
   const capture = async (
@@ -859,7 +919,7 @@ describe("captureWordSelection of bookmarks Word for Mac's OOXML leaves out", ()
       { p: "FB" },
     ],
   ] as const)(
-    "finds %s through getBookmarks and keeps the selection context only",
+    "finds %s the OOXML leaves out through getBookmarks and keeps the selection context only",
     async (_, runs, target) => {
       const { host, selection } = await capture(
         ["Intro.", { runs }, "Outro."],
@@ -884,6 +944,28 @@ describe("captureWordSelection of bookmarks Word for Mac's OOXML leaves out", ()
       { paragraph: 1 },
     );
     expect(selection).toMatchObject({ role: "rewrite", reasonCode: null });
+  });
+
+  it("keeps a bookmark the OOXML shows, once getBookmarks lists nothing else", async () => {
+    const host = installWordSelectionHost(
+      {
+        body: [
+          "Intro.",
+          {
+            runs: [
+              { text: "H1 Selection probe heading", bookmark: "_Toc938001" },
+            ],
+          },
+          "Outro.",
+        ],
+      },
+      { host: "mac" },
+    );
+    host.select({ p: "H1" });
+    expect(await captureWordSelection("user", 15_000, SHAPES)).toMatchObject({
+      value: { role: "rewrite", reasonCode: null },
+    });
+    expect(host.calls()).toContain("Range.getBookmarks");
   });
 
   it.each(HOSTS)(
@@ -937,6 +1019,18 @@ describe.each(HOSTS)(
       if (read.status !== "ok") throw new Error("capture failed");
       return { host, selection: read.value };
     };
+    const installedWith =
+      (body: MockSelectionDocument["body"]) =>
+      async (target: MockSelectionTarget) => {
+        const host = installWordSelectionHost(
+          { body: ["Intro.", ...body, "Outro."] },
+          { host: flavour },
+        );
+        host.select(target);
+        const read = await captureWordSelection("user", 15_000, INLINE);
+        if (read.status !== "ok") throw new Error("capture failed");
+        return read.value;
+      };
 
     it.each([
       ["a unique passage", { p: "PL1", text: "lima mike" }],
@@ -984,6 +1078,55 @@ describe.each(HOSTS)(
         });
       },
     );
+
+    describe("in a paragraph with a bookmark", () => {
+      const marked = installedWith([
+        {
+          runs: [
+            { text: "H1 Selection probe heading", bookmark: "_Toc938001" },
+          ],
+          style: "Heading 1",
+        },
+        {
+          runs: [
+            "PB Plain kilo ",
+            { text: "lima mike", bookmark: "Intro938" },
+            " papa.",
+          ],
+        },
+      ]);
+
+      it.each([
+        ["a word inside a heading's bookmark", { p: "H1", text: "probe" }],
+        ["exactly the bookmarked words", { p: "PB", text: "lima mike" }],
+        ["words before the bookmark", { p: "PB", text: "Plain kilo" }],
+        ["words after the bookmark", { p: "PB", text: "papa." }],
+      ] as const)(
+        "offers %s for rewriting, the bookmark kept",
+        async (_, target) => {
+          const selection = await marked(target);
+          expect(selection).toMatchObject({
+            role: "rewrite",
+            shape: "inline",
+            selectedText: target.text,
+            paragraphs: [{ kept: { text: target.text, markers: [] } }],
+          });
+        },
+      );
+
+      it.each([
+        ["starts", { p: "PB", text: "kilo lima" }],
+        ["ends", { p: "PB", text: "mike papa" }],
+      ] as const)(
+        "keeps a span a bookmark %s inside context only",
+        async (_, target) => {
+          expect(await marked(target)).toMatchObject({
+            role: "context_only",
+            reasonCode: "bookmark_cut",
+          });
+        },
+      );
+    });
 
     it("keeps a span next to a red word context only, since the rewrite could take its colour", async () => {
       const { selection } = await capture({ p: "BN1", text: " end." });
