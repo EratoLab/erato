@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 
@@ -25,6 +25,7 @@ beforeEach(() => {
   sidecar.strict = false;
   sidecar.invoke.mockClear();
 });
+afterEach(() => vi.unstubAllGlobals());
 vi.mock("@/providers/DesktopSidecarProvider", () => ({
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT: "https://localhost:1234",
   resolveDesktopSidecarEndpoint: () => undefined,
@@ -144,4 +145,54 @@ it("introduces the sidecar and distinguishes permission settings from connection
   expect(
     screen.getByRole("button", { name: "Retry connection" }),
   ).toBeVisible();
+});
+
+it("shows blocked access in the collapsed row, explains recovery and retries", async () => {
+  const status = Object.assign(new EventTarget(), { state: "denied" });
+  vi.stubGlobal("navigator", {
+    permissions: { query: vi.fn().mockResolvedValue(status) },
+  });
+  render(<DesktopSidecarRow />);
+  await waitFor(() =>
+    expect(screen.getByText(/Local application access blocked/)).toBeVisible(),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
+  );
+  expect(screen.getByRole("alert")).toHaveTextContent("allow or reset");
+  fireEvent.click(
+    screen.getByRole("button", { name: "Retry local application access" }),
+  );
+  expect(providerMounted).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(screen.getByRole("alert")).toBeVisible());
+  act(() => {
+    status.state = "granted";
+    status.dispatchEvent(new Event("change"));
+  });
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Retry connection" }),
+  ).toBeVisible();
+});
+
+it("offers a permission retry for a pending prompt without claiming access is blocked", async () => {
+  vi.stubGlobal("navigator", {
+    permissions: {
+      query: vi
+        .fn()
+        .mockResolvedValue(
+          Object.assign(new EventTarget(), { state: "prompt" }),
+        ),
+    },
+  });
+  render(<DesktopSidecarRow />);
+  fireEvent.click(
+    screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
+  );
+  expect(
+    await screen.findByRole("button", {
+      name: "Retry local application access",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
