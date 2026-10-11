@@ -4112,6 +4112,11 @@ msgstr "La propuesta está vacía o contiene caracteres que Word no conserva com
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.bookmark"
+msgstr "marcador"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.item.break"
 msgstr "salto de línea"
 
@@ -4219,6 +4224,11 @@ msgstr "Erato no pudo leer tu selección en Word, así que tu mensaje no se envi
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.bookmark"
 msgstr "Este pasaje contiene un marcador, como los que usan una tabla de contenido o una referencia cruzada, que una reescritura podría romper."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmarkCut"
+msgstr "Un marcador, como uno al que apunta una referencia cruzada, empieza o termina dentro de esta selección, y una reescritura no sabría dónde colocarlo. Selecciona exactamente el texto del marcador, o solo texto antes o después de él, para que se reemplace."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4413,7 +4423,7 @@ msgstr "Reescritura del pasaje seleccionado"
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.trackedItems"
-msgstr "El control de cambios está activado y este pasaje contiene campos, vínculos, notas o comentarios que una reescritura con seguimiento marcaría como cambiados. Desactiva el control de cambios para reemplazarlo. No se reemplazó nada."
+msgstr "El control de cambios está activado y este pasaje contiene campos, vínculos, notas, comentarios o marcadores, así que una reescritura con seguimiento marcaría todo su párrafo como cambiado. Desactiva el control de cambios para reemplazarlo. No se reemplazó nada."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

@@ -1,5 +1,6 @@
 import {
   alignWordParagraph,
+  wordBookmarkRanges,
   wordKeptItemsShape,
   wordParagraphElement,
   wordPartBoundaries,
@@ -7,6 +8,7 @@ import {
 
 import type {
   WordAlignedParagraph,
+  WordKeptItem,
   WordPartBoundary,
 } from "./wordSelectionItems";
 
@@ -19,6 +21,8 @@ export interface WordParagraphRewrite {
   ooxml: string;
   /** The paragraph.text the rewritten paragraph must read back as. */
   rangeText: string;
+  /** wordBookmarkRanges of the rewritten paragraph, which it must read back with. */
+  bookmarks: string;
 }
 
 const isW = (node: Node | null, name: string): node is Element =>
@@ -248,11 +252,79 @@ function slot(
   return { parent: after.parentNode!, before: after.nextSibling };
 }
 
+type Place = { parent: Node; before: Node | null };
+
+const elementFrom = (
+  node: Node | null,
+  step: "previousSibling" | "nextSibling",
+): Element | null => {
+  let at = node;
+  while (at && !(at instanceof Element)) at = at[step];
+  return at;
+};
+
+/**
+ * Moves a place for new text that has no old text to take the place of among the bookmark ends
+ * right beside it. `goesAfter` tells, per bookmark end, whether the text goes after it. Null when
+ * their order leaves no such place.
+ */
+function besideBookmarks(
+  place: Place,
+  goesAfter: ReadonlyMap<Element, boolean>,
+): Place | null {
+  const row: Element[] = [];
+  for (
+    let node = elementFrom(
+      place.before ? place.before.previousSibling : place.parent.lastChild,
+      "previousSibling",
+    );
+    node && goesAfter.has(node);
+    node = elementFrom(node.previousSibling, "previousSibling")
+  )
+    row.unshift(node);
+  for (
+    let node = elementFrom(place.before, "nextSibling");
+    node && goesAfter.has(node);
+    node = elementFrom(node.nextSibling, "nextSibling")
+  )
+    row.push(node);
+  if (row.length === 0) return place;
+  const split = row.findIndex((node) => !goesAfter.get(node));
+  if (split < 0)
+    return { parent: place.parent, before: row.at(-1)!.nextSibling };
+  if (row.slice(split).some((node) => goesAfter.get(node))) return null;
+  return { parent: place.parent, before: row[split] };
+}
+
+/**
+ * Whether each bookmark covers the result's characters as it should: those it covered before, and
+ * the new text of a piece where it covered that piece's old text. New text where there was none
+ * goes inside only the bookmarks that wrap the whole part, never one around just an item beside it.
+ */
+function bookmarksKept(
+  before: readonly WordKeptItem[],
+  after: readonly WordKeptItem[],
+  origins: readonly number[],
+  pieceOrigins: readonly (number | null)[],
+  wraps: (item: WordKeptItem) => boolean,
+): boolean {
+  return before.every((item, i) => {
+    if (item.kind !== "bookmark") return true;
+    const now = after[i];
+    return origins.every((origin, at) => {
+      const old = origin >= 0 ? origin : pieceOrigins[-1 - origin];
+      const covered =
+        old === null ? wraps(item) : item.start <= old && old < item.end;
+      return covered === (now.start <= at && at < now.end);
+    });
+  });
+}
+
 /**
  * The paragraph with its part [start, end) replaced by `pieces`, the text before, between and after
  * the part's markers. Only text is replaced; every item and everything outside the part stays as
  * it was. Null when the paragraph no longer matches the part, or when the result would not read
- * back as the expected text with the same items.
+ * back as the expected text with the same items, each bookmark over the text it should cover.
  */
 export function rewriteWordParagraphPart(
   ooxml: string,
@@ -272,13 +344,31 @@ export function rewriteWordParagraphPart(
   if (!part || pieces.length !== part.boundaries.length + 1) return null;
   const { boundaries, hidden } = part;
   const edges = [start, ...boundaries.map((b) => b.at), end];
+  const wraps = (item: WordKeptItem) => item.start <= start && item.end >= end;
+  const goesAfter = new Map<Element, boolean>();
+  for (const [item, { open, close }] of aligned.spans) {
+    if (item.kind !== "bookmark") continue;
+    if (open) goesAfter.set(open, wraps(item));
+    if (close) goesAfter.set(close, !wraps(item));
+  }
+  // Per character of the result, the old offset it stays at, or -1 - k for piece k's new text.
+  const origins: number[] = [];
+  const keep = (from: number, to: number) => {
+    for (let at = from; at < to; at += 1) origins.push(at);
+  };
+  keep(0, start);
+  const pieceOrigins: (number | null)[] = [];
   let expected = rangeText.slice(0, start);
   for (let k = 0; k < pieces.length; k += 1) {
     const old: Element[] = [];
+    let first: number | null = null;
     for (let at = edges[k]; at < edges[k + 1]; at += 1) {
       const char = aligned.chars[at];
-      if (!hidden.has(at) && char) old.push(char.node);
+      if (hidden.has(at) || !char) continue;
+      old.push(char.node);
+      if (first === null) first = at;
     }
+    pieceOrigins.push(first);
     const text = pieces[k];
     if (old.length) {
       const runs = [...new Set(old.map((node) => node.parentNode as Element))];
@@ -295,23 +385,30 @@ export function rewriteWordParagraphPart(
           : k > 0
             ? slot(aligned, boundaries[k - 1], "after")
             : null;
-      if (!place) return null;
-      place.parent.insertBefore(
-        newRun(doc, text, place.parent, place.before),
-        place.before,
+      const beside = place && besideBookmarks(place, goesAfter);
+      if (!beside) return null;
+      beside.parent.insertBefore(
+        newRun(doc, text, beside.parent, beside.before),
+        beside.before,
       );
     }
     expected += text;
+    for (let at = 0; at < text.length; at += 1) origins.push(-1 - k);
     const boundary = boundaries[k];
     if (!boundary) continue;
-    if (boundary.end === "point") expected += boundary.item.shows;
-    else if (
+    if (boundary.end === "point") {
+      expected += boundary.item.shows;
+      keep(boundary.item.start, boundary.item.end);
+    } else if (
       boundary.end === "close" &&
       boundary.item.kind === "comment" &&
       rangeText[boundary.at] === "\u0005"
-    )
+    ) {
       expected += "\u0005";
+      keep(boundary.at, boundary.at + 1);
+    }
   }
+  keep(end, rangeText.length);
   expected += rangeText.slice(end);
   mergeTexts(paragraph);
   const serialized = new XMLSerializer().serializeToString(doc);
@@ -323,9 +420,16 @@ export function rewriteWordParagraphPart(
   const check = wordParagraphElement(result);
   const reread = check && alignWordParagraph(check.paragraph, expected);
   if (!reread || "refused" in reread) return null;
-  if (wordKeptItemsShape(reread.items) !== wordKeptItemsShape(aligned.items))
+  if (
+    wordKeptItemsShape(reread.items) !== wordKeptItemsShape(aligned.items) ||
+    !bookmarksKept(aligned.items, reread.items, origins, pieceOrigins, wraps)
+  )
     return null;
-  return { ooxml: result, rangeText: expected };
+  return {
+    ooxml: result,
+    rangeText: expected,
+    bookmarks: wordBookmarkRanges(reread.items),
+  };
 }
 
 /** What a rewrite of a part would not keep of its text's formatting, by what it changes. */

@@ -4112,6 +4112,11 @@ msgstr "Der Vorschlag ist leer oder enthält Zeichen, die Word nicht als Text ü
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.item.bookmark"
+msgstr "Textmarke"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.item.break"
 msgstr "Zeilenumbruch"
 
@@ -4219,6 +4224,11 @@ msgstr "Erato konnte Ihre Auswahl in Word nicht lesen, daher wurde Ihre Nachrich
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.bookmark"
 msgstr "Diese Passage enthält eine Textmarke, etwa eine, die ein Inhaltsverzeichnis oder ein Querverweis verwendet. Eine Umformulierung könnte sie zerstören."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmarkCut"
+msgstr "Eine Textmarke, etwa eine, auf die ein Querverweis zeigt, beginnt oder endet innerhalb dieser Auswahl, und bei einer Umformulierung wäre unklar, wohin sie gehört. Wählen Sie genau den Text der Textmarke oder nur Text davor oder danach aus, damit er ersetzt werden kann."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4413,7 +4423,7 @@ msgstr "Umformulierung der ausgewählten Passage"
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.trackedItems"
-msgstr "Die Änderungsnachverfolgung ist aktiv, und diese Passage enthält Felder, Links, Fußnoten oder Kommentare, die eine nachverfolgte Ersetzung als geändert markieren würde. Schalten Sie die Änderungsnachverfolgung aus, um sie zu ersetzen. Es wurde nichts ersetzt."
+msgstr "Die Änderungsnachverfolgung ist aktiv, und diese Passage enthält Felder, Links, Fußnoten, Kommentare oder Textmarken, daher würde eine nachverfolgte Ersetzung ihren ganzen Absatz als geändert markieren. Schalten Sie die Änderungsnachverfolgung aus, um sie zu ersetzen. Es wurde nichts ersetzt."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx

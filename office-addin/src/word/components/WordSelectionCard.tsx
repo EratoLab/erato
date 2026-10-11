@@ -165,6 +165,12 @@ export function wordSelectionReasonText(
         message:
           "This selection starts or ends inside a field or another item Word keeps whole. Select the whole item, or the text around it, to have it replaced.",
       });
+    case "bookmark_cut":
+      return t({
+        id: "officeAddin.word.selection.reason.bookmarkCut",
+        message:
+          "A bookmark, such as one a cross-reference points to, starts or ends inside this selection, and a rewrite could not tell where it belongs. Select exactly the bookmarked text, or only text before or after it, to have it replaced.",
+      });
     case "shape_not_enabled":
       return t({
         id: "officeAddin.word.selection.reason.shape",
@@ -230,6 +236,11 @@ function keptItemName(kind: WordKeptItemKind): string {
       return t({
         id: "officeAddin.word.selection.item.control",
         message: "content control",
+      });
+    case "bookmark":
+      return t({
+        id: "officeAddin.word.selection.item.bookmark",
+        message: "bookmark",
       });
   }
 }
@@ -405,7 +416,7 @@ function resultText(
           return t({
             id: "officeAddin.word.selection.trackedItems",
             message:
-              "Track Changes is on, and this passage holds fields, links, notes or comments that a tracked rewrite would mark as changed. Turn Track Changes off to replace it. Nothing was replaced.",
+              "Track Changes is on, and this passage holds fields, links, notes, comments or bookmarks, so a tracked rewrite would mark its whole paragraph as changed. Turn Track Changes off to replace it. Nothing was replaced.",
           });
         case "TARGET_RANGE_UNPROVEN":
           return t({

@@ -444,14 +444,15 @@ function consecutive(
 
 /**
  * Per covered paragraph, its part with markers where it holds items to keep (ERMAIN-938): "cut"
- * where the part starts or ends inside one, null where it holds none or its items cannot be read.
+ * where the part starts or ends inside one, "bookmark_cut" where a bookmark starts or ends inside
+ * it, null where it holds none or its items cannot be read.
  */
 function keptParts(
   reads: readonly WordParagraphSpanChecks[],
   rangeTexts: readonly string[],
   parts: readonly { start: number; end: number }[],
   support: WordSelectionSupport,
-): (WordMarkedPart | "cut" | null)[] {
+): (WordMarkedPart | "cut" | "bookmark_cut" | null)[] {
   let next = 1;
   return reads.map((read, i) => {
     if (!support.keepsItems) return null;
@@ -465,9 +466,21 @@ function keptParts(
       parts[i].end,
       next,
     );
-    if (!marked) return "cut";
+    if (!marked) {
+      const visible = {
+        items: items.items.filter((item) => item.kind !== "bookmark"),
+        references: items.references,
+      };
+      const { start, end } = parts[i];
+      return markWordSelectionPart(rangeTexts[i], visible, start, end)
+        ? "bookmark_cut"
+        : "cut";
+    }
     next = marked.next;
-    return { ...marked, kinds: [...new Set(items.items.map((i) => i.kind))] };
+    const kinds = items.items.flatMap((item) =>
+      item.kind === "bookmark" ? [] : [item.kind],
+    );
+    return { ...marked, kinds: [...new Set(kinds)] };
   });
 }
 

@@ -490,6 +490,176 @@ describe("replaceWordSelection on the web", () => {
   });
 });
 
+describe.each(HOSTS)(
+  "replaceWordSelection of a paragraph with bookmarks on %s",
+  (flavour) => {
+    const HEADING = {
+      runs: [{ text: "H1 Selection probe heading", bookmark: "_Toc938001" }],
+      style: "Heading 1",
+    };
+    const STACKED = {
+      runs: [{ text: "H2 Scope", bookmark: ["_Toc938003", "_Ref938004"] }],
+      style: "Heading 2",
+    };
+    const CAPTION = {
+      runs: [
+        { text: "Figure ", bookmark: "_Ref938005" },
+        { text: "1", field: "SEQ Figure", bookmark: "_Ref938005" },
+        ": Sales by region.",
+      ],
+    };
+    const USER = {
+      runs: [
+        "PB Plain kilo ",
+        { text: "lima mike", bookmark: "Intro938" },
+        " papa.",
+      ],
+    };
+    const install = () =>
+      installWordSelectionHost(
+        { body: ["Intro.", HEADING, STACKED, CAPTION, USER, "Outro."] },
+        { host: flavour },
+      );
+    const covered = (host: WordSelectionHost, paragraph: number) => {
+      const { runs } = host.paragraphs()[paragraph];
+      return runs.map(({ text, bookmarks }) => [text, bookmarks ?? []]);
+    };
+    const INLINE = new Set<WordSelectionShape>(["paragraph", "inline"]);
+    const captureInline = async (
+      host: WordSelectionHost,
+      target: MockSelectionTarget,
+    ) => {
+      host.select(target);
+      const read = await captureWordSelection("user", 15_000, INLINE);
+      if (read.status !== "ok" || !read.value) throw new Error("no capture");
+      return emptySelectionCapture("doc", read.value);
+    };
+
+    it.each([
+      [
+        "a heading inside its table of contents bookmark",
+        1,
+        "H1 A shorter heading",
+        [["H1 A shorter heading", ["_Toc938001"]]],
+      ],
+      [
+        "a heading inside both its bookmarks",
+        2,
+        "H2 Purpose",
+        [["H2 Purpose", ["_Toc938003", "_Ref938004"]]],
+      ],
+      [
+        "a caption, its bookmark still around the label and its field",
+        3,
+        "Abbildung \u27E61\u27E7: Umsatz nach Region.",
+        [
+          ["Abbildung ", ["_Ref938005"]],
+          ["1", ["_Ref938005"]],
+          [": Umsatz nach Region.", []],
+        ],
+      ],
+    ] as const)(
+      "rewrites %s and undoes it exactly",
+      async (_, paragraph, rewrite, after) => {
+        const host = install();
+        const before = host.paragraphs();
+        const capture = await captureOf(host, { paragraph });
+        expect(capture.selection).toMatchObject({ role: "rewrite" });
+        const result = await replace(capture, rewrite);
+        expect(result).toMatchObject({ status: "applied" });
+        expect(covered(host, paragraph)).toEqual(after);
+        expect(host.paragraphs()[paragraph].style).toBe(
+          before[paragraph].style,
+        );
+        expect(others(host.paragraphs(), "PB")).toHaveLength(5);
+        if (result.status !== "applied" || !result.backups)
+          throw new Error("not applied");
+        expect(
+          await revertWordSelection(result.backups, result.written),
+        ).toMatchObject({ status: "reverted" });
+        expect(
+          host
+            .paragraphs()
+            .map(({ text, style, runs }) => ({ text, style, runs })),
+        ).toEqual(
+          before.map(({ text, style, runs }) => ({ text, style, runs })),
+        );
+      },
+    );
+
+    it.each([
+      [
+        "a word inside a heading's bookmark",
+        { p: "H1", text: "probe" },
+        "test",
+        1,
+        [["H1 Selection test heading", ["_Toc938001"]]],
+      ],
+      [
+        "words before a bookmark",
+        { p: "PB", text: "Plain kilo" },
+        "Short",
+        4,
+        [
+          ["PB Short ", []],
+          ["lima mike", ["Intro938"]],
+          [" papa.", []],
+        ],
+      ],
+      [
+        "exactly the bookmarked words",
+        { p: "PB", text: "lima mike" },
+        "Lima und Mike",
+        4,
+        [
+          ["PB Plain kilo ", []],
+          ["Lima und Mike", ["Intro938"]],
+          [" papa.", []],
+        ],
+      ],
+    ] as const)(
+      "rewrites %s and leaves the bookmark over the same text",
+      async (_, target, rewrite, paragraph, after) => {
+        const host = install();
+        const result = await replaceWordSelection({
+          capture: await captureInline(host, target),
+          fenceContent: rewrite,
+          enabledShapes: INLINE,
+        });
+        expect(result).toMatchObject({ status: "applied" });
+        expect(covered(host, paragraph)).toEqual(after);
+      },
+    );
+
+    it("reports unverified when the heading's bookmark moved by the read-back", async () => {
+      const host = install();
+      const capture = await captureOf(host, { p: "H1" });
+      let moved = false;
+      // In the read-back's run: the web applies an OOXML write only once its own run has ended.
+      host.beforeSync(() => {
+        if (host.writeSyncs().length === 1 && !moved) {
+          moved = true;
+          host.clearBookmarks({ p: "H1", text: "H1 " });
+        }
+      });
+      expect(await replace(capture, "H1 A shorter heading")).toMatchObject({
+        status: "unverified",
+      });
+    });
+
+    it("refuses a heading with a bookmark under Track Changes and writes nothing", async () => {
+      const host = install();
+      const capture = await captureOf(host, { p: "H1" });
+      host.setTrackingMode("TrackAll");
+      expect(await replace(capture, "H1 A shorter heading")).toMatchObject({
+        status: "refused",
+        code: "TRACKED_ITEMS",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+    });
+  },
+);
+
 describe("replaceWordSelection on Mac when its OOXML leaves out bookmarks", () => {
   it.each([
     [
