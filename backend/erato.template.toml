@@ -680,8 +680,9 @@ chat_provider_ids = ["test-token-limit"]
 # definitions and facet prompts are supplied by deployment configuration packages.
 #
 # [client_tools]
-# # Dark by default. Only compiled operation kinds with typed result validators
-# # may park durably; enabling this alone does not enable any executor.
+# # Dark by default. Only compiled operation kinds may park durably: native
+# # local evidence, and configured tools that opt in with a `durable` table
+# # below. Enabling this alone does not make any other tool durable.
 # durable_operations_enabled = false
 #
 # [client_tools.tools.outlook_fetch_availability]
@@ -712,6 +713,16 @@ chat_provider_ids = ["test-token-limit"]
 # # mode = "receipt"
 # # keep_input_fields = ["$.lookahead_days"]
 # # keep_output_fields = ["$.status", "$.error"]
+#
+# # Optional: with durable_operations_enabled, a call whose stream drops or
+# # times out parks durably for the same device and Outlook mailbox instead of
+# # ending as a timeout; the turn resumes when that add-in answers. Not allowed
+# # with `submission`. Lease 60-900 s, at most the expiry (60-86400 s).
+# # [client_tools.tools.outlook_fetch_availability.durable]
+# # host_context = "outlook_mailbox"
+# # attempt_expiry_secs = 3600
+# # claim_lease_secs = 120
+# # result_schema = """{"type":"object","required":["legend","timezone","now","busy","recentMeetings","degraded"],"properties":{"legend":{"type":"string"},"timezone":{"type":"string"},"now":{"type":"object"},"busy":{"type":"array"},"recentMeetings":{"type":"array"},"degraded":{"type":"array"}}}"""
 #
 # OPTIONAL Entra permissions (EXO attendee name search): grant the add-in app
 # registration People.Read and/or User.ReadBasic.All (delegated) to resolve

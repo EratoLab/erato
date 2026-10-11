@@ -2818,6 +2818,10 @@ export type NothingToReactError = {
 
 export type OperationError = {
   code: string;
+  /**
+   * Executor text, at most 1024 characters. Only a kind validator may forward it.
+   */
+  message?: string;
 };
 
 export type OperationOutcome = "succeeded" | "rejected" | "failed" | "unknown";

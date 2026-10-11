@@ -767,6 +767,7 @@ mod tests {
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            durable: None,
         }
     }
 

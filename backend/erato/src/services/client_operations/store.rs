@@ -233,7 +233,7 @@ pub async fn claim(
             r#"
         UPDATE client_operation_attempts a
         SET state = 'claimed', claim_token = $3, claim_binding = $4,
-            claim_expires_at = LEAST(expires_at, now() + interval '5 minutes')
+            claim_expires_at = LEAST(expires_at, now() + make_interval(secs => $5))
         FROM chats c WHERE a.attempt_id = $1 AND a.account_id = $2 AND c.id = a.chat_id
           AND c.archived_at IS NULL AND c.generation_state <> 'running' AND a.expires_at > now()
           AND (a.state = 'pending' OR (a.state = 'claimed' AND a.claim_expires_at < now()))
@@ -244,6 +244,7 @@ pub async fn claim(
                 account_id.into(),
                 token.into(),
                 serde_json::to_value(binding)?.into(),
+                (kind.claim_lease().num_seconds() as f64).into(),
             ],
         ))
         .await?;
@@ -266,7 +267,8 @@ pub async fn accept(
 
 /// The fast transport may race escalation. Invalid content from its original
 /// bound executor becomes fixed refused-call feedback, including in that race.
-/// Claimed durable results still require the kind's validator without this fallback.
+/// Claimed durable results still require the kind's validator, unless the kind
+/// settles invalid claimed results the same way.
 pub async fn accept_fast(
     db: &DatabaseConnection,
     registry: &OperationRegistry,
@@ -339,6 +341,7 @@ async fn accept_result_in(
     let kind = registry
         .for_request(&request)
         .ok_or_else(|| eyre!("Operation kind unavailable"))?;
+    let refuse_invalid = refuse_invalid || (token.is_some() && kind.settle_invalid_claimed());
     let validated = if (refuse_invalid
         && result
             .error
@@ -363,6 +366,7 @@ async fn accept_result_in(
             refused.result = None;
             refused.error = Some(OperationError {
                 code: "invalid_operation_result".into(),
+                message: None,
             });
             (serde_json::to_value(refused)?, invalid_result_feedback())
         }
@@ -455,7 +459,10 @@ async fn settle_server_outcome(
         base_revision: request.base_revision,
         outcome: OperationOutcome::Rejected,
         result: None,
-        error: Some(OperationError { code: code.into() }),
+        error: Some(OperationError {
+            code: code.into(),
+            message: None,
+        }),
         executor: request.binding,
     };
     let validated = ValidatedResult {

@@ -294,4 +294,21 @@ mod tests {
             assert!(plan(&input, 100).is_err());
         }
     }
+
+    // request_plan derives the plan's issue time from a 24 h attempt expiry.
+    #[test]
+    fn local_evidence_keeps_its_fixed_expiry_and_lease() {
+        use crate::services::client_operations::OperationKind;
+        let kind = LocalEvidenceKind {
+            signer: std::sync::Arc::new(
+                super::super::signing::Signer::new(&super::super::signing::tests::fixture())
+                    .unwrap(),
+            ),
+        };
+        assert_eq!(kind.attempt_ttl(), chrono::Duration::hours(24));
+        assert_eq!(kind.claim_lease(), chrono::Duration::minutes(5));
+        assert!(!kind.gated_by_user_decision());
+        assert!(kind.requires_binding());
+        assert!(!kind.settle_invalid_claimed());
+    }
 }

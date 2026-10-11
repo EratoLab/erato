@@ -1035,6 +1035,7 @@ async fn repeated_parks_do_not_mint_new_submission_allowances(pool: Pool<Postgre
         rejected.result = None;
         rejected.error = Some(OperationError {
             code: "validation_failed".into(),
+            message: None,
         });
         store::accept(
             &state.db,
@@ -1619,6 +1620,7 @@ async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool
     rejected.result = None;
     rejected.error = Some(OperationError {
         code: "validation_failed".into(),
+        message: None,
     });
     store::accept(
         &state.db,
@@ -1888,6 +1890,7 @@ async fn post_claimed_result(
             result.outcome = OperationOutcome::Rejected;
             result.error = Some(OperationError {
                 code: "validation_failed".into(),
+                message: None,
             });
         }
     } else {

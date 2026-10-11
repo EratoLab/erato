@@ -128,10 +128,10 @@ impl Signer {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     // Synthetic, public test fixture (32-byte seed filled with 7). Never a deployment key.
-    fn fixture() -> LocalDelegationConfig {
+    pub(crate) fn fixture() -> LocalDelegationConfig {
         LocalDelegationConfig {
             enabled: true,
             backend_origin: Some("https://erato.example".into()),

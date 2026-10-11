@@ -195,9 +195,11 @@ async fn test_app_state_internal(
         .transpose()
         .unwrap();
     let app_state = AppState {
-        client_operations: erato::services::local_delegation::tool::registry(
+        client_operations: erato::services::client_operations::registry(
+            &app_config,
             local_delegation_signer.as_ref(),
-        ),
+        )
+        .unwrap(),
         local_delegation_signer,
         ms_teams_bot: None,
         db: db.clone(),
