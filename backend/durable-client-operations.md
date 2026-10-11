@@ -166,10 +166,12 @@ through its own consent policy, so a saved `ask` decision runs it. A configured
 kind keeps the user's decision: `ask` shows the approval card before dispatch,
 and a call that runs (no decision, `always_allow`, or an approved `ask`) escalates
 with consent `none` and keeps the live fast path. `never_allow` is filtered from
-the offer and refused at dispatch. Saved after a park, it withdraws the call at
-claim, at the first claimed result and at a late fast result. An `ask` or
-`always_allow` saved after an approved run does not prompt again; the call may
-complete later on the same device and mailbox (owner decision, 2026-10-11).
+the offer and refused at dispatch. Saved while the live call waits, it settles the
+call in memory as `withdrawn` on timeout or stream loss instead of parking it.
+Saved after a park, it withdraws the call at claim, at the first claimed result
+and at a late fast result. An `ask` or `always_allow` saved after an approved run
+does not prompt again; the call may complete later on the same device and mailbox
+(owner decision, 2026-10-11).
 
 Claim and first durable-result acceptance share current authorization checks:
 account/chat access, recorded qualified identity, current configuration and facet
@@ -219,7 +221,8 @@ registry builder and the mock LLM:
 - a rejected call creates no attempt;
 - an approval from another executor keeps the legacy path;
 - `ask` saved after a park does not block the claim;
-- `never_allow` is neither offered nor escalated, and withdraws a parked call at
+- `never_allow` is neither offered nor escalated, saved during the live wait it
+  settles the call in memory as `withdrawn`, and it withdraws a parked call at
   claim, at its first claimed result and at a late fast result;
 - a sidecar binding, a missing binding, a tool that does not opt in and the
   disabled flag all keep the in-memory path.

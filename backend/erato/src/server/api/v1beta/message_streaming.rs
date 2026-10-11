@@ -7245,18 +7245,42 @@ async fn stream_generate_chat_completion<'a>(
                         }
                     };
 
+                    // The gate read the decision before dispatch. A Never saved while
+                    // the call waited settles it as withdrawn: no park, no raced-in result.
+                    let withdrawn = match (&park, &durable_request, operation_kind) {
+                        (Park::TimedOut, Some(request), Some(kind))
+                            if kind.gated_by_user_decision() =>
+                        {
+                            crate::models::user_preference::find_client_tool_decision(
+                                &app_state.db,
+                                &request.account_id,
+                                &request.operation_id,
+                            )
+                            .await?
+                                == Some(
+                                    crate::models::user_preference::ClientToolDecision::NeverAllow,
+                                )
+                        }
+                        _ => false,
+                    };
+                    let escalate =
+                        matches!(park, Park::TimedOut) && durable_request.is_some() && !withdrawn;
+
                     // Drop the pending entry, then settle the timeout/abort-vs-
                     // delivery boundary race: if the client's result landed just as
                     // we gave up, prefer it over discarding (and over the endpoint
                     // having reported a spurious success).
-                    if !matches!(park, Park::TimedOut) || durable_request.is_none() {
+                    if !escalate {
                         task.remove_pending_client_tool(&call_id).await;
                     }
                     let raced_in = result_rx.try_recv().ok();
 
                     match park {
                         Park::Delivered(outcome) => outcome,
-                        Park::TimedOut if raced_in.is_none() && durable_request.is_some() => {
+                        Park::TimedOut if withdrawn => ClientToolOutcome::Cancelled {
+                            reason: "withdrawn".to_string(),
+                        },
+                        Park::TimedOut if raced_in.is_none() && escalate => {
                             upsert_tool_use(
                                 &mut current_message_content,
                                 ToolUse {

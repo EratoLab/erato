@@ -1001,6 +1001,32 @@ async fn never_allow_saved_after_park_withdraws_the_claim(pool: Pool<Postgres>) 
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn never_allow_saved_during_the_live_wait_is_not_escalated(pool: Pool<Postgres>) {
+    let setup = setup(pool, 2_000, true, true).await;
+    let (response, ()) = tokio::time::timeout(Duration::from_secs(20), async {
+        tokio::join!(
+            submit(&setup.state, setup.chat_id, Some(&mailbox())),
+            async {
+                live_call(&setup.state, setup.chat_id).await;
+                set_decision(&setup.state, "never_allow").await;
+            }
+        )
+    })
+    .await
+    .expect("turn did not finish");
+    response.assert_status_ok();
+    assert!(client_tool_calls(&response) > 0);
+    assert_settled_in_memory(&setup, "withdrawn").await;
+    assert!(
+        assistant_message(&setup)
+            .await
+            .raw_message
+            .to_string()
+            .contains(ANSWER)
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn opted_in_tool_with_a_sidecar_binding_keeps_the_legacy_path(pool: Pool<Postgres>) {
     let mut setup = setup(pool, 10, true, true).await;
     let sidecar = ExecutorBinding {
