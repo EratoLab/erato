@@ -4096,6 +4096,11 @@ msgid "officeAddin.word.selection.failed"
 msgstr "Word no aceptó el cambio. No se reemplazó nada."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.flattensEmphasis"
+msgstr "Tras reemplazar, las palabras en negrita, cursiva, subrayadas o tachadas de este pasaje toman el formato habitual del párrafo."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Si este pasaje se puede reemplazar, se envía en lugar del documento."
@@ -4182,6 +4187,11 @@ msgstr "El texto seleccionado no es exactamente el pasaje de tu solicitud. No se
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickEmphasis"
+msgstr "El pasaje seleccionado tiene palabras en negrita, cursiva, subrayadas o tachadas que el pasaje de tu solicitud no tenía. Reemplazar quitaría ese formato, así que no se reemplazó nada."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.pickHint"
 msgstr "Selecciona en Word el pasaje al que te refieres y elige Reemplazar el pasaje seleccionado. Solo se reemplaza si su texto es exactamente el mismo."
 
@@ -4204,6 +4214,11 @@ msgstr "Word no pudo localizar el pasaje con exactitud dentro de su párrafo. No
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato no pudo leer tu selección en Word, así que tu mensaje no se envió. Envíalo de nuevo o descarta la selección para enviarlo sin ella."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmark"
+msgstr "Este pasaje contiene un marcador, como los que usan una tabla de contenido o una referencia cruzada, que una reescritura podría romper."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4239,6 +4254,11 @@ msgstr "El texto de una tabla dentro de otra tabla solo se usa como contexto."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato no puede localizar este pasaje con exactitud en el documento, así que no puede reemplazarlo con seguridad."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.script"
+msgstr "Este pasaje tiene caracteres en superíndice o subíndice, como en m² o CO₂, que una reescritura convertiría en texto normal."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

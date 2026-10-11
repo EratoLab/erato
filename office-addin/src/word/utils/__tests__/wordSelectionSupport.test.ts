@@ -17,9 +17,12 @@ const host =
   };
 
 describe("wordSelectionSupport", () => {
-  it.each(["Mac", "PC"] as const)(
+  it.each([
+    ["Mac", true],
+    ["PC", false],
+  ] as const)(
     "rewrites with complex-script setters on Microsoft 365 for %s",
-    (platform) => {
+    (platform, listsBookmarks) => {
       expect(
         wordSelectionSupport(
           host({ WordApi: "1.9", WordApiDesktop: "1.5" }),
@@ -36,6 +39,7 @@ describe("wordSelectionSupport", () => {
         searchMaxCharacters: 255,
         keepsItems: true,
         keptItemParagraphs: null,
+        listsBookmarks,
         reason: null,
       });
     },
@@ -55,6 +59,7 @@ describe("wordSelectionSupport", () => {
       searchMaxCharacters: 255,
       keepsItems: true,
       keptItemParagraphs: 5,
+      listsBookmarks: false,
       reason: null,
     });
   });
@@ -85,6 +90,7 @@ describe("wordSelectionSupport", () => {
       searchMaxCharacters: 255,
       keepsItems: false,
       keptItemParagraphs: null,
+      listsBookmarks: false,
       reason: "host_unsupported",
     });
   });
@@ -99,6 +105,7 @@ describe("wordSelectionSupport", () => {
       trackingMode: false,
       canRewrite: false,
       styleFontSource: "ooxml",
+      listsBookmarks: false,
       reason: "host_unsupported",
     });
   });

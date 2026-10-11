@@ -4096,6 +4096,11 @@ msgid "officeAddin.word.selection.failed"
 msgstr "Word did not accept the change. Nothing was replaced."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.flattensEmphasis"
+msgstr "After Replace, bold, italic, underlined or struck-through words in this passage take the paragraph's usual formatting."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "If this passage can be replaced, it is sent instead of the document."
@@ -4182,6 +4187,11 @@ msgstr "The selected text is not exactly the passage from your request. Nothing 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.pickEmphasis"
+msgstr "The selected passage has bold, italic, underlined or struck-through words that the passage in your request did not have. Replace would remove that formatting, so nothing was replaced."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.pickHint"
 msgstr "Select the one you mean in Word, then choose Replace selected passage. It is replaced only if its text is exactly the same."
 
@@ -4204,6 +4214,11 @@ msgstr "Word could not pinpoint the passage inside its paragraph. Nothing was re
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.bookmark"
+msgstr "This passage holds a bookmark, such as one a table of contents or a cross-reference uses, which a rewrite could break."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4239,6 +4254,11 @@ msgstr "Text in a table inside another table is only used as context."
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.reason.position"
 msgstr "Erato cannot pinpoint this passage in the document, so it cannot replace it safely."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.reason.script"
+msgstr "This passage has superscript or subscript characters, as in m² or CO₂, which a rewrite would turn into normal text."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx

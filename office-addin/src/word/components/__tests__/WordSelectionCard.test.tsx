@@ -320,6 +320,40 @@ describe("WordSelectionCard", () => {
     expect(host.writeSyncs()).toEqual([]);
   });
 
+  it("replaces nothing when only the selected copy has bold the card did not announce", async () => {
+    uninstallWordSelectionHost();
+    host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+      nullParagraphIds: true,
+    });
+    const capture = await captureOf(host, { p: "PL1" });
+    expect(capture.selection).toMatchObject({ role: "rewrite" });
+    expect(capture.selection?.flattensEmphasis).toBeUndefined();
+    host.insertParagraphs({ p: "PL1" }, [host.paragraphs()[2].text], "After");
+    host.format({ paragraph: 3, text: "lima" }, { font: { bold: true } });
+    renderCard({ capture });
+    fireEvent.click(replaceButton()!);
+    await screen.findByText(
+      "This passage now appears more than once, so Erato can't tell which one you meant. Nothing was replaced.",
+    );
+    expect(
+      screen.queryByText(
+        "After Replace, bold, italic, underlined or struck-through words in this passage take the paragraph's usual formatting.",
+      ),
+    ).toBeNull();
+    const before = host.paragraphs().slice(2, 4);
+
+    host.select({ paragraph: 3 });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace selected passage" }),
+    );
+    await screen.findByText(
+      "The selected passage has bold, italic, underlined or struck-through words that the passage in your request did not have. Replace would remove that formatting, so nothing was replaced.",
+    );
+    expect(host.writeSyncs()).toEqual([]);
+    expect(host.paragraphs().slice(2, 4)).toEqual(before);
+    expect(screen.queryByText("Replaced the selected passage.")).toBeNull();
+  });
+
   it("shows a kept field by its text and replaces around it", async () => {
     const capture = await captureOf(host, { p: "FD1" });
     renderCard({
@@ -416,6 +450,56 @@ describe("WordSelectionCard", () => {
     ],
   ] as const)("explains the table reason %s", (code, text) => {
     expect(wordSelectionReasonText(code)).toBe(text);
+  });
+
+  it("says a bookmark, not a link or field, keeps a heading from being replaced", async () => {
+    uninstallWordSelectionHost();
+    host = installWordSelectionHost({
+      body: [
+        {
+          runs: [
+            { text: "H1 Selection probe heading", bookmark: "_Toc938001" },
+          ],
+          style: "Heading 1",
+        },
+        ...SV2_MAIN_DOCUMENT.body.slice(1),
+      ],
+    });
+    const capture = await captureOf(host, { p: "H1" });
+    renderCard({ capture });
+    expect(
+      screen.getByText(
+        "This passage holds a bookmark, such as one a table of contents or a cross-reference uses, which a rewrite could break.",
+      ),
+    ).toBeInTheDocument();
+    expect(replaceButton()).toBeNull();
+  });
+
+  it("says superscript or subscript would turn into normal text", () => {
+    expect(wordSelectionReasonText("mixed_script")).toBe(
+      "This passage has superscript or subscript characters, as in m² or CO₂, which a rewrite would turn into normal text.",
+    );
+  });
+
+  it("says before Replace that mixed bold or italic takes the paragraph's usual formatting", async () => {
+    const hint =
+      "After Replace, bold, italic, underlined or struck-through words in this passage take the paragraph's usual formatting.";
+    const mixed = await captureOf(host, { p: "MX1" });
+    expect(mixed.selection).toMatchObject({
+      role: "rewrite",
+      flattensEmphasis: true,
+    });
+    renderCard({
+      capture: mixed,
+      content:
+        "MX1 Alpha \u27E61\u27E7link\u27E6/1\u27E7 golf \u27E62\u27E7 hotel.",
+    });
+    expect(screen.getByText(hint)).toBeInTheDocument();
+    expect(replaceButton()).toBeInTheDocument();
+    cleanup();
+    renderCard({ capture: await captureOf(host, { p: "PL1" }) });
+    expect(replaceButton()).toBeInTheDocument();
+    expect(screen.queryByText(hint)).toBeNull();
   });
 
   it("no longer says only whole paragraphs can be replaced for a shape not enabled", () => {

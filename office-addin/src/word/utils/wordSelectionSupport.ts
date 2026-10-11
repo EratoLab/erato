@@ -48,6 +48,12 @@ export interface WordSelectionSupport {
    * Word for the web's own undo stack (office-js #6423), so there Erato's Undo must cover it all.
    */
   keptItemParagraphs: number | null;
+  /**
+   * A paragraph's bookmarks are also listed by Range.getBookmarks. BM0 found every bookmark, hidden
+   * ones included, in the paragraph's OOXML on Word PC and the web only; Word for Mac's paragraph
+   * OOXML already leaves out the sectPr, and a whole-text rewrite deletes a bookmark it misses.
+   */
+  listsBookmarks: boolean;
   reason: "host_unsupported" | null;
 }
 
@@ -69,6 +75,8 @@ export const WORD_SELECTION_REQUIREMENTS = {
   styleFontApi: ["WordApi", "1.5"],
   /** Range.getOoxml, the style fallback. */
   ooxml: ["WordApi", "1.1"],
+  /** Range.getBookmarks. */
+  bookmarks: ["WordApi", "1.4"],
   /** boldBidirectional, italicBidirectional, sizeBidirectional and nameBidirectional. */
   bidiSetters: ["WordApiDesktop", "1.3"],
 } as const satisfies Record<string, readonly [string, string]>;
@@ -110,6 +118,8 @@ export function wordSelectionSupport(
     searchMaxCharacters: 255,
     keepsItems: canRewrite && has(WORD_SELECTION_REQUIREMENTS.ooxml),
     keptItemParagraphs: desktop ? null : WORD_WEB_REVERT_MAX_PARAGRAPHS,
+    listsBookmarks:
+      platform === "Mac" && has(WORD_SELECTION_REQUIREMENTS.bookmarks),
     reason: canRewrite ? null : "host_unsupported",
   };
 }

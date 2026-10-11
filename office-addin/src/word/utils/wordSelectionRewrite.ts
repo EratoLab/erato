@@ -175,6 +175,11 @@ const propKey = (property: Element) =>
     .sort()
     .join(",")}|${new XMLSerializer().serializeToString(property)}`;
 
+const propKeys = (runs: readonly Element[]) =>
+  runs.map(
+    (run) => new Set(Array.from(propsOf(run)?.children ?? []).map(propKey)),
+  );
+
 /**
  * Only the properties every one of a piece's old runs had: a rewrite whose first word was bold
  * would otherwise come out bold throughout. A property they did not share is left to the
@@ -183,14 +188,23 @@ const propKey = (property: Element) =>
 function sharedProps(runs: readonly Element[]): Element | undefined {
   const first = propsOf(runs[0]);
   if (!first || runs.length < 2) return first;
-  const keys = runs.map(
-    (run) => new Set(Array.from(propsOf(run)?.children ?? []).map(propKey)),
-  );
+  const keys = propKeys(runs);
   const shared = first.cloneNode(false) as Element;
   for (const property of Array.from(first.children))
     if (keys.every((set) => set.has(propKey(property))))
       shared.appendChild(property.cloneNode(true));
   return shared;
+}
+
+/** The properties sharedProps leaves out: each one some of the runs have and others not. */
+function droppedProps(runs: readonly Element[]): Element[] {
+  if (runs.length < 2) return [];
+  const keys = propKeys(runs);
+  return runs.flatMap((run) =>
+    Array.from(propsOf(run)?.children ?? []).filter(
+      (property) => !keys.every((set) => set.has(propKey(property))),
+    ),
+  );
 }
 
 /** Where text goes that has no old text to take the place of: right before or after a boundary. */
@@ -312,4 +326,87 @@ export function rewriteWordParagraphPart(
   if (wordKeptItemsShape(reread.items) !== wordKeptItemsShape(aligned.items))
     return null;
   return { ooxml: result, rangeText: expected };
+}
+
+/** What a rewrite of a part would not keep of its text's formatting, by what it changes. */
+export interface WordPartFormatLoss {
+  /** Bold, italic, underline or strikethrough on part of a piece's text. */
+  emphasis: boolean;
+  /** Superscript or subscript on part of a piece's text. */
+  script: boolean;
+  /** Any other property on part of a piece's text: a colour, highlight, font, size, character style. */
+  other: boolean;
+}
+
+const EMPHASIS = new Set(["b", "bCs", "i", "iCs", "u", "strike"]);
+
+/**
+ * What a dropped property changes. Automatic colour, no highlight, baseline, a font hint alone and
+ * the language marks are let through, as the plain path lets them through.
+ */
+function lossOf(property: Element): keyof WordPartFormatLoss | null {
+  if (property.namespaceURI !== W) return "other";
+  const name = property.localName;
+  const val = property.getAttributeNS(W, "val");
+  if (EMPHASIS.has(name)) return "emphasis";
+  switch (name) {
+    case "lang":
+    case "noProof":
+      return null;
+    case "vertAlign":
+      return val === "superscript" || val === "subscript" ? "script" : null;
+    case "color":
+      return val === "auto" ? null : "other";
+    case "highlight":
+      return val === "none" ? null : "other";
+    case "rFonts":
+      return Array.from(property.attributes).every(
+        (a) => a.localName === "hint" || a.name.startsWith("xmlns"),
+      )
+        ? null
+        : "other";
+    default:
+      return "other";
+  }
+}
+
+/**
+ * What rewriteWordParagraphPart would drop of the part [start, end)'s formatting. It writes each
+ * piece between the part's markers with the properties all of that piece's old text runs share,
+ * so a property on part of one piece is lost, while pieces formatted differently from each other
+ * keep their own. An item's own runs (a field's result, a note reference) are kept as they are and
+ * do not count; a link's text is a piece of its own, so its Hyperlink style is shared. Null when
+ * the paragraph's items cannot be read or the part cuts through one.
+ */
+export function wordPartFormatLoss(
+  ooxml: string,
+  rangeText: string,
+  start: number,
+  end: number,
+): WordPartFormatLoss | null {
+  const parsed = wordParagraphElement(ooxml);
+  if (!parsed) return null;
+  const aligned = alignWordParagraph(parsed.paragraph, rangeText);
+  if ("refused" in aligned) return null;
+  const part = wordPartBoundaries(rangeText, aligned, start, end);
+  if (!part) return null;
+  const edges = [start, ...part.boundaries.map((b) => b.at), end];
+  const loss: WordPartFormatLoss = {
+    emphasis: false,
+    script: false,
+    other: false,
+  };
+  for (let k = 0; k + 1 < edges.length; k += 1) {
+    const runs = new Set<Element>();
+    for (let at = edges[k]; at < edges[k + 1]; at += 1) {
+      const char = aligned.chars[at];
+      if (!part.hidden.has(at) && char)
+        runs.add(char.node.parentNode as Element);
+    }
+    for (const property of droppedProps([...runs])) {
+      const kind = lossOf(property);
+      if (kind) loss[kind] = true;
+    }
+  }
+  return loss;
 }
