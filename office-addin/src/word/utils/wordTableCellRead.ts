@@ -170,6 +170,7 @@ export function readWordTableCell(
       result: { ...result, status: matches.length ? "ambiguous" : "not-found" },
     };
   const match = matches[0];
+  const fallback = snapshot.completeReadIssue ? "target" : "complete-read";
   if (encoder.encode(match.text).length > CELL_BYTES)
     return {
       ok: true,
@@ -177,7 +178,7 @@ export function readWordTableCell(
         ...result,
         status: "unsupported",
         reason: "cell-context-limit",
-        fallback: "complete-read",
+        fallback,
       },
     };
   const scope: WordTableCellScope = {
@@ -216,7 +217,7 @@ export function readWordTableCell(
         ...result,
         status: "unsupported",
         reason: error.code,
-        fallback: "complete-read",
+        fallback,
       },
     };
   }

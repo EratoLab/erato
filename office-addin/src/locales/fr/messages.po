@@ -2667,6 +2667,11 @@ msgstr "Word a ajouté des données de document en double lors de l’écriture.
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.packageTooLarge"
+msgstr "Ce fichier est trop volumineux pour être ouvert par Erato : Erato ne peut donc ni le lire ni le modifier."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.partlyWritten"
 msgstr "Word s’est arrêté après {applied} sur {total} modifications. Votre original est enregistré."
 
@@ -2698,7 +2703,7 @@ msgstr "Word n’a pas pu lire le document pour cette opération. Aucune modific
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.readOnlyTooLarge"
-msgstr "Ce document est trop volumineux pour être modifié par Erato. Erato peut toutefois en lire le texte."
+msgstr "Ce fichier est trop volumineux pour être ouvert entièrement par Erato. Erato ne reçoit que le texte inclus et peut le reformuler, mais pas en modifier la structure ni la mise en forme."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -2784,7 +2789,7 @@ msgstr "Le document a changé. Rien n’a été appliqué. Envoyez une nouvelle 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.tooLarge"
-msgstr "Ce document dépasse la limite actuelle de réécriture d’un document complet. Aucune réécriture partielle ne sera appliquée."
+msgstr "Ce document est trop volumineux pour être réécrit en une seule fois. Erato peut toutefois le lire et le modifier section par section."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2943,6 +2948,11 @@ msgstr "Document inclus"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.includedInParts"
+msgstr "Document inclus · lu par parties"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.includedNamed"
 msgstr "{documentName} est inclus"
 
@@ -2977,6 +2987,11 @@ msgstr "Lecture du document…"
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.selectionInstead"
 msgstr "Votre sélection est envoyée à la place du document"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.selectLaterPart"
+msgstr "Seul le début est envoyé. Pour travailler sur une partie plus loin dans le document, sélectionnez-la dans Word."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts

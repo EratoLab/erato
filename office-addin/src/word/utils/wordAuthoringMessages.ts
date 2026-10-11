@@ -309,11 +309,17 @@ export function wordAuthoringIssueText(
               "The model context check failed. Try sending your request again. No document changes were made.",
           });
     case "too-large":
-      return t({
-        id: "officeAddin.word.authoring.tooLarge",
-        message:
-          "This document exceeds the current complete-document rewrite limit. No partial rewrite will be applied.",
-      });
+      return details.includes("package-too-large")
+        ? t({
+            id: "officeAddin.word.authoring.packageTooLarge",
+            message:
+              "This file is too large for Erato to open, so Erato cannot read or edit it.",
+          })
+        : t({
+            id: "officeAddin.word.authoring.tooLarge",
+            message:
+              "This document is too large to rewrite as a whole. Erato can still read and edit it section by section.",
+          });
     case "invalid":
       return t({
         id: "officeAddin.word.authoring.invalid",

@@ -162,7 +162,7 @@ export class WordDocumentReadSession {
       new TextEncoder().encode(JSON.stringify(records)).length >
       MAX_SOURCE_BYTES
     )
-      snapshot.issue = "too-large";
+      snapshot.completeReadIssue = "too-large";
     for (const { text, runs, structure, ...block } of records) {
       const chars = Array.from(text);
       const fragments: Fragment[] = [];
@@ -235,8 +235,8 @@ export class WordDocumentReadSession {
       }
     }
     if (wordStyleNamesBytes(snapshot.styles) > 16384)
-      snapshot.issue = "too-large";
-    if (pages.length > MAX_PAGES) snapshot.issue = "too-large";
+      snapshot.completeReadIssue = "too-large";
+    if (pages.length > MAX_PAGES) snapshot.completeReadIssue = "too-large";
     this.session = {
       snapshot,
       pages,
@@ -308,6 +308,11 @@ export class WordDocumentReadSession {
       return fail(
         `Whole-body authoring unavailable: ${snapshot.issue}${snapshot.issueDetails?.length ? ` (${snapshot.issueDetails.join(", ")})` : ""}. No document changes were made.`,
         snapshot.issue,
+      );
+    if (snapshot.completeReadIssue)
+      return fail(
+        "This document is too large for a complete read, so whole-document plans and repairs are unavailable. Read the parts the request needs with target, target.queries or table_cell, and submit scoped_edit or table_cell changes. No document changes were made.",
+        snapshot.completeReadIssue,
       );
     if (this.completeBudgetCheck) {
       this.completeBudget ??= this.completeBudgetCheck().catch(

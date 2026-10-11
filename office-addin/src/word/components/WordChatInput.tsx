@@ -30,6 +30,7 @@ import {
   WORD_AUTHORING_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
   withWordReviewFallback,
+  wordReviewFallbackApplies,
   wordSelectionFacetAvailable,
   wordSelectionForFacets,
 } from "../utils/wordActionFacet";
@@ -209,7 +210,10 @@ export function WordChatInput({
     null,
   );
   const [authoringNotice, setAuthoringNotice] = useState<
-    Pick<WordDocumentPreview, "authoringIssue" | "authoringDetails"> & {
+    Pick<
+      WordDocumentPreview,
+      "authoringIssue" | "authoringDetails" | "completeReadIssue"
+    > & {
       readOnly?: boolean;
     }
   >();
@@ -403,6 +407,7 @@ export function WordChatInput({
           setAuthoringNotice({
             authoringIssue: capturedIssue,
             authoringDetails: capturedDetails,
+            completeReadIssue: authoringSnapshot?.completeReadIssue,
             readOnly: !!capturedIssue && !build?.authoring,
           });
           const actionFacet = resolveWordActionFacet({
@@ -544,6 +549,27 @@ export function WordChatInput({
   );
   const reportOptions = useMemo(() => ({ chatId }), [chatId]);
   const notice = authoringNotice ?? preview;
+  const readOnly = authoringNotice
+    ? !!authoringNotice.readOnly
+    : wordReviewFallbackApplies(
+        preview.authoringIssue,
+        preview.coverage?.hasContent ?? false,
+        availableFacetIds,
+      );
+  // Authoring reads the document through its tools; the review excerpt's counts do not apply.
+  const authoringRoute = authoringAvailable && !readOnly;
+  const readInParts =
+    authoringRoute && !!notice.completeReadIssue && !notice.authoringIssue;
+  const coverageHint = readInParts
+    ? wordAuthoringIssueText("too-large")
+    : !authoringRoute &&
+        (preview.coverage?.truncated || preview.coverage?.partialParagraph)
+      ? t({
+          id: "officeAddin.word.chip.selectLaterPart",
+          message:
+            "Only the beginning is sent. To work on a later part, select it in Word.",
+        })
+      : undefined;
 
   return (
     <>
@@ -606,7 +632,12 @@ export function WordChatInput({
                       id: "officeAddin.word.chip.selectionInstead",
                       message: "Your selection is sent instead of the document",
                     })
-                  : chipLabel(preview, resolveWordDocumentName())}
+                  : chipLabel(
+                      preview,
+                      resolveWordDocumentName(),
+                      authoringRoute,
+                      readInParts,
+                    )}
               </span>
               <button
                 type="button"
@@ -637,6 +668,14 @@ export function WordChatInput({
                 })}
               </span>
             </Button>
+          )}
+          {chipEnabled && !selectionReplacesDocument && coverageHint && (
+            <p
+              className="mt-1 text-xs text-theme-fg-secondary"
+              data-testid="word-document-coverage-hint"
+            >
+              {coverageHint}
+            </p>
           )}
           {chipEnabled && readReport && (
             <CopyErrorButton
@@ -686,7 +725,7 @@ export function WordChatInput({
           )}
           {chipEnabled &&
             notice.authoringIssue &&
-            (authoringNotice?.readOnly ? (
+            (readOnly ? (
               <Alert type="warning">
                 {readOnlyText(notice.authoringIssue, notice.authoringDetails)}
               </Alert>
@@ -725,7 +764,7 @@ function readOnlyText(issue: string, details: string[] = []): string {
     return t({
       id: "officeAddin.word.authoring.readOnlyTooLarge",
       message:
-        "This document is too large for Erato to edit. Erato can still read its text.",
+        "This file is too large for Erato to open completely. Erato receives only the included text and can reword it, but not change its structure or formatting.",
     });
   if (details.includes("package-unsupported"))
     return t({
@@ -740,7 +779,12 @@ function readOnlyText(issue: string, details: string[] = []): string {
   });
 }
 
-function chipLabel(preview: WordDocumentPreview, documentName: string): string {
+function chipLabel(
+  preview: WordDocumentPreview,
+  documentName: string,
+  authoringRoute: boolean,
+  readInParts: boolean,
+): string {
   if (preview.status === "unreadable") {
     return t({
       id: "officeAddin.word.chip.notIncluded",
@@ -759,7 +803,13 @@ function chipLabel(preview: WordDocumentPreview, documentName: string): string {
       message: "Document included - changed since last send",
     });
   }
-  const coverage = preview.coverage;
+  if (readInParts) {
+    return t({
+      id: "officeAddin.word.chip.includedInParts",
+      message: "Document included · read in parts",
+    });
+  }
+  const coverage = authoringRoute ? null : preview.coverage;
   if (coverage?.partialParagraph) {
     return t({
       id: "officeAddin.word.chip.includedPartial",

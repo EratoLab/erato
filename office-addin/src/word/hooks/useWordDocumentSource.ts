@@ -27,6 +27,7 @@ export type WordDocumentStatus =
 export interface WordDocumentPreview {
   authoringIssue?: WordAuthoringSnapshot["issue"];
   authoringDetails?: string[];
+  completeReadIssue?: WordAuthoringSnapshot["completeReadIssue"];
   status: WordDocumentStatus;
   coverage: WordDocumentCoverage | null;
   changedSinceLastSend: boolean;
@@ -245,6 +246,7 @@ export function useWordDocumentSource({
         setPreview({
           authoringIssue: build.authoring?.issue,
           authoringDetails: build.authoring?.issueDetails,
+          completeReadIssue: build.authoring?.completeReadIssue,
           status: build.coverage.hasContent ? "included" : "empty",
           coverage: build.coverage,
           changedSinceLastSend:
