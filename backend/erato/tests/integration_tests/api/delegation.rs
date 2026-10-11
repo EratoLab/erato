@@ -7840,6 +7840,466 @@ async fn task_tool_is_not_offered_without_an_allowlist_selecting_it(pool: Pool<P
     }
 }
 
+/// What a Word turn plans with: two capability facets a task may be scoped to,
+/// a planning facet whose own child is `mail`, and the Word action facets — one
+/// that selects the task tool and one that does not. The second carries
+/// overrides too, so a scope that showed `files` without the opt-in would mean
+/// they leaked in through the action facet alone.
+fn word_task_config(config: &mut erato::config::AppConfig) {
+    for id in ["files", "mail"] {
+        config.facets.facets.insert(
+            id.to_string(),
+            erato::config::FacetConfig {
+                display_name: id.to_string(),
+                icon: None,
+                additional_system_prompt: None,
+                tool_call_allowlist: vec![],
+                model_settings: Default::default(),
+                disable_facet_prompt_template: true,
+                hidden: false,
+                hidden_always_active_for_platform: None,
+                delegation: None,
+            },
+        );
+    }
+    config.facets.facets.get_mut("plan").unwrap().delegation =
+        Some(serde_json::from_value(json!({ "child_facet_ids": ["mail"] })).unwrap());
+    let word_overrides = json!({ "child_facet_ids": ["files"], "run_modes": ["wait", "async"] });
+    config.action_facets.facets.insert(
+        "word_opted".to_string(),
+        word_action_facet(&["erato/delegate_task"], word_overrides.clone()),
+    );
+    config.action_facets.facets.insert(
+        "word_plain".to_string(),
+        word_action_facet(&[], word_overrides),
+    );
+}
+
+fn word_action_facet(
+    tool_call_allowlist: &[&str],
+    delegation: Value,
+) -> erato::config::ActionFacetConfig {
+    erato::config::ActionFacetConfig {
+        display_name: "Word".to_string(),
+        platform: Some("word".to_string()),
+        template: "Work on {{document_name}}.".to_string(),
+        allowed_args: vec!["document_name".to_string()],
+        client_actions: vec![],
+        presentation: None,
+        client_actions_always_ask: vec![],
+        tool_call_allowlist: tool_call_allowlist.iter().map(|s| s.to_string()).collect(),
+        delegation: Some(serde_json::from_value(delegation).unwrap()),
+    }
+}
+
+fn word_facet_mut<'a>(
+    config: &'a mut erato::config::AppConfig,
+    id: &str,
+) -> &'a mut erato::config::ActionFacetConfig {
+    config.action_facets.facets.get_mut(id).unwrap()
+}
+
+/// Submit as the Word add-in does: the action facet on the turn, the platform
+/// it is bound to in the header.
+async fn submit_on_word_turn(
+    server: &TestServer,
+    chat_id: &str,
+    text: &str,
+    selected_facet_ids: &[&str],
+    action_facet_id: &str,
+) -> Vec<Event> {
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Platform", "word")
+        .json(&json!({
+            "existing_chat_id": chat_id,
+            "user_message": text,
+            "input_files_ids": [],
+            "selected_facet_ids": selected_facet_ids,
+            "action_facet": { "id": action_facet_id, "args": { "document_name": "Report.docx" } },
+        }))
+        .await;
+    response.assert_status_ok();
+    parse_sse_events(&response)
+}
+
+/// The recorded generation requests, without the chat-title summary that a
+/// first message also sends.
+fn generation_bodies(recorder: &RequestBodyRecorder) -> Vec<String> {
+    recorder
+        .bodies()
+        .into_iter()
+        .filter(|body| !body.contains("Generate a summary for the topic"))
+        .collect()
+}
+
+fn offered_tool(body: &str, name: &str) -> Option<Value> {
+    let body: Value = serde_json::from_str(body).ok()?;
+    body["tools"]
+        .as_array()?
+        .iter()
+        .find(|tool| tool["function"]["name"] == name)
+        .cloned()
+}
+
+fn sorted_enum(tool: &Value, path: &[&str]) -> Vec<String> {
+    let mut node = &tool["function"]["parameters"]["properties"];
+    for key in path {
+        node = &node[*key];
+    }
+    let mut values: Vec<String> = node["enum"]
+        .as_array()
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    values.sort();
+    values
+}
+
+/// Word turns plan under an action facet, not a selected one. An action facet
+/// that selects the task tool contributes its overrides like a selected
+/// planning facet, merged with one when both plan; one that does not select
+/// the tool contributes nothing, even on a turn where the tool is offered.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_word_action_facet_plans_tasks_with_its_own_overrides(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["word answer"]),
+            );
+        });
+    }
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "web-search-mcp/*"],
+        word_task_config,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+
+    // The offered child facets and run modes, or `None` for no offer.
+    type Offer = Option<(&'static [&'static str], &'static [&'static str])>;
+    let cases: [(&str, &[&str], Offer); 4] = [
+        ("word_opted", &[], Some((&["files"], &["async", "wait"]))),
+        ("word_plain", &[], None),
+        (
+            "word_plain",
+            &["plan"],
+            Some((&["mail", "plan"], &["wait"])),
+        ),
+        (
+            "word_opted",
+            &["plan"],
+            Some((&["files", "mail", "plan"], &["async", "wait"])),
+        ),
+    ];
+    for (action_facet, selected, expected) in cases {
+        let text = format!("word offer probe {action_facet} [{}]", selected.join(","));
+        let chat = create_chat(&server, None).await;
+        submit_on_word_turn(&server, &chat, &text, selected, action_facet).await;
+        let body = generation_bodies(&recorder)
+            .into_iter()
+            .find(|body| body.contains(&text))
+            .expect("the turn reached the model");
+        let offered = offered_tool(&body, "delegate_task");
+        let Some((facets, run_modes)) = expected else {
+            assert!(offered.is_none(), "{text}: no allowlist selects the tool");
+            continue;
+        };
+        let tool = offered.unwrap_or_else(|| panic!("{text}: the task tool must be offered"));
+        assert_eq!(
+            sorted_enum(&tool, &["facet_ids", "items"]),
+            facets,
+            "{text}"
+        );
+        assert_eq!(sorted_enum(&tool, &["run_mode"]), run_modes, "{text}");
+    }
+}
+
+/// The Word facet's cap is what dispatch enforces, and a selected planning
+/// facet with a looser one cannot lift it: the per-turn cap is the minimum.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_word_action_facet_cap_holds_at_dispatch(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["the most allowed"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["WORD-CAP-RECOVERED"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["word cap question"],
+                &["the most allowed"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                ("call_task_a", "delegate_task", json!({ "task": "   " })),
+                ("call_task_b", "delegate_task", json!({ "task": "   " })),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "web-search-mcp/*"],
+        |config| {
+            word_task_config(config);
+            config.delegation.tasks.max_tasks_per_turn = 5;
+            config.facets.facets.get_mut("plan").unwrap().delegation =
+                Some(serde_json::from_value(json!({ "max_tasks_per_turn": 3 })).unwrap());
+            word_facet_mut(config, "word_opted").delegation =
+                Some(serde_json::from_value(json!({ "max_tasks_per_turn": 1 })).unwrap());
+        },
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events =
+        submit_on_word_turn(&server, &chat, "word cap question", &["plan"], "word_opted").await;
+
+    let refusals: Vec<String> = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(event.data.as_str()).ok())
+        .filter(|frame| frame["tool_name"] == "delegate_task")
+        .filter_map(|frame| frame["output"]["error"].as_str().map(str::to_string))
+        .collect();
+    assert!(
+        refusals
+            .iter()
+            .any(|error| error.contains("already started 1 task(s), the most allowed")),
+        "the second attempt must be refused by the Word facet's cap: {refusals:?}"
+    );
+    assert!(extract_full_text_answer(&events).contains("WORD-CAP-RECOVERED"));
+}
+
+/// A Word turn parked by its own approval override is offered the same task
+/// tool when the decision resumes it. The resumed request carries no action
+/// facet; the scope has to come from the one persisted with the turn.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_parked_word_turn_is_offered_the_same_task_tool_again(pool: Pool<Postgres>) {
+    let first = RequestBodyRecorder::new();
+    let resumed = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let resumed = resumed.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[PLAN_USER_MESSAGE, PLAN_DENIAL_TEXT],
+                    &[],
+                ))
+                .matcher(resumed);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["PARENT-PLAN-FINAL"]),
+            );
+        });
+    }
+    {
+        let first = first.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[PLAN_USER_MESSAGE],
+                    &[PLAN_BRIEF_A],
+                ))
+                .matcher(first);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_plan_a",
+                    "delegate_task",
+                    json!({ "task": PLAN_BRIEF_A, "facet_ids": ["files"] }),
+                )]),
+            );
+        });
+    }
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        word_task_config(config);
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
+        word_facet_mut(config, "word_opted")
+            .delegation
+            .as_mut()
+            .unwrap()
+            .approval = Some(erato_config::config::FacetDelegationApprovalOverrides {
+            mode: Some(erato_config::config::TaskApprovalMode::Always),
+            plan_min_tasks: None,
+        });
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_on_word_turn(&server, &chat, PLAN_USER_MESSAGE, &[], "word_opted").await;
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    assert_eq!(
+        plan_request(&content)["kind"],
+        "task_plan",
+        "the Word facet's `always` wins over the deployment's `never`"
+    );
+
+    let continued =
+        post_continuestream_decisions(&server, parent_message_id, &[("plan:1:0", "reject")]).await;
+    continued.assert_status_ok();
+    assert!(extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-PLAN-FINAL"));
+
+    let (first, resumed) = (generation_bodies(&first), generation_bodies(&resumed));
+    assert_eq!((first.len(), resumed.len()), (1, 1));
+    let offered = offered_tool(&first[0], "delegate_task").expect("offered on the Word turn");
+    assert_eq!(sorted_enum(&offered, &["facet_ids", "items"]), ["files"]);
+    assert_eq!(
+        offered_tool(&resumed[0], "delegate_task"),
+        Some(offered),
+        "the resumed turn must be offered the very same tool"
+    );
+}
+
+/// A Word turn may plan tasks, but its child never holds the Word pane. The
+/// child is scoped to a facet that allowlists the Word client tools, so the
+/// delegated-run suppression is the only thing withholding them.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_planned_on_a_word_turn_gets_no_word_client_tools(pool: Pool<Postgres>) {
+    const USER_MESSAGE: &str = "word child question";
+    const BRIEF: &str = "WORD-BRIEF-SENTINEL: summarise chapter two";
+    let parent = RequestBodyRecorder::new();
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let child = child.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[BRIEF], &[USER_MESSAGE]))
+                .matcher(child);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["CHILD-WORD-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-WORD-ANSWER", USER_MESSAGE],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-WORD-FINAL"]),
+        );
+    });
+    {
+        let parent = parent.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[USER_MESSAGE],
+                    &[BRIEF, "CHILD-WORD-ANSWER"],
+                ))
+                .matcher(parent);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_word_task",
+                    "delegate_task",
+                    json!({ "task": BRIEF, "facet_ids": ["word_tools"] }),
+                )]),
+            );
+        });
+    }
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        word_task_config(config);
+        config.client_tools.tools.insert(
+            "word_read_probe".to_string(),
+            erato::config::ClientToolConfig {
+                name: "read_document_probe".to_string(),
+                namespace: Some("word".to_string()),
+                description: "Reads the open Word document".to_string(),
+                parameters: r#"{"type":"object","properties":{}}"#.to_string(),
+                requires_client_registration: false,
+                timeout_ms: None,
+                submission: None,
+                replay: Default::default(),
+            },
+        );
+        let mut word_tools = config.facets.facets["files"].clone();
+        word_tools.tool_call_allowlist = vec!["word/*".to_string()];
+        config
+            .facets
+            .facets
+            .insert("word_tools".to_string(), word_tools);
+        let word = word_facet_mut(config, "word_opted");
+        word.tool_call_allowlist = vec!["word/*".to_string(), "erato/delegate_task".to_string()];
+        word.delegation =
+            Some(serde_json::from_value(json!({ "child_facet_ids": ["word_tools"] })).unwrap());
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_on_word_turn(&server, &chat, USER_MESSAGE, &[], "word_opted").await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed", "{output}");
+    assert!(extract_full_text_answer(&events).contains("PARENT-WORD-FINAL"));
+    let parent = generation_bodies(&parent);
+    assert_eq!(parent.len(), 1);
+    assert!(offered_tool(&parent[0], "read_document_probe").is_some());
+    let child = generation_bodies(&child);
+    assert_eq!(child.len(), 1, "expected exactly one child turn");
+    assert!(child[0].contains(BRIEF), "the recorded turn is the child's");
+    assert!(offered_tool(&child[0], "read_document_probe").is_none());
+    assert!(offered_tool(&child[0], "delegate_task").is_none());
+}
+
 /// The happy path: the model plans a sub-task, the child runs it, and the
 /// answer comes back into the same turn as the tool's result. The child is a
 /// real chat the user can open, and it is offered neither delegation tool —

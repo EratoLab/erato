@@ -4919,6 +4919,64 @@ model_name = "gpt-4o"
 }
 
 #[test]
+#[should_panic(
+    expected = "action_facets.facets.word.delegation.child_facet_ids references unknown facet 'nope'"
+)]
+fn test_action_facet_child_facet_ids_unknown_facet_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[action_facets.facets.word]
+display_name = "Word"
+template = "Work on {{document_name}}."
+allowed_args = ["document_name"]
+tool_call_allowlist = ["erato/delegate_task"]
+
+[action_facets.facets.word.delegation]
+child_facet_ids = ["nope"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+fn test_action_facet_delegation_override_parses() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[facets.facets.web_search]
+display_name = "Web search"
+
+[action_facets.facets.word]
+display_name = "Word"
+template = "Work on {{document_name}}."
+allowed_args = ["document_name"]
+tool_call_allowlist = ["erato/delegate_task"]
+delegation = { max_tasks_per_turn = 4, child_facet_ids = ["web_search"] }
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    let word = config.action_facets.facets["word"]
+        .delegation
+        .as_ref()
+        .expect("the action facet carries a delegation override");
+    assert_eq!(word.max_tasks_per_turn, Some(4));
+    assert_eq!(
+        word.child_facet_ids.as_deref(),
+        Some(["web_search".to_string()].as_slice())
+    );
+}
+
+#[test]
 fn test_facet_delegation_override_parses_dotted_and_inline_forms() {
     let config = build_and_migrate_delegation_config(
         r#"

@@ -4360,7 +4360,7 @@ Model-planned delegated tasks. Where the assistants route is driven by an explic
 
 Unlike the assistants route, this route has no dependency on `assistants.enabled` — a deployment can offer model-planned tasks without using assistants at all.
 
-Enabling the feature is not sufficient on its own: the tool is only offered when a selected facet's `tool_call_allowlist` also selects it, which keeps the capability scoped to the facets where planning makes sense.
+Enabling the feature is not sufficient on its own: the tool is only offered when a selected facet's `tool_call_allowlist` also selects it, or the [action facet](#action-facet-delegation) the request runs under, which keeps the capability scoped to the facets where planning makes sense.
 
 <Callout type="warn">
   Always pair a reserved `erato/*` pattern with a real MCP pattern on the same facet. An allowlist naming only `erato/*` patterns narrows the derived MCP server filter to nothing, so the parent turn loses every MCP tool while that facet is selected.
@@ -5280,6 +5280,32 @@ Each action facet supports these fields:
 - `platform` - Optional platform identifier (e.g. `"excel"`, `"outlook"`)
 - `template` - Prompt template with `{{variable}}` placeholders
 - `allowed_args` - List of allowed argument names for the template
+
+#### Action facet delegation
+
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_tasks_per_turn */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_parallel */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.persona */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.run_modes.[] */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.scheduling */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.approval.mode */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.approval.plan_min_tasks */}
+
+Add `erato/delegate_task` to an action facet's `tool_call_allowlist` to offer [delegated tasks](#delegationtasks) on its turns, for example a Word document turn that no selected facet plans for. The facet then counts as a planning facet: its optional `delegation` table takes the same keys as [per-facet delegation overrides](#per-facet-delegation-overrides) and merges with any selected planning facet by the same rules (caps take the minimum, `child_facet_ids` and `run_modes` the union, the strictest approval wins). Single-valued keys such as `persona` and `scheduling` come from a selected facet first.
+
+```toml
+[action_facets.facets.word_document_review]
+tool_call_allowlist = ["erato/delegate_task"]
+
+[action_facets.facets.word_document_review.delegation]
+max_tasks_per_turn = 4
+child_facet_ids = ["web_search"]
+```
+
+Delegated tasks never receive client tools, so a task started on a Word turn cannot read or edit the open document. Pass what it needs in the brief or as attached files. An action facet's `erato/*` patterns do not change its MCP tool set.
 
 #### Template Rendering
 

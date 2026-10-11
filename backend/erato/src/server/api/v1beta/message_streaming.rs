@@ -4289,6 +4289,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                 &me_profile_input.subject,
                 me_profile_input.user_groups,
                 &effective_selected_facet_ids,
+                user_input.action_facet.as_ref().map(|af| af.id.as_str()),
             )
             .await?;
             chat_request_tools.push(crate::services::delegation::build_delegate_task_tool(
@@ -10797,6 +10798,7 @@ pub(crate) async fn resolve_task_offer_scope(
     subject: &Subject,
     user_groups: &[String],
     effective_selected_facet_ids: &[String],
+    action_facet_id: Option<&str>,
 ) -> Result<crate::services::delegation::TaskOfferScope, Report> {
     // Which of the SELECTED facets asked for the tool. The allowlist the slot
     // tested is the union of all of them, so it can say "selected" but never
@@ -10819,10 +10821,22 @@ pub(crate) async fn resolve_task_offer_scope(
         })
         .cloned()
         .collect();
+    // The action facet is in that union too (a Word turn plans under one), so
+    // it gets the same say when it asks for the tool itself.
+    let planning_action_facet = action_facet_id
+        .and_then(|id| app_state.config.action_facets.facets.get(id))
+        .filter(|facet| {
+            erato_config::config::allowlist_selects_reserved_tool(
+                &facet.tool_call_allowlist,
+                erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            )
+        })
+        .and_then(|facet| facet.delegation.as_ref());
     let effective = crate::services::delegation::effective_tasks_config(
         &app_state.config.delegation.tasks,
         &app_state.config.facets,
         &planning_facet_ids,
+        planning_action_facet,
     );
 
     // What a task may be scoped to: what this turn already has, plus what the
@@ -11067,8 +11081,8 @@ mod tests {
         StreamRouteError, ToolApprovalDecision, ToolCallGate, apply_assistant_server_filter,
         derive_requested_server_ids_from_allowlist, detached_generation_event_sink,
         effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
-        filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
-        filter_mcp_tools_by_write_access, gate_mcp_tool_call,
+        filter_mcp_tools_by_allowlist, filter_mcp_tools_by_disabled_patterns,
+        filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
         merge_action_facet_into_mcp_allowlist, reserved_tool_selected, resolve_submitted_decisions,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
@@ -11993,6 +12007,39 @@ mod tests {
         assert_eq!(merged, base);
     }
 
+    #[test]
+    fn an_action_facet_selecting_delegate_task_offers_the_same_mcp_tools() {
+        let tools = vec![
+            managed_tool("server_a", Tool::new("read", "reads", Map::new())),
+            managed_tool("server_b", Tool::new("write", "writes", Map::new())),
+        ];
+        let names = |tools: Vec<crate::services::mcp_session_manager::ManagedTool>| {
+            tools
+                .into_iter()
+                .map(|tool| format!("{}/{}", tool.server_id, tool.tool.name))
+                .collect::<Vec<_>>()
+        };
+        let plain = vec!["word/read_document_blocks".to_string()];
+        let opted_in = vec![
+            "word/read_document_blocks".to_string(),
+            "erato/delegate_task".to_string(),
+        ];
+        for base in [None, Some(vec!["server_a/*".to_string()])] {
+            let without = merge_action_facet_into_mcp_allowlist(base.clone(), &plain);
+            let with = merge_action_facet_into_mcp_allowlist(base, &opted_in);
+            assert_eq!(
+                names(filter_mcp_tools_by_allowlist(
+                    tools.clone(),
+                    with.as_deref()
+                )),
+                names(filter_mcp_tools_by_allowlist(
+                    tools.clone(),
+                    without.as_deref()
+                )),
+            );
+        }
+    }
+
     // ========================================================================
     // validate_action_facet tests
     // ========================================================================
@@ -12039,6 +12086,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -12062,6 +12110,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -12086,6 +12135,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -12108,6 +12158,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -12132,6 +12183,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -12154,6 +12206,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             let oversized = "x".repeat(ACTION_FACET_ARG_MAX_SIZE + 1);
@@ -12179,6 +12232,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             let at_limit = "x".repeat(ACTION_FACET_ARG_MAX_SIZE);
@@ -12207,6 +12261,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             config
@@ -12265,6 +12320,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     tool_call_allowlist: vec![],
+                    delegation: None,
                 },
             );
             assert!(is_known_platform(&config, "web"));
@@ -18645,6 +18701,7 @@ async fn resume_parked_generation(
             &me_profile_input.subject,
             me_profile_input.user_groups,
             &effective_selected_facet_ids,
+            generation_parameters.action_facet_id.as_deref(),
         )
         .await?;
         delegation_offered_file_ids = crate::models::file_upload::get_chat_file_uploads(
