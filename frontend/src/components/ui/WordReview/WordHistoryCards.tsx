@@ -22,8 +22,16 @@ import {
 } from "@/lib/wordReview/wordHistory";
 import {
   WORD_EDITS_FENCE,
+  WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
+  WORD_REPLACE_FENCE,
 } from "@/lib/wordReview/wordHistoryNames";
+import {
+  parseWordKeptItems,
+  wordSelectionReplyOriginal,
+  wordSelectionReplyProposal,
+  wordSelectionWithoutMarkers,
+} from "@/lib/wordReview/wordSelectionReply";
 
 import {
   WordProposalCard,
@@ -31,6 +39,7 @@ import {
 } from "./WordProposalCard";
 import { WordReviewCard, WordReviewHeader } from "./WordReviewCardParts";
 import { useWordMessageLineage } from "./useWordHistoryMessage";
+import { wordKeptMarkersLabelled } from "./wordKeptMarkerLabels";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { WordEdit } from "@/lib/wordReview/wordEditPlan";
@@ -244,6 +253,75 @@ function WordHistoryInsertCard({
   );
 }
 
+function WordHistoryReplaceCard({
+  content,
+  args,
+  documentName,
+}: {
+  content: string;
+  args: Record<string, string> | undefined;
+  documentName?: string;
+}) {
+  const detailsId = useId();
+  const notes = useMemo(
+    () => parseWordKeptItems(args?.kept_items),
+    [args?.kept_items],
+  );
+  const proposal = wordSelectionReplyProposal(content, args?.selection_shape);
+  const original = wordSelectionReplyOriginal(args);
+  return (
+    <WordReviewCard
+      label={t({
+        id: "wordReview.history.replaceLabel",
+        message: "Proposed rewrite of a selected passage",
+      })}
+      testId="word-history-replace"
+      collapsed={false}
+      detailsId={detailsId}
+      footer={
+        <WordProposalReadOnlyFooter
+          text={() => wordSelectionWithoutMarkers(proposal, notes)}
+          documentName={documentName}
+        />
+      }
+    >
+      <WordReviewHeader
+        title={t({
+          id: "wordReview.history.replaceTitle",
+          message: "Rewrite of the selected passage",
+        })}
+      >
+        {original !== null ? (
+          <p className="word-review__comparison-label">
+            {t({
+              id: "wordReview.history.replaceComparison",
+              message: "Selection when requested → proposed replacement",
+            })}
+          </p>
+        ) : (
+          <p className="word-review__hint">
+            {args?.selection_role === "context_only"
+              ? t({
+                  id: "wordReview.history.replaceContextOnly",
+                  message:
+                    "Word could not replace this selection, so only the proposal is shown.",
+                })
+              : t({
+                  id: "wordReview.history.replaceNotStored",
+                  message:
+                    "The selection was not stored in full, so only the proposal is shown.",
+                })}
+          </p>
+        )}
+        <TextComparison
+          original={original && wordKeptMarkersLabelled(original, notes)}
+          proposed={wordKeptMarkersLabelled(proposal, notes)}
+        />
+      </WordReviewHeader>
+    </WordReviewCard>
+  );
+}
+
 /** A Word card fence of a stored answer, rendered read-only; an incomplete payload stays code. */
 export function WordHistoryFenceCard({
   language,
@@ -276,11 +354,15 @@ export function WordHistoryFenceCard({
         testId="word-history-plan"
       />
     );
-  if (
-    language !== WORD_EDITS_FENCE &&
-    language !== WORD_PLAN_FENCE &&
-    content.trim()
-  )
+  if (language === WORD_REPLACE_FENCE && content.trim())
+    return (
+      <WordHistoryReplaceCard
+        content={content}
+        args={previousUserMessage?.action_facet_args}
+        documentName={source.documentName}
+      />
+    );
+  if (language === WORD_INSERT_FENCE && content.trim())
     return (
       <WordHistoryInsertCard
         text={content}

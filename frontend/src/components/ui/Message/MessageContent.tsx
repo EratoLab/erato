@@ -32,6 +32,7 @@ import {
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
+  WORD_REPLACE_FENCE,
 } from "@/lib/wordReview/wordHistoryNames";
 import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
@@ -204,6 +205,7 @@ const WORD_HISTORY_FENCES: ReadonlySet<string> = new Set([
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
+  WORD_REPLACE_FENCE,
 ]);
 
 const WORD_HISTORY_FENCE_RULES: HostFenceRules = {
