@@ -7,6 +7,9 @@ import {
   fetchCancelClientOperation,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { clientOperationHandlerRegistry } from "./handlers";
+
+import type { ClientOperationHandlerRegistry } from "./handlers";
 import type {
   ClientOperationView,
   ClaimClientOperationResponse,
@@ -71,6 +74,10 @@ export const clientOperationApi: ClientOperationApi = {
 export type CoordinatorStatus = "unavailable" | "another_device" | "continuing";
 export interface ClientOperationHandler {
   readonly kind: string;
+  /** Narrows dispatch within a kind, e.g. to one tool's operation_id. */
+  matches?(request: OperationRequest): boolean;
+  /** Skips the claim for this sweep, e.g. while the live call still runs here. */
+  defer?(request: OperationRequest): boolean;
   prepare(signal: AbortSignal): Promise<void>;
   executor(): ExecutorBinding | undefined;
   execute(
@@ -105,20 +112,39 @@ export class ClientOperationCoordinator {
   readonly #abort = new AbortController();
   readonly #operations = new Map<string, ClientOperationView>();
   readonly #claims = new Map<string, ClaimClientOperationResponse>();
+  readonly #builtIns: readonly ClientOperationHandler[];
+  readonly #unsubscribe: () => void;
   #running: Promise<void> | undefined;
   #refresh = false;
   enabled = true;
   constructor(
     readonly accountId: string,
     private readonly api: ClientOperationApi,
-    private readonly handlers: readonly ClientOperationHandler[],
+    builtIns: readonly ClientOperationHandler[],
     private readonly accountChanged: () => void,
-  ) {}
+    private readonly registry: ClientOperationHandlerRegistry = clientOperationHandlerRegistry,
+  ) {
+    this.#builtIns = builtIns;
+    this.#unsubscribe = registry.subscribe(() => {
+      void this.reconcile();
+    });
+  }
   dispose(): void {
     this.#abort.abort();
+    this.#unsubscribe();
     this.#operations.clear();
     this.#claims.clear();
-    this.handlers.forEach((handler) => handler.dispose());
+    this.#builtIns.forEach((handler) => handler.dispose());
+  }
+  #handlers(): readonly ClientOperationHandler[] {
+    return [...this.#builtIns, ...this.registry.handlers()];
+  }
+  #handlerFor(request: OperationRequest): ClientOperationHandler | undefined {
+    return this.#handlers().find(
+      (candidate) =>
+        candidate.kind === request.kind &&
+        (candidate.matches?.(request) ?? true),
+    );
   }
   #check(): void {
     this.#abort.signal.throwIfAborted();
@@ -177,12 +203,12 @@ export class ClientOperationCoordinator {
       if (!page.enabled) {
         this.#operations.clear();
         this.#claims.clear();
-        this.handlers.forEach((handler) => handler.reset());
+        this.#handlers().forEach((handler) => handler.reset());
         return;
       }
       if (!prepared) {
         prepared = true;
-        for (const handler of this.handlers) {
+        for (const handler of this.#handlers()) {
           try {
             await handler.prepare(this.#abort.signal);
           } catch {
@@ -201,9 +227,7 @@ export class ClientOperationCoordinator {
         }
         seen.add(request.attempt_id);
         this.#operations.set(request.attempt_id, operation);
-        const handler = this.handlers.find(
-          (candidate) => candidate.kind === request.kind,
-        );
+        const handler = this.#handlerFor(request);
         // Unsupported kinds are discoverable but never claimed/executed.
         if (!handler) continue;
         if (
@@ -239,6 +263,7 @@ export class ClientOperationCoordinator {
           handler.status(request, executor ? "another_device" : "unavailable");
           continue;
         }
+        if (handler.defer?.(request)) continue;
         try {
           const claim = await this.#claim(request, handler);
           const result = await handler.execute(
@@ -276,7 +301,7 @@ export class ClientOperationCoordinator {
         this.#operations.delete(id);
         this.#claims.delete(id);
       }
-    for (const handler of this.handlers) {
+    for (const handler of this.#handlers()) {
       handler.retain(seen);
       try {
         await handler.recover(this.#abort.signal);
@@ -288,9 +313,7 @@ export class ClientOperationCoordinator {
   }
   async review(id: string): Promise<void> {
     const operation = this.#operations.get(id);
-    const handler = this.handlers.find(
-      (candidate) => candidate.kind === operation?.request.kind,
-    );
+    const handler = operation && this.#handlerFor(operation.request);
     if (!operation || !handler) return;
     try {
       const claim = await this.#claim(operation.request, handler, true);

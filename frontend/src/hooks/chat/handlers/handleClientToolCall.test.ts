@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { registerOperationExecutor } from "@/lib/clientOperations/registration";
+
 import { handleClientToolCall } from "./handleClientToolCall";
 import { handleToolCallUpdate } from "./handleToolCallUpdate";
 import {
@@ -118,6 +120,40 @@ describe("handleClientToolCall", () => {
       tool_call_id: "call-1",
       result: { slots: 3 },
     });
+  });
+
+  it("sends the tool's own executor binding only when one is registered", async () => {
+    registerClientToolExecutor("fetch_availability", async () => ({
+      ok: true,
+      result: null,
+    }));
+    await handleClientToolCall(makeEvent(), deps);
+    const unbound = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(unbound.headers).not.toHaveProperty("X-Erato-Executor");
+
+    const binding = {
+      device_id: "pane-device-000000",
+      realm: "office-addin" as const,
+      host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+    };
+    const unregister = [
+      registerOperationExecutor("fetch_availability", () => binding, {
+        yields: true,
+      }),
+      registerOperationExecutor("local_collect_evidence", () => ({
+        device_id: "sidecar-device",
+        realm: "desktop-sidecar",
+      })),
+    ];
+    try {
+      await handleClientToolCall(makeEvent({ tool_call_id: "call-2" }), deps);
+      const bound = fetchMock.mock.calls[1][1] as RequestInit;
+      expect(
+        (bound.headers as Record<string, string>)["X-Erato-Executor"],
+      ).toBe(JSON.stringify(binding));
+    } finally {
+      unregister.forEach((cleanup) => cleanup());
+    }
   });
 
   it("delivers attachment file references through the ordinary result endpoint", async () => {

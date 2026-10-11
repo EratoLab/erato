@@ -159,6 +159,10 @@ export function releaseClientToolCallAbort(toolCallId: string): void {
   abortControllers.delete(toolCallId);
 }
 
+export function isClientToolCallInFlight(toolCallId: string): boolean {
+  return abortControllers.has(toolCallId);
+}
+
 /** Stop local work when the server reports that this call has finished or expired. */
 export function abortClientToolCall(toolCallId: string): void {
   const tracked = abortControllers.get(toolCallId);

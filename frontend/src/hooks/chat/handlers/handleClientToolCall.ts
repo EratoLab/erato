@@ -1,3 +1,5 @@
+import { operationExecutorBinding } from "@/lib/clientOperations/registration";
+
 import {
   getClientToolExecutor,
   isClientToolResultLocalOnly,
@@ -95,6 +97,8 @@ export async function handleClientToolCall(
   }
 
   if (isClientToolResultLocalOnly(tool_name)) return;
+  // A call with a durable operation identity only accepts its submit binding.
+  const binding = operationExecutorBinding(tool_name);
   try {
     const response = await fetch("/api/v1beta/me/messages/clienttoolresult", {
       method: "POST",
@@ -102,6 +106,7 @@ export async function handleClientToolCall(
         "Content-Type": "application/json",
         ...deps.getAuthHeaders(),
         ...(deps.extraHeaders ?? {}),
+        ...(binding ? { "X-Erato-Executor": JSON.stringify(binding) } : {}),
       },
       body: JSON.stringify(body),
     });
