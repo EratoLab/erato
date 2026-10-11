@@ -164,9 +164,8 @@ pub struct OperationResult {
 }
 
 /// Only a kind validator constructs the model-visible result. Raw receipts are
-/// never forwarded. Only a kind validator may forward a bounded executor message;
-/// the generic client_tool.v1 kind does so to match the legacy fast path, and it
-/// reaches tool-call telemetry as legacy client-tool errors already do.
+/// never forwarded; `client_tool.v1` forwards a bounded executor message, as
+/// the legacy fast path does.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ValidatedResult {
     pub output: Value,
