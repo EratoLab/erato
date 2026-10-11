@@ -91,9 +91,9 @@ describe("rich authoring read contract integration", () => {
     expect(plan).not.toBeNull();
     expect(validateWordDocumentPlan(plan!, source)).toBeNull();
     const xml = compileWordDocumentPlan(plan!, source);
-    expect(
-      captureWordAuthoringSnapshot(xml, "document", "Off", true).issue,
-    ).toBe("too-large");
+    const read = captureWordAuthoringSnapshot(xml, "document", "Off", true);
+    expect(read.issue).toBeUndefined();
+    expect(read.completeReadIssue).toBe("too-large");
     const verified = captureWordAuthoringSnapshot(
       xml,
       "document",

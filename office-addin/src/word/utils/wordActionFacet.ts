@@ -1,3 +1,8 @@
+import {
+  MAX_WORD_SCOPE_BYTES,
+  MAX_WORD_SCOPE_TARGETS,
+} from "@erato/frontend/word-review";
+
 import { wordSelectionWithoutKeptItems } from "./wordSelectionAnchor";
 import { wordSelectionFacetArgs } from "./wordSelectionArgs";
 
@@ -63,22 +68,35 @@ export function resolveWordSelectionFacet(input: {
   };
 }
 
+/** Only a failed package capture leaves authoring nothing to read. A capture that is merely too
+ * large for a complete read sets completeReadIssue instead and keeps its scoped reads. */
 const REVIEW_FALLBACK_ISSUES = new Set(["too-large", "unavailable"]);
+
+export function wordReviewFallbackApplies(
+  issue: WordAuthoringSnapshot["issue"],
+  hasContent: boolean,
+  availableFacetIds: ReadonlySet<string>,
+): boolean {
+  return (
+    !!issue &&
+    REVIEW_FALLBACK_ISSUES.has(issue) &&
+    hasContent &&
+    availableFacetIds.has(WORD_DOCUMENT_REVIEW_FACET_ID)
+  );
+}
 
 /** Authoring that cannot read the document gives the model nothing; review still sends its text. */
 export function withWordReviewFallback(
   build: WordDocumentBuild,
   availableFacetIds: ReadonlySet<string>,
 ): WordDocumentBuild {
-  const issue = build.authoring?.issue;
-  if (
-    !issue ||
-    !REVIEW_FALLBACK_ISSUES.has(issue) ||
-    !build.coverage.hasContent ||
-    !availableFacetIds.has(WORD_DOCUMENT_REVIEW_FACET_ID)
+  return wordReviewFallbackApplies(
+    build.authoring?.issue,
+    build.coverage.hasContent,
+    availableFacetIds,
   )
-    return build;
-  return { ...build, authoring: undefined };
+    ? { ...build, authoring: undefined }
+    : build;
 }
 
 export interface WordActionFacetInput {
@@ -105,11 +123,12 @@ export function resolveWordActionFacet(
       args: {
         document_name: input.documentName,
         document_identity: input.documentIdentity,
-        ...wordAuthoringDocumentArgs(input.documentArgs),
+        ...wordAuthoringDocumentArgs(
+          input.documentArgs,
+          input.authoring.completeReadIssue,
+        ),
         document_snapshot: input.authoring.token,
-        authoring_status: input.authoring.issue
-          ? `${input.authoring.issue}${input.authoring.issueDetails?.length ? ` (${input.authoring.issueDetails.join(", ")})` : ""}`
-          : "available",
+        authoring_status: wordAuthoringStatus(input.authoring),
       },
     };
   }
@@ -141,18 +160,29 @@ export function resolveWordActionFacet(
   };
 }
 
+function wordAuthoringStatus(authoring: WordAuthoringSnapshot): string {
+  if (authoring.issue)
+    return `${authoring.issue}${authoring.issueDetails?.length ? ` (${authoring.issueDetails.join(", ")})` : ""}`;
+  // Starts with "available" because the facet prompt only submits plans when the status is available.
+  if (authoring.completeReadIssue)
+    return `available for scoped reads and scoped edits only. Complete reads, whole-document plans and repairs are unavailable (${authoring.completeReadIssue}: the document exceeds the complete-read limit). target, target.queries and table_cell reads work, up to ${MAX_WORD_SCOPE_TARGETS} targets and ${MAX_WORD_SCOPE_BYTES / 1024} KiB per response; submit scoped_edit or table_cell changes.`;
+  return "available";
+}
+
 /** Authoring starts with identity and counts only. Tools explicitly deliver content.
  * Used by hosts independently of Office.js; review-only captures keep their excerpt.
  */
 export function wordAuthoringDocumentArgs(
   args: WordDocumentArgs,
+  completeReadIssue?: WordAuthoringSnapshot["completeReadIssue"],
 ): WordDocumentArgs {
   return {
     ...args,
     document_text: "",
     heading_outline: "",
     paragraphs_sent: "0",
-    truncation_note:
-      "Document content is available through read_document_blocks; no paragraphs are included in this initial context.",
+    truncation_note: completeReadIssue
+      ? "No paragraphs are included in this initial context. The document is too large to read completely: read only the parts the request needs with read_document_blocks target, target.queries or table_cell, and say which parts an answer covers."
+      : "Document content is available through read_document_blocks; no paragraphs are included in this initial context.",
   };
 }

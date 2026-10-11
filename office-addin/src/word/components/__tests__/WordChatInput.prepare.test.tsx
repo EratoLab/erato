@@ -631,17 +631,19 @@ describe("WordChatInput prepared send", () => {
   it.each([
     [
       "too-large",
-      "This document is too large for Erato to edit. Erato can still read its text.",
+      "package-too-large",
+      "This file is too large for Erato to open completely. Erato receives only the included text and can reword it, but not change its structure or formatting.",
     ],
     [
       "unavailable",
+      "package-failed",
       "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
     ],
   ])(
     "falls back to a read-only review when authoring is %s",
-    async (issue, warning) => {
+    async (issue, detail, warning) => {
       host.capture.mockResolvedValue(
-        authoringBuild({ issue, issueDetails: ["detail"] }),
+        authoringBuild({ issue, issueDetails: [detail] }),
       );
       renderInput();
       send();
@@ -666,7 +668,12 @@ describe("WordChatInput prepared send", () => {
 
   it("keeps authoring with its issue when the review facet is not advertised", async () => {
     host.advertised = ["word_document_authoring"];
-    host.capture.mockResolvedValue(authoringBuild({ issue: "too-large" }));
+    host.capture.mockResolvedValue(
+      authoringBuild({
+        issue: "too-large",
+        issueDetails: ["package-too-large"],
+      }),
+    );
     renderInput();
     send();
 
@@ -677,7 +684,146 @@ describe("WordChatInput prepared send", () => {
       args: { authoring_status: "too-large" },
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "This document exceeds the current complete-document rewrite limit.",
+      "This file is too large for Erato to open, so Erato cannot read or edit it.",
+    );
+  });
+
+  it("keeps a document that is only too large for a complete read on authoring, budget-checked", async () => {
+    host.fileIds = ["image-1"];
+    host.images.mockResolvedValue({
+      assets: [{ id: "asset-1" }],
+      unavailable: [],
+    });
+    const build = authoringBuild({ completeReadIssue: "too-large" });
+    host.capture.mockResolvedValue(build);
+    renderInput();
+    send();
+
+    const prepared = await settle(startPreparation());
+
+    expect(prepared?.actionFacet).toMatchObject({
+      id: "word_document_authoring",
+      args: { authoring_status: "available" },
+    });
+    expect(host.session.activate).toHaveBeenCalledWith(
+      build.authoring,
+      undefined,
+      expect.any(Function),
+    );
+    expect(build.authoring?.assets).toEqual([{ id: "asset-1" }]);
+    expect(staged.at(-1)?.authoring).toBe(build.authoring);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(chip()).toHaveTextContent("Document included · read in parts");
+    expect(screen.getByTestId("word-document-coverage-hint")).toHaveTextContent(
+      "This document is too large to rewrite as a whole. Erato can still read and edit it section by section.",
+    );
+  });
+
+  it("reports a failed scoped budget check for a document too large for a complete read", async () => {
+    host.capture.mockResolvedValue(
+      authoringBuild({ completeReadIssue: "too-large" }),
+    );
+    host.budget.mockResolvedValue({ ok: false, issue: "model-budget" });
+    renderInput();
+    send();
+
+    const prepared = await settle(startPreparation());
+
+    expect(prepared?.actionFacet?.args?.authoring_status).toBe("model-budget");
+  });
+});
+
+describe("WordChatInput document coverage", () => {
+  const truncated = {
+    hasContent: true,
+    truncated: true,
+    partialParagraph: false,
+    paragraphsSent: 453,
+    paragraphsTotal: 1590,
+  };
+  const renderWith = (
+    advertised: string[],
+    preview: Partial<WordDocumentPreview>,
+  ) => {
+    host.advertised = advertised;
+    host.preview = { ...host.readyPreview, ...preview };
+    render(
+      <WordChatInput
+        chatInputProps={
+          {
+            chatId: "chat-1",
+            onSendMessage: () => {},
+          } as unknown as AddinChatInputRenderProps
+        }
+        documentIdentity={IDENTITY}
+        stagePendingCapture={() => {}}
+      />,
+    );
+  };
+  const chip = () => screen.getByTestId("word-include-document-chip");
+  const hint = () => screen.queryByTestId("word-document-coverage-hint");
+
+  beforeEach(() => i18n.activate("en"));
+  afterEach(cleanup);
+
+  it("keeps the paragraph count and points to a selection when only the review excerpt is sent", () => {
+    renderWith(["word_document_review"], { coverage: truncated });
+
+    expect(chip()).toHaveTextContent(
+      "Document included (first 453 of 1590 paragraphs)",
+    );
+    expect(hint()).toHaveTextContent(
+      "Only the beginning is sent. To work on a later part, select it in Word.",
+    );
+  });
+
+  it("does not claim the review excerpt's count when authoring reads the document", () => {
+    renderWith(["word_document_review", "word_document_authoring"], {
+      coverage: truncated,
+    });
+
+    expect(chip()).not.toHaveTextContent("first 453");
+    expect(hint()).toBeNull();
+  });
+
+  it("says a document too large for a complete read is read in parts", () => {
+    renderWith(["word_document_review", "word_document_authoring"], {
+      coverage: truncated,
+      completeReadIssue: "too-large",
+    });
+
+    expect(chip()).toHaveTextContent("Document included · read in parts");
+    expect(hint()).toHaveTextContent(
+      "This document is too large to rewrite as a whole. Erato can still read and edit it section by section.",
+    );
+  });
+
+  it("does not promise reads in parts while a hard issue blocks every read", () => {
+    renderWith(["word_document_review", "word_document_authoring"], {
+      coverage: truncated,
+      completeReadIssue: "too-large",
+      authoringIssue: "tracking",
+    });
+
+    expect(chip()).not.toHaveTextContent("read in parts");
+    expect(hint()).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Document restructuring is unavailable with the current Track Changes state.",
+    );
+  });
+
+  it("keeps the count when a file too large to open falls back to the review excerpt", () => {
+    renderWith(["word_document_review", "word_document_authoring"], {
+      coverage: truncated,
+      authoringIssue: "too-large",
+      authoringDetails: ["package-too-large"],
+    });
+
+    expect(chip()).toHaveTextContent(
+      "Document included (first 453 of 1590 paragraphs)",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This file is too large for Erato to open completely.",
     );
   });
 });

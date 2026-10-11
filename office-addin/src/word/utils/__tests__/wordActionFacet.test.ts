@@ -18,6 +18,7 @@ import type {
 } from "../buildWordDocumentArgs";
 import type { WordActionFacetInput } from "../wordActionFacet";
 import type { WordSelectionSnapshot } from "../wordSelectionAnchor";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 /** Arguments must match the configured facet: extra keys fail validation; missing values leave placeholders. */
 const ALLOWED_ARGS: Record<string, string[]> = {
@@ -273,5 +274,59 @@ describe("withWordReviewFallback", () => {
   it("keeps authoring for an empty document", () => {
     const source = build("unavailable", false);
     expect(withWordReviewFallback(source, all)).toBe(source);
+  });
+
+  it("keeps authoring for a capture that is only too large for a complete read", () => {
+    const source = {
+      ...build(),
+      authoring: { token: "t", completeReadIssue: "too-large" },
+    } as unknown as WordDocumentBuild;
+    expect(withWordReviewFallback(source, all)).toBe(source);
+  });
+});
+
+describe("authoring arguments", () => {
+  const authoring = (
+    snapshot: Partial<WordAuthoringSnapshot>,
+  ): WordAuthoringSnapshot =>
+    ({ token: "snapshot-1", ...snapshot }) as WordAuthoringSnapshot;
+  const args = (snapshot: Partial<WordAuthoringSnapshot>) =>
+    resolveWordActionFacet(
+      input({
+        authoring: authoring(snapshot),
+        availableFacetIds: new Set([WORD_AUTHORING_FACET_ID]),
+      }),
+    )?.args;
+
+  it("reports an ordinary capture as available", () => {
+    expect(args({})).toMatchObject({
+      authoring_status: "available",
+      paragraphs_sent: "0",
+      document_text: "",
+    });
+  });
+
+  it("tells the model that only scoped reads and edits work for a document too large for a complete read", () => {
+    const sent = args({ completeReadIssue: "too-large" });
+    expect(sent?.authoring_status).toMatch(
+      /^available for scoped reads and scoped edits only\./,
+    );
+    expect(sent?.authoring_status).toContain(
+      "whole-document plans and repairs are unavailable (too-large",
+    );
+    expect(sent?.authoring_status).toContain("16 targets and 24 KiB");
+    expect(sent?.truncation_note).toContain("too large to read completely");
+    expect(sent?.truncation_note).toContain("target.queries or table_cell");
+    expect(sent?.document_text).toBe("");
+  });
+
+  it("keeps reporting a hard issue, even on a capture too large for a complete read", () => {
+    expect(
+      args({
+        issue: "unsupported",
+        issueDetails: ["unbalanced-fields"],
+        completeReadIssue: "too-large",
+      })?.authoring_status,
+    ).toBe("unsupported (unbalanced-fields)");
   });
 });

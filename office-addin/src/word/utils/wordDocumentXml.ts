@@ -375,7 +375,7 @@ export function captureWordAuthoringSnapshot(
           JSON.stringify(base.blocks.map(wordReadableSourceBlock)),
         ).length > MAX_SOURCE_BYTES)
     )
-      base.issue = "too-large";
+      base.completeReadIssue = "too-large";
     base.trackingMode = tracking;
     // Under Track Changes only the in-place writer can apply a plan, as revisions; it needs the
     // complete document, and a re-read for verification must never pass while revisions are pending.

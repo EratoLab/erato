@@ -127,6 +127,7 @@ export interface WordAuthoringSnapshot {
     inUse?: boolean;
     look?: WordStyleLook;
   }[];
+  /** Blocks every read and plan; "too-large" here means the file itself exceeds the capture limit. */
   issue?:
     | "unsupported"
     | "too-large"
@@ -136,6 +137,8 @@ export interface WordAuthoringSnapshot {
     | "model-budget";
   /** Fixed diagnostic codes, never document text or XML. */
   issueDetails?: string[];
+  /** Captured, but too large for a complete read: only scoped reads and scoped plans remain. */
+  completeReadIssue?: "too-large";
   /** Word's Track Changes mode at capture; edits then go in as revisions or not at all. */
   trackingMode?: string;
   preservedStories?: string[];
@@ -495,19 +498,29 @@ export function validateWordDocumentPlan(
       "document-scope",
       "Stories and sections require scope=document.",
     );
+  const completeRead =
+    !snapshot.completeReadIssue &&
+    !!snapshot.readToken &&
+    plan.readToken === snapshot.readToken &&
+    wordSourceReadRefs(snapshot).every((ref) => snapshot.read.has(ref));
   if (
-    (!snapshot.readToken ||
-      plan.readToken !== snapshot.readToken ||
-      wordSourceReadRefs(snapshot).some((ref) => !snapshot.read.has(ref))) &&
+    !completeRead &&
     !wordPlanMatchesCellScope(plan, snapshot) &&
     !wordPlanMatchesObjectScope(plan, snapshot)
   )
-    return fail(
-      "incomplete",
-      "/readToken",
-      "incomplete-read",
-      "A complete read is required unless the entire plan matches an explicitly authorized scoped edit.",
-    );
+    return snapshot.completeReadIssue
+      ? fail(
+          snapshot.completeReadIssue,
+          "/readToken",
+          snapshot.completeReadIssue,
+          "This document is too large for a complete read, so whole-document plans are unavailable. Submit scoped_edit or table_cell changes with a scoped readToken.",
+        )
+      : fail(
+          "incomplete",
+          "/readToken",
+          "incomplete-read",
+          "A complete read is required unless the entire plan matches an explicitly authorized scoped edit.",
+        );
 
   const sources = new Map(snapshot.blocks.map((b) => [b.ref, b]));
   const consumed = new Map<string, string>();

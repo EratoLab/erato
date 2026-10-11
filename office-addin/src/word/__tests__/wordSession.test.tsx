@@ -12,6 +12,7 @@ import {
 } from "../utils/wordDocumentIdentity";
 import {
   WORD_DOCUMENT_CHATS_KEY,
+  forgetWordDocumentChat,
   readWordDocumentChat,
   recordWordDocumentChat,
   wordDocumentChatKey,
@@ -268,31 +269,41 @@ describe("Word session controller", () => {
         expect(readWordDocumentChat(budgetKey)).toBe("chat-budget"),
       );
 
+      // Observe the focus-triggered write before this test clears storage.
+      forgetWordDocumentChat(budgetKey, "chat-budget");
       act(() => {
         globalThis.dispatchEvent(new Event("focus"));
       });
-      await flushLiveReads();
+      await waitFor(() =>
+        expect(readWordDocumentChat(budgetKey)).toBe("chat-budget"),
+      );
 
       expect(readWordDocumentChat(reportKey)).toBe("chat-report");
     });
   });
 
   it("keeps two panes on different documents independent", async () => {
+    const reportKey = await keyOf(REPORT_URL);
+    const budgetKey = await keyOf(BUDGET_URL);
     const reportPane = await renderOpenedPane("report-pane");
     act(() => reportPane.session().adoptNewChatId("chat-report"));
-    await flushLiveReads();
+    await waitFor(() =>
+      expect(readWordDocumentChat(reportKey)).toBe("chat-report"),
+    );
 
     resetWordDocumentIdentityForTests();
     word.document.url = BUDGET_URL;
     const budgetPane = await renderOpenedPane("budget-pane");
     expect(budgetPane.session().currentChatId).toBeNull();
     act(() => budgetPane.session().adoptNewChatId("chat-budget"));
-    await flushLiveReads();
+    await waitFor(() =>
+      expect(readWordDocumentChat(budgetKey)).toBe("chat-budget"),
+    );
 
     expect(screen.getByTestId("report-pane")).toHaveTextContent("chat-report");
     expect(screen.getByTestId("budget-pane")).toHaveTextContent("chat-budget");
-    expect(readWordDocumentChat(await keyOf(REPORT_URL))).toBe("chat-report");
-    expect(readWordDocumentChat(await keyOf(BUDGET_URL))).toBe("chat-budget");
+    expect(readWordDocumentChat(reportKey)).toBe("chat-report");
+    expect(readWordDocumentChat(budgetKey)).toBe("chat-budget");
   });
 
   describe("a recorded chat that no longer exists", () => {
