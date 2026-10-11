@@ -45,6 +45,9 @@ export interface WordReviewState {
   revertFailed?: "failed" | "timed-out";
   /** A selection Replace: its result, which decides the card's message, locator and Undo. */
   selection?: WordReplaceSelectionResult;
+  /** A selection Replace refused because another version from the same answer holds the passage.
+   * The card stays idle, so it can be replaced once that version is undone. */
+  refusedForSibling?: boolean;
 }
 export const EMPTY_WORD_REVIEW: WordReviewState = {
   status: "idle",

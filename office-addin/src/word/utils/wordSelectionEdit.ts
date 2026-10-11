@@ -9,6 +9,16 @@ import type { WordKeptMarker } from "./wordSelectionItems";
 /** Fence tags are case-sensitive and must match the renderer registration. */
 export const WORD_REPLACE_FENCE = "erato-word-replace";
 
+const WORD_REPLACE_FENCE_OPENING = new RegExp(
+  `^[^\\S\\n]*(?:\`{3,}|~{3,})[^\\S\\n]*${WORD_REPLACE_FENCE}(?![\\w-])`,
+  "gm",
+);
+
+/** Replace fences in an answer. Counting a nested or indented one too errs towards several. */
+export function countWordReplaceFences(text: string): number {
+  return text.match(WORD_REPLACE_FENCE_OPENING)?.length ?? 0;
+}
+
 export type WordSelectionReplacement =
   | { lines: string[] }
   | {

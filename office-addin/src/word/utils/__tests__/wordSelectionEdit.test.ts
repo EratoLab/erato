@@ -1,9 +1,36 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  countWordReplaceFences,
   splitWordSelectionReplacement,
   WORD_REPLACE_FENCE,
 } from "../wordSelectionEdit";
+
+describe("countWordReplaceFences", () => {
+  it("counts each opening replace fence, not its closing fence or other fences", () => {
+    expect(
+      countWordReplaceFences(
+        [
+          "Formal:",
+          "```erato-word-replace",
+          "One",
+          "```",
+          "Casual:",
+          "  ~~~~ erato-word-replace",
+          "Two",
+          "  ~~~~",
+          "```erato-word-replacement",
+          "```text",
+          "```",
+        ].join("\n"),
+      ),
+    ).toBe(2);
+  });
+
+  it("finds none in prose that only names the fence", () => {
+    expect(countWordReplaceFences("Use an erato-word-replace block.")).toBe(0);
+  });
+});
 
 describe("splitWordSelectionReplacement", () => {
   it("uses the erato-word-replace fence", () => {
