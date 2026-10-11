@@ -79,8 +79,9 @@ account-scoped discovery, claim/result/continuation, executor headers,
 `client_tool_pending` presentation, shell lifecycle handling and native review.
 Real-host qualification is still required before enablement.
 
-The coordinator runs its built-in handlers (local evidence) beside a handler
-registry that the web and Office shells populate. It picks a handler by `kind` and
+The coordinator runs its built-in handlers (local evidence) beside a shared handler
+registry that any shell may populate; today only the Outlook add-in registers one,
+for `fetch_availability`. It picks a handler by `kind` and
 the handler's optional `matches(request)`. The generic handler matches its tool's
 bare name in any namespace, as the live call's executor lookup does, because the
 namespace is deployment configuration. A handler's `defer(request)` skips the
