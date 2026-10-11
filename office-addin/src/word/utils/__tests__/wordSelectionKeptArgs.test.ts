@@ -29,8 +29,10 @@ describe("kept items for the model", () => {
     const selection = await captured({ p: "MX1" });
     expect(wordKeptItemsArg(selection)).toBe(
       [
-        "⟦1⟧…⟦/1⟧ a link around the text between; that text may change",
-        '⟦2⟧ a field showing "2026-10-06"',
+        "⟦1⟧…⟦/1⟧ formatting: bold",
+        "⟦2⟧…⟦/2⟧ formatting: italic",
+        "⟦3⟧…⟦/3⟧ a link around the text between; that text may change",
+        '⟦4⟧ a field showing "2026-10-06"',
       ].join("\n"),
     );
   });
@@ -57,12 +59,52 @@ describe("kept items for the model", () => {
     });
   });
 
-  it("drops the flattened-emphasis notice with the rewrite when falling back", async () => {
+  it("drops the format spans and the flattened-emphasis notice with the rewrite when falling back", async () => {
     const selection = await captured({ p: "MX1" });
-    expect(selection.flattensEmphasis).toBe(true);
-    expect(
-      wordSelectionForFacets(selection, advertised(["selected_text"])),
-    ).not.toHaveProperty("flattensEmphasis");
+    expect(selection.paragraphs[0].formats?.spans).toHaveLength(2);
+    const fallback = wordSelectionForFacets(
+      { ...selection, flattensEmphasis: true },
+      advertised(["selected_text"]),
+    );
+    expect(fallback).not.toHaveProperty("flattensEmphasis");
+    expect(fallback).toMatchObject({
+      role: "context_only",
+      selectedText:
+        "MX1 Alpha bravo charlie delta echo foxtrot link golf 2026-10-06 hotel india.",
+      paragraphs: [expect.not.objectContaining({ formats: expect.anything() })],
+    });
+  });
+
+  it("keeps a rewrite with only format spans where the server does not explain markers, without them", async () => {
+    installWordSelectionHost(
+      {
+        body: [
+          "Intro.",
+          {
+            runs: ["One ", { text: "bold", font: { bold: true } }, " word."],
+          },
+        ],
+      },
+      { host: "pc" },
+    ).select({ paragraph: 1 });
+    const read = await captureWordSelection();
+    if (read.status !== "ok" || !read.value) throw new Error("no capture");
+    expect(read.value).toMatchObject({
+      role: "rewrite",
+      selectedText: "One ⟦1⟧bold⟦/1⟧ word.",
+    });
+    expect(wordKeptItemsArg(read.value)).toBe("⟦1⟧…⟦/1⟧ formatting: bold");
+    const fallback = wordSelectionForFacets(
+      read.value,
+      advertised(["selected_text"]),
+    );
+    expect(fallback).toMatchObject({
+      role: "rewrite",
+      selectedText: "One bold word.",
+      flattensEmphasis: true,
+      paragraphs: [expect.not.objectContaining({ formats: expect.anything() })],
+    });
+    expect(wordKeptItemsArg(fallback)).toBe("");
   });
 
   it("keeps a rewrite without markers where the server does not explain them", async () => {

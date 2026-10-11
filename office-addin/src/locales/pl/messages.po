@@ -4101,6 +4101,51 @@ msgid "officeAddin.word.selection.flattensEmphasis"
 msgstr "Po zastąpieniu pogrubione, pochylone, podkreślone lub przekreślone słowa w tym fragmencie przyjmą zwykłe formatowanie akapitu."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.bold"
+msgstr "pogrubienie"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.italic"
+msgstr "kursywa"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.noStrikethrough"
+msgstr "bez przekreślenia"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.notBold"
+msgstr "bez pogrubienia"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.notItalic"
+msgstr "bez kursywy"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.noUnderline"
+msgstr "bez podkreślenia"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.strikethrough"
+msgstr "przekreślenie"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.format.underline"
+msgstr "podkreślenie"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSelectionCard.tsx
+msgid "officeAddin.word.selection.formatsDropped"
+msgstr "Propozycja nie oznacza już formatowania {dropped}. Jeśli te słowa nadal w niej występują, po zastąpieniu przyjmą formatowanie otaczającego tekstu."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.selection.insteadOfDocument"
 msgstr "Jeśli ten fragment można zastąpić, zostanie wysłany zamiast dokumentu."

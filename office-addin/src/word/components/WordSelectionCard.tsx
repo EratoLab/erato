@@ -43,11 +43,13 @@ import {
   isSameWordPassage,
   rewritableWordSelection,
   wordSelectionOf,
+  wordSelectionWithoutFormats,
 } from "../utils/wordSelectionAnchor";
 import { captureWordSelection } from "../utils/wordSelectionCapture";
 import {
   countWordReplaceFences,
   splitWordSelectionReplacement,
+  withoutFormatMarkers,
   wordSelectionLinePieces,
 } from "../utils/wordSelectionEdit";
 import { WORD_MARKER } from "../utils/wordSelectionItems";
@@ -69,6 +71,7 @@ import type {
   WordSelectionReasonCode,
   WordSelectionSnapshot,
 } from "../utils/wordSelectionAnchor";
+import type { WordEmphasis } from "../utils/wordSelectionFormatSpans";
 import type { WordKeptItemKind } from "../utils/wordSelectionItems";
 
 /** V2-4: why this selection can only be context, one message per kind of reason. */
@@ -186,7 +189,13 @@ export function wordSelectionReasonText(
   }
 }
 
-/** What the card shows for each kept item's marker, so the comparison reads as text. */
+const formatSpans = (selection: WordSelectionSnapshot) =>
+  selection.paragraphs.flatMap((p) => p.formats?.spans ?? []);
+
+/**
+ * What the card shows for each kept item's marker and each format span's, so the comparison reads
+ * as text: a span's text as [bold]…[/bold].
+ */
 function wordKeptMarkersShown(
   text: string,
   selection: WordSelectionSnapshot,
@@ -196,7 +205,15 @@ function wordKeptMarkersShown(
       (p.kept?.markers ?? []).map((m) => [m.number, m] as const),
     ),
   );
+  const formats = new Map(
+    formatSpans(selection).map((span) => [span.number, span.emphasis]),
+  );
   return text.replace(WORD_MARKER, (marker, close: string, number: string) => {
+    const emphasis = formats.get(Number(number));
+    if (emphasis) {
+      const name = emphasisName(emphasis);
+      return close ? `[/${name}]` : `[${name}]`;
+    }
     const kept = markers.get(Number(number));
     if (!kept) return marker;
     const name = keptItemName(kept.kind);
@@ -204,6 +221,80 @@ function wordKeptMarkersShown(
     const shows = kept.shows.replace(/[\u0000-\u001F]/g, "");
     return kept.end === "point" && shows ? `[${shows}]` : `[${name}]`;
   });
+}
+
+/** A format span's emphasis in words, such as "bold, italic". */
+function emphasisName(emphasis: WordEmphasis): string {
+  const words: string[] = [];
+  if (emphasis.bold !== undefined)
+    words.push(
+      emphasis.bold
+        ? t({ id: "officeAddin.word.selection.format.bold", message: "bold" })
+        : t({
+            id: "officeAddin.word.selection.format.notBold",
+            message: "not bold",
+          }),
+    );
+  if (emphasis.italic !== undefined)
+    words.push(
+      emphasis.italic
+        ? t({
+            id: "officeAddin.word.selection.format.italic",
+            message: "italic",
+          })
+        : t({
+            id: "officeAddin.word.selection.format.notItalic",
+            message: "not italic",
+          }),
+    );
+  if (emphasis.underline !== undefined)
+    words.push(
+      emphasis.underline === "None"
+        ? t({
+            id: "officeAddin.word.selection.format.noUnderline",
+            message: "no underline",
+          })
+        : t({
+            id: "officeAddin.word.selection.format.underline",
+            message: "underline",
+          }),
+    );
+  if (emphasis.strikeThrough !== undefined)
+    words.push(
+      emphasis.strikeThrough
+        ? t({
+            id: "officeAddin.word.selection.format.strikethrough",
+            message: "strikethrough",
+          })
+        : t({
+            id: "officeAddin.word.selection.format.noStrikethrough",
+            message: "no strikethrough",
+          }),
+    );
+  return words.join(", ");
+}
+
+/** The format spans a proposal dropped, each by its text in the request and its emphasis. */
+function droppedFormatsText(
+  dropped: readonly number[],
+  selection: WordSelectionSnapshot,
+): string {
+  const spans = new Map(
+    formatSpans(selection).map((span) => [span.number, span.emphasis]),
+  );
+  return dropped
+    .flatMap((number) => {
+      const emphasis = spans.get(number);
+      const text = new RegExp(
+        `\u27E6${number}\u27E7([^]*?)\u27E6/${number}\u27E7`,
+      )
+        .exec(selection.selectedText)?.[1]
+        ?.replace(WORD_MARKER, "");
+      return emphasis && text !== undefined
+        ? [`“${text}” (${emphasisName(emphasis)})`]
+        : [];
+    })
+    .join(", ");
 }
 
 function keptItemName(kind: WordKeptItemKind): string {
@@ -572,12 +663,18 @@ export function WordSelectionCard({
     );
     if ("refused" in split) return split;
     const pieces = wordSelectionLinePieces(rewritable.paragraphs, split.lines);
-    return "refused" in pieces ? pieces : split;
+    return "refused" in pieces
+      ? pieces
+      : { lines: split.lines, dropped: pieces.dropped };
   }, [content, rewritable]);
   const proposal =
     replacement && "lines" in replacement
       ? replacement.lines.join("\n")
       : content.replace(/\n$/, "");
+  const dropped =
+    rewritable && replacement && "dropped" in replacement
+      ? droppedFormatsText(replacement.dropped, rewritable)
+      : "";
   const offeredActions = useMemo(
     () =>
       rewritable && replacement && "lines" in replacement
@@ -755,9 +852,18 @@ export function WordSelectionCard({
     let note = "";
     try {
       const read = await captureWordSelection();
+      // A request sent without format spans compares with the pick as it would have been sent.
+      const pick =
+        read.status === "ok" &&
+        read.value &&
+        formatSpans(rewritable).length === 0
+          ? wordSelectionWithoutFormats(read.value)
+          : read.status === "ok"
+            ? read.value
+            : null;
       const picked =
-        read.status === "ok" && read.value && documentIdentity
-          ? emptySelectionCapture(documentIdentity, read.value)
+        pick && documentIdentity
+          ? emptySelectionCapture(documentIdentity, pick)
           : null;
       const live = resolveWordWriteGate({
         capture: picked ?? undefined,
@@ -811,9 +917,12 @@ export function WordSelectionCard({
     replaceOn,
     endOperation,
   ]);
+  const shownProposal = selection
+    ? wordKeptMarkersShown(proposal, selection)
+    : proposal;
   const buildSummary = useCallback(
-    () => (idle && !isGenerating ? proposal : null),
-    [idle, isGenerating, proposal],
+    () => (idle && !isGenerating ? shownProposal : null),
+    [idle, isGenerating, shownProposal],
   );
   const { confirmCard, isConfirmPending, allowCard, denyCard } =
     useClientActionConfirmFlow<string, WordClientAction>({
@@ -934,7 +1043,10 @@ export function WordSelectionCard({
       return;
     }
     try {
-      void navigator.clipboard.writeText(proposal).then(
+      const text = selection
+        ? withoutFormatMarkers(proposal, formatSpans(selection))
+        : proposal;
+      void navigator.clipboard.writeText(text).then(
         () =>
           setCopyNote(
             t({
@@ -1070,6 +1182,14 @@ export function WordSelectionCard({
                     id: "officeAddin.word.selection.flattensEmphasis",
                     message:
                       "After Replace, bold, italic, underlined or struck-through words in this passage take the paragraph's usual formatting.",
+                  })}
+                </p>
+              )}
+              {dropped && (
+                <p className="word-review__hint">
+                  {t({
+                    id: "officeAddin.word.selection.formatsDropped",
+                    message: `The proposal no longer marks the formatting of ${dropped}. If those words are still in it, Replace gives them the formatting of the text around them.`,
                   })}
                 </p>
               )}
@@ -1286,9 +1406,7 @@ export function WordSelectionCard({
               ? wordKeptMarkersShown(selection.selectedText, selection)
               : null
           }
-          proposed={
-            selection ? wordKeptMarkersShown(proposal, selection) : proposal
-          }
+          proposed={shownProposal}
         />
       </WordReviewHeader>
     </WordReviewCard>

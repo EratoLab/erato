@@ -4,6 +4,7 @@ import {
   countWordReplaceFences,
   splitWordSelectionReplacement,
   WORD_REPLACE_FENCE,
+  wordSelectionLinePieces,
 } from "../wordSelectionEdit";
 
 describe("countWordReplaceFences", () => {
@@ -134,5 +135,67 @@ describe("splitWordSelectionReplacement", () => {
     expect(splitWordSelectionReplacement("A\tB", "inline", 1)).toEqual({
       lines: ["A\tB"],
     });
+  });
+});
+
+describe("wordSelectionLinePieces", () => {
+  const paragraphs = [
+    {
+      kept: { markers: [{ number: 2, end: "point" as const }] },
+      formats: { spans: [{ number: 1 }] },
+    },
+    { formats: { spans: [{ number: 3 }, { number: 4 }] } },
+    {},
+  ];
+
+  it("gives each line's text without format markers, and the spans it dropped", () => {
+    expect(
+      wordSelectionLinePieces(paragraphs, [
+        "A ⟦1⟧b⟦/1⟧ ⟦2⟧.",
+        "C ⟦4⟧d⟦/4⟧.",
+        "Plain.",
+      ]),
+    ).toEqual({
+      lines: [
+        {
+          text: "A b ⟦2⟧.",
+          pieces: ["A b ", "."],
+          parts: [
+            [
+              { text: "A ", format: null },
+              { text: "b", format: 1 },
+              { text: " ", format: null },
+            ],
+            [{ text: ".", format: null }],
+          ],
+        },
+        {
+          text: "C d.",
+          pieces: null,
+          parts: [
+            [
+              { text: "C ", format: null },
+              { text: "d", format: 4 },
+              { text: ".", format: null },
+            ],
+          ],
+        },
+        {
+          text: "Plain.",
+          pieces: null,
+          parts: [[{ text: "Plain.", format: null }]],
+        },
+      ],
+      dropped: [3],
+    });
+  });
+
+  it("refuses a span moved into another paragraph's line, and a marker in a line without any", () => {
+    expect(
+      wordSelectionLinePieces(paragraphs, ["A ⟦2⟧.", "⟦1⟧C⟦/1⟧.", "Plain."]),
+    ).toEqual({ refused: "MARKERS_CHANGED" });
+    expect(
+      wordSelectionLinePieces(paragraphs, ["A ⟦2⟧.", "C.", "⟦3⟧P⟦/3⟧."]),
+    ).toEqual({ refused: "MARKERS_CHANGED" });
   });
 });

@@ -40,6 +40,25 @@ describe("ActionFacetContext", () => {
     expect(quote().textContent).toBe("See [link]link[/link] on [2026-10-10].");
   });
 
+  it("labels a format span by the emphasis kept_items gives it", () => {
+    render(
+      <ActionFacetContext
+        actionFacetArgs={{
+          selected_text: "A ⟦1⟧bold⟦/1⟧ and ⟦2⟧odd⟦/2⟧ ⟦3⟧link⟦/3⟧.",
+          kept_items: [
+            "⟦1⟧…⟦/1⟧ formatting: bold, not italic",
+            "⟦2⟧…⟦/2⟧ formatting: wavy",
+            "⟦3⟧…⟦/3⟧ a link around the text between; that text may change",
+          ].join("\n"),
+        }}
+      />,
+    );
+
+    expect(quote().textContent).toBe(
+      "A [bold, not italic]bold[/bold, not italic] and [wavy]odd[/wavy] [link]link[/link].",
+    );
+  });
+
   it("leaves the text alone without kept_items", () => {
     render(
       <ActionFacetContext actionFacetArgs={{ selected_text: "Plain ⟦1⟧." }} />,

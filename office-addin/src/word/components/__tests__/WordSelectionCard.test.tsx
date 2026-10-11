@@ -30,6 +30,7 @@ import {
   captureWordSelection,
   WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
 } from "../../utils/wordSelectionCapture";
+import { WORD_FORMAT_SPANS_MAX } from "../../utils/wordSelectionFormatSpans";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 import { wordSelectionReasonText } from "../WordSelectionCard";
 
@@ -298,6 +299,48 @@ describe("WordSelectionCard", () => {
     expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
   });
 
+  it("replaces the picked copy with the same format spans, and refuses one whose emphasis differs", async () => {
+    uninstallWordSelectionHost();
+    const mixed = {
+      runs: ["PX1 Mixed ", { text: "bold", font: { bold: true } }, " words."],
+    };
+    host = installWordSelectionHost(
+      { body: ["Intro.", mixed, "MP2 Then xray."] },
+      { nullParagraphIds: true },
+    );
+    const capture = await captureOf(host, { paragraph: 1 });
+    host.insertParagraphs({ paragraph: 1 }, [mixed, mixed], "After");
+    host.format({ paragraph: 3, text: "Mixed" }, { font: { italic: true } });
+    renderCard({
+      capture,
+      content: "PX1 Fewer \u27E61\u27E7strong\u27E6/1\u27E7 words.",
+    });
+    fireEvent.click(replaceButton()!);
+    await screen.findByText(AMBIGUOUS);
+
+    host.select({ paragraph: 3 });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace selected passage" }),
+    );
+    await screen.findByText(
+      "The selected text is not exactly the passage from your request. Nothing was replaced.",
+    );
+    expect(host.writeSyncs()).toEqual([]);
+
+    host.select({ paragraph: 2 });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace selected passage" }),
+    );
+    await screen.findByText("Replaced the selected passage.");
+    expect(
+      host.paragraphs()[2].runs.map((run) => [run.text, !!run.font?.bold]),
+    ).toEqual([
+      ["PX1 Fewer ", false],
+      ["strong", true],
+      [" words.", false],
+    ]);
+  });
+
   it("replaces nothing when the selected text is not exactly the requested passage", async () => {
     uninstallWordSelectionHost();
     host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
@@ -490,25 +533,122 @@ describe("WordSelectionCard", () => {
     );
   });
 
-  it("says before Replace that mixed bold or italic takes the paragraph's usual formatting", async () => {
+  it("says before Replace that mixed bold or italic takes the paragraph's usual formatting past the span cap", async () => {
     const hint =
       "After Replace, bold, italic, underlined or struck-through words in this passage take the paragraph's usual formatting.";
-    const mixed = await captureOf(host, { p: "MX1" });
+    uninstallWordSelectionHost();
+    host = installWordSelectionHost({
+      body: [
+        "Intro.",
+        {
+          runs: Array.from({ length: WORD_FORMAT_SPANS_MAX + 1 }, (_, k) => [
+            { text: `w${k}`, font: { bold: true } },
+            " ",
+          ]).flat(),
+        },
+        "Plain words.",
+        "MP2 The selection moves to xray after Send.",
+      ],
+    });
+    const mixed = await captureOf(host, { paragraph: 1 });
     expect(mixed.selection).toMatchObject({
       role: "rewrite",
       flattensEmphasis: true,
     });
-    renderCard({
-      capture: mixed,
-      content:
-        "MX1 Alpha \u27E61\u27E7link\u27E6/1\u27E7 golf \u27E62\u27E7 hotel.",
-    });
+    renderCard({ capture: mixed, content: "Now plain words." });
     expect(screen.getByText(hint)).toBeInTheDocument();
     expect(replaceButton()).toBeInTheDocument();
     cleanup();
-    renderCard({ capture: await captureOf(host, { p: "PL1" }) });
+    renderCard({
+      capture: await captureOf(host, { paragraph: 2 }),
+      content: "Other words.",
+    });
     expect(replaceButton()).toBeInTheDocument();
     expect(screen.queryByText(hint)).toBeNull();
+  });
+
+  it("labels each format span by its emphasis and replaces with it, without a formatting hint", async () => {
+    const capture = await captureOf(host, { p: "MX1" });
+    renderCard({
+      capture,
+      content:
+        "MX1 \u27E62\u27E7Charlie\u27E6/2\u27E7 and \u27E61\u27E7bravo\u27E6/1\u27E7 \u27E63\u27E7Verweis\u27E6/3\u27E7 golf \u27E64\u27E7.",
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Original" }));
+    expect(
+      screen.getByText(
+        "MX1 Alpha [bold]bravo[/bold] [italic]charlie[/italic] delta echo foxtrot [link]link[/link] golf [2026-10-06] hotel india.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Proposed" }));
+    expect(
+      screen.getByText(
+        "MX1 [italic]Charlie[/italic] and [bold]bravo[/bold] [link]Verweis[/link] golf [2026-10-06].",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/formatting/u)).toBeNull();
+    fireEvent.click(replaceButton()!);
+    await screen.findByText("Replaced the selected passage.");
+    const after = host.paragraphs().find((p) => p.text.startsWith("MX1"))!;
+    expect(after.text).toBe("MX1 Charlie and bravo Verweis golf 2026-10-06.");
+    expect(
+      after.runs
+        .filter((run) => run.font?.bold || run.font?.italic)
+        .map((run) => [run.text, !!run.font?.bold, !!run.font?.italic]),
+    ).toEqual([
+      ["Charlie", false, true],
+      ["bravo", true, false],
+    ]);
+  });
+
+  it("notes a format span the proposal drops, whose words take the formatting around them", async () => {
+    const capture = await captureOf(host, { p: "MX1" });
+    renderCard({
+      capture,
+      content:
+        "MX1 Alpha \u27E62\u27E7charlie\u27E6/2\u27E7 \u27E63\u27E7link\u27E6/3\u27E7 golf \u27E64\u27E7.",
+    });
+    expect(
+      screen.getByText(
+        "The proposal no longer marks the formatting of “bravo” (bold). If those words are still in it, Replace gives them the formatting of the text around them.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(replaceButton()!);
+    await screen.findByText("Replaced the selected passage.");
+    expect(
+      host
+        .paragraphs()
+        .find((p) => p.text.startsWith("MX1"))!
+        .runs.some((run) => run.font?.bold),
+    ).toBe(false);
+  });
+
+  it("refuses a proposal that invents a format span, and copies the proposal without span markers", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const capture = await captureOf(host, { p: "MX1" });
+    renderCard({
+      capture,
+      content:
+        "MX1 \u27E61\u27E7Bravo\u27E6/1\u27E7 \u27E63\u27E7link\u27E6/3\u27E7 \u27E64\u27E7.",
+    });
+    expect(replaceButton()).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy proposal" }));
+    expect(writeText).toHaveBeenCalledWith(
+      "MX1 Bravo \u27E63\u27E7link\u27E6/3\u27E7 \u27E64\u27E7.",
+    );
+    cleanup();
+    renderCard({
+      capture,
+      content:
+        "MX1 \u27E69\u27E7Bravo\u27E6/9\u27E7 \u27E63\u27E7link\u27E6/3\u27E7 \u27E64\u27E7.",
+    });
+    expect(
+      screen.getByText(
+        "The proposal lost or moved a field, link, note or comment of the passage, so it would delete or misplace it. Nothing was replaced.",
+      ),
+    ).toBeInTheDocument();
+    expect(replaceButton()).toBeNull();
   });
 
   it("no longer says only whole paragraphs can be replaced for a shape not enabled", () => {

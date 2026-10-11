@@ -597,3 +597,118 @@ describe("wordPartFormatLoss", () => {
     ).toBeNull();
   });
 });
+
+describe("rewriteWordParagraphPart with format spans", () => {
+  const props = (paragraph: Element) =>
+    Array.from(paragraph.getElementsByTagNameNS(W, "r"))
+      .filter((r) => r.getElementsByTagNameNS(W, "t").length)
+      .map((r) => [
+        r.getElementsByTagNameNS(W, "t")[0].textContent,
+        Array.from(r.getElementsByTagNameNS(W, "rPr")[0]?.children ?? []).map(
+          (c) => c.localName,
+        ),
+      ]);
+  const text = "Red bold and italic 3 tail";
+  const paragraph = p(
+    run("Red ", '<w:color w:val="C00000"/>'),
+    run(
+      "bold",
+      '<w:b/><w:bCs/><w:color w:val="C00000"/><w:lang w:val="en-GB"/>',
+    ),
+    run(" and ", '<w:color w:val="C00000"/>'),
+    run("italic", '<w:i/><w:color w:val="C00000"/>'),
+    run(" ", '<w:color w:val="C00000"/>'),
+    field(" PAGE ", "3"),
+    run(" tail", '<w:color w:val="C00000"/>'),
+  );
+
+  it("writes a span's text with its old run's toggles, twins included, in the schema's order", () => {
+    const result = rewriteWordParagraphPart(pkg(paragraph), text, 0, 26, [
+      [
+        { text: "Rot ", span: null },
+        { text: "fett", span: 0 },
+        { text: " und ", span: null },
+        { text: "kursiv", span: 1 },
+        { text: " ", span: null },
+      ],
+      " Ende",
+    ]);
+    expect(result?.rangeText).toBe("Rot fett und kursiv 3 Ende");
+    expect(props(paragraphOf(result!.ooxml))).toEqual([
+      ["Rot ", ["color"]],
+      ["fett", ["b", "bCs", "color"]],
+      [" und ", ["color"]],
+      ["kursiv", ["i", "color"]],
+      [" ", ["color"]],
+      ["3", []],
+      [" Ende", ["color"]],
+    ]);
+  });
+
+  it("gives a span moved across an item its toggles on both sides of it", () => {
+    const result = rewriteWordParagraphPart(pkg(paragraph), text, 0, 26, [
+      [
+        { text: "Rot und ", span: null },
+        { text: "fett ", span: 0 },
+      ],
+      [{ text: " fett", span: 0 }],
+    ]);
+    expect(result?.rangeText).toBe("Rot und fett 3 fett");
+    expect(props(paragraphOf(result!.ooxml))).toEqual([
+      ["Rot und ", ["color"]],
+      ["fett ", ["b", "bCs", "color"]],
+      ["3", []],
+      [" fett", ["b", "bCs", "color"]],
+    ]);
+  });
+
+  it("refuses a span the part does not have", () => {
+    expect(
+      rewriteWordParagraphPart(pkg(paragraph), text, 0, 26, [
+        [{ text: "Rot", span: 2 }],
+        " Ende",
+      ]),
+    ).toBeNull();
+  });
+});
+
+describe("wordPartFormatLoss with format spans", () => {
+  const NONE = { emphasis: false, script: false, other: false };
+  const pageField = field(" PAGE ", "3");
+  const loss = (paragraph: string, text: string) =>
+    wordPartFormatLoss(pkg(paragraph), text, 0, text.length, true);
+
+  it("loses no emphasis the spans carry", () => {
+    expect(
+      loss(
+        p(
+          run("Plain "),
+          run("bold", "<w:b/><w:bCs/>"),
+          run(" and "),
+          run("struck", "<w:strike/>"),
+          pageField,
+        ),
+        "Plain bold and struck3",
+      ),
+    ).toEqual(NONE);
+  });
+
+  it("still loses a twin no span carries, and anything else on part of the text", () => {
+    expect(
+      loss(
+        p(run("Bold ", "<w:b/><w:bCs/>"), run("words", "<w:b/>"), pageField),
+        "Bold words3",
+      ),
+    ).toEqual({ ...NONE, emphasis: true });
+    expect(
+      loss(
+        p(
+          run("Plain "),
+          run("red", '<w:b/><w:color w:val="C00000"/>'),
+          pageField,
+        ),
+        "Plain red3",
+      ),
+    ).toEqual({ ...NONE, other: true });
+  });
+});

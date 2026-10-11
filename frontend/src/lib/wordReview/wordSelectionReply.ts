@@ -17,11 +17,17 @@ export type WordKeptItemKind =
 
 /** What one marker number stands for, as the kept_items argument says. */
 export interface WordKeptItemNote {
-  kind: WordKeptItemKind;
+  /**
+   * "format" for a format span: text that keeps its own bold, italic,
+   * underline or strikethrough.
+   */
+  kind: WordKeptItemKind | "format";
   /** One point the text flows around; otherwise a span, whose ends show no text. */
   point: boolean;
   /** What a point shows, such as a field's result; "" when nothing. */
   shows: string;
+  /** A format span's emphasis in kept_items' words: ["bold", "not italic"]. */
+  formatting?: readonly string[];
 }
 
 export type WordKeptItemNotes = ReadonlyMap<number, WordKeptItemNote>;
@@ -70,10 +76,23 @@ const KEPT_ITEM_LINES: readonly { pattern: RegExp; point: boolean }[] = [
   },
 ];
 
+const FORMAT_LINE =
+  /^\u27E6(\d+)\u27E7\u2026\u27E6\/\1\u27E7 formatting: (.+)$/u;
+
 /** The marker numbers kept_items explains; a line it does not recognise is skipped. */
 export function parseWordKeptItems(arg: string | undefined): WordKeptItemNotes {
   const notes = new Map<number, WordKeptItemNote>();
-  for (const line of (arg ?? "").split(/\r?\n/u))
+  for (const line of (arg ?? "").split(/\r?\n/u)) {
+    const format = FORMAT_LINE.exec(line);
+    if (format) {
+      notes.set(Number(format[1]), {
+        kind: "format",
+        point: false,
+        shows: "",
+        formatting: format[2].split(", "),
+      });
+      continue;
+    }
     for (const { pattern, point } of KEPT_ITEM_LINES) {
       const match = pattern.exec(line);
       if (!match) continue;
@@ -84,6 +103,7 @@ export function parseWordKeptItems(arg: string | undefined): WordKeptItemNotes {
       });
       break;
     }
+  }
   return notes;
 }
 
