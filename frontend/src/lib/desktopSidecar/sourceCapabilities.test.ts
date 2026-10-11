@@ -13,7 +13,7 @@ import {
   readSidecarConversation,
   SidecarConversationUnavailableError,
 } from "./mailboxAccess";
-import { outlookStoreVariant } from "./outlookStores";
+import { outlookMailWindow, outlookStoreVariant } from "./outlookStores";
 import {
   cachedSourceDirectory,
   sidecarSourceError,
@@ -394,6 +394,34 @@ describe("source capability helpers", () => {
       "newOutlookForMac",
       "newOutlookForWindows",
       "classic",
+      null,
+    ]);
+  });
+
+  it("names the Outlook setting that limits how much mail a store keeps", () => {
+    expect(
+      [
+        "OST",
+        "ost",
+        "new Outlook for Windows",
+        "windowsNewOutlook",
+        "macOS Hx account",
+        "macOsHxAccount",
+        "PST",
+        "macOS profile",
+        "macOsProfile",
+        "teams",
+      ].map(outlookMailWindow),
+    ).toEqual([
+      "classicOutlookForWindows",
+      "classicOutlookForWindows",
+      "newOutlookForWindows",
+      "newOutlookForWindows",
+      "newOutlookForMac",
+      "newOutlookForMac",
+      null,
+      null,
+      null,
       null,
     ]);
   });

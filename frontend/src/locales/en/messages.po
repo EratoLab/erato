@@ -5965,6 +5965,21 @@ msgstr "Outlook on this device reported:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.classicOutlookForWindows"
+msgstr "To index older mail, keep more of it on this device: in Outlook, go to File > Account Settings > Account Settings, select this account, choose Change, set “Download email for the past” to All and restart Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForMac"
+msgstr "To index older mail, keep more of it on this device: in Outlook, go to Settings > Sync and set “Days of mail to sync” to the highest value."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForWindows"
+msgstr "To index older mail, keep more of it on this device: in Outlook, go to Settings > General > Offline and set “Days of email to save” to the highest value."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.missingFromLocalCache"
 #~ msgstr "{missingCount, plural, one {# document is unavailable in the local cache.} other {# documents are unavailable in the local cache.}}"
 

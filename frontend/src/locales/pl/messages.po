@@ -5965,6 +5965,21 @@ msgstr "Outlook na tym urządzeniu zgłosił:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.classicOutlookForWindows"
+msgstr "Aby indeksować starszą pocztę, przechowuj jej więcej na tym urządzeniu: w programie Outlook przejdź do Plik > Ustawienia konta > Ustawienia konta, wybierz to konto, kliknij Zmień, w sekcji „Ustawienia trybu offline” przesuń suwak na Wszystkie i uruchom ponownie program Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForMac"
+msgstr "Aby indeksować starszą pocztę, przechowuj jej więcej na tym urządzeniu: w ustawieniach programu Outlook otwórz Synchronizacja i ustaw „Dni poczty do zsynchronizowania” na najwyższą wartość."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForWindows"
+msgstr "Aby indeksować starszą pocztę, przechowuj jej więcej na tym urządzeniu: w programie Outlook przejdź do Ustawienia > Ogólne > Tryb offline i ustaw „Dni poczty e-mail do zapisania” na najwyższą wartość."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.missingFromLocalCache"
 #~ msgstr "{missingCount, plural, one {# dokument jest niedostępny w lokalnej pamięci podręcznej.} few {# dokumenty są niedostępne w lokalnej pamięci podręcznej.} many {# dokumentów jest niedostępnych w lokalnej pamięci podręcznej.} other {# dokumentów jest niedostępnych w lokalnej pamięci podręcznej.}}"
 

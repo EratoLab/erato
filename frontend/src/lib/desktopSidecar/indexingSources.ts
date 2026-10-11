@@ -4,9 +4,9 @@ import {
   indexingMailboxId,
   orderedMailboxes,
 } from "./indexingConfiguration";
-import { outlookStoreVariant } from "./outlookStores";
+import { outlookMailWindow, outlookStoreVariant } from "./outlookStores";
 
-import type { OutlookStoreVariant } from "./outlookStores";
+import type { OutlookMailWindow, OutlookStoreVariant } from "./outlookStores";
 import type {
   OutlookMailbox,
   SidecarConfiguration,
@@ -29,6 +29,8 @@ export interface IndexingEntry {
   product: string;
   /** Which Outlook, when the sidecar says. */
   variant?: OutlookStoreVariant;
+  /** The Outlook setting that limits how far back its mail goes. */
+  mailWindow?: OutlookMailWindow;
   name: string | null;
   account?: IndexingAccount;
   /** The sidecar matched this source to the signed-in work account. */
@@ -146,11 +148,14 @@ export function indexingEntries(
       product === "outlook"
         ? outlookStoreVariant(source.sourceKind)
         : undefined;
+    const mailWindow =
+      product === "outlook" ? outlookMailWindow(source.sourceKind) : undefined;
     entries.push({
       id,
       scope: "source",
       product,
       ...(variant && { variant }),
+      ...(mailWindow && { mailWindow }),
       // A Teams source is one organisation the person is signed in to.
       name: firstName(
         account ? source.account?.tenantName : undefined,
@@ -169,11 +174,13 @@ export function indexingEntries(
   for (const mailbox of orderedMailboxes(mailboxes, configuration)) {
     if (represented.has(indexingMailboxId(mailbox.id))) continue;
     const variant = outlookStoreVariant(mailbox.source);
+    const mailWindow = outlookMailWindow(mailbox.source);
     entries.push({
       id: indexingMailboxId(mailbox.id),
       scope: "mailbox",
       product: "outlook",
       ...(variant && { variant }),
+      ...(mailWindow && { mailWindow }),
       name: firstName(mailbox.emailAddress, mailbox.displayName),
       enabled: mailbox.enabled,
       priority: mailbox.priority,

@@ -5965,6 +5965,21 @@ msgstr "Outlook en este dispositivo informó:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.classicOutlookForWindows"
+msgstr "Para indexar correo más antiguo, guarda más en este dispositivo: en Outlook, ve a Archivo > Configuración de la cuenta > Configuración de la cuenta, selecciona esta cuenta, elige Cambiar, mueve el control deslizante de “Configuración sin conexión” a Todos y reinicia Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForMac"
+msgstr "Para indexar correo más antiguo, guarda más en este dispositivo: en los ajustes de Outlook, abre Sincronizar y establece “Días de correo para sincronizar” en el valor más alto."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForWindows"
+msgstr "Para indexar correo más antiguo, guarda más en este dispositivo: en Outlook, ve a Configuración > General > Sin conexión y establece “Días de correo electrónico para guardar” en el valor más alto."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.missingFromLocalCache"
 #~ msgstr "{missingCount, plural, one {# documento no está disponible en la caché local.} other {# documentos no están disponibles en la caché local.}}"
 
