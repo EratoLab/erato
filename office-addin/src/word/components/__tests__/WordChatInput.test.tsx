@@ -337,6 +337,28 @@ describe("WordChatInput", () => {
     },
   );
 
+  it("keeps the open chat as it was when the setting for new chats changes", () => {
+    const { rerender } = renderInput("chat-1");
+    expect(isIncluded()).toBe(true);
+
+    preferences.includeByDefault = false;
+    rerender(element("chat-1"));
+    expect(isIncluded()).toBe(true);
+
+    rerender(element("chat-2"));
+    expect(isIncluded()).toBe(false);
+  });
+
+  it("applies the setting at once to a chat that has not started yet", () => {
+    const { rerender } = renderInput(null);
+    expect(isIncluded()).toBe(true);
+
+    preferences.includeByDefault = false;
+    rerender(element(null));
+
+    expect(isIncluded()).toBe(false);
+  });
+
   it.each([true, false])(
     "returns to the default (included: %s) when the pane's document identity changes",
     (includeByDefault) => {

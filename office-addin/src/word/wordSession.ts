@@ -89,20 +89,17 @@ function WordDocumentSessionController({
   const currentChatIdRef = useRef(opening.chatId);
   const clearNewlyCreatedChatIdRef = useRef<() => void>(() => {});
 
-  const rememberChat = useCallback(
-    (chatId: string) => {
-      if (documentKey !== null) recordWordDocumentChat(documentKey, chatId);
-      // An unsaved document gets its URL on first save, and Save As moves it.
-      void liveDocumentKey().then((liveKey) => {
-        const latest = currentChatIdRef.current;
-        if (liveKey === null || liveKey === documentKey || latest === null) {
-          return;
-        }
-        recordWordDocumentChat(liveKey, latest);
-      });
-    },
-    [documentKey],
-  );
+  // An unsaved document gets its URL on first save, and after Save As the pane edits the new
+  // file, so chats are recorded under the URL Word reports now, not the one at pane load.
+  const currentKeyRef = useRef(documentKey);
+  const rememberChat = useCallback(() => {
+    void liveDocumentKey().then((liveKey) => {
+      if (liveKey !== null) currentKeyRef.current = liveKey;
+      const key = currentKeyRef.current;
+      const latest = currentChatIdRef.current;
+      if (key !== null && latest !== null) recordWordDocumentChat(key, latest);
+    });
+  }, []);
 
   const beginNewChat = useCallback(() => {
     currentChatIdRef.current = null;
@@ -113,15 +110,14 @@ function WordDocumentSessionController({
     (chatId: string) => {
       currentChatIdRef.current = chatId;
       setCurrentChatId(chatId);
-      rememberChat(chatId);
+      rememberChat();
     },
     [rememberChat],
   );
 
   useEffect(() => {
     const onFocus = () => {
-      const chatId = currentChatIdRef.current;
-      if (chatId !== null) rememberChat(chatId);
+      if (currentChatIdRef.current !== null) rememberChat();
     };
     globalThis.addEventListener("focus", onFocus);
     return () => globalThis.removeEventListener("focus", onFocus);
@@ -139,8 +135,8 @@ function WordDocumentSessionController({
       if (handled || state?.status !== "error") return;
       if (!isChatNotFound(state.error)) return;
       handled = true;
-      if (documentKey !== null) {
-        forgetWordDocumentChat(documentKey, currentChatId);
+      for (const key of new Set([documentKey, currentKeyRef.current])) {
+        if (key !== null) forgetWordDocumentChat(key, currentChatId);
       }
       beginNewChat();
       const messaging = useMessagingStore.getState();

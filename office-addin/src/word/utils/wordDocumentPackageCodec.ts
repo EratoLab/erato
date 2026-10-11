@@ -70,7 +70,7 @@ export function readWordPackage(bytes: Uint8Array): WordDocumentParts {
     const data = new Uint8Array(entry.content);
     expanded += data.length;
     if (expanded > MAX_EXPANDED_BYTES || parts.size >= 2048)
-      throw new Error(
+      throw new WordDocumentTooLargeError(
         "The expanded document is too large to process in this pane.",
       );
     parts.set(path, data);
@@ -115,7 +115,7 @@ function inspectZipDirectory(bytes: Uint8Array): void {
   let cursor = view.getUint32(end + 16, true),
     expanded = 0;
   if (count > 2048)
-    throw new Error(
+    throw new WordDocumentTooLargeError(
       `The DOCX has ${count} parts; this pane supports up to 2048.`,
     );
   if (

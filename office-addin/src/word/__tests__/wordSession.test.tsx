@@ -139,11 +139,11 @@ describe("Word session controller", () => {
 
     act(() => pane.session().adoptNewChatId("chat-new"));
     expect(pane.session().currentChatId).toBe("chat-new");
-    expect(readWordDocumentChat(key)).toBe("chat-new");
+    await waitFor(() => expect(readWordDocumentChat(key)).toBe("chat-new"));
 
     act(() => pane.session().selectChat("chat-picked"));
     expect(pane.session().currentChatId).toBe("chat-picked");
-    expect(readWordDocumentChat(key)).toBe("chat-picked");
+    await waitFor(() => expect(readWordDocumentChat(key)).toBe("chat-picked"));
   });
 
   it("begins a new chat without forgetting the document's last one", async () => {
@@ -214,22 +214,67 @@ describe("Word session controller", () => {
     );
   });
 
-  it("follows a Save As without dropping the original document's chat", async () => {
-    const pane = await renderOpenedPane();
-    word.document.getFilePropertiesAsync.mockImplementation((callback) =>
-      callback({
-        status: Office.AsyncResultStatus.Succeeded,
-        value: { url: BUDGET_URL },
-      } as Office.AsyncResult<Office.FileProperties>),
-    );
+  describe("after Save As", () => {
+    const saveAs = (url: string) =>
+      word.document.getFilePropertiesAsync.mockImplementation((callback) =>
+        callback({
+          status: Office.AsyncResultStatus.Succeeded,
+          value: { url },
+        } as Office.AsyncResult<Office.FileProperties>),
+      );
 
-    act(() => pane.session().selectChat("chat-report"));
+    it("carries the open chat over to the new file and leaves the original's", async () => {
+      const reportKey = await keyOf(REPORT_URL);
+      recordWordDocumentChat(reportKey, "chat-report");
+      await renderOpenedPane();
 
-    const budgetKey = await keyOf(BUDGET_URL);
-    await waitFor(() =>
-      expect(readWordDocumentChat(budgetKey)).toBe("chat-report"),
-    );
-    expect(readWordDocumentChat(await keyOf(REPORT_URL))).toBe("chat-report");
+      saveAs(BUDGET_URL);
+      act(() => {
+        globalThis.dispatchEvent(new Event("focus"));
+      });
+
+      const budgetKey = await keyOf(BUDGET_URL);
+      await waitFor(() =>
+        expect(readWordDocumentChat(budgetKey)).toBe("chat-report"),
+      );
+      expect(readWordDocumentChat(reportKey)).toBe("chat-report");
+    });
+
+    it("records a chat started afterwards only under the new file", async () => {
+      const reportKey = await keyOf(REPORT_URL);
+      const budgetKey = await keyOf(BUDGET_URL);
+      recordWordDocumentChat(reportKey, "chat-report");
+      const pane = await renderOpenedPane();
+
+      saveAs(BUDGET_URL);
+      act(() => pane.session().beginNewChat());
+      act(() => pane.session().adoptNewChatId("chat-budget"));
+
+      await waitFor(() =>
+        expect(readWordDocumentChat(budgetKey)).toBe("chat-budget"),
+      );
+      expect(readWordDocumentChat(reportKey)).toBe("chat-report");
+    });
+
+    it("stops writing the original's key on later returns to the pane", async () => {
+      const reportKey = await keyOf(REPORT_URL);
+      const budgetKey = await keyOf(BUDGET_URL);
+      recordWordDocumentChat(reportKey, "chat-report");
+      const pane = await renderOpenedPane();
+      saveAs(BUDGET_URL);
+      act(() => pane.session().beginNewChat());
+      act(() => pane.session().adoptNewChatId("chat-budget"));
+      await waitFor(() =>
+        expect(readWordDocumentChat(budgetKey)).toBe("chat-budget"),
+      );
+
+      act(() => {
+        globalThis.dispatchEvent(new Event("focus"));
+      });
+      await flushLiveReads();
+
+      expect(readWordDocumentChat(reportKey)).toBe("chat-report");
+    });
   });
 
   it("keeps two panes on different documents independent", async () => {

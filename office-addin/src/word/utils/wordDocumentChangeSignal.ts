@@ -1,12 +1,14 @@
+import { withWordTimeout } from "./wordTimeout";
 import { wordWriteHost } from "./wordWriteHost";
-import { subscribeToOfficeSelectionChanged } from "../../hooks/officeSelectionChangedBroker";
 
 type Listener = () => void;
 
+const TRACKING_PROBE_TIMEOUT_MS = 2_000;
+
 const listeners = new Set<Listener>();
 let installed = false;
+let paragraphEventsActive = false;
 
-/** Paragraph events miss formatting-only edits, so selection changes also count as changes. */
 export function subscribeWordDocumentChanged(listener: Listener): () => void {
   listeners.add(listener);
   install();
@@ -25,12 +27,33 @@ export function markWordDocumentChanged(): void {
   }
 }
 
+/** Without these events a text edit in Word reaches the pane by no other signal. */
+export function wordParagraphEventsActive(): boolean {
+  return paragraphEventsActive;
+}
+
+/** One property, so returning to the pane can notice a Track Changes toggle without a full read. */
+export async function readWordChangeTrackingMode(): Promise<string | null> {
+  const word = wordWriteHost();
+  if (!word) return null;
+  try {
+    return await withWordTimeout(
+      word.run(async (context) => {
+        context.document.load("changeTrackingMode");
+        await context.sync();
+        return String(context.document.changeTrackingMode);
+      }),
+      TRACKING_PROBE_TIMEOUT_MS,
+      () => new Error("tracking probe timed out"),
+    );
+  } catch {
+    return null;
+  }
+}
+
 function install(): void {
   if (installed) return;
   installed = true;
-  subscribeToOfficeSelectionChanged({
-    onSelectionChanged: markWordDocumentChanged,
-  });
   void installParagraphEvents();
 }
 
@@ -52,12 +75,14 @@ async function installParagraphEvents(): Promise<void> {
       context.document.onParagraphDeleted.add(handler);
       await context.sync();
     });
+    paragraphEventsActive = true;
   } catch {
-    // Hosts that refuse the events still report selection changes and our own writes.
+    // Callers then treat every return to the pane as a change.
   }
 }
 
 export function resetWordDocumentChangeSignalForTests(): void {
   listeners.clear();
   installed = false;
+  paragraphEventsActive = false;
 }

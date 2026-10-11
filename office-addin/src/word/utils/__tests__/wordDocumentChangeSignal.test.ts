@@ -1,15 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { subscribeToOfficeSelectionChanged } from "../../../hooks/officeSelectionChangedBroker";
 import {
   markWordDocumentChanged,
+  readWordChangeTrackingMode,
   resetWordDocumentChangeSignalForTests,
+  wordParagraphEventsActive,
   subscribeWordDocumentChanged,
 } from "../wordDocumentChangeSignal";
-
-vi.mock("../../../hooks/officeSelectionChangedBroker", () => ({
-  subscribeToOfficeSelectionChanged: vi.fn(() => () => {}),
-}));
 
 type Handler = () => Promise<void>;
 
@@ -29,6 +26,8 @@ function installWord(supportsEvents: boolean) {
           onParagraphAdded: event("added"),
           onParagraphChanged: event("changed"),
           onParagraphDeleted: event("deleted"),
+          load: () => {},
+          changeTrackingMode: "TrackAll",
         },
         sync: async () => {},
       }),
@@ -104,16 +103,44 @@ describe("wordDocumentChangeSignal", () => {
     expect(vi.mocked(globalThis.Word.run)).not.toHaveBeenCalled();
   });
 
-  it("treats a selection change as a possible change, installing once", () => {
-    installWord(false);
-    const listener = vi.fn();
-    subscribeWordDocumentChanged(listener);
+  it("reports paragraph events as active once Word accepted them", async () => {
+    installWord(true);
+    expect(wordParagraphEventsActive()).toBe(false);
+
     subscribeWordDocumentChanged(vi.fn());
 
-    expect(subscribeToOfficeSelectionChanged).toHaveBeenCalledOnce();
-    vi.mocked(
-      subscribeToOfficeSelectionChanged,
-    ).mock.calls[0][0].onSelectionChanged();
-    expect(listener).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(wordParagraphEventsActive()).toBe(true));
+  });
+
+  it("reports paragraph events as inactive when Word refuses them", async () => {
+    installWord(true);
+    vi.mocked(globalThis.Word.run).mockRejectedValueOnce(new Error("refused"));
+
+    subscribeWordDocumentChanged(vi.fn());
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(wordParagraphEventsActive()).toBe(false);
+  });
+
+  it("reads the Track Changes mode without a document read", async () => {
+    installWord(false);
+
+    await expect(readWordChangeTrackingMode()).resolves.toBe("TrackAll");
+  });
+
+  it("gives up on a Track Changes read Word never answers", async () => {
+    vi.useFakeTimers();
+    try {
+      installWord(false);
+      vi.mocked(globalThis.Word.run).mockReturnValueOnce(new Promise(() => {}));
+
+      const mode = readWordChangeTrackingMode();
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      await expect(mode).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

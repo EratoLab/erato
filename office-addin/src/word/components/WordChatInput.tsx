@@ -129,6 +129,8 @@ export function WordChatInput({
     reviewAvailable || composeAvailable || authoringAvailable;
 
   const [includeByDefault] = useWordIncludeDocumentByDefault();
+  // The setting applies to new chats; a chat keeps the default it started with.
+  const [chatDefault, setChatDefault] = useState(includeByDefault);
   const [inclusionOverride, setInclusionOverride] = useState<boolean | null>(
     null,
   );
@@ -141,6 +143,7 @@ export function WordChatInput({
     const isNewChatGettingItsId =
       lastChatIdRef.current == null && chatId != null;
     lastChatIdRef.current = chatId;
+    setChatDefault(includeByDefault);
     if (!isNewChatGettingItsId) {
       setInclusionOverride(null);
       // The send waiting in the chat being left is dropped now, so it cannot hold up this one.
@@ -151,10 +154,12 @@ export function WordChatInput({
   const lastIdentityRef = useRef(documentIdentity);
   if (documentIdentity !== lastIdentityRef.current) {
     lastIdentityRef.current = documentIdentity;
+    setChatDefault(includeByDefault);
     setInclusionOverride(null);
   }
 
-  const isDocumentIncluded = inclusionOverride ?? includeByDefault;
+  const isDocumentIncluded =
+    inclusionOverride ?? (chatId === null ? includeByDefault : chatDefault);
   const chipEnabled = isDocumentIncluded && chipAvailable;
 
   const availableFacetArgs = useAvailableActionFacetArgs();
@@ -316,6 +321,10 @@ export function WordChatInput({
           authoringAvailable && inputFileIds?.length
             ? captureWordImageAssets(inputFileIds).catch(() => null)
             : null;
+        // Cancelled as soon as the capture shows authoring cannot use it.
+        const estimate = new AbortController();
+        const stopEstimate = () => estimate.abort();
+        signal.addEventListener("abort", stopEstimate, { once: true });
         const scopedBudget = authoringAvailable
           ? checkWordAuthoringBudget(null, {
               message,
@@ -323,118 +332,123 @@ export function WordChatInput({
               assistantId: chatInputProps.assistantId,
               modelId: resolvedModelId,
               fileIds: inputFileIds,
-              signal,
+              signal: estimate.signal,
             })
           : null;
-        const outcome = await waitForCapture(
-          capture(),
-          signal,
-          () => setSlowCapture(true),
-          (settle) => {
-            settleCaptureRef.current = settle;
-          },
-        );
-        markWordSend("capture-end");
-        setSlowCapture(false);
-        settleCaptureRef.current = null;
-        if (outcome.kind === "aborted" || signal.aborted) return null;
-        if (contextChanged()) return null;
-        let build: WordDocumentBuild | null;
-        if (outcome.kind === "skipped") return withoutDocument();
-        if (outcome.kind === "timeout") {
-          build = previousCapture();
-          setCaptureNotice(build ? "previous-capture" : "not-included");
-          if (!build) return withoutDocument();
-        } else build = outcome.build;
-        const captured = images && (await images);
-        if (build?.authoring && !build.authoring.issue && captured) {
-          build.authoring.assets = captured.assets;
-          build.authoring.imageAssetIssues = captured.unavailable;
-        }
-        if (signal.aborted) return null;
-        if (build?.authoring && !build.authoring.issue && scopedBudget) {
-          const budget = await scopedBudget;
-          if (!budget.ok) {
-            build.authoring.issue = budget.issue;
-            build.authoring.issueDetails = budget.details;
-          }
-          markWordSend("budget-end");
-        }
-        if (signal.aborted || contextChanged()) return null;
-        if (!readEnabledRef.current) {
-          clearReadSession();
-          return withoutDocument();
-        }
-        const capturedIssue = build?.authoring?.issue;
-        const capturedDetails = build?.authoring?.issueDetails;
-        if (build) build = withWordReviewFallback(build, availableFacetIds);
-        // Finalize paging limits before exposing whole-document availability.
-        const authoringSnapshot = build?.authoring;
-        wordDocumentReadSession.activate(
-          authoringSnapshot,
-          undefined,
-          authoringSnapshot
-            ? async () => {
-                const budget = await checkWordAuthoringBudget(
-                  authoringSnapshot,
-                  {
-                    message,
-                    chatId,
-                    assistantId: chatInputProps.assistantId,
-                    modelId: resolvedModelId,
-                    fileIds: inputFileIds,
-                    mode: "complete",
-                  },
-                );
-                return budget.ok ? undefined : budget.issue;
-              }
-            : undefined,
-        );
-        setAuthoringNotice({
-          authoringIssue: capturedIssue,
-          authoringDetails: capturedDetails,
-          readOnly: !!capturedIssue && !build?.authoring,
-        });
-        const actionFacet = resolveWordActionFacet({
-          chipEnabled: true,
-          documentName: resolveWordDocumentName(),
-          documentIdentity,
-          documentArgs: build?.args ?? null,
-          hasContent: build?.coverage.hasContent ?? false,
-          authoring: build?.authoring,
-          availableFacetIds,
-        });
-        if (actionFacet) markSent(build);
-        else clearReadSession();
-        stagePendingCapture(
-          actionFacet
-            ? {
-                identity: documentIdentity,
-                authoring: build?.authoring,
-                ordinalMap: build?.ordinalMap ?? new Map(),
-                paragraphsSent: build?.authoring
-                  ? 0
-                  : (build?.coverage.paragraphsSent ?? 0),
-                renderedOrdinals: build?.authoring
-                  ? new Set()
-                  : (build?.renderedOrdinals ?? new Set()),
-                partialOrdinal: build?.authoring
-                  ? null
-                  : (build?.partialOrdinal ?? null),
-              }
-            : null,
-        );
-        if (actionFacet && build?.authoring) {
-          stopRequestBindingRef.current = bindWordDocumentReadRequest(
-            wordDocumentReadSession,
-            build.authoring.token,
-            chatId,
+        try {
+          const outcome = await waitForCapture(
+            capture(),
+            signal,
+            () => setSlowCapture(true),
+            (settle) => {
+              settleCaptureRef.current = settle;
+            },
           );
+          markWordSend("capture-end");
+          setSlowCapture(false);
+          settleCaptureRef.current = null;
+          if (outcome.kind === "aborted" || signal.aborted) return null;
+          if (contextChanged()) return null;
+          let build: WordDocumentBuild | null;
+          if (outcome.kind === "skipped") return withoutDocument();
+          if (outcome.kind === "timeout") {
+            build = previousCapture();
+            setCaptureNotice(build ? "previous-capture" : "not-included");
+            if (!build) return withoutDocument();
+          } else build = outcome.build;
+          const captured = images && (await images);
+          if (build?.authoring && !build.authoring.issue && captured) {
+            build.authoring.assets = captured.assets;
+            build.authoring.imageAssetIssues = captured.unavailable;
+          }
+          if (signal.aborted) return null;
+          if (build?.authoring && !build.authoring.issue && scopedBudget) {
+            const budget = await scopedBudget;
+            if (!budget.ok) {
+              build.authoring.issue = budget.issue;
+              build.authoring.issueDetails = budget.details;
+            }
+            markWordSend("budget-end");
+          }
+          if (signal.aborted || contextChanged()) return null;
+          if (!readEnabledRef.current) {
+            clearReadSession();
+            return withoutDocument();
+          }
+          const capturedIssue = build?.authoring?.issue;
+          const capturedDetails = build?.authoring?.issueDetails;
+          if (build) build = withWordReviewFallback(build, availableFacetIds);
+          // Finalize paging limits before exposing whole-document availability.
+          const authoringSnapshot = build?.authoring;
+          wordDocumentReadSession.activate(
+            authoringSnapshot,
+            undefined,
+            authoringSnapshot
+              ? async () => {
+                  const budget = await checkWordAuthoringBudget(
+                    authoringSnapshot,
+                    {
+                      message,
+                      chatId,
+                      assistantId: chatInputProps.assistantId,
+                      modelId: resolvedModelId,
+                      fileIds: inputFileIds,
+                      mode: "complete",
+                    },
+                  );
+                  return budget.ok ? undefined : budget.issue;
+                }
+              : undefined,
+          );
+          setAuthoringNotice({
+            authoringIssue: capturedIssue,
+            authoringDetails: capturedDetails,
+            readOnly: !!capturedIssue && !build?.authoring,
+          });
+          const actionFacet = resolveWordActionFacet({
+            chipEnabled: true,
+            documentName: resolveWordDocumentName(),
+            documentIdentity,
+            documentArgs: build?.args ?? null,
+            hasContent: build?.coverage.hasContent ?? false,
+            authoring: build?.authoring,
+            availableFacetIds,
+          });
+          if (actionFacet) markSent(build);
+          else clearReadSession();
+          stagePendingCapture(
+            actionFacet
+              ? {
+                  identity: documentIdentity,
+                  authoring: build?.authoring,
+                  ordinalMap: build?.ordinalMap ?? new Map(),
+                  paragraphsSent: build?.authoring
+                    ? 0
+                    : (build?.coverage.paragraphsSent ?? 0),
+                  renderedOrdinals: build?.authoring
+                    ? new Set()
+                    : (build?.renderedOrdinals ?? new Set()),
+                  partialOrdinal: build?.authoring
+                    ? null
+                    : (build?.partialOrdinal ?? null),
+                }
+              : null,
+          );
+          if (actionFacet && build?.authoring) {
+            stopRequestBindingRef.current = bindWordDocumentReadRequest(
+              wordDocumentReadSession,
+              build.authoring.token,
+              chatId,
+            );
+          }
+          return {
+            actionFacet,
+            hostContextIdentity: actionFacet ? documentIdentity : null,
+          };
+        } finally {
+          signal.removeEventListener("abort", stopEstimate);
+          stopEstimate();
         }
-        return {
-          actionFacet,
-          hostContextIdentity: actionFacet ? documentIdentity : null,
-        };
       };
 
       // The selection captured now wins over what the chip showed (D-9).
@@ -674,7 +688,7 @@ export function WordChatInput({
             notice.authoringIssue &&
             (authoringNotice?.readOnly ? (
               <Alert type="warning">
-                {readOnlyText(notice.authoringIssue)}
+                {readOnlyText(notice.authoringIssue, notice.authoringDetails)}
               </Alert>
             ) : (
               <Alert type="warning">
@@ -706,18 +720,24 @@ function selectionMetaLabel(paragraphCount: number): string {
   });
 }
 
-function readOnlyText(issue: string): string {
-  return issue === "too-large"
-    ? t({
-        id: "officeAddin.word.authoring.readOnlyTooLarge",
-        message:
-          "This document is too large for Erato to edit. Erato can still read its text.",
-      })
-    : t({
-        id: "officeAddin.word.authoring.readOnlyUnavailable",
-        message:
-          "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
-      });
+function readOnlyText(issue: string, details: string[] = []): string {
+  if (issue === "too-large")
+    return t({
+      id: "officeAddin.word.authoring.readOnlyTooLarge",
+      message:
+        "This document is too large for Erato to edit. Erato can still read its text.",
+    });
+  if (details.includes("package-unsupported"))
+    return t({
+      id: "officeAddin.word.authoring.readOnlyUnsupported",
+      message:
+        "Erato cannot edit this document's file structure, so it can only read its text.",
+    });
+  return t({
+    id: "officeAddin.word.authoring.readOnlyUnavailable",
+    message:
+      "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
+  });
 }
 
 function chipLabel(preview: WordDocumentPreview, documentName: string): string {

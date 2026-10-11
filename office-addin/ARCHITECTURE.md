@@ -164,8 +164,10 @@ Unsaved documents always start a new chat, and a chat whose history GET returns
 The open document is included by default (`default_settings.word_include_document`,
 overridable per user and dismissible per chat); a selection the user made is
 sent instead. The pane captures ahead of the send and reuses that capture until
-Word reports a change (paragraph events, selection changes, our own writes); a
-send never waits on it longer than the capture deadline. Each send gets its own
+Word reports a change (paragraph events, our own card operations, a Track Changes
+check on returning to the pane, or any return where paragraph events are
+unavailable); a failed read is retried at the next send, and a send never waits
+on it longer than the capture deadline. Each send gets its own
 copy with a fresh snapshot token. The host validates submitted structured plans
 before offering consent; accepted plans still pass live-state checks before writing.
 The compiler owns native XML, while the model receives typed document data.

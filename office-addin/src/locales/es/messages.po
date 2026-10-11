@@ -2706,6 +2706,11 @@ msgid "officeAddin.word.authoring.readOnlyUnavailable"
 msgstr "Word no entregó el documento completo, así que Erato puede leer su texto pero no editarlo. Vuelva a enviar para intentarlo de nuevo."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyUnsupported"
+msgstr "Erato no puede editar la estructura de archivo de este documento, así que solo puede leer su texto."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.rejectTracked"
 msgstr "Rechazar estos cambios con seguimiento"

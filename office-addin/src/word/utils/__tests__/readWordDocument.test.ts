@@ -6,12 +6,14 @@ import {
 } from "../../../test/mocks/word/document";
 import {
   readWordDocument,
+  WORD_PACKAGE_CAPTURE_TIMEOUT_MS,
   WORD_PARAGRAPH_READ_TIMEOUT_MS,
 } from "../readWordDocument";
 import {
   captureWordDocumentPackage,
   supportsWordDocumentPackage,
   WordDocumentCaptureTimeoutError,
+  WordDocumentTransferError,
 } from "../wordDocumentPackage";
 import { WordDocumentTooLargeError } from "../wordDocumentPackageCodec";
 import { wordInPlaceAvailability } from "../wordInPlaceSwitch";
@@ -128,7 +130,7 @@ describe("readWordDocument", () => {
   it("keeps the paragraphs and drops authoring when the full package cannot be captured", async () => {
     vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
     vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(
-      new Error("Word could not read a document slice."),
+      new WordDocumentTransferError("Word could not read a document slice."),
     );
 
     const result = await readWordDocument(true);
@@ -139,7 +141,7 @@ describe("readWordDocument", () => {
       issue: "unavailable",
       detail: "package-failed",
       error:
-        "full-document capture: Error: Word could not read a document slice.",
+        "full-document capture: WordDocumentTransferError: Word could not read a document slice.",
     });
   });
 
@@ -150,6 +152,11 @@ describe("readWordDocument", () => {
       "package-too-large",
     ],
     [new WordDocumentCaptureTimeoutError(), "unavailable", "package-timeout"],
+    [
+      new Error("The proposed XML is incomplete or malformed."),
+      "unavailable",
+      "package-unsupported",
+    ],
   ] as const)(
     "classifies a package failure: %s",
     async (error, issue, detail) => {
@@ -164,6 +171,27 @@ describe("readWordDocument", () => {
       });
     },
   );
+
+  it("keeps the paragraphs when the full transfer outlasts its deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+      vi.mocked(captureWordDocumentPackage).mockReturnValueOnce(
+        new Promise(() => {}),
+      );
+      const read = readWordDocument(true);
+      await vi.advanceTimersByTimeAsync(WORD_PACKAGE_CAPTURE_TIMEOUT_MS);
+
+      const result = await read;
+      expect(result.ok && result.paragraphs).toHaveLength(3);
+      expect(result.ok && result.authoringUnavailable).toMatchObject({
+        issue: "unavailable",
+        detail: "package-timeout",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("stops waiting for a paragraph read that never settles", async () => {
     vi.useFakeTimers();

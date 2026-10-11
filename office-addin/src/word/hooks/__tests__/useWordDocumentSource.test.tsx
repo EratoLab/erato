@@ -16,6 +16,10 @@ import {
 import type { WordDocumentReadResult } from "../../utils/readWordDocument";
 
 const changes = vi.hoisted(() => new Set<() => void>());
+const signal = vi.hoisted(() => ({
+  eventsActive: false,
+  trackingMode: vi.fn<() => Promise<string | null>>(),
+}));
 
 vi.mock("../../utils/readWordDocument", () => ({
   readWordDocument: vi.fn(),
@@ -26,6 +30,8 @@ vi.mock("../../utils/wordDocumentChangeSignal", () => ({
     changes.add(listener);
     return () => changes.delete(listener);
   },
+  wordParagraphEventsActive: () => signal.eventsActive,
+  readWordChangeTrackingMode: () => signal.trackingMode(),
 }));
 
 const read = vi.mocked(readWordDocument);
@@ -73,6 +79,8 @@ describe("useWordDocumentSource", () => {
   beforeEach(() => {
     read.mockReset();
     changes.clear();
+    signal.eventsActive = false;
+    signal.trackingMode.mockReset().mockResolvedValue("Off");
   });
 
   afterEach(() => {
@@ -302,6 +310,7 @@ describe("useWordDocumentSource", () => {
   it.each([
     ["retries", "package-timeout", "unavailable", 2],
     ["does not retry", "package-too-large", "too-large", 1],
+    ["does not retry", "package-unsupported", "unavailable", 1],
   ] as const)(
     "%s a document whose full package failed with %s",
     async (_, detail, issue, reads) => {
@@ -340,17 +349,114 @@ describe("useWordDocumentSource", () => {
     );
   });
 
-  it("treats a return from the document to the pane as a possible change", async () => {
+  const leavePane = () =>
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+    });
+
+  const readsAuthoring = (tracking: string) =>
+    read.mockResolvedValue({
+      ok: true,
+      paragraphs: paragraphs(["Alpha"]),
+      authoring: { ooxml: packageXml(paragraph("Alpha")), tracking },
+    });
+
+  it("without paragraph events, treats a return to the pane as a change", async () => {
     readsText(["Alpha"]);
     const { result } = renderSource();
     await waitFor(() => expect(result.current.preview.status).toBe("included"));
 
-    act(() => {
-      window.dispatchEvent(new Event("blur"));
-    });
+    leavePane();
     focusPane();
 
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+  });
+
+  it("with paragraph events, does not read again on a return when Track Changes is unchanged", async () => {
+    signal.eventsActive = true;
+    readsAuthoring("Off");
+    const { result } = renderSource({ authoringEnabled: true });
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    leavePane();
+    focusPane();
+    await act(async () => {
+      await result.current.capture();
+    });
+
+    expect(signal.trackingMode).toHaveBeenCalledOnce();
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads again on a return after Track Changes was toggled", async () => {
+    signal.eventsActive = true;
+    readsAuthoring("Off");
+    const { result } = renderSource({ authoringEnabled: true });
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+    signal.trackingMode.mockResolvedValue("TrackAll");
+
+    leavePane();
+    focusPane();
+
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+  });
+
+  it("retries a failed full transfer at the next send, not on every focus", async () => {
+    read.mockResolvedValue({
+      ok: true,
+      paragraphs: paragraphs(["Alpha"]),
+      authoringUnavailable: {
+        issue: "unavailable",
+        detail: "package-timeout",
+        error: "capture failed",
+      },
+    });
+    const { result } = renderSource({ authoringEnabled: true });
+    await waitFor(() =>
+      expect(result.current.preview.authoringIssue).toBe("unavailable"),
+    );
+
+    focusPane();
+    focusPane();
+    expect(read).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.capture();
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let an older capture that settles late replace a newer one", async () => {
+    const older = deferred<WordDocumentReadResult>();
+    const newer = deferred<WordDocumentReadResult>();
+    read.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+    const { result, rerender } = renderSource();
+    rerender({
+      enabled: true,
+      documentIdentity: "doc-1",
+      authoringEnabled: true,
+    });
+    const send = result.current.capture();
+    expect(read).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      newer.resolve({
+        ok: true,
+        paragraphs: paragraphs(["Newer"]),
+        authoring: { ooxml: packageXml(paragraph("Newer")), tracking: "Off" },
+      });
+      await send;
+    });
+    await act(async () => {
+      older.resolve({ ok: true, paragraphs: paragraphs(["Older"]) });
+      await older.promise;
+    });
+    readsText(["Third"]);
+
+    const build = await result.current.capture();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(build?.args.document_text).toContain("Newer");
+    expect(build?.authoring).toBeDefined();
   });
 
   it("keeps the last good capture for the deadline when a later read fails", async () => {
@@ -378,7 +484,10 @@ describe("useWordDocumentSource", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(WORD_CAPTURE_CEILING_MS);
     });
-    expect(result.current.preview.status).toBe("unreadable");
+    expect(result.current.preview).toMatchObject({
+      status: "unreadable",
+      readError: `capture: Error: capture timed out after ${WORD_CAPTURE_CEILING_MS} ms`,
+    });
     readsText(["Alpha"]);
     let build: Awaited<ReturnType<typeof result.current.capture>> = null;
     await act(async () => {

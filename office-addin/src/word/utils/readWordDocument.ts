@@ -1,11 +1,13 @@
 import { wordErrorText } from "./wordApplyDiagnostics";
 import {
   WordDocumentCaptureTimeoutError,
+  WordDocumentTransferError,
   captureWordDocumentPackage,
   supportsWordDocumentPackage,
 } from "./wordDocumentPackage";
 import { WordDocumentTooLargeError } from "./wordDocumentPackageCodec";
 import { noteWordParagraphIds, wordParagraphId } from "./wordParagraphIds";
+import { withWordTimeout } from "./wordTimeout";
 
 import type { WordParagraphRead } from "./buildWordDocumentArgs";
 
@@ -27,11 +29,18 @@ export type WordDocumentReadResult =
 
 export interface WordAuthoringUnavailable {
   issue: "too-large" | "unavailable";
-  detail: "package-too-large" | "package-timeout" | "package-failed";
+  /** Timeouts and failed transfers can succeed later; an unsupported file never will. */
+  detail:
+    | "package-too-large"
+    | "package-timeout"
+    | "package-failed"
+    | "package-unsupported";
   error: string;
 }
 
 export const WORD_PARAGRAPH_READ_TIMEOUT_MS = 30_000;
+/** Bounds the whole transfer however many slices Word returns, so a slow file keeps its text. */
+export const WORD_PACKAGE_CAPTURE_TIMEOUT_MS = 45_000;
 
 interface WordGlobal {
   run: <T>(
@@ -58,7 +67,7 @@ export async function readWordDocument(
   const packaged = includeAuthoring && supportsWordDocumentPackage();
   let step = "paragraph read";
   try {
-    const result = await withTimeout(
+    const result = await withWordTimeout(
       word.run(async (context) => {
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load(
@@ -98,13 +107,18 @@ export async function readWordDocument(
         };
       }),
       WORD_PARAGRAPH_READ_TIMEOUT_MS,
+      () => new Error(`timed out after ${WORD_PARAGRAPH_READ_TIMEOUT_MS} ms`),
     );
     if (packaged && result.authoring) {
       step = "full-document capture";
       // A failed full capture must not degrade into a partial rewrite or clear, so authoring is
       // dropped and only the paragraph text remains.
       try {
-        const full = await captureWordDocumentPackage();
+        const full = await withWordTimeout(
+          captureWordDocumentPackage(),
+          WORD_PACKAGE_CAPTURE_TIMEOUT_MS,
+          () => new WordDocumentCaptureTimeoutError(),
+        );
         return {
           ...result,
           authoring: {
@@ -137,25 +151,7 @@ function authoringUnavailable(
     return { issue: "too-large", detail: "package-too-large", error: text };
   if (error instanceof WordDocumentCaptureTimeoutError)
     return { issue: "unavailable", detail: "package-timeout", error: text };
-  return { issue: "unavailable", detail: "package-failed", error: text };
-}
-
-/** Word.run cannot be cancelled; the timeout only stops the capture from waiting on it. */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`timed out after ${ms} ms`)),
-      ms,
-    );
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
+  if (error instanceof WordDocumentTransferError)
+    return { issue: "unavailable", detail: "package-failed", error: text };
+  return { issue: "unavailable", detail: "package-unsupported", error: text };
 }

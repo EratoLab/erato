@@ -249,7 +249,11 @@ describe("WordChatInput prepared send", () => {
     expect(host.images).toHaveBeenCalledWith(["image-1"]);
     expect(host.budget).toHaveBeenCalledWith(
       null,
-      expect.objectContaining({ message: "hi", chatId: "chat-1", signal }),
+      expect.objectContaining({
+        message: "hi",
+        chatId: "chat-1",
+        signal: expect.any(AbortSignal),
+      }),
     );
 
     const build = authoringBuild();
@@ -507,6 +511,7 @@ describe("WordChatInput prepared send", () => {
 
     expect(await settle(result)).toEqual(WITHOUT_DOCUMENT);
     expect(host.markSent).not.toHaveBeenCalled();
+    expect(host.budget.mock.calls[0][1].signal.aborted).toBe(true);
   });
 
   it("drops a send still waiting in the chat being left, so the next chat can send", async () => {
@@ -527,6 +532,31 @@ describe("WordChatInput prepared send", () => {
     send();
     expect(handedOver).toHaveLength(2);
   });
+
+  it.each([
+    ["has no authoring", () => ({ ...authoringBuild(), authoring: undefined })],
+    [
+      "has an editing issue",
+      () => {
+        const build = authoringBuild();
+        build.authoring!.issue = "tracking";
+        return build;
+      },
+    ],
+  ])(
+    "neither waits for nor keeps the token estimate when the capture %s",
+    async (_, build) => {
+      host.budget.mockReturnValue(new Promise(() => {}));
+      host.capture.mockResolvedValue(build());
+      renderInput();
+      send();
+
+      const prepared = await settle(startPreparation());
+
+      expect(prepared).not.toBeNull();
+      expect(host.budget.mock.calls[0][1].signal.aborted).toBe(true);
+    },
+  );
 
   it("records the capture a send carried for the changed-since-last-send label", async () => {
     const build = authoringBuild();

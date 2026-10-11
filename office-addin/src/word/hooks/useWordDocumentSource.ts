@@ -2,8 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { buildWordDocumentArgs } from "../utils/buildWordDocumentArgs";
 import { readWordDocument } from "../utils/readWordDocument";
-import { subscribeWordDocumentChanged } from "../utils/wordDocumentChangeSignal";
+import { wordErrorText } from "../utils/wordApplyDiagnostics";
+import {
+  readWordChangeTrackingMode,
+  subscribeWordDocumentChanged,
+  wordParagraphEventsActive,
+} from "../utils/wordDocumentChangeSignal";
 import { captureWordAuthoringSnapshot } from "../utils/wordDocumentXml";
+import { withWordTimeout } from "../utils/wordTimeout";
 
 import type {
   WordDocumentBuild,
@@ -51,7 +57,9 @@ interface CachedCapture {
   authoring: boolean;
   generation: number;
   durationMs: number;
-  /** A failed read or package transfer is retried; a document too large to edit is not. */
+  startedAt: number;
+  /** A failed read or package transfer is retried at the next send; a file that can never be
+   * edited is not. */
   retry: boolean;
 }
 
@@ -115,25 +123,6 @@ function assignParagraphOrdinals(
     if (matches?.length === 1 && blocksByText.get(block.text) === 1)
       block.paragraphOrdinal = matches[0];
   }
-}
-
-function withCaptureCeiling<T>(promise: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("capture timed out")),
-      WORD_CAPTURE_CEILING_MS,
-    );
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }
 
 async function captureDocument(
@@ -208,10 +197,14 @@ export function useWordDocumentSource({
           previous.reading ? previous : { ...previous, reading: true },
         );
     }, WORD_CAPTURE_SLOW_MS);
-    const promise = withCaptureCeiling(captureDocument(identity, authoring))
+    const promise = withWordTimeout(
+      captureDocument(identity, authoring),
+      WORD_CAPTURE_CEILING_MS,
+      () => new Error(`capture timed out after ${WORD_CAPTURE_CEILING_MS} ms`),
+    )
       .catch((error: unknown) => ({
         build: null,
-        error: error instanceof Error ? error.name : "capture failed",
+        error: `capture: ${wordErrorText(error)}`,
       }))
       .then(({ build, error }) => {
         clearTimeout(slowTimer);
@@ -220,6 +213,7 @@ export function useWordDocumentSource({
           authoring,
           generation,
           durationMs: globalThis.performance.now() - startedAt,
+          startedAt,
           retry:
             !build ||
             !!build.authoring?.issueDetails?.some((detail) =>
@@ -228,7 +222,12 @@ export function useWordDocumentSource({
         };
         if (flightRef.current?.startedAt === startedAt)
           flightRef.current = null;
-        if (identityRef.current !== identity) return entry;
+        // A capture started earlier, e.g. before the facets changed, must not replace a newer one.
+        if (
+          identityRef.current !== identity ||
+          (cacheRef.current && cacheRef.current.startedAt > startedAt)
+        )
+          return entry;
         cacheRef.current = entry;
         if (build) lastGoodRef.current = build;
         if (!build) {
@@ -260,7 +259,16 @@ export function useWordDocumentSource({
   }, []);
 
   const prefetch = useCallback(() => {
-    if (!isClean(cacheRef.current) && !flightRef.current) void startCapture();
+    const entry = cacheRef.current;
+    if (isClean(entry) || flightRef.current) return;
+    // A failure the document did not cause is retried at the next send, not on every focus.
+    if (
+      entry?.retry &&
+      entry.generation === generationRef.current &&
+      entry.authoring === authoringRef.current
+    )
+      return;
+    void startCapture();
   }, [isClean, startCapture]);
 
   useEffect(() => {
@@ -281,18 +289,35 @@ export function useWordDocumentSource({
     [],
   );
 
-  // Ribbon formatting, Track Changes and typing on hosts without paragraph events fire nothing,
-  // so returning from the document to the pane counts as a possible change.
+  // A Track Changes toggle fires no event, and without paragraph events neither does typing.
+  // Formatting-only edits still go unnoticed; apply refuses the stale plan and marks a change.
   useEffect(() => {
     const leave = () => {
       leftPaneRef.current = true;
     };
-    const back = () => {
-      if (leftPaneRef.current) {
-        leftPaneRef.current = false;
-        generationRef.current += 1;
-      }
+    const refresh = () => {
       if (enabledRef.current) prefetch();
+    };
+    const back = () => {
+      if (!leftPaneRef.current) {
+        refresh();
+        return;
+      }
+      leftPaneRef.current = false;
+      if (!wordParagraphEventsActive()) {
+        generationRef.current += 1;
+        refresh();
+        return;
+      }
+      const captured = cacheRef.current?.build?.authoring?.trackingMode;
+      if (captured === undefined) {
+        refresh();
+        return;
+      }
+      void readWordChangeTrackingMode().then((mode) => {
+        if (mode !== captured) generationRef.current += 1;
+        refresh();
+      });
     };
     globalThis.addEventListener("blur", leave);
     globalThis.addEventListener("focus", back);

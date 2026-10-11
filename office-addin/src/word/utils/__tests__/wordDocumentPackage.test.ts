@@ -242,6 +242,16 @@ describe("native complete-document capture", () => {
     },
   );
 
+  it("reports a DOCX with more parts than the pane handles as too large", () => {
+    const bytes = wordDocumentOoxmlToFile(fixture());
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let end = bytes.length - 22;
+    while (end > 0 && view.getUint32(end, true) !== 0x06054b50) end -= 1;
+    view.setUint16(end + 10, 2049, true);
+
+    expect(() => readWordPackage(bytes)).toThrow(WordDocumentTooLargeError);
+  });
+
   it("reports an oversized document as too large", async () => {
     officeFile(wordDocumentOoxmlToFile(fixture()), "oversize");
     await expect(readWordDocumentFile()).rejects.toBeInstanceOf(
