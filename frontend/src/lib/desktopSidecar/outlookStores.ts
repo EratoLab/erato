@@ -21,6 +21,23 @@ export function outlookStoreVariant(
   return null;
 }
 
+/** An Outlook setting that limits how much mail a store keeps on the device. */
+export type OutlookMailWindow =
+  | "classicOutlookForWindows"
+  | "newOutlookForWindows"
+  | "newOutlookForMac";
+
+export function outlookMailWindow(
+  kindOrSource: string | undefined,
+): OutlookMailWindow | null {
+  const variant = outlookStoreVariant(kindOrSource);
+  if (variant !== "classic") return variant;
+  // A PST is a complete file, and legacy Outlook for Mac syncs all mail.
+  return kindOrSource?.trim().toLowerCase() === "ost"
+    ? "classicOutlookForWindows"
+    : null;
+}
+
 const STORE_NAMES: Record<OutlookStoreVariant, string> = {
   newOutlookForMac: "new Outlook for Mac",
   newOutlookForWindows: "new Outlook for Windows",

@@ -5965,6 +5965,21 @@ msgstr "Outlook auf diesem Gerät meldet:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.classicOutlookForWindows"
+msgstr "Um ältere E-Mails zu indexieren, behalten Sie mehr davon auf diesem Gerät: Gehen Sie in Outlook zu Datei > Kontoeinstellungen > Kontoeinstellungen, wählen Sie dieses Konto aus, klicken Sie auf „Ändern“, stellen Sie den Schieberegler unter „Offlineeinstellungen“ auf „Alle“ und starten Sie Outlook neu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForMac"
+msgstr "Um ältere E-Mails zu indexieren, behalten Sie mehr davon auf diesem Gerät: Öffnen Sie in den Outlook-Einstellungen „Synchronisieren“ und stellen Sie „Tage der zu synchronisierenden E-Mail“ auf den höchsten Wert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForWindows"
+msgstr "Um ältere E-Mails zu indexieren, behalten Sie mehr davon auf diesem Gerät: Gehen Sie in Outlook zu Einstellungen > Allgemein > Offline und wählen Sie bei den Tagen an E-Mails, die gespeichert werden, den höchsten Wert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.missingFromLocalCache"
 #~ msgstr "{missingCount, plural, one {# Dokument ist im lokalen Cache nicht verfügbar.} other {# Dokumente sind im lokalen Cache nicht verfügbar.}}"
 

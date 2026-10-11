@@ -5965,6 +5965,21 @@ msgstr "Outlook sur cet appareil a signalé :"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.classicOutlookForWindows"
+msgstr "Pour indexer des e-mails plus anciens, conservez-en davantage sur cet appareil : dans Outlook, accédez à Fichier > Paramètres du compte > Paramètres du compte, sélectionnez ce compte, choisissez Modifier, placez le curseur sous « Paramètres hors connexion » sur Tous, puis redémarrez Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForMac"
+msgstr "Pour indexer des e-mails plus anciens, conservez-en davantage sur cet appareil : dans les réglages d’Outlook, ouvrez Synchronisation et réglez « Jours de synchronisation du courrier » sur la valeur la plus élevée."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.mailWindow.newOutlookForWindows"
+msgstr "Pour indexer des e-mails plus anciens, conservez-en davantage sur cet appareil : dans Outlook, accédez à Paramètres > Général > Hors connexion et réglez « Jours d’e-mail à enregistrer » sur la valeur la plus élevée."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.missingFromLocalCache"
 #~ msgstr "{missingCount, plural, one {# document est indisponible dans le cache local.} other {# documents sont indisponibles dans le cache local.}}"
 

@@ -10,6 +10,7 @@ import { ArrowUpIcon, ChatBubbleIcon, ComputerIcon, MailIcon } from "../icons";
 
 import type { IndexingSummary } from "@/lib/desktopSidecar/indexingConfiguration";
 import type { IndexingEntry } from "@/lib/desktopSidecar/indexingSources";
+import type { OutlookMailWindow } from "@/lib/desktopSidecar/outlookStores";
 
 export function IndexingSourceRow({
   entry,
@@ -160,6 +161,23 @@ export function IndexingSourceRow({
     unavailable: t({
       id: "sidecar.indexing.status.unavailable",
       message: "Status unavailable",
+    }),
+  };
+  const mailWindowHint: Record<OutlookMailWindow, string> = {
+    classicOutlookForWindows: t({
+      id: "sidecar.indexing.mailWindow.classicOutlookForWindows",
+      message:
+        "To index older mail, keep more of it on this device: in Outlook, go to File > Account Settings > Account Settings, select this account, choose Change, set “Download email for the past” to All and restart Outlook.",
+    }),
+    newOutlookForWindows: t({
+      id: "sidecar.indexing.mailWindow.newOutlookForWindows",
+      message:
+        "To index older mail, keep more of it on this device: in Outlook, go to Settings > General > Offline and set “Days of email to save” to the highest value.",
+    }),
+    newOutlookForMac: t({
+      id: "sidecar.indexing.mailWindow.newOutlookForMac",
+      message:
+        "To index older mail, keep more of it on this device: in Outlook, go to Settings > Sync and set “Days of mail to sync” to the highest value.",
     }),
   };
   /* eslint-disable lingui/no-unlocalized-strings -- Internal indexing status keys. */
@@ -344,6 +362,7 @@ export function IndexingSourceRow({
                     })}
             </p>
           )}
+          {entry.mailWindow && <p>{mailWindowHint[entry.mailWindow]}</p>}
           {entry.editable && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <span>

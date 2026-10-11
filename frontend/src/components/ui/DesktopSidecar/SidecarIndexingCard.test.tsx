@@ -435,6 +435,24 @@ describe("mailbox status rendering", () => {
     expect(warnings).toHaveTextContent(warning.message);
   });
 
+  it.each([
+    ["ost", /File > Account Settings .*“Download email for the past” to All/],
+    [
+      "windowsNewOutlook",
+      /Settings > General > Offline .*“Days of email to save”/,
+    ],
+    ["macOsHxAccount", /Settings > Sync and set “Days of mail to sync”/],
+  ])("tells %s users where Outlook keeps older mail", (source, setting) => {
+    currentData.mailboxes[0].source = source;
+    const row = renderStatus();
+    expect(row.getByText(/^To index older mail/)).toHaveTextContent(setting);
+  });
+
+  it("does not suggest keeping more mail for a complete PST", () => {
+    const row = renderStatus();
+    expect(row.queryByText(/^To index older mail/)).not.toBeInTheDocument();
+  });
+
   it("explains cache-only inventories without Teams wording outside Teams", () => {
     const row = renderStatus(withRange({ inventory: "futureInventory" }));
     expect(
