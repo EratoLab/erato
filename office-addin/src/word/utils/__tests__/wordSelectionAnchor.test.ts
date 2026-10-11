@@ -278,6 +278,8 @@ describe("classifyWordSelection: D-10", () => {
     ],
     ["a colour on part of it", { mixedFormatting: true }, "mixed_formatting"],
     ["a page break or symbol", { breakOrSymbol: true }, "special_character"],
+    ["a bookmark", { bookmark: true }, "bookmark"],
+    ["superscript on part of it", { mixedScript: true }, "mixed_script"],
   ] as const)(
     "sends a span containing %s as context only",
     (_, hazards, reason) => {
@@ -305,6 +307,27 @@ describe("classifyWordSelection: D-10", () => {
         ),
       ),
     ).toBe(reason);
+  });
+
+  it("names a bookmark before the items a rewrite could keep, and superscript before other formatting", () => {
+    expect(
+      reasonOf({
+        ...INLINE,
+        hazards: { hyperlink: true, field: true, bookmark: true },
+      }),
+    ).toBe("bookmark");
+    expect(
+      reasonOf({
+        ...INLINE,
+        hazards: { bookmark: true, trackedChange: true },
+      }),
+    ).toBe("tracked_changes");
+    expect(
+      reasonOf({
+        ...INLINE,
+        hazards: { mixedScript: true, mixedFormatting: true },
+      }),
+    ).toBe("mixed_script");
   });
 
   it("keeps a span whose runs do not spell its paragraph's text context only", () => {
@@ -425,12 +448,11 @@ describe("classifyWordSelection: D-10", () => {
     );
   });
 
-  it("sends a span that cannot be told apart without a hint as context only", () => {
+  it("sends a span that cannot be told apart without IDs as context only", () => {
     const texts = ["B", "B", "B", "T", "B", "B", "B", "T", "B", "B", "B"];
     const withoutIds = facts(body(texts, false), { first: 3 });
     expect(withoutIds.anchor?.window).toBeNull();
     expect(reasonOf(withoutIds)).toBe("not_unique");
-    expect(reasonOf({ ...withoutIds, trackedRange: true })).toBeNull();
     expect(reasonOf(facts(body(texts), { first: 3 }))).toBeNull();
   });
 
@@ -587,6 +609,21 @@ const snapshot = (
 };
 
 describe("buildWordSelectionSnapshot", () => {
+  it("carries the flattened-emphasis notice on a rewrite only", () => {
+    expect(snapshot({ ...PARAGRAPH, flattensEmphasis: true })).toMatchObject({
+      role: "rewrite",
+      flattensEmphasis: true,
+    });
+    expect(snapshot(PARAGRAPH)).not.toHaveProperty("flattensEmphasis");
+    expect(
+      snapshot({
+        ...PARAGRAPH,
+        flattensEmphasis: true,
+        hazards: { mixedFormatting: true },
+      }),
+    ).not.toHaveProperty("flattensEmphasis");
+  });
+
   it("records the span, its occurrence and the text around it", () => {
     expect(snapshot(INLINE)).toEqual({
       role: "rewrite",
@@ -960,58 +997,5 @@ describe("resolveWordSelection", () => {
         rangeTexts(story),
       ),
     ).toEqual({ refused: "TARGET_NOT_FOUND" });
-  });
-
-  describe("with a tracked Range hint", () => {
-    it("must agree with a surviving ID", () => {
-      const story = body(texts);
-      const selection = snapshot(facts(story, { first: 1 }));
-      expect(
-        resolveWordSelection(selection, story, rangeTexts(story), {
-          position: 1,
-        }),
-      ).toEqual({ positions: [1] });
-      expect(
-        resolveWordSelection(selection, story, rangeTexts(story), {
-          position: 2,
-        }),
-      ).toEqual({ refused: "HINT_CONFLICT" });
-    });
-
-    it("proposes repeated text without IDs, and the exact text decides", () => {
-      const story = body(
-        ["B", "B", "B", "T", "B", "B", "B", "T", "B", "B", "B"],
-        false,
-      );
-      const selection = snapshot(
-        facts(story, { first: 3 }, { trackedRange: true }),
-      );
-      expect(selection.role).toBe("rewrite");
-      const live = rangeTexts(story);
-      expect(resolveWordSelection(selection, story, live)).toEqual({
-        refused: "AMBIGUOUS_TARGET",
-      });
-      expect(
-        resolveWordSelection(selection, story, live, { position: 3 }),
-      ).toEqual({ positions: [3] });
-      expect(
-        resolveWordSelection(selection, story, live, { position: 2 }),
-      ).toEqual({ refused: "TARGET_TEXT_MISMATCH" });
-    });
-
-    it("refuses when the hint and a unique text match disagree without IDs", () => {
-      const story = body(["P", "T", "N", "Q", "T", "R"], false);
-      const selection = snapshot(facts(story, { first: 4 }));
-      expect(
-        resolveWordSelection(selection, story, rangeTexts(story), {
-          position: 1,
-        }),
-      ).toEqual({ refused: "AMBIGUOUS_TARGET" });
-      expect(
-        resolveWordSelection(selection, story, rangeTexts(story), {
-          position: 4,
-        }),
-      ).toEqual({ positions: [4] });
-    });
   });
 });
