@@ -2696,6 +2696,21 @@ msgid "officeAddin.word.authoring.readFailed"
 msgstr "Word nie mógł odczytać dokumentu na potrzeby tej operacji. Nie wprowadzono zmian."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTooLarge"
+msgstr "Ten dokument jest za duży, aby Erato mógł go edytować. Erato nadal może odczytać jego tekst."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyUnavailable"
+msgstr "Word nie przekazał całego dokumentu, więc Erato może odczytać jego tekst, ale nie może go edytować. Wyślij ponownie, aby spróbować jeszcze raz."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyUnsupported"
+msgstr "Erato nie może edytować struktury pliku tego dokumentu, więc może tylko odczytać jego tekst."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.rejectTracked"
 msgstr "Odrzuć te śledzone zmiany"
@@ -2913,6 +2928,11 @@ msgstr "Dokument dołączony — zmieniony od ostatniego wysłania"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.dismiss"
+msgstr "Nie dołączaj tego dokumentu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.include"
 msgstr "Dołącz ten dokument"
 
@@ -2920,6 +2940,11 @@ msgstr "Dołącz ten dokument"
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.included"
 msgstr "Dokument dołączony"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.includedNamed"
+msgstr "Dołączono: {documentName}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -2942,6 +2967,16 @@ msgstr "Nowy dokument"
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.notIncluded"
 msgstr "Dokument niedołączony"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.reading"
+msgstr "Odczytywanie dokumentu…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.selectionInstead"
+msgstr "Zamiast dokumentu wysyłane jest Twoje zaznaczenie"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts
@@ -4147,8 +4182,8 @@ msgstr "Propozycja nie oznacza już formatowania {dropped}. Jeśli te słowa nad
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.selection.insteadOfDocument"
-msgstr "Jeśli ten fragment można zastąpić, zostanie wysłany zamiast dokumentu."
+#~ msgid "officeAddin.word.selection.insteadOfDocument"
+#~ msgstr "Jeśli ten fragment można zastąpić, zostanie wysłany zamiast dokumentu."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4222,8 +4257,8 @@ msgstr "Word nie odpowiada. Jeśli to się utrzymuje, załaduj ponownie panel do
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.selection.notSentWithDocument"
-msgstr "Nie jest wysyłany, gdy dokument jest dołączony."
+#~ msgid "officeAddin.word.selection.notSentWithDocument"
+#~ msgstr "Nie jest wysyłany, gdy dokument jest dołączony."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4416,6 +4451,11 @@ msgid "officeAddin.word.selection.scope"
 msgstr "Zastąpienie zapisuje tylko w zaznaczonym przez ciebie fragmencie i tylko wtedy, gdy nie zmienił się od twojej prośby."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.sentInsteadOfDocument"
+msgstr "Wysyłane zamiast dokumentu."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.selection.showUnavailable"
 msgstr "Word nie zaznaczył fragmentu. Spróbuj ponownie za chwilę."
@@ -4507,13 +4547,38 @@ msgstr "Word mógł zastąpić fragment, ale nie udało się sprawdzić wyniku. 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.send.preparingDocument"
-msgstr ""
+msgid "officeAddin.word.send.notIncluded"
+msgstr "Odczytywanie dokumentu trwało zbyt długo, więc ta wiadomość została wysłana bez niego."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+#~ msgid "officeAddin.word.send.preparingDocument"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.previousCapture"
+msgstr "Odczytywanie dokumentu trwało zbyt długo, więc Erato użył wcześniejszej kopii. Może brakować ostatnich zmian."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.readingDocument"
+msgstr "Odczytywanie dokumentu…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.readingSelection"
 msgstr "Odczytywanie zaznaczenia…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.stillReading"
+msgstr "Word nadal przekazuje dokument."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.withoutDocument"
+msgstr "Wyślij bez dokumentu"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
@@ -4539,6 +4604,31 @@ msgstr "Zastępuj cały dokument podczas stosowania (tryb zgodności)"
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.compatibilityMode.helper"
 msgstr "Nowe wersje zastępują cały dokument zamiast edytować tylko zmienione fragmenty. Użyj tej opcji, jeśli edycja bezpośrednia powoduje problemy. W tym trybie nie można stosować nowych wersji przy włączonym śledzeniu zmian."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.description"
+msgstr "Wybierz, jak nowe czaty korzystają z otwartego dokumentu."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.heading"
+msgstr "Zachowanie w programie Word"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.includeDocument"
+msgstr "Dołączaj otwarty dokument do nowych czatów"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.includeDocument.helper"
+msgstr "Erato odczytuje dokument, gdy wysyłasz wiadomość. Możesz go usunąć z dowolnego czatu."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.tab"
+msgstr "Word"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

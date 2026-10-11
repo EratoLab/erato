@@ -1,7 +1,10 @@
 import { wordSelectionWithoutKeptItems } from "./wordSelectionAnchor";
 import { wordSelectionFacetArgs } from "./wordSelectionArgs";
 
-import type { WordDocumentArgs } from "./buildWordDocumentArgs";
+import type {
+  WordDocumentArgs,
+  WordDocumentBuild,
+} from "./buildWordDocumentArgs";
 import type { WordSelectionSnapshot } from "./wordSelectionAnchor";
 import type { ActionFacetRequest } from "@erato/frontend/library";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
@@ -21,17 +24,6 @@ export function wordSelectionFacetAvailable(
     (availableFacetArgs.get(WORD_SELECTION_FACET_ID)?.has("selected_text") ??
       false)
   );
-}
-
-/**
- * A selection the Replace action can write takes the facet slot ahead of the document (D-28). One
- * that can only be context does not displace an included document (decision 2).
- */
-export function wordSelectionTakesSlot(
-  selection: WordSelectionSnapshot,
-  documentIncluded: boolean,
-): boolean {
-  return selection.role === "rewrite" || !documentIncluded;
 }
 
 /**
@@ -69,6 +61,24 @@ export function resolveWordSelectionFacet(input: {
       input.availableFacetArgs.get(WORD_SELECTION_FACET_ID),
     ),
   };
+}
+
+const REVIEW_FALLBACK_ISSUES = new Set(["too-large", "unavailable"]);
+
+/** Authoring that cannot read the document gives the model nothing; review still sends its text. */
+export function withWordReviewFallback(
+  build: WordDocumentBuild,
+  availableFacetIds: ReadonlySet<string>,
+): WordDocumentBuild {
+  const issue = build.authoring?.issue;
+  if (
+    !issue ||
+    !REVIEW_FALLBACK_ISSUES.has(issue) ||
+    !build.coverage.hasContent ||
+    !availableFacetIds.has(WORD_DOCUMENT_REVIEW_FACET_ID)
+  )
+    return build;
+  return { ...build, authoring: undefined };
 }
 
 export interface WordActionFacetInput {

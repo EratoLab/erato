@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 
+import { markWordDocumentChanged } from "../utils/wordDocumentChangeSignal";
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 
 import type { WordSelectionBackup } from "../utils/wordReplaceSelection";
@@ -119,6 +120,7 @@ export function WordWriteProvider({
   const endOperation = useCallback(() => {
     operationRef.current = false;
     setOperationInProgress(false);
+    markWordDocumentChanged();
   }, []);
   const [heldOperationOwner, setHeldOperationOwner] = useState<string | null>(
     null,

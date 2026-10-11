@@ -61,8 +61,9 @@ implement the seams listed below, and never modify the core itself.
    isolated storage (`erato.addin.neutral.currentChat.v1`). Outlook supplies
    `OutlookAddinSessionController` (mail-item anchor + session policy); Teams
    supplies `createNeutralAddinSessionController` bound to
-   `erato.addin.teams.currentChat.v1`; Word uses
-   `erato.addin.word.currentChat.v1`. Each host keeps an independent selection.
+   `erato.addin.teams.currentChat.v1`; Word supplies
+   `WordAddinSessionController` (one chat per document, see the Word host).
+   Each host keeps an independent selection.
 3. **Auth** — a host auth provider mounts `SessionAuthProvider`
    (`src/core/SessionAuthProvider.tsx`) with an `AuthSource`; `AuthGate` reads
    only the `SessionAuthCore` fields. The NAA source
@@ -154,8 +155,20 @@ feature-specific overrides inline in `SharedAddinShell`.
 without a mailbox dependency. The manifest uses a distinct document add-in
 identity and inherits deployment branding from the mail configuration.
 
-Document inclusion is opt-in. Each send captures fresh state, bound to its
-chat/turn and the open document. The host validates submitted structured plans
+Each document gets its own chat: `WordAddinSessionController` keeps the open
+chat in pane state and remembers it per document in
+`erato.addin.word.documentChats.v1`, keyed by a SHA-256 of the normalized URL.
+Unsaved documents always start a new chat, and a chat whose history GET returns
+404 is forgotten.
+
+The open document is included by default (`default_settings.word_include_document`,
+overridable per user and dismissible per chat); a selection the user made is
+sent instead. The pane captures ahead of the send and reuses that capture until
+Word reports a change (paragraph events, our own card operations, a Track Changes
+check on returning to the pane, or any return where paragraph events are
+unavailable); a failed read is retried at the next send, and a send never waits
+on it longer than the capture deadline. Each send gets its own
+copy with a fresh snapshot token. The host validates submitted structured plans
 before offering consent; accepted plans still pass live-state checks before writing.
 The compiler owns native XML, while the model receives typed document data.
 Behavior instructions and action facets come from deployment configuration.

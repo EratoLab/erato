@@ -17,8 +17,23 @@ vi.mock("../../../core/AddinSettingsDialogCore", () => ({
     hostContribution?: AddinSettingsHostContribution;
   }) => {
     contribution = props.hostContribution;
-    return <div>{props.hostContribution?.serversToolsEntities}</div>;
+    return (
+      <div>
+        {props.hostContribution?.serversToolsEntities}
+        {props.hostContribution?.content}
+      </div>
+    );
   },
+}));
+
+let mockIncludeDocument = true;
+const mockSetIncludeDocument = vi.fn();
+
+vi.mock("../../wordPreferences", () => ({
+  useWordIncludeDocumentByDefault: () => [
+    mockIncludeDocument,
+    mockSetIncludeDocument,
+  ],
 }));
 
 const mockUseActionFacetClientActions = vi.fn();
@@ -55,6 +70,8 @@ describe("WordSettingsDialog", () => {
     i18n.load("en", {});
     i18n.activate("en");
     contribution = undefined;
+    mockIncludeDocument = true;
+    mockSetIncludeDocument.mockReset();
     mockUseActionFacetClientActions.mockReturnValue(
       new Map([
         [
@@ -85,12 +102,36 @@ describe("WordSettingsDialog", () => {
     localStorage.removeItem(WORD_COMPATIBILITY_MODE_KEY);
   });
 
-  it("contributes no host tab — only the shared pane entity", () => {
+  it("contributes a Word tab alongside the shared pane entity", () => {
     render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);
 
     expect(contribution?.serversToolsEntities).toBeTruthy();
-    expect(contribution?.content).toBeUndefined();
-    expect(contribution?.tabLabel).toBeUndefined();
+    expect(contribution?.content).toBeTruthy();
+    expect(contribution?.tabLabel).toBe("Word");
+  });
+
+  describe("include the open document", () => {
+    const toggle = () =>
+      screen.getByRole<HTMLInputElement>("checkbox", {
+        name: "Include the open document in new chats",
+      });
+
+    it.each([true, false])(
+      "shows the effective default (%s) and saves the user's choice",
+      (current) => {
+        mockIncludeDocument = current;
+        render(<WordSettingsDialog isOpen onClose={() => {}} />);
+        expect(toggle().checked).toBe(current);
+        expect(toggle()).toHaveAccessibleDescription(
+          "Erato reads the document when you send a message. You can remove it from any chat.",
+        );
+
+        fireEvent.click(toggle());
+        expect(mockSetIncludeDocument).toHaveBeenCalledExactlyOnceWith(
+          !current,
+        );
+      },
+    );
   });
 
   it("shows both Word actions, grouped by the facet that advertises them", () => {

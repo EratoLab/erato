@@ -23,6 +23,7 @@ interface ImportMetaEnv {
 interface OfficeAddinDefaultSettings {
   mode?: "resume" | "ask" | "new";
   compose_inherits_from_read?: boolean;
+  word_include_document?: boolean;
 }
 
 interface Window {

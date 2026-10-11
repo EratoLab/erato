@@ -6,12 +6,16 @@ import {
   WORD_COMPOSE_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
   WORD_SELECTION_FACET_ID,
+  WORD_AUTHORING_FACET_ID,
+  withWordReviewFallback,
   wordSelectionFacetAvailable,
-  wordSelectionTakesSlot,
 } from "../wordActionFacet";
 import { WORD_SELECTION_ARG_KEYS } from "../wordSelectionArgs";
 
-import type { WordDocumentArgs } from "../buildWordDocumentArgs";
+import type {
+  WordDocumentArgs,
+  WordDocumentBuild,
+} from "../buildWordDocumentArgs";
 import type { WordActionFacetInput } from "../wordActionFacet";
 import type { WordSelectionSnapshot } from "../wordSelectionAnchor";
 
@@ -194,20 +198,6 @@ describe("word_selection", () => {
     ).toBe(false);
   });
 
-  it.each([
-    ["rewrite", false, true],
-    ["rewrite", true, true],
-    ["context_only", false, true],
-    ["context_only", true, false],
-  ] as const)(
-    "a %s selection with the document included=%s takes the slot: %s",
-    (role, documentIncluded, takes) => {
-      expect(
-        wordSelectionTakesSlot({ ...selection, role }, documentIncluded),
-      ).toBe(takes);
-    },
-  );
-
   it("fills every advertised key and nothing else", () => {
     expect(resolve()).toEqual({
       id: WORD_SELECTION_FACET_ID,
@@ -241,5 +231,47 @@ describe("word_selection", () => {
 
   it("is not sent when the server does not advertise it", () => {
     expect(resolve({ availableFacetIds: new Set() })).toBeUndefined();
+  });
+});
+
+describe("withWordReviewFallback", () => {
+  const build = (
+    issue?: NonNullable<WordDocumentBuild["authoring"]>["issue"],
+    hasContent = true,
+  ): WordDocumentBuild =>
+    ({
+      args: documentArgs,
+      coverage: { hasContent },
+      authoring: { token: "t", issue },
+    }) as unknown as WordDocumentBuild;
+  const all = new Set([WORD_AUTHORING_FACET_ID, WORD_DOCUMENT_REVIEW_FACET_ID]);
+
+  it.each(["too-large", "unavailable"] as const)(
+    "sends review text when authoring is %s",
+    (issue) => {
+      expect(withWordReviewFallback(build(issue), all).authoring).toBe(
+        undefined,
+      );
+    },
+  );
+
+  it.each([undefined, "tracking", "model-budget", "unsupported"] as const)(
+    "keeps authoring when its issue is %s",
+    (issue) => {
+      const source = build(issue);
+      expect(withWordReviewFallback(source, all)).toBe(source);
+    },
+  );
+
+  it("keeps authoring when review is not advertised", () => {
+    const source = build("too-large");
+    expect(
+      withWordReviewFallback(source, new Set([WORD_AUTHORING_FACET_ID])),
+    ).toBe(source);
+  });
+
+  it("keeps authoring for an empty document", () => {
+    const source = build("unavailable", false);
+    expect(withWordReviewFallback(source, all)).toBe(source);
   });
 });

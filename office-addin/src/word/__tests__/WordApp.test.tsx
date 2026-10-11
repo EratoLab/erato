@@ -10,7 +10,7 @@ import {
   uninstallMockWordDocument,
 } from "../../test/mocks/word/document";
 import WordApp from "../WordApp";
-import { WORD_CURRENT_CHAT_KEY } from "../wordSession";
+import { LEGACY_WORD_CURRENT_CHAT_KEY } from "../wordSession";
 
 import type { LoginHintResolver } from "../../core/auth/AuthSource";
 import type { MockWordHost } from "../../test/mocks/word/document";
@@ -208,13 +208,22 @@ describe("Word task pane composition", () => {
     expect(Object.keys(componentRegistry)).toEqual(["HostCardCodeBlock"]);
   });
 
-  it("selects chats under the Word storage key, never the neutral one", async () => {
+  it("opens a new document on a new chat, never a chat shared across documents", async () => {
+    localStorage.setItem(LEGACY_WORD_CURRENT_CHAT_KEY, '"chat-elsewhere"');
+
     renderPane();
     await screen.findByTestId("word-message-list");
 
     const keys = spies.usePersistedState.mock.calls.map(([key]) => key);
-    expect(keys).toContain(WORD_CURRENT_CHAT_KEY);
+    expect(keys).not.toContain(LEGACY_WORD_CURRENT_CHAT_KEY);
     expect(keys).not.toContain(NEUTRAL_CURRENT_CHAT_KEY);
+    expect(localStorage.getItem(LEGACY_WORD_CURRENT_CHAT_KEY)).toBeNull();
+    expect(spies.useChatMessaging).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: null }),
+    );
+    expect(spies.useChatMessaging).not.toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: "chat-elsewhere" }),
+    );
   });
 
   it("waits for office.js before building the auth source", async () => {

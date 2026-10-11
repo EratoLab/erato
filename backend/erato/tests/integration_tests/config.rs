@@ -187,6 +187,14 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .display_name,
         "Erato for Documents"
     );
+    assert!(
+        config
+            .integrations
+            .ms_office
+            .addin
+            .default_settings
+            .word_include_document
+    );
     assert_eq!(config.integrations.ms_office.ews_api_endpoint, None);
     assert!(!config.integrations.ms_office.ews_skip_tls_validation);
     assert!(!config.cleanup_enabled);
@@ -233,6 +241,9 @@ high_resolution_icon_path = "/public/common/custom-theme/contoso/color-icon-hire
 icon_16_path = "assets/contoso-outline-16.png"
 icon_32_path = "assets/contoso-outline-32.png"
 icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
+
+[integrations.ms_office.addin.default_settings]
+word_include_document = false
 "#;
 
     temp_file
@@ -278,6 +289,14 @@ icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
     assert_eq!(
         config.integrations.ms_office.addin.manifest.icon_80_path,
         "https://cdn.example.com/contoso/icon-80.png"
+    );
+    assert!(
+        !config
+            .integrations
+            .ms_office
+            .addin
+            .default_settings
+            .word_include_document
     );
 }
 

@@ -189,9 +189,8 @@ describe("WordAddinChatHost", () => {
   it("passes the pane's document identity down to the composer", () => {
     render(<WordAddinChat />);
 
-    expect(screen.getByTestId("word-include-document-chip")).toHaveAttribute(
-      "aria-pressed",
-      "false",
+    expect(screen.getByTestId("word-include-document-chip")).toHaveTextContent(
+      "report.docx is included",
     );
   });
 });
