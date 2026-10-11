@@ -5655,7 +5655,7 @@ async fn stream_generate_chat_completion<'a>(
     // iteration against `max_tool_calls_per_message`, but this park time is NOT a
     // generation wall-clock budget. A per-facet `client_tool.timeout_ms` (see
     // the park below) overrides this default per tool.
-    const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = 60_000;
+    const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = crate::config::DEFAULT_CLIENT_TOOL_TIMEOUT_MS;
     struct PendingWait {
         /// Where the call sat in the batch, so its answer is fed back in call
         /// order like every other.
@@ -7117,7 +7117,7 @@ async fn stream_generate_chat_completion<'a>(
                         let binding = policy.executor.as_ref()?;
                         // An approval answered by another executor never parks
                         // the call for the device that submitted the turn.
-                        if !kind.requires_binding()
+                        if kind.gated_by_user_decision()
                             && approving_executor
                                 .as_ref()
                                 .is_some_and(|approving| approving.as_ref() != Some(binding))

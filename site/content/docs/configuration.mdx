@@ -4963,7 +4963,9 @@ result_schema = '''{"type":"object","required":["busy"],"properties":{"busy":{"t
   `type = "object"` that a successful result must satisfy. A result that fails
   it, or any malformed result, reaches the model as fixed feedback, never verbatim.
 - **`attempt_expiry_secs`** _(default: 3600, range: 60–86400)_ - How long a
-  parked call stays claimable. An expired call continues the turn as `expired`.
+  parked call stays claimable, counted from when the call was dispatched. It must
+  cover the tool's `timeout_ms` (default 60000) plus `claim_lease_secs`. An
+  expired call continues the turn as `expired`.
 - **`claim_lease_secs`** _(default: 120, range: 60–900)_ - How long a claiming
   executor holds the call before another claim may replace it. It must not
   exceed `attempt_expiry_secs`.

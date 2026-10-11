@@ -17,12 +17,10 @@ import {
 
 import type { ExecutorBinding } from "@erato/frontend/library";
 
-export const OUTLOOK_MAILBOX_HOST_CONTEXT = "outlook_mailbox";
+const OUTLOOK_MAILBOX_HOST_CONTEXT = "outlook_mailbox";
 
 /** SHA-256 hex of the normalized address, so no raw address leaves the pane. */
-export async function outlookMailboxDigest(
-  emailAddress: string,
-): Promise<string> {
+async function outlookMailboxDigest(emailAddress: string): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(emailAddress.trim().toLowerCase()),

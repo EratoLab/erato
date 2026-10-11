@@ -557,14 +557,8 @@ export {
   registerClientOperationHandler,
   requestClientOperationSweep,
 } from "@/lib/clientOperations/handlers";
-export {
-  ClientToolOperationHandler,
-  CLIENT_TOOL_OPERATION_KIND,
-} from "@/lib/clientOperations/clientToolHandler";
-export {
-  registerOperationExecutor,
-  operationExecutorBinding,
-} from "@/lib/clientOperations/registration";
+export { ClientToolOperationHandler } from "@/lib/clientOperations/clientToolHandler";
+export { registerOperationExecutor } from "@/lib/clientOperations/registration";
 export { clientOperationDeviceId } from "@/lib/clientOperations/deviceId";
 export type { ClientOperationHandler } from "@/lib/clientOperations/coordinator";
 export type { ExecutorBinding } from "@/lib/generated/v1betaApi/v1betaApiSchemas";

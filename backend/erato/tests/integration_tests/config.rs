@@ -3579,6 +3579,54 @@ claim_lease_secs = 301"#,
     );
 }
 
+fn migrate_timed_durable_tool(timeout_ms: u64, durable_toml: &str) -> AppConfig {
+    migrate_config_with_action_facets(&format!(
+        r#"
+[client_tools.tools.availability]
+name = "fetch_availability"
+namespace = "outlook"
+description = "Free/busy"
+parameters = '{{"type":"object"}}'
+timeout_ms = {timeout_ms}
+[client_tools.tools.availability.durable]
+host_context = "outlook_mailbox"
+{durable_toml}
+"#
+    ))
+}
+
+#[test]
+fn durable_opt_in_reads_explicit_durations() {
+    let config =
+        migrate_timed_durable_tool(810_000, "attempt_expiry_secs = 900\nclaim_lease_secs = 90");
+    let durable = config.client_tools.tools["availability"]
+        .durable
+        .as_ref()
+        .unwrap();
+    assert_eq!(durable.attempt_expiry_secs, 900);
+    assert_eq!(durable.claim_lease_secs, 90);
+}
+
+#[test]
+#[should_panic(
+    expected = "durable.attempt_expiry_secs must cover timeout_ms plus claim_lease_secs"
+)]
+fn durable_opt_in_rejects_an_expiry_that_the_default_timeout_uses_up() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+attempt_expiry_secs = 60
+claim_lease_secs = 60"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "durable.attempt_expiry_secs must cover timeout_ms plus claim_lease_secs"
+)]
+fn durable_opt_in_rejects_a_timeout_longer_than_the_expiry_allows() {
+    migrate_timed_durable_tool(810_001, "attempt_expiry_secs = 900\nclaim_lease_secs = 90");
+}
+
 #[test]
 #[should_panic(expected = "host_context")]
 fn durable_opt_in_requires_a_host_context() {

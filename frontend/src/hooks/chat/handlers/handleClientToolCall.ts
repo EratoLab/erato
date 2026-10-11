@@ -1,3 +1,4 @@
+import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
 import { operationExecutorBinding } from "@/lib/clientOperations/registration";
 
 import {
@@ -52,18 +53,26 @@ export async function handleClientToolCall(
   markClientToolCallAnswered(tool_call_id);
 
   const base = { chat_id: chatId, message_id, tool_call_id };
-  let body: ClientToolResultRequest;
 
   const executor = getClientToolExecutor(tool_name);
   if (!executor) {
-    body = {
-      ...base,
-      error: `No client-tool executor registered for "${tool_name}"`,
-    };
-  } else {
-    // Tracked so the user stop pathway can abort the execution mid-flight;
-    // an aborted executor settles like any failure and POSTs its error.
-    const signal = trackClientToolCallAbort(tool_call_id, chatId);
+    await postClientToolResult(
+      {
+        ...base,
+        error: `No client-tool executor registered for "${tool_name}"`,
+      },
+      tool_name,
+      tool_call_id,
+      deps,
+    );
+    return;
+  }
+  // Tracked so the user stop pathway can abort the execution mid-flight;
+  // an aborted executor settles like any failure and POSTs its error. Held
+  // until the POST settles, so a parked operation's handler defers its claim.
+  const signal = trackClientToolCallAbort(tool_call_id, chatId);
+  try {
+    let body: ClientToolResultRequest;
     try {
       const outcome = await executor(input ?? null, {
         toolCallId: tool_call_id,
@@ -91,14 +100,22 @@ export async function handleClientToolCall(
         ...base,
         error: error instanceof Error ? error.message : String(error),
       };
-    } finally {
-      releaseClientToolCallAbort(tool_call_id);
     }
+    await postClientToolResult(body, tool_name, tool_call_id, deps);
+  } finally {
+    releaseClientToolCallAbort(tool_call_id);
   }
+}
 
-  if (isClientToolResultLocalOnly(tool_name)) return;
+async function postClientToolResult(
+  body: ClientToolResultRequest,
+  toolName: string,
+  toolCallId: string,
+  deps: HandleClientToolCallDeps,
+): Promise<void> {
+  if (isClientToolResultLocalOnly(toolName)) return;
   // A call with a durable operation identity only accepts its submit binding.
-  const binding = operationExecutorBinding(tool_name);
+  const binding = operationExecutorBinding(toolName);
   try {
     const response = await fetch("/api/v1beta/me/messages/clienttoolresult", {
       method: "POST",
@@ -110,15 +127,19 @@ export async function handleClientToolCall(
       },
       body: JSON.stringify(body),
     });
-    if (!response.ok) {
-      // Un-mark so a resumestream replay can retry (executors are idempotent).
-      unmarkClientToolCallAnswered(tool_call_id);
-      console.warn(
-        `[client_tool_call] result POST returned ${response.status}`,
-      );
+    if (response.ok) {
+      // The POST may have settled a parked operation; continue it from here.
+      if (binding) requestClientOperationSweep();
+      return;
     }
+    // Un-mark so a resumestream replay can retry (executors are idempotent),
+    // unless a durable operation already owns the bound call: a replay would
+    // only conflict again.
+    if (!binding || response.status !== 409)
+      unmarkClientToolCallAnswered(toolCallId);
+    console.warn(`[client_tool_call] result POST returned ${response.status}`);
   } catch (error) {
-    unmarkClientToolCallAnswered(tool_call_id);
+    unmarkClientToolCallAnswered(toolCallId);
     console.warn("[client_tool_call] result POST failed", error);
   }
 }

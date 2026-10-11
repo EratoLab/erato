@@ -92,6 +92,8 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
       toolCallId: string,
     ) => boolean = isClientToolCallInFlight,
   ) {}
+  // By bare name, like the live call's executor lookup: the namespace is
+  // deployment configuration the pane does not know.
   matches(request: OperationRequest): boolean {
     return (
       request.kind === this.kind &&

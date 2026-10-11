@@ -717,7 +717,8 @@ chat_provider_ids = ["test-token-limit"]
 # # Optional: with durable_operations_enabled, a call whose stream drops or
 # # times out parks durably for the same device and Outlook mailbox instead of
 # # ending as a timeout; the turn resumes when that add-in answers. Not allowed
-# # with `submission`. Lease 60-900 s, at most the expiry (60-86400 s).
+# # with `submission`. Lease 60-900 s, at most the expiry (60-86400 s). The
+# # expiry counts from dispatch and must cover timeout_ms plus the lease.
 # # [client_tools.tools.outlook_fetch_availability.durable]
 # # host_context = "outlook_mailbox"
 # # attempt_expiry_secs = 3600

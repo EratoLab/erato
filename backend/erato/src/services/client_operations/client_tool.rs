@@ -2,7 +2,7 @@
 //! with `[client_tools.tools.<id>.durable]`. Configuration selects the tool and a
 //! compiled host family; it never names an executor, realm or device.
 use super::*;
-use crate::config::{ClientToolConfig, ClientToolDurableConfig, ClientToolHostContext};
+use crate::config::{ClientToolConfig, ClientToolHostContext};
 use serde_json::json;
 
 pub const CLIENT_TOOL_KIND: &str = "client_tool.v1";
@@ -25,10 +25,11 @@ fn seconds(value: u64) -> Result<chrono::Duration, String> {
 }
 
 impl ConfiguredClientToolKind {
-    pub fn from_config(
-        tool: &ClientToolConfig,
-        durable: &ClientToolDurableConfig,
-    ) -> Result<Self, String> {
+    /// `None` for a tool without a `durable` table.
+    pub fn from_config(tool: &ClientToolConfig) -> Result<Option<Self>, String> {
+        let Some(durable) = &tool.durable else {
+            return Ok(None);
+        };
         let result = durable
             .result_schema
             .as_deref()
@@ -37,13 +38,13 @@ impl ConfiguredClientToolKind {
                 erato_config::client_tool_schema::compile(&schema).map(Arc::new)
             })
             .transpose()?;
-        Ok(Self {
+        Ok(Some(Self {
             operation_id: tool.qualified_name(),
             host: durable.host_context,
             result,
             attempt_ttl: seconds(durable.attempt_expiry_secs)?,
             claim_lease: seconds(durable.claim_lease_secs)?,
-        })
+        }))
     }
 }
 
@@ -158,6 +159,7 @@ impl OperationKind for ConfiguredClientToolKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ClientToolDurableConfig;
 
     const SCHEMA: &str =
         r#"{"type":"object","required":["busy"],"properties":{"busy":{"type":"array"}}}"#;
@@ -177,14 +179,15 @@ mod tests {
         ClientToolDurableConfig {
             host_context: ClientToolHostContext::OutlookMailbox,
             result_schema: result_schema.map(str::to_string),
-            attempt_expiry_secs: 3600,
-            claim_lease_secs: 120,
+            attempt_expiry_secs: 900,
+            claim_lease_secs: 90,
         }
     }
 
     fn kind(result_schema: Option<&str>) -> ConfiguredClientToolKind {
-        let durable = durable(result_schema);
-        ConfiguredClientToolKind::from_config(&tool(durable.clone()), &durable).unwrap()
+        ConfiguredClientToolKind::from_config(&tool(durable(result_schema)))
+            .unwrap()
+            .unwrap()
     }
 
     fn binding() -> ExecutorBinding {
@@ -250,12 +253,21 @@ mod tests {
         assert!(kind.gated_by_user_decision());
         assert!(!kind.requires_binding());
         assert!(kind.settle_invalid_claimed());
-        assert_eq!(kind.attempt_ttl(), chrono::Duration::seconds(3600));
-        assert_eq!(kind.claim_lease(), chrono::Duration::seconds(120));
+        assert_eq!(kind.attempt_ttl(), chrono::Duration::seconds(900));
+        assert_eq!(kind.claim_lease(), chrono::Duration::seconds(90));
         let mut invalid = durable(Some(r#"{"type":"array"}"#));
-        assert!(ConfiguredClientToolKind::from_config(&tool(invalid.clone()), &invalid).is_err());
+        assert!(ConfiguredClientToolKind::from_config(&tool(invalid.clone())).is_err());
         invalid.result_schema = Some("not json".into());
-        assert!(ConfiguredClientToolKind::from_config(&tool(invalid.clone()), &invalid).is_err());
+        assert!(ConfiguredClientToolKind::from_config(&tool(invalid)).is_err());
+        let plain = ClientToolConfig {
+            durable: None,
+            ..tool(durable(None))
+        };
+        assert!(
+            ConfiguredClientToolKind::from_config(&plain)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

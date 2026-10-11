@@ -62,8 +62,8 @@ async fn setup(pool: Pool<Postgres>, timeout_ms: u64, durable_flag: bool, opt_in
             durable: opt_in.then(|| erato::config::ClientToolDurableConfig {
                 host_context: erato::config::ClientToolHostContext::OutlookMailbox,
                 result_schema: Some(SCHEMA.into()),
-                attempt_expiry_secs: 3600,
-                claim_lease_secs: 120,
+                attempt_expiry_secs: 900,
+                claim_lease_secs: 90,
             }),
             ..Default::default()
         },
@@ -448,6 +448,22 @@ async fn dropped_stream_parks_fetch_availability_and_a_second_tab_resumes_the_tu
     .expect("a dropped stream should park without waiting for the timeout");
     assert_eq!(row.state, AttemptState::Pending);
     let request: OperationRequest = serde_json::from_value(row.request).unwrap();
+    // The attempt commits while the generation still runs; claims wait for its release.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let chat = chats::Entity::find_by_id(setup.chat_id)
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            if chat.generation_state.as_deref() == Some("awaiting_approval") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the parked generation should release as awaiting_approval");
     server.abort();
 
     // A second tab of the same add-in: same device id and mailbox, another replica.
@@ -502,13 +518,13 @@ async fn timeout_parks_fetch_availability_with_configured_expiry_and_lease(pool:
             "{actual} is not {seconds} s from now"
         );
     };
-    close(request.expires_at, 3600);
+    close(request.expires_at, 900);
     claim_token(&setup.state, &request).await;
     let row = attempt(&setup.state, request.attempt_id).await;
-    close(row.expires_at.with_timezone(&chrono::Utc), 3600);
+    close(row.expires_at.with_timezone(&chrono::Utc), 900);
     close(
         row.claim_expires_at.unwrap().with_timezone(&chrono::Utc),
-        120,
+        90,
     );
 }
 
@@ -926,22 +942,31 @@ async fn never_allow_is_neither_offered_nor_escalated(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn never_allow_saved_after_park_withdraws_the_claim(pool: Pool<Postgres>) {
     let mut setup = setup(pool, 10, true, true).await;
-    for late_fast_result in [false, true] {
+    for stage in ["claim", "late_fast_result", "first_claimed_result"] {
         setup.chat_id = seed_origin_chat(&setup.state.db).await;
         set_decision(&setup.state, "always_allow").await;
         let request = park(&setup).await;
-        set_decision(&setup.state, "never_allow").await;
-        let refused = if late_fast_result {
-            post_live(
-                &setup.state,
-                setup.chat_id,
-                &(request.message_id, request.tool_call_id.clone()),
-                json!({"result":availability()}),
-                Some(&mailbox()),
-            )
-            .await
+        let token = if stage == "first_claimed_result" {
+            Some(claim_token(&setup.state, &request).await)
         } else {
-            claim(&setup.state, &request, &mailbox(), false).await
+            None
+        };
+        set_decision(&setup.state, "never_allow").await;
+        let refused = match &token {
+            Some(token) => {
+                post_result(&setup.state, token, &value_result(&request, availability())).await
+            }
+            None if stage == "late_fast_result" => {
+                post_live(
+                    &setup.state,
+                    setup.chat_id,
+                    &(request.message_id, request.tool_call_id.clone()),
+                    json!({"result":availability()}),
+                    Some(&mailbox()),
+                )
+                .await
+            }
+            None => claim(&setup.state, &request, &mailbox(), false).await,
         };
         refused.assert_status_conflict();
         assert_eq!(refused.text(), "Operation authorization withdrawn");
@@ -963,6 +988,14 @@ async fn never_allow_saved_after_park_withdraws_the_claim(pool: Pool<Postgres>) 
                 .iter()
                 .any(|body| offers_tool(&serde_json::from_str(body).unwrap())),
             "withdrawn tools are not re-offered"
+        );
+        assert!(
+            !setup
+                .recorder
+                .bodies()
+                .iter()
+                .any(|body| body.contains("AVAIL-SLOT-MARKER")),
+            "{stage}: a withdrawn result never reaches the model"
         );
     }
 }

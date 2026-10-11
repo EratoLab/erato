@@ -81,12 +81,18 @@ Real-host qualification is still required before enablement.
 
 The coordinator runs its built-in handlers (local evidence) beside a handler
 registry that the web and Office shells populate. It picks a handler by `kind` and
-the handler's optional `matches(request)`, so the generic handler answers only its
-own tool's `operation_id`. A handler's `defer(request)` skips the claim while the
-same JS context still runs the live call; the live POST then settles the
-unclaimed attempt through the fast path. A `client_tool_pending` part nudges an
-immediate sweep, so a drop on the same pane resumes without waiting for the 10 s
-poll. A pane without a matching handler leaves the operation for another.
+the handler's optional `matches(request)`. The generic handler matches its tool's
+bare name in any namespace, as the live call's executor lookup does, because the
+namespace is deployment configuration. A handler's `defer(request)` skips the
+claim while the same JS context still runs the live call or posts its result. That
+POST settles the unclaimed attempt through the fast path and then requests a
+sweep, so a drop on the same pane resumes without waiting for the 10 s poll. A
+`client_tool_pending` part also requests a sweep, for a pane whose executor is not
+running. That sweep can race the generation's release after the park; a refused
+claim waits for the poll. A pane without a matching handler leaves the operation
+for another. The web app registers no `client_tool.v1` handler, so only the
+add-in continues these attempts; a continue-only fallback for other tabs would be
+a separate decision.
 
 After a durable park, continuation is detached. Further registered client calls
 enter the inbox immediately. Attached continuation (ERMAIN-912) is still required
@@ -121,6 +127,9 @@ of the mailbox address. Attempt expiry and claim lease are per kind, and the
 lease is bounded by the expiry. Local evidence keeps 24 hours and five minutes,
 which its signed plan requires. Configured tools use `attempt_expiry_secs` and
 `claim_lease_secs` (defaults 3600 and 120; the lease is at least 60 seconds).
+Expiry counts from dispatch, because the identity is persisted before the call
+runs so that a crash resumes it; a timeout park therefore needs an expiry that
+covers `timeout_ms` plus the lease.
 
 Inbox `after` is a cursor for one sweep, ordered by random attempt UUID. Concurrent
 inserts may sort before that cursor. A coordinator must restart every subsequent
@@ -137,7 +146,10 @@ An opted-in call's fast result passes the kind validator too, so the model sees
 the kind's `{"status":"success","result":…}` wrapper on both paths.
 `OperationError.message` (at most 1024 characters, control characters replaced)
 is forwarded only by `client_tool.v1`, matching legacy client-tool errors. Like
-them, it reaches tool-call telemetry.
+them, it reaches tool-call telemetry. Client `validation_errors` do not survive
+opt-in: `rejected` carries only `validation_failed`, on the live path too, and the
+model sees fixed text. A tool that relies on correctable diagnostics must not opt
+in until the kind carries bounded issues; Word tools decide this under ERMAIN-912.
 Continuation resolves original tool identities against current configuration and
 re-prepares their schemas/timeouts. It retains consumed counters and never raises
 the original submission limit or removes submission semantics during that turn.
@@ -207,7 +219,8 @@ registry builder and the mock LLM:
 - a rejected call creates no attempt;
 - an approval from another executor keeps the legacy path;
 - `ask` saved after a park does not block the claim;
-- `never_allow` is neither offered nor escalated, and withdraws a parked call;
+- `never_allow` is neither offered nor escalated, and withdraws a parked call at
+  claim, at its first claimed result and at a late fast result;
 - a sidecar binding, a missing binding, a tool that does not opt in and the
   disabled flag all keep the in-memory path.
 
@@ -220,12 +233,13 @@ side.
 [client_tools.tools.<id>.durable]
 host_context = "outlook_mailbox"   # required compiled host family
 result_schema = """{ ... }"""      # optional JSON Schema string, type = "object"
-attempt_expiry_secs = 3600         # 60..=86400
+attempt_expiry_secs = 3600         # 60..=86400, from dispatch; >= timeout_ms + lease
 claim_lease_secs = 120             # 60..=900, at most attempt_expiry_secs
 ```
 
 Load-time validation rejects a durable tool that also has `submission`, a result
-schema that does not compile as an object schema, and out-of-range durations. The
+schema that does not compile as an object schema, out-of-range durations, and an
+expiry shorter than `timeout_ms` (default 60 s) plus the lease. The
 `parameters` schema is not applied at dispatch; the generic kind checks only that
 the input is a JSON object of at most 64 KiB. Results are JSON values of at most
 1 MiB. `failed` carries `execution_failed` and an optional message; `rejected`
@@ -271,7 +285,8 @@ Turning the flag on has costs beyond configured tools. Generation starts take th
 compare-and-set lease path with the lease identity guard. Every abort runs the
 inbox abort transaction. Late results probe the logged inbox. For an opted-in tool,
 a brief SSE drop now parks and detaches the turn instead of waiting out
-`timeout_ms`. The `client_tool_pending` nudge or the 10 s inbox poll recovers it.
+`timeout_ms`. The sweep after the pane's result POST, the `client_tool_pending`
+nudge or the 10 s inbox poll recovers it.
 
 Production opt-in lives in the private configuration package
 (`configuration-packages/erato-action-facets.toml`), next to

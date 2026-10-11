@@ -1679,6 +1679,16 @@ impl AppConfig {
                         qualified
                     );
                 }
+                // Expiry counts from dispatch, so a timeout park must still leave a full lease.
+                let timeout_ms = tool.timeout_ms.unwrap_or(DEFAULT_CLIENT_TOOL_TIMEOUT_MS);
+                if durable.attempt_expiry_secs.saturating_mul(1000)
+                    < timeout_ms.saturating_add(durable.claim_lease_secs.saturating_mul(1000))
+                {
+                    panic!(
+                        "Client tool '{}' durable.attempt_expiry_secs must cover timeout_ms plus claim_lease_secs.",
+                        qualified
+                    );
+                }
             }
         }
 
@@ -5062,7 +5072,9 @@ pub struct ClientToolDurableConfig {
     /// fixed feedback, never verbatim.
     #[serde(default)]
     pub result_schema: Option<String>,
-    /// Seconds a parked call stays claimable. Must be 60–86400. Default: 3600.
+    /// Seconds from dispatch that a call stays claimable once parked. Must be
+    /// 60–86400 and cover the tool's `timeout_ms` plus `claim_lease_secs`.
+    /// Default: 3600.
     #[serde(default = "default_durable_attempt_expiry_secs")]
     pub attempt_expiry_secs: u64,
     /// Seconds a claiming executor holds the call before another claim may
@@ -5194,6 +5206,9 @@ pub enum ClientToolNativeSchema {
 
 /// Default namespace for a client tool when none is configured.
 pub const DEFAULT_CLIENT_TOOL_NAMESPACE: &str = "client";
+
+/// Park timeout of a client tool without `timeout_ms`.
+pub const DEFAULT_CLIENT_TOOL_TIMEOUT_MS: u64 = 60_000;
 
 impl ClientToolConfig {
     /// The tool's namespace, or the `client` default.

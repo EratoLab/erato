@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 
 import { handleClientToolCall } from "./handleClientToolCall";
 import { handleToolCallUpdate } from "./handleToolCallUpdate";
 import {
   abortClientToolCalls,
+  hasClientToolCallBeenAnswered,
+  isClientToolCallInFlight,
   registerClientToolExecutor,
   registerLocalOnlyClientTools,
   resetClientToolRegistryForTests,
@@ -153,6 +156,83 @@ describe("handleClientToolCall", () => {
       ).toBe(JSON.stringify(binding));
     } finally {
       unregister.forEach((cleanup) => cleanup());
+    }
+  });
+
+  describe("with an operation binding", () => {
+    const sweep = vi.fn<() => void>();
+    let unregister: () => void;
+    let unsubscribe: () => void;
+
+    beforeEach(() => {
+      unregister = registerOperationExecutor(
+        "fetch_availability",
+        () => ({
+          device_id: "pane-device-000000",
+          realm: "office-addin",
+          host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+        }),
+        { yields: true },
+      );
+      sweep.mockClear();
+      unsubscribe = clientOperationHandlerRegistry.subscribe(sweep);
+      registerClientToolExecutor("fetch_availability", async () => ({
+        ok: true,
+        result: null,
+      }));
+    });
+
+    afterEach(() => {
+      unsubscribe();
+      unregister();
+    });
+
+    it("stays in flight until its result POST settles, then requests a sweep", async () => {
+      let respond!: (response: { ok: boolean; status: number }) => void;
+      fetchMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          respond = resolve;
+        }),
+      );
+      const pending = handleClientToolCall(makeEvent(), deps);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(isClientToolCallInFlight("call-1")).toBe(true);
+      expect(sweep).not.toHaveBeenCalled();
+
+      respond({ ok: true, status: 200 });
+      await pending;
+      expect(isClientToolCallInFlight("call-1")).toBe(false);
+      expect(sweep).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a conflicting call answered without requesting a sweep", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 409 });
+      await handleClientToolCall(makeEvent(), deps);
+      expect(hasClientToolCallBeenAnswered("call-1")).toBe(true);
+      expect(isClientToolCallInFlight("call-1")).toBe(false);
+
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 503 });
+      await handleClientToolCall(makeEvent({ tool_call_id: "call-2" }), deps);
+      expect(hasClientToolCallBeenAnswered("call-2")).toBe(false);
+      expect(sweep).not.toHaveBeenCalled();
+    });
+  });
+
+  it("requests no sweep for an unbound call and lets its conflict retry", async () => {
+    const sweep = vi.fn<() => void>();
+    const unsubscribe = clientOperationHandlerRegistry.subscribe(sweep);
+    try {
+      registerClientToolExecutor("fetch_availability", async () => ({
+        ok: true,
+        result: null,
+      }));
+      await handleClientToolCall(makeEvent(), deps);
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 409 });
+      await handleClientToolCall(makeEvent({ tool_call_id: "call-2" }), deps);
+      expect(hasClientToolCallBeenAnswered("call-2")).toBe(false);
+      expect(sweep).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
     }
   });
 

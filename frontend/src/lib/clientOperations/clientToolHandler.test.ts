@@ -148,11 +148,14 @@ describe("ClientToolOperationHandler", () => {
     );
   }
 
-  it("matches its own tool by bare name within its kind", () => {
+  it("matches its own tool by bare name within its kind, as the live call does", () => {
     const subject = handler();
     expect(subject.matches(request)).toBe(true);
     expect(
-      subject.matches({ ...request, operation_id: "fetch_availability" }),
+      subject.matches({
+        ...request,
+        operation_id: "client/fetch_availability",
+      }),
     ).toBe(true);
     expect(
       subject.matches({ ...request, operation_id: "outlook/create_draft" }),

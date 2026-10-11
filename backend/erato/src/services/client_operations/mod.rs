@@ -280,17 +280,16 @@ pub fn registry(
     let mut registry = crate::services::local_delegation::tool::registry(signer);
     if config.client_tools.durable_operations_enabled {
         for tool in config.client_tools.tools.values() {
-            let Some(durable) = &tool.durable else {
-                continue;
-            };
-            let kind = client_tool::ConfiguredClientToolKind::from_config(tool, durable).map_err(
-                |error| {
+            let Some(kind) =
+                client_tool::ConfiguredClientToolKind::from_config(tool).map_err(|error| {
                     eyre::eyre!(
                         "Client tool '{}' cannot be durable: {error}",
                         tool.qualified_name()
                     )
-                },
-            )?;
+                })?
+            else {
+                continue;
+            };
             registry
                 .register(Arc::new(kind))
                 .map_err(|error| eyre::eyre!("Client tool '{}': {error}", tool.qualified_name()))?;
