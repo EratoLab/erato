@@ -36,17 +36,27 @@ import type { Attachment as MimeAttachment } from "postal-mime";
  *    SELECTED item only (`ParentItemId:<current item>`). GetItem on the current
  *    item (MimeContent or full body) returns 200; mailbox/conversation-wide
  *    operations (GetConversationItems, FindItem) return 500 ErrorAccessDenied —
- *    the token simply does not authorize them. UPSIDE: no response size cap, so
- *    the current item's full MIME comes back whole. We use this path ONLY for
- *    the current item (the id the caller already holds).
+ *    the token simply does not authorize them. UPSIDE: no host size cap (that
+ *    cap belongs to the Outlook client, not to EWS), and Exchange documents no
+ *    EWS response-size limit (its 64 MB web.config limits bound what clients
+ *    SEND), so the current item's full MIME comes back whole. Practical bounds
+ *    remain: the MIME arrives base64-inlined in one SOAP body (~1.33x) and the
+ *    proxy buffers it. We use this path ONLY for the current item (the id the
+ *    caller already holds).
  *
  * 2. HOST-BROKERED ({@link ewsHostFetch}) — `Office.context.mailbox.
  *    makeEwsRequestAsync`. The host authenticates with the user's FULL mailbox
  *    credentials (the manifest declares ReadWriteMailbox, requirement set 1.1 is
  *    available on SE), so this path can enumerate the conversation and read
- *    SIBLING messages the callback token can't reach. DOWNSIDE: a hard RESPONSE
- *    cap (5 MB in OWA / 1 MB in classic Outlook; Office.js error code 9020 /
- *    "Response exceeds N MB size limit"); a sibling whose response overflows it
+ *    SIBLING messages the callback token can't reach. DOWNSIDE: a hard size cap
+ *    that the OUTLOOK CLIENT enforces (not Exchange; no server or tenant setting
+ *    changes it) on the request AND the response, counted in characters of the
+ *    SOAP string, so base64 MimeContent leaves ~3/4 of it for the message: 5 MB
+ *    in Outlook on the web, new Outlook, classic Windows from Version 2303
+ *    (Build 16225.10000) and Mac from 16.73; 1 MB in older classic Windows and
+ *    Mac builds. On-prem OWA ships its host code with the Exchange build and its
+ *    cap is undocumented, so read N from the error (Office.js error code 9020 /
+ *    "Response exceeds N MB size limit"). A sibling whose response overflows it
  *    degrades to a body-less disclosure marker. SECOND DOWNSIDE: makeEwsRequestAsync
  *    only permits a fixed OPERATION allow-list (GetItem/FindItem/
  *    GetConversationItems/… — but NOT GetAttachment), so attachment bytes cannot
@@ -65,7 +75,7 @@ import type { Attachment as MimeAttachment } from "postal-mime";
  * which carries every attachment (file AND nested-item) inline; we parse it with
  * postal-mime and splice each matched part's bytes onto the GraphAttachment (see
  * {@link enrichEwsAttachments}). Routed by the SAME hybrid rule: the CURRENT item
- * via DIRECT (no cap — a 3 MB PDF comes through whole), a sibling via HOST (its
+ * via DIRECT (no host cap — a 3 MB PDF comes through whole), a sibling via HOST (its
  * ~4 MB MIME is subject to the host cap; on overflow that message's attachments
  * degrade to byte-less markers, `state: "partial"`).
  *
@@ -82,11 +92,12 @@ import type { Attachment as MimeAttachment } from "postal-mime";
  *
  * ROUTING:
  *   - bytes / files for the CURRENT item (by the id the caller holds)
- *       → DIRECT path (no cap).
+ *       → DIRECT path (no host cap).
  *   - conversation enumeration (GetConversationItems) + sibling GetItem
  *       → HOST path (broad), except the member equal to the current item, which
- *         is fetched via the DIRECT path (no cap on the message we care about
- *         most). A sibling that overflows the 1 MB cap degrades to `partial`.
+ *         is fetched via the DIRECT path (no host cap on the message we care
+ *         about most). A sibling that overflows the host cap (1 or 5 MB,
+ *         depending on the client) degrades to `partial`.
  *   - FindItem-by-Message-ID spans the well-known mail folders → HOST path;
  *     the resolved GetItem then goes DIRECT if it is the current item, else
  *     HOST.
@@ -190,8 +201,9 @@ export class EwsProxySessionExpiredError extends EwsRequestError {
 }
 
 /**
- * The host transport ({@link ewsHostFetch}) hit `makeEwsRequestAsync`'s RESPONSE
- * cap (5 MB in OWA / 1 MB in classic Outlook). Distinct from {@link
+ * The host transport ({@link ewsHostFetch}) hit `makeEwsRequestAsync`'s size
+ * cap (1 or 5 MB depending on the Outlook client; see the module doc). Distinct
+ * from {@link
  * EwsRequestError} so the conversation fetch can degrade just the offending
  * sibling — or, when its attachment MIME overflows, that message's attachments —
  * to byte-less disclosure markers (`state: "partial"`) instead of failing the
@@ -206,8 +218,8 @@ export class EwsResponseTooLargeError extends Error {
 }
 
 /**
- * `makeEwsRequestAsync`'s Office.js error code for the response cap (5 MB in
- * OWA / 1 MB in classic Outlook), surfaced as "Response exceeds N MB size
+ * `makeEwsRequestAsync`'s Office.js error code for the size cap (1 or 5 MB
+ * depending on the Outlook client), surfaced as "Response exceeds N MB size
  * limit". We also pattern-match the message text via {@link
  * EWS_RESPONSE_TOO_LARGE_MESSAGE} as a belt-and-suspenders signal in case a host
  * reports the cap without the numeric code.
@@ -423,7 +435,7 @@ async function ewsFetch(
  * `asyncResult.value`), which we parse exactly like the direct path via the
  * shared {@link parseEwsSoap}. On failure we classify STRICTLY: ONLY a genuine
  * response-size cap (the 9020 code or the "Response exceeds N MB size limit"
- * wording — 5 MB OWA / 1 MB classic) surfaces as {@link EwsResponseTooLargeError}
+ * wording; 1 or 5 MB by client) surfaces as {@link EwsResponseTooLargeError}
  * (so the conversation fetch degrades just that sibling/its attachments); every
  * other failure — including the host being restricted or an operation outside
  * the allow-list, both of which come back as ErrorAccessDenied / "the requested
@@ -1092,7 +1104,7 @@ export async function fetchOutlookMessageBytesViaEws(
  * HYBRID: FindItem reaches beyond the current item (it searches the well-known
  * mail folders), which the item-scoped callback token can't do, so the lookup
  * goes through the HOST path. The resolved GetItem then goes DIRECT if it
- * happens to be the current item (no cap), else HOST.
+ * happens to be the current item (no host cap), else HOST.
  */
 export async function fetchOutlookMessageBytesByInternetMessageIdViaEws(
   internetMessageId: string,
@@ -1110,9 +1122,9 @@ export async function fetchOutlookMessageBytesByInternetMessageIdViaEws(
   }
   const result =
     matchId === getCurrentItemId()
-      ? // The matched message is the current item → DIRECT (no cap).
+      ? // The matched message is the current item → DIRECT (no host cap).
         await fetchOutlookMessageBytesViaEws(matchId, { ...options, transport })
-      : // A sibling/other-folder message → HOST (broad, may hit the 1 MB cap).
+      : // A sibling/other-folder message → HOST (broad, may hit the host cap).
         await fetchOutlookMessageBytesViaEwsHost(matchId);
   return {
     ...result,
@@ -1124,7 +1136,7 @@ export async function fetchOutlookMessageBytesByInternetMessageIdViaEws(
  * Raw MIME of a message by EWS item id via the HOST path (for messages other
  * than the current item, which the item-scoped token can't reach). Same shape
  * as {@link fetchOutlookMessageBytesViaEws} but no proxy/token/abort plumbing;
- * the host's ~1 MB cap surfaces as {@link EwsResponseTooLargeError}.
+ * the host cap surfaces as {@link EwsResponseTooLargeError}.
  */
 async function fetchOutlookMessageBytesViaEwsHost(
   ewsItemId: string,
@@ -1319,7 +1331,7 @@ async function enumerateConversationMessageMetadata(
  * that yields zero members, since the current item is by definition a member
  * of its own conversation, so an empty enumeration is always a failure, never
  * a real empty thread; `partial` when some per-message GetItem calls fail, a
- * sibling overflows the host 1 MB cap, or the item cap is hit). NEVER throws
+ * sibling overflows the host cap, or the item cap is hit). NEVER throws
  * (abort aside): a server (or host) that rejects the enumeration surfaces as
  * `state: "error"`, not a crash.
  *
@@ -1329,7 +1341,7 @@ async function enumerateConversationMessageMetadata(
  * full mailbox creds) — if THAT fails (e.g. the host is also restricted →
  * ErrorAccessDenied) we return `state: "error"`. Then (2) GetItem each member's
  * body with bounded concurrency, routing the CURRENT item through the DIRECT
- * path (no cap) and every sibling through the HOST path. A sibling whose
+ * path (no host cap) and every sibling through the HOST path. A sibling whose
  * response overflows the host's cap ({@link EwsResponseTooLargeError}) degrades
  * to a body-less marker (`state: "partial"`) but stays in the thread. Finally
  * enrich byte-less attachments from each owning message's MIME (GetItem +
@@ -1412,12 +1424,12 @@ export async function fetchConversationMessagesViaEws(
         throw options.signal.reason ?? error;
       }
       if (error instanceof EwsResponseTooLargeError) {
-        // The sibling's body blew past the host's ~1 MB cap. Keep the message in
+        // The sibling's body blew past the host cap. Keep the message in
         // the thread (so the parent/structure is preserved) with a body-less
         // marker — downstream `parsedThread` renders the empty body as a
         // disclosure rather than dropping it. Window becomes `partial`.
         console.warn(
-          "[fetchConversationMessagesViaEws] sibling exceeds host 1 MB cap, " +
+          "[fetchConversationMessagesViaEws] sibling exceeds host size cap, " +
             "degrading to body-less marker:",
           error,
         );
@@ -1531,9 +1543,10 @@ async function getConversationItemIdsViaFindItem(
 
 /**
  * GetItem for one conversation member's body, routed by the HYBRID rule: the
- * CURRENT item goes through the DIRECT path (no cap on the message we care about
- * most), every sibling through the HOST path (which can read it but may hit the
- * ~1 MB cap → {@link EwsResponseTooLargeError}, which the caller degrades).
+ * CURRENT item goes through the DIRECT path (no host cap on the message we care
+ * about most), every sibling through the HOST path (which can read it but may
+ * hit the host cap → {@link EwsResponseTooLargeError}, which the caller
+ * degrades).
  * Returns the mapped message, or null on a tolerable not-found (e.g. the item
  * was deleted mid-enumeration).
  */
@@ -1576,9 +1589,9 @@ async function getConversationMessage(
  * one GetItem-MIME per message serves every attachment kind.
  *
  * One GetItem-MIME per MESSAGE (not per attachment), routed by the same HYBRID
- * rule as the body fetch: the CURRENT item goes DIRECT (no cap — a 3 MB PDF on
+ * rule as the body fetch: the CURRENT item goes DIRECT (no host cap — a 3 MB PDF on
  * the selected message comes through whole); every sibling goes HOST, whose MIME
- * is subject to the makeEwsRequestAsync response cap (5 MB OWA / 1 MB classic).
+ * is subject to the makeEwsRequestAsync host cap (1 or 5 MB by client).
  * Best-effort: a single message's MIME failure (including a sibling whose MIME
  * overflows the cap → {@link EwsResponseTooLargeError}) leaves that message's
  * attachments byte-less, to be disclosed as markers downstream, and never

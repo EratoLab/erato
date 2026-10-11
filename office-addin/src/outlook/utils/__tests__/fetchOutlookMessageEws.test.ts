@@ -947,7 +947,7 @@ describe("fetchConversationMessagesViaEws", () => {
     expect(byId.m3.subject).toBe("Later reply");
   });
 
-  it("degrades a sibling whose host GetItem hits the ~1 MB cap to a body-less marker (partial)", async () => {
+  it("degrades a sibling whose host GetItem hits the host size cap to a body-less marker (partial)", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     // No current item: both members are siblings served by the host. m2's host
     // GetItem hits the 9020 / size cap → it degrades, the thread stays partial.
