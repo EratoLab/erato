@@ -11,9 +11,15 @@ import {
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
   withWordInPlaceBackup,
+  WordDocumentCaptureTimeoutError,
   WORD_DOCUMENT_IMPORT_OPTIONS,
+  WORD_FILE_OPEN_TIMEOUT_MS,
 } from "../wordDocumentPackage";
-import { readWordPackage, wordXmlText } from "../wordDocumentPackageCodec";
+import {
+  readWordPackage,
+  WordDocumentTooLargeError,
+  wordXmlText,
+} from "../wordDocumentPackageCodec";
 import { wordDocumentFingerprint } from "../wordDocumentXml";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -235,6 +241,97 @@ describe("native complete-document capture", () => {
       expect(host.close).toHaveBeenCalledOnce();
     },
   );
+
+  it("reports an oversized document as too large", async () => {
+    officeFile(wordDocumentOoxmlToFile(fixture()), "oversize");
+    await expect(readWordDocumentFile()).rejects.toBeInstanceOf(
+      WordDocumentTooLargeError,
+    );
+  });
+
+  it("stops waiting for a file Word does not hand over, and closes it when it arrives late", async () => {
+    vi.useFakeTimers();
+    try {
+      const host = officeFile(wordDocumentOoxmlToFile(fixture()));
+      let deliver: (() => void) | undefined;
+      host.document.getFileAsync.mockImplementationOnce(
+        (_type, _options, callback) => {
+          deliver = () =>
+            callback({
+              status: "succeeded",
+              value: { closeAsync: host.close },
+            });
+        },
+      );
+      const read = readWordDocumentFile();
+      const rejected = expect(read).rejects.toBeInstanceOf(
+        WordDocumentCaptureTimeoutError,
+      );
+      await vi.advanceTimersByTimeAsync(WORD_FILE_OPEN_TIMEOUT_MS);
+      await rejected;
+      deliver?.();
+      expect(host.close).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes the file when a slice never arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const bytes = wordDocumentOoxmlToFile(fixture());
+      const host = officeFile(bytes);
+      host.document.getFileAsync.mockImplementationOnce(
+        (_type, _options, callback) =>
+          callback({
+            status: "succeeded",
+            value: {
+              size: bytes.length,
+              sliceCount: 1,
+              closeAsync: host.close,
+              getSliceAsync: () => {},
+            },
+          }),
+      );
+      const read = readWordDocumentFile();
+      const rejected = expect(read).rejects.toBeInstanceOf(
+        WordDocumentCaptureTimeoutError,
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      await rejected;
+      expect(host.close).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up when the close after a stuck slice never answers either", async () => {
+    vi.useFakeTimers();
+    try {
+      const bytes = wordDocumentOoxmlToFile(fixture());
+      const host = officeFile(bytes);
+      host.document.getFileAsync.mockImplementationOnce(
+        (_type, _options, callback) =>
+          callback({
+            status: "succeeded",
+            value: {
+              size: bytes.length,
+              sliceCount: 1,
+              closeAsync: () => {},
+              getSliceAsync: () => {},
+            },
+          }),
+      );
+      const read = readWordDocumentFile();
+      const rejected = expect(read).rejects.toBeInstanceOf(
+        WordDocumentCaptureTimeoutError,
+      );
+      await vi.advanceTimersByTimeAsync(15_000 + 2_000);
+      await rejected;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("requests Office's maximum slice size so one read covers a supported document", async () => {
     const host = officeFile(wordDocumentOoxmlToFile(fixture()));

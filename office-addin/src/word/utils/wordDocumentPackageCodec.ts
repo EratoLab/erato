@@ -42,6 +42,13 @@ export function wordXmlText(bytes: Uint8Array): string {
   return new TextDecoder(utf16, { fatal: true }).decode(bytes);
 }
 
+export class WordDocumentTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WordDocumentTooLargeError";
+  }
+}
+
 export function readWordPackage(bytes: Uint8Array): WordDocumentParts {
   if (
     bytes.length > MAX_WORD_DOCX_BYTES ||
@@ -138,7 +145,9 @@ function inspectZipDirectory(bytes: Uint8Array): void {
     names.add(name);
     expanded += view.getUint32(cursor + 24, true);
     if (expanded > MAX_EXPANDED_BYTES)
-      throw new Error("The expanded document is too large.");
+      throw new WordDocumentTooLargeError(
+        "The expanded document is too large.",
+      );
     cursor = next;
   }
   if (cursor !== end) throw new Error("Invalid DOCX directory size.");

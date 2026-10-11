@@ -32,7 +32,9 @@ import type { ReactNode } from "react";
 
 const host = vi.hoisted(() => ({
   facets: [] as { id: string; allowed_args?: string[] }[],
+  includeDocument: false,
   capture: vi.fn(),
+  captureExpectedSlow: vi.fn(() => false),
 }));
 
 vi.mock("@erato/frontend/library", async () => {
@@ -63,9 +65,21 @@ vi.mock("../../../core/AddinChatInputCore", () => ({
 
 vi.mock("../../hooks/useWordDocumentSource", () => ({
   useWordDocumentSource: () => ({
-    preview: { status: "ready", coverage: null, changedSinceLastSend: false },
+    preview: {
+      status: "included",
+      coverage: null,
+      changedSinceLastSend: false,
+      reading: false,
+    },
     capture: host.capture,
+    captureExpectedSlow: host.captureExpectedSlow,
+    previousCapture: () => null,
+    markSent: () => {},
   }),
+}));
+
+vi.mock("../../wordPreferences", () => ({
+  useWordIncludeDocumentByDefault: () => [host.includeDocument, () => {}],
 }));
 
 type SendCall = Parameters<AddinChatInputRenderProps["onSendMessage"]>;
@@ -120,6 +134,7 @@ describe("WordChatInput with a Word selection", () => {
     return view;
   };
   const chip = () => screen.queryByTestId("word-selection-chip");
+  const documentChip = () => screen.getByTestId("word-include-document-chip");
   const send = () => fireEvent.click(screen.getByTestId("send"));
   const lastSend = () => {
     const call = handedOver.at(-1);
@@ -140,6 +155,7 @@ describe("WordChatInput with a Word selection", () => {
     vi.useFakeTimers();
     i18n.activate("en");
     host.facets = [SELECTION_FACET, REVIEW_FACET];
+    host.includeDocument = false;
     host.capture.mockReset().mockResolvedValue(documentBuild());
     handedOver = [];
     staged = [];
@@ -203,30 +219,31 @@ describe("WordChatInput with a Word selection", () => {
     expect(chip()).toBeNull();
   });
 
-  it("keeps sending the included document, and says the selection is not sent", async () => {
+  it("sends a selection that can only be context instead of the included document", async () => {
+    host.includeDocument = true;
     word.select({ table: 0, tableWhole: true });
     await renderInput();
-    fireEvent.click(screen.getByTestId("word-include-document-chip"));
-    expect(chip()?.textContent).toContain(
-      "Not sent while the document is included.",
+    expect(chip()?.textContent).toContain("Sent instead of the document.");
+    expect(documentChip()).toHaveTextContent(
+      "Your selection is sent instead of the document",
     );
-    const callsBefore = word.calls().length;
 
     send();
-    expect(lastSend()[11]?.label).toBe("Preparing document…");
+    expect(lastSend()[11]?.label).toBe("Reading selection…");
     const result = await prepared();
-    expect(result?.actionFacet?.id).toBe("word_document_review");
-    expect(host.capture).toHaveBeenCalledTimes(1);
-    expect(word.calls().slice(callsBefore)).not.toContain("Paragraph.getText");
+    expect(result?.actionFacet).toMatchObject({
+      id: "word_selection",
+      args: { selection_role: "context_only" },
+    });
+    expect(result?.hostContextIdentity).toBe(IDENTITY);
+    expect(host.capture).not.toHaveBeenCalled();
   });
 
   it("sends a whole paragraph Erato can replace instead of the included document", async () => {
+    host.includeDocument = true;
     word.select({ p: "PL1" });
     await renderInput();
-    fireEvent.click(screen.getByTestId("word-include-document-chip"));
-    expect(chip()?.textContent).toContain(
-      "If this passage can be replaced, it is sent instead of the document.",
-    );
+    expect(chip()?.textContent).toContain("Sent instead of the document.");
     send();
     const result = await prepared();
     expect(result?.actionFacet).toMatchObject({
@@ -237,11 +254,9 @@ describe("WordChatInput with a Word selection", () => {
   });
 
   it("sends a passage inside a paragraph instead of the included document", async () => {
+    host.includeDocument = true;
     await renderInput();
-    fireEvent.click(screen.getByTestId("word-include-document-chip"));
-    expect(chip()?.textContent).toContain(
-      "If this passage can be replaced, it is sent instead of the document.",
-    );
+    expect(chip()?.textContent).toContain("Sent instead of the document.");
     send();
     const result = await prepared();
     expect(result?.actionFacet).toMatchObject({
@@ -265,12 +280,10 @@ describe("WordChatInput with a Word selection", () => {
   ] as const)(
     "sends %s Erato can replace instead of the included document",
     async (_, target, shape) => {
+      host.includeDocument = true;
       word.select(target);
       await renderInput();
-      fireEvent.click(screen.getByTestId("word-include-document-chip"));
-      expect(chip()?.textContent).toContain(
-        "If this passage can be replaced, it is sent instead of the document.",
-      );
+      expect(chip()?.textContent).toContain("Sent instead of the document.");
       send();
       const result = await prepared();
       expect(result?.actionFacet).toMatchObject({
@@ -281,13 +294,62 @@ describe("WordChatInput with a Word selection", () => {
     },
   );
 
-  it("sends the document when the paragraph turns out to be context only", async () => {
+  it("sends a paragraph that turns out to be context only instead of the included document", async () => {
+    host.includeDocument = true;
     word.select({ p: "HT1" });
     await renderInput();
-    fireEvent.click(screen.getByTestId("word-include-document-chip"));
+    send();
+    const result = await prepared();
+    expect(result?.actionFacet).toMatchObject({
+      id: "word_selection",
+      args: { selection_role: "context_only" },
+    });
+    expect(host.capture).not.toHaveBeenCalled();
+  });
+
+  it("says on the document chip that the selection is sent instead, until the selection is dismissed", async () => {
+    host.includeDocument = true;
+    await renderInput();
+    expect(documentChip()).toHaveTextContent(
+      "Your selection is sent instead of the document",
+    );
+
+    fireEvent.click(screen.getByLabelText("Dismiss selection"));
+
+    expect(documentChip()).toHaveTextContent("selection.docx is included");
     send();
     const result = await prepared();
     expect(result?.actionFacet?.id).toBe("word_document_review");
+    expect(host.capture).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends the included document rather than a passage Erato selected", async () => {
+    host.includeDocument = true;
+    await renderInput();
+    markProgrammaticWordSelection();
+    act(() => word.select({ p: "MP1", text: "victor" }));
+    await settle();
+    expect(chip()?.textContent).toContain("Shown by Erato");
+    expect(chip()?.textContent).not.toContain("Sent instead of the document.");
+    expect(documentChip()).toHaveTextContent("selection.docx is included");
+
+    send();
+    const result = await prepared();
+    expect(result?.actionFacet?.id).toBe("word_document_review");
+  });
+
+  it("says a selection too long to send whole is cut, also while the document is included", async () => {
+    host.includeDocument = true;
+    word = installWordSelectionHost({
+      body: [`BIG ${"lorem ipsum ".repeat(6_000)}`],
+    });
+    word.select({ p: "BIG" });
+    await renderInput();
+
+    expect(chip()?.textContent).toContain(
+      "Too long to send in full. Only the beginning is sent.",
+    );
+    expect(chip()?.textContent).not.toContain("Sent instead of the document.");
   });
 
   it("sends a plain message when the selection collapsed before Send", async () => {
@@ -300,6 +362,17 @@ describe("WordChatInput with a Word selection", () => {
       hostContextIdentity: null,
     });
     expect(staged.at(-1)).toBeNull();
+  });
+
+  it("sends the included document when the selection collapsed before Send", async () => {
+    host.includeDocument = true;
+    await renderInput();
+    word.select({ p: "PL1", collapse: "End" }, { event: false });
+    send();
+    const result = await prepared();
+    expect(result?.actionFacet?.id).toBe("word_document_review");
+    expect(result?.hostContextIdentity).toBe(IDENTITY);
+    expect(host.capture).toHaveBeenCalledTimes(1);
   });
 
   it("sends the selection made at Send, not the one the chip showed", async () => {

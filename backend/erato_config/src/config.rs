@@ -6453,6 +6453,9 @@ pub struct MsOfficeAddinDefaultSettings {
     /// Whether replies and forwards inherit the current read-mail chat.
     #[serde(default = "default_ms_office_addin_compose_inherits_from_read")]
     pub compose_inherits_from_read: bool,
+    /// Whether new Word chats include the open document until the user changes it.
+    #[serde(default = "default_ms_office_addin_word_include_document")]
+    pub word_include_document: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
@@ -6471,6 +6474,7 @@ impl Default for MsOfficeAddinDefaultSettings {
         Self {
             mode: MsOfficeAddinSessionMode::default(),
             compose_inherits_from_read: default_ms_office_addin_compose_inherits_from_read(),
+            word_include_document: default_ms_office_addin_word_include_document(),
         }
     }
 }
@@ -6810,6 +6814,10 @@ fn default_ms_office_addin_frontend_bundle_path() -> String {
 }
 
 fn default_ms_office_addin_compose_inherits_from_read() -> bool {
+    true
+}
+
+fn default_ms_office_addin_word_include_document() -> bool {
     true
 }
 

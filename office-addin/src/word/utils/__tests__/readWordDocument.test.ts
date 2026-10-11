@@ -4,17 +4,24 @@ import {
   installMockWordDocument,
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
-import { readWordDocument } from "../readWordDocument";
+import {
+  readWordDocument,
+  WORD_PARAGRAPH_READ_TIMEOUT_MS,
+} from "../readWordDocument";
 import {
   captureWordDocumentPackage,
   supportsWordDocumentPackage,
+  WordDocumentCaptureTimeoutError,
 } from "../wordDocumentPackage";
+import { WordDocumentTooLargeError } from "../wordDocumentPackageCodec";
 import { wordInPlaceAvailability } from "../wordInPlaceSwitch";
 import { wordParagraphIdsMissing } from "../wordParagraphIds";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
+import type * as wordDocumentPackageModule from "../wordDocumentPackage";
 
-vi.mock("../wordDocumentPackage", () => ({
+vi.mock("../wordDocumentPackage", async (importOriginal) => ({
+  ...(await importOriginal<typeof wordDocumentPackageModule>()),
   supportsWordDocumentPackage: vi.fn(() => false),
   captureWordDocumentPackage: vi.fn(),
 }));
@@ -118,17 +125,59 @@ describe("readWordDocument", () => {
     });
   });
 
-  it("resolves to a failure when the full package cannot be captured", async () => {
+  it("keeps the paragraphs and drops authoring when the full package cannot be captured", async () => {
     vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
     vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(
-      new Error("The expanded document is too large."),
+      new Error("Word could not read a document slice."),
     );
 
-    await expect(readWordDocument(true)).resolves.toEqual({
-      ok: false,
+    const result = await readWordDocument(true);
+
+    expect(result.ok && result.paragraphs).toHaveLength(3);
+    expect(result.ok && result.authoring).toBeUndefined();
+    expect(result.ok && result.authoringUnavailable).toEqual({
+      issue: "unavailable",
+      detail: "package-failed",
       error:
-        "full-document capture: Error: The expanded document is too large.",
+        "full-document capture: Error: Word could not read a document slice.",
     });
+  });
+
+  it.each([
+    [
+      new WordDocumentTooLargeError("The expanded document is too large."),
+      "too-large",
+      "package-too-large",
+    ],
+    [new WordDocumentCaptureTimeoutError(), "unavailable", "package-timeout"],
+  ] as const)(
+    "classifies a package failure: %s",
+    async (error, issue, detail) => {
+      vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+      vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(error);
+
+      const result = await readWordDocument(true);
+
+      expect(result.ok && result.authoringUnavailable).toMatchObject({
+        issue,
+        detail,
+      });
+    },
+  );
+
+  it("stops waiting for a paragraph read that never settles", async () => {
+    vi.useFakeTimers();
+    try {
+      word.word.run.mockReturnValueOnce(new Promise(() => {}));
+      const read = readWordDocument();
+      await vi.advanceTimersByTimeAsync(WORD_PARAGRAPH_READ_TIMEOUT_MS);
+      await expect(read).resolves.toEqual({
+        ok: false,
+        error: "paragraph read: Error: timed out after 30000 ms",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("resolves to a failure when the run rejects", async () => {

@@ -9,7 +9,7 @@ import { WordSettingsDialog } from "./components/WordSettingsDialog";
 import { useWordDocumentCaptures } from "./hooks/useWordDocumentCaptures";
 import { WordWriteProvider } from "./providers/WordWriteProvider";
 import { buildWordArtifact } from "./utils/buildWordArtifact";
-import { resolveWordDocumentIdentity } from "./utils/wordDocumentIdentity";
+import { getWordDocumentIdentity } from "./utils/wordDocumentIdentity";
 import { AddinChatCore, AddinChatCoreView } from "../core/AddinChatCore";
 import { useActionFacetClientActions } from "../core/clientActions/useAvailableActionFacets";
 
@@ -31,7 +31,7 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
     maxSizeFormatted,
   });
 
-  const [documentIdentity] = useState(resolveWordDocumentIdentity);
+  const [documentIdentity] = useState(getWordDocumentIdentity);
 
   const captures = useWordDocumentCaptures(controller);
   controller.hostCallbacksRef.current = captures.hostCallbacks;

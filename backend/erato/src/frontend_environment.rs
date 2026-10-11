@@ -662,16 +662,13 @@ fn build_frontend_environment(
             FRONTEND_ENV_KEY_MSAL_AUTHORITY.to_string(),
             Value::String(config.integrations.ms_office.addin.msal_authority.clone()),
         );
+        let default_settings = &config.integrations.ms_office.addin.default_settings;
         env.additional_environment.insert(
             FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS.to_string(),
             serde_json::json!({
-                "mode": config.integrations.ms_office.addin.default_settings.mode,
-                "compose_inherits_from_read": config
-                    .integrations
-                    .ms_office
-                    .addin
-                    .default_settings
-                    .compose_inherits_from_read,
+                "mode": default_settings.mode,
+                "compose_inherits_from_read": default_settings.compose_inherits_from_read,
+                "word_include_document": default_settings.word_include_document,
             }),
         );
     }
@@ -1310,6 +1307,41 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn office_addin_default_settings_are_only_emitted_to_the_office_addin() {
+        let mut config = AppConfig::default();
+        assert_eq!(
+            build_frontend_environment(&config, FrontendKind::OfficeAddin)
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS),
+            Some(&serde_json::json!({
+                "mode": "resume",
+                "compose_inherits_from_read": true,
+                "word_include_document": true,
+            }))
+        );
+
+        let default_settings = &mut config.integrations.ms_office.addin.default_settings;
+        default_settings.mode = crate::config::MsOfficeAddinSessionMode::Ask;
+        default_settings.compose_inherits_from_read = false;
+        default_settings.word_include_document = false;
+        assert_eq!(
+            build_frontend_environment(&config, FrontendKind::OfficeAddin)
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS),
+            Some(&serde_json::json!({
+                "mode": "ask",
+                "compose_inherits_from_read": false,
+                "word_include_document": false,
+            }))
+        );
+        assert!(
+            !build_frontend_environment(&config, FrontendKind::Web)
+                .additional_environment
+                .contains_key(FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS)
+        );
     }
 
     fn served_frontend(mount_path: &str, enabled: bool) -> ServedFrontend {

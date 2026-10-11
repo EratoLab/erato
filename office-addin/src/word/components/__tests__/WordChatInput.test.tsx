@@ -19,6 +19,10 @@ import type { MockWordHost } from "../../../test/mocks/word/document";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const advertised = vi.hoisted(() => ({ ids: [] as string[] }));
+const preferences = vi.hoisted(() => ({
+  includeByDefault: true,
+  setIncludeByDefault: vi.fn(),
+}));
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
@@ -28,6 +32,13 @@ vi.mock("@erato/frontend/library", async () => {
     }),
   });
 });
+
+vi.mock("../../wordPreferences", () => ({
+  useWordIncludeDocumentByDefault: () => [
+    preferences.includeByDefault,
+    preferences.setIncludeByDefault,
+  ],
+}));
 
 vi.mock("../../../core/AddinChatInputCore", () => ({
   AddinChatInputCore: ({
@@ -83,19 +94,29 @@ describe("WordChatInput", () => {
       },
     }) as unknown as AddinChatInputRenderProps;
 
+  const element = (
+    chatId: string | null = "chat-1",
+    documentIdentity: string = IDENTITY,
+  ) => (
+    <WordChatInput
+      chatInputProps={chatInputProps(chatId)}
+      documentIdentity={documentIdentity}
+      stagePendingCapture={(capture) => staged.push(capture)}
+    />
+  );
   const renderInput = (
     chatId: string | null = "chat-1",
     documentIdentity: string = IDENTITY,
-  ) =>
-    render(
-      <WordChatInput
-        chatInputProps={chatInputProps(chatId)}
-        documentIdentity={documentIdentity}
-        stagePendingCapture={(capture) => staged.push(capture)}
-      />,
-    );
+  ) => render(element(chatId, documentIdentity));
 
   const chip = () => screen.getByTestId("word-include-document-chip");
+  const excludeButton = () => screen.queryByTestId("word-exclude-document");
+  const isIncluded = () => excludeButton() !== null;
+  const exclude = () =>
+    fireEvent.click(screen.getByTestId("word-exclude-document"));
+  const include = () => fireEvent.click(chip());
+  const toggleAwayFromDefault = () =>
+    preferences.includeByDefault ? exclude() : include();
   const send = () => fireEvent.click(screen.getByTestId("send"));
   const lastFacet = () => sends.at(-1)?.[4];
   const lastIdentity = () => sends.at(-1)?.[5];
@@ -103,6 +124,7 @@ describe("WordChatInput", () => {
   beforeEach(() => {
     i18n.activate("en");
     advertised.ids = [...BOTH_FACETS];
+    preferences.includeByDefault = true;
     sends = [];
     handedOver = [];
     staged = [];
@@ -119,16 +141,43 @@ describe("WordChatInput", () => {
     vi.clearAllMocks();
   });
 
-  it("is off by default and turns on with one gesture", async () => {
+  it("includes the document by default and names it in the chip", async () => {
+    renderInput();
+
+    expect(excludeButton()).toHaveAttribute(
+      "aria-label",
+      "Don't include this document",
+    );
+    await waitFor(() =>
+      expect(chip()).toHaveTextContent("report.docx is included"),
+    );
+  });
+
+  it("starts without the document when the preference is off, and includes it with one click", async () => {
+    preferences.includeByDefault = false;
     renderInput();
 
     expect(chip()).toHaveTextContent("Include this document");
-    expect(chip()).toHaveAttribute("aria-pressed", "false");
+    expect(excludeButton()).toBeNull();
 
-    fireEvent.click(chip());
+    include();
 
-    expect(chip()).toHaveAttribute("aria-pressed", "true");
-    await waitFor(() => expect(chip()).toHaveTextContent("Document included"));
+    expect(isIncluded()).toBe(true);
+    await waitFor(() =>
+      expect(chip()).toHaveTextContent("report.docx is included"),
+    );
+  });
+
+  it("stops including the document for this chat with the ✕", async () => {
+    renderInput();
+
+    exclude();
+
+    expect(chip()).toHaveTextContent("Include this document");
+    send();
+    await waitFor(() => expect(sends).toHaveLength(1));
+    expect(lastFacet()).toBeUndefined();
+    expect(lastIdentity()).toBeNull();
   });
 
   it("is not rendered at all when neither facet is advertised", () => {
@@ -139,7 +188,8 @@ describe("WordChatInput", () => {
     expect(screen.getByTestId("send")).toBeInTheDocument();
   });
 
-  it("sends with no action facet while the chip is off", async () => {
+  it("neither reads nor attaches the document while it is not included", async () => {
+    preferences.includeByDefault = false;
     renderInput();
 
     send();
@@ -151,9 +201,8 @@ describe("WordChatInput", () => {
     expect(word.word.run).not.toHaveBeenCalled();
   });
 
-  it("attaches word_document_review and the identity once the chip is on", async () => {
+  it("attaches word_document_review and the identity by default", async () => {
     renderInput();
-    fireEvent.click(chip());
 
     send();
 
@@ -180,7 +229,6 @@ describe("WordChatInput", () => {
   it("attaches word_compose for an empty document", async () => {
     word.word.setParagraphs([{ text: "" }]);
     renderInput();
-    fireEvent.click(chip());
 
     await waitFor(() => expect(chip()).toHaveTextContent("New document"));
     send();
@@ -193,40 +241,37 @@ describe("WordChatInput", () => {
     });
   });
 
-  it("hands the message over before the document is captured", async () => {
+  it("hands the message over, unlabelled, before a quick capture finishes", async () => {
     renderInput();
-    fireEvent.click(chip());
-    await waitFor(() => expect(chip()).toHaveTextContent("Document included"));
 
     send();
 
     expect(handedOver).toHaveLength(1);
     expect(handedOver[0][4]).toBeUndefined();
-    expect(handedOver[0][11]?.label).toBe("Preparing document…");
+    expect(handedOver[0][11]).toBeDefined();
+    expect(handedOver[0][11]?.label).toBeUndefined();
     expect(sends).toHaveLength(0);
     await waitFor(() => expect(sends).toHaveLength(1));
     expect(lastFacet()?.id).toBe("word_document_review");
   });
 
   it("still sends when the document cannot be read", async () => {
-    renderInput();
-    fireEvent.click(chip());
     word.word.run.mockRejectedValue(new Error("GeneralException"));
+    renderInput();
 
+    await waitFor(() =>
+      expect(chip()).toHaveTextContent("Document not included"),
+    );
     send();
 
     await waitFor(() => expect(sends).toHaveLength(1));
     expect(lastFacet()).toBeUndefined();
     expect(lastIdentity()).toBeNull();
     expect(staged.at(-1)).toBeNull();
-    await waitFor(() =>
-      expect(chip()).toHaveTextContent("Document not included"),
-    );
   });
 
   it("carries the document on every send, unchanged document included", async () => {
     renderInput();
-    fireEvent.click(chip());
 
     send();
     await waitFor(() => expect(sends).toHaveLength(1));
@@ -246,8 +291,6 @@ describe("WordChatInput", () => {
     );
     renderInput();
 
-    fireEvent.click(chip());
-
     await waitFor(() =>
       expect(chip()).toHaveTextContent(
         /Document included \(first \d+ of 200 paragraphs\)/,
@@ -255,66 +298,72 @@ describe("WordChatInput", () => {
     );
   });
 
-  it("keeps the chip on when a new chat receives its id on first send", async () => {
+  it("keeps a dismissal when a new chat receives its id on first send", async () => {
     const { rerender } = renderInput(null);
-    fireEvent.click(chip());
-    expect(chip()).toHaveAttribute("aria-pressed", "true");
+    exclude();
 
-    rerender(
-      <WordChatInput
-        chatInputProps={chatInputProps("chat-created-on-send")}
-        documentIdentity={IDENTITY}
-        stagePendingCapture={(capture) => staged.push(capture)}
-      />,
-    );
+    rerender(element("chat-created-on-send"));
 
-    expect(chip()).toHaveAttribute("aria-pressed", "true");
+    expect(isIncluded()).toBe(false);
+    send();
+    await waitFor(() => expect(sends).toHaveLength(1));
+    expect(lastFacet()).toBeUndefined();
+  });
+
+  it("keeps the document included when a new chat receives its id, though the preference is off", async () => {
+    preferences.includeByDefault = false;
+    const { rerender } = renderInput(null);
+    include();
+
+    rerender(element("chat-created-on-send"));
+
+    expect(isIncluded()).toBe(true);
     send();
     await waitFor(() => expect(sends).toHaveLength(1));
     expect(lastFacet()?.id).toBe("word_document_review");
   });
 
-  it("resets to off when the chat genuinely changes", () => {
-    const { rerender } = renderInput("chat-1");
-    fireEvent.click(chip());
+  it.each([true, false])(
+    "returns to the default (included: %s) when the chat genuinely changes",
+    (includeByDefault) => {
+      preferences.includeByDefault = includeByDefault;
+      const { rerender } = renderInput("chat-1");
+      toggleAwayFromDefault();
+      expect(isIncluded()).toBe(!includeByDefault);
 
-    rerender(
-      <WordChatInput
-        chatInputProps={chatInputProps("chat-2")}
-        documentIdentity={IDENTITY}
-        stagePendingCapture={(capture) => staged.push(capture)}
-      />,
-    );
+      rerender(element("chat-2"));
 
-    expect(chip()).toHaveAttribute("aria-pressed", "false");
-    expect(chip()).toHaveTextContent("Include this document");
-  });
+      expect(isIncluded()).toBe(includeByDefault);
+    },
+  );
 
-  it("resets to off when the pane's document identity changes", () => {
-    const { rerender } = renderInput("chat-1");
-    fireEvent.click(chip());
+  it.each([true, false])(
+    "returns to the default (included: %s) when the pane's document identity changes",
+    (includeByDefault) => {
+      preferences.includeByDefault = includeByDefault;
+      const { rerender } = renderInput("chat-1");
+      toggleAwayFromDefault();
+      expect(isIncluded()).toBe(!includeByDefault);
 
-    rerender(
-      <WordChatInput
-        chatInputProps={chatInputProps("chat-1")}
-        documentIdentity="pane-session:11111111-2222-3333-4444-555555555555"
-        stagePendingCapture={(capture) => staged.push(capture)}
-      />,
-    );
+      rerender(
+        element("chat-1", "pane-session:11111111-2222-3333-4444-555555555555"),
+      );
 
-    expect(chip()).toHaveAttribute("aria-pressed", "false");
-  });
+      expect(isIncluded()).toBe(includeByDefault);
+    },
+  );
 
-  it("never persists the read gate anywhere", async () => {
+  it("keeps the per-chat choice out of the saved preference and of every store", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const removeItem = vi.spyOn(Storage.prototype, "removeItem");
 
     renderInput();
-    fireEvent.click(chip());
     send();
     await waitFor(() => expect(sends).toHaveLength(1));
-    fireEvent.click(chip());
+    exclude();
+    include();
 
+    expect(preferences.setIncludeByDefault).not.toHaveBeenCalled();
     expect(setItem).not.toHaveBeenCalled();
     expect(removeItem).not.toHaveBeenCalled();
     expect(word.document.settings.set).not.toHaveBeenCalled();

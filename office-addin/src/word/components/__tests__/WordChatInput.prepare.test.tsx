@@ -8,21 +8,40 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WordChatInput } from "../WordChatInput";
+import {
+  WORD_SEND_CAPTURE_DEADLINE_MS,
+  WORD_SEND_SKIP_OFFER_MS,
+  WordChatInput,
+} from "../WordChatInput";
 
 import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
+import type { WordDocumentPreview } from "../../hooks/useWordDocumentSource";
 import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
 import type * as wordActionFacetModule from "../../utils/wordActionFacet";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
+import type { ReactNode } from "react";
 
-const host = vi.hoisted(() => ({
-  advertised: [] as string[],
-  fileIds: undefined as string[] | undefined,
-  capture: vi.fn(),
-  budget: vi.fn(),
-  images: vi.fn(),
-  session: { activate: vi.fn(), clear: vi.fn(), execute: vi.fn() },
-}));
+const host = vi.hoisted(() => {
+  const readyPreview: WordDocumentPreview = {
+    status: "included",
+    coverage: null,
+    changedSinceLastSend: false,
+    reading: false,
+  };
+  return {
+    advertised: [] as string[],
+    fileIds: undefined as string[] | undefined,
+    readyPreview,
+    preview: readyPreview,
+    capture: vi.fn(),
+    captureExpectedSlow: vi.fn(),
+    previousCapture: vi.fn(),
+    markSent: vi.fn(),
+    budget: vi.fn(),
+    images: vi.fn(),
+    session: { activate: vi.fn(), clear: vi.fn(), execute: vi.fn() },
+  };
+});
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
@@ -30,18 +49,27 @@ vi.mock("@erato/frontend/library", async () => {
     useFacets: () => ({
       data: { action_facets: host.advertised.map((id) => ({ id })) },
     }),
+    Alert: ({ children }: { children: ReactNode }) => (
+      <div role="alert">{children}</div>
+    ),
+    SpinnerIcon: ({ srText }: { srText?: string }) => (
+      <span role="status">{srText}</span>
+    ),
   });
 });
 
 vi.mock("../../../core/AddinChatInputCore", () => ({
   AddinChatInputCore: ({
     onSendMessage,
+    disabled,
   }: {
     onSendMessage: (message: string, inputFileIds?: string[]) => void;
+    disabled?: boolean;
   }) => (
     <button
       type="button"
       data-testid="send"
+      data-composer-disabled={String(disabled === true)}
       onClick={() => onSendMessage("hi", host.fileIds)}
     >
       send
@@ -51,8 +79,11 @@ vi.mock("../../../core/AddinChatInputCore", () => ({
 
 vi.mock("../../hooks/useWordDocumentSource", () => ({
   useWordDocumentSource: () => ({
-    preview: { status: "ready", coverage: null, changedSinceLastSend: false },
+    preview: host.preview,
     capture: host.capture,
+    captureExpectedSlow: host.captureExpectedSlow,
+    previousCapture: host.previousCapture,
+    markSent: host.markSent,
   }),
 }));
 
@@ -98,6 +129,7 @@ type SendCall = Parameters<AddinChatInputRenderProps["onSendMessage"]>;
 type Prepared = Awaited<ReturnType<NonNullable<SendCall[11]>["run"]>>;
 
 const IDENTITY = "https://contoso.sharepoint.com/Shared%20Documents/a.docx";
+const WITHOUT_DOCUMENT = { actionFacet: undefined, hostContextIdentity: null };
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -109,49 +141,81 @@ const deferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
-const authoringBuild = (): WordDocumentBuild =>
+const authoringBuild = (
+  authoring: Record<string, unknown> = {},
+): WordDocumentBuild =>
   ({
     args: { document_text: "[1] Text" },
     coverage: { hasContent: true, paragraphsSent: 1 },
     ordinalMap: new Map(),
     renderedOrdinals: new Set([1]),
     partialOrdinal: null,
-    authoring: { token: "snapshot-1" },
+    authoring: { token: "snapshot-1", ...authoring },
   }) as unknown as WordDocumentBuild;
 
 describe("WordChatInput prepared send", () => {
   let handedOver: SendCall[];
   let staged: (WordDocumentCapture | null)[];
 
-  const props = (chatId: string): AddinChatInputRenderProps =>
+  const props = (
+    chatId: string,
+    extra: Partial<AddinChatInputRenderProps> = {},
+  ): AddinChatInputRenderProps =>
     ({
       chatId,
       onSendMessage: (...args: SendCall) => handedOver.push(args),
+      ...extra,
     }) as unknown as AddinChatInputRenderProps;
 
-  const renderInput = (documentIdentity = IDENTITY) =>
+  const renderInput = (
+    documentIdentity = IDENTITY,
+    extra: Partial<AddinChatInputRenderProps> = {},
+  ) =>
     render(
       <WordChatInput
-        chatInputProps={props("chat-1")}
+        chatInputProps={props("chat-1", extra)}
         documentIdentity={documentIdentity}
         stagePendingCapture={(capture) => staged.push(capture)}
       />,
     );
 
-  const includeDocument = () =>
-    fireEvent.click(screen.getByTestId("word-include-document-chip"));
   const send = () => fireEvent.click(screen.getByTestId("send"));
+  const composerDisabled = () =>
+    screen.getByTestId("send").getAttribute("data-composer-disabled");
+  const chip = () => screen.getByTestId("word-include-document-chip");
   const preparation = () => {
     const prepare = handedOver.at(-1)?.[11];
     if (!prepare) throw new Error("the send was not prepared");
     return prepare;
   };
+  const startPreparation = (signal = new AbortController().signal) => {
+    let result!: Promise<Prepared>;
+    act(() => {
+      result = preparation().run(signal);
+    });
+    return result;
+  };
+  const settle = async (result: Promise<Prepared>): Promise<Prepared> => {
+    let prepared = null as Prepared;
+    await act(async () => {
+      prepared = await result;
+    });
+    return prepared;
+  };
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  const neverSettles = () => new Promise<WordDocumentBuild>(() => {});
 
   beforeEach(() => {
     i18n.activate("en");
     host.advertised = ["word_document_review", "word_document_authoring"];
     host.fileIds = undefined;
+    host.preview = { ...host.readyPreview };
     host.capture.mockReset();
+    host.captureExpectedSlow.mockReset().mockReturnValue(false);
+    host.previousCapture.mockReset().mockReturnValue(null);
     host.budget.mockReset().mockResolvedValue({ ok: true });
     host.images.mockReset().mockResolvedValue({ assets: [], unavailable: [] });
     handedOver = [];
@@ -160,10 +224,11 @@ describe("WordChatInput prepared send", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
-  it("captures the document and images together after handing the message over", async () => {
+  it("captures the document, images and the budget check together after handing the message over", async () => {
     host.fileIds = ["image-1"];
     const capture = deferred<WordDocumentBuild>();
     host.capture.mockReturnValue(capture.promise);
@@ -172,26 +237,25 @@ describe("WordChatInput prepared send", () => {
       unavailable: [],
     });
     renderInput();
-    includeDocument();
 
     send();
     expect(handedOver).toHaveLength(1);
     expect(host.capture).not.toHaveBeenCalled();
+    expect(host.budget).not.toHaveBeenCalled();
 
-    let result: Promise<Prepared> | undefined;
-    act(() => {
-      result = preparation().run(new AbortController().signal);
-    });
+    const signal = new AbortController().signal;
+    const result = startPreparation(signal);
     expect(host.capture).toHaveBeenCalledTimes(1);
     expect(host.images).toHaveBeenCalledWith(["image-1"]);
+    expect(host.budget).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ message: "hi", chatId: "chat-1", signal }),
+    );
 
     const build = authoringBuild();
-    await act(async () => {
-      capture.resolve(build);
-      await result;
-    });
+    capture.resolve(build);
+    const prepared = await settle(result);
 
-    const prepared = await result;
     expect(prepared?.actionFacet?.id).toBe("word_document_authoring");
     expect(prepared?.hostContextIdentity).toBe(IDENTITY);
     expect(build.authoring?.assets).toEqual([{ id: "asset-1" }]);
@@ -208,28 +272,52 @@ describe("WordChatInput prepared send", () => {
     host.capture.mockResolvedValue(authoringBuild());
     host.budget.mockResolvedValue({ ok: false, issue: "model-budget" });
     renderInput();
-    includeDocument();
     send();
 
-    let prepared = null as Prepared;
-    await act(async () => {
-      prepared = await preparation().run(new AbortController().signal);
-    });
+    const prepared = await settle(startPreparation());
 
     expect(prepared?.actionFacet?.args?.authoring_status).toBe("model-budget");
+  });
+
+  it("keeps the capture's own authoring issue over a budget refusal", async () => {
+    host.capture.mockResolvedValue(authoringBuild({ issue: "tracking" }));
+    host.budget.mockResolvedValue({ ok: false, issue: "model-budget" });
+    renderInput();
+    send();
+
+    const prepared = await settle(startPreparation());
+
+    expect(prepared?.actionFacet).toMatchObject({
+      id: "word_document_authoring",
+      args: { authoring_status: "tracking" },
+    });
+  });
+
+  it("ignores a budget refusal when the capture has no authoring", async () => {
+    host.capture.mockResolvedValue({
+      ...authoringBuild(),
+      authoring: undefined,
+    });
+    host.budget.mockResolvedValue({ ok: false, issue: "model-budget" });
+    renderInput();
+    send();
+
+    const prepared = await settle(startPreparation());
+
+    expect(prepared?.actionFacet).toMatchObject({
+      id: "word_document_review",
+      args: { authoring_status: "available" },
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("drops the send when the document changes during preparation", async () => {
     const capture = deferred<WordDocumentBuild>();
     host.capture.mockReturnValue(capture.promise);
     const { rerender } = renderInput();
-    includeDocument();
     send();
 
-    let result: Promise<Prepared> | undefined;
-    act(() => {
-      result = preparation().run(new AbortController().signal);
-    });
+    const result = startPreparation();
     rerender(
       <WordChatInput
         chatInputProps={props("chat-1")}
@@ -237,59 +325,41 @@ describe("WordChatInput prepared send", () => {
         stagePendingCapture={(capture) => staged.push(capture)}
       />,
     );
-    await act(async () => {
-      capture.resolve(authoringBuild());
-      await result;
-    });
+    capture.resolve(authoringBuild());
 
-    expect(await result).toBeNull();
+    expect(await settle(result)).toBeNull();
     expect(host.session.activate).not.toHaveBeenCalled();
     act(() => preparation().onAbandoned?.());
     expect(staged.at(-1)).toBeNull();
     expect(host.session.clear).toHaveBeenCalled();
   });
 
-  it("drops the send when it is stopped during preparation", async () => {
-    const capture = deferred<WordDocumentBuild>();
-    host.capture.mockReturnValue(capture.promise);
+  it("drops the send as soon as it is stopped, without waiting for Word", async () => {
+    host.capture.mockReturnValue(neverSettles());
     renderInput();
-    includeDocument();
     send();
 
     const controller = new AbortController();
-    let result: Promise<Prepared> | undefined;
-    act(() => {
-      result = preparation().run(controller.signal);
-    });
-    controller.abort();
-    await act(async () => {
-      capture.resolve(authoringBuild());
-      await result;
-    });
+    const result = startPreparation(controller.signal);
+    act(() => controller.abort());
 
-    expect(await result).toBeNull();
-    expect(host.budget).not.toHaveBeenCalled();
+    expect(await settle(result)).toBeNull();
+    expect(host.budget.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(host.session.activate).not.toHaveBeenCalled();
   });
 
   it("sends without the document when it cannot be read", async () => {
     host.capture.mockRejectedValue(new Error("GeneralException"));
     renderInput();
-    includeDocument();
     send();
 
-    let prepared = null as Prepared;
-    await act(async () => {
-      prepared = await preparation().run(new AbortController().signal);
-    });
+    const prepared = await settle(startPreparation());
 
-    expect(prepared).toEqual({
-      actionFacet: undefined,
-      hostContextIdentity: null,
-    });
+    expect(prepared).toEqual(WITHOUT_DOCUMENT);
     expect(staged.at(-1)).toBeNull();
   });
 
-  it("does not fetch images when document authoring is unavailable", async () => {
+  it("does not fetch images or check the budget when document authoring is unavailable", async () => {
     host.advertised = ["word_document_review"];
     host.fileIds = ["image-1"];
     host.capture.mockResolvedValue({
@@ -297,12 +367,9 @@ describe("WordChatInput prepared send", () => {
       authoring: undefined,
     });
     renderInput();
-    includeDocument();
     send();
 
-    await act(async () => {
-      await preparation().run(new AbortController().signal);
-    });
+    await settle(startPreparation());
 
     expect(host.images).not.toHaveBeenCalled();
     expect(host.budget).not.toHaveBeenCalled();
@@ -312,20 +379,14 @@ describe("WordChatInput prepared send", () => {
     const capture = deferred<WordDocumentBuild>();
     host.capture.mockReturnValue(capture.promise);
     renderInput();
-    includeDocument();
 
     send();
     send();
     expect(handedOver).toHaveLength(1);
 
-    let result: Promise<Prepared> | undefined;
-    act(() => {
-      result = preparation().run(new AbortController().signal);
-    });
-    await act(async () => {
-      capture.resolve(authoringBuild());
-      await result;
-    });
+    const result = startPreparation();
+    capture.resolve(authoringBuild());
+    await settle(result);
 
     host.capture.mockResolvedValue(authoringBuild());
     send();
@@ -334,12 +395,259 @@ describe("WordChatInput prepared send", () => {
 
   it("unlocks sending again after a dropped send", () => {
     renderInput();
-    includeDocument();
     send();
 
     act(() => preparation().onAbandoned?.());
     send();
 
     expect(handedOver).toHaveLength(2);
+  });
+
+  it("leaves the composer usable while a send is being prepared", () => {
+    host.capture.mockReturnValue(neverSettles());
+    renderInput();
+
+    send();
+    void startPreparation();
+
+    expect(composerDisabled()).toBe("false");
+  });
+
+  it("passes the host's disabled state to the composer unchanged", () => {
+    renderInput(IDENTITY, { disabled: true });
+
+    expect(composerDisabled()).toBe("true");
+  });
+
+  it.each([
+    [true, "Reading document…"],
+    [false, undefined],
+  ])(
+    "labels the send by whether the capture is expected to be slow (%s)",
+    (slow, label) => {
+      host.captureExpectedSlow.mockReturnValue(slow);
+      renderInput();
+
+      send();
+
+      expect(preparation().label).toBe(label);
+    },
+  );
+
+  it("shows a spinner in the chip while Word is handing over the document", () => {
+    host.preview = { ...host.readyPreview, reading: true };
+    renderInput();
+
+    expect(screen.getByRole("status")).toHaveTextContent("Reading document…");
+  });
+
+  it("shows no spinner once the document is read", () => {
+    renderInput();
+
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("says the document changed since the last send", () => {
+    host.preview = { ...host.readyPreview, changedSinceLastSend: true };
+    renderInput();
+
+    expect(chip()).toHaveTextContent(
+      "Document included - changed since last send",
+    );
+  });
+
+  it("offers to send without the document once the capture is slow, and does so on request", async () => {
+    vi.useFakeTimers();
+    host.capture.mockReturnValue(neverSettles());
+    renderInput();
+    send();
+    const result = startPreparation();
+
+    await advance(WORD_SEND_SKIP_OFFER_MS - 1);
+    expect(screen.queryByTestId("word-slow-capture")).toBeNull();
+    await advance(1);
+    expect(screen.getByTestId("word-slow-capture")).toHaveTextContent(
+      "Word is still handing over the document.",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send without document" }),
+    );
+
+    expect(await settle(result)).toEqual(WITHOUT_DOCUMENT);
+    expect(staged.at(-1)).toBeNull();
+    expect(host.session.activate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-slow-capture")).toBeNull();
+  });
+
+  it("withdraws the offer when the capture arrives in time", async () => {
+    vi.useFakeTimers();
+    const capture = deferred<WordDocumentBuild>();
+    host.capture.mockReturnValue(capture.promise);
+    renderInput();
+    send();
+    const result = startPreparation();
+    await advance(WORD_SEND_SKIP_OFFER_MS);
+    expect(screen.getByTestId("word-slow-capture")).toBeInTheDocument();
+
+    capture.resolve(authoringBuild());
+    const prepared = await settle(result);
+
+    expect(prepared?.actionFacet?.id).toBe("word_document_authoring");
+    expect(screen.queryByTestId("word-slow-capture")).toBeNull();
+  });
+
+  it("stops waiting for Word as soon as the document is removed with ✕", async () => {
+    host.capture.mockReturnValue(neverSettles());
+    renderInput();
+    send();
+    const result = startPreparation();
+
+    fireEvent.click(screen.getByTestId("word-exclude-document"));
+
+    expect(await settle(result)).toEqual(WITHOUT_DOCUMENT);
+    expect(host.markSent).not.toHaveBeenCalled();
+  });
+
+  it("drops a send still waiting in the chat being left, so the next chat can send", async () => {
+    host.capture.mockReturnValue(neverSettles());
+    const { rerender } = renderInput();
+    send();
+    const result = startPreparation();
+
+    rerender(
+      <WordChatInput
+        chatInputProps={props("chat-2")}
+        documentIdentity={IDENTITY}
+        stagePendingCapture={(capture) => staged.push(capture)}
+      />,
+    );
+
+    expect(await settle(result)).toBeNull();
+    send();
+    expect(handedOver).toHaveLength(2);
+  });
+
+  it("records the capture a send carried for the changed-since-last-send label", async () => {
+    const build = authoringBuild();
+    host.capture.mockResolvedValue(build);
+    renderInput();
+    send();
+
+    await settle(startPreparation());
+
+    expect(host.markSent).toHaveBeenCalledWith(build);
+  });
+
+  it("sends an earlier capture when Word misses the deadline, and says so", async () => {
+    vi.useFakeTimers();
+    host.capture.mockReturnValue(neverSettles());
+    const earlier = authoringBuild();
+    host.previousCapture.mockReturnValue(earlier);
+    renderInput();
+    send();
+    const result = startPreparation();
+
+    await advance(WORD_SEND_CAPTURE_DEADLINE_MS);
+    const prepared = await settle(result);
+
+    expect(prepared?.actionFacet?.id).toBe("word_document_authoring");
+    expect(prepared?.hostContextIdentity).toBe(IDENTITY);
+    expect(host.session.activate).toHaveBeenCalledWith(
+      earlier.authoring,
+      undefined,
+      expect.any(Function),
+    );
+    expect(staged.at(-1)?.identity).toBe(IDENTITY);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Reading the document took too long, so Erato used an earlier copy. Recent edits may be missing.",
+    );
+  });
+
+  it("sends without the document when Word misses the deadline and no earlier capture exists, and says so", async () => {
+    vi.useFakeTimers();
+    host.capture.mockReturnValue(neverSettles());
+    renderInput();
+    send();
+    const result = startPreparation();
+
+    await advance(WORD_SEND_CAPTURE_DEADLINE_MS - 1);
+    expect(screen.queryByRole("alert")).toBeNull();
+    await advance(1);
+
+    expect(await settle(result)).toEqual(WITHOUT_DOCUMENT);
+    expect(staged.at(-1)).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Reading the document took too long, so this message was sent without it.",
+    );
+  });
+
+  it("clears the deadline notice on the next send", async () => {
+    vi.useFakeTimers();
+    host.capture.mockReturnValue(neverSettles());
+    renderInput();
+    send();
+    const result = startPreparation();
+    await advance(WORD_SEND_CAPTURE_DEADLINE_MS);
+    await settle(result);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    host.capture.mockResolvedValue(authoringBuild());
+    send();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it.each([
+    [
+      "too-large",
+      "This document is too large for Erato to edit. Erato can still read its text.",
+    ],
+    [
+      "unavailable",
+      "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
+    ],
+  ])(
+    "falls back to a read-only review when authoring is %s",
+    async (issue, warning) => {
+      host.capture.mockResolvedValue(
+        authoringBuild({ issue, issueDetails: ["detail"] }),
+      );
+      renderInput();
+      send();
+
+      const prepared = await settle(startPreparation());
+
+      expect(prepared?.actionFacet?.id).toBe("word_document_review");
+      expect(prepared?.hostContextIdentity).toBe(IDENTITY);
+      expect(host.session.activate).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        undefined,
+      );
+      expect(staged.at(-1)).toMatchObject({
+        identity: IDENTITY,
+        authoring: undefined,
+        paragraphsSent: 1,
+      });
+      expect(screen.getByRole("alert")).toHaveTextContent(warning);
+    },
+  );
+
+  it("keeps authoring with its issue when the review facet is not advertised", async () => {
+    host.advertised = ["word_document_authoring"];
+    host.capture.mockResolvedValue(authoringBuild({ issue: "too-large" }));
+    renderInput();
+    send();
+
+    const prepared = await settle(startPreparation());
+
+    expect(prepared?.actionFacet).toMatchObject({
+      id: "word_document_authoring",
+      args: { authoring_status: "too-large" },
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This document exceeds the current complete-document rewrite limit.",
+    );
   });
 });

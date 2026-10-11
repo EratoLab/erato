@@ -2,6 +2,7 @@ import { createWordXmlComparison } from "@erato/frontend/word-review";
 
 import {
   MAX_WORD_DOCX_BYTES,
+  WordDocumentTooLargeError,
   encodeWordXml,
   isWordXmlPart,
   parseWordXml,
@@ -56,18 +57,41 @@ export const WORD_DOCUMENT_IMPORT_OPTIONS: Word.InsertFileOptions = {
 /** Office's documented maximum and default; one slice covers every supported DOCX. */
 const WORD_FILE_SLICE_BYTES = 4 * 1024 * 1024;
 
+/** Covers a Grant Access prompt the user has not answered yet. */
+export const WORD_FILE_OPEN_TIMEOUT_MS = 30_000;
+const WORD_FILE_SLICE_TIMEOUT_MS = 15_000;
+const WORD_FILE_CLOSE_TIMEOUT_MS = 2_000;
+
+export class WordDocumentCaptureTimeoutError extends Error {
+  constructor() {
+    super("Word did not hand over the document in time.");
+    this.name = "WordDocumentCaptureTimeoutError";
+  }
+}
+
 /** Office keeps only two file handles; close ours on every slice/size failure. */
 export async function readWordDocumentFile(): Promise<Uint8Array> {
   const document = globalThis.Office?.context?.document;
   if (!document?.getFileAsync)
     throw new Error("This Word host cannot capture the complete document.");
   const file = await new Promise<Office.File>((resolve, reject) => {
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      reject(new WordDocumentCaptureTimeoutError());
+    }, WORD_FILE_OPEN_TIMEOUT_MS);
     document.getFileAsync(
       Office.FileType.Compressed,
       { sliceSize: WORD_FILE_SLICE_BYTES },
       (result) => {
-        if (result.status === Office.AsyncResultStatus.Succeeded)
-          resolve(result.value);
+        clearTimeout(timer);
+        const succeeded = result.status === Office.AsyncResultStatus.Succeeded;
+        // A handle that arrives after the timeout would otherwise hold one of Office's two slots.
+        if (timedOut) {
+          if (succeeded) result.value.closeAsync(() => {});
+          return;
+        }
+        if (succeeded) resolve(result.value);
         else
           reject(
             new Error(
@@ -81,18 +105,28 @@ export async function readWordDocumentFile(): Promise<Uint8Array> {
     if (
       !Number.isSafeInteger(file.size) ||
       file.size <= 0 ||
-      file.size > MAX_WORD_DOCX_BYTES ||
       !Number.isSafeInteger(file.sliceCount) ||
-      file.sliceCount <= 0 ||
+      file.sliceCount <= 0
+    )
+      throw new Error("Word returned an incomplete document snapshot.");
+    if (
+      file.size > MAX_WORD_DOCX_BYTES ||
       // Bounded as for 64 KB slices, so a host that returns smaller slices is still accepted.
       file.sliceCount > Math.ceil(MAX_WORD_DOCX_BYTES / 65536)
     )
-      throw new Error("Full-document editing supports DOCX files up to 4 MB.");
+      throw new WordDocumentTooLargeError(
+        "Full-document editing supports DOCX files up to 4 MB.",
+      );
     const output = new Uint8Array(file.size);
     let offset = 0;
     for (let i = 0; i < file.sliceCount; i++) {
       const slice = await new Promise<Office.Slice>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new WordDocumentCaptureTimeoutError()),
+          WORD_FILE_SLICE_TIMEOUT_MS,
+        );
         file.getSliceAsync(i, (result) => {
+          clearTimeout(timer);
           if (result.status === Office.AsyncResultStatus.Succeeded)
             resolve(result.value);
           else reject(new Error("Word could not read a document slice."));
@@ -112,7 +146,14 @@ export async function readWordDocumentFile(): Promise<Uint8Array> {
       throw new Error("Word returned an incomplete document snapshot.");
     return output;
   } finally {
-    await new Promise<void>((resolve) => file.closeAsync(() => resolve()));
+    // After a slice timeout the close queues behind the stuck slice and may never answer.
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, WORD_FILE_CLOSE_TIMEOUT_MS);
+      file.closeAsync(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
   }
 }
 

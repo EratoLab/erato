@@ -2696,6 +2696,16 @@ msgid "officeAddin.word.authoring.readFailed"
 msgstr "Word no pudo leer el documento para esta operación. No se realizó ningún cambio."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTooLarge"
+msgstr "Este documento es demasiado grande para que Erato lo edite. Erato puede seguir leyendo su texto."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyUnavailable"
+msgstr "Word no entregó el documento completo, así que Erato puede leer su texto pero no editarlo. Vuelva a enviar para intentarlo de nuevo."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.rejectTracked"
 msgstr "Rechazar estos cambios con seguimiento"
@@ -2913,6 +2923,11 @@ msgstr "Documento incluido: ha cambiado desde el último envío"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.dismiss"
+msgstr "No incluir este documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.include"
 msgstr "Incluir este documento"
 
@@ -2920,6 +2935,11 @@ msgstr "Incluir este documento"
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.included"
 msgstr "Documento incluido"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.includedNamed"
+msgstr "{documentName} está incluido"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -2942,6 +2962,16 @@ msgstr "Documento nuevo"
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.notIncluded"
 msgstr "Documento no incluido"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.reading"
+msgstr "Leyendo el documento…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.selectionInstead"
+msgstr "Se envía su selección en lugar del documento"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts
@@ -4147,8 +4177,8 @@ msgstr "La propuesta ya no marca el formato de {dropped}. Si esas palabras sigue
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.selection.insteadOfDocument"
-msgstr "Si este pasaje se puede reemplazar, se envía en lugar del documento."
+#~ msgid "officeAddin.word.selection.insteadOfDocument"
+#~ msgstr "Si este pasaje se puede reemplazar, se envía en lugar del documento."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4222,8 +4252,8 @@ msgstr "Word no responde. Vuelve a cargar el panel del complemento si esto conti
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.selection.notSentWithDocument"
-msgstr "No se envía mientras el documento esté incluido."
+#~ msgid "officeAddin.word.selection.notSentWithDocument"
+#~ msgstr "No se envía mientras el documento esté incluido."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -4416,6 +4446,11 @@ msgid "officeAddin.word.selection.scope"
 msgstr "Reemplazar solo escribe en el pasaje que seleccionaste, y solo si no cambió desde tu solicitud."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.sentInsteadOfDocument"
+msgstr "Se envía en lugar del documento."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordShowInWordButton.tsx
 msgid "officeAddin.word.selection.showUnavailable"
 msgstr "Word no seleccionó el pasaje. Inténtalo de nuevo en un momento."
@@ -4507,13 +4542,38 @@ msgstr "Puede que Word haya reemplazado el pasaje, pero no se pudo comprobar el 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.send.preparingDocument"
-msgstr ""
+msgid "officeAddin.word.send.notIncluded"
+msgstr "La lectura del documento tardó demasiado, así que este mensaje se envió sin él."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+#~ msgid "officeAddin.word.send.preparingDocument"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.previousCapture"
+msgstr "La lectura del documento tardó demasiado, así que Erato usó una copia anterior. Es posible que falten los cambios recientes."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.readingDocument"
+msgstr "Leyendo el documento…"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.readingSelection"
 msgstr "Leyendo la selección…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.stillReading"
+msgstr "Word todavía está entregando el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.withoutDocument"
+msgstr "Enviar sin el documento"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
@@ -4539,6 +4599,31 @@ msgstr "Reemplazar todo el documento al aplicar (modo de compatibilidad)"
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.compatibilityMode.helper"
 msgstr "Las reescrituras se aplican como un reemplazo completo en lugar de editar solo los pasajes modificados. Úselo si las ediciones directas causan problemas. Así no se pueden aplicar reescrituras mientras el control de cambios está activado."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.description"
+msgstr "Elija cómo usan los chats nuevos el documento abierto."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.heading"
+msgstr "Comportamiento en Word"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.includeDocument"
+msgstr "Incluir el documento abierto en los chats nuevos"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.includeDocument.helper"
+msgstr "Erato lee el documento cuando envía un mensaje. Puede quitarlo de cualquier chat."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.tab"
+msgstr "Word"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

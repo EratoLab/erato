@@ -871,6 +871,7 @@
   "integrations.ms_office.addin.addin_id": {},
   "integrations.ms_office.addin.default_settings.compose_inherits_from_read": {},
   "integrations.ms_office.addin.default_settings.mode": {},
+  "integrations.ms_office.addin.default_settings.word_include_document": {},
   "integrations.ms_office.addin.document.addin_id": {},
   "integrations.ms_office.addin.document.manifest.description": {},
   "integrations.ms_office.addin.document.manifest.display_name": {},
