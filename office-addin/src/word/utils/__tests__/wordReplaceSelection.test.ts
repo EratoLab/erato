@@ -557,6 +557,8 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
       });
       expect(host.writeSyncs()).toEqual([]);
       expect(host.ooxml({ p })).toBe(before);
+      // ERMAIN-948 F1: on the web Comment.getRange can unhide hidden text, so no anchor is read.
+      expect(host.calls().includes("Comment.getRange")).toBe(flavour !== "web");
     },
   );
 
@@ -2211,6 +2213,9 @@ describe.each(HOSTS)(
             .filter((call) => call.endsWith("Ooxml")),
         ).toEqual([]);
         expect(documentOf(host)).toEqual(before);
+        expect(host.calls().slice(calls).includes("Comment.getRange")).toBe(
+          flavour !== "web",
+        );
       },
     );
 
@@ -2264,49 +2269,55 @@ describe.each(HOSTS)(
       });
     });
 
-    it("gives the restore's anchor comparison its allowance per comment", async () => {
-      const COMMENT = {
-        p: "SC1",
-        text: "Rewritten",
-        to: { p: "MC1", text: "MC1 Control" },
-      } as const;
-      const measure = install();
-      const measured = await apply(measure, { p: "SC1" }, () => SC1);
-      measure.addComment(COMMENT);
-      const start = measure.syncCount();
-      await revert(measured);
-      const offset =
-        measure
-          .syncLog()
-          .find(
-            (entry) =>
-              entry.index > start &&
-              entry.commands.includes("Range.compareLocationWith"),
-          )!.index - start;
-      uninstallWordSelectionHost();
+    it.runIf(flavour !== "web")(
+      "gives the restore's anchor comparison its allowance per comment",
+      async () => {
+        const COMMENT = {
+          p: "SC1",
+          text: "Rewritten",
+          to: { p: "MC1", text: "MC1 Control" },
+        } as const;
+        const measure = install();
+        const measured = await apply(measure, { p: "SC1" }, () => SC1);
+        measure.addComment(COMMENT);
+        const start = measure.syncCount();
+        await revert(measured);
+        const offset =
+          measure
+            .syncLog()
+            .find(
+              (entry) =>
+                entry.index > start &&
+                entry.commands.includes("Range.compareLocationWith"),
+            )!.index - start;
+        uninstallWordSelectionHost();
 
-      const host = install();
-      const result = await apply(host, { p: "SC1" }, () => SC1);
-      host.addComment(COMMENT);
-      const writes = host.writeSyncs().length;
-      vi.useFakeTimers();
-      const hang = host.hangSync({ at: host.syncCount() + offset });
-      let done = false;
-      const restore = revert(result).finally(() => {
-        done = true;
-      });
-      await hang.reached;
-      await vi.advanceTimersByTimeAsync(
-        WORD_REVERT_SELECTION_TIMEOUT_MS +
-          WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
-      );
-      expect(done).toBe(false);
-      await vi.advanceTimersByTimeAsync(WORD_COMMENT_ANCHOR_CHECK_MS);
-      expect(await restore).toMatchObject({ status: "failed", timedOut: true });
-      hang.release();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(host.writeSyncs()).toHaveLength(writes);
-    });
+        const host = install();
+        const result = await apply(host, { p: "SC1" }, () => SC1);
+        host.addComment(COMMENT);
+        const writes = host.writeSyncs().length;
+        vi.useFakeTimers();
+        const hang = host.hangSync({ at: host.syncCount() + offset });
+        let done = false;
+        const restore = revert(result).finally(() => {
+          done = true;
+        });
+        await hang.reached;
+        await vi.advanceTimersByTimeAsync(
+          WORD_REVERT_SELECTION_TIMEOUT_MS +
+            WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+        );
+        expect(done).toBe(false);
+        await vi.advanceTimersByTimeAsync(WORD_COMMENT_ANCHOR_CHECK_MS);
+        expect(await restore).toMatchObject({
+          status: "failed",
+          timedOut: true,
+        });
+        hang.release();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(host.writeSyncs()).toHaveLength(writes);
+      },
+    );
 
     describe("in a legacy file without commentsIds", () => {
       it.each([

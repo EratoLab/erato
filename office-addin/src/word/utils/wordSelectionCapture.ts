@@ -674,6 +674,7 @@ export async function captureWordSelection(
       const reads = await settleWordCommentAnchors(
         context,
         checks.map((check) => check()),
+        support,
         guard,
       );
       const { kept, formats } = markedParts(reads, rangeTexts, parts, support);

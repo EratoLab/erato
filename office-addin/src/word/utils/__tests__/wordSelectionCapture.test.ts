@@ -1656,11 +1656,13 @@ describe.each(HOSTS)(
         },
       ],
     ])("keeps %s context only", async (_, target) => {
-      const { selection } = await capture(target);
+      const { host, selection } = await capture(target);
       expect(selection).toMatchObject({
         role: "context_only",
         reasonCode: "comment_mark",
       });
+      // ERMAIN-948 F1: on the web Comment.getRange can unhide hidden text, so no anchor is read.
+      expect(host.calls().includes("Comment.getRange")).toBe(flavour !== "web");
     });
 
     it.each<[string, MockSelectionTarget]>([
@@ -1671,9 +1673,13 @@ describe.each(HOSTS)(
     ])(
       "offers %s, which lies strictly inside the anchor, for rewriting",
       async (_, target) => {
-        const { selection } = await capture(target);
+        const { host, selection } = await capture(target);
         expect(selection).toMatchObject({ role: "rewrite", reasonCode: null });
         expect(selection!.paragraphs[0].kept).toBeUndefined();
+        // Desktop finds the comment it lists to lie around the paragraph; F-11: the web lists none.
+        expect(host.calls().includes("Comment.getRange")).toBe(
+          flavour !== "web",
+        );
       },
     );
 
@@ -1730,16 +1736,35 @@ describe.each(HOSTS)(
       expect(host.syncCount()).toBe(plainSyncs);
     });
 
-    it("compares the anchors of the comments it lacks in one more sync", async () => {
-      const { host: plain } = await capture({ p: "SC1" });
-      const plainSyncs = plain.syncCount();
-      const { host } = await capture({ p: "MA1" });
-      const compared = host
-        .syncLog()
-        .filter((entry) => entry.commands.includes("Comment.getRange"));
-      expect(compared).toHaveLength(1);
-      expect(host.syncCount()).toBe(plainSyncs + 1);
-    });
+    it.runIf(flavour !== "web")(
+      "compares the anchors of the comments it lacks in one more sync",
+      async () => {
+        const { host: plain } = await capture({ p: "SC1" });
+        const plainSyncs = plain.syncCount();
+        const { host } = await capture({ p: "MA1" });
+        const compared = host
+          .syncLog()
+          .filter((entry) => entry.commands.includes("Comment.getRange"));
+        expect(compared).toHaveLength(1);
+        expect(host.syncCount()).toBe(plainSyncs + 1);
+      },
+    );
+
+    it.runIf(flavour === "web")(
+      "keeps a paragraph whose OOXML lacks a listed comment context only without reading the comment's anchor",
+      async () => {
+        const { host: plain } = await capture({ p: "SC1" });
+        const plainSyncs = plain.syncCount();
+        const { host, selection } = await capture({ p: "MA1" });
+        expect(selection).toMatchObject({
+          role: "context_only",
+          reasonCode: "comment_mark",
+        });
+        expect(host.calls()).toContain("Paragraph.getComments");
+        expect(host.calls()).not.toContain("Comment.getRange");
+        expect(host.syncCount()).toBe(plainSyncs);
+      },
+    );
 
     describe("in a legacy file without commentsIds", () => {
       const legacy = { legacyComments: true };

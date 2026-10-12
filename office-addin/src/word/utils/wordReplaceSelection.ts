@@ -349,6 +349,7 @@ export async function replaceWordSelection(args: {
       // the final read is made again in that sync.
       const anchors = queueWordCommentAnchors(
         verification.paragraphs.map((live) => live.checks.commentsOutside),
+        support,
         guard,
       );
       if (anchors) {
@@ -507,14 +508,15 @@ export interface WordSelectionRevertResult {
 /**
  * Restores the paragraphs a Replace wrote from their OOXML before the write, only while every
  * covered paragraph still holds exactly the written text, and every restored one lists no comment
- * its backup lacks but one whose anchor lies around it. All are restored in one sync, last to
- * first, so Word's own Undo takes them back in one step too. The restore shows only in a later
- * Word.run on the web (PF4), so it is verified in one.
+ * its backup lacks but, on desktop, one whose anchor lies around it. All are restored in one sync,
+ * last to first, so Word's own Undo takes them back in one step too. The restore shows only in a
+ * later Word.run on the web (PF4), so it is verified in one.
  */
 export async function revertWordSelection(
   backups: readonly WordSelectionBackup[],
   written: WordSelectionWritten,
 ): Promise<WordSelectionRevertResult> {
+  const support = currentWordSelectionSupport();
   const run = await runWordGuarded<
     | {
         positions: number[];
@@ -581,7 +583,7 @@ export async function revertWordSelection(
       const cellTables = cells.map((cell) => cell?.() ?? null);
       if (!unchanged()) return "stale";
       let outside = outsideOf(listed);
-      const anchors = queueWordCommentAnchors(outside, guard);
+      const anchors = queueWordCommentAnchors(outside, support, guard);
       if (anchors) {
         listed = listComments();
         await context.sync();

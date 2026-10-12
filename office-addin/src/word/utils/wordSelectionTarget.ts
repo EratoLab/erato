@@ -320,12 +320,15 @@ export function wordListedCommentsOutside(
  * anchor lies strictly around the paragraph, as it does around the middle one of three: a write of
  * the paragraph's own OOXML moves no mark of theirs. A mark at or inside its edge, even an
  * anchor's start at its first character, would move or go (ERMAIN-955), so every other relation
- * leaves the id out.
+ * leaves the id out. Null too where the host does not compare anchors (Word for the web), so each
+ * such comment keeps its paragraph context only.
  */
 export function queueWordCommentAnchors(
   outside: readonly (WordCommentsOutside | "uncertain" | null)[],
+  support: Pick<WordSelectionSupport, "comparesCommentAnchors">,
   guard?: Pick<WordRunGuard, "extendTimeout">,
 ): (() => Set<string>[]) | null {
+  if (!support.comparesCommentAnchors) return null;
   const relations = outside.map((each) => {
     if (!each || each === "uncertain") return [];
     const whole = each.paragraph.getRange("Whole");
@@ -380,10 +383,12 @@ function settledChecks(
 export async function settleWordCommentAnchors(
   context: Word.RequestContext,
   reads: readonly WordParagraphSpanChecks[],
+  support: Pick<WordSelectionSupport, "comparesCommentAnchors">,
   guard?: Pick<WordRunGuard, "extendTimeout">,
 ): Promise<WordParagraphSpanChecks[]> {
   const anchors = queueWordCommentAnchors(
     reads.map((read) => read.commentsOutside),
+    support,
     guard,
   );
   if (anchors) await context.sync();

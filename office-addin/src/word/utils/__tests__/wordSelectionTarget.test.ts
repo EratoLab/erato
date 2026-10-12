@@ -17,8 +17,10 @@ import {
   checkTargetVerification,
   proveWordSelectionTarget,
   queueTargetVerification,
+  queueWordCommentAnchors,
   showWordSelection,
   showWrittenWordSelection,
+  WORD_COMMENT_ANCHOR_CHECK_MS,
   WORD_SELECTION_SHOW_TIMEOUT_MS,
   wordCommentsOutsidePackage,
 } from "../wordSelectionTarget";
@@ -829,5 +831,53 @@ describe("wordCommentsOutsidePackage", () => {
         ),
       ).toEqual({ missing: listed, uncertain: true });
     });
+  });
+});
+
+describe("queueWordCommentAnchors", () => {
+  const listedOutside = () => {
+    const comment = {
+      id: 747888207,
+      getRange: vi.fn(() => ({
+        compareLocationWith: vi.fn(() => ({ value: "Contains" })),
+      })),
+    };
+    const paragraph = { getRange: vi.fn(() => ({})) };
+    return {
+      comment,
+      paragraph,
+      outside: {
+        paragraph: paragraph as unknown as Word.Paragraph,
+        comments: [comment as unknown as Word.Comment],
+      },
+    };
+  };
+
+  it("reads no comment's anchor on a host that does not compare them, as on Word for the web", () => {
+    const { comment, paragraph, outside } = listedOutside();
+    const extendTimeout = vi.fn();
+    expect(
+      queueWordCommentAnchors(
+        [outside],
+        { comparesCommentAnchors: false },
+        { extendTimeout },
+      ),
+    ).toBeNull();
+    expect(comment.getRange).not.toHaveBeenCalled();
+    expect(paragraph.getRange).not.toHaveBeenCalled();
+    expect(extendTimeout).not.toHaveBeenCalled();
+  });
+
+  it("finds a comment whose anchor contains its paragraph on desktop", () => {
+    const { comment, outside } = listedOutside();
+    const extendTimeout = vi.fn();
+    const anchors = queueWordCommentAnchors(
+      [outside, null],
+      { comparesCommentAnchors: true },
+      { extendTimeout },
+    );
+    expect(comment.getRange).toHaveBeenCalledOnce();
+    expect(extendTimeout).toHaveBeenCalledWith(WORD_COMMENT_ANCHOR_CHECK_MS);
+    expect(anchors?.()).toEqual([new Set(["747888207"]), new Set()]);
   });
 });
