@@ -58,7 +58,7 @@ fn collect_paths(
             path.pop();
         }
         Def::Map(map_def) => {
-            path.push(map_key_placeholder(path.last().map(String::as_str)));
+            path.push(map_key_placeholder(path));
             collect_paths(map_def.v, path, entries);
             path.pop();
         }
@@ -308,12 +308,13 @@ fn ensure_entry(entries: &mut BTreeMap<String, Value>, key: String) {
         .or_insert_with(|| Value::Object(Map::new()));
 }
 
-fn map_key_placeholder(parent_segment: Option<&str>) -> String {
-    match parent_segment {
+fn map_key_placeholder(path: &[String]) -> String {
+    match path.last().map(String::as_str) {
         Some("facets") => "<facet-id>".to_string(),
         Some("file_storage_providers") => "<provider-id>".to_string(),
         Some("localized_prompts") => "<locale>".to_string(),
         Some("mcp_servers") => "<server-id>".to_string(),
+        Some("tools") if path.len() == 3 && path[0] == "mcp_servers" => "<tool-name>".to_string(),
         Some("prompt_patterns") => "<pattern-id>".to_string(),
         Some("prompts") => "<prompt-id>".to_string(),
         Some("providers") => "<provider-id>".to_string(),
@@ -343,6 +344,16 @@ mod tests {
         assert!(keys.contains(&"integrations.entra_id.enabled".to_string()));
         assert!(keys.contains(&"model_permissions.rules.<rule-name>.rule_type".to_string()));
         assert!(keys.contains(&"server.encryption_key".to_string()));
+        assert!(
+            keys.contains(
+                &"mcp_servers_global.default_tool_annotations.read_only_hint".to_string()
+            )
+        );
+        assert!(keys.contains(
+            &"mcp_servers.<server-id>.override_tool_annotations.destructive_hint".to_string()
+        ));
+        assert!(keys.contains(&"mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint".to_string()));
+        assert!(keys.contains(&"client_tools.tools.<key>.name".to_string()));
         assert!(keys.contains(&"chat_providers.priority_order.[]".to_string()));
         assert!(keys.windows(2).all(|window| window[0] <= window[1]));
     }

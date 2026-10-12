@@ -10378,7 +10378,7 @@ pub(crate) struct GenerationMcpToolInputs<'a> {
     pub subject: &'a Subject,
     pub user_groups: &'a [String],
     pub user_id: Option<Uuid>,
-    /// The chat's write toggle. Off, only tools whose server marks them
+    /// The chat's write toggle. Off, only tools whose effective hints mark them
     /// read-only survive; an unannotated tool is not read-only.
     pub write_tools_enabled: bool,
     /// Servers the user switched off for the chat; their tools are dropped.
@@ -10556,7 +10556,7 @@ async fn resolve_generation_mcp_tools(
     })
 }
 
-/// With writes off, keep only tools whose server marks them read-only. The
+/// With writes off, keep only tools whose effective hints mark them read-only. The
 /// hint is normalized the way the approval gate reads it, so a tool without
 /// annotations counts as a write and is dropped; the dropped pairs are
 /// returned so a continuation can name the reason it refuses one.
@@ -11173,6 +11173,58 @@ mod tests {
                 ("other".to_string(), "unknown_one".to_string()),
             ]),
             "a tool without annotations is not read-only under protocol defaults"
+        );
+    }
+
+    #[test]
+    fn write_filter_and_approval_use_the_same_operator_resolved_hints() {
+        use crate::config::{
+            McpToolAnnotationsConfig, McpToolApprovalConfig, McpToolApprovalPreset,
+        };
+        use crate::services::mcp_tool_annotations::resolve_tool_annotations;
+
+        let config = serde_json::from_value(json!({
+            "transport_type": "streamable_http", "url": "https://example.com/mcp",
+            "default_tool_annotations": { "read_only_hint": true, "destructive_hint": false, "open_world_hint": false },
+            "tools": { "write_one": { "override_tool_annotations": { "read_only_hint": false } } }
+        })).unwrap();
+        let tools: Vec<_> = ["read_one", "write_one"]
+            .into_iter()
+            .map(|name| {
+                managed_tool(
+                    "files",
+                    resolve_tool_annotations(
+                        Tool::new(name, "fixture", Map::new()),
+                        &config,
+                        &McpToolAnnotationsConfig::default(),
+                        &McpToolAnnotationsConfig::default(),
+                    )
+                    .tool,
+                )
+            })
+            .collect();
+        for preset in [
+            McpToolApprovalPreset::Permissive,
+            McpToolApprovalPreset::Restrictive,
+        ] {
+            assert!(
+                !evaluate_mcp_tool_approval(
+                    &McpToolApprovalConfig {
+                        enabled: true,
+                        preset,
+                        allow_always: false
+                    },
+                    &tools[0].tool
+                )
+                .requires_approval
+            );
+        }
+        let (kept, suppressed) = filter_mcp_tools_by_write_access(tools, false);
+        assert_eq!(kept[0].tool.name.as_ref(), "read_one");
+        assert_eq!(kept.len(), 1);
+        assert_eq!(
+            suppressed,
+            HashSet::from([("files".into(), "write_one".into())])
         );
     }
 
