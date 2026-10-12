@@ -3009,24 +3009,298 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Replace the selected passage"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.atCursorMany"
+msgstr "{count, plural, one {Your cursor is in # comment} other {Your cursor is in # comments}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.comments.blocked.chooseComment"
 msgstr "Your cursor is in more than one comment, so Erato does not know which one you mean."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.blocked.pickedGone"
 msgstr "The comment you chose is no longer in the document."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentPicker.tsx
 msgid "officeAddin.word.comments.blocked.readFailed"
 msgstr "Erato could not read the comments in Word."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.changeDefault"
+msgstr "Change default"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.choose"
+msgstr "Choose comment…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.emails"
+msgstr "Email addresses of comment authors are never sent."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.nearbyDocument"
+msgstr "If your question needs them, Erato may read the other comments in the document."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.nearbyNear"
+msgstr "If your question needs them, Erato may read up to {limit} comments above and {limit} below your selection."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.resolved"
+msgstr "Resolved comments are sent only when they are in your selection or when you ask for them."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.rest"
+msgstr "{rest, plural, one {# other comment is not sent.} other {# other comments are not sent.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.sentMap"
+msgstr "{threads, plural, one {A list of the comment in the document: its author, place, status and how it starts.} other {A list of the # comments in the document: each one's author, place, status and how it starts.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.sentOpen"
+msgstr "{threads, plural, one {The open comment in the document, with its replies.} other {The # open comments in the document, with their replies.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.sentSelection"
+msgstr "{threads, plural, one {The comment in your selection, with its replies.} other {The # comments in your selection, with their replies.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.sentThread"
+msgstr "The comment by {author}, with its replies."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.trigger"
+msgstr "What is sent"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.dismissPick"
+msgstr "Remove the chosen comment"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.comments.includeOpen"
+msgstr "Include open comments"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.inSelection"
+msgstr "{count, plural, one {# comment in selection} other {# comments in selection}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.mapListed"
+msgstr "{threads, plural, one {# comment is listed with the document} other {# comments are listed with the document}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.coverage"
+msgstr "{total, plural, =0 {No comments in this document.} one {# comment in this document: {open} open, {resolved} resolved.} other {# comments in this document: {open} open, {resolved} resolved.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.filter"
+msgstr "Show comments"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.filterAll"
+msgstr "All ({total})"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.filterOpen"
+msgstr "Open ({open})"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.filterResolved"
+msgstr "Resolved ({resolved})"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.inSelection"
+msgstr "In your selection"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.list"
+msgstr "Comments"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.noMatch"
+msgstr "No comment matches your search."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.none"
+msgstr "This document has no comments."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.noneOpen"
+msgstr "No open comments."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.noneResolved"
+msgstr "No resolved comments."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.refresh"
+msgstr "Refresh"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.replies"
+msgstr "{replies, plural, =0 {no replies} one {# reply} other {# replies}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.search"
+msgstr "Search comments"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.searchPlaceholder"
+msgstr "Search by author or text"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.sort"
+msgstr "Sort"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.sortActivity"
+msgstr "Latest activity"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.sortDocument"
+msgstr "Document order"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.statusOpen"
+msgstr "Open"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.statusResolved"
+msgstr "Resolved"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.timeUnknown"
+msgstr "time unknown"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.title"
+msgstr "Choose a comment"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.unplaced"
+msgstr "{unplaced, plural, one {Word gave no place for # more, so it is not listed.} other {Word gave no place for # more, so they are not listed.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.webHint"
+msgstr "In Word for the web, clicking a comment in the document does not choose it here. Choose it from this list."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.readingProgress"
+msgstr "Reading comments… {done} of {total}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.sendWithout"
 msgstr "Send without comments"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.switchToComment"
+msgstr "Work on {author}'s comment instead"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.switchToPassage"
+msgstr "Use selected passage instead"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.on"
+msgstr "on “{shown}”"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.point"
+msgstr "on a spot without highlighted text"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.title"
+msgstr "Comment by {author}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.titleWithReplies"
+msgstr "{replies, plural, =0 {Comment by {author}} one {Comment by {author} · # reply} other {Comment by {author} · # replies}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.unknown"
+msgstr "Chosen comment"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.why.chosen"
+msgstr "Chosen by you"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.why.cursor"
+msgstr "At your cursor"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.why.default"
+msgstr "Your default"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.withAgain"
+msgstr "Include comments"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.without"
+msgstr "This message is sent without comments."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
@@ -4136,6 +4410,11 @@ msgid "officeAddin.word.selection.askAgainNote"
 msgstr "Your request is back in the message box. Select the passage you mean, then send."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.commentInstead"
+msgstr "The comment below is sent instead of this passage."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.comparisonLabel"
 msgstr "Selection when requested → proposed replacement"
@@ -4597,6 +4876,7 @@ msgstr "Reading the document took too long, so Erato used an earlier copy. Recen
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentPicker.tsx
 msgid "officeAddin.word.send.readingComments"
 msgstr "Reading comments…"
 

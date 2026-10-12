@@ -10,6 +10,12 @@ import {
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { WordCommentChip, wordCommentChipView } from "./WordCommentChip";
+import {
+  WordCommentCoverage,
+  wordCommentCoverageInfo,
+} from "./WordCommentCoverage";
+import { WordCommentPicker, wordCommentReadingText } from "./WordCommentPicker";
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
 import {
   useAvailableActionFacetArgs,
@@ -18,6 +24,7 @@ import {
 import { AddinSelectionChip } from "../../core/selection/AddinSelectionChip";
 import { useConversationKey } from "../../core/selection/useConversationKey";
 import { useSelectionDismissal } from "../../core/selection/useSelectionDismissal";
+import { useWordComments } from "../hooks/useWordComments";
 import { useWordDocumentSource } from "../hooks/useWordDocumentSource";
 import { useWordSelection } from "../hooks/useWordSelection";
 import { wordCommentGestureStore } from "../hooks/wordCommentGestureStore";
@@ -57,6 +64,7 @@ import {
   withWordCommentRefs,
   wordAnchoredCommentsArg,
   wordCommentAdvertised,
+  wordCommentsAdvertised,
   wordCommentIdOfRef,
   wordCommentMapArg,
   wordCommentSendExact,
@@ -65,6 +73,7 @@ import {
   wordCommentsDue,
   wordCommentThreadArgs,
 } from "../utils/wordCommentSend";
+import { showWordComment } from "../utils/wordCommentShow";
 import { resolveWordDocumentName } from "../utils/wordDocumentIdentity";
 import { bindWordDocumentReadRequest } from "../utils/wordDocumentReadRequest";
 import {
@@ -104,6 +113,7 @@ import type {
   WordCommentSendInput,
   WordCommentSendPlan,
   WordCommentSendRead,
+  WordCommentSendSelection,
 } from "../utils/wordCommentSend";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
@@ -111,6 +121,8 @@ export interface WordChatInputProps {
   chatInputProps: AddinChatInputRenderProps;
   documentIdentity: string;
   stagePendingCapture: (capture: WordDocumentCapture | null) => void;
+  /** Opens the settings on the Word tab, where the comment default lives. */
+  onOpenWordSettings?: () => void;
 }
 
 export const WORD_SEND_SKIP_OFFER_MS = 8_000;
@@ -164,6 +176,7 @@ export function WordChatInput({
   chatInputProps,
   documentIdentity,
   stagePendingCapture,
+  onOpenWordSettings,
 }: WordChatInputProps) {
   const { chatId } = chatInputProps;
   const availableFacetIds = useAvailableActionFacetIds();
@@ -243,11 +256,14 @@ export function WordChatInput({
   );
   useWordSelection(documentIdentity, selectionAvailable);
   const liveSelection = wordSelectionStore.useSnapshot();
-  const liveSelectionKey = liveSelection.preview?.key ?? null;
+  // A passage Erato selected, as Show in Word does, is no new selection of the user's.
+  const armedSelectionKey = liveSelection.armed
+    ? (liveSelection.preview?.key ?? null)
+    : null;
   useEffect(() => {
-    wordCommentGestureStore.pick({ kind: "selection", key: liveSelectionKey });
+    wordCommentGestureStore.pick({ kind: "selection", key: armedSelectionKey });
     wordCommentGestureStore.set({ override: null, withoutComments: false });
-  }, [liveSelectionKey]);
+  }, [armedSelectionKey]);
   const selectionDismissal = useSelectionDismissal(
     liveSelection.preview?.key ?? "",
     useConversationKey(chatId, documentIdentity),
@@ -274,6 +290,75 @@ export function WordChatInput({
       liveSelection.pending);
   const selectionReplacesDocument =
     chipEnabled && selectionShown && liveSelection.armed;
+
+  const commentsShown = wordCommentsAdvertised(commentAdvertised);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [commentProgress, setCommentProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const pickRef = commentPick?.ref ?? null;
+  const { list: commentList, refresh: refreshComments } = useWordComments({
+    documentIdentity,
+    enabled: commentsShown,
+    detailed: pickerOpen,
+    picked: pickRef,
+  });
+  const passageGoes = selectionShown && liveSelection.armed;
+  const liveCommentSelection: WordCommentSendSelection = passageGoes
+    ? {
+        kind: "passage",
+        threads:
+          commentList.selection.kind === "passage"
+            ? commentList.selection.threads
+            : [],
+        rewritable: liveSelection.preview?.mayRewrite ?? false,
+      }
+    : commentList.selection.kind === "caret"
+      ? { kind: "caret", threads: commentList.selection.threads }
+      : { kind: "none" };
+  // What Send would resolve now; Send reads Word again and decides for itself.
+  const livePlan = resolveWordCommentSend({
+    advertised: commentAdvertised,
+    selection: liveCommentSelection,
+    precedence: commentPrecedence,
+    pick: pickRef,
+    pickFound:
+      pickRef === null ||
+      commentList.status !== "ready" ||
+      commentList.threads.some((thread) => thread.ref === pickRef),
+    override: commentOverride,
+    withoutComments: false,
+    documentIncluded: chipEnabled,
+    includeOpenComments,
+    readFailed: false,
+  });
+  const commentView = wordCommentChipView({
+    plan: livePlan,
+    list: commentList,
+    passage: passageGoes,
+    pick: pickRef,
+    withoutComments,
+  });
+  const commentCoverage = wordCommentCoverageInfo(livePlan, commentList, {
+    document: chipEnabled,
+    picked: pickRef !== null,
+    openComments: includeOpenComments,
+  });
+  const chipOffersChoose =
+    commentView.kind === "choose" ||
+    commentView.kind === "picked-gone" ||
+    (commentView.kind === "passage" && commentView.offerChoose);
+  const pickComment = (ref: string) => {
+    wordCommentGestureStore.pick({
+      kind: "pick",
+      ref,
+      selectionKey: armedSelectionKey,
+    });
+    if (commentBlock === "choose-comment" || commentBlock === "picked-gone")
+      decideCommentsRef.current?.({ kind: "pick", ref });
+    setPickerOpen(false);
+  };
   const [selectionReadFailed, setSelectionReadFailed] = useState(false);
   const { preview, capture, captureExpectedSlow, previousCapture, markSent } =
     useWordDocumentSource({
@@ -476,7 +561,9 @@ export function WordChatInput({
           selection: true,
           exact: (records, live) =>
             wordCommentSendExact(records, { passage, live, pickedId }),
+          onProgress: (done, total) => setCommentProgress({ done, total }),
         });
+        setCommentProgress(null);
         return result.ok
           ? wordCommentSendRead({
               result,
@@ -566,6 +653,7 @@ export function WordChatInput({
       };
       const finishPreparing = () => {
         preparingRef.current = false;
+        setCommentProgress(null);
         settleCaptureRef.current = null;
         setSlowCapture(false);
       };
@@ -931,23 +1019,48 @@ export function WordChatInput({
           preview={liveSelection.preview.text}
           metaLabel={selectionMetaLabel(liveSelection.preview.paragraphCount)}
           note={
-            liveSelection.preview.truncated
+            passageGoes && livePlan.carrier.kind === "thread"
               ? t({
-                  id: "officeAddin.word.selection.truncated",
-                  message:
-                    "Too long to send in full. Only the beginning is sent.",
+                  id: "officeAddin.word.selection.commentInstead",
+                  message: "The comment below is sent instead of this passage.",
                 })
-              : chipEnabled && liveSelection.armed
+              : liveSelection.preview.truncated
                 ? t({
-                    id: "officeAddin.word.selection.sentInsteadOfDocument",
-                    message: "Sent instead of the document.",
+                    id: "officeAddin.word.selection.truncated",
+                    message:
+                      "Too long to send in full. Only the beginning is sent.",
                   })
-                : undefined
+                : chipEnabled && liveSelection.armed
+                  ? t({
+                      id: "officeAddin.word.selection.sentInsteadOfDocument",
+                      message: "Sent instead of the document.",
+                    })
+                  : undefined
           }
           armed={liveSelection.armed}
           onUse={armWordSelection}
           onDismiss={selectionDismissal.dismiss}
           testId="word-selection-chip"
+        />
+      )}
+      {commentsShown && (
+        <WordCommentChip
+          view={commentView}
+          coverage={commentCoverage}
+          canChangeDefault={commentAdvertised.thread && !!onOpenWordSettings}
+          onWithoutComments={() =>
+            wordCommentGestureStore.set({ withoutComments: true })
+          }
+          onWithComments={() =>
+            wordCommentGestureStore.set({ withoutComments: false })
+          }
+          onSwitch={(override) => wordCommentGestureStore.set({ override })}
+          onDismissPick={() =>
+            wordCommentGestureStore.pick({ kind: "dismiss" })
+          }
+          onChoose={() => setPickerOpen(true)}
+          onChangeDefault={() => onOpenWordSettings?.()}
+          onShowInWord={showWordComment}
         />
       )}
       {selectionReadFailed && (
@@ -971,6 +1084,19 @@ export function WordChatInput({
               <span className="min-w-0 flex-1">
                 {commentBlockText(commentBlock)}
               </span>
+              {commentBlock !== "read-failed" && commentAdvertised.thread && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  {t({
+                    id: "officeAddin.word.comments.choose",
+                    message: "Choose comment…",
+                  })}
+                </Button>
+              )}
               <Button
                 type="button"
                 size="sm"
@@ -1116,6 +1242,72 @@ export function WordChatInput({
               </Alert>
             ))}
         </div>
+      )}
+
+      {commentsShown &&
+        commentAdvertised.thread &&
+        commentList.threads.length > 0 && (
+          <div
+            className="mx-auto flex w-full max-w-[var(--theme-layout-chat-input-max-width)] flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-1 text-xs text-theme-fg-secondary sm:px-4"
+            data-testid="word-comment-options"
+          >
+            {!chipEnabled && (
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={includeOpenComments}
+                  onChange={(event) =>
+                    wordCommentGestureStore.set({
+                      includeOpenComments: event.target.checked,
+                    })
+                  }
+                  className="size-3.5 accent-[var(--theme-fg-accent)]"
+                />
+                <span>
+                  {t({
+                    id: "officeAddin.word.comments.includeOpen",
+                    message: "Include open comments",
+                  })}
+                </span>
+              </label>
+            )}
+            {livePlan.carrier.kind === "open-comments" &&
+              !withoutComments &&
+              commentCoverage && <WordCommentCoverage info={commentCoverage} />}
+            {!chipOffersChoose && (
+              <button
+                type="button"
+                className="font-medium underline underline-offset-2 hover:text-theme-fg-primary"
+                onClick={() => setPickerOpen(true)}
+              >
+                {t({
+                  id: "officeAddin.word.comments.choose",
+                  message: "Choose comment…",
+                })}
+              </button>
+            )}
+          </div>
+        )}
+      {commentProgress && (
+        <p
+          className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 text-xs text-theme-fg-secondary sm:px-4"
+          role="status"
+          data-testid="word-comment-progress"
+        >
+          {wordCommentReadingText(commentProgress)}
+        </p>
+      )}
+      {commentAdvertised.thread && (
+        <WordCommentPicker
+          isOpen={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          list={commentList}
+          onRefresh={refreshComments}
+          onPick={pickComment}
+          onShowInWord={showWordComment}
+          picked={pickRef}
+          web={wordHostPlatform() === "OfficeOnline"}
+        />
       )}
 
       <AddinChatInputCore
