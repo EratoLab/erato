@@ -177,6 +177,7 @@ pub struct JwtTokenBuilder {
     tenant_preferred_language: Option<String>,
     organization_user_id: Option<String>,
     groups: Vec<String>,
+    extra_claims: serde_json::Map<String, Value>,
 }
 
 impl Default for JwtTokenBuilder {
@@ -191,6 +192,7 @@ impl Default for JwtTokenBuilder {
             tenant_preferred_language: None,
             organization_user_id: None,
             groups: Vec::new(),
+            extra_claims: Default::default(),
         }
     }
 }
@@ -258,6 +260,12 @@ impl JwtTokenBuilder {
         self
     }
 
+    /// Add or override a raw claim, including distributed-claim overage markers.
+    pub fn claim(mut self, name: &str, value: Value) -> Self {
+        self.extra_claims.insert(name.to_owned(), value);
+        self
+    }
+
     /// Build and encode the JWT token
     pub fn build(self) -> String {
         let mut claims = json!({
@@ -298,6 +306,7 @@ impl JwtTokenBuilder {
             claims["groups"] = Value::Array(self.groups.into_iter().map(Value::String).collect());
         }
 
+        claims.as_object_mut().unwrap().extend(self.extra_claims);
         let header = Header::new(Algorithm::HS256);
         encode(&header, &claims, &EncodingKey::from_secret(TEST_JWT_SECRET))
             .expect("Failed to encode JWT token")

@@ -645,6 +645,7 @@ mod tests {
             db: sea_orm::DatabaseConnection::default(),
             local_delegation_signer: None,
             ms_teams_bot: None,
+            entra_group_overage: None,
             default_file_storage_provider: None,
             file_storage_providers: Default::default(),
             client_operations: Default::default(),

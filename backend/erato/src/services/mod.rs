@@ -14,6 +14,7 @@ pub mod tool_display;
 
 pub mod display_text;
 pub(crate) mod embedded_images;
+pub mod entra_group_overage;
 pub mod file_context;
 pub mod file_parsing;
 pub mod file_processing_cached;

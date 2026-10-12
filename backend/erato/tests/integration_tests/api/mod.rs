@@ -9,6 +9,7 @@ pub mod chats;
 pub mod delegation;
 pub mod edit;
 pub mod embedded_images;
+pub mod entra_group_overage;
 pub mod entra_id;
 pub mod facets;
 pub mod files;

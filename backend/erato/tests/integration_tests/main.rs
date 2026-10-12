@@ -200,6 +200,11 @@ async fn test_app_state_internal(
         ),
         local_delegation_signer,
         ms_teams_bot: None,
+        entra_group_overage:
+            erato::services::entra_group_overage::EntraGroupOverageResolver::from_config(
+                &app_config.integrations.entra_id.group_overage,
+            )
+            .unwrap(),
         db: db.clone(),
         default_file_storage_provider: None,
         file_storage_providers,

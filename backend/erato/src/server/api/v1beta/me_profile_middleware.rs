@@ -1,7 +1,7 @@
 use crate::config::{I18nLanguageConfig, LanguageDetectionPriority};
 use crate::models::user::{get_or_create_user, record_entra_object_id};
 use crate::models::user_preference::get_user_preferences;
-use crate::normalize_profile::{IdTokenProfile, normalize_profile};
+use crate::normalize_profile::{IdTokenProfile, has_groups_overage, normalize_profile};
 use crate::policy::prelude::Subject;
 use crate::state::AppState;
 use axum::extract::{Request, State};
@@ -51,8 +51,7 @@ pub struct UserProfile {
     pub preferred_language: String,
     /// List of groups the user belongs to.
     ///
-    /// This is derived from the `groups` claim in the ID token.
-    /// If the claim is not present, this will be an empty list.
+    /// Derived from the ID token's `groups` claim, or Microsoft Graph for Entra overage.
     pub groups: Vec<String>,
     /// Organization user ID from the `oid` claim (Entra ID specific).
     ///
@@ -61,7 +60,7 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub organization_user_id: Option<String>,
-    /// Organization group IDs from the `groups` claim.
+    /// Organization membership IDs from the token or Entra overage resolution.
     ///
     /// These can be used as subject_id when creating share grants
     /// with subject_id_type "organization_group_id".
@@ -250,6 +249,7 @@ pub async fn user_profile_from_token(
     app_state: &AppState,
     token: &str,
     accept_language_header: Option<&str>,
+    forwarded_access_token: Option<&str>,
 ) -> Result<(UserProfile, Value), StatusCode> {
     // Decode the token
     // We don't validate anything, as we always run behind oauth2-proxy which handles verification
@@ -260,7 +260,18 @@ pub async fn user_profile_from_token(
     let id_token_claims = token_data.claims;
 
     let normalized_profile = normalize_profile(id_token_claims.clone());
-    let normalized_profile = normalized_profile.map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut normalized_profile =
+        normalized_profile.map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if app_state.config.integrations.entra_id.group_overage.enabled
+        && has_groups_overage(&id_token_claims)
+        && let Some(resolver) = &app_state.entra_group_overage
+    {
+        let groups = resolver
+            .resolve_groups(&id_token_claims, forwarded_access_token)
+            .await;
+        normalized_profile.organization_group_ids = groups.clone();
+        normalized_profile.groups = groups;
+    }
 
     let user = get_or_create_user(
         &app_state.db,
@@ -355,6 +366,7 @@ pub(crate) async fn user_profile_middleware(
             &app_state,
             auth_header.token(),
             accept_language_header.as_deref(),
+            forwarded_access_token.as_deref(),
         ),
     )
     .await

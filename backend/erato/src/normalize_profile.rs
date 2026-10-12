@@ -33,6 +33,16 @@ pub struct IdTokenProfile {
     pub organization_group_ids: Vec<String>,
 }
 
+/// Entra overage markers identify a distributed claim, not a group ID.
+pub fn has_groups_overage(claims: &Value) -> bool {
+    claims
+        .get("_claim_names")
+        .and_then(Value::as_object)
+        .is_some_and(|names| names.contains_key("groups"))
+        || (claims.get("hasgroups").and_then(Value::as_bool) == Some(true)
+            && claims.get("groups").is_none())
+}
+
 // Normalize profile from the ID token claims of different OIDC providers.
 pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
     // Required claims per spec
@@ -59,7 +69,10 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
     let preferred_language = id_token_xms_pl.clone().or(id_token_xms_tpl.clone());
 
     // Parse groups claim - can be either an array of strings or a single string
-    let groups = match claims.get("groups") {
+    let groups = match claims
+        .get("groups")
+        .filter(|_| !has_groups_overage(&claims))
+    {
         Some(groups_value) => {
             tracing::debug!("Groups claim found in ID token: {:?}", groups_value);
             match groups_value {
@@ -106,6 +119,66 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn groups_overage_does_not_treat_source_names_as_memberships() {
+        for (extra, expected) in [
+            (
+                serde_json::json!({"_claim_names": {"groups": "src1"}}),
+                vec![],
+            ),
+            (
+                serde_json::json!({"_claim_names": {"groups": "src1"}, "groups": "src1"}),
+                vec![],
+            ),
+            (serde_json::json!({"hasgroups": true}), vec![]),
+            (
+                serde_json::json!({"hasgroups": true, "groups": ["premium"]}),
+                vec!["premium"],
+            ),
+            (
+                serde_json::json!({"hasgroups": false, "groups": "premium"}),
+                vec!["premium"],
+            ),
+            (serde_json::json!({"groups": ["premium"]}), vec!["premium"]),
+            (
+                serde_json::json!({"_claim_names": {"email": "src1"}, "groups": ["premium"]}),
+                vec!["premium"],
+            ),
+            (serde_json::json!({}), vec![]),
+        ] {
+            let mut claims = serde_json::json!({"iss": "https://login.microsoftonline.com/tenant/v2.0", "sub": "user"});
+            claims
+                .as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            let profile = normalize_profile(claims).unwrap();
+            assert_eq!(profile.groups, expected);
+            assert_eq!(profile.organization_group_ids, expected);
+        }
+    }
+
+    #[test]
+    fn groups_overage_detection_requires_a_group_marker_or_boolean_hasgroups() {
+        for (claims, expected) in [
+            (
+                serde_json::json!({"_claim_names": {"groups": "src1"}}),
+                true,
+            ),
+            (serde_json::json!({"hasgroups": true}), true),
+            (serde_json::json!({"hasgroups": "true"}), false),
+            (serde_json::json!({"hasgroups": false}), false),
+            (serde_json::json!({"hasgroups": true, "groups": []}), false),
+            (
+                serde_json::json!({"_claim_names": {"email": "src1"}}),
+                false,
+            ),
+            (serde_json::json!({"_claim_names": "groups"}), false),
+            (serde_json::json!({}), false),
+        ] {
+            assert_eq!(has_groups_overage(&claims), expected);
+        }
+    }
 
     #[test]
     pub fn test_normalize_dex_profile() {

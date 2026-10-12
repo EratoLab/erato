@@ -2626,7 +2626,7 @@ Model permissions rely on group information from the user's ID token. The `group
 - **Array of strings:** `["group1", "group2", "group3"]`
 - **Single string:** `"group1"` (automatically converted to array)
 
-If no `groups` claim is present in the ID token, the user is treated as having no group memberships, and only `allow-all` rules will grant them access.
+For Entra ID tokens that signal group overage, [group-overage resolution](#integrationsentra_idgroup_overage) retrieves memberships through Microsoft Graph by default. Otherwise, if no `groups` claim is present, the user is treated as having no group memberships, and only `allow-all` rules will grant them access.
 
 ### `mcp_server_permissions`
 
@@ -2732,7 +2732,7 @@ groups = ["design-team"]
 
 #### Integration with SSO/OIDC
 
-Like `model_permissions`, both `mcp_server_permissions` and `facet_permissions` use the `groups` claim from the user's ID token for `allow-for-group-members` rules. If no `groups` claim is present, only `allow-all` rules grant access.
+Like `model_permissions`, both `mcp_server_permissions` and `facet_permissions` use the `groups` claim from the user's ID token for `allow-for-group-members` rules. Entra ID group-overage tokens use [memberships resolved through Microsoft Graph](#integrationsentra_idgroup_overage) by default. If neither source supplies memberships, only `allow-all` rules grant access.
 
 ### `integrations`
 
@@ -3361,7 +3361,7 @@ See the [SharePoint/OneDrive Integration](./integrations/sharepoint) documentati
 
 {/* erato_toml_config_key: integrations.entra_id */}
 
-Configuration for the Entra ID integration. This allows exposing organization users and groups to the frontend for sharing features.
+Configuration for the Entra ID integration. This allows exposing organization users and groups to the frontend for sharing features and resolving group overage for authorization.
 
 **Deprecated compatibility:** The previous `[integrations.experimental_entra_id]` section is still accepted, but it is deprecated. Use `[integrations.entra_id]` instead. Environment variables also accept both names; migrate to `INTEGRATIONS__ENTRA_ID__...`. Use only one name for each section across configuration files and environment variables; combining the old and new names is rejected as a duplicate field.
 
@@ -3379,7 +3379,7 @@ Whether the Entra ID integration is enabled. When enabled, the `/me/organization
 
 {/* erato_toml_config_key: integrations.entra_id.auth_via_access_token */}
 
-Whether to use the user's forwarded access token for Microsoft Graph API authentication. Currently, this is the only supported authentication method.
+Whether to use the user's forwarded access token for Microsoft Graph API authentication. Currently, this is the only supported authentication method. This must be `true` when directory integration or group-overage resolution is enabled.
 
 **Default value:** `true`
 
@@ -3401,12 +3401,39 @@ auth_via_access_token = true
 
 **Related Features:**
 
-When the Entra ID integration is enabled, the user profile will include additional fields:
+The user profile includes organization identity fields when claims or resolved memberships supply them, independently of whether directory listing is enabled:
 
 - `organization_user_id` - Extracted from the `oid` claim (Entra ID specific)
-- `organization_group_ids` - Extracted from the `groups` claim
+- `organization_group_ids` - Extracted from the `groups` claim or group-overage resolution
 
 These fields enable sharing assistants with organization groups via share grants with `subject_type = "organization_group"` and `subject_id_type = "organization_group_id"`. Assistants can also be shared with every logged-in user in the organization using `subject_type = "organization"`, `subject_id_type = "organization_id"`, and `subject_id = "__organization__"`.
+
+##### `integrations.entra_id.group_overage`
+
+{/* erato_toml_config_key: integrations.entra_id.group_overage */}
+
+Resolve memberships when an Entra ID token signals group overage through `_claim_names.groups`, or `hasgroups: true` without a `groups` claim. This works independently of `integrations.entra_id.enabled`. Tokens without an overage signal keep their existing claim groups and do not use Graph or the membership cache.
+
+The proxy must forward a Microsoft Graph access token with delegated `User.Read` permission in `X-Forwarded-Access-Token`, and the ID token must contain `oid`. Resolution supports global Entra ID issuers (`login.microsoftonline.com` v2 and `sts.windows.net` v1) and uses `graph.microsoft.com`. Erato verifies that Graph's `/me` identity matches `oid` before fetching all pages of `/me/transitiveMemberOf`. The membership set matches oauth2-proxy: nested memberships, groups, directory roles and administrative units, expressed as object IDs. It does not reproduce application-assigned group filtering or on-premises group names/SIDs.
+
+Successful lookups are cached per replica for ten minutes; failed lookups have a thirty-second cooldown. Entries are bound to the issuer, user object ID and forwarded access token. Identity verification and all membership pages share a three-second timeout. Missing prerequisites or lookup failures leave both `groups` and `organization_group_ids` empty; normal group-based authorization then denies access. Failed lookups never return partial membership lists. The profile response retains the full resolved lists.
+
+##### `integrations.entra_id.group_overage.enabled`
+
+{/* erato_toml_config_key: integrations.entra_id.group_overage.enabled */}
+
+Whether Entra group-overage resolution is enabled. Set this to `false` to disable Graph and cache access for overage tokens. Overage source identifiers are never interpreted as group IDs, including when disabled. `integrations.entra_id.auth_via_access_token` must be `true` while resolution is enabled.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[integrations.entra_id.group_overage]
+enabled = false
+```
 
 ### `logging`
 
