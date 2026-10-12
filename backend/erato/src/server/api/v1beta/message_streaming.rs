@@ -124,6 +124,26 @@ fn non_empty_vec<T: Clone>(value: &[T]) -> Option<Vec<T>> {
     (!value.is_empty()).then(|| value.to_vec())
 }
 
+fn assistant_content_for_replay(content: &MessageContent, summary: &str) -> MessageContent {
+    // Responses requires a summary even when empty. genai also duplicates each
+    // reasoning item as a bare signature, which must not be replayed separately.
+    MessageContent::from_parts(
+        content
+            .parts()
+            .iter()
+            .filter(|part| !matches!(part, genai::chat::ContentPart::ThoughtSignature(_)))
+            .cloned()
+            .map(|part| match part {
+                genai::chat::ContentPart::ReasoningItem(mut item) if item.summary.is_empty() => {
+                    item.summary.push(reasoning_summary_part(Some(summary)));
+                    genai::chat::ContentPart::ReasoningItem(item)
+                }
+                other => other,
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
 fn reasoning_summary_part(summary: Option<&str>) -> ReasoningSummaryText {
     ReasoningSummaryText::new(summary.unwrap_or_default())
 }
@@ -5705,6 +5725,14 @@ async fn stream_generate_chat_completion<'a>(
     // budget may still make client calls, and the other way round.
     let mut task_server_tool_calls: u32 = consumption.server_tool_calls;
     let mut task_client_tool_calls: u32 = consumption.client_tool_calls;
+    let mut submission_correction = consumption.submission_correction;
+    if let Some(correction) = submission_correction.as_mut() {
+        correction.restore(
+            offered_client_tools
+                .values()
+                .find(|tool| tool.config.qualified_name() == correction.tool),
+        );
+    }
     let mut submission_attempts = consumption.submission_attempts;
     let mut tool_charges = consumption.tool_charges;
 
@@ -5833,6 +5861,7 @@ async fn stream_generate_chat_completion<'a>(
                     // whatever a continuation owed this message it no longer
                     // does.
                     continuation_in_flight: None,
+                    submission_outcome: None,
                 })
             } else {
                 None
@@ -5884,6 +5913,40 @@ async fn stream_generate_chat_completion<'a>(
                         server_tool_calls: task_server_tool_calls,
                         client_tool_calls: task_client_tool_calls,
                         submission_attempts: submission_attempts.clone(),
+                        submission_correction: submission_correction.clone(),
+                        tool_charges: tool_charges.clone(),
+                        client_action_proposed: client_action_already_proposed,
+                    },
+                )
+                .await?;
+            }
+        };
+    }
+
+    macro_rules! persist_correction {
+        () => {
+            if let Some(correction) = submission_correction.as_ref() {
+                let name = correction
+                    .tool
+                    .rsplit('/')
+                    .next()
+                    .expect("qualified submission name");
+                submission_attempts.insert(name.to_owned(), correction.outcome.attempts_used);
+            }
+            if submission_correction.is_some()
+                && let Some(task) = streaming_task
+            {
+                crate::services::client_operations::store::save_consumption(
+                    &app_state.db,
+                    assistant_message_id,
+                    task.generation_id,
+                    &crate::services::client_operations::TurnConsumption {
+                        model_turns: current_turn,
+                        tool_calls: current_tool_call_count,
+                        server_tool_calls: task_server_tool_calls,
+                        client_tool_calls: task_client_tool_calls,
+                        submission_attempts: submission_attempts.clone(),
+                        submission_correction: submission_correction.clone(),
                         tool_charges: tool_charges.clone(),
                         client_action_proposed: client_action_already_proposed,
                     },
@@ -5897,6 +5960,19 @@ async fn stream_generate_chat_completion<'a>(
         // A parked iteration was already counted before its checkpoint.
         if !std::mem::take(&mut resume_iteration) {
             current_turn += 1;
+        }
+        if submission_correction
+            .as_ref()
+            .is_some_and(|correction| !correction.pending())
+        {
+            // No inference ran in this continuation; retain the parked turn's usage and trace.
+            let message =
+                get_message_by_id(&app_state.db, policy, subject, &assistant_message_id).await?;
+            let metadata = message
+                .generation_metadata
+                .map(serde_json::from_value::<GenerationMetadata>)
+                .transpose()?;
+            break 'loop_call_turns Ok((current_message_content, metadata));
         }
         tracing::debug!("Starting chat completion turn {}", current_turn);
         let chat_provider_metric_label = chat_provider_id.unwrap_or("unknown");
@@ -5915,7 +5991,8 @@ async fn stream_generate_chat_completion<'a>(
         let turn_langfuse_generation_name =
             langfuse_turn_name(langfuse_generation_name.as_deref(), current_turn);
 
-        if current_turn != 1 && unfinished_tool_calls.is_empty() {
+        if current_turn != 1 && unfinished_tool_calls.is_empty() && submission_correction.is_none()
+        {
             tracing::warn!(
                 "Trying to progress chat completion after first iteration without open tool calls. Will likely result in error."
             )
@@ -5926,6 +6003,25 @@ async fn stream_generate_chat_completion<'a>(
         // Paired with the call's position in the batch: task runs settle out
         // of order, and the model is answered in the order it asked.
         let batch_call_count = unfinished_tool_calls.len();
+        // Reserve semantic attempts before either ordinary budgets or task approval can park a batch.
+        for call in &unfinished_tool_calls {
+            if allowed_tool_names.contains(&call.fn_name)
+                && let Some(tool) = offered_client_tools
+                    .get(&call.fn_name)
+                    .filter(|tool| tool.submission.is_some())
+            {
+                let correction = submission_correction.get_or_insert_with(|| {
+                    crate::services::submission_correction::SubmissionCorrection::new(tool)
+                });
+                let charge = tool_charges.entry(call.call_id.clone()).or_default();
+                charge.submission_mixed_batch |= batch_call_count != 1;
+                if charge.submission_attempt.is_none() {
+                    let attempt = correction.charge_submission();
+                    charge.submission_attempt = Some(attempt);
+                }
+            }
+        }
+        persist_correction!();
         let mut current_turn_tool_responses: Vec<(usize, genai::chat::ToolResponse)> = vec![];
         let mut retrieved_images = Vec::new();
         let mut retrieved_files = Vec::new();
@@ -6113,6 +6209,32 @@ async fn stream_generate_chat_completion<'a>(
             // hallucinations drain a real allowance — and, with a budget of
             // `0`, would answer an invalid name with "you are out of budget",
             // telling the model nothing about what was actually wrong with it.
+            let is_submission = tool_charges
+                .get(&unfinished_tool_call.call_id)
+                .is_some_and(|charge| charge.submission_attempt.is_some());
+            let is_recovery_read = allowed_tool_names.contains(&unfinished_tool_call.fn_name)
+                && offered_client_tools
+                    .get(&unfinished_tool_call.fn_name)
+                    .is_some_and(|tool| {
+                        submission_correction
+                            .as_ref()
+                            .is_some_and(|correction| correction.is_recovery_read(tool))
+                    });
+            if is_recovery_read && !tool_charges.contains_key(&unfinished_tool_call.call_id) {
+                if !submission_correction
+                    .as_mut()
+                    .expect("recovery state")
+                    .charge_read()
+                {
+                    exit_after_join = true;
+                    break 'pop_calls;
+                }
+                tool_charges
+                    .entry(unfinished_tool_call.call_id.clone())
+                    .or_default()
+                    .recovery_read = true;
+            }
+            let reserved = is_submission || is_recovery_read;
             let already_charged = tool_charges.get(&unfinished_tool_call.call_id);
             let budget_refusal = if let Some(charge) = already_charged {
                 charge.budget_refusal.clone()
@@ -6160,7 +6282,10 @@ async fn stream_generate_chat_completion<'a>(
             // `{"status":"failed"}` with nothing in it. Ending the turn
             // gracefully keeps what the child has and reports it as the
             // partial, resumable result it is.
-            if already_charged.is_none() && current_tool_call_count >= max_tool_calls_per_message {
+            if !reserved
+                && already_charged.is_none()
+                && current_tool_call_count >= max_tool_calls_per_message
+            {
                 if let Some(task) = streaming_task.filter(|_| task_tool_budgets.is_some()) {
                     tracing::warn!(
                         chat_id = %chat_id,
@@ -7054,6 +7179,14 @@ async fn stream_generate_chat_completion<'a>(
                         Some(&response_text),
                     )
                     .await;
+                    if tool_charges.get(&call_id).is_some_and(|charge| {
+                        charge.submission_attempt.is_some() || charge.recovery_read
+                    }) && let Some(correction) = submission_correction.as_mut()
+                    {
+                        correction.stop(crate::services::submission_correction::SubmissionReason::CapabilityUnavailable);
+                        persist_correction!();
+                        exit_after_join = true;
+                    }
                     current_turn_tool_responses.push((
                         batch_position,
                         genai::chat::ToolResponse {
@@ -7062,22 +7195,16 @@ async fn stream_generate_chat_completion<'a>(
                             content: response_text,
                         },
                     ));
+                    if exit_after_join {
+                        break 'pop_calls;
+                    }
                     continue;
                 };
                 let submission = tool_policy.and_then(|policy| policy.submission.as_ref());
-                let attempt = if submission.is_some() {
-                    *tool_charges
-                        .entry(call_id.clone())
-                        .or_default()
-                        .submission_attempt
-                        .get_or_insert_with(|| {
-                            let count = submission_attempts.entry(tool_name.clone()).or_default();
-                            *count += 1;
-                            *count
-                        })
-                } else {
-                    0
-                };
+                let attempt = tool_charges
+                    .get(&call_id)
+                    .and_then(|charge| charge.submission_attempt)
+                    .unwrap_or(0);
                 let operation_kind = tool_policy
                     .filter(|_| app_state.config.client_tools.durable_operations_enabled)
                     .and_then(|policy| {
@@ -7105,7 +7232,14 @@ async fn stream_generate_chat_completion<'a>(
                 let mut validation_failure = submission.and_then(|submission| {
                     if attempt > submission.max_attempts {
                         Some(ClientToolOutcome::Cancelled { reason: "submission_attempt_limit".into() })
-                    } else if batch_call_count != 1 {
+                    } else if submission_correction.as_ref().is_some_and(|correction| tool_policy.is_none_or(|tool| tool.config.qualified_name() != correction.tool)) {
+                        Some(ClientToolOutcome::ValidationFailed(vec![
+                            crate::services::client_tools::ClientToolValidationIssue {
+                                path: String::new(), code: "submission_tool_changed".into(),
+                                message: "Correct the proposal with the originally selected submission tool.".into(),
+                            }
+                        ], None))
+                    } else if tool_charges.get(&call_id).is_some_and(|charge| charge.submission_mixed_batch) {
                         Some(ClientToolOutcome::ValidationFailed(vec![
                             crate::services::client_tools::ClientToolValidationIssue {
                                 path: String::new(),
@@ -7423,10 +7557,36 @@ async fn stream_generate_chat_completion<'a>(
                     output_value = output;
                     response_text = output_value.to_string();
                 }
+                if tool_charges
+                    .get(&call_id)
+                    .is_some_and(|charge| charge.recovery_read)
+                    && let Some(correction) = submission_correction.as_mut()
+                {
+                    use crate::services::submission_correction::SubmissionReason;
+                    match &outcome {
+                        ClientToolOutcome::ValidationFailed(_, Some(feedback)) if feedback.recovery == crate::services::client_tools::SubmissionRecovery::CannotContinue => correction.stop(SubmissionReason::ContextUnavailable),
+                        ClientToolOutcome::Cancelled { reason } => correction.stop(if reason == "timeout" { SubmissionReason::Timeout } else { SubmissionReason::Cancelled }),
+                        ClientToolOutcome::Error(_) => correction.stop(SubmissionReason::CapabilityUnavailable),
+                        _ => {},
+                    }
+                    exit_after_join |= !correction.pending();
+                }
                 if let Some(submission) = submission {
                     submission.annotate(&mut output_value, &outcome, attempt);
                     response_text = output_value.to_string();
-                    if submission.finish_after(&outcome, attempt) {
+                    if let Some(correction) = submission_correction.as_mut() {
+                        correction.record(&outcome);
+                        output_value["submission_outcome"] =
+                            serde_json::to_value(&correction.outcome)?;
+                        if !correction.pending() && correction.outcome.status != crate::services::submission_correction::SubmissionStatus::Accepted {
+                            output_value["submission"] = json!({"status":"failed", "attempts_remaining":0});
+                        }
+                        response_text = output_value.to_string();
+                    }
+                    if submission_correction
+                        .as_ref()
+                        .is_some_and(|correction| !correction.pending())
+                    {
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
                             total_prompt_tokens,
@@ -7442,6 +7602,7 @@ async fn stream_generate_chat_completion<'a>(
                         );
                     }
                 }
+                persist_correction!();
                 let tool_error =
                     matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
 
@@ -7528,6 +7689,9 @@ async fn stream_generate_chat_completion<'a>(
                         content: response_text,
                     },
                 ));
+                if exit_after_join {
+                    break 'pop_calls;
+                }
                 continue;
             }
 
@@ -8326,6 +8490,7 @@ async fn stream_generate_chat_completion<'a>(
                         server_tool_calls: task_server_tool_calls,
                         client_tool_calls: task_client_tool_calls,
                         submission_attempts: submission_attempts.clone(),
+                        submission_correction: submission_correction.clone(),
                         tool_charges: tool_charges.clone(),
                         client_action_proposed: client_action_already_proposed,
                     },
@@ -8367,6 +8532,7 @@ async fn stream_generate_chat_completion<'a>(
                     server_tool_calls: task_server_tool_calls,
                     client_tool_calls: task_client_tool_calls,
                     submission_attempts: submission_attempts.clone(),
+                    submission_correction: submission_correction.clone(),
                     tool_charges: tool_charges.clone(),
                     client_action_proposed: client_action_already_proposed,
                 },
@@ -8399,7 +8565,21 @@ async fn stream_generate_chat_completion<'a>(
             );
         }
         if exit_after_join {
-            break 'loop_call_turns Ok((current_message_content, exit_metadata));
+            let metadata = exit_metadata.or_else(|| {
+                build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                )
+            });
+            break 'loop_call_turns Ok((current_message_content, metadata));
         }
 
         persist_operation_turn!();
@@ -9429,6 +9609,55 @@ async fn stream_generate_chat_completion<'a>(
                 }
             }
 
+            if let Some(correction) = submission_correction
+                .as_mut()
+                .filter(|correction| correction.pending())
+            {
+                let calls = stream_end.captured_tool_calls().unwrap_or_default();
+                let progresses = calls.iter().any(|call| {
+                    allowed_tool_names.contains(&call.fn_name)
+                        && offered_client_tools.get(&call.fn_name).is_some_and(|tool| {
+                            tool.submission.is_some() || correction.is_declared_read(tool)
+                        })
+                });
+                if !progresses {
+                    let retry = correction.no_progress(current_turn);
+                    if !retry {
+                        break 'loop_call_turns Ok((
+                            current_message_content,
+                            build_generation_metadata(
+                                total_prompt_tokens,
+                                total_completion_tokens,
+                                total_total_tokens,
+                                total_reasoning_tokens,
+                                langfuse_trace_id.clone(),
+                                false,
+                                None,
+                                non_empty_string(&captured_reasoning_summary),
+                                non_empty_vec(&captured_reasoning_items),
+                                non_empty_vec(&captured_reasoning_item_encrypted_content),
+                            ),
+                        ));
+                    }
+                    if calls.is_empty() {
+                        if let Some(content) = stream_end.captured_content.as_ref() {
+                            current_turn_chat_request.messages.push(GenAiChatMessage {
+                                role: ChatRole::Assistant,
+                                content: assistant_content_for_replay(
+                                    content,
+                                    &current_turn_captured_reasoning_summary,
+                                ),
+                                options: None,
+                            });
+                        }
+                        current_turn_chat_request
+                            .messages
+                            .push(GenAiChatMessage::user(correction.reminder()));
+                        continue 'loop_call_turns;
+                    }
+                }
+            }
+
             if let Some(captured_tool_calls) = stream_end.captured_tool_calls() {
                 if !captured_tool_calls.is_empty() {
                     // Track tool names for Langfuse metadata
@@ -9436,39 +9665,13 @@ async fn stream_generate_chat_completion<'a>(
                         all_tool_names.insert(tool_call.fn_name.clone());
                     }
 
-                    // OpenAI Responses API rejects reasoning items without a `summary` field.
-                    // Two issues to handle here:
-                    //   1. genai's StreamEnd duplicates each captured reasoning event as both a
-                    //      full ReasoningItem and a bare ThoughtSignature (encrypted_content only).
-                    //      The ThoughtSignature serializes without `summary` — drop it.
-                    //   2. The captured ReasoningItem itself may have `summary: vec![]` when the
-                    //      model emitted no summary chunks. genai's `skip_serializing_if =
-                    //      "Vec::is_empty"` then omits the field. Inject a placeholder summary
-                    //      so it serializes (mirrors build_openai_responses_reasoning_replay_parts).
                     let assistant_turn_content = stream_end
                         .captured_content
                         .as_ref()
-                        .map(|captured_content| {
-                            MessageContent::from_parts(
-                                captured_content
-                                    .parts()
-                                    .iter()
-                                    .filter(|p| {
-                                        !matches!(p, genai::chat::ContentPart::ThoughtSignature(_))
-                                    })
-                                    .cloned()
-                                    .map(|part| match part {
-                                        genai::chat::ContentPart::ReasoningItem(mut item)
-                                            if item.summary.is_empty() =>
-                                        {
-                                            item.summary.push(reasoning_summary_part(Some(
-                                                current_turn_captured_reasoning_summary.as_str(),
-                                            )));
-                                            genai::chat::ContentPart::ReasoningItem(item)
-                                        }
-                                        other => other,
-                                    })
-                                    .collect::<Vec<_>>(),
+                        .map(|content| {
+                            assistant_content_for_replay(
+                                content,
+                                &current_turn_captured_reasoning_summary,
                             )
                         })
                         .unwrap_or_else(|| {
@@ -9713,7 +9916,33 @@ async fn stream_generate_chat_completion<'a>(
             ));
         }
     };
-    completion.map(|(content, metadata)| (without_preparing_tools(&content), metadata))
+    if let Ok((content, metadata)) = &completion
+        && let Some(correction) = submission_correction.as_mut()
+        && correction.pending()
+        && !crate::models::message::is_durable_stop(content)
+    {
+        correction.stop(
+            if metadata
+                .as_ref()
+                .is_some_and(|meta| meta.was_aborted == Some(true))
+            {
+                crate::services::submission_correction::SubmissionReason::Cancelled
+            } else if metadata.as_ref().is_some_and(|meta| meta.error.is_some()) {
+                crate::services::submission_correction::SubmissionReason::ProviderError
+            } else {
+                crate::services::submission_correction::SubmissionReason::ModelStopped
+            },
+        );
+    }
+    persist_correction!();
+    completion.map(|(content, mut metadata)| {
+        if let Some(correction) = submission_correction {
+            metadata
+                .get_or_insert_with(GenerationMetadata::default)
+                .submission_outcome = Some(correction.outcome);
+        }
+        (without_preparing_tools(&content), metadata)
+    })
 }
 
 /// Mark the task's outcome as parked when the finalized message stops on an
@@ -13194,6 +13423,7 @@ mod reasoning_replay_tests {
             mcp_servers_disabled_by_user: None,
             mcp_tools_disabled_by_user: None,
             continuation_in_flight: None,
+            submission_outcome: None,
         }
     }
 
@@ -13857,6 +14087,7 @@ fn generation_metadata_for_error(error: GenerationErrorType) -> GenerationMetada
         mcp_servers_disabled_by_user: None,
         mcp_tools_disabled_by_user: None,
         continuation_in_flight: None,
+        submission_outcome: None,
     }
 }
 
@@ -13873,12 +14104,28 @@ async fn persist_background_generation_failure(
     let generation_error = internal_generation_error(report);
     report_chat_provider_generation_error(chat_provider_id, &generation_error);
 
+    let mut metadata = generation_metadata_for_error(generation_error.clone());
+    if let Ok(message) = get_message_by_id(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &assistant_message_id,
+    )
+    .await
+        && let Some(parameters) = message
+            .generation_parameters
+            .and_then(|value| serde_json::from_value::<GenerationParameters>(value).ok())
+        && let Some(mut correction) = parameters.turn_consumption.submission_correction
+    {
+        correction.stop(crate::services::submission_correction::SubmissionReason::ProviderError);
+        metadata.submission_outcome = Some(correction.outcome);
+    }
     if let Err(error) = update_message_generation_metadata(
         &app_state.db,
         policy,
         &me_user.to_subject(),
         &assistant_message_id,
-        generation_metadata_for_error(generation_error.clone()),
+        metadata,
     )
     .await
     {
@@ -17753,11 +18000,17 @@ pub(crate) async fn run_continuation(
             parsed.content.clone(),
         )
         .await?;
-        if crate::services::tool_call_budget::choices(&parsed.content)
+        let budget_choice = crate::services::tool_call_budget::choices(&parsed.content)
             .last()
-            .is_some_and(|(_, choice)| {
-                choice == crate::services::tool_call_budget::BudgetChoice::Stop
-            })
+            .map(|(_, choice)| choice);
+        let pending_correction = generation_parameters
+            .turn_consumption
+            .submission_correction
+            .as_ref()
+            .filter(|correction| correction.pending());
+        if budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Stop)
+            || (budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Answer)
+                && pending_correction.is_some())
         {
             let mut metadata = message
                 .generation_metadata
@@ -17765,7 +18018,27 @@ pub(crate) async fn run_continuation(
                 .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
                 .unwrap_or_default();
             metadata.continuation_in_flight = None;
-            metadata.was_aborted = Some(true);
+            metadata.was_aborted = (budget_choice
+                == Some(crate::services::tool_call_budget::BudgetChoice::Stop))
+            .then_some(true);
+            if let Some(correction) = pending_correction {
+                let mut correction = correction.clone();
+                correction.stop(if budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Stop) {
+                    crate::services::submission_correction::SubmissionReason::UserStopped
+                } else {
+                    crate::services::submission_correction::SubmissionReason::UserRequestedAnswer
+                });
+                metadata.submission_outcome = Some(correction.outcome.clone());
+                let mut consumption = generation_parameters.turn_consumption.clone();
+                consumption.submission_correction = Some(correction);
+                crate::services::client_operations::store::save_consumption(
+                    &app_state.db,
+                    message.id,
+                    task.generation_id,
+                    &consumption,
+                )
+                .await?;
+            }
             update_message_generation_metadata(
                 &app_state.db,
                 policy,

@@ -1687,7 +1687,7 @@ async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool
     })
     .await
     .unwrap();
-    assert_eq!(checkpoint.tool_calls, 2);
+    assert_eq!(checkpoint.tool_calls, 0);
     let second_id = checkpoint.tool_charges[&second_call_id]
         .operation_identity
         .as_ref()
@@ -2185,11 +2185,17 @@ async fn joint_replay_case(pool: Pool<Postgres>, withdraw: bool) {
         .unwrap();
     let params: GenerationParameters =
         serde_json::from_value(message.generation_parameters.unwrap()).unwrap();
-    assert_eq!(params.turn_consumption.tool_calls, 3);
+    assert_eq!(params.turn_consumption.tool_calls, 1);
     assert_eq!(
         params.turn_consumption.submission_attempts["submit_plan"],
-        2
+        if withdraw { 2 } else { 3 }
     );
+    if !withdraw {
+        assert_eq!(
+            message.generation_metadata.as_ref().unwrap()["submission_outcome"]["reason"],
+            "attempts_exhausted"
+        );
+    }
     assert_eq!(
         message.raw_message["content"]
             .as_array()

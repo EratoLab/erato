@@ -7123,6 +7123,10 @@ msgstr ""
 #~ msgid "1 step"
 #~ msgstr ""
 
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "A model or context limit prevented further correction."
+msgstr ""
+
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "A passage could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
 msgstr "No se pudo transcribir un fragmento porque el filtro de contenido del proveedor de IA lo bloqueó. Esto también ocurre con frases inofensivas. Dilo de otra manera o escríbelo."
@@ -7547,6 +7551,10 @@ msgstr ""
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Copy code"
 #~ msgstr ""
+
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "Correcting changes · attempt {attempt} of {total}"
+msgstr ""
 
 #: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "Could not capture audio from the microphone. Please try again."
@@ -8097,6 +8105,10 @@ msgstr ""
 msgid "No text."
 msgstr "Sin texto."
 
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "No valid proposal was prepared"
+msgstr ""
+
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "noise suppression: {0}"
 #~ msgstr ""
@@ -8570,6 +8582,14 @@ msgstr "El proveedor de IA no pudo transcribir un fragmento. Inténtalo de nuevo
 msgid "The AI provider could not transcribe the passage starting at {passage}. Please try again."
 msgstr "El proveedor de IA no pudo transcribir el fragmento que empieza en {passage}. Inténtalo de nuevo."
 
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "The correction attempts were exhausted."
+msgstr ""
+
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "The correction was cancelled."
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "The file \"{filename}\" cannot be processed by the AI and was not uploaded."
 msgstr "El archivo \"{filename}\" no puede ser procesado por la IA y no se subió."
@@ -8577,6 +8597,14 @@ msgstr "El archivo \"{filename}\" no puede ser procesado por la IA y no se subi�
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "The following files cannot be processed and were not uploaded: {filenames}"
 msgstr "Los siguientes archivos no pueden ser procesados y no se subieron: {filenames}"
+
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "The host could not continue validating this proposal."
+msgstr ""
+
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "The host did not return a result in time."
+msgstr ""
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 #: src/hooks/audio/useGuidedAudioCapture.ts
@@ -8603,6 +8631,10 @@ msgstr "El micrófono se desconectó. Comprueba el micrófono y vuelve a iniciar
 msgid "The microphone was disconnected. Please check your microphone and start recording again."
 msgstr "El micrófono se desconectó. Comprueba el micrófono y vuelve a iniciar la grabación."
 
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "The model stopped without an accepted proposal."
+msgstr ""
+
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The passage starting at {passage} could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
 msgstr "No se pudo transcribir el fragmento que empieza en {passage} porque el filtro de contenido del proveedor de IA lo bloqueó. Esto también ocurre con frases inofensivas. Dilo de otra manera o escríbelo."
@@ -8611,10 +8643,26 @@ msgstr "No se pudo transcribir el fragmento que empieza en {passage} porque el f
 msgid "The passage starting at {passage} could not be transcribed. Please try again."
 msgstr "No se pudo transcribir el fragmento que empieza en {passage}. Inténtalo de nuevo."
 
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "The recovery read limit was reached."
+msgstr ""
+
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "The required submission capability is unavailable."
+msgstr ""
+
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 #: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "The selected microphone is not available. Refresh the device list and try again."
 msgstr "El micrófono seleccionado no está disponible. Actualiza la lista de dispositivos e inténtalo de nuevo."
+
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "The source context is no longer available for this request."
+msgstr ""
+
+#: src/components/ui/Chat/SubmissionNotice.tsx
+#~ msgid "The work limit was reached."
+#~ msgstr ""
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
@@ -8816,6 +8864,10 @@ msgstr ""
 #: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
 msgid "You asked: {query}"
 msgstr "Tu pregunta: {query}"
+
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "You chose to finish without further corrections."
+msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
 #~ msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."

@@ -5809,7 +5809,7 @@ description = "Validate and stage a draft for review. Call alone after reading."
 parameters = '''{"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}'''
 
 [client_tools.tools.submit_draft.submission]
-max_attempts = 3
+max_attempts = 5
 native_schema = "auto"
 ```
 
@@ -5819,9 +5819,13 @@ is absent. Schemas support local references, and never fetch external schemas.
 
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.max_attempts */}
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.native_schema */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.recovery_read_tools.[] */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.max_recovery_reads */}
 
-- **`max_attempts`** _(default: 3, range: 1–10)_ - Total attempts per tool and generation, including the initial call. Schema errors and client failures return bounded feedback for correction; the final failed attempt ends generation. A timeout ends generation without retrying a possibly staged draft.
+- **`max_attempts`** _(default: 3, range: 1–10)_ - Total attempts per logical editing step, including the initial call and plain-text replies during correction. These attempts are reserved independently of ordinary tool budgets. Switching submission tools or draft identifiers does not reset the allowance. Schema errors and client failures return bounded feedback for correction; the final failed attempt ends generation with a persisted unresolved outcome. A timeout ends generation without retrying a possibly staged draft.
 - **`native_schema`** _(default: `"auto"`)_ - `auto` uses native enforcement when the adapter, explicit model capability and schema are compatible; otherwise it uses local validation and feedback. `off` always uses local validation. `required` rejects request preparation if native enforcement is unavailable, including when `compat_omit_strict` is enabled.
+- **`recovery_read_tools`** _(default: `[]`)_ - Qualified names of configured non-submission client tools permitted to read current context when the host returns `submission_feedback.recovery = "read_current_context"`. These reads use their separate allowance without spending the ordinary tool budget. Configure only tools that read the current source context.
+- **`max_recovery_reads`** _(default: 32, range: 0–128)_ - Maximum recovery reads across the editing step, including approval continuations. Exhaustion ends with an unresolved outcome. The host can end recovery immediately with `submission_feedback.recovery = "cannot_continue"` when the source context is unavailable.
 
 Native enforcement does not replace the host's parser or domain checks. A schema
 must already fit the provider subset: object properties are all required and

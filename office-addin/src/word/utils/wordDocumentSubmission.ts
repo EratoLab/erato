@@ -38,6 +38,46 @@ export { WORD_SUBMIT_PLAN_ACTION, WORD_SUBMIT_PLAN_TOOL };
 export function createWordDocumentSubmissionExecutor(
   session: WordDocumentReadSession,
 ): ClientToolExecutor {
+  const execute = createSubmissionExecutor(session);
+  return async (input, context) => {
+    const result = await execute(input, context);
+    if (result.ok) return result;
+    const snapshot = context && session.snapshotForSubmission(context);
+    const unavailable =
+      !snapshot ||
+      snapshot.revoked ||
+      snapshot.used ||
+      !!snapshot.issue ||
+      context?.signal?.aborted;
+    const needsRead = result.validationErrors?.some(({ code }) =>
+      [
+        "too-large",
+        "incomplete-read",
+        "expired",
+        "outside-read-scope",
+      ].includes(code),
+    );
+    return {
+      ...result,
+      validationErrors: result.validationErrors?.length
+        ? result.validationErrors
+        : [{ path: "", code: "submission-unavailable", message: result.error }],
+      submissionFeedback: {
+        ...result.submissionFeedback,
+        terminal: unavailable || result.submissionFeedback?.terminal || false,
+        recovery: unavailable
+          ? "cannot_continue"
+          : needsRead
+            ? "read_current_context"
+            : "repair_arguments",
+      },
+    };
+  };
+}
+
+function createSubmissionExecutor(
+  session: WordDocumentReadSession,
+): ClientToolExecutor {
   return async (input, context) => {
     if (!context || context.signal?.aborted)
       return {

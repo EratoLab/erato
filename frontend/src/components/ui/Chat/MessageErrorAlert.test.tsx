@@ -6,6 +6,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { MessageErrorAlert } from "./MessageErrorAlert";
 
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { MessageError } from "@/types/chat";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 import type { Messages } from "@lingui/core";
@@ -52,6 +53,87 @@ const renderAlert = async (message: UiChatMessage) => {
 };
 
 describe("MessageErrorAlert", () => {
+  it("shows the persisted unresolved outcome with verbose errors disabled", async () => {
+    await renderAlert(
+      failedMessage(undefined, {
+        status: "complete",
+        submission_outcome: {
+          status: "unresolved",
+          reason: "attempts_exhausted",
+          attempts_used: 5,
+          max_attempts: 5,
+        },
+      }),
+    );
+    expect(screen.getByTestId("submission-unresolved")).toHaveTextContent(
+      "No valid proposal was prepared",
+    );
+    expect(
+      screen.getByText("The correction attempts were exhausted."),
+    ).toBeInTheDocument();
+  });
+
+  it("clears rejected tool detail after genuine acceptance in reloaded history", async () => {
+    const pending = {
+      status: "correcting",
+      reason: "validation_failed",
+      attempts_used: 1,
+      max_attempts: 5,
+    };
+    const { container } = await renderAlert(
+      failedMessage(undefined, {
+        status: "complete",
+        content: [
+          {
+            content_type: "tool_use",
+            tool_call_id: "rejected",
+            tool_name: "submit_draft",
+            status: "error",
+            output: { submission_outcome: pending } as unknown as Extract<
+              ContentPart,
+              { content_type: "tool_use" }
+            >["output"],
+          },
+        ],
+        submission_outcome: {
+          status: "accepted",
+          attempts_used: 2,
+          max_attempts: 5,
+        },
+      }),
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows correction progress from the live tool result", async () => {
+    await renderAlert(
+      failedMessage(undefined, {
+        status: "sending",
+        content: [
+          {
+            content_type: "tool_use",
+            tool_call_id: "rejected",
+            tool_name: "submit_draft",
+            status: "error",
+            output: {
+              submission_outcome: {
+                status: "correcting",
+                attempts_used: 1,
+                max_attempts: 5,
+              },
+            } as unknown as Extract<
+              ContentPart,
+              { content_type: "tool_use" }
+            >["output"],
+          },
+        ],
+      }),
+    );
+    expect(screen.getByTestId("submission-progress")).toHaveTextContent(
+      "Correcting changes · attempt 2 of 5",
+    );
+  });
+
   it("draws nothing for a message that did not fail", async () => {
     const { container } = await renderAlert(
       failedMessage(undefined, {

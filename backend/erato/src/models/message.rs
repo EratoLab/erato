@@ -273,6 +273,8 @@ pub enum GenerationErrorType {
 /// Metadata about the generation process, including usage statistics
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GenerationMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submission_outcome: Option<crate::services::submission_correction::SubmissionOutcome>,
     /// Number of prompt tokens used during generation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub used_prompt_tokens: Option<u32>,
