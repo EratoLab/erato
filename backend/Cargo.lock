@@ -2911,6 +2911,8 @@ dependencies = [
  "reqwest 0.13.2",
  "rmcp",
  "serde_json",
+ "tracing",
+ "tracing-subscriber",
  "url",
 ]
 

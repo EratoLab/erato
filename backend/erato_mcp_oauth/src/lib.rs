@@ -3,9 +3,11 @@
 //! PRM is obtained from the configured MCP endpoint, never from the API resource
 //! identifier. The HTTP adapter presents the endpoint as PRM's resource to rmcp's
 //! endpoint-matching validator, while retaining the real identifier separately.
-//! Only that field is adapted: SDK discovery, issuer checks, PKCE, credential
-//! storage, refresh coordination, and token parsing remain in use.
+//! Resource identifiers and configured authorization-query parameters are adapted;
+//! SDK discovery, issuer checks, PKCE, credential storage, refresh coordination,
+//! and token parsing remain in use.
 use std::{
+    collections::BTreeMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -26,6 +28,54 @@ use serde_json::Value;
 use url::form_urlencoded;
 
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+
+const PROTECTED_AUTHORIZATION_PARAMS: &[&str] = &[
+    "response_type",
+    "client_id",
+    "client_secret",
+    "redirect_uri",
+    "scope",
+    "state",
+    "code_challenge",
+    "code_challenge_method",
+    "resource",
+    "response_mode",
+    "request",
+    "request_uri",
+];
+
+fn filter_authorization_params(mut params: BTreeMap<String, String>) -> BTreeMap<String, String> {
+    params.retain(|key, _| {
+        if key.is_empty()
+            || PROTECTED_AUTHORIZATION_PARAMS
+                .iter()
+                .any(|protected| key.eq_ignore_ascii_case(protected))
+        {
+            tracing::warn!(
+                parameter = key,
+                "Ignoring protected or empty OAuth authorization parameter"
+            );
+            false
+        } else {
+            true
+        }
+    });
+    params
+}
+
+fn replace_authorization_params(query: &str, params: &BTreeMap<String, String>) -> String {
+    if params.is_empty() {
+        return query.to_owned();
+    }
+    let mut serializer = form_urlencoded::Serializer::new(String::new());
+    for (key, value) in form_urlencoded::parse(query.as_bytes()) {
+        if !params.contains_key(key.as_ref()) {
+            serializer.append_pair(&key, &value);
+        }
+    }
+    serializer.extend_pairs(params);
+    serializer.finish()
+}
 
 #[derive(Default)]
 struct Discovery {
@@ -206,6 +256,7 @@ fn replace_resource(encoded: &[u8], resource: Option<&str>) -> String {
 pub struct AuthorizationManager {
     sdk: SdkAuthorizationManager,
     http: Arc<ResourceHttpClient>,
+    authorization_params: BTreeMap<String, String>,
 }
 
 impl AuthorizationManager {
@@ -236,7 +287,18 @@ impl AuthorizationManager {
         });
         let sdk =
             SdkAuthorizationManager::new_with_oauth_http_client(endpoint, http.clone()).await?;
-        Ok(Self { sdk, http })
+        Ok(Self {
+            sdk,
+            http,
+            authorization_params: BTreeMap::new(),
+        })
+    }
+
+    /// Set literal query parameters used only when generating authorization URLs.
+    /// Protected names (case insensitive) and empty names are ignored with WARN;
+    /// values are never logged. Existing endpoint pairs with configured names are replaced.
+    pub fn set_authorization_params(&mut self, params: BTreeMap<String, String>) {
+        self.authorization_params = filter_authorization_params(params);
     }
 
     pub async fn resolve_metadata(&self) -> Result<AuthorizationMetadataResolution, AuthError> {
@@ -315,7 +377,10 @@ impl AuthorizationManager {
             url.query().unwrap_or_default().as_bytes(),
             self.http.resource().as_deref(),
         );
-        url.set_query(Some(&query));
+        url.set_query(Some(&replace_authorization_params(
+            &query,
+            &self.authorization_params,
+        )));
         Ok(url.to_string())
     }
 }
@@ -323,6 +388,99 @@ impl AuthorizationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn authorization_params_replace_endpoint_pairs_and_keep_flow_parameters() {
+        let query = "audience=old&state=a%2Bb%26c&code_challenge=abc&scope=read&scope=write&audience=older&resource=x&other=1&other=2";
+        let params = std::collections::BTreeMap::from([
+            ("prompt".into(), "consent".into()),
+            (
+                "audience".into(),
+                "https://api.example.com/?a=1&b=ü + %2B".into(),
+            ),
+        ]);
+        let result = replace_authorization_params(query, &params);
+        let pairs = form_urlencoded::parse(result.as_bytes())
+            .into_owned()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            pairs,
+            vec![
+                ("state".into(), "a+b&c".into()),
+                ("code_challenge".into(), "abc".into()),
+                ("scope".into(), "read".into()),
+                ("scope".into(), "write".into()),
+                ("resource".into(), "x".into()),
+                ("other".into(), "1".into()),
+                ("other".into(), "2".into()),
+                ("audience".into(), params["audience"].clone()),
+                ("prompt".into(), "consent".into()),
+            ]
+        );
+        assert_eq!(
+            replace_authorization_params(query, &Default::default()),
+            query
+        );
+    }
+
+    #[test]
+    fn protected_authorization_params_warn_and_do_not_expose_values() {
+        #[derive(Clone)]
+        struct LogWriter(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for LogWriter {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let logs = Arc::new(Mutex::new(Vec::new()));
+        let writer = LogWriter(logs.clone());
+        let subscriber = tracing_subscriber::fmt()
+            .without_time()
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let protected = [
+            "response_type",
+            "client_id",
+            "client_secret",
+            "redirect_uri",
+            "scope",
+            "state",
+            "code_challenge",
+            "code_challenge_method",
+            "resource",
+            "response_mode",
+            "request",
+            "request_uri",
+            "",
+        ];
+        let mut params = std::collections::BTreeMap::from([
+            ("audience".into(), "api.example.com".into()),
+            ("prompt".into(), "consent".into()),
+        ]);
+        for key in protected {
+            params.insert(key.to_ascii_uppercase(), "must-not-be-logged".into());
+        }
+        let filtered =
+            tracing::subscriber::with_default(subscriber, || filter_authorization_params(params));
+        assert_eq!(
+            filtered,
+            std::collections::BTreeMap::from([
+                ("audience".into(), "api.example.com".into()),
+                ("prompt".into(), "consent".into()),
+            ])
+        );
+        let logs = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+        assert_eq!(logs.matches("WARN").count(), protected.len());
+        assert!(!logs.contains("must-not-be-logged"));
+        for key in protected.iter().filter(|key| !key.is_empty()) {
+            assert!(logs.contains(&key.to_ascii_uppercase()), "{logs}");
+        }
+    }
 
     fn client() -> ResourceHttpClient {
         ResourceHttpClient {

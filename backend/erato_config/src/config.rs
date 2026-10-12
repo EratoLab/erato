@@ -3065,6 +3065,10 @@ pub struct McpServerOauth2AuthenticationConfig {
     #[serde(default)]
     pub scopes: Vec<String>,
     pub client_name: Option<String>,
+    /// Literal, nonsecret query parameters for authorization only. Protected
+    /// OAuth flow parameters are ignored with a warning by the OAuth adapter.
+    #[serde(default)]
+    pub authorization_params: std::collections::BTreeMap<String, String>,
 }
 
 fn default_mcp_fixed_auth_header_name() -> String {

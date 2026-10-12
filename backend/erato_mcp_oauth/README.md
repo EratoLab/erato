@@ -1,4 +1,4 @@
-# MCP OAuth resource compatibility
+# MCP OAuth resource compatibility and authorization parameters
 
 This crate wraps the registry release of **rmcp 3.2.0** through its public
 `OAuthHttpClient` hook. No SDK code is vendored or patched. Both the Erato backend
@@ -22,6 +22,16 @@ endpoint, optional resource setting, and custom HTTP headers:
 Nonempty resource identifiers must be absolute URIs with no fragment or control
 characters. A trailing slash or query in an explicit/PRM identifier is preserved.
 
+`set_authorization_params(BTreeMap<String, String>)` adds literal, nonsecret
+query parameters to authorization URLs only. Configured names replace every
+matching endpoint pair (case-sensitive), and configured pairs are appended in
+ascending key order, form-encoded once. An empty map leaves current behavior
+unchanged. Empty names and protected names (ignoring ASCII case) are skipped
+with WARN messages that include the name but never the value: `response_type`,
+`client_id`, `client_secret`, `redirect_uri`, `scope`, `state`, `code_challenge`,
+`code_challenge_method`, `resource`, `response_mode`, `request`, and `request_uri`.
+Discovery, registration, code exchange and refresh requests are unaffected.
+
 ## Adapter boundaries
 
 Discovery still starts at the actual MCP endpoint. The adapter recognizes PRM
@@ -33,8 +43,8 @@ check. It never fetches the API resource URI itself, changes an authorization
 server URL, or rewrites issuer metadata.
 
 The selected resource is applied to the SDK-generated authorization URL and to
-form POSTs **only at the configured token endpoint**. Other parameters (including
-state, PKCE, scope and client authentication) retain their values. JSON dynamic
+form POSTs **only at the configured token endpoint**. SDK-managed flow parameters
+(state, PKCE, scope and client authentication) retain their values. JSON dynamic
 registration requests are unchanged. Rebuilding the wrapper for callback and
 refresh repeats discovery and applies the same configuration. Erato's encrypted
 credential/state formats continue to use the SDK's serde representations.
@@ -65,5 +75,6 @@ cargo test -p erato_mcp_oauth -p mock-mcp-server -p erato_config
 all three resource modes across authorization/exchange/MCP calls/refresh,
 metadata fallback, resource and transport queries, dynamic registration,
 configured headers, callback issuer validation and redirect boundaries. The
-fixture requires no live Entra tenant. Its standalone configuration is documented
-in `../mock-mcp-server/README.md`.
+authorization-parameter regression also covers registration and token-request
+isolation. The fixture requires no live Entra tenant. Its standalone configuration
+is documented in `../mock-mcp-server/README.md`.
