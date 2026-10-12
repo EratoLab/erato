@@ -123,6 +123,15 @@ The card shows the expected route before Apply ("Edits N passages in place" or
 "Replaces the whole document because …"). Apply decides again with the live
 host state, and the result reports the route that actually ran.
 
+On Word for Windows and Mac, a card whose preview is the import or the body
+route reads `Word.Coauthoring` once (WordApiDesktop 1.4, `wordCoauthoring.ts`).
+When Word lists more than one author, or holds co-authors' updates not yet
+merged, a warning row before Apply says others are editing and may lose their
+latest changes. Apply itself is unchanged. Without the API, or when the read
+fails, the card is as before; the web never reads it and keeps its
+confirmation. The rule is ERMAIN-960's plan: P-D-COAUTH has not run yet to show
+whether `authors` lists the user on every build.
+
 ### Routing
 
 `routeWordDocumentPlan` (`wordInPlaceRoute.ts`) is pure and shared by the
@@ -182,7 +191,10 @@ off:
   takes the import as `script-text` until `scriptText` passes on a platform.
 
 `list`, `span`, `tracked`, `trackedStructure`, `storyText` and `scriptText`
-stay off until their probe passes. `window.eratoWordInPlaceProbe()` runs the probes in
+stay off until their probe passes. Word for the web and Mac write only `text`
+and `cell` in place: P2–P13 have no web run yet (P-W-INPLACE in ERMAIN-961), so
+on the web every other change takes the confirmed import or, for a scoped edit,
+is refused. `marks` also needs WordApiDesktop 1.3, which the web lacks. `window.eratoWordInPlaceProbe()` runs the probes in
 development builds, on an empty scratch document only; a failed probe reports
 the step it reached.
 

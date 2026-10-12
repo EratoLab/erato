@@ -3049,6 +3049,16 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Ausgewählte Passage ersetzen"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.body"
+msgstr "Andere bearbeiten dieses Dokument gerade. Das Ersetzen des Dokumentinhalts kann ihre letzten Änderungen überschreiben."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.import"
+msgstr "Andere bearbeiten dieses Dokument gerade. Das Ersetzen des gesamten Dokuments kann ihre letzten Änderungen überschreiben."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.askAgain"
 msgstr "Erneut nach direkten Bearbeitungen fragen"

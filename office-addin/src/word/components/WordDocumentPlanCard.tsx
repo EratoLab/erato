@@ -21,7 +21,7 @@ import {
   wordHistoryProposal,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { WordImportConfirm, WordImportRefusal } from "./WordImportConfirm";
 import {
@@ -53,6 +53,7 @@ import { wordApplyHost, wordApplyPolicy } from "../utils/wordApplyPolicy";
 import {
   wordApplyAdjustmentText,
   wordAuthoringIssueText,
+  wordCoauthorsEditingText,
   wordDocumentDiagnosticText,
   wordInPlaceRequestText,
   wordPartlyWrittenText,
@@ -62,6 +63,7 @@ import {
   wordUnverifiedPassagesText,
 } from "../utils/wordAuthoringMessages";
 import { offerableWordClientActionsForFacet } from "../utils/wordClientActions";
+import { readWordCoauthoring } from "../utils/wordCoauthoring";
 import {
   decodeWordDocumentBackup,
   decodeWordInPlaceBackup,
@@ -212,6 +214,7 @@ export function WordDocumentPlanCard({
         compiled,
       );
       return {
+        route: route.route,
         text: wordRoutePreviewText(route, wordPlanPassages(plan)),
         write: wordWholeDocumentWrite(route, plan, snapshot, wordApplyPolicy()),
       };
@@ -229,6 +232,24 @@ export function WordDocumentPlanCard({
     offered && wholeDocument?.write === "refuse"
       ? wholeDocument.reason
       : undefined;
+  const web = wordApplyHost(wordHostPlatform()) === "web";
+  const replacedRoute = block
+    ? wordWholeDocumentBlockRoute(block).route
+    : routing?.route;
+  const replaces =
+    replacedRoute === "import" || replacedRoute === "body"
+      ? replacedRoute
+      : undefined;
+  const checkCoauthors = !web && !!replaces;
+  const coauthorsRead = useRef(false);
+  const [othersEditing, setOthersEditing] = useState(false);
+  useEffect(() => {
+    if (!checkCoauthors || coauthorsRead.current) return;
+    coauthorsRead.current = true;
+    void readWordCoauthoring().then((state) =>
+      setOthersEditing(!!state?.othersEditing),
+    );
+  }, [checkCoauthors]);
   const run = useCallback(
     async (importConfirmed: boolean) => {
       // Always allow and auto-prompt reach this too; only the card's own tick confirms.
@@ -623,6 +644,16 @@ export function WordDocumentPlanCard({
   if (!plan || !planReview)
     return <Alert type="error">{wordAuthoringIssueText("invalid")}</Alert>;
   const applyLabel = wordPlanApplyLabel(planReview);
+  const coauthorsNotice = othersEditing && replaces && (
+    <Alert
+      type="warning"
+      role="status"
+      className="[overflow-wrap:anywhere]"
+      data-testid="word-plan-coauthors"
+    >
+      {wordCoauthorsEditingText(replaces)}
+    </Alert>
+  );
   const planTitle = wordPlanTitleText(planReview.title);
   const blockedText = issue
     ? wordAuthoringIssueText(issue, snapshot?.issueDetails)
@@ -673,7 +704,8 @@ export function WordDocumentPlanCard({
                   )
                 : routePreview
             }
-            web={wordApplyHost(wordHostPlatform()) === "web"}
+            web={web}
+            notice={coauthorsNotice}
             applyLabel={applyLabel}
             canApply={ready && !host.operationInProgress}
             applying={applying}
@@ -694,6 +726,7 @@ export function WordDocumentPlanCard({
                 {routePreview}
               </p>
             )}
+            {(idle || applying) && offered && coauthorsNotice}
             {(idle || applying) && offered && !confirmCard && (
               <WordApplyButton
                 applying={applying}

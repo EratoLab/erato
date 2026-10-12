@@ -1302,24 +1302,53 @@ function replaceBlock(
 
 async function mountRealistic(
   makePlan: (snapshot: WordAuthoringSnapshot) => WordDocumentPlan,
-  options: WordOoxmlHostOptions & { tracking?: string; xml?: string } = {},
+  options: WordOoxmlHostOptions & {
+    tracking?: string;
+    xml?: string;
+    /** Everyone Word.Coauthoring lists, the user included; the host has no such object otherwise. */
+    coauthors?: number;
+    platform?: "Mac";
+  } = {},
 ) {
   const {
     tracking = "Off",
     xml = realisticWordPackageXml(),
+    coauthors,
+    platform,
     ...host
   } = options;
   const word = installWordOoxmlHost(xml, {
     profile: "word-pc-16.0.20326",
     ...host,
   });
+  if (platform)
+    (
+      globalThis as unknown as {
+        Office: { context: { diagnostics: { platform: string } } };
+      }
+    ).Office.context.diagnostics.platform = platform;
+  const coauthoringRead = vi.fn();
+  if (coauthors !== undefined)
+    Object.defineProperty(word.document, "coauthoring", {
+      configurable: true,
+      value: {
+        pendingUpdates: false,
+        load: coauthoringRead,
+        authors: {
+          items: Array.from({ length: coauthors }, (_, i) => ({
+            id: `author-${i}`,
+          })),
+          load: () => {},
+        },
+      },
+    });
   if (tracking !== "Off") word.setTrackingMode(tracking);
   const snapshot = await captureRealisticSnapshot(
     String(mock.artifact.messageId),
     tracking,
   );
   renderRealisticCard(snapshot, JSON.stringify(makePlan(snapshot)));
-  return { word, snapshot };
+  return { word, snapshot, coauthoringRead };
 }
 
 const routeText = () => screen.getByTestId("word-plan-route").textContent;
@@ -2099,5 +2128,101 @@ describe("confirmed whole-document replacement on Word for the web", () => {
       /^Applied/,
     );
     expect(word.insert).toHaveBeenCalledOnce();
+  });
+});
+
+describe("co-author warning on Word for Windows and Mac", () => {
+  const COAUTHORS_WARNING =
+    "Others are editing this document. Replacing the whole document may overwrite their latest changes.";
+
+  it("warns before Apply when Word lists another author, and Apply still replaces the document", async () => {
+    const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 2,
+    });
+    expect(routeText()).toBe(SECTIONS_ROUTE);
+    expect(await screen.findByTestId("word-plan-coauthors")).toHaveTextContent(
+      COAUTHORS_WARNING,
+    );
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(applyButton()).toBeEnabled();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+    expect(coauthoringRead).toHaveBeenCalledOnce();
+  });
+
+  it("warns above the consent card as well", async () => {
+    autoPrompt();
+    await mountRealistic(sectionsPlan, { coauthors: 2 });
+    expect(await screen.findByTestId("word-plan-coauthors")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Allow once" })).toBeEnabled();
+  });
+
+  it("warns inside the confirmation where the deployment asks first on Word PC", async () => {
+    window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
+      word_apply: { pc: { whole_document_import: "confirm" } },
+    };
+    onTestFinished(() => {
+      delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+    });
+    await mountRealistic(sectionsPlan, { coauthors: 2 });
+    const group = screen.getByRole("group", {
+      name: "Confirm replacing the whole document",
+    });
+    expect(
+      await within(group).findByTestId("word-plan-coauthors"),
+    ).toBeVisible();
+    expect(confirmBox()).not.toBeChecked();
+  });
+
+  it("stays as today when the user is the only author", async () => {
+    const { coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 1,
+    });
+    await waitFor(() => expect(coauthoringRead).toHaveBeenCalledOnce());
+    await act(async () => {});
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    expect(applyButton()).toBeEnabled();
+  });
+
+  it("stays as today where Word cannot report co-authors", async () => {
+    const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 2,
+      platform: "Mac",
+      isSetSupported: (name, version) =>
+        !(name === "WordApiDesktop" && version === "1.4"),
+    });
+    await act(async () => {});
+    expect(coauthoringRead).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("does not ask Word for a plan written in place", async () => {
+    const { coauthoringRead } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      { coauthors: 2 },
+    );
+    await act(async () => {});
+    expect(routeText()).toBe("Edits 1 passage in place.");
+    expect(coauthoringRead).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+  });
+
+  it("leaves Word for the web to its confirmation", async () => {
+    const { coauthoringRead } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+      coauthors: 2,
+    });
+    await act(async () => {});
+    expect(coauthoringRead).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    expect(confirmBox()).not.toBeChecked();
   });
 });

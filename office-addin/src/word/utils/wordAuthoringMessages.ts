@@ -158,6 +158,21 @@ export function wordInPlaceRequestText(): string {
   });
 }
 
+/** Before Apply on Word for Windows or Mac, when Word reports others editing the document. */
+export function wordCoauthorsEditingText(route: "import" | "body"): string {
+  return route === "body"
+    ? t({
+        id: "officeAddin.word.coauthors.body",
+        message:
+          "Others are editing this document. Replacing the document body may overwrite their latest changes.",
+      })
+    : t({
+        id: "officeAddin.word.coauthors.import",
+        message:
+          "Others are editing this document. Replacing the whole document may overwrite their latest changes.",
+      });
+}
+
 function wordTrackingNeedsImportText(): string {
   return t({
     id: "officeAddin.word.authoring.trackingNeedsImport",

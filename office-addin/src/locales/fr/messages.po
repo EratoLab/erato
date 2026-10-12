@@ -3049,6 +3049,16 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Remplacer le passage sélectionné"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.body"
+msgstr "D’autres personnes modifient ce document. Remplacer le corps du document peut écraser leurs dernières modifications."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.import"
+msgstr "D’autres personnes modifient ce document. Remplacer tout le document peut écraser leurs dernières modifications."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.askAgain"
 msgstr "Redemander des modifications directes"

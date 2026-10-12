@@ -3049,6 +3049,16 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Zastąp zaznaczony fragment"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.body"
+msgstr "Inne osoby edytują ten dokument. Zastąpienie treści dokumentu może nadpisać ich ostatnie zmiany."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.import"
+msgstr "Inne osoby edytują ten dokument. Zastąpienie całego dokumentu może nadpisać ich ostatnie zmiany."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.askAgain"
 msgstr "Zapytaj ponownie o edycję bezpośrednią"

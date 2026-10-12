@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   examplePlan,
@@ -27,6 +27,7 @@ import {
 } from "../wordInPlaceRoute";
 
 import type { WordWholeDocumentImport } from "../wordApplyPolicy";
+import type { WordHostPlatform } from "../wordHostPlatform";
 import type { WordPlanRoute } from "../wordInPlaceRoute";
 import type {
   WordAuthoringSnapshot,
@@ -148,6 +149,34 @@ describe("routeWordDocumentPlan", () => {
       route: "import",
       reason: "program-mismatch",
     });
+  });
+});
+
+describe("wordInPlaceCapabilities", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const enabled = (platform: WordHostPlatform) =>
+    Object.entries(wordInPlaceCapabilities(platform))
+      .filter(([, on]) => on)
+      .map(([mechanism]) => mechanism);
+
+  it("writes only text and cell in place on Word for the web, even where the bidirectional setters exist", () => {
+    vi.stubGlobal("Office", {
+      context: { requirements: { isSetSupported: () => true } },
+    });
+    expect(enabled("OfficeOnline")).toEqual(["text", "cell"]);
+    expect(enabled("Mac")).toEqual(["text", "cell"]);
+    expect(enabled("PC")).toEqual([
+      "text",
+      "cell",
+      "marks",
+      "delete",
+      "insert",
+      "split",
+      "restyle",
+    ]);
   });
 });
 

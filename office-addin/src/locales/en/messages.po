@@ -3049,6 +3049,16 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Replace the selected passage"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.body"
+msgstr "Others are editing this document. Replacing the document body may overwrite their latest changes."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.import"
+msgstr "Others are editing this document. Replacing the whole document may overwrite their latest changes."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.askAgain"
 msgstr "Ask again for in-place edits"

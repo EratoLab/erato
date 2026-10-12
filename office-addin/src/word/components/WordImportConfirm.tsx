@@ -7,6 +7,7 @@ import { wordWholeDocumentRefusalText } from "../utils/wordAuthoringMessages";
 
 import type { WordApplyStage } from "../utils/wordApplyProgress";
 import type { WordWholeDocumentRefusal } from "../utils/wordInPlaceRoute";
+import type { ReactNode } from "react";
 
 function AskAgainButton({
   disabled,
@@ -37,6 +38,7 @@ function AskAgainButton({
 export function WordImportConfirm({
   routeText,
   web,
+  notice,
   applyLabel,
   canApply,
   applying,
@@ -48,6 +50,8 @@ export function WordImportConfirm({
   routeText: string | undefined;
   /** Word for the web cannot undo the import, and its import rewrites comment metadata. */
   web: boolean;
+  /** Shown after the route, such as Word reporting others in the document. */
+  notice?: ReactNode;
   applyLabel: string;
   canApply: boolean;
   applying: boolean;
@@ -96,6 +100,7 @@ export function WordImportConfirm({
           {routeText}
         </p>
       )}
+      {notice}
       <ul
         id={statementsId}
         className="list-disc space-y-1 ps-5 text-sm text-theme-fg-primary"
