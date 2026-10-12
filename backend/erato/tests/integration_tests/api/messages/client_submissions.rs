@@ -975,12 +975,31 @@ async fn run_scenario(
                         response.assert_status_ok();
                         assert_eq!(response.json::<Value>()["delivered"], true);
                         if duplicate_results {
-                            server
+                            let duplicate = server
                                 .post("/api/v1beta/me/messages/clienttoolresult")
                                 .with_bearer_token(TEST_JWT_TOKEN)
                                 .json(&payload)
-                                .await
-                                .assert_status_ok();
+                                .await;
+                            if duplicate.status_code() == http::StatusCode::NOT_FOUND {
+                                // Live-only results retire with the completed task; redelivery
+                                // then returns 404, after the accepted receipt is persisted.
+                                assert_eq!(
+                                    duplicate.text(),
+                                    "No active generation task found for this chat"
+                                );
+                                let completed = Messages::find_by_id(message_id)
+                                    .one(&state.db)
+                                    .await
+                                    .unwrap()
+                                    .unwrap();
+                                assert_eq!(
+                                    completed.generation_metadata.unwrap()["submission_outcome"]["status"],
+                                    "accepted"
+                                );
+                            } else {
+                                duplicate.assert_status_ok();
+                                assert_eq!(duplicate.json::<Value>()["delivered"], false);
+                            }
                         }
                         next_result = results.next();
                     }
