@@ -5643,6 +5643,23 @@ pub struct EntraIdConfig {
     // Defaults to `true`.
     #[serde(default = "default_true")]
     pub auth_via_access_token: bool,
+
+    /// Resolve overage memberships independently of directory endpoints.
+    #[serde(default)]
+    pub group_overage: EntraIdGroupOverageConfig,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct EntraIdGroupOverageConfig {
+    /// Resolve memberships through Microsoft Graph when an Entra token signals overage.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for EntraIdGroupOverageConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
 }
 
 impl Default for EntraIdConfig {
@@ -5650,6 +5667,7 @@ impl Default for EntraIdConfig {
         Self {
             enabled: false,
             auth_via_access_token: true,
+            group_overage: EntraIdGroupOverageConfig::default(),
         }
     }
 }
@@ -5661,6 +5679,12 @@ impl EntraIdConfig {
             return Err(eyre!(
                 "Entra ID integration is enabled but auth_via_access_token is false. \
                  Currently, auth_via_access_token must be true when Entra ID is enabled."
+            ));
+        }
+        if self.group_overage.enabled && !self.auth_via_access_token {
+            return Err(eyre!(
+                "Entra group overage resolution requires auth_via_access_token = true. \
+                 Enable access-token authentication or disable integrations.entra_id.group_overage.enabled."
             ));
         }
         Ok(())
@@ -7816,6 +7840,10 @@ enabled = true
                     format!("integrations__{prefix}entra_id__enabled"),
                     "false".into(),
                 ),
+                (
+                    format!("integrations__{prefix}entra_id__group_overage__enabled"),
+                    "false".into(),
+                ),
             ])
             .into_iter()
             .map(|(key, value)| (key.to_uppercase(), value))
@@ -7843,6 +7871,7 @@ enabled = true
             );
             assert!(!config.integrations.sharepoint.enabled);
             assert!(!config.integrations.entra_id.enabled);
+            assert!(!config.integrations.entra_id.group_overage.enabled);
         }
     }
 

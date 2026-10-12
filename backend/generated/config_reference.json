@@ -811,6 +811,7 @@
   "i18n.language.language_detection_priority.[]": {},
   "integrations.entra_id.auth_via_access_token": {},
   "integrations.entra_id.enabled": {},
+  "integrations.entra_id.group_overage.enabled": {},
   "integrations.experimental_entra_id.auth_via_access_token": {
     "hide_in_docs": true,
     "deprecated": {
@@ -823,6 +824,13 @@
     "deprecated": {
       "note": "Please use `integrations.entra_id.enabled` instead.",
       "replacement_key": "integrations.entra_id.enabled"
+    }
+  },
+  "integrations.experimental_entra_id.group_overage.enabled": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.entra_id.group_overage.enabled` instead.",
+      "replacement_key": "integrations.entra_id.group_overage.enabled"
     }
   },
   "integrations.experimental_sharepoint.all_drives_sources.[]": {

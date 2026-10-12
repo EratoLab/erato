@@ -91,6 +91,21 @@ pass_user_headers = true
 skip_auth_regex = ["^/health", "^/metrics"]
 ```
 
+## Entra ID group overage
+
+Erato resolves group overage in the backend by default. Configure your Entra application to grant delegated Microsoft Graph `User.Read`, request that scope, and forward the access token:
+
+```ini
+provider = "entra-id"
+scope = "openid profile email offline_access https://graph.microsoft.com/User.Read"
+pass_authorization_header = true
+pass_access_token = true
+```
+
+oauth2-proxy can resolve overage for its own group checks and forward the result in `X-Forwarded-Groups`, but it does not add resolved memberships to the ID or access token. Erato uses the original ID token's overage signal and the forwarded Graph access token to fetch the same transitive membership set. The backend lookup is independent of `integrations.entra_id.enabled`; see [group-overage configuration](../configuration#integrationsentra_idgroup_overage) for disabling it, cache lifetimes and failure behavior.
+
+Backend resolution cannot recover a request rejected by the proxy's group checks, and does not remove large membership headers emitted by the proxy. For a token accepted through `skip_jwt_bearer_tokens`, make sure the proxy forwards a usable delegated Graph access token; an ID token used as an access token cannot call Graph.
+
 ## Redis Session Storage
 
 The Erato Helm chart includes an optional Redis deployment for OAuth2 Proxy session storage.

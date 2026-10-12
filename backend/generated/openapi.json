@@ -12114,7 +12114,7 @@
             "items": {
               "type": "string"
             },
-            "description": "List of groups the user belongs to.\n\nThis is derived from the `groups` claim in the ID token.\nIf the claim is not present, this will be an empty list."
+            "description": "List of groups the user belongs to.\n\nDerived from the ID token's `groups` claim, or Microsoft Graph for Entra overage."
           },
           "id": {
             "type": "string"
@@ -12128,7 +12128,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Organization group IDs from the `groups` claim.\n\nThese can be used as subject_id when creating share grants\nwith subject_id_type \"organization_group_id\"."
+            "description": "Organization membership IDs from the token or Entra overage resolution.\n\nThese can be used as subject_id when creating share grants\nwith subject_id_type \"organization_group_id\"."
           },
           "organization_user_id": {
             "type": "string",
