@@ -17,6 +17,27 @@ const outputDirectory =
     : path.resolve(process.argv[outputArgumentIndex + 1]);
 
 const typeTargets = [
+  [
+    "schemas/methods/sidecar-status-v1-params.schema.json",
+    "sidecar-status-v1-params.ts",
+    "SidecarStatusV1Params",
+  ],
+  [
+    "schemas/methods/sidecar-status-v1-result.schema.json",
+    "sidecar-status-v1-result.ts",
+    "SidecarStatusV1Result",
+  ],
+  [
+    "schemas/methods/sidecar-request-permission-v1-params.schema.json",
+    "sidecar-request-permission-v1-params.ts",
+    "SidecarRequestPermissionV1Params",
+  ],
+  [
+    "schemas/methods/sidecar-request-permission-v1-result.schema.json",
+    "sidecar-request-permission-v1-result.ts",
+    "SidecarRequestPermissionV1Result",
+  ],
+
   ["schemas/delegation/binding.schema.json", "binding.ts", "LocalTaskBinding"],
   ["schemas/delegation/plan.schema.json", "plan.ts", "LocalTaskPlan"],
   ["schemas/delegation/status.schema.json", "status.ts", "LocalTaskStatus"],
@@ -487,6 +508,15 @@ const typeTargets = [
 ];
 
 const validatorTargets = {
+  validateSidecarStatusV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-status-v1-params.schema.json",
+  validateSidecarStatusV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-status-v1-result.schema.json",
+  validateSidecarRequestPermissionV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-request-permission-v1-params.schema.json",
+  validateSidecarRequestPermissionV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-request-permission-v1-result.schema.json",
+
   validateLocalTaskBinding:
     "https://schemas.erato.ai/desktop-sidecar/v1/delegation/binding.schema.json",
   validateLocalTaskPlan:
