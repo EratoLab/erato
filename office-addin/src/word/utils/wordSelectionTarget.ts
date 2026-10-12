@@ -56,7 +56,7 @@ const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 
 export const WORD_SELECTION_SHOW_TIMEOUT_MS = 10_000;
 /**
- * Added to a run's timeout per comment whose anchor wordParagraphsInsideCommentAnchors compares.
+ * Added to a run's timeout per comment whose anchor queueWordCommentAnchors compares.
  * Word for the web mapped 50 anchors in 33.6 s (ERMAIN-947 P-PERF).
  */
 export const WORD_COMMENT_ANCHOR_CHECK_MS = 1_000;
@@ -97,7 +97,7 @@ export interface WordParagraphSpanChecks {
   /**
    * Listed comments the OOXML does not hold, which settleWordCommentAnchors may still find to lie
    * around the paragraph; until then they count as a commentMark. Null when there are none, or
-   * when a legacy package cannot tell which ones they are.
+   * when the package cannot tell which ones they are.
    */
   commentsOutside: WordCommentsOutside | null;
 }
@@ -171,8 +171,9 @@ export interface WordCommentsOutsidePackage {
   /** As String(Comment.id): Word for the web gives Comment.id as a number. */
   missing: string[];
   /**
-   * A legacy package marks fewer comments in the paragraph than were listed, and has no ids to
-   * tell which ones are missing, so `missing` names every listed one.
+   * Which ones are missing cannot be told, so `missing` names every listed one: a legacy package
+   * marks fewer comments in the paragraph than were listed and has no ids, or the package holds
+   * only one end of a comment's range.
    */
   uncertain: boolean;
 }
@@ -213,12 +214,34 @@ function replyCommentIds(
 }
 
 /**
+ * Whether the part holds only one end of a comment's range. A cell paragraph's package is cut from
+ * its whole row's (wordCellParagraphOoxml), whose parts still name a comment that reaches from it
+ * into another paragraph of the row.
+ */
+function holdsOneEndOnly(part: Element): boolean {
+  const marked = (name: string) =>
+    new Set(
+      Array.from(
+        part.getElementsByTagNameNS(W, name),
+        (mark) => mark.getAttributeNS(W, "id") ?? "",
+      ),
+    );
+  const starts = marked("commentRangeStart");
+  const ends = marked("commentRangeEnd");
+  return (
+    [...starts].some((id) => !ends.has(id)) ||
+    [...ends].some((id) => !starts.has(id))
+  );
+}
+
+/**
  * Which of the comments getComments listed for a paragraph its own OOXML leaves out. Word leaves a
  * comment whose anchor spans paragraphs out of each one's package, marks and parts alike, while
  * getComments lists it there (F-13). A comment is held where commentsIds gives its durableId,
- * which Comment.id spells in decimal (F-2). A legacy package has comments but no commentsIds (the
- * web never writes them for such files), so its root comments marked in the paragraph, by a start
- * or a reference, are counted instead.
+ * which Comment.id spells in decimal (F-2), and the package holds both ends of every comment range
+ * it has. A legacy package has comments but no commentsIds (the web never writes them for such
+ * files), so its root comments marked in the paragraph, by a start or a reference, are counted
+ * instead.
  */
 export function wordCommentsOutsidePackage(
   ooxml: string,
@@ -228,6 +251,12 @@ export function wordCommentsOutsidePackage(
   if (!ids.length) return { missing: [], uncertain: false };
   const doc = new DOMParser().parseFromString(ooxml, "application/xml");
   if (doc.getElementsByTagName("parsererror").length)
+    return { missing: ids, uncertain: true };
+  if (
+    holdsOneEndOnly(
+      packagePart(doc, "/word/document.xml") ?? doc.documentElement,
+    )
+  )
     return { missing: ids, uncertain: true };
   const commentsIds = packagePart(doc, "/word/commentsIds.xml");
   if (commentsIds) {
@@ -265,7 +294,7 @@ export function wordCommentsOutsidePackage(
 
 /**
  * The comments listed for `paragraph` that `ooxml`, its own package, does not hold: null when it
- * holds them all, and "uncertain" when a legacy package lacks some but cannot tell which.
+ * holds them all, and "uncertain" when it lacks some but cannot tell which.
  */
 export function wordListedCommentsOutside(
   paragraph: Word.Paragraph,
@@ -286,60 +315,80 @@ export function wordListedCommentsOutside(
 }
 
 /**
- * Per entry, whether its paragraph lies strictly inside the anchor of each of its comments, as the
- * middle one of three does: a write of the paragraph's own OOXML moves no mark of theirs. A mark at
- * or inside its edge, even an anchor's start at its first character, would move or go
- * (ERMAIN-955), so every other relation fails, as does "uncertain"; a null entry passes. One sync,
- * only when there is a comment to compare.
+ * Queued only: the anchor of each comment `outside` names, compared with its paragraph; null when
+ * there is none to compare. Read after the sync, it gives per entry the ids of the comments whose
+ * anchor lies strictly around the paragraph, as it does around the middle one of three: a write of
+ * the paragraph's own OOXML moves no mark of theirs. A mark at or inside its edge, even an
+ * anchor's start at its first character, would move or go (ERMAIN-955), so every other relation
+ * leaves the id out.
  */
-export async function wordParagraphsInsideCommentAnchors(
-  context: Word.RequestContext,
+export function queueWordCommentAnchors(
   outside: readonly (WordCommentsOutside | "uncertain" | null)[],
   guard?: Pick<WordRunGuard, "extendTimeout">,
-): Promise<boolean[]> {
+): (() => Set<string>[]) | null {
   const relations = outside.map((each) => {
-    if (!each || each === "uncertain") return null;
+    if (!each || each === "uncertain") return [];
     const whole = each.paragraph.getRange("Whole");
-    return each.comments.map((comment) =>
-      comment.getRange().compareLocationWith(whole),
-    );
+    // Seen from the comment, an anchor around the paragraph Contains it.
+    return each.comments.map((comment) => ({
+      id: String(comment.id),
+      relation: comment.getRange().compareLocationWith(whole),
+    }));
   });
-  const compared = relations.reduce(
-    (sum, each) => sum + (each?.length ?? 0),
-    0,
-  );
-  if (compared > 0) {
-    guard?.extendTimeout(compared * WORD_COMMENT_ANCHOR_CHECK_MS);
-    await context.sync();
-  }
-  return outside.map(
-    (each, i) =>
-      each !== "uncertain" &&
-      (relations[i]?.every((relation) => relation.value === "Contains") ??
-        true),
+  const compared = relations.reduce((sum, each) => sum + each.length, 0);
+  if (compared === 0) return null;
+  guard?.extendTimeout(compared * WORD_COMMENT_ANCHOR_CHECK_MS);
+  return () =>
+    relations.map(
+      (each) =>
+        new Set(
+          each
+            .filter(({ relation }) => relation.value === "Contains")
+            .map(({ id }) => id),
+        ),
+    );
+}
+
+/** Whether each comment `outside` names lies around its paragraph: among `around`. */
+export function wordCommentsAround(
+  outside: WordCommentsOutside | "uncertain" | null,
+  around: ReadonlySet<string> | undefined,
+): boolean {
+  if (outside === null) return true;
+  if (outside === "uncertain") return false;
+  return outside.comments.every(
+    (comment) => around?.has(String(comment.id)) ?? false,
   );
 }
 
 /**
  * Lifts the commentMark the span checks gave a paragraph for comments its OOXML does not hold,
- * where it lies strictly inside each one's anchor (wordParagraphsInsideCommentAnchors).
+ * where each lies around it (queueWordCommentAnchors).
  */
+function settledChecks(
+  read: WordParagraphSpanChecks,
+  around: ReadonlySet<string> | undefined,
+): WordParagraphSpanChecks {
+  if (!read.commentsOutside) return read;
+  const objectHazards = { ...read.objectHazards };
+  if (wordCommentsAround(read.commentsOutside, around))
+    delete objectHazards.commentMark;
+  return { ...read, objectHazards, commentsOutside: null };
+}
+
+/** The span checks with their comment anchors settled, in one more sync where there are any. */
 export async function settleWordCommentAnchors(
   context: Word.RequestContext,
   reads: readonly WordParagraphSpanChecks[],
   guard?: Pick<WordRunGuard, "extendTimeout">,
 ): Promise<WordParagraphSpanChecks[]> {
-  const inside = await wordParagraphsInsideCommentAnchors(
-    context,
+  const anchors = queueWordCommentAnchors(
     reads.map((read) => read.commentsOutside),
     guard,
   );
-  return reads.map((read, i) => {
-    if (!read.commentsOutside) return read;
-    const objectHazards = { ...read.objectHazards };
-    if (inside[i]) delete objectHazards.commentMark;
-    return { ...read, objectHazards, commentsOutside: null };
-  });
+  if (anchors) await context.sync();
+  const around = anchors?.() ?? [];
+  return reads.map((read, i) => settledChecks(read, around[i]));
 }
 
 /** The bookmarks Range.getBookmarks listed that the paragraph's own OOXML does not show. */
@@ -676,22 +725,16 @@ export function queueTargetVerification(
   });
 }
 
-/** The final read with its comment anchors settled (settleWordCommentAnchors). */
-export async function settleTargetVerification(
-  context: Word.RequestContext,
+/** A final read with its comment anchors settled by `around` (queueWordCommentAnchors). */
+export function settleTargetVerification(
   verification: WordTargetVerification,
-  guard?: Pick<WordRunGuard, "extendTimeout">,
-): Promise<WordTargetVerification> {
-  const checks = await settleWordCommentAnchors(
-    context,
-    verification.paragraphs.map((live) => live.checks),
-    guard,
-  );
+  around: readonly ReadonlySet<string>[],
+): WordTargetVerification {
   return {
     ...verification,
     paragraphs: verification.paragraphs.map((live, i) => ({
       ...live,
-      checks: checks[i],
+      checks: settledChecks(live.checks, around[i]),
     })),
   };
 }

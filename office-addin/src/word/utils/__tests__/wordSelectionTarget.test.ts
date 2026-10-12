@@ -761,6 +761,32 @@ describe("wordCommentsOutsidePackage", () => {
     ).toEqual({ missing: ["2010680536", "27818680"], uncertain: false });
   });
 
+  it.each([
+    [
+      "start",
+      `<w:p><w:commentRangeStart w:id="0"/><w:r><w:t>Text</w:t></w:r></w:p>`,
+    ],
+    [
+      "end",
+      `<w:p><w:r><w:t>Text</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r></w:p>`,
+    ],
+  ])(
+    "reports every listed comment of a cell paragraph cut from its row, holding only the %s of one, though commentsIds gives it",
+    (_, paragraph) => {
+      expect(
+        wordCommentsOutsidePackage(
+          pkg(
+            paragraph,
+            comments("1A2B3C4D"),
+            extended(["1A2B3C4D", null]),
+            ids(["1A2B3C4D", "2C93DE4F"]),
+          ),
+          ["747888207"],
+        ),
+      ).toEqual({ missing: ["747888207"], uncertain: true });
+    },
+  );
+
   it("reports nothing for a paragraph without comments", () => {
     expect(wordCommentsOutsidePackage(modern, [])).toEqual({
       missing: [],

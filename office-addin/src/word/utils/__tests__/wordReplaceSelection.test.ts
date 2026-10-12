@@ -598,6 +598,61 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     ).toMatchObject({ status: "reverted" });
     expect(host.comments()).toEqual(comments);
   });
+
+  it.each([
+    [
+      "its text changed",
+      (host: WordSelectionHost) => {
+        host.insertText({ p: "MA2", text: "charlie" }, "CHARLIE");
+      },
+      "TARGET_TEXT_MISMATCH",
+    ],
+    [
+      "a comment reaching out of it was added",
+      (host: WordSelectionHost) => {
+        host.addComment({
+          p: "MA2",
+          text: "delta words.",
+          to: { p: "MA3", text: "MA3 Last" },
+        });
+      },
+      "UNSUPPORTED_CONTENT",
+    ],
+  ] as const)(
+    "refuses the middle paragraph of a comment's anchor once %s in the sync before the write",
+    async (_, edit, code) => {
+      const MA2 = "MA2 Middle paragraph rewritten.";
+      const measure = install(V3C_MULTI_DOCUMENT);
+      const measured = await captureOf(measure, { p: "MA2" });
+      const start = measure.syncCount();
+      expect(await replace(measured, MA2)).toMatchObject({
+        status: "applied",
+      });
+      const offset = measure.writeSyncs()[0].index - 1 - start;
+      // F-11: the web does not list the comment around a middle paragraph, so compares none.
+      expect(
+        measure
+          .syncLog()
+          .find((entry) => entry.index === start + offset)
+          ?.commands.includes("Range.compareLocationWith"),
+      ).toBe(flavour !== "web");
+      uninstallWordSelectionHost();
+
+      const host = install(V3C_MULTI_DOCUMENT);
+      const capture = await captureOf(host, { p: "MA2" });
+      const at = host.syncCount() + offset;
+      host.beforeSync((index) => {
+        if (index === at) edit(host);
+      });
+      const before = host.paragraphs();
+      expect(await replace(capture, MA2)).toMatchObject({
+        status: "refused",
+        code,
+      });
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.paragraphs()).not.toEqual(before);
+    },
+  );
 });
 
 describe.each(HOSTS)(
@@ -2156,6 +2211,37 @@ describe.each(HOSTS)(
             .filter((call) => call.endsWith("Ooxml")),
         ).toEqual([]);
         expect(documentOf(host)).toEqual(before);
+      },
+    );
+
+    it.each([
+      ["SC1", SC1, { p: "SC1", text: "separator" }],
+      [
+        "MA2",
+        "MA2 Middle paragraph rewritten.",
+        { p: "MA2", text: "paragraph" },
+      ],
+    ] as const)(
+      "writes nothing back over %s once it changed in the sync before the restore",
+      async (p, rewrite, typed) => {
+        const fence = () => rewrite;
+        const measure = install();
+        const measured = await apply(measure, { p }, fence);
+        const start = measure.syncCount();
+        expect(await revert(measured)).toMatchObject({ status: "reverted" });
+        const offset = measure.writeSyncs().at(-1)!.index - 1 - start;
+        uninstallWordSelectionHost();
+
+        const host = install();
+        const result = await apply(host, { p }, fence);
+        const at = host.syncCount() + offset;
+        host.beforeSync((index) => {
+          if (index === at) host.insertText(typed, typed.text.toUpperCase());
+        });
+        const writes = host.writeSyncs().length;
+        expect(await revert(result)).toMatchObject({ status: "stale" });
+        expect(host.writeSyncs()).toHaveLength(writes);
+        expect(host.text({ p })).toContain(typed.text.toUpperCase());
       },
     );
 
