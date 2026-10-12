@@ -128,7 +128,7 @@ export interface WordCommentReadSessionOptions {
 export type WordCommentReadThread = WordCommentThread & {
   /** Document text just before the anchor: the "above" that means text, not an earlier comment. */
   text_before?: string;
-  /** The whole anchored text, in the section view. */
+  /** The whole anchored text, in the section view with the document included. */
   passage?: string;
   passage_cut?: true;
 };
@@ -988,9 +988,14 @@ export class WordCommentReadSession {
         resolved: thread.status === "resolved",
         authors: thread.entries.map((e) => fold(e.by)),
         mine: thread.entries.some((e) => e.me === true),
+        // Anchored text past the quote is document text: a match count would answer for it.
         texts: [
           ...thread.entries.map((e) => fold(e.text)),
-          fold(rangeLines(record).join(" ")),
+          fold(
+            gestures.document
+              ? rangeLines(record).join(" ")
+              : thread.where.quote,
+          ),
         ],
       };
     });
@@ -1023,7 +1028,7 @@ export class WordCommentReadSession {
         const before = textBeforeOf(record, inventoryTexts);
         if (before !== null) extras.text_before = before;
       }
-      if (view === "section") {
+      if (view === "section" && gestures.document) {
         const passage = headOf(passageOf(record), WORD_COMMENT_TEXT_MAX_CHARS);
         if (passage.text) extras.passage = passage.text;
         if (passage.cut) extras.passage_cut = true;
@@ -1133,7 +1138,7 @@ export class WordCommentReadSession {
     const threads = plural(input.shown, "comment thread");
     const where = (() => {
       if (input.view === "section")
-        return `anchored in paragraphs ${query.section!.para}–${query.section!.through}, with their anchored passages`;
+        return `anchored in paragraphs ${query.section!.para}–${query.section!.through}, ${input.document ? "with their anchored passages" : "without their anchored passages, which are document text and need the document included"}`;
       if (input.view === "document") return "from the whole document";
       const { center, above, below } = query.near!;
       const at =

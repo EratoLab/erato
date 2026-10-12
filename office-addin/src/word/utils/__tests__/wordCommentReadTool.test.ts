@@ -495,6 +495,62 @@ describe("the section view", () => {
   });
 });
 
+describe("anchored text without the document", () => {
+  /** About 900 characters, with a marker in the middle that the quote's two ends never show. */
+  const longAnchor = (i: number) =>
+    [
+      ...Array.from({ length: 60 }, (_, k) => `head${i}w${k}`),
+      `MIDDLE${i}`,
+      ...Array.from({ length: 60 }, (_, k) => `tail${i}w${k}`),
+    ].join(" ");
+  const installLong = () =>
+    install({ document: generated({ paragraphs: 6, anchor: longAnchor }) });
+  const GESTURES = [
+    { document: false, openComments: true },
+    { document: false, picked: "t00" },
+  ];
+
+  for (const gestures of GESTURES)
+    it(`leaves the section view's passages out under ${JSON.stringify(gestures)}`, async () => {
+      installLong();
+      activate({ gestures });
+      const result = await read({
+        section: { para: 1, through: 9999 },
+        status: "all",
+      });
+      expect(result.threads).toHaveLength(6);
+      for (const thread of result.threads) {
+        expect(thread).not.toHaveProperty("passage");
+        expect(thread.where.quote).not.toContain("MIDDLE");
+      }
+      expect(result.coverage_line).toContain(
+        "without their anchored passages, which are document text and need the document included",
+      );
+    });
+
+  for (const gestures of GESTURES)
+    it(`matches text only in comments and quotes under ${JSON.stringify(gestures)}`, async () => {
+      installLong();
+      activate({ gestures });
+      const hidden = await read({ text: "MIDDLE3", status: "all" });
+      expect(hidden.threads).toEqual([]);
+      expect(hidden.coverage_line).toContain("0 match");
+      expect(keysOf(await read({ text: "head3w0", status: "all" }))).toEqual([
+        "G3",
+      ]);
+    });
+
+  it("reads passages and matches anchored text with the document", async () => {
+    installLong();
+    activate({ gestures: { document: true } });
+    const section = await read({ section: { para: 3 }, status: "all" });
+    expect(section.threads[0].passage).toContain("MIDDLE3");
+    expect(keysOf(await read({ text: "MIDDLE3", status: "all" }))).toEqual([
+      "G3",
+    ]);
+  });
+});
+
 describe("text_before", () => {
   const above = { near: { selection: true, above: 1, below: 0 } };
 
