@@ -6315,8 +6315,69 @@ msgstr "Zarządzaj połączeniem i lokalnymi danymi wyszukiwania."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "sidecar.maintenance.title"
 msgstr "Konserwacja"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.fullDiskAccess"
+msgstr "Pełny dostęp do dysku"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.fullDiskAccessHelp"
+msgstr "Aby uzyskać dostęp do danych Outlooka i Teams bez powtarzających się monitów, otwórz Ustawienia systemowe > Prywatność i ochrona > Pełny dostęp do dysku. Dodaj i włącz uruchomioną aplikację Erato Desktop Sidecar, a następnie uruchom sidecar ponownie. Pełny dostęp do dysku pozwala aplikacji odczytywać pliki i dane innych aplikacji."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.granted"
+msgstr "Przyznano"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.loadError"
+msgstr "Nie udało się sprawdzić uprawnień systemowych."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.loading"
+msgstr "Sprawdzanie uprawnień systemowych…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.notGranted"
+msgstr "Nie przyznano"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.openSettings"
+msgstr "Otwórz Ustawienia systemowe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.refresh"
+msgstr "Sprawdź uprawnienia ponownie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.request"
+msgstr "Poproś o uprawnienie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.requestError"
+msgstr "Nie udało się otworzyć ustawień uprawnień. Otwórz ustawienia systemowe ręcznie i spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.title"
+msgstr "Uprawnienia systemowe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.unknown"
+msgstr "Nieznane"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx

@@ -166,6 +166,28 @@ describe("DesktopSidecarClient", () => {
     ).toBe("mock attachment bytes");
   });
 
+  it("reports permissions and opens the generic permission flow", async () => {
+    const { client } = await setup();
+    await client.discover();
+    expect(client.supports("sidecar.status.v1")).toBe(true);
+    await expect(client.invoke("sidecar.status.v1", {})).resolves.toEqual({
+      permissions: { macos_full_disk_access: "unknown" },
+    });
+    await expect(
+      client.invoke("sidecar.request_permission.v1", {
+        permission: "macos_full_disk_access",
+      }),
+    ).resolves.toEqual({ opened: true });
+    await expect(
+      client.invoke("sidecar.request_permission.v1", {
+        permission: "unsupported",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      client.invoke("sidecar.request_permission.v1", { permission: "" }),
+    ).rejects.toThrow();
+  });
+
   it("acknowledges a sidecar restart request", async () => {
     const { client, sidecar } = await setup();
     await client.discover();

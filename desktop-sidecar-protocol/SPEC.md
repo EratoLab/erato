@@ -1090,3 +1090,21 @@ unsupported provenance versions, rather than interpret them as version 1.
 [DELEGATION.md](./DELEGATION.md) defines the strict snapshot profile and its
 closed schemas. Version 0.1.28 reserves these methods with disabled availability;
 shipping their schemas does not qualify any implementation or enable delegation.
+
+## Platform permissions
+
+`sidecar.status.v1` returns a `permissions` map with extensible string keys and
+values `granted`, `not_granted`, `unknown`, or
+`not_appliccable_different_platform` (the wire spelling is intentional).
+Clients omit permissions inapplicable to the sidecar's platform, show unknown
+keys using their key as a fallback label, and handle older sidecars without
+these capabilities. The first permission is `macos_full_disk_access`.
+
+`sidecar.request_permission.v1` takes `{ "permission": "macos_full_disk_access" }`.
+Its `opened` result acknowledges opening the permission flow, never a grant.
+On macOS this opens Privacy & Security > Full Disk Access in System Settings.
+The user adds/enables the running sidecar application and restarts it. Unknown
+keys or requests for a different platform return InvalidParams. Status polling
+must never itself open a permission dialog. macOS has no public Full Disk Access
+status API; implementations use a best-effort protected-file access check and
+return `unknown` if it cannot determine access.

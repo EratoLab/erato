@@ -188,6 +188,18 @@ const validators = {
   "sidecar.open_data_directory.v1:result": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-result.schema.json",
   ),
+  "sidecar.status.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-status-v1-params.schema.json",
+  ),
+  "sidecar.status.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-status-v1-result.schema.json",
+  ),
+  "sidecar.request_permission.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-request-permission-v1-params.schema.json",
+  ),
+  "sidecar.request_permission.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-request-permission-v1-result.schema.json",
+  ),
   "sidecar.restart.v1:params": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json",
   ),

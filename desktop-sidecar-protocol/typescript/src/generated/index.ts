@@ -1,4 +1,8 @@
 /* This file is generated. Do not edit. */
+export type { SidecarStatusV1Params } from "./sidecar-status-v1-params.js";
+export type { SidecarStatusV1Result } from "./sidecar-status-v1-result.js";
+export type { SidecarRequestPermissionV1Params } from "./sidecar-request-permission-v1-params.js";
+export type { SidecarRequestPermissionV1Result } from "./sidecar-request-permission-v1-result.js";
 export type { LocalTaskBinding } from "./binding.js";
 export type { LocalTaskPlan } from "./plan.js";
 export type { LocalTaskStatus } from "./status.js";

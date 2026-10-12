@@ -4,6 +4,10 @@ import {
 } from "./localDelegation.js";
 import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
+  validateSidecarStatusV1Params,
+  validateSidecarStatusV1Result,
+  validateSidecarRequestPermissionV1Params,
+  validateSidecarRequestPermissionV1Result,
   validateCancelResult,
   validateIndexingBenchmarkListV1Params,
   validateIndexingBenchmarkListV1Result,
@@ -53,6 +57,10 @@ import {
 } from "./generated/validators.mjs";
 
 import type {
+  SidecarStatusV1Params,
+  SidecarStatusV1Result,
+  SidecarRequestPermissionV1Params,
+  SidecarRequestPermissionV1Result,
   LocalContextsChallengeV1Params,
   LocalContextsChallengeV1Result,
   LocalContextsBindV1Params,
@@ -261,6 +269,14 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   "sidecar.progress.v1": {
     validateParams: validateSidecarProgressV1Params,
     validateResult: validateSidecarProgressV1Result,
+  },
+  "sidecar.status.v1": {
+    validateParams: validateSidecarStatusV1Params,
+    validateResult: validateSidecarStatusV1Result,
+  },
+  "sidecar.request_permission.v1": {
+    validateParams: validateSidecarRequestPermissionV1Params,
+    validateResult: validateSidecarRequestPermissionV1Result,
   },
   "sidecar.open_data_directory.v1": {
     validateParams: validateSidecarOpenDataDirectoryV1Params,
@@ -529,6 +545,16 @@ export class DesktopSidecarClient {
     params: SidecarRestartV1Params,
     options?: InvokeOptions,
   ): Promise<SidecarRestartV1Result>;
+  async invoke(
+    method: "sidecar.status.v1",
+    params: SidecarStatusV1Params,
+    options?: InvokeOptions,
+  ): Promise<SidecarStatusV1Result>;
+  async invoke(
+    method: "sidecar.request_permission.v1",
+    params: SidecarRequestPermissionV1Params,
+    options?: InvokeOptions,
+  ): Promise<SidecarRequestPermissionV1Result>;
   async invoke(
     method: string,
     params: unknown,

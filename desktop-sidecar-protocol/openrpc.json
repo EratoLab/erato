@@ -1397,6 +1397,82 @@
           "$ref": "#/components/errors/SidecarInternal"
         }
       ]
+    },
+    {
+      "name": "sidecar.status.v1",
+      "summary": "Report platform permission status without prompting.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sidecar-status-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sidecar-status-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "sidecar.status",
+        "major": 1,
+        "method": "sidecar.status.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "sidecar.request_permission.v1",
+      "summary": "Open the platform permission flow for a supported permission. Full Disk Access opens macOS System Settings; the user must grant access and restart the sidecar. Unknown keys and inapplicable permissions return InvalidParams.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sidecar-request-permission-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sidecar-request-permission-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "sidecar.request_permission",
+        "major": 1,
+        "method": "sidecar.request_permission.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
     }
   ],
   "components": {
@@ -1451,6 +1527,6 @@
   },
   "x-erato-catalogue": {
     "revision": "14",
-    "digest": "sha256:997cc21751e43538e9caab6c8c11642b58452108c77220ee065d1ab845203fb2"
+    "digest": "sha256:7b7e279e10e04239cb4f52d36d39a7aac5c1ed34eb7c05d9e5647a001e3b14cb"
   }
 }

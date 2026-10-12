@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-status-v1-result.schema.json",
+  "title": "SidecarStatusV1Result",
+  "type": "object",
+  "properties": {
+    "permissions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "granted",
+          "not_granted",
+          "unknown",
+          "not_appliccable_different_platform"
+        ]
+      },
+      "description": "Extensible permission keys. macos_full_disk_access is the first key. Status is best effort; unknown means the platform could not determine access."
+    }
+  },
+  "additionalProperties": true,
+  "required": ["permissions"]
+}

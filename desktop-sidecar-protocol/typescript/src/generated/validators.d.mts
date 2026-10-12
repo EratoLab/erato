@@ -12,6 +12,10 @@ export interface Validator {
   errors?: ValidationError[] | null;
 }
 
+export const validateSidecarStatusV1Params: Validator;
+export const validateSidecarStatusV1Result: Validator;
+export const validateSidecarRequestPermissionV1Params: Validator;
+export const validateSidecarRequestPermissionV1Result: Validator;
 export const validateLocalTaskBinding: Validator;
 export const validateLocalTaskPlan: Validator;
 export const validateLocalTaskStatus: Validator;

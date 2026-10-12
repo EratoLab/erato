@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-request-permission-v1-result.schema.json",
+  "title": "SidecarRequestPermissionV1Result",
+  "type": "object",
+  "properties": {
+    "opened": {
+      "type": "boolean",
+      "description": "The permission flow was opened, not that access was granted."
+    }
+  },
+  "additionalProperties": true,
+  "required": ["opened"]
+}

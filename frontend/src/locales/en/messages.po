@@ -6315,8 +6315,69 @@ msgstr "Manage the connection and local search data."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "sidecar.maintenance.title"
 msgstr "Maintenance"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.fullDiskAccess"
+msgstr "Full Disk Access"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.fullDiskAccessHelp"
+msgstr "To access Outlook and Teams data without repeated prompts, open System Settings > Privacy & Security > Full Disk Access. Add and enable the running Erato Desktop Sidecar app, then restart the sidecar. Full Disk Access allows the app to read files and data from other apps."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.granted"
+msgstr "Granted"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.loadError"
+msgstr "Could not check system permissions."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.loading"
+msgstr "Checking system permissions…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.notGranted"
+msgstr "Not granted"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.openSettings"
+msgstr "Open System Settings"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.refresh"
+msgstr "Check permissions again"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.request"
+msgstr "Request permission"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.requestError"
+msgstr "Could not open the permission settings. Open your system settings manually and try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.title"
+msgstr "System permissions"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.unknown"
+msgstr "Unknown"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
