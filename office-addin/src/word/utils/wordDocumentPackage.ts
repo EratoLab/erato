@@ -66,7 +66,13 @@ const WORD_FILE_CLOSE_TIMEOUT_MS = 2_000;
 
 /** Word failed to hand the file over; unlike a malformed file, trying again can succeed. */
 export class WordDocumentTransferError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** Word refused to open the file at all, rather than failing part-way through the transfer. */
+    readonly refused = false,
+    /** Office's error code for the refusal, when Word gave one. */
+    readonly officeCode?: number,
+  ) {
     super(message);
     this.name = "WordDocumentTransferError";
   }
@@ -106,6 +112,8 @@ export async function readWordDocumentFile(): Promise<Uint8Array> {
           reject(
             new WordDocumentTransferError(
               "Word could not capture the document. Check any Grant Access prompt in Word.",
+              true,
+              result.error?.code,
             ),
           );
       },

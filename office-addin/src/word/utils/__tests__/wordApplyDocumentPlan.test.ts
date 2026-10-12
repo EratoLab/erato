@@ -22,7 +22,11 @@ import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 
 import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
-function word(ooxml: string, transform = (value: string) => value) {
+function word(
+  ooxml: string,
+  transform = (value: string) => value,
+  read = (value: string) => value,
+) {
   let current = ooxml;
   let pending: string | null = null;
   let failWrite: { code: string; lands: boolean } | undefined;
@@ -37,7 +41,7 @@ function word(ooxml: string, transform = (value: string) => value) {
       getOoxml: () => {
         if (unreadable && insert.mock.calls.length)
           throw new Error("Read unavailable");
-        return { value: current };
+        return { value: read(current) };
       },
       insertOoxml: insert,
     },
@@ -513,6 +517,68 @@ describe("whole-body writes on Word for the web", () => {
         .status,
     ).toBe("reverted");
     expect(host.get()).toBe(s.ooxml);
+  });
+
+  describe("with a list, whose instances Word for the web renumbers at every body read", () => {
+    const CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+    const numbering = `<pkg:part pkg:name="/word/numbering.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"><pkg:xmlData><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w16cid="${CID}"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum><w:num w:numId="1" w16cid:durableId="1000"><w:abstractNumId w:val="0"/></w:num></w:numbering></pkg:xmlData></pkg:part>`;
+    let reads = 0;
+    const renumber = (value: string) =>
+      value.replace(
+        /w16cid:durableId="\d+"/g,
+        () => `w16cid:durableId="${2000 + ++reads}"`,
+      );
+    const listed = () =>
+      readySnapshot(
+        renumber(
+          readySnapshot().ooxml.replace(
+            "</pkg:package>",
+            `${numbering}</pkg:package>`,
+          ),
+        ),
+      );
+
+    it("applies a confirmed body replace, verifies it and reverts it", async () => {
+      const s = listed();
+      word(s.ooxml, undefined, renumber);
+      const applied = await applyWordDocumentPlan(
+        JSON.stringify(examplePlan(s.token)),
+        s,
+        "message-A",
+        undefined,
+        undefined,
+        { importConfirmed: true },
+      );
+      expect(applied).toMatchObject({
+        status: "applied",
+        outcome: { route: "body", tier: "strict" },
+      });
+      expect(
+        await revertWordDocumentPlan(
+          applied.before!,
+          applied.afterFingerprint!,
+        ),
+      ).toMatchObject({ status: "reverted", outcome: { tier: "strict" } });
+    });
+
+    it("still recognizes a NotAllowed refusal that left the body unchanged", async () => {
+      const s = listed();
+      const host = word(s.ooxml, undefined, renumber);
+      host.fail("NotAllowed", false);
+      expect(
+        await applyWordDocumentPlan(
+          JSON.stringify(examplePlan(s.token)),
+          s,
+          "message-A",
+          undefined,
+          undefined,
+          { importConfirmed: true },
+        ),
+      ).toMatchObject({
+        status: "blocked",
+        diagnostic: { stage: "write", reason: "not-allowed" },
+      });
+    });
   });
 
   it("refuses a body replace the deployment turned off for the web", async () => {

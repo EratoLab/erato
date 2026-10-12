@@ -162,11 +162,11 @@ describe("wordInPlaceCapabilities", () => {
       .filter(([, on]) => on)
       .map(([mechanism]) => mechanism);
 
-  it("writes only text and cell in place on Word for the web, even where the bidirectional setters exist", () => {
+  it("writes text, cell and restyle in place on Word for the web, even where the bidirectional setters exist", () => {
     vi.stubGlobal("Office", {
       context: { requirements: { isSetSupported: () => true } },
     });
-    expect(enabled("OfficeOnline")).toEqual(["text", "cell"]);
+    expect(enabled("OfficeOnline")).toEqual(["text", "cell", "restyle"]);
     expect(enabled("Mac")).toEqual(["text", "cell"]);
     expect(enabled("PC")).toEqual([
       "text",

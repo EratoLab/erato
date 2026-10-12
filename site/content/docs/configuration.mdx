@@ -3183,8 +3183,10 @@ Each table takes:
 
 A key left out of a table keeps that host's default. On Word for the web the
 import cannot be undone with Word Undo, co-authors may lose concurrent edits,
-and comment dates and resolved flags may change, so it needs confirmation there
-by default.
+comment dates and resolved flags may change, and the add-in cannot verify the
+result, so it needs confirmation there by default. Unless the import is
+`allowed`, undoing an in-place change that did not verify never falls back to
+it.
 
 **Default value:** `{ pc = { in_place = false, whole_document_import = "allowed", package_read = true }, mac = { in_place = false, whole_document_import = "allowed", package_read = true }, web = { in_place = true, whole_document_import = "confirm", package_read = true } }`
 

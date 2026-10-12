@@ -2781,6 +2781,11 @@ msgid "officeAddin.word.authoring.reverting"
 msgstr "Checking and restoring the document…"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.revertNeedsImport"
+msgstr "Erato can't undo this change here without replacing the whole document. Use Word's Undo to reverse it, or download the original document."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.revertStale"
@@ -3050,13 +3055,33 @@ msgstr "Replace the selected passage"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.body"
-msgstr "Others are editing this document. Replacing the document body may overwrite their latest changes."
+#~ msgid "officeAddin.word.coauthors.body"
+#~ msgstr "Others are editing this document. Replacing the document body may overwrite their latest changes."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.import"
-msgstr "Others are editing this document. Replacing the whole document may overwrite their latest changes."
+msgid "officeAddin.word.coauthors.editingBody"
+msgstr "Someone else is editing this document. Replacing the document body can discard the changes they make while it runs."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.editingImport"
+msgstr "Someone else is editing this document. Replacing the whole document can discard the changes they make while it runs, and their cursor moves to the start."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+#~ msgid "officeAddin.word.coauthors.import"
+#~ msgstr "Others are editing this document. Replacing the whole document may overwrite their latest changes."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingBody"
+msgstr "Word holds co-authors' changes that are not merged into your copy yet; replacing the document body can discard them."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingImport"
+msgstr "Word holds co-authors' changes that are not merged into your copy yet; replacing the whole document can discard them."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx

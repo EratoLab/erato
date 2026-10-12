@@ -1307,6 +1307,7 @@ async function mountRealistic(
     xml?: string;
     /** Everyone Word.Coauthoring lists, the user included; the host has no such object otherwise. */
     coauthors?: number;
+    pendingUpdates?: boolean;
     platform?: "Mac";
   } = {},
 ) {
@@ -1314,6 +1315,7 @@ async function mountRealistic(
     tracking = "Off",
     xml = realisticWordPackageXml(),
     coauthors,
+    pendingUpdates = false,
     platform,
     ...host
   } = options;
@@ -1332,7 +1334,7 @@ async function mountRealistic(
     Object.defineProperty(word.document, "coauthoring", {
       configurable: true,
       value: {
-        pendingUpdates: false,
+        pendingUpdates,
         load: coauthoringRead,
         authors: {
           items: Array.from({ length: coauthors }, (_, i) => ({
@@ -1706,6 +1708,30 @@ describe("apply outcomes", () => {
     );
   });
 
+  it("unverified on Word for the web: points to Word's Undo instead of an unconfirmed whole-document restore", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      { profile: "word-web" },
+    );
+    expect(routeText()).toBe("Edits 1 passage in place.");
+    word.setReplaceFault("edits-next");
+    apply();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your original is saved for recovery.",
+    );
+    expect(screen.getByTestId("word-plan-revert-refused")).toHaveTextContent(
+      "Erato can't undo this change here without replacing the whole document. Use Word's Undo to reverse it, or download the original document.",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Restore original document" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Download original document" }),
+    ).toBeInTheDocument();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
   it("partly written: counts changes, not regions, when Word stops inside one region", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const rewrites: Record<string, string> = {
@@ -1839,7 +1865,7 @@ const sectionsPlan = (s: WordAuthoringSnapshot): WordDocumentPlan => ({
 const SECTIONS_ROUTE =
   "Replaces the whole document because it changes sections or page layout.";
 const WEB_IMPORT_STATEMENTS = [
-  "Word's Undo can't reverse this change, and Erato's Undo works only until someone edits the document.",
+  "Word's Undo can't reverse this change. Erato can't verify the result on Word for the web, and its Restore may not bring back the exact original, which stays available to download.",
   "People editing at the same time may lose their latest changes.",
   "Comment dates and resolved flags may change.",
 ];
@@ -2131,9 +2157,9 @@ describe("confirmed whole-document replacement on Word for the web", () => {
   });
 });
 
-describe("co-author warning on Word for Windows and Mac", () => {
+describe("co-author warning on Word for Windows", () => {
   const COAUTHORS_WARNING =
-    "Others are editing this document. Replacing the whole document may overwrite their latest changes.";
+    "Someone else is editing this document. Replacing the whole document can discard the changes they make while it runs, and their cursor moves to the start.";
 
   it("warns before Apply when Word lists another author, and Apply still replaces the document", async () => {
     const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
@@ -2187,10 +2213,32 @@ describe("co-author warning on Word for Windows and Mac", () => {
     expect(applyButton()).toBeEnabled();
   });
 
-  it("stays as today where Word cannot report co-authors", async () => {
+  it("says only that changes wait to merge when Word lists no other author", async () => {
+    await mountRealistic(sectionsPlan, { coauthors: 1, pendingUpdates: true });
+    expect(await screen.findByTestId("word-plan-coauthors")).toHaveTextContent(
+      "Word holds co-authors' changes that are not merged into your copy yet; replacing the whole document can discard them.",
+    );
+    expect(applyButton()).toBeEnabled();
+  });
+
+  it("leaves Word for Mac as today until its co-author probe has run", async () => {
     const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
       coauthors: 2,
       platform: "Mac",
+    });
+    await act(async () => {});
+    expect(coauthoringRead).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("stays as today where Word cannot report co-authors", async () => {
+    const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 2,
       isSetSupported: (name, version) =>
         !(name === "WordApiDesktop" && version === "1.4"),
     });

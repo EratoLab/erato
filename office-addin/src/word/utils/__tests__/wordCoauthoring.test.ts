@@ -88,10 +88,12 @@ describe("readWordCoauthoring", () => {
     ]);
   });
 
-  it("reports others editing when their changes are waiting to merge", async () => {
+  it("does not take changes waiting to merge for others editing, as Word PC keeps them after co-authors left", async () => {
     installCoauthoring({ authors: 1, pendingUpdates: true });
-    await expect(readWordCoauthoring()).resolves.toMatchObject({
-      othersEditing: true,
+    await expect(readWordCoauthoring()).resolves.toEqual({
+      authors: 1,
+      pendingUpdates: true,
+      othersEditing: false,
     });
   });
 

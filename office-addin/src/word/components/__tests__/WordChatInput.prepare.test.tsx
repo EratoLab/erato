@@ -689,7 +689,7 @@ describe("WordChatInput prepared send", () => {
   });
 
   const PACKAGE_BLOCKED =
-    "Word for the web didn't hand over the complete file, which happens for documents with a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout.";
+    "Word for the web didn't hand over the complete file, for example because the document has a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout, and any change replaces the whole body instead of editing passages in place.";
   const readNote = () => screen.queryByTestId("word-document-read-note");
 
   it("says before sending that Erato reads only the body of a labelled document", () => {

@@ -2693,7 +2693,7 @@ msgstr "Word hat Änderungen vorgenommen, das Ergebnis konnte jedoch nicht über
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.packageBlocked"
-msgstr "Word für das Web hat nicht die vollständige Datei übergeben. Das passiert bei Dokumenten mit einer Vertraulichkeitsbezeichnung. Erato hat nur den Textkörper gelesen und kann daher keine Kopf- und Fußzeilen und kein Seitenlayout ändern."
+msgstr "Word für das Web hat nicht die vollständige Datei übergeben, zum Beispiel weil das Dokument eine Vertraulichkeitsbezeichnung hat. Erato hat nur den Textkörper gelesen und kann daher keine Kopf- und Fußzeilen und kein Seitenlayout ändern, und jede Änderung ersetzt den gesamten Textkörper, statt Passagen direkt zu bearbeiten."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2779,6 +2779,11 @@ msgstr "Word konnte das wiederhergestellte Dokument nicht überprüfen. Das gesp
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.reverting"
 msgstr "Dokument wird geprüft und wiederhergestellt…"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.revertNeedsImport"
+msgstr "Erato kann diese Änderung hier nur rückgängig machen, indem das gesamte Dokument ersetzt wird. Nehmen Sie sie mit „Rückgängig“ in Word zurück, oder laden Sie das Originaldokument herunter."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
@@ -3050,13 +3055,33 @@ msgstr "Ausgewählte Passage ersetzen"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.body"
-msgstr "Andere bearbeiten dieses Dokument gerade. Das Ersetzen des Dokumentinhalts kann ihre letzten Änderungen überschreiben."
+#~ msgid "officeAddin.word.coauthors.body"
+#~ msgstr "Andere bearbeiten dieses Dokument gerade. Das Ersetzen des Dokumentinhalts kann ihre letzten Änderungen überschreiben."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.import"
-msgstr "Andere bearbeiten dieses Dokument gerade. Das Ersetzen des gesamten Dokuments kann ihre letzten Änderungen überschreiben."
+msgid "officeAddin.word.coauthors.editingBody"
+msgstr "Jemand anderes bearbeitet dieses Dokument gerade. Das Ersetzen des Dokumentinhalts kann Änderungen verwerfen, die diese Person währenddessen vornimmt."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.editingImport"
+msgstr "Jemand anderes bearbeitet dieses Dokument gerade. Das Ersetzen des gesamten Dokuments kann Änderungen verwerfen, die diese Person währenddessen vornimmt, und ihr Cursor springt an den Anfang."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+#~ msgid "officeAddin.word.coauthors.import"
+#~ msgstr "Andere bearbeiten dieses Dokument gerade. Das Ersetzen des gesamten Dokuments kann ihre letzten Änderungen überschreiben."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingBody"
+msgstr "Word hält Änderungen von Mitautoren bereit, die noch nicht in Ihre Kopie übernommen wurden; das Ersetzen des Dokumentinhalts kann sie verwerfen."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingImport"
+msgstr "Word hält Änderungen von Mitautoren bereit, die noch nicht in Ihre Kopie übernommen wurden; das Ersetzen des gesamten Dokuments kann sie verwerfen."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
@@ -3101,7 +3126,7 @@ msgstr "Ich habe verstanden. Gesamtes Dokument ersetzen."
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.undo"
-msgstr "„Rückgängig“ in Word kann diese Änderung nicht zurücknehmen, und „Rückgängig“ in Erato funktioniert nur, bis jemand das Dokument bearbeitet."
+msgstr "„Rückgängig“ in Word kann diese Änderung nicht zurücknehmen. Erato kann das Ergebnis in Word für das Web nicht überprüfen, und seine Wiederherstellung bringt das Original möglicherweise nicht exakt zurück; es bleibt zum Herunterladen verfügbar."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

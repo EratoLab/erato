@@ -2693,7 +2693,7 @@ msgstr "Program Word zapisał zmiany, ale nie udało się zweryfikować wyniku. 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.packageBlocked"
-msgstr "Program Word dla sieci Web nie przekazał całego pliku, co zdarza się w przypadku dokumentów z etykietą poufności. Erato odczytał tylko treść główną dokumentu, więc nie może zmienić nagłówków, stopek ani układu strony."
+msgstr "Program Word dla sieci Web nie przekazał całego pliku, na przykład dlatego, że dokument ma etykietę poufności. Erato odczytał tylko treść główną dokumentu, więc nie może zmienić nagłówków, stopek ani układu strony, a każda zmiana zastępuje całą treść główną zamiast edytować fragmenty w miejscu."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2779,6 +2779,11 @@ msgstr "Program Word nie mógł zweryfikować przywróconego dokumentu. Zapisany
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.reverting"
 msgstr "Sprawdzanie i przywracanie dokumentu…"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.revertNeedsImport"
+msgstr "Erato nie może cofnąć tej zmiany tutaj bez zastąpienia całego dokumentu. Użyj funkcji „Cofnij” w programie Word, aby ją odwrócić, lub pobierz oryginalny dokument."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
@@ -3050,13 +3055,33 @@ msgstr "Zastąp zaznaczony fragment"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.body"
-msgstr "Inne osoby edytują ten dokument. Zastąpienie treści dokumentu może nadpisać ich ostatnie zmiany."
+#~ msgid "officeAddin.word.coauthors.body"
+#~ msgstr "Inne osoby edytują ten dokument. Zastąpienie treści dokumentu może nadpisać ich ostatnie zmiany."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.import"
-msgstr "Inne osoby edytują ten dokument. Zastąpienie całego dokumentu może nadpisać ich ostatnie zmiany."
+msgid "officeAddin.word.coauthors.editingBody"
+msgstr "Ktoś inny edytuje ten dokument. Zastąpienie treści dokumentu może odrzucić zmiany, które ta osoba wprowadzi w trakcie."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.editingImport"
+msgstr "Ktoś inny edytuje ten dokument. Zastąpienie całego dokumentu może odrzucić zmiany, które ta osoba wprowadzi w trakcie, a jej kursor przeskoczy na początek."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+#~ msgid "officeAddin.word.coauthors.import"
+#~ msgstr "Inne osoby edytują ten dokument. Zastąpienie całego dokumentu może nadpisać ich ostatnie zmiany."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingBody"
+msgstr "Word przechowuje zmiany współautorów, które nie zostały jeszcze scalone z Twoją kopią; zastąpienie treści dokumentu może je odrzucić."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingImport"
+msgstr "Word przechowuje zmiany współautorów, które nie zostały jeszcze scalone z Twoją kopią; zastąpienie całego dokumentu może je odrzucić."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
@@ -3101,7 +3126,7 @@ msgstr "Rozumiem. Zastąp cały dokument."
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.undo"
-msgstr "Funkcja „Cofnij” w programie Word nie może odwrócić tej zmiany, a funkcja „Cofnij” w Erato działa tylko do chwili, gdy ktoś zmieni dokument."
+msgstr "Funkcja „Cofnij” w programie Word nie może odwrócić tej zmiany. Erato nie może zweryfikować wyniku w programie Word dla sieci Web, a jego przywracanie może nie odtworzyć dokładnie oryginału, który nadal można pobrać."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

@@ -2,7 +2,9 @@
 export interface WordCoauthoringState {
   /** Everyone Word lists as editing the document, the user included. */
   authors: number;
-  /** Co-authors' changes Word has received but not yet merged into this session. */
+  /** Co-authors' changes Word has received but not yet merged into this session. Word PC keeps it
+   * true for minutes after the last co-author left (P-D-COAUTH), so it never means others are
+   * editing by itself. */
   pendingUpdates: boolean;
   othersEditing: boolean;
 }
@@ -33,7 +35,7 @@ export async function readWordCoauthoring(): Promise<
       return {
         authors: count,
         pendingUpdates,
-        othersEditing: count > 1 || pendingUpdates,
+        othersEditing: count > 1,
       };
     });
   } catch {

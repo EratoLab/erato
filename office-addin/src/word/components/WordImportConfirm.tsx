@@ -48,7 +48,8 @@ export function WordImportConfirm({
   onCancel,
 }: {
   routeText: string | undefined;
-  /** Word for the web cannot undo the import, and its import rewrites comment metadata. */
+  /** Word for the web cannot undo the import, rewrites comment metadata with it, and leaves a
+   * result that does not verify (ERMAIN-961 gate, F2). */
   web: boolean;
   /** Shown after the route, such as Word reporting others in the document. */
   notice?: ReactNode;
@@ -67,7 +68,7 @@ export function WordImportConfirm({
       ? t({
           id: "officeAddin.word.importConfirm.undo",
           message:
-            "Word's Undo can't reverse this change, and Erato's Undo works only until someone edits the document.",
+            "Word's Undo can't reverse this change. Erato can't verify the result on Word for the web, and its Restore may not bring back the exact original, which stays available to download.",
         })
       : t({
           id: "officeAddin.word.importConfirm.eratoUndo",

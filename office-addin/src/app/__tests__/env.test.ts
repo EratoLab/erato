@@ -76,7 +76,6 @@ describe("injectFrontendEnv Word apply overrides", () => {
   it("leaves a production build to the deployment's per-host settings", () => {
     vi.stubEnv("PROD", true);
     vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "");
-    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
 
     injectFrontendEnv();
 
@@ -87,17 +86,15 @@ describe("injectFrontendEnv Word apply overrides", () => {
   it("forces the import when the build asks for it", () => {
     vi.stubEnv("PROD", true);
     vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "true");
-    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
 
     injectFrontendEnv();
 
     expect(window.WORD_FORCE_IMPORT_APPLY).toBe(true);
   });
 
-  it("writes in place everywhere in development or when a production build opts in", () => {
+  it("writes in place everywhere in development only", () => {
     vi.stubEnv("PROD", false);
     vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "");
-    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
     injectFrontendEnv();
     expect(window.WORD_IN_PLACE_APPLY).toBe(true);
     expect(window.WORD_FORCE_IMPORT_APPLY).toBeUndefined();
@@ -106,7 +103,7 @@ describe("injectFrontendEnv Word apply overrides", () => {
     vi.stubEnv("PROD", true);
     vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "true");
     injectFrontendEnv();
-    expect(window.WORD_IN_PLACE_APPLY).toBe(true);
+    expect(window.WORD_IN_PLACE_APPLY).toBeUndefined();
   });
 
   it("keeps values the serving backend injected", () => {

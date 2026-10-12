@@ -2693,7 +2693,7 @@ msgstr "Word aplicó cambios, pero no se pudo verificar el resultado. El origina
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.packageBlocked"
-msgstr "Word para la web no entregó el archivo completo, algo que ocurre con los documentos que tienen una etiqueta de confidencialidad. Erato solo leyó el cuerpo del documento, así que no puede cambiar encabezados, pies de página ni el diseño de página."
+msgstr "Word para la web no entregó el archivo completo, por ejemplo porque el documento tiene una etiqueta de confidencialidad. Erato solo leyó el cuerpo del documento, así que no puede cambiar encabezados, pies de página ni el diseño de página, y cualquier cambio reemplaza todo el cuerpo en lugar de editar los pasajes directamente."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2779,6 +2779,11 @@ msgstr "Word no pudo verificar el documento restaurado. El original guardado sig
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.reverting"
 msgstr "Comprobando y restaurando el documento…"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.revertNeedsImport"
+msgstr "Erato no puede deshacer este cambio aquí sin reemplazar todo el documento. Usa «Deshacer» de Word para revertirlo o descarga el documento original."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
@@ -3050,13 +3055,33 @@ msgstr "Reemplazar el pasaje seleccionado"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.body"
-msgstr "Otras personas están editando este documento. Reemplazar el cuerpo del documento puede sobrescribir sus últimos cambios."
+#~ msgid "officeAddin.word.coauthors.body"
+#~ msgstr "Otras personas están editando este documento. Reemplazar el cuerpo del documento puede sobrescribir sus últimos cambios."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.import"
-msgstr "Otras personas están editando este documento. Reemplazar todo el documento puede sobrescribir sus últimos cambios."
+msgid "officeAddin.word.coauthors.editingBody"
+msgstr "Otra persona está editando este documento. Reemplazar el cuerpo del documento puede descartar los cambios que haga mientras se ejecuta."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.editingImport"
+msgstr "Otra persona está editando este documento. Reemplazar todo el documento puede descartar los cambios que haga mientras se ejecuta, y su cursor vuelve al principio."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+#~ msgid "officeAddin.word.coauthors.import"
+#~ msgstr "Otras personas están editando este documento. Reemplazar todo el documento puede sobrescribir sus últimos cambios."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingBody"
+msgstr "Word tiene cambios de coautores que aún no se han combinado en tu copia; reemplazar el cuerpo del documento puede descartarlos."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingImport"
+msgstr "Word tiene cambios de coautores que aún no se han combinado en tu copia; reemplazar todo el documento puede descartarlos."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
@@ -3101,7 +3126,7 @@ msgstr "Lo entiendo. Reemplazar todo el documento."
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.undo"
-msgstr "«Deshacer» de Word no puede revertir este cambio, y «Deshacer» de Erato solo funciona hasta que alguien edite el documento."
+msgstr "«Deshacer» de Word no puede revertir este cambio. Erato no puede verificar el resultado en Word para la web, y su restauración puede no recuperar exactamente el original, que sigue disponible para descargar."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

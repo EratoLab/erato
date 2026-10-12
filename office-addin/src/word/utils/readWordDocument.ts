@@ -30,9 +30,13 @@ export type WordDocumentReadResult =
   /** `error` names the failed step with our own or Office's generic message, never document text. */
   | { ok: false; error?: string };
 
-/** Word for the web withholds the file of a sensitivity-labelled document by design (office-js
- * #6743), so authoring falls back to the body. */
+/** Word for the web refused to open the file, as it does by design for a sensitivity-labelled
+ * document (office-js #6743), so authoring falls back to the body. */
 export type WordDocumentReadNote = "package-blocked";
+
+/** Office keeps two file handles per document; while both are held getFileAsync fails with this
+ * code, which clears once they close, so it never means the file is withheld. */
+const OFFICE_FILE_HANDLES_BUSY = 11000;
 
 export interface WordAuthoringUnavailable {
   issue: "too-large" | "unavailable";
@@ -119,8 +123,9 @@ export async function readWordDocument(
     if (packaged && result.authoring) {
       step = "full-document capture";
       // A failed full capture must not degrade into a partial rewrite or clear, so authoring is
-      // dropped and only the paragraph text remains. Only a file Word for the web withholds falls
-      // back to the body route, whose capture says it is not the whole document.
+      // dropped and only the paragraph text remains. Only a file Word for the web refuses to open
+      // falls back to the body route, whose capture says it is not the whole document; a transfer
+      // that fails part-way, or a document that changes during capture, is retried at the next send.
       try {
         const full = await withWordTimeout(
           captureWordDocumentPackage(),
@@ -139,6 +144,8 @@ export async function readWordDocument(
       } catch (error) {
         const body =
           error instanceof WordDocumentTransferError &&
+          error.refused &&
+          error.officeCode !== OFFICE_FILE_HANDLES_BUSY &&
           wordHostPlatform() === "OfficeOnline"
             ? await readWordBody(word)
             : undefined;

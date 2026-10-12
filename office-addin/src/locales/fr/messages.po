@@ -2693,7 +2693,7 @@ msgstr "Word a effectué des modifications, mais le résultat n’a pas pu être
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.packageBlocked"
-msgstr "Word pour le web n’a pas transmis le fichier complet, ce qui arrive pour les documents dotés d’une étiquette de confidentialité. Erato n’a lu que le corps du document : il ne peut donc pas modifier les en-têtes, les pieds de page ni la mise en page."
+msgstr "Word pour le web n’a pas transmis le fichier complet, par exemple parce que le document a une étiquette de confidentialité. Erato n’a lu que le corps du document : il ne peut donc pas modifier les en-têtes, les pieds de page ni la mise en page, et toute modification remplace tout le corps au lieu de modifier les passages sur place."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2779,6 +2779,11 @@ msgstr "Word n’a pas pu vérifier le document restauré. L’original enregist
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.authoring.reverting"
 msgstr "Vérification et restauration du document…"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.revertNeedsImport"
+msgstr "Erato ne peut annuler cette modification ici qu’en remplaçant tout le document. Utilisez l’annulation de Word pour revenir en arrière, ou téléchargez le document d’origine."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
@@ -3050,13 +3055,33 @@ msgstr "Remplacer le passage sélectionné"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.body"
-msgstr "D’autres personnes modifient ce document. Remplacer le corps du document peut écraser leurs dernières modifications."
+#~ msgid "officeAddin.word.coauthors.body"
+#~ msgstr "D’autres personnes modifient ce document. Remplacer le corps du document peut écraser leurs dernières modifications."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
-msgid "officeAddin.word.coauthors.import"
-msgstr "D’autres personnes modifient ce document. Remplacer tout le document peut écraser leurs dernières modifications."
+msgid "officeAddin.word.coauthors.editingBody"
+msgstr "Quelqu’un d’autre modifie ce document. Remplacer le corps du document peut supprimer les modifications que cette personne fait pendant l’opération."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.editingImport"
+msgstr "Quelqu’un d’autre modifie ce document. Remplacer tout le document peut supprimer les modifications que cette personne fait pendant l’opération, et son curseur revient au début."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+#~ msgid "officeAddin.word.coauthors.import"
+#~ msgstr "D’autres personnes modifient ce document. Remplacer tout le document peut écraser leurs dernières modifications."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingBody"
+msgstr "Word contient des modifications de coauteurs qui ne sont pas encore fusionnées dans votre copie ; remplacer le corps du document peut les supprimer."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingImport"
+msgstr "Word contient des modifications de coauteurs qui ne sont pas encore fusionnées dans votre copie ; remplacer tout le document peut les supprimer."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
@@ -3101,7 +3126,7 @@ msgstr "J’ai compris. Remplacer tout le document."
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.undo"
-msgstr "L’annulation de Word ne peut pas revenir sur cette modification, et celle d’Erato ne fonctionne que jusqu’à ce que quelqu’un modifie le document."
+msgstr "L’annulation de Word ne peut pas revenir sur cette modification. Erato ne peut pas vérifier le résultat dans Word pour le web, et sa restauration peut ne pas rétablir exactement l’original, qui reste disponible au téléchargement."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

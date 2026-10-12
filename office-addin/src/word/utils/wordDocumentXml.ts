@@ -62,6 +62,7 @@ import type {
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+const CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
 const REL = "http://schemas.openxmlformats.org/package/2006/relationships";
 const OFFICE_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
@@ -92,6 +93,33 @@ function parse(value: string): Document {
 
 export function wordDocumentFingerprint(value: string): string {
   return createWordXmlComparison(parse(value)).fingerprint();
+}
+
+/**
+ * Word for the web's Body.getOoxml gives every list instance (w:num) a new w16cid:durableId on each
+ * read, so two reads of an unchanged body differ there. Body reads are compared without it; a
+ * complete package keeps it.
+ */
+function withoutListInstanceIds(doc: Document): Document {
+  for (const num of Array.from(doc.getElementsByTagNameNS(W, "num")))
+    num.removeAttributeNS(CID, "durableId");
+  return doc;
+}
+
+function bodyComparable(ooxml: string): string {
+  if (!ooxml.includes("durableId")) return ooxml;
+  try {
+    return xml(withoutListInstanceIds(parse(ooxml)));
+  } catch {
+    return ooxml;
+  }
+}
+
+/** The fingerprint of a Body.getOoxml read, as a body capture records it. */
+export function wordBodyFingerprint(value: string): string {
+  return createWordXmlComparison(
+    withoutListInstanceIds(parse(value)),
+  ).fingerprint();
 }
 
 function paragraphText(p: Element): string {
@@ -136,8 +164,11 @@ export function captureWordAuthoringSnapshot(
   };
   try {
     const doc = parse(ooxml);
-    // Same result as wordDocumentFingerprint(ooxml) without a second parse; the comparison only reads.
-    const fingerprint = createWordXmlComparison(doc).fingerprint();
+    // Same result as wordDocumentFingerprint(ooxml), or wordBodyFingerprint for a body read, without
+    // a second parse; nothing below reads list instance IDs.
+    const fingerprint = createWordXmlComparison(
+      fullDocument ? doc : withoutListInstanceIds(doc),
+    ).fingerprint();
     const body = wordMainBody(doc)!;
     const styleNodes = all(doc, "style");
     base.styles = styleNodes
@@ -944,7 +975,11 @@ function comparePlanOutput(
   );
   const ok =
     !after.issue &&
-    sameWordPreservedParts(before.ooxml, after.ooxml, tier) &&
+    sameWordPreservedParts(
+      bodyComparable(before.ooxml),
+      bodyComparable(after.ooxml),
+      tier,
+    ) &&
     expected.length === actualBlocks.length &&
     expected.every((e, i) => {
       const actual = actualBlocks[i];
@@ -1015,7 +1050,11 @@ function compareSnapshots(
   const ok =
     !a.issue &&
     !b.issue &&
-    sameWordPreservedParts(a.ooxml, b.ooxml, tier) &&
+    sameWordPreservedParts(
+      bodyComparable(a.ooxml),
+      bodyComparable(b.ooxml),
+      tier,
+    ) &&
     a.blocks.length === actualBlocks.length &&
     a.blocks.every(
       (block, i) =>

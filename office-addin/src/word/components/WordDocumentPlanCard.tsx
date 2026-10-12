@@ -47,6 +47,7 @@ import {
 } from "../utils/wordApplyDiagnostics";
 import {
   revertWordDocumentPlan,
+  wordRevertImportRefusal,
   wordRevertMechanism,
 } from "../utils/wordApplyDocumentPlan";
 import { wordApplyHost, wordApplyPolicy } from "../utils/wordApplyPolicy";
@@ -58,6 +59,7 @@ import {
   wordInPlaceRequestText,
   wordPartlyWrittenText,
   wordPlanAdjustedText,
+  wordRevertNeedsImportText,
   wordRoutePreviewText,
   wordTrackedApplyText,
   wordUnverifiedPassagesText,
@@ -240,14 +242,22 @@ export function WordDocumentPlanCard({
     replacedRoute === "import" || replacedRoute === "body"
       ? replacedRoute
       : undefined;
-  const checkCoauthors = !web && !!replaces;
+  // Word for Mac reports Word.Coauthoring too, but its P-D-COAUTH run has not completed.
+  const checkCoauthors =
+    wordApplyHost(wordHostPlatform()) === "pc" && !!replaces;
   const coauthorsRead = useRef(false);
-  const [othersEditing, setOthersEditing] = useState(false);
+  const [coauthors, setCoauthors] = useState<"editing" | "pending">();
   useEffect(() => {
     if (!checkCoauthors || coauthorsRead.current) return;
     coauthorsRead.current = true;
     void readWordCoauthoring().then((state) =>
-      setOthersEditing(!!state?.othersEditing),
+      setCoauthors(
+        state?.othersEditing
+          ? "editing"
+          : state?.pendingUpdates
+            ? "pending"
+            : undefined,
+      ),
     );
   }, [checkCoauthors]);
   const run = useCallback(
@@ -412,10 +422,17 @@ export function WordDocumentPlanCard({
     : [];
   // After a stale revert the slot is kept only for download: retrying would
   // hit the same later edits, so the undo line would promise too much.
-  const canRevert =
+  const revertable =
     ["done", "write-failed", "revert-failed"].includes(review.status) &&
     review.documentPlanStatus !== "revert-stale" &&
     !!recoverySlot?.afterFingerprint;
+  const revertRefused =
+    revertable &&
+    !!wordRevertImportRefusal(
+      recoverySlot.ooxml,
+      recoverySlot.afterFingerprint,
+    );
+  const canRevert = revertable && !revertRefused;
   const revert = async () => {
     const slot = host.revertSlot;
     if (!canRevert || !slot?.afterFingerprint || !host.beginOperation()) return;
@@ -644,14 +661,14 @@ export function WordDocumentPlanCard({
   if (!plan || !planReview)
     return <Alert type="error">{wordAuthoringIssueText("invalid")}</Alert>;
   const applyLabel = wordPlanApplyLabel(planReview);
-  const coauthorsNotice = othersEditing && replaces && (
+  const coauthorsNotice = coauthors && replaces && (
     <Alert
       type="warning"
       role="status"
       className="[overflow-wrap:anywhere]"
       data-testid="word-plan-coauthors"
     >
-      {wordCoauthorsEditingText(replaces)}
+      {wordCoauthorsEditingText(replaces, coauthors)}
     </Alert>
   );
   const planTitle = wordPlanTitleText(planReview.title);
@@ -897,7 +914,14 @@ export function WordDocumentPlanCard({
               )}
           </>
         ),
-        revert: (
+        revert: revertRefused ? (
+          <p
+            className="word-review__hint"
+            data-testid="word-plan-revert-refused"
+          >
+            {wordRevertNeedsImportText()}
+          </p>
+        ) : (
           <WordUndoLine
             canRevert={canRevert}
             label={

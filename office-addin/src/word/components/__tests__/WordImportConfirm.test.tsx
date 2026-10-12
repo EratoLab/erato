@@ -86,7 +86,7 @@ describe("WordImportConfirm", () => {
     renderConfirm();
     expect(screen.getAllByRole("listitem").map((li) => li.textContent)).toEqual(
       [
-        "Word's Undo can't reverse this change, and Erato's Undo works only until someone edits the document.",
+        "Word's Undo can't reverse this change. Erato can't verify the result on Word for the web, and its Restore may not bring back the exact original, which stays available to download.",
         "People editing at the same time may lose their latest changes.",
         "Comment dates and resolved flags may change.",
       ],

@@ -35,7 +35,7 @@ import {
   verifyWordPlanOutput,
   verifyWordPlanWrite,
   verifyWordRestore,
-  wordDocumentFingerprint,
+  wordBodyFingerprint,
 } from "./wordDocumentXml";
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
 import {
@@ -195,7 +195,7 @@ async function observeAfterFailure(
     return await wordWriteHost()?.run(async (context) => {
       const body = context.document.body.getOoxml();
       await context.sync();
-      return wordDocumentFingerprint(body.value);
+      return wordBodyFingerprint(body.value);
     });
   } catch {
     return undefined;
@@ -511,7 +511,7 @@ async function applyPlan(
           ? "expired"
           : context.document.changeTrackingMode !== "Off"
             ? "tracking"
-            : wordDocumentFingerprint(live.value) !== snapshot.fingerprint
+            : wordBodyFingerprint(live.value) !== snapshot.fingerprint
               ? "source-changed"
               : null;
       if (reason)
@@ -617,6 +617,43 @@ export function wordRevertMechanism(
   }
 }
 
+function writtenInPlace(before: string): boolean {
+  try {
+    return !!decodeWordInPlaceBackup(before).inPlace;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Revert of an in-place write that did not verify restores the complete original, a whole-document
+ * import nobody confirmed. Unless the host's policy allows the import outright, only a write whose
+ * differences all lie in its own paragraphs is undone, in place; the rest is left to Word's Undo
+ * and the downloadable original. A confirmed import's own Revert is not affected.
+ */
+export function wordRevertImportRefusal(
+  before: string,
+  expectedAfter: string | undefined,
+): Extract<
+  WordDocumentDiagnostic["reason"],
+  "import-needs-confirmation" | "import-disabled"
+> | null {
+  if (
+    !expectedAfter ||
+    !isWordDocumentBackup(before) ||
+    isWordScopeFingerprint(expectedAfter) ||
+    !writtenInPlace(before) ||
+    wordInPlaceFallbackScope(before)
+  )
+    return null;
+  const policy = wordApplyPolicy().wholeDocumentImport;
+  return policy === "allowed"
+    ? null
+    : policy === "off"
+      ? "import-disabled"
+      : "import-needs-confirmation";
+}
+
 async function revertPlan(
   before: string,
   expectedAfter: string,
@@ -624,6 +661,20 @@ async function revertPlan(
   if (isWordDocumentBackup(before)) {
     if (isWordScopeFingerprint(expectedAfter))
       return revertWordPlanInPlace(before, expectedAfter);
+    const refusal = wordRevertImportRefusal(before, expectedAfter);
+    if (refusal)
+      return {
+        status: "stale",
+        diagnostic: diagnostic("preflight", refusal, undefined, {
+          route: "in-place",
+        }),
+      };
+    const confined =
+      writtenInPlace(before) &&
+      wordApplyPolicy().wholeDocumentImport !== "allowed"
+        ? wordInPlaceFallbackScope(before)
+        : undefined;
+    if (confined) return revertWordPlanInPlace(before, confined);
     const exact = await revertFullDocument(before, expectedAfter);
     const scope =
       exact.status === "stale" &&
@@ -649,7 +700,7 @@ async function revertPlan(
       const reason =
         context.document.changeTrackingMode !== "Off"
           ? "tracking"
-          : wordDocumentFingerprint(live.value) !== expectedAfter
+          : wordBodyFingerprint(live.value) !== expectedAfter
             ? "source-changed"
             : null;
       if (reason)

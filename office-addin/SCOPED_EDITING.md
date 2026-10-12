@@ -123,14 +123,17 @@ The card shows the expected route before Apply ("Edits N passages in place" or
 "Replaces the whole document because …"). Apply decides again with the live
 host state, and the result reports the route that actually ran.
 
-On Word for Windows and Mac, a card whose preview is the import or the body
-route reads `Word.Coauthoring` once (WordApiDesktop 1.4, `wordCoauthoring.ts`).
-When Word lists more than one author, or holds co-authors' updates not yet
-merged, a warning row before Apply says others are editing and may lose their
-latest changes. Apply itself is unchanged. Without the API, or when the read
-fails, the card is as before; the web never reads it and keeps its
-confirmation. The rule is ERMAIN-960's plan: P-D-COAUTH has not run yet to show
-whether `authors` lists the user on every build.
+On Word for Windows, a card whose preview is the import or the body route reads
+`Word.Coauthoring` once (WordApiDesktop 1.4, `wordCoauthoring.ts`). When Word
+lists more than one author, a warning row before Apply says someone else is
+editing and can lose what they change while the document is replaced. When it
+lists only the user but holds co-authors' updates not yet merged, the row says
+only that. Apply itself is unchanged. Without the API, or when the read fails,
+the card is as before. The rule follows P-D-COAUTH on Word PC 16.0.20430
+(ERMAIN-961): `authors` lists the user, drops a co-author about 15 s after they
+leave, while `pendingUpdates` stays true for minutes afterwards. Word for Mac
+reports the API too, but its run did not complete, so the Mac card does not read
+it; the web never reads it and keeps its confirmation.
 
 ### Routing
 
@@ -191,10 +194,13 @@ off:
   takes the import as `script-text` until `scriptText` passes on a platform.
 
 `list`, `span`, `tracked`, `trackedStructure`, `storyText` and `scriptText`
-stay off until their probe passes. Word for the web and Mac write only `text`
-and `cell` in place: P2–P13 have no web run yet (P-W-INPLACE in ERMAIN-961), so
-on the web every other change takes the confirmed import or, for a scoped edit,
-is refused. `marks` also needs WordApiDesktop 1.3, which the web lacks. `window.eratoWordInPlaceProbe()` runs the probes in
+stay off until their probe passes. Word for Mac writes only `text` and `cell`
+in place. Word for the web adds `restyle`: in its P-W-INPLACE run (ERMAIN-961,
+2026-10-12) only P7 passed, so on the web every other change takes the
+confirmed import or, for a scoped edit, is refused. `marks` also needs
+WordApiDesktop 1.3, which the web lacks. On the web, reloading
+`body.paragraphs` inside one `Word.run` returns the cached collection, so P1
+and P8 need a fresh count before `insert` or `delete` can be decided there. `window.eratoWordInPlaceProbe()` runs the probes in
 development builds, on an empty scratch document only; a failed probe reports
 the step it reached.
 
@@ -269,7 +275,12 @@ changes in Word, and the read contract says so while tracking is on.
   Replace) runs only when the caller passes the user's confirmation, under `off`
   never, and a plan from a scoped read never takes one unless the switch is
   `allowed`. A refused plan writes nothing and keeps its capture, so a confirmed
-  retry still applies; Revert of a confirmed import is not gated.
+  retry still applies; Revert of a confirmed import is not gated. Revert of an
+  in-place write that did not verify restores the complete original, an import
+  nobody confirmed: unless the switch is `allowed`, it undoes the write in place
+  when every difference lies in its own paragraphs and is refused otherwise
+  (`wordRevertImportRefusal`), and the card points to Word's Undo and the
+  downloadable original instead of offering Restore.
   The plan card (`WordImportConfirm`) asks for that confirmation in place of
   Apply and the consent card: it names the costs, and Apply stays disabled until
   an unticked box is ticked. Always allow and auto-prompt never pass it, and a
@@ -288,18 +299,22 @@ changes in Word, and the read contract says so while tracking is on.
   reported `stale` and not offered again. If the document changed, the write
   stays `interrupted` and the card names the cause.
 - **Labelled documents**: Word for the web withholds the file of a document
-  with a sensitivity label (office-js #6743), which surfaces as a failed
-  transfer. On the web only, the read then falls back to the body
+  with a sensitivity label (office-js #6743): `getFileAsync` refuses to open
+  it. On the web only, such a refusal makes the read fall back to the body
   (`fullDocument` false), and the chip notes that headers, footers and page
-  layout are out of reach; writes take the body route and its confirmation.
-  Elsewhere a failed transfer still leaves text only and retries at the next
-  send.
+  layout are out of reach and that any change replaces the whole body; writes
+  take the body route and its confirmation. Error 11000 (both of Office's file
+  handles held), a transfer that fails part-way and a document that changes
+  during capture are not refusals: they, and every failed transfer elsewhere,
+  still leave text only and retry at the next send. Body reads are compared
+  without `w16cid:durableId` on `w:num`, which Word for the web writes afresh at
+  every `Body.getOoxml`.
 - **Kill switch**: `window.WORD_FORCE_IMPORT_APPLY = true`, injected by the
   backend or set from `VITE_WORD_FORCE_IMPORT_APPLY=true` at build time. In-place
   writing is off on every host, and tracked captures are refused as before.
 - **In-place override**: `window.WORD_IN_PLACE_APPLY = true` turns in-place
-  writing on for every host. Development builds and
-  `VITE_WORD_IN_PLACE_APPLY=true` set it; the kill switch still wins.
+  writing on for every host. Only development builds set it; release builds
+  follow the deployment's per-host `in_place`, and the kill switch still wins.
 - **Compatibility mode**: a per-device setting (localStorage
   `erato.word.forceImportApply`) that sends every rewrite to the import;
   unreadable storage means off.

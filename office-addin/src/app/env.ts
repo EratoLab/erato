@@ -63,10 +63,7 @@ export function injectFrontendEnv() {
   if (import.meta.env.VITE_WORD_FORCE_IMPORT_APPLY === "true") {
     window.WORD_FORCE_IMPORT_APPLY ??= true;
   }
-  if (
-    !import.meta.env.PROD ||
-    import.meta.env.VITE_WORD_IN_PLACE_APPLY === "true"
-  ) {
+  if (!import.meta.env.PROD) {
     window.WORD_IN_PLACE_APPLY ??= true;
   }
 }

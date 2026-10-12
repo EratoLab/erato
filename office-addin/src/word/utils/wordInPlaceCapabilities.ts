@@ -75,8 +75,8 @@ export const WORD_IN_PLACE_MECHANISMS: Record<
     delete: true,
   },
   Mac: { text: true, cell: true, ...PENDING },
-  // Word for the web: P2–P13 have no web run yet (P-W-INPLACE, ERMAIN-961), so only text and cell.
-  OfficeOnline: { text: true, cell: true, ...PENDING },
+  // Word for the web, P-W-INPLACE run of 2026-10-12 (runs a and c1): only P7 (restyle) passed.
+  OfficeOnline: { text: true, cell: true, ...PENDING, restyle: true },
   unknown: { text: true, cell: true, ...PENDING },
 };
 

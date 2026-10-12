@@ -85,6 +85,12 @@ export function wordDocumentDiagnosticText(
         });
   if (diagnostic.reason === "tracking" && diagnostic.details?.fallbackReasons)
     return wordTrackingNeedsImportText();
+  if (
+    restoring &&
+    (diagnostic.reason === "import-needs-confirmation" ||
+      diagnostic.reason === "import-disabled")
+  )
+    return wordRevertNeedsImportText();
   if (diagnostic.reason === "import-needs-confirmation")
     return t({
       id: "officeAddin.word.authoring.importNeedsConfirmation",
@@ -109,6 +115,15 @@ export function wordDocumentDiagnosticText(
   )
     return wordAuthoringIssueText("no-capture");
   return wordAuthoringIssueText(diagnostic.reason);
+}
+
+/** In place of Revert for an unverified in-place write whose only full restore is an unconfirmed import. */
+export function wordRevertNeedsImportText(): string {
+  return t({
+    id: "officeAddin.word.authoring.revertNeedsImport",
+    message:
+      "Erato can't undo this change here without replacing the whole document. Use Word's Undo to reverse it, or download the original document.",
+  });
 }
 
 /** Word refused to replace the document and nothing changed; trying again would meet the same refusal. */
@@ -158,18 +173,33 @@ export function wordInPlaceRequestText(): string {
   });
 }
 
-/** Before Apply on Word for Windows or Mac, when Word reports others editing the document. */
-export function wordCoauthorsEditingText(route: "import" | "body"): string {
+/** Before Apply on Word for Windows, when Word lists another author or holds their changes unmerged. */
+export function wordCoauthorsEditingText(
+  route: "import" | "body",
+  state: "editing" | "pending",
+): string {
+  if (state === "pending")
+    return route === "body"
+      ? t({
+          id: "officeAddin.word.coauthors.pendingBody",
+          message:
+            "Word holds co-authors' changes that are not merged into your copy yet; replacing the document body can discard them.",
+        })
+      : t({
+          id: "officeAddin.word.coauthors.pendingImport",
+          message:
+            "Word holds co-authors' changes that are not merged into your copy yet; replacing the whole document can discard them.",
+        });
   return route === "body"
     ? t({
-        id: "officeAddin.word.coauthors.body",
+        id: "officeAddin.word.coauthors.editingBody",
         message:
-          "Others are editing this document. Replacing the document body may overwrite their latest changes.",
+          "Someone else is editing this document. Replacing the document body can discard the changes they make while it runs.",
       })
     : t({
-        id: "officeAddin.word.coauthors.import",
+        id: "officeAddin.word.coauthors.editingImport",
         message:
-          "Others are editing this document. Replacing the whole document may overwrite their latest changes.",
+          "Someone else is editing this document. Replacing the whole document can discard the changes they make while it runs, and their cursor moves to the start.",
       });
 }
 
