@@ -1,10 +1,18 @@
 import { vi } from "vitest";
 
+import { resetWordDocumentIdentityForTests } from "../../../word/utils/wordDocumentIdentity";
+
 import type { Mock } from "vitest";
 
 export interface MockWordDocument {
   url: string | null;
   mode: string;
+  /** Reports `url` at call time ("" while unsaved), as Word does after a save. */
+  getFilePropertiesAsync: Mock<
+    (
+      callback: (result: Office.AsyncResult<Office.FileProperties>) => void,
+    ) => void
+  >;
   /** This store persists into the DOCX; spies verify that reading never touches it. */
   settings: {
     get: Mock<(name: string) => unknown>;
@@ -96,10 +104,18 @@ export function installMockWordDocument(
   paragraphs: MockWordParagraphSpec[] = [],
 ): MockWordHost {
   const office = Office as unknown as Record<string, unknown>;
+  // Each install is a fresh pane load.
+  resetWordDocumentIdentityForTests();
 
   const document: MockWordDocument = {
     url: "https://contoso.sharepoint.com/Shared%20Documents/report.docx",
     mode: "readWrite",
+    getFilePropertiesAsync: vi.fn((callback) => {
+      callback({
+        status: Office.AsyncResultStatus.Succeeded,
+        value: { url: document.url ?? "" },
+      } as Office.AsyncResult<Office.FileProperties>);
+    }),
     settings: {
       get: vi.fn(() => undefined),
       set: vi.fn(),

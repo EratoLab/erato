@@ -6315,8 +6315,69 @@ msgstr "Verwalten Sie die Verbindung und die lokalen Suchdaten."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "sidecar.maintenance.title"
 msgstr "Wartung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.fullDiskAccess"
+msgstr "Vollzugriff auf Festplatte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.fullDiskAccessHelp"
+msgstr "Um ohne wiederholte Abfragen auf Outlook- und Teams-Daten zuzugreifen, öffne Systemeinstellungen > Datenschutz & Sicherheit > Vollzugriff auf Festplatte. Füge die laufende Erato Desktop Sidecar-App hinzu, aktiviere sie und starte den Sidecar neu. Der Vollzugriff erlaubt der App, Dateien und Daten anderer Apps zu lesen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.granted"
+msgstr "Gewährt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.loadError"
+msgstr "Systemberechtigungen konnten nicht geprüft werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.loading"
+msgstr "Systemberechtigungen werden geprüft…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.notGranted"
+msgstr "Nicht gewährt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.openSettings"
+msgstr "Systemeinstellungen öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.refresh"
+msgstr "Berechtigungen erneut prüfen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.request"
+msgstr "Berechtigung anfordern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.requestError"
+msgstr "Die Berechtigungseinstellungen konnten nicht geöffnet werden. Öffne die Systemeinstellungen manuell und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.title"
+msgstr "Systemberechtigungen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.unknown"
+msgstr "Unbekannt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx

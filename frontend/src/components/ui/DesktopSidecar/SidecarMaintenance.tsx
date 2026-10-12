@@ -1,5 +1,8 @@
 import { t } from "@lingui/core/macro";
 
+import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
+
+import { SidecarPermissions } from "./SidecarPermissions";
 import { Button } from "../Controls/Button";
 import { SettingsDisclosure } from "../Settings/SettingsDisclosure";
 import { Trash } from "../icons";
@@ -23,8 +26,10 @@ export function SidecarMaintenance({
     resetError,
     resetSucceeded,
   } = indexing;
+  const { client } = useDesktopSidecar();
   const busy = saving || resetting || data?.status.resetInProgress === true;
-  if (!children && !resetSupported) return null;
+  if (!children && !resetSupported && !client?.supports("sidecar.status.v1"))
+    return null;
   return (
     <div className="border-t border-theme-border pt-4">
       <SettingsDisclosure
@@ -36,6 +41,7 @@ export function SidecarMaintenance({
         })}
       >
         {children}
+        <SidecarPermissions />
         {resetSupported && data && (
           <div className="space-y-3 border-t border-theme-border pt-4">
             <p className="text-xs text-theme-fg-secondary">

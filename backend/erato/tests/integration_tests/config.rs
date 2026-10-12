@@ -187,6 +187,14 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .display_name,
         "Erato for Documents"
     );
+    assert!(
+        config
+            .integrations
+            .ms_office
+            .addin
+            .default_settings
+            .word_include_document
+    );
     assert_eq!(config.integrations.ms_office.ews_api_endpoint, None);
     assert!(!config.integrations.ms_office.ews_skip_tls_validation);
     assert!(!config.cleanup_enabled);
@@ -233,6 +241,9 @@ high_resolution_icon_path = "/public/common/custom-theme/contoso/color-icon-hire
 icon_16_path = "assets/contoso-outline-16.png"
 icon_32_path = "assets/contoso-outline-32.png"
 icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
+
+[integrations.ms_office.addin.default_settings]
+word_include_document = false
 "#;
 
     temp_file
@@ -278,6 +289,14 @@ icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
     assert_eq!(
         config.integrations.ms_office.addin.manifest.icon_80_path,
         "https://cdn.example.com/contoso/icon-80.png"
+    );
+    assert!(
+        !config
+            .integrations
+            .ms_office
+            .addin
+            .default_settings
+            .word_include_document
     );
 }
 
@@ -5073,6 +5092,64 @@ model_name = "gpt-4o"
 
 [file_storage_providers]
 "#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "action_facets.facets.word.delegation.child_facet_ids references unknown facet 'nope'"
+)]
+fn test_action_facet_child_facet_ids_unknown_facet_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[action_facets.facets.word]
+display_name = "Word"
+template = "Work on {{document_name}}."
+allowed_args = ["document_name"]
+tool_call_allowlist = ["erato/delegate_task"]
+
+[action_facets.facets.word.delegation]
+child_facet_ids = ["nope"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+fn test_action_facet_delegation_override_parses() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[facets.facets.web_search]
+display_name = "Web search"
+
+[action_facets.facets.word]
+display_name = "Word"
+template = "Work on {{document_name}}."
+allowed_args = ["document_name"]
+tool_call_allowlist = ["erato/delegate_task"]
+delegation = { max_tasks_per_turn = 4, child_facet_ids = ["web_search"] }
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    let word = config.action_facets.facets["word"]
+        .delegation
+        .as_ref()
+        .expect("the action facet carries a delegation override");
+    assert_eq!(word.max_tasks_per_turn, Some(4));
+    assert_eq!(
+        word.child_facet_ids.as_deref(),
+        Some(["web_search".to_string()].as_slice())
     );
 }
 

@@ -26,6 +26,10 @@ export {
   type SidecarTransportRequestOptions,
 } from "./transport.js";
 export type {
+  SidecarStatusV1Params,
+  SidecarStatusV1Result,
+  SidecarRequestPermissionV1Params,
+  SidecarRequestPermissionV1Result,
   CapabilityDescriptor,
   IndexingBenchmarkListV1Params,
   IndexingBenchmarkListV1Result,

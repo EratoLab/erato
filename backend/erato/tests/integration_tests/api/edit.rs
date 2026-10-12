@@ -44,6 +44,7 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             presentation: None,
             client_actions_always_ask: vec![],
             tool_call_allowlist: vec![],
+            delegation: None,
         },
     );
     app_config.action_facets.facets.insert(
@@ -57,6 +58,7 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             presentation: None,
             client_actions_always_ask: vec![],
             tool_call_allowlist: vec![],
+            delegation: None,
         },
     );
 }

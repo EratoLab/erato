@@ -6315,8 +6315,69 @@ msgstr "Gestiona la conexión y los datos de búsqueda locales."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarMaintenance.tsx
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "sidecar.maintenance.title"
 msgstr "Mantenimiento"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.fullDiskAccess"
+msgstr "Acceso total al disco"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.fullDiskAccessHelp"
+msgstr "Para acceder a los datos de Outlook y Teams sin avisos repetidos, abre Ajustes del Sistema > Privacidad y seguridad > Acceso total al disco. Añade y activa la aplicación Erato Desktop Sidecar que está en ejecución y reinicia el sidecar. El acceso total al disco permite a la aplicación leer archivos y datos de otras aplicaciones."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.granted"
+msgstr "Concedido"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.loadError"
+msgstr "No se pudieron comprobar los permisos del sistema."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.loading"
+msgstr "Comprobando los permisos del sistema…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.notGranted"
+msgstr "No concedido"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.openSettings"
+msgstr "Abrir Ajustes del Sistema"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.refresh"
+msgstr "Comprobar permisos de nuevo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.request"
+msgstr "Solicitar permiso"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.requestError"
+msgstr "No se pudieron abrir los ajustes de permisos. Abre los ajustes del sistema manualmente e inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.title"
+msgstr "Permisos del sistema"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
+msgid "sidecar.permissions.unknown"
+msgstr "Desconocido"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx

@@ -21,7 +21,8 @@ type WordAuthoringBudgetResult =
 
 /** A conservative preflight estimate; it cannot guarantee the model’s eventual output size. */
 export async function checkWordAuthoringBudget(
-  snapshot: WordAuthoringSnapshot,
+  /** Only the complete mode estimates the document itself. */
+  snapshot: WordAuthoringSnapshot | null,
   args: {
     message: string;
     chatId: string | null;
@@ -33,28 +34,35 @@ export async function checkWordAuthoringBudget(
   },
 ): Promise<WordAuthoringBudgetResult> {
   const complete = args.mode === "complete";
-  const source = complete
-    ? JSON.stringify({
-        contract: WORD_AUTHORING_CONTRACT,
-        styles: snapshot.styles,
-        blocks: snapshot.blocks.map(wordReadableSourceBlock),
-        stories: snapshot.fullDocument
-          ? snapshot.stories?.map(
-              ({ xml, part: _part, nativeId: _nativeId, ...s }) => ({
-                ...s,
-                ...wordSourceDetails(xml, `story_${s.id}`),
-              }),
-            )
-          : undefined,
-        sections: snapshot.fullDocument
-          ? snapshot.sections?.map(({ xml: _xml, ...s }) => s)
-          : undefined,
-        assets: snapshot.assets?.map(wordImageAssetMetadata),
-        imageAssetIssues: snapshot.imageAssetIssues?.map(
-          ({ fileId: _fileId, ...issue }) => issue,
-        ),
-      })
-    : JSON.stringify({ contract: WORD_AUTHORING_CONTRACT });
+  if (complete && !snapshot)
+    return {
+      ok: false,
+      issue: "budget-unavailable",
+      details: ["estimate-invalid"],
+    };
+  const source =
+    complete && snapshot
+      ? JSON.stringify({
+          contract: WORD_AUTHORING_CONTRACT,
+          styles: snapshot.styles,
+          blocks: snapshot.blocks.map(wordReadableSourceBlock),
+          stories: snapshot.fullDocument
+            ? snapshot.stories?.map(
+                ({ xml, part: _part, nativeId: _nativeId, ...s }) => ({
+                  ...s,
+                  ...wordSourceDetails(xml, `story_${s.id}`),
+                }),
+              )
+            : undefined,
+          sections: snapshot.fullDocument
+            ? snapshot.sections?.map(({ xml: _xml, ...s }) => s)
+            : undefined,
+          assets: snapshot.assets?.map(wordImageAssetMetadata),
+          imageAssetIssues: snapshot.imageAssetIssues?.map(
+            ({ fileId: _fileId, ...issue }) => issue,
+          ),
+        })
+      : JSON.stringify({ contract: WORD_AUTHORING_CONTRACT });
   const controller = new AbortController();
   const abort = () => controller.abort();
   args.signal?.addEventListener("abort", abort, { once: true });

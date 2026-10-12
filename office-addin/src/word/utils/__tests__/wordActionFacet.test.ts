@@ -6,14 +6,19 @@ import {
   WORD_COMPOSE_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
   WORD_SELECTION_FACET_ID,
+  WORD_AUTHORING_FACET_ID,
+  withWordReviewFallback,
   wordSelectionFacetAvailable,
-  wordSelectionTakesSlot,
 } from "../wordActionFacet";
 import { WORD_SELECTION_ARG_KEYS } from "../wordSelectionArgs";
 
-import type { WordDocumentArgs } from "../buildWordDocumentArgs";
+import type {
+  WordDocumentArgs,
+  WordDocumentBuild,
+} from "../buildWordDocumentArgs";
 import type { WordActionFacetInput } from "../wordActionFacet";
 import type { WordSelectionSnapshot } from "../wordSelectionAnchor";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 /** Arguments must match the configured facet: extra keys fail validation; missing values leave placeholders. */
 const ALLOWED_ARGS: Record<string, string[]> = {
@@ -194,20 +199,6 @@ describe("word_selection", () => {
     ).toBe(false);
   });
 
-  it.each([
-    ["rewrite", false, true],
-    ["rewrite", true, true],
-    ["context_only", false, true],
-    ["context_only", true, false],
-  ] as const)(
-    "a %s selection with the document included=%s takes the slot: %s",
-    (role, documentIncluded, takes) => {
-      expect(
-        wordSelectionTakesSlot({ ...selection, role }, documentIncluded),
-      ).toBe(takes);
-    },
-  );
-
   it("fills every advertised key and nothing else", () => {
     expect(resolve()).toEqual({
       id: WORD_SELECTION_FACET_ID,
@@ -241,5 +232,101 @@ describe("word_selection", () => {
 
   it("is not sent when the server does not advertise it", () => {
     expect(resolve({ availableFacetIds: new Set() })).toBeUndefined();
+  });
+});
+
+describe("withWordReviewFallback", () => {
+  const build = (
+    issue?: NonNullable<WordDocumentBuild["authoring"]>["issue"],
+    hasContent = true,
+  ): WordDocumentBuild =>
+    ({
+      args: documentArgs,
+      coverage: { hasContent },
+      authoring: { token: "t", issue },
+    }) as unknown as WordDocumentBuild;
+  const all = new Set([WORD_AUTHORING_FACET_ID, WORD_DOCUMENT_REVIEW_FACET_ID]);
+
+  it.each(["too-large", "unavailable"] as const)(
+    "sends review text when authoring is %s",
+    (issue) => {
+      expect(withWordReviewFallback(build(issue), all).authoring).toBe(
+        undefined,
+      );
+    },
+  );
+
+  it.each([undefined, "tracking", "model-budget", "unsupported"] as const)(
+    "keeps authoring when its issue is %s",
+    (issue) => {
+      const source = build(issue);
+      expect(withWordReviewFallback(source, all)).toBe(source);
+    },
+  );
+
+  it("keeps authoring when review is not advertised", () => {
+    const source = build("too-large");
+    expect(
+      withWordReviewFallback(source, new Set([WORD_AUTHORING_FACET_ID])),
+    ).toBe(source);
+  });
+
+  it("keeps authoring for an empty document", () => {
+    const source = build("unavailable", false);
+    expect(withWordReviewFallback(source, all)).toBe(source);
+  });
+
+  it("keeps authoring for a capture that is only too large for a complete read", () => {
+    const source = {
+      ...build(),
+      authoring: { token: "t", completeReadIssue: "too-large" },
+    } as unknown as WordDocumentBuild;
+    expect(withWordReviewFallback(source, all)).toBe(source);
+  });
+});
+
+describe("authoring arguments", () => {
+  const authoring = (
+    snapshot: Partial<WordAuthoringSnapshot>,
+  ): WordAuthoringSnapshot =>
+    ({ token: "snapshot-1", ...snapshot }) as WordAuthoringSnapshot;
+  const args = (snapshot: Partial<WordAuthoringSnapshot>) =>
+    resolveWordActionFacet(
+      input({
+        authoring: authoring(snapshot),
+        availableFacetIds: new Set([WORD_AUTHORING_FACET_ID]),
+      }),
+    )?.args;
+
+  it("reports an ordinary capture as available", () => {
+    expect(args({})).toMatchObject({
+      authoring_status: "available",
+      paragraphs_sent: "0",
+      document_text: "",
+    });
+  });
+
+  it("tells the model that only scoped reads and edits work for a document too large for a complete read", () => {
+    const sent = args({ completeReadIssue: "too-large" });
+    expect(sent?.authoring_status).toMatch(
+      /^available for scoped reads and scoped edits only\./,
+    );
+    expect(sent?.authoring_status).toContain(
+      "whole-document plans and repairs are unavailable (too-large",
+    );
+    expect(sent?.authoring_status).toContain("16 targets and 24 KiB");
+    expect(sent?.truncation_note).toContain("too large to read completely");
+    expect(sent?.truncation_note).toContain("target.queries or table_cell");
+    expect(sent?.document_text).toBe("");
+  });
+
+  it("keeps reporting a hard issue, even on a capture too large for a complete read", () => {
+    expect(
+      args({
+        issue: "unsupported",
+        issueDetails: ["unbalanced-fields"],
+        completeReadIssue: "too-large",
+      })?.authoring_status,
+    ).toBe("unsupported (unbalanced-fields)");
   });
 });

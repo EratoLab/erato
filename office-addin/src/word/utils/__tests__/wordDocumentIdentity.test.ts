@@ -1,10 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
 import {
+  getWordDocumentIdentity,
+  readLiveWordDocumentUrl,
+  resetWordDocumentIdentityForTests,
   resolveWordDocumentIdentity,
   resolveWordDocumentName,
 } from "../wordDocumentIdentity";
@@ -57,5 +60,94 @@ describe("word document identity", () => {
   it("returns an empty name for an unsaved document rather than inventing one", () => {
     word.document.url = null;
     expect(resolveWordDocumentName()).toBe("");
+  });
+
+  describe("pane identity", () => {
+    it("keeps the URL seen at first use for the rest of the pane load", () => {
+      const identity = getWordDocumentIdentity();
+      word.document.url = "https://contoso.sharepoint.com/renamed.docx";
+
+      expect(getWordDocumentIdentity()).toBe(identity);
+      expect(identity).toBe(
+        "https://contoso.sharepoint.com/Shared%20Documents/report.docx",
+      );
+    });
+
+    it("keeps one session token for an unsaved document, even after a save", () => {
+      word.document.url = null;
+      const identity = getWordDocumentIdentity();
+      word.document.url = "https://contoso.sharepoint.com/saved.docx";
+
+      expect(identity).toMatch(/^pane-session:/);
+      expect(getWordDocumentIdentity()).toBe(identity);
+    });
+
+    it("mints a new identity after a reset", () => {
+      word.document.url = null;
+      const identity = getWordDocumentIdentity();
+
+      resetWordDocumentIdentityForTests();
+
+      expect(getWordDocumentIdentity()).not.toBe(identity);
+    });
+  });
+
+  describe("live document URL", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("reads the URL from the file properties, which see a save after load", async () => {
+      word.document.url = null;
+      word.document.getFilePropertiesAsync.mockImplementation((callback) =>
+        callback({
+          status: Office.AsyncResultStatus.Succeeded,
+          value: { url: "https://contoso.sharepoint.com/saved.docx" },
+        } as Office.AsyncResult<Office.FileProperties>),
+      );
+
+      await expect(readLiveWordDocumentUrl()).resolves.toBe(
+        "https://contoso.sharepoint.com/saved.docx",
+      );
+    });
+
+    it("falls back to the document URL when the file properties fail", async () => {
+      word.document.getFilePropertiesAsync.mockImplementation((callback) =>
+        callback({
+          status: Office.AsyncResultStatus.Failed,
+          error: { message: "not supported" },
+        } as Office.AsyncResult<Office.FileProperties>),
+      );
+
+      await expect(readLiveWordDocumentUrl()).resolves.toBe(
+        "https://contoso.sharepoint.com/Shared%20Documents/report.docx",
+      );
+    });
+
+    it("falls back to the document URL when the host lacks file properties", async () => {
+      delete (word.document as Partial<typeof word.document>)
+        .getFilePropertiesAsync;
+
+      await expect(readLiveWordDocumentUrl()).resolves.toBe(
+        "https://contoso.sharepoint.com/Shared%20Documents/report.docx",
+      );
+    });
+
+    it("resolves null for an unsaved document", async () => {
+      word.document.url = null;
+
+      await expect(readLiveWordDocumentUrl()).resolves.toBeNull();
+    });
+
+    it("gives up on a host that never answers", async () => {
+      vi.useFakeTimers();
+      word.document.url = null;
+      word.document.getFilePropertiesAsync.mockImplementation(() => {});
+
+      const read = readLiveWordDocumentUrl();
+      await vi.advanceTimersByTimeAsync(2000);
+
+      await expect(read).resolves.toBeNull();
+    });
   });
 });

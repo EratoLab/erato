@@ -3527,6 +3527,7 @@ async fn test_message_submit_records_mcp_server_needing_oauth_authorization(pool
                     client_secret: None,
                     scopes: vec![],
                     client_name: None,
+                    authorization_params: Default::default(),
                 },
             },
         ),
@@ -3659,6 +3660,7 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             presentation: None,
             client_actions_always_ask: vec![],
             tool_call_allowlist: vec![],
+            delegation: None,
         },
     );
     app_config.action_facets.facets.insert(
@@ -3674,6 +3676,7 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             presentation: None,
             client_actions_always_ask: vec![],
             tool_call_allowlist: vec![],
+            delegation: None,
         },
     );
 }

@@ -16,6 +16,7 @@ import { SettingsDisclosure } from "./SettingsDisclosure";
 import { SidecarToolDecisions } from "./SidecarToolDecisions";
 import { Button } from "../Controls/Button";
 import { SidecarIndexingControls } from "../DesktopSidecar/SidecarIndexingCard";
+import { SidecarPermissions } from "../DesktopSidecar/SidecarPermissions";
 import { ComputerIcon, FolderIcon } from "../icons";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Desktop-sidecar URL protocol.
@@ -147,13 +148,23 @@ function DesktopSidecarEntityRow({
           <div className="border-t border-theme-border pt-4">
             <SettingsDisclosure
               headingLevel={3}
-              title={t({
-                id: "preferences.dialog.desktopSidecar.connection",
-                message: "Connection",
-              })}
+              title={
+                connected &&
+                !snapshot.localDelegation &&
+                client?.supports("sidecar.status.v1")
+                  ? t({
+                      id: "sidecar.maintenance.title",
+                      message: "Maintenance",
+                    })
+                  : t({
+                      id: "preferences.dialog.desktopSidecar.connection",
+                      message: "Connection",
+                    })
+              }
               defaultExpanded={!connected}
             >
               <SidecarConnectionActions onRetry={onRetry} />
+              {!snapshot.localDelegation && <SidecarPermissions />}
             </SettingsDisclosure>
           </div>
         )}

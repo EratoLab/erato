@@ -1336,6 +1336,8 @@ impl AppConfig {
             );
             let selected_by_a_facet = config.facets.facets.values().any(|facet| {
                 allowlist_selects_reserved_tool(&facet.tool_call_allowlist, DELEGATE_TASK_TOOL_NAME)
+            }) || config.action_facets.facets.values().any(|facet| {
+                allowlist_selects_reserved_tool(&facet.tool_call_allowlist, DELEGATE_TASK_TOOL_NAME)
             });
             if !selected_globally && !selected_by_a_facet {
                 startup_log::warn_preinit(format!(
@@ -1379,6 +1381,21 @@ impl AppConfig {
                 ));
             }
         }
+        for (facet_id, facet) in &config.action_facets.facets {
+            if facet.delegation.is_some()
+                && !allowlist_selects_reserved_tool(
+                    &facet.tool_call_allowlist,
+                    DELEGATE_TASK_TOOL_NAME,
+                )
+            {
+                startup_log::warn_preinit(format!(
+                    "Action facet '{facet_id}' configures `delegation` overrides but its \
+                     tool_call_allowlist does not select \
+                     `{RESERVED_TOOL_NAMESPACE}/{DELEGATE_TASK_TOOL_NAME}`, so the overrides \
+                     never apply."
+                ));
+            }
+        }
 
         // Every `child_facet_ids` entry, global or per facet, must name a
         // configured facet.
@@ -1390,10 +1407,20 @@ impl AppConfig {
                 );
             }
         }
-        for (facet_id, facet) in &config.facets.facets {
-            let Some(overrides) = &facet.delegation else {
-                continue;
-            };
+        let facet_overrides = config.facets.facets.iter().filter_map(|(id, facet)| {
+            let overrides = facet.delegation.as_ref()?;
+            Some((format!("facets.facets.{id}.delegation"), overrides))
+        });
+        let action_facet_overrides =
+            config
+                .action_facets
+                .facets
+                .iter()
+                .filter_map(|(id, facet)| {
+                    let overrides = facet.delegation.as_ref()?;
+                    Some((format!("action_facets.facets.{id}.delegation"), overrides))
+                });
+        for (path, overrides) in facet_overrides.chain(action_facet_overrides) {
             // Three independent rules over the same overrides. Deliberately not
             // chained `let ... else { continue }`: an early exit on the first
             // absent field would skip the checks below it.
@@ -1401,32 +1428,28 @@ impl AppConfig {
                 for id in ids {
                     if !config.facets.facets.contains_key(id) {
                         panic!(
-                            "facets.facets.{}.delegation.child_facet_ids references unknown facet '{}'.",
-                            facet_id, id
+                            "{}.child_facet_ids references unknown facet '{}'.",
+                            path, id
                         );
                     }
                 }
             }
             if let Some(modes) = &overrides.run_modes {
                 if modes.is_empty() {
-                    panic!(
-                        "facets.facets.{facet_id}.delegation.run_modes must list at least one mode."
-                    );
+                    panic!("{path}.run_modes must list at least one mode.");
                 }
                 for (index, mode) in modes.iter().enumerate() {
                     if modes[..index].contains(mode) {
                         panic!(
-                            "facets.facets.{}.delegation.run_modes contains \"{}\" more than once.",
-                            facet_id,
+                            "{}.run_modes contains \"{}\" more than once.",
+                            path,
                             mode.as_str()
                         );
                     }
                 }
             }
             if overrides.scheduling == Some(TaskScheduling::Interrupt) {
-                panic!(
-                    "facets.facets.{facet_id}.delegation.scheduling = \"interrupt\" is not supported yet."
-                );
+                panic!("{path}.scheduling = \"interrupt\" is not supported yet.");
             }
         }
 
@@ -3109,6 +3132,10 @@ pub struct McpServerOauth2AuthenticationConfig {
     #[serde(default)]
     pub scopes: Vec<String>,
     pub client_name: Option<String>,
+    /// Literal, nonsecret query parameters for authorization only. Protected
+    /// OAuth flow parameters are ignored with a warning by the OAuth adapter.
+    #[serde(default)]
+    pub authorization_params: std::collections::BTreeMap<String, String>,
 }
 
 fn default_mcp_fixed_auth_header_name() -> String {
@@ -4849,6 +4876,7 @@ impl ActionFacetsConfig {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 tool_call_allowlist: vec![],
+                delegation: None,
             });
 
         self.facets
@@ -4866,6 +4894,7 @@ impl ActionFacetsConfig {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 tool_call_allowlist: vec![],
+                delegation: None,
             });
     }
 }
@@ -4964,6 +4993,12 @@ pub struct ActionFacetConfig {
     // their `namespace/name`, e.g. `outlook/*`) and MCP tools. Empty = none.
     #[serde(default)]
     pub tool_call_allowlist: Vec<String>,
+
+    // Overrides for the model-planned task route when this action facet's
+    // `tool_call_allowlist` selects `erato/delegate_task`. Same keys and merge
+    // rules as `[facets.facets.<id>.delegation]`.
+    #[serde(default)]
+    pub delegation: Option<FacetDelegationOverrides>,
 }
 
 /// Valid values for `ActionFacetConfig::presentation`.
@@ -6557,6 +6592,9 @@ pub struct MsOfficeAddinDefaultSettings {
     /// Whether replies and forwards inherit the current read-mail chat.
     #[serde(default = "default_ms_office_addin_compose_inherits_from_read")]
     pub compose_inherits_from_read: bool,
+    /// Whether new Word chats include the open document until the user changes it.
+    #[serde(default = "default_ms_office_addin_word_include_document")]
+    pub word_include_document: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
@@ -6575,6 +6613,7 @@ impl Default for MsOfficeAddinDefaultSettings {
         Self {
             mode: MsOfficeAddinSessionMode::default(),
             compose_inherits_from_read: default_ms_office_addin_compose_inherits_from_read(),
+            word_include_document: default_ms_office_addin_word_include_document(),
         }
     }
 }
@@ -6914,6 +6953,10 @@ fn default_ms_office_addin_frontend_bundle_path() -> String {
 }
 
 fn default_ms_office_addin_compose_inherits_from_read() -> bool {
+    true
+}
+
+fn default_ms_office_addin_word_include_document() -> bool {
     true
 }
 

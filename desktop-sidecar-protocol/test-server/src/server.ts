@@ -33,6 +33,8 @@ import {
   validateOutlookSearchEmailsV1Params,
   validateSidecarConfigureV1Params,
   validateSidecarProgressV1Params,
+  validateSidecarStatusV1Params,
+  validateSidecarRequestPermissionV1Params,
   validateSidecarRestartV1Params,
 } from "../../typescript/src/generated/validators.mjs";
 
@@ -465,6 +467,22 @@ export class MockSidecar {
       });
     }
 
+    if (message.method === "sidecar.status.v1") {
+      if (!validateSidecarStatusV1Params(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      return rpcResult(message.id, {
+        permissions: { macos_full_disk_access: "unknown" },
+      });
+    }
+    if (message.method === "sidecar.request_permission.v1") {
+      if (
+        !validateSidecarRequestPermissionV1Params(message.params) ||
+        (message.params as { permission: string }).permission !==
+          "macos_full_disk_access"
+      )
+        return rpcError(message.id, -32602, "Unsupported permission.");
+      return rpcResult(message.id, { opened: true });
+    }
     if (message.method === "sidecar.restart.v1") {
       if (!validateSidecarRestartV1Params(message.params)) {
         return rpcError(message.id, -32602, "Invalid method parameters.");

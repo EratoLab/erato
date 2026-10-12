@@ -17,6 +17,7 @@ import {
   readWordCompatibilityMode,
   writeWordCompatibilityMode,
 } from "../utils/wordInPlaceSwitch";
+import { useWordIncludeDocumentByDefault } from "../wordPreferences";
 
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
@@ -25,6 +26,19 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
       {...props}
       audioInputSupported={supportsAudioCapture}
       hostContribution={{
+        tabLabel: t({
+          id: "officeAddin.word.settings.tab",
+          message: "Word",
+        }),
+        heading: t({
+          id: "officeAddin.word.settings.heading",
+          message: "Word behavior",
+        }),
+        description: t({
+          id: "officeAddin.word.settings.description",
+          message: "Choose how new chats use the open document.",
+        }),
+        content: <WordIncludeDocumentSetting />,
         systemDescription: t({
           id: "officeAddin.settings.appearance.system.description.word",
           message: "Follow your Word theme.",
@@ -83,6 +97,38 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
         ),
       }}
     />
+  );
+}
+
+function WordIncludeDocumentSetting() {
+  const helperId = useId();
+  const [includeDocument, setIncludeDocument] =
+    useWordIncludeDocumentByDefault();
+  return (
+    <div className="space-y-1">
+      <label className="flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          checked={includeDocument}
+          aria-describedby={helperId}
+          onChange={(event) => setIncludeDocument(event.target.checked)}
+          className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0"
+        />
+        <span className="text-sm text-theme-fg-secondary">
+          {t({
+            id: "officeAddin.word.settings.includeDocument",
+            message: "Include the open document in new chats",
+          })}
+        </span>
+      </label>
+      <p id={helperId} className="text-xs text-theme-fg-muted">
+        {t({
+          id: "officeAddin.word.settings.includeDocument.helper",
+          message:
+            "Erato reads the document when you send a message. You can remove it from any chat.",
+        })}
+      </p>
+    </div>
   );
 }
 

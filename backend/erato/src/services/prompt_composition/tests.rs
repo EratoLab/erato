@@ -2758,6 +2758,7 @@ mod test_cases {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 tool_call_allowlist: vec![],
+                delegation: None,
             },
         )]);
 
@@ -2992,6 +2993,7 @@ mod test_cases {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 tool_call_allowlist: vec![],
+                delegation: None,
             },
         )]);
 

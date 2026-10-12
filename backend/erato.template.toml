@@ -460,8 +460,8 @@ chat_provider_ids = ["test-token-limit"]
 #
 # # Model-planned delegated tasks, offered to the model as the reserved
 # # erato/delegate_task tool. Enabling this is not enough on its own: a selected
-# # facet's tool_call_allowlist must also select the tool. See the planning
-# # facet example in the facets section below.
+# # facet's (or the request's action facet's) tool_call_allowlist must also
+# # select the tool. See the planning facet example in the facets section below.
 # [delegation.tasks]
 # # Whether the model may plan and dispatch its own delegated tasks (default: false)
 # enabled = false
@@ -574,6 +574,10 @@ chat_provider_ids = ["test-token-limit"]
 # platform = "slack"
 # template = "Summarize the following content for posting to {{channel}}: {{content}}"
 # allowed_args = ["channel", "content"]
+# # Offer delegated tasks on this facet's turns, with optional overrides of the
+# # [delegation.tasks] keys merged like a selected planning facet's.
+# tool_call_allowlist = ["erato/delegate_task"]
+# delegation = { max_tasks_per_turn = 3 }
 #
 # Outlook override example: redefine the builtin Outlook facets only if you
 # need to customize them. If you do, keep the text-vs-HTML contract aligned

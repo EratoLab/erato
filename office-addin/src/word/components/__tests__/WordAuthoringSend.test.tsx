@@ -15,6 +15,7 @@ import {
 } from "../../../test/mocks/word/authoringFixtures";
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { createWordReadRequestStore } from "../../../test/mocks/word/readRequestStore";
+import { markWordDocumentChanged } from "../../utils/wordDocumentChangeSignal";
 import { wordDocumentReadSession } from "../../utils/wordDocumentReadTool";
 import { WordChatInput } from "../WordChatInput";
 
@@ -160,7 +161,6 @@ function setup() {
       stagePendingCapture={stage}
     />,
   );
-  fireEvent.click(screen.getByTestId("word-include-document-chip"));
   return { send, stage };
 }
 describe("authoring send integration", () => {
@@ -192,6 +192,7 @@ describe("authoring send integration", () => {
           }
         : {}),
     }));
+    markWordDocumentChanged();
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
     const next = (stage.mock.calls.at(-1)?.[0] as WordDocumentCapture)
@@ -339,7 +340,7 @@ describe("authoring send integration", () => {
     expect(result?.ok).toBe(true);
     expect(capture.authoring?.readToken).toBeTruthy();
     expect(capture.authoring?.read.size).toBe(6);
-    fireEvent.click(screen.getByTestId("word-include-document-chip"));
+    fireEvent.click(screen.getByTestId("word-exclude-document"));
     expect(capture.authoring?.revoked).toBe(true);
   });
   it("reports a model-context limit instead of presenting an incomplete rewrite as available", async () => {
@@ -403,7 +404,7 @@ describe("authoring send integration", () => {
     const { send, stage } = setup();
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(mocks.estimate).toHaveBeenCalled());
-    fireEvent.click(screen.getByTestId("word-include-document-chip"));
+    fireEvent.click(screen.getByTestId("word-exclude-document"));
     await act(async () => {
       resolveBudget?.({ stats: { total_tokens: 5000, max_tokens: 128000 } });
     });

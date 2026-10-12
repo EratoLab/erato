@@ -138,6 +138,7 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
             presentation: None,
             client_actions_always_ask: vec![],
             tool_call_allowlist: vec![],
+            delegation: None,
         },
     );
     app_config.action_facets.facets.insert(
@@ -151,6 +152,7 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
             presentation: None,
             client_actions_always_ask: vec![],
             tool_call_allowlist: vec![],
+            delegation: None,
         },
     );
 
@@ -225,6 +227,7 @@ async fn test_facets_endpoint_exposes_auto_prompt_presentation(pool: Pool<Postgr
             presentation: Some("auto_prompt".to_string()),
             client_actions_always_ask: vec!["outlook.reply_all".to_string()],
             tool_call_allowlist: vec![],
+            delegation: None,
         },
     );
 

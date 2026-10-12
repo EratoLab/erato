@@ -3136,15 +3136,18 @@ The path must contain the Office add-in frontend artifacts including `manifest.x
 
 {/* erato_toml_config_key: integrations.ms_office.addin.default_settings.mode */}
 {/* erato_toml_config_key: integrations.ms_office.addin.default_settings.compose_inherits_from_read */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_include_document */}
 
-Default switching behavior for the Office add-in. These values apply only
-until a user chooses their own preferences in the add-in.
+Default behavior for the Office add-in. These values apply only until a user
+chooses their own preferences in the add-in.
 
 `mode` controls what happens when switching to another Outlook item. Supported
 values are `resume`, `ask`, and `new`. `compose_inherits_from_read` controls
 whether replies and forwards inherit the current read-mail chat.
+`word_include_document` controls whether new Word chats include the open
+document; users can still remove it from any chat.
 
-**Default value:** `{ mode = "resume", compose_inherits_from_read = true }`
+**Default value:** `{ mode = "resume", compose_inherits_from_read = true, word_include_document = true }`
 
 **Type:** `object`
 
@@ -3828,6 +3831,54 @@ that value. Scope selection and authorization-server discovery still apply.
 See [OAuth resource selection](./features/mcp_servers#oauth-resource-selection)
 for precedence, compatibility, and a complete configuration example.
 
+#### `mcp_servers.<server-id>.authentication.oauth2.authorization_params`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.authorization_params.<key> */}
+
+Additional query parameters sent only to the OAuth authorization URL. They are
+never added to discovery, client registration, code exchange, or token refresh
+requests. An omitted or empty map preserves the existing authorization behavior.
+
+Values are literal strings: do not URL-encode them. Each configured parameter
+replaces all endpoint query pairs with the same case-sensitive name and appears
+once, form-encoded, after other parameters in ascending key order. Other pairs
+retain their values, order, and multiplicity.
+
+Erato ignores empty names and the following protected names (ignoring ASCII
+case), emitting a WARN message when authorization starts: `response_type`,
+`client_id`, `client_secret`, `redirect_uri`, `scope`, `state`, `code_challenge`,
+`code_challenge_method`, `resource`, `response_mode`, `request`, and `request_uri`.
+Use the existing dedicated client, scopes, and resource settings instead.
+The warning includes the parameter name, never its value.
+
+Values must not contain secrets: the authorization URL is visible in the user's
+browser and may appear in browser history or proxy logs. Discovery and callback
+issuer checks still use the authorization server's metadata.
+
+Like other configuration maps, this table merges by key across sources. An empty
+override table does not remove inherited entries; remove them from the source
+that defines them. Use TOML for case-sensitive parameter names, since environment
+variable names are lowercased. Reloading changed settings invalidates that
+server's cached MCP sessions but does not delete stored OAuth grants. New values
+take effect on the next authorization; users with existing grants must reconnect
+to authorize with them.
+
+**Type:** `object<string, string>`
+
+**Default:** `{}`
+
+**Example:**
+
+```toml
+[mcp_servers.tickets.authentication.oauth2.authorization_params]
+audience = "api.atlassian.com"
+prompt = "consent"
+```
+
+These illustrate provider-specific settings; they do not establish complete
+Atlassian compatibility. The provider must also support Erato's discovery,
+PKCE, token exchange, and refresh behavior.
+
 #### `mcp_servers.<server-id>.authentication.oauth2.scopes`
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.scopes */}
@@ -4357,7 +4408,7 @@ Model-planned delegated tasks. Where the assistants route is driven by an explic
 
 Unlike the assistants route, this route has no dependency on `assistants.enabled` — a deployment can offer model-planned tasks without using assistants at all.
 
-Enabling the feature is not sufficient on its own: the tool is only offered when a selected facet's `tool_call_allowlist` also selects it, which keeps the capability scoped to the facets where planning makes sense.
+Enabling the feature is not sufficient on its own: the tool is only offered when a selected facet's `tool_call_allowlist` also selects it, or the [action facet](#action-facet-delegation) the request runs under, which keeps the capability scoped to the facets where planning makes sense.
 
 <Callout type="warn">
   Always pair a reserved `erato/*` pattern with a real MCP pattern on the same facet. An allowlist naming only `erato/*` patterns narrows the derived MCP server filter to nothing, so the parent turn loses every MCP tool while that facet is selected.
@@ -5334,6 +5385,32 @@ Each action facet supports these fields:
 - `platform` - Optional platform identifier (e.g. `"excel"`, `"outlook"`)
 - `template` - Prompt template with `{{variable}}` placeholders
 - `allowed_args` - List of allowed argument names for the template
+
+#### Action facet delegation
+
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_tasks_per_turn */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_parallel */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.persona */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.run_modes.[] */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.scheduling */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.approval.mode */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.approval.plan_min_tasks */}
+
+Add `erato/delegate_task` to an action facet's `tool_call_allowlist` to offer [delegated tasks](#delegationtasks) on its turns, for example a Word document turn that no selected facet plans for. The facet then counts as a planning facet: its optional `delegation` table takes the same keys as [per-facet delegation overrides](#per-facet-delegation-overrides) and merges with any selected planning facet by the same rules (caps take the minimum, `child_facet_ids` and `run_modes` the union, the strictest approval wins). Single-valued keys such as `persona` and `scheduling` come from a selected facet first.
+
+```toml
+[action_facets.facets.word_document_review]
+tool_call_allowlist = ["erato/delegate_task"]
+
+[action_facets.facets.word_document_review.delegation]
+max_tasks_per_turn = 4
+child_facet_ids = ["web_search"]
+```
+
+Delegated tasks never receive client tools, so a task started on a Word turn cannot read or edit the open document. Pass what it needs in the brief or as attached files. An action facet's `erato/*` patterns do not change its MCP tool set.
 
 #### Template Rendering
 

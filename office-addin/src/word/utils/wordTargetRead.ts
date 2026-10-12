@@ -431,7 +431,9 @@ export function readWordTargets(
         ...base,
         status: "unsupported",
         reason: "scope-context-limit",
-        fallback: "narrow-target-or-complete-read",
+        fallback: snapshot.completeReadIssue
+          ? "narrow-target"
+          : "narrow-target-or-complete-read",
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
       },
     };

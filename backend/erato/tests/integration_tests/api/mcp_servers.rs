@@ -48,6 +48,67 @@ fn mcp_server_config(
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_mcp_oauth_start_applies_configured_authorization_params(pool: Pool<Postgres>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let router = mock_mcp_server::oauth::router(mock_mcp_server::oauth::OAuthConfig::entra(
+        base_url.clone(),
+    ));
+    let oauth_server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let mut app_config = crate::test_utils::hermetic_app_config(None, None);
+    app_config.server.encryption_key = Some("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=".into());
+    app_config.mcp_servers.insert(
+        "tickets".into(),
+        mcp_server_config(
+            &base_url,
+            mock_mcp_server::oauth::MCP_PATH,
+            McpServerAuthenticationConfig::Oauth2 {
+                oauth2: McpServerOauth2AuthenticationConfig {
+                    resource: None,
+                    client_id: None,
+                    client_secret: None,
+                    scopes: vec![mock_mcp_server::oauth::SCOPE.into()],
+                    client_name: Some("Erato test".into()),
+                    authorization_params: std::collections::BTreeMap::from([
+                        ("audience".into(), "api.example.com".into()),
+                        ("prompt".into(), "consent".into()),
+                        ("State".into(), "must-be-ignored".into()),
+                        ("scope".into(), "must-be-ignored".into()),
+                        ("resource".into(), "must-be-ignored".into()),
+                    ]),
+                },
+            },
+        ),
+    );
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let server = create_test_server(app_state);
+    let response = server
+        .post("/api/v1beta/me/mcp_servers/tickets/oauth/start")
+        .add_header(http::header::HOST, "erato.example.com")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    let url = reqwest::Url::parse(body["authorization_url"].as_str().unwrap()).unwrap();
+    let params = url
+        .query_pairs()
+        .into_owned()
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(params["audience"], "api.example.com");
+    assert_eq!(params["prompt"], "consent");
+    assert_eq!(params["scope"], mock_mcp_server::oauth::SCOPE);
+    assert_eq!(params["resource"], mock_mcp_server::oauth::RESOURCE);
+    assert_eq!(params["redirect_uri"], "http://erato.example.com");
+    assert_eq!(params["code_challenge_method"], "S256");
+    assert!(!params["state"].is_empty());
+    assert!(!params.contains_key("State"));
+    oauth_server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgres>) {
     let mock_mcp_base_url = mock_mcp_base_url();
     let (mut app_config, _llm_server) = setup_mock_llm_server(None).await;
@@ -229,6 +290,7 @@ async fn test_list_mcp_server_tools_reports_unconnected_oauth_server(pool: Pool<
                     client_secret: None,
                     scopes: vec![],
                     client_name: None,
+                    authorization_params: Default::default(),
                 },
             },
         ),
