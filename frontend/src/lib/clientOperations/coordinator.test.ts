@@ -115,6 +115,48 @@ function coordinatorWith(
 afterEach(resetClientToolRegistryForTests);
 
 describe("ClientOperationCoordinator handler registry", () => {
+  it.each(["pending", "claimed"] as const)(
+    "expires a %s operation after its executor has gone away",
+    async (state) => {
+      for (const executor of [
+        undefined,
+        { ...binding, device_id: "another-device-0000" },
+        {
+          ...binding,
+          host_context: { kind: "outlook_mailbox", identity: "b".repeat(64) },
+        },
+      ]) {
+        const request = operation({ expires_at: new Date(0).toISOString() });
+        const { api } = fakeApi(request);
+        api.list.mockResolvedValue({
+          enabled: true,
+          account_id: ACCOUNT,
+          operations: [{ request, state }],
+        });
+        const attach = vi.fn<NonNullable<ClientOperationApi["attach"]>>();
+        const { handler, run } = toolHandler();
+        vi.spyOn(handler, "executor").mockReturnValue(executor);
+        const { coordinator } = coordinatorWith(
+          { ...api, attach },
+          [],
+          [handler],
+        );
+        try {
+          await coordinator.reconcile();
+          expect(api.continue).toHaveBeenCalledWith(
+            request.attempt_id,
+            expect.any(AbortSignal),
+          );
+          expect(attach).not.toHaveBeenCalled();
+          expect(api.claim).not.toHaveBeenCalled();
+          expect(run).not.toHaveBeenCalled();
+        } finally {
+          coordinator.dispose();
+        }
+      }
+    },
+  );
+
   it.each(["ready", "continuing"] as const)(
     "does not detach a %s continuation from another device or an unavailable executor",
     async (state) => {

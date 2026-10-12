@@ -443,10 +443,7 @@ pub async fn continue_client_operation(
         .await;
     });
     if let Some(guard) = guard {
-        let events = futures::StreamExt::filter_map(
-            tokio_stream::wrappers::BroadcastStream::new(events),
-            |event| futures::future::ready(event.ok().map(Ok)),
-        );
+        let events = super::message_streaming::live_streaming_events(events);
         Ok(
             Sse::new(super::message_streaming::owned_streaming_events_to_sse(
                 events, guard,

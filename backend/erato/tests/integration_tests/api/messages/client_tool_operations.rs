@@ -33,9 +33,19 @@ async fn setup_reads(
     opt_in: bool,
     reads: usize,
 ) -> Setup {
+    setup_tool_calls(pool, timeout_ms, durable_flag, opt_in, &vec![TOOL; reads]).await
+}
+
+async fn setup_tool_calls(
+    pool: Pool<Postgres>,
+    timeout_ms: u64,
+    durable_flag: bool,
+    opt_in: bool,
+    tools: &[&str],
+) -> Setup {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
-    let calls: Vec<String> = (0..reads)
+    let calls: Vec<String> = (0..tools.len())
         .map(|i| {
             if i == 0 {
                 CALL.into()
@@ -47,6 +57,7 @@ async fn setup_reads(
     for (index, call) in calls.iter().enumerate() {
         let capture = recorder.clone();
         let call = call.clone();
+        let tool = tools[index].to_owned();
         let previous = index.checked_sub(1).map(|i| calls[i].clone());
         mocks.mock(move |when, then| {
             let included: Vec<&str> = previous.as_deref().into_iter().collect();
@@ -58,7 +69,7 @@ async fn setup_reads(
                 then,
                 build_openai_tool_calls_streaming_response(&[(
                     &call,
-                    TOOL,
+                    &tool,
                     json!({"lookahead_days":7}),
                 )]),
             );
@@ -94,6 +105,20 @@ async fn setup_reads(
         },
     );
     config.facets.tool_call_allowlist = vec!["outlook/*".into()];
+    for tool in tools.iter().filter(|tool| **tool != TOOL) {
+        config.client_tools.tools.insert(
+            format!("outlook_{tool}"),
+            ClientToolConfig {
+                name: (*tool).into(),
+                namespace: Some("outlook".into()),
+                description: "Read live mailbox state".into(),
+                parameters:
+                    json!({"type":"object","properties":{"lookahead_days":{"type":"integer"}}})
+                        .to_string(),
+                ..Default::default()
+            },
+        );
+    }
     let state = test_app_state(config, pool).await;
     let chat_id = seed_origin_chat(&state.db).await;
     Setup {

@@ -57,7 +57,7 @@ pub async fn acquire(
             r#"UPDATE client_operation_transports t SET transport_id = $5,
              expires_at = now() + interval '20 seconds'
            FROM chats c WHERE t.chat_id = $1 AND t.generation_id = $2 AND t.binding = $3
-             AND ($4::jsonb ? t.operation_id OR $4::jsonb ? split_part(t.operation_id, '/', 2))
+             AND ($4::jsonb ? t.operation_id OR $4::jsonb ? regexp_replace(t.operation_id, '^.*/', ''))
              AND (t.transport_id IS NULL OR t.expires_at <= now())
              AND c.id = t.chat_id AND c.active_generation_id = t.generation_id
              AND c.generation_state = 'running'"#,
@@ -78,16 +78,18 @@ pub async fn renew(
     db: &DatabaseConnection,
     generation_id: Uuid,
     transport_id: Uuid,
-) -> Result<(), Report> {
-    db.execute_raw(statement(
-        r#"UPDATE client_operation_transports t SET expires_at = now() + interval '20 seconds'
+) -> Result<bool, Report> {
+    Ok(db
+        .execute_raw(statement(
+            r#"UPDATE client_operation_transports t SET expires_at = now() + interval '20 seconds'
            FROM chats c WHERE t.generation_id = $1 AND t.transport_id = $2
              AND t.expires_at > now() AND c.id = t.chat_id
              AND c.active_generation_id = t.generation_id AND c.generation_state = 'running'"#,
-        vec![generation_id.into(), transport_id.into()],
-    ))
-    .await?;
-    Ok(())
+            vec![generation_id.into(), transport_id.into()],
+        ))
+        .await?
+        .rows_affected()
+        == 1)
 }
 
 pub async fn release(

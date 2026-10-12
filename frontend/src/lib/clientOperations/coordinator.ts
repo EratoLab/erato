@@ -270,7 +270,7 @@ export class ClientOperationCoordinator {
         ) {
           // The server authors expiry; never manufacture an executor result.
           try {
-            await this.#continue(request, handler);
+            await this.api.continue(request.attempt_id, this.#abort.signal);
           } catch {
             /* Retry after auth/network recovery. */
           }

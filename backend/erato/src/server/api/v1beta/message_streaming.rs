@@ -1914,11 +1914,31 @@ where
         futures::future::ready(match result {
             Ok(streaming_event) => match streaming_event_to_sse(&streaming_event) {
                 Ok(sse_event) => Some(Ok(sse_event)),
-                Err(error) => Some(Err(error)),
+                Err(error) => {
+                    log_and_capture_error("SSE serialization", &error);
+                    Some(Err(error))
+                }
             },
             Err(error) => Some(Err(error)),
         })
     }))
+}
+
+pub(crate) fn live_streaming_events(
+    receiver: tokio::sync::broadcast::Receiver<StreamingEvent>,
+) -> impl Stream<Item = Result<StreamingEvent, Report>> + Send {
+    futures::StreamExt::filter_map(
+        tokio_stream::wrappers::BroadcastStream::new(receiver),
+        |event| {
+            futures::future::ready(match event {
+                Ok(event) => Some(Ok(event)),
+                Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(count)) => {
+                    tracing::warn!(count, "Client lagged behind streaming events");
+                    None
+                }
+            })
+        },
+    )
 }
 
 pub(crate) fn owned_streaming_events_to_sse<S>(
@@ -7378,7 +7398,8 @@ async fn stream_generate_chat_completion<'a>(
                         send_background_event(
                             task,
                             StreamingEvent::ClientToolCall {
-                                requires_transport: task.uses_shared_client_transport(),
+                                requires_transport: durable_request.is_some()
+                                    && task.uses_shared_client_transport(),
                                 message_id: assistant_message_id,
                                 content_index,
                                 tool_call_id: call_id.clone(),
@@ -7401,7 +7422,8 @@ async fn stream_generate_chat_completion<'a>(
                         // during the park, so a dropped SSE connection here must NOT
                         // abort the generation. The broadcast + resume history is the
                         // durable signal path.
-                        if task.original_transport_can_execute().await
+                        if (durable_request.is_none()
+                            || task.original_transport_can_execute().await)
                             && let Err(error) = call_message.send_event_report(tx.clone()).await
                         {
                             warn_and_capture_error(
@@ -13272,10 +13294,7 @@ pub async fn message_submit_sse(
     )
     .await?;
 
-    let events = futures::StreamExt::filter_map(
-        tokio_stream::wrappers::BroadcastStream::new(broadcast_rx),
-        |event| futures::future::ready(event.ok().map(Ok)),
-    );
+    let events = live_streaming_events(broadcast_rx);
     let event_stream = owned_streaming_events_to_sse(events, client_stream_guard);
     Ok(Sse::new(event_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
@@ -19695,41 +19714,24 @@ pub async fn resume_message_sse(
             "No active generation task found for this chat".to_string(),
         ));
     };
-    let transport_id = Uuid::new_v4();
     let db = app_state
         .config
         .client_tools
         .durable_operations_enabled
         .then(|| app_state.db.clone());
-    if let Some(db) = &db
-        && let Some(binding) =
-            crate::services::client_operations::ExecutorBinding::from_headers(&headers)
-    {
-        crate::services::client_operations::transport::acquire(
-            db,
-            request.chat_id,
-            generation_id,
-            &binding,
-            &crate::services::client_tools::registered_client_tools(&headers),
-            transport_id,
-        )
-        .await
-        .map_err(|_| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Client transport acquisition failed".into(),
-            )
-        })?;
-    }
-    let guard = ClientStreamGuard::new(db, generation_id, transport_id, None);
+    let guard = ClientStreamGuard::resume(
+        db,
+        request.chat_id,
+        generation_id,
+        crate::services::client_operations::ExecutorBinding::from_headers(&headers),
+        crate::services::client_tools::registered_client_tools(&headers),
+    )
+    .await;
     let event_stream = if let Some(task) = local {
         let event_history = task.get_event_history().await;
         let broadcast_rx = task.subscribe();
         let history = futures::stream::iter(event_history.into_iter().map(Ok::<_, Report>));
-        let live = futures::StreamExt::filter_map(
-            tokio_stream::wrappers::BroadcastStream::new(broadcast_rx),
-            |event| futures::future::ready(event.ok().map(Ok)),
-        );
+        let live = live_streaming_events(broadcast_rx);
         owned_streaming_events_to_sse(futures::StreamExt::chain(history, live), guard)
     } else {
         owned_streaming_events_to_sse(

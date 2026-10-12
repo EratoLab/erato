@@ -204,6 +204,15 @@ async fn attached_disconnect_reparks_without_recharging_or_replacing_results(poo
 async fn other_replica_owns_resumestream_and_stale_release_cannot_displace_it(
     pool: Pool<Postgres>,
 ) {
+    reconnect_before_owner_leaves(pool, false).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn other_replica_retries_ownership_after_unclean_disconnect(pool: Pool<Postgres>) {
+    reconnect_before_owner_leaves(pool, true).await;
+}
+
+async fn reconnect_before_owner_leaves(pool: Pool<Postgres>, expire: bool) {
     let setup = setup_reads(pool.clone(), 60_000, true, true, 3).await;
     let replica = test_app_state(setup.state.config.clone(), pool).await;
     let (base, server) = serve(&setup.state).await;
@@ -250,26 +259,44 @@ async fn other_replica_owns_resumestream_and_stale_release_cannot_displace_it(
     )
     .await
     .assert_status_ok();
-    drop(original);
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while transport::owner(&setup.state.db, task.generation_id)
-            .await
-            .unwrap()
-            != Some(None)
-        {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-    })
-    .await
-    .unwrap();
     let response = interactive(&remote, "/me/messages/resumestream")
         .json(&json!({"chat_id":setup.chat_id}))
         .send()
         .await
         .unwrap();
     let mut resumed = response.bytes_stream();
-    let replay = next_call(&mut resumed).await;
-    assert_eq!(replay, call);
+    assert_eq!(
+        transport::owner(&setup.state.db, task.generation_id)
+            .await
+            .unwrap(),
+        Some(Some(old)),
+    );
+    if expire {
+        setup
+            .state
+            .db
+            .execute_unprepared(
+                "UPDATE client_operation_transports SET expires_at = now() - interval '1 second'",
+            )
+            .await
+            .unwrap();
+    } else {
+        drop(original);
+    }
+    tokio::time::timeout(Duration::from_secs(12), async {
+        loop {
+            if let Some(Some(owner)) = transport::owner(&setup.state.db, task.generation_id)
+                .await
+                .unwrap()
+                && owner != old
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("observer retries acquisition after the old owner leaves");
     let owner = transport::owner(&setup.state.db, task.generation_id)
         .await
         .unwrap()
@@ -327,6 +354,94 @@ async fn other_replica_owns_resumestream_and_stale_release_cannot_displace_it(
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn non_durable_call_reaches_an_observer_without_a_transport_owner(pool: Pool<Postgres>) {
+    let setup = setup_tool_calls(pool, 60_000, true, true, &[TOOL, "live_read"]).await;
+    let (base, server) = serve(&setup.state).await;
+    let response = interactive(&base, "/me/messages/submitstream")
+        .header("X-Erato-Client-Tools", format!("{TOOL},live_read"))
+        .json(&json!({"existing_chat_id":setup.chat_id,"user_message":"Read twice."}))
+        .send()
+        .await
+        .unwrap();
+    let mut original = response.bytes_stream();
+    let first = next_call(&mut original).await;
+    let task = setup
+        .state
+        .background_tasks
+        .get_task(&setup.chat_id)
+        .await
+        .unwrap();
+    let checkpoint = setup.state.db.begin().await.unwrap();
+    checkpoint
+        .query_one_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT id FROM messages WHERE id = $1 FOR UPDATE",
+            [first.0.into()],
+        ))
+        .await
+        .unwrap();
+    post_live(
+        &setup.state,
+        setup.chat_id,
+        &first,
+        json!({"result":availability()}),
+        Some(&mailbox()),
+    )
+    .await
+    .assert_status_ok();
+    let response = reqwest::Client::new()
+        .post(format!("{base}/me/messages/resumestream"))
+        .bearer_auth(TEST_JWT_TOKEN)
+        .json(&json!({"chat_id":setup.chat_id}))
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let mut observer = response.bytes_stream();
+    drop(original);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while transport::owner(&setup.state.db, task.generation_id)
+            .await
+            .unwrap()
+            != Some(None)
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    checkpoint.commit().await.unwrap();
+    let second = next_call(&mut observer).await;
+    assert!(second.1.ends_with("avail-call-2"));
+    post_live(
+        &setup.state,
+        setup.chat_id,
+        &second,
+        json!({"result":availability()}),
+        None,
+    )
+    .await
+    .assert_status_ok();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !task.is_completed() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(chat_attempts(&setup.state, setup.chat_id).await.is_empty());
+    assert!(
+        assistant_message(&setup)
+            .await
+            .raw_message
+            .to_string()
+            .contains(ANSWER)
+    );
+    assert_eq!(turn_requests(&setup.recorder).len(), 3);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn transport_lease_requires_binding_and_capability_and_fences_expired_owners(
     pool: Pool<Postgres>,
 ) {
@@ -344,7 +459,7 @@ async fn transport_lease_requires_binding_and_capability_and_fences_expired_owne
         setup.chat_id,
         task.generation_id,
         &mailbox(),
-        QUALIFIED,
+        "nested/outlook/fetch_availability",
         None,
     )
     .await

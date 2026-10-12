@@ -692,6 +692,11 @@ impl BackgroundTaskManager {
                                 let _ = task
                                     .deliver_client_tool_result(&tool_call_id, outcome)
                                     .await;
+                            } else {
+                                tracing::warn!(
+                                    %tool_call_id, generation_id = %task.generation_id,
+                                    "Discarding shared client result with a mismatched executor or consent policy"
+                                );
                             }
                         }
 
@@ -1273,6 +1278,7 @@ pub struct StreamingTask {
     original_transport_id: Uuid,
     original_transport_connected: AtomicBool,
     shared_transport: AtomicBool,
+    shared_transport_ready: Arc<Notify>,
 }
 
 impl std::fmt::Debug for StreamingTask {
@@ -1313,6 +1319,7 @@ impl StreamingTask {
             original_transport_id: Uuid::new_v4(),
             original_transport_connected: AtomicBool::new(false),
             shared_transport: AtomicBool::new(false),
+            shared_transport_ready: Arc::new(Notify::new()),
         }
     }
 
@@ -1542,14 +1549,18 @@ impl StreamingTask {
         loop {
             let connected = if self.shared_transport.load(Ordering::Acquire) {
                 if let Some(db) = &self.db {
-                    matches!(
-                        crate::services::client_operations::transport::owner(
-                            db,
-                            self.generation_id
-                        )
-                        .await,
-                        Ok(Some(Some(_)))
+                    match crate::services::client_operations::transport::owner(
+                        db,
+                        self.generation_id,
                     )
+                    .await
+                    {
+                        Ok(owner) => matches!(owner, Some(Some(_))),
+                        Err(error) => {
+                            tracing::warn!(%error, "Cannot determine client transport connectivity");
+                            true
+                        }
+                    }
                 } else {
                     self.original_transport_connected.load(Ordering::Acquire)
                 }
@@ -1602,6 +1613,7 @@ impl StreamingTask {
             .await?;
         }
         self.shared_transport.store(true, Ordering::Release);
+        self.shared_transport_ready.notify_one();
         // A disconnect can race initialization before there was a row to release.
         if !self.original_transport_connected.load(Ordering::Acquire)
             && let Some(db) = &self.db
@@ -1758,7 +1770,14 @@ pub struct ClientStreamGuard {
     generation_id: Uuid,
     transport_id: Uuid,
     original: Option<std::sync::Weak<StreamingTask>>,
-    heartbeat: JoinHandle<()>,
+    owned: Arc<AtomicBool>,
+    heartbeat: Option<JoinHandle<()>>,
+}
+
+struct ClientTransportClaim {
+    chat_id: Uuid,
+    binding: crate::services::client_operations::ExecutorBinding,
+    registered: Vec<String>,
 }
 
 impl ClientStreamGuard {
@@ -1768,38 +1787,128 @@ impl ClientStreamGuard {
         transport_id: Uuid,
         original: Option<std::sync::Weak<StreamingTask>>,
     ) -> Self {
-        let heartbeat_db = db.clone();
-        let task = original.clone();
-        let heartbeat = tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(crate::services::client_operations::transport::HEARTBEAT).await;
-                if let Some(task) = task.as_ref().and_then(|task| task.upgrade()) {
-                    if task.is_completed() {
-                        break;
-                    }
-                    if !task.shared_transport.load(Ordering::Acquire) {
-                        continue;
-                    }
-                }
-                if let Some(db) = &heartbeat_db
-                    && let Err(error) = crate::services::client_operations::transport::renew(
-                        db,
-                        generation_id,
-                        transport_id,
-                    )
-                    .await
-                {
-                    tracing::warn!(%error, "Client transport heartbeat failed");
-                }
-            }
-        });
-        Self {
+        let mut guard = Self {
             db,
             generation_id,
             transport_id,
             original,
-            heartbeat,
+            owned: Arc::new(AtomicBool::new(false)),
+            heartbeat: None,
+        };
+        guard.start_heartbeat(None);
+        guard
+    }
+
+    pub async fn resume(
+        db: Option<DatabaseConnection>,
+        chat_id: Uuid,
+        generation_id: Uuid,
+        binding: Option<crate::services::client_operations::ExecutorBinding>,
+        registered: Vec<String>,
+    ) -> Self {
+        let claim = binding
+            .filter(|binding| binding.validate() && !registered.is_empty())
+            .map(|binding| ClientTransportClaim {
+                chat_id,
+                binding,
+                registered,
+            });
+        let mut guard = Self::new(
+            db.filter(|_| claim.is_some()),
+            generation_id,
+            Uuid::new_v4(),
+            None,
+        );
+        if let (Some(db), Some(claim)) = (&guard.db, &claim) {
+            match crate::services::client_operations::transport::acquire(
+                db,
+                chat_id,
+                generation_id,
+                &claim.binding,
+                &claim.registered,
+                guard.transport_id,
+            )
+            .await
+            {
+                Ok(owned) => guard.owned.store(owned, Ordering::Release),
+                Err(error) => {
+                    tracing::warn!(%error, "Client transport acquisition failed; will retry")
+                }
+            }
         }
+        guard.start_heartbeat(claim);
+        guard
+    }
+
+    fn start_heartbeat(&mut self, claim: Option<ClientTransportClaim>) {
+        let Some(db) = self.db.clone() else {
+            return;
+        };
+        if self.original.is_none() && claim.is_none() {
+            return;
+        }
+        let original = self.original.clone();
+        let owned = self.owned.clone();
+        let generation_id = self.generation_id;
+        let transport_id = self.transport_id;
+        self.heartbeat = Some(tokio::spawn(async move {
+            let readiness = original
+                .as_ref()
+                .and_then(|task| task.upgrade())
+                .map(|task| {
+                    (
+                        task.shared_transport.load(Ordering::Acquire),
+                        task.shared_transport_ready.clone(),
+                    )
+                });
+            if let Some((ready, notification)) = readiness {
+                // Ordinary chats never arm a lease timer.
+                if !ready {
+                    notification.notified().await;
+                }
+                owned.store(true, Ordering::Release);
+            }
+            loop {
+                tokio::time::sleep(crate::services::client_operations::transport::HEARTBEAT).await;
+                if original
+                    .as_ref()
+                    .is_some_and(|task| task.upgrade().is_none_or(|task| task.is_completed()))
+                {
+                    break;
+                }
+                if owned.load(Ordering::Acquire) {
+                    match crate::services::client_operations::transport::renew(
+                        &db,
+                        generation_id,
+                        transport_id,
+                    )
+                    .await
+                    {
+                        Ok(renewed) => owned.store(renewed, Ordering::Release),
+                        Err(error) => tracing::warn!(%error, "Client transport heartbeat failed"),
+                    }
+                }
+                if !owned.load(Ordering::Acquire)
+                    && let Some(claim) = &claim
+                {
+                    match crate::services::client_operations::transport::acquire(
+                        &db,
+                        claim.chat_id,
+                        generation_id,
+                        &claim.binding,
+                        &claim.registered,
+                        transport_id,
+                    )
+                    .await
+                    {
+                        Ok(acquired) => owned.store(acquired, Ordering::Release),
+                        Err(error) => {
+                            tracing::warn!(%error, "Client transport acquisition failed; will retry")
+                        }
+                    }
+                }
+            }
+        }));
     }
 
     pub async fn allows_client_call(&self, requires_transport: bool) -> bool {
@@ -1818,13 +1927,17 @@ impl ClientStreamGuard {
 
 impl Drop for ClientStreamGuard {
     fn drop(&mut self) {
-        self.heartbeat.abort();
+        if let Some(heartbeat) = &self.heartbeat {
+            heartbeat.abort();
+        }
         if let Some(task) = self.original.as_ref().and_then(|task| task.upgrade()) {
             task.original_transport_connected
                 .store(false, Ordering::Release);
             if !task.shared_transport.load(Ordering::Acquire) {
                 return;
             }
+        } else if !self.owned.load(Ordering::Acquire) {
+            return;
         }
         if let Some(db) = self.db.clone() {
             let generation_id = self.generation_id;
@@ -1847,6 +1960,28 @@ impl Drop for ClientStreamGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn transport_lookup_error_does_not_signal_disconnect() {
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4())
+            .with_shared_state(Some(DatabaseConnection::default()), Uuid::new_v4());
+        task.shared_transport.store(true, Ordering::Release);
+        assert!(
+            tokio::time::timeout(
+                Duration::from_millis(200),
+                task.wait_for_client_disconnect(),
+            )
+            .await
+            .is_err()
+        );
+        task.shared_transport.store(false, Ordering::Release);
+        tokio::time::timeout(
+            Duration::from_millis(200),
+            task.wait_for_client_disconnect(),
+        )
+        .await
+        .unwrap();
+    }
 
     #[tokio::test]
     async fn test_task_creation_and_subscription() {
