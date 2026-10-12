@@ -310,6 +310,91 @@ describe("McpToolApprovalCard", () => {
     );
   });
 
+  it("keeps long multiline arguments complete alongside a shortened description", async () => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    const message = `${"Message  line\n".repeat(500)}Final message line`;
+    const request = {
+      ...approvalRequest,
+      input: { message },
+      display: {
+        title: "Publish release notes",
+        description: "Shortened tool description",
+        description_truncated: true,
+      },
+    };
+    const { container } = renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={request}
+          resolution={null}
+        />,
+        "chat-1",
+        { continueToolApproval },
+      ),
+    );
+    const value = container.querySelector("span.text-theme-success-fg");
+
+    expect(value?.textContent).toBe(`"${message}"`);
+    expect(value).toHaveClass("whitespace-pre-wrap", "break-words");
+    expect(value?.closest(".max-h-48")).toHaveClass("overflow-y-auto");
+    expect(screen.getByText("Description shortened by Erato")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({ toolInput: request.input }),
+      ),
+    );
+  });
+
+  it("keeps full multiline task arguments beneath a shortened plan heading", () => {
+    const task = `${"Task  line\n".repeat(30)}Final task line`;
+    const { container } = renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...taskPlanRequest,
+          approvals: [{ ...taskPlanRequest.approvals[0], input: { task } }],
+        }}
+      />,
+    );
+    const heading = screen
+      .getByTestId("task-plan-approval-item")
+      .querySelector("p");
+    const value = container.querySelector("span.text-theme-success-fg");
+
+    expect(heading?.textContent).toBe(`${task.slice(0, 160)}…`);
+    expect(value?.textContent).toBe(`"${task}"`);
+    expect(value).toHaveClass("whitespace-pre-wrap", "break-words");
+    expect(value?.closest(".max-h-48")).toHaveClass("overflow-y-auto");
+  });
+
+  it("preserves multiline arguments on a delegated child's approval", () => {
+    const message = "First line\n\n  Indented  line";
+    const { container } = renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...delegatedTaskRequest,
+          approvals: [
+            {
+              ...delegatedTaskRequest.approvals[0],
+              child: { ...childApprovalRef, input: { message } },
+            },
+          ],
+        }}
+      />,
+    );
+    const value = container.querySelector("span.text-theme-success-fg");
+
+    expect(value?.textContent).toBe(`"${message}"`);
+    expect(value).toHaveClass("whitespace-pre-wrap", "break-words");
+    expect(value?.closest(".max-h-48")).toHaveClass("overflow-y-auto");
+  });
+
   it("renders the child's saved descriptor on a delegated approval", () => {
     renderCard(
       <McpToolApprovalCard

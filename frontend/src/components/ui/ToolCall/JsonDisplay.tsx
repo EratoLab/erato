@@ -16,7 +16,11 @@ const formatValue = (value: unknown, depth = 0): React.ReactNode => {
     return <span className="text-theme-fg-muted">undefined</span>;
 
   if (typeof value === "string") {
-    return <span className="text-theme-success-fg">&quot;{value}&quot;</span>;
+    return (
+      <span className="whitespace-pre-wrap break-words text-theme-success-fg">
+        &quot;{value}&quot;
+      </span>
+    );
   }
 
   if (typeof value === "number") {
