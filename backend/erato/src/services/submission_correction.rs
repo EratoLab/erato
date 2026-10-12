@@ -26,7 +26,6 @@ pub enum SubmissionReason {
     Cancelled,
     UserRequestedAnswer,
     UserStopped,
-    WorkLimitReached,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -104,13 +103,16 @@ impl SubmissionCorrection {
         self.outcome.attempts_used
     }
 
-    pub fn is_recovery_read(&self, tool: &OfferedClientTool) -> bool {
+    pub fn is_declared_read(&self, tool: &OfferedClientTool) -> bool {
         self.pending()
-            && self.recovery == SubmissionRecovery::ReadCurrentContext
             && tool.submission.is_none()
             && self
                 .recovery_read_tools
                 .contains(&tool.config.qualified_name())
+    }
+
+    pub fn is_recovery_read(&self, tool: &OfferedClientTool) -> bool {
+        self.recovery == SubmissionRecovery::ReadCurrentContext && self.is_declared_read(tool)
     }
 
     pub fn charge_read(&mut self) -> bool {

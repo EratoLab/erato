@@ -40,8 +40,6 @@ function reasonText(reason: SubmissionOutcome["reason"]): string {
       return t`A model or context limit prevented further correction.`;
     case "terminal_validation":
       return t`The host could not continue validating this proposal.`;
-    case "work_limit_reached":
-      return t`The work limit was reached.`;
     default:
       return t`The model stopped without an accepted proposal.`;
   }

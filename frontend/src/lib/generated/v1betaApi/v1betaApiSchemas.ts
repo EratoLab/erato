@@ -3580,8 +3580,7 @@ export type SubmissionReason =
   | "timeout"
   | "cancelled"
   | "user_requested_answer"
-  | "user_stopped"
-  | "work_limit_reached";
+  | "user_stopped";
 
 export type SubmissionRecovery =
   | "repair_arguments"

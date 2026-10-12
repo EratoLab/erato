@@ -51,7 +51,7 @@ native_schema = "auto"
 tool_call_allowlist = ["editor/submit_draft"]
 ```
 
-The example's `editor/read_context` must be a separately configured non-submission client tool. Recovery names do not grant access: each read must still be offered and authorized in the current request. `max_recovery_reads` bounds calls, including pagination, separately from submission attempts (0–128; default 32). Ordinary tools and unrelated work retain their usual budgets.
+The example's `editor/read_context` must be a separately configured non-submission client tool. Recovery names do not grant access: each read must still be offered and authorized in the current request. `max_recovery_reads` bounds calls, including pagination, separately from submission attempts (0–128; default 32). Declared reads preserve submission attempts after any rejection. They use the separate read allowance only when the host requests `read_current_context`; otherwise they still spend the ordinary tool budget. Ordinary tools and unrelated work retain their usual budgets.
 
 The same tool selection works in regular facets and action facets. `submission` is an optional table, not a new tool type or hardcoded name.
 

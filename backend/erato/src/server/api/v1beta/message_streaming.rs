@@ -124,6 +124,26 @@ fn non_empty_vec<T: Clone>(value: &[T]) -> Option<Vec<T>> {
     (!value.is_empty()).then(|| value.to_vec())
 }
 
+fn assistant_content_for_replay(content: &MessageContent, summary: &str) -> MessageContent {
+    // Responses requires a summary even when empty. genai also duplicates each
+    // reasoning item as a bare signature, which must not be replayed separately.
+    MessageContent::from_parts(
+        content
+            .parts()
+            .iter()
+            .filter(|part| !matches!(part, genai::chat::ContentPart::ThoughtSignature(_)))
+            .cloned()
+            .map(|part| match part {
+                genai::chat::ContentPart::ReasoningItem(mut item) if item.summary.is_empty() => {
+                    item.summary.push(reasoning_summary_part(Some(summary)));
+                    genai::chat::ContentPart::ReasoningItem(item)
+                }
+                other => other,
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
 fn reasoning_summary_part(summary: Option<&str>) -> ReasoningSummaryText {
     ReasoningSummaryText::new(summary.unwrap_or_default())
 }
@@ -8524,7 +8544,21 @@ async fn stream_generate_chat_completion<'a>(
             );
         }
         if exit_after_join {
-            break 'loop_call_turns Ok((current_message_content, exit_metadata));
+            let metadata = exit_metadata.or_else(|| {
+                build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                )
+            });
+            break 'loop_call_turns Ok((current_message_content, metadata));
         }
 
         persist_operation_turn!();
@@ -9562,7 +9596,7 @@ async fn stream_generate_chat_completion<'a>(
                 let progresses = calls.iter().any(|call| {
                     allowed_tool_names.contains(&call.fn_name)
                         && offered_client_tools.get(&call.fn_name).is_some_and(|tool| {
-                            tool.submission.is_some() || correction.is_recovery_read(tool)
+                            tool.submission.is_some() || correction.is_declared_read(tool)
                         })
                 });
                 if !progresses {
@@ -9585,10 +9619,13 @@ async fn stream_generate_chat_completion<'a>(
                         ));
                     }
                     if calls.is_empty() {
-                        if let Some(content) = stream_end.captured_content.clone() {
+                        if let Some(content) = stream_end.captured_content.as_ref() {
                             current_turn_chat_request.messages.push(GenAiChatMessage {
                                 role: ChatRole::Assistant,
-                                content,
+                                content: assistant_content_for_replay(
+                                    content,
+                                    &current_turn_captured_reasoning_summary,
+                                ),
                                 options: None,
                             });
                         }
@@ -9607,39 +9644,13 @@ async fn stream_generate_chat_completion<'a>(
                         all_tool_names.insert(tool_call.fn_name.clone());
                     }
 
-                    // OpenAI Responses API rejects reasoning items without a `summary` field.
-                    // Two issues to handle here:
-                    //   1. genai's StreamEnd duplicates each captured reasoning event as both a
-                    //      full ReasoningItem and a bare ThoughtSignature (encrypted_content only).
-                    //      The ThoughtSignature serializes without `summary` — drop it.
-                    //   2. The captured ReasoningItem itself may have `summary: vec![]` when the
-                    //      model emitted no summary chunks. genai's `skip_serializing_if =
-                    //      "Vec::is_empty"` then omits the field. Inject a placeholder summary
-                    //      so it serializes (mirrors build_openai_responses_reasoning_replay_parts).
                     let assistant_turn_content = stream_end
                         .captured_content
                         .as_ref()
-                        .map(|captured_content| {
-                            MessageContent::from_parts(
-                                captured_content
-                                    .parts()
-                                    .iter()
-                                    .filter(|p| {
-                                        !matches!(p, genai::chat::ContentPart::ThoughtSignature(_))
-                                    })
-                                    .cloned()
-                                    .map(|part| match part {
-                                        genai::chat::ContentPart::ReasoningItem(mut item)
-                                            if item.summary.is_empty() =>
-                                        {
-                                            item.summary.push(reasoning_summary_part(Some(
-                                                current_turn_captured_reasoning_summary.as_str(),
-                                            )));
-                                            genai::chat::ContentPart::ReasoningItem(item)
-                                        }
-                                        other => other,
-                                    })
-                                    .collect::<Vec<_>>(),
+                        .map(|content| {
+                            assistant_content_for_replay(
+                                content,
+                                &current_turn_captured_reasoning_summary,
                             )
                         })
                         .unwrap_or_else(|| {

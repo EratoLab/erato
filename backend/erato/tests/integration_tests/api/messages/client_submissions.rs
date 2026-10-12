@@ -192,6 +192,7 @@ async fn recovery_read_loop_has_an_independent_finite_limit(pool: Pool<Postgres>
         ScenarioOptions {
             ordinary_budget: 0,
             recovery_reads: 1,
+            check_metadata: true,
             ..Default::default()
         },
     )
@@ -378,6 +379,7 @@ async fn unavailable_recovery_context_stops_without_another_submission(pool: Poo
         ],
         ScenarioOptions {
             ordinary_budget: 0,
+            check_metadata: true,
             ..Default::default()
         },
     )
@@ -434,6 +436,127 @@ async fn cancellation_during_correction_retains_an_unresolved_reason(pool: Pool<
     assert_eq!(final_outcome(&events)["reason"], "cancelled");
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn declared_reads_after_argument_rejection_preserve_submission_attempts(
+    pool: Pool<Postgres>,
+) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::Tools(vec![(
+                "call_854_read_one",
+                "read_context",
+                json!({"title":"page one"}),
+            )]),
+            ModelStep::Tools(vec![(
+                "call_854_read_two",
+                "read_context",
+                json!({"title":"page two"}),
+            )]),
+            submission("call_854_corrected", json!("valid")),
+        ],
+        vec![
+            json!({"result":{}}),
+            json!({"result":{}}),
+            json!({"result":{"draft_id":"valid"}}),
+        ],
+        ScenarioOptions {
+            max_attempts: 3,
+            ordinary_budget: 2,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 4);
+    assert_eq!(final_outcome(&events)["status"], "accepted");
+    assert_eq!(final_outcome(&events)["attempts_used"], 2);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn declared_reads_still_need_ordinary_budget_without_host_recovery_request(
+    pool: Pool<Postgres>,
+) {
+    let (_, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::Tools(vec![(
+                "call_854_read",
+                "read_context",
+                json!({"title":"page"}),
+            )]),
+        ],
+        vec![],
+        ScenarioOptions {
+            ordinary_budget: 0,
+            budget_decision: Some("reject"),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(final_outcome(&events)["reason"], "user_requested_answer");
+    assert_eq!(final_outcome(&events)["attempts_used"], 1);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn recovery_read_timeout_preserves_generation_metadata(pool: Pool<Postgres>) {
+    let (_, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!("draft")),
+            ModelStep::Tools(vec![(
+                "call_854_read",
+                "read_context",
+                json!({"title":"page"}),
+            )]),
+        ],
+        vec![rejected("read_current_context")],
+        ScenarioOptions {
+            timeout_ms: 200,
+            check_metadata: true,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(final_outcome(&events)["reason"], "timeout");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn responses_prose_retry_replays_reasoning_with_required_summary(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::Text("PROSE_WITHOUT_PROPOSAL"),
+            submission("call_854_corrected", json!("valid")),
+        ],
+        vec![json!({"result":{"draft_id":"valid"}})],
+        ScenarioOptions {
+            responses: true,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 3);
+    let reasoning = requests[2]["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["type"] == "reasoning")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reasoning.len(),
+        2,
+        "bare signatures must not duplicate reasoning items"
+    );
+    for item in reasoning {
+        assert_eq!(item["summary"], json!([{"type":"summary_text","text":""}]));
+    }
+    assert_eq!(final_outcome(&events)["status"], "accepted");
+    assert_eq!(final_outcome(&events)["attempts_used"], 3);
+}
+
 async fn run_submission(
     pool: Pool<Postgres>,
     attempts: Vec<Vec<(&'static str, Value)>>,
@@ -482,6 +605,8 @@ struct ScenarioOptions {
     budget_decision: Option<&'static str>,
     duplicate_results: bool,
     task_approval: bool,
+    responses: bool,
+    check_metadata: bool,
 }
 
 impl Default for ScenarioOptions {
@@ -495,6 +620,8 @@ impl Default for ScenarioOptions {
             budget_decision: None,
             duplicate_results: false,
             task_approval: false,
+            responses: false,
+            check_metadata: false,
         }
     }
 }
@@ -514,6 +641,8 @@ async fn run_scenario(
         budget_decision,
         duplicate_results,
         task_approval,
+        responses,
+        check_metadata,
     } = options;
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
@@ -530,12 +659,34 @@ async fn run_scenario(
         mocks.mock(move |when, then| {
             let required = previous.into_iter().collect::<Vec<_>>();
             when.post()
-                .path("/v1/chat/completions")
+                .path(if responses { "/v1/responses" } else { "/v1/chat/completions" })
                 .matcher(BodyContainsMatcher::new(&required, &[marker]))
                 .matcher(capture);
+            if responses {
+                let text_delta = match &step { ModelStep::Text(text) => Some(json!({"type":"response.output_text.delta","delta":text})), _ => None };
+                let mut output = vec![json!({"type":"reasoning","id":format!("rs_{marker}"),"summary":[],"encrypted_content":format!("encrypted_{marker}")})];
+                match step {
+                    ModelStep::Tools(calls) => output.extend(calls.into_iter().map(|(id,name,args)| json!({"type":"function_call","call_id":id,"name":name,"arguments":args.to_string()}))),
+                    ModelStep::Text(text) => output.push(json!({"type":"message","role":"assistant","content":[{"type":"output_text","text":text}]})),
+                    _ => panic!("unsupported Responses fixture"),
+                }
+                let body = json!({"type":"response.completed","response":{"id":format!("resp_{marker}"),"model":"gpt-4o","output":output}});
+                let mut actions = Vec::new();
+                if let Some(delta) = text_delta { actions.push(BodyAction::Bytes(format!("data: {delta}\n\n").into())); }
+                actions.push(BodyAction::Bytes(format!("data: {body}\n\n").into()));
+                mock_llm_sse_response(then, actions);
+                return;
+            }
+            let with_usage = |mut actions: Vec<BodyAction>| {
+                if check_metadata {
+                    let usage = json!({"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18,"completion_tokens_details":{"reasoning_tokens":3}}});
+                    actions.insert(actions.len()-1, BodyAction::Bytes(format!("data: {usage}\n\n").into()));
+                }
+                actions
+            };
             match step {
                 ModelStep::Tools(calls) => {
-                    mock_llm_sse_response(then, build_openai_tool_calls_streaming_response(&calls));
+                    mock_llm_sse_response(then, with_usage(build_openai_tool_calls_streaming_response(&calls)));
                 }
                 ModelStep::Text(text) => {
                     mock_llm_sse_response(then, build_openai_text_streaming_response(&[text]));
@@ -570,6 +721,15 @@ async fn run_scenario(
         .values_mut()
     {
         provider.model_capabilities.supports_strict_tool_calling = native;
+        if responses {
+            provider.provider_kind = "openai_responses".into();
+            provider.model_settings.reasoning_effort =
+                Some(erato::config::ModelReasoningEffort::Medium);
+            provider.model_capabilities.supports_reasoning_summary = true;
+            provider
+                .model_capabilities
+                .supports_encrypted_reasoning_content = true;
+        }
     }
     config.client_tools.tools.insert("draft".into(), ClientToolConfig {
         name: "submit_draft".into(),
@@ -606,6 +766,11 @@ async fn run_scenario(
                 delegation: None,
             },
         );
+    }
+    if check_metadata {
+        // test_app_state supplies an inactive tracing client, so no telemetry leaves the test.
+        config.integrations.langfuse.enabled = true;
+        config.integrations.langfuse.tracing_enabled = true;
     }
     let state = test_app_state(config, pool).await;
     let chat_id = seed_origin_chat(&state.db).await;
@@ -759,6 +924,19 @@ async fn run_scenario(
         .iter()
         .find(|row| row.id.to_string() == message_id)
         .unwrap();
+    if check_metadata {
+        let requests = recorder
+            .bodies()
+            .iter()
+            .filter(|body| body.contains("\"tools\""))
+            .count();
+        let metadata = saved.generation_metadata.as_ref().unwrap();
+        assert_eq!(metadata["used_prompt_tokens"], json!(11 * requests));
+        assert_eq!(metadata["used_completion_tokens"], json!(7 * requests));
+        assert_eq!(metadata["used_total_tokens"], json!(18 * requests));
+        assert_eq!(metadata["used_reasoning_tokens"], json!(3 * requests));
+        assert!(!metadata["langfuse_trace_id"].as_str().unwrap().is_empty());
+    }
     let saved_outcome =
         &saved.generation_metadata.as_ref().unwrap_or(&Value::Null)["submission_outcome"];
     assert_eq!(&completion["message"]["submission_outcome"], saved_outcome);
