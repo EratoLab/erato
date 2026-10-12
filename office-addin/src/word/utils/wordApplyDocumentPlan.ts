@@ -12,6 +12,7 @@ import {
   verifyDifferingParts,
   wordDocumentDiagnostic as diagnostic,
 } from "./wordApplyDiagnostics";
+import { wordApplyPolicy } from "./wordApplyPolicy";
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
 import {
   unlockWordContentControlsForImport,
@@ -50,7 +51,11 @@ import {
   WORD_IN_PLACE_FALLBACKS,
   wordInPlaceFallbacks,
 } from "./wordInPlacePlan";
-import { routeWordDocumentPlan } from "./wordInPlaceRoute";
+import {
+  routeWordDocumentPlan,
+  wordPlanReadScope,
+  wordWholeDocumentWrite,
+} from "./wordInPlaceRoute";
 import { isWordScopeFingerprint } from "./wordInPlaceState";
 import {
   isWordTrackingMode,
@@ -71,6 +76,7 @@ import type {
   WordApplyAdjustment,
   WordVerifyTier,
 } from "./wordFullDocumentComparison";
+import type { WordWholeDocumentRefusal } from "./wordInPlaceRoute";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -92,7 +98,10 @@ export interface WordDocumentDiagnostic {
     | "compile-failed"
     | "output-mismatch"
     | "package-growth"
-    | "host-error";
+    | "host-error"
+    /** The host's policy asks before a whole-document write, and the user has not confirmed it. */
+    | "import-needs-confirmation"
+    | WordWholeDocumentRefusal;
   officeCode?: string;
   officeLocation?: string;
   details?: WordDiagnosticDetails;
@@ -170,12 +179,18 @@ async function observeAfterFailure(
   }
 }
 
+export interface WordDocumentApplyOptions {
+  /** The user confirmed replacing the whole document, where the host's policy asks first. */
+  importConfirmed?: boolean;
+}
+
 export async function applyWordDocumentPlan(
   content: string,
   snapshot: WordAuthoringSnapshot | undefined,
   messageId?: string,
   onBeforeWrite?: (before: string) => void,
   onStage?: (stage: WordApplyStage) => void,
+  options: WordDocumentApplyOptions = {},
 ): Promise<WordDocumentApplyResult> {
   const progress = trackWordApply("plan", onStage);
   const routing: { reason?: WordRouteReason } = {};
@@ -188,6 +203,7 @@ export async function applyWordDocumentPlan(
       onBeforeWrite,
       progress,
       routing,
+      options,
     );
     return result;
   } finally {
@@ -224,24 +240,80 @@ function imported(
   };
 }
 
-/** Track Changes rules the import out: it would replace the document without revisions. */
-function trackingBlocked(
+/** A whole-document write refused before anything was written or the capture was used. */
+function wholeDocumentBlocked(
+  reason: "tracking" | WordWholeDocumentGuard,
+  route: "import" | "body",
   routeReason: WordRouteReason | undefined,
   fallbackReasons: () => WordRouteReason[],
+  extra: WordDiagnosticDetails = {},
 ): WordDocumentApplyResult {
   const reasons = fallbackReasons();
   return {
     status: "blocked",
-    diagnostic: diagnostic("validate", "tracking", undefined, {
-      route: "import",
+    diagnostic: diagnostic("validate", reason, undefined, {
+      route,
       ...(routeReason ? { routeReason } : {}),
       fallbackReasons: reasons.length
         ? reasons
         : routeReason
           ? [routeReason]
           : [],
+      ...extra,
     }),
   };
+}
+
+/** Track Changes rules the import out: it would replace the document without revisions. */
+function trackingBlocked(
+  routeReason: WordRouteReason | undefined,
+  fallbackReasons: () => WordRouteReason[],
+): WordDocumentApplyResult {
+  return wholeDocumentBlocked(
+    "tracking",
+    "import",
+    routeReason,
+    fallbackReasons,
+  );
+}
+
+type WordWholeDocumentGuard =
+  | "import-needs-confirmation"
+  | WordWholeDocumentRefusal;
+
+/**
+ * The host's policy decides here, not only on the card, so no caller or automatic run reaches a
+ * whole-document write the user has not confirmed, and a scoped plan never reaches one at all.
+ */
+function wholeDocumentGuard(
+  route: "import" | "body",
+  routeReason: WordRouteReason | undefined,
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  options: WordDocumentApplyOptions,
+  fallbackReasons: () => WordRouteReason[],
+): WordDocumentApplyResult | undefined {
+  const write = wordWholeDocumentWrite(
+    { route },
+    plan,
+    snapshot,
+    wordApplyPolicy(),
+  );
+  const reason =
+    write.write === "refuse"
+      ? write.reason
+      : write.write === "confirm" && !options.importConfirmed
+        ? "import-needs-confirmation"
+        : undefined;
+  if (!reason) return undefined;
+  const readScope = wordPlanReadScope(plan, snapshot);
+  return wholeDocumentBlocked(
+    reason,
+    route,
+    routeReason,
+    fallbackReasons,
+    readScope ? { readScope } : {},
+  );
 }
 
 function trackedFallbacks(
@@ -268,6 +340,7 @@ async function applyPlan(
   onBeforeWrite: ((before: string) => void) | undefined,
   progress: WordApplyProgress,
   routing: { reason?: WordRouteReason },
+  options: WordDocumentApplyOptions,
 ): Promise<WordDocumentApplyResult> {
   progress.stage("checking");
   // Parsing, compiling and verifying below are synchronous; let the busy button paint first.
@@ -373,6 +446,15 @@ async function applyPlan(
       };
       if (isWordTrackingMode(snapshot.trackingMode))
         return trackingBlocked(routeReason, fallbackReasons);
+      const guarded = wholeDocumentGuard(
+        "import",
+        routeReason,
+        plan,
+        snapshot,
+        options,
+        fallbackReasons,
+      );
+      if (guarded) return guarded;
       return imported(
         await applyFullDocument(
           plan,
@@ -386,6 +468,15 @@ async function applyPlan(
         fallbackDetails,
       );
     }
+    const guarded = wholeDocumentGuard(
+      "body",
+      undefined,
+      plan,
+      snapshot,
+      options,
+      () => [],
+    );
+    if (guarded) return guarded;
     stage = "preflight";
     progress.stage("backup");
     return await host.run(async (context) => {

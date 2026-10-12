@@ -2527,8 +2527,18 @@ msgstr "Nie udało się zastosować nowej wersji. Nie zmieniono dokumentu."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled"
+msgstr "Ta zmiana wymaga przepisania całego dokumentu, co jest wyłączone w tej wersji programu Word. Nic nie zostało zastosowane. Poproś o mniejszą zmianę, którą można zapisać bezpośrednio w dokumencie."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importedContent"
 msgstr "Treść główna zawiera zaimportowaną zawartość, której Word nie przekształcił jeszcze w czytelne bloki dokumentu."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importNeedsConfirmation"
+msgstr "Ta zmiana zastępuje cały dokument i najpierw wymaga Twojego potwierdzenia. Nic nie zostało zastosowane."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2760,6 +2770,11 @@ msgstr "Dokument zmienił się po zastosowaniu nowej wersji. Nie cofnięto zmian
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.sameOddEvenPages"
 #~ msgstr "Użyj tych samych nagłówków i stopek na stronach parzystych i nieparzystych"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.scopedNeedsInPlace"
+msgstr "Tej ukierunkowanej zmiany nie można zapisać bezpośrednio w dokumencie, a ukierunkowana zmiana nigdy nie zastępuje całego dokumentu. Nic nie zostało zastosowane."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

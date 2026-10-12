@@ -2527,8 +2527,18 @@ msgstr "The rewrite could not be applied. No document changes were made."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled"
+msgstr "This change needs a full-document rewrite, which is turned off for this version of Word. Nothing was applied. Ask for a smaller edit that can be written in place."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importedContent"
 msgstr "The body contains imported content that Word has not expanded into readable document blocks."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importNeedsConfirmation"
+msgstr "This change replaces the whole document, which needs your confirmation first. Nothing was applied."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2760,6 +2770,11 @@ msgstr "The document changed after applying. Revert was not run because it could
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.sameOddEvenPages"
 #~ msgstr "Use the same headers and footers on odd and even pages"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.scopedNeedsInPlace"
+msgstr "This targeted edit can't be written in place, and a targeted edit never replaces the whole document. Nothing was applied."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

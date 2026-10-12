@@ -1,7 +1,8 @@
 import { i18n } from "@lingui/core";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CLIENT_ACTION_TOOL_NAME } from "../../../core/clientActions/proposedClientAction";
+import { applyWordDocumentPlan } from "../wordApplyDocumentPlan";
 import {
   clientActionDisplayLabel,
   extractProposedClientAction,
@@ -15,6 +16,11 @@ import {
 } from "../wordClientActions";
 
 import type { ContentPart } from "@erato/frontend/library";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
+
+vi.mock("../wordApplyDocumentPlan", () => ({
+  applyWordDocumentPlan: vi.fn(async () => ({ status: "blocked" })),
+}));
 
 const proposal = (action: string, status = "success"): ContentPart[] =>
   [
@@ -54,6 +60,27 @@ describe("the Word client-action registry", () => {
       fenceLanguage: WORD_INSERT_FENCE,
       promptScope: "word-insert",
     });
+  });
+
+  it("passes the user's whole-document confirmation to the plan writer", async () => {
+    const capture = { authoring: undefined } as unknown as WordDocumentCapture;
+    const run = await WORD_CLIENT_ACTIONS.get(
+      "word.apply_document_plan",
+    )!.execute({
+      fenceContent: "{}",
+      capture,
+      messageId: "message-A",
+      importConfirmed: true,
+    });
+    expect(run.ok).toBe(false);
+    expect(applyWordDocumentPlan).toHaveBeenLastCalledWith(
+      "{}",
+      undefined,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
   });
 
   it("gives all actions distinct auto-prompt scopes", () => {

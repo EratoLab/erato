@@ -1,8 +1,18 @@
 import { wordSourceReadRefs } from "@erato/frontend/word-review";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import nativeSource from "../../../test/fixtures/word-authoring-state/rewrite-source.xml?raw";
+import {
+  allowWordWebImport,
+  setWordWebImport,
+} from "../../../test/mocks/word/applyPolicy";
 import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+  statusRewritePlan,
+} from "../../../test/mocks/word/realisticWordFixtures";
+import { renderWordDiagnosticReport } from "../wordApplyDiagnostics";
 import {
   applyWordDocumentPlan,
   revertWordDocumentPlan,
@@ -10,10 +20,13 @@ import {
 import {
   captureWordDocumentPackage,
   decodeWordDocumentBackup,
+  insertWordDocumentFile,
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
 } from "../wordDocumentPackage";
 import { wordDocxBase64 } from "../wordDocumentPackageCodec";
+import { WordDocumentReadSession } from "../wordDocumentReadTool";
+import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -21,10 +34,20 @@ import {
   wordDocumentFingerprint,
 } from "../wordDocumentXml";
 
+import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
+import type * as wordDocumentPackageModule from "../wordDocumentPackage";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
 } from "@erato/frontend/word-review";
+
+vi.mock("../wordDocumentPackage", async (importOriginal) => {
+  const actual = await importOriginal<typeof wordDocumentPackageModule>();
+  return {
+    ...actual,
+    insertWordDocumentFile: vi.fn(actual.insertWordDocumentFile),
+  };
+});
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 function changeStory(xml: string, kind: "hdr" | "ftr", text: string): string {
@@ -117,6 +140,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 // Each integration case imports, verifies, and restores several real DOCX archives.
 describe("complete-document writer", { timeout: 15_000 }, () => {
+  beforeEach(allowWordWebImport);
   it("retains the exact locked original before unlocking and preserves requested locks through Apply and Revert", async () => {
     const { bytes, host, source, plan } = await sourceAndPlan({
       lockedControls: true,
@@ -644,3 +668,267 @@ describe("complete-document writer", { timeout: 15_000 }, () => {
     expect(host.insert).not.toHaveBeenCalled();
   });
 });
+
+describe(
+  "whole-document writes on Word for the web",
+  { timeout: 30_000 },
+  () => {
+    const context = {
+      chatId: "chat-A",
+      messageId: "message-A",
+      toolCallId: "read",
+    };
+    const imports = vi.mocked(insertWordDocumentFile);
+    const report = (
+      result: Awaited<ReturnType<typeof applyWordDocumentPlan>>,
+    ) => renderWordDiagnosticReport("apply", result.status, result.diagnostic);
+    const mutations = (events: string[]) =>
+      events.filter((e) => e.startsWith("mutation:"));
+    const sectionChange = (snapshot: WordAuthoringSnapshot) =>
+      JSON.stringify({
+        ...statusRewritePlan(snapshot, "Status: revised."),
+        sections: [
+          {
+            id: "final",
+            source: "section-1",
+            layout: { orientation: "landscape" },
+          },
+        ],
+      } satisfies WordDocumentPlan);
+    const confirmed = { importConfirmed: true };
+    async function realistic(options: WordOoxmlHostOptions = {}) {
+      const host = installWordOoxmlHost(realisticWordPackageXml(), options);
+      const snapshot = await captureRealisticSnapshot();
+      return { host, snapshot };
+    }
+    /** Reads `request` as a scoped read and submits `edit` under its token, as the model would. */
+    async function scopedPlan(
+      snapshot: WordAuthoringSnapshot,
+      request: Record<string, unknown>,
+      edit: (result: Record<string, unknown>) => Record<string, unknown>,
+    ): Promise<string> {
+      const session = new WordDocumentReadSession();
+      session.activate(snapshot, context);
+      const read = await session.execute(
+        {
+          snapshot: snapshot.token,
+          documentIdentity: snapshot.identity,
+          ...request,
+        },
+        context,
+      );
+      if (!read.ok) throw new Error(read.error);
+      const result = read.result as Record<string, unknown>;
+      const submitted = await createWordDocumentSubmissionExecutor(session)(
+        {
+          snapshot: snapshot.token,
+          readToken: result.readToken,
+          ...edit(result),
+        },
+        { ...context, toolCallId: "submit" },
+      );
+      if (!submitted.ok) throw new Error(JSON.stringify(submitted));
+      return JSON.stringify((submitted.result as { plan: unknown }).plan);
+    }
+    /** A scoped_edit of the status paragraph alone. */
+    function statusEdit(snapshot: WordAuthoringSnapshot): Promise<string> {
+      const status = snapshot.blocks.find((b) => b.text.startsWith("Status"))!;
+      return scopedPlan(snapshot, { target: { ref: status.ref } }, () => ({
+        scoped_edit: {
+          body: [
+            {
+              operation: "replace",
+              source: [status.ref],
+              blocks: [
+                { id: "new", type: "paragraph", text: "Status: revised." },
+              ],
+            },
+          ],
+        },
+      }));
+    }
+
+    beforeEach(() => {
+      imports.mockClear();
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+      delete window.WORD_FORCE_IMPORT_APPLY;
+      delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+      window.WORD_IN_PLACE_APPLY = true;
+    });
+
+    it("asks before a section change replaces the document, then imports the same plan once confirmed and reverts it", async () => {
+      const { host, snapshot } = await realistic();
+      const save = vi.fn();
+      const plan = sectionChange(snapshot);
+      const blocked = await applyWordDocumentPlan(
+        plan,
+        snapshot,
+        "message-A",
+        save,
+      );
+      expect(blocked).toEqual({
+        status: "blocked",
+        diagnostic: {
+          stage: "validate",
+          reason: "import-needs-confirmation",
+          details: {
+            route: "import",
+            routeReason: "sections",
+            fallbackReasons: ["sections"],
+          },
+        },
+      });
+      expect(report(blocked)).toContain("Reason: import-needs-confirmation");
+      expect(report(blocked)).toContain("Route: import (sections)");
+      expect(imports).not.toHaveBeenCalled();
+      expect(host.insert).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(snapshot.used).toBe(false);
+
+      const applied = await applyWordDocumentPlan(
+        plan,
+        snapshot,
+        "message-A",
+        save,
+        undefined,
+        confirmed,
+      );
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome?.route).toBe("import");
+      expect(imports).toHaveBeenCalledOnce();
+      expect(host.insert).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledOnce();
+
+      host.clearNativeUndo();
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status, JSON.stringify(reverted.diagnostic)).toBe(
+        "reverted",
+      );
+      expect(host.insert).toHaveBeenCalledTimes(2);
+    });
+
+    it("refuses an import the deployment turned off for the web, confirmed or not", async () => {
+      setWordWebImport("off");
+      const { host, snapshot } = await realistic();
+      const plan = sectionChange(snapshot);
+      for (const options of [{}, confirmed]) {
+        const result = await applyWordDocumentPlan(
+          plan,
+          snapshot,
+          "message-A",
+          undefined,
+          undefined,
+          options,
+        );
+        expect(result).toMatchObject({
+          status: "blocked",
+          diagnostic: {
+            stage: "validate",
+            reason: "import-disabled",
+            details: { route: "import", routeReason: "sections" },
+          },
+        });
+      }
+      expect(imports).not.toHaveBeenCalled();
+      expect(host.insert).not.toHaveBeenCalled();
+      expect(snapshot.used).toBe(false);
+    });
+
+    it("never turns a scoped edit into an import, even once confirmed", async () => {
+      window.WORD_FORCE_IMPORT_APPLY = true;
+      const { host, snapshot } = await realistic();
+      const result = await applyWordDocumentPlan(
+        await statusEdit(snapshot),
+        snapshot,
+        "message-A",
+        undefined,
+        undefined,
+        confirmed,
+      );
+      expect(result).toEqual({
+        status: "blocked",
+        diagnostic: {
+          stage: "validate",
+          reason: "scoped-needs-in-place",
+          details: {
+            route: "import",
+            routeReason: "disabled",
+            fallbackReasons: ["disabled"],
+            readScope: "objects",
+          },
+        },
+      });
+      expect(report(result)).toContain("Read scope: objects");
+      expect(imports).not.toHaveBeenCalled();
+      expect(host.insert).not.toHaveBeenCalled();
+      expect(snapshot.used).toBe(false);
+    });
+
+    it("refuses a table-cell edit whose in-place write falls back live, even once confirmed", async () => {
+      const { host, snapshot } = await realistic({
+        cellParagraphTextSuffix: "\u0007",
+      });
+      const plan = await scopedPlan(
+        snapshot,
+        { table_cell: { header: "budget", rowLabel: "north" } },
+        (result) => ({
+          table_cell: {
+            ...(result.target as Record<string, unknown>),
+            text: "43",
+          },
+        }),
+      );
+      host.events.length = 0;
+      const result = await applyWordDocumentPlan(
+        plan,
+        snapshot,
+        "message-A",
+        undefined,
+        undefined,
+        confirmed,
+      );
+      expect(result.diagnostic).toMatchObject({
+        stage: "validate",
+        reason: "scoped-needs-in-place",
+        details: {
+          route: "import",
+          routeReason: "alignment",
+          readScope: "table-cell",
+        },
+      });
+      expect(imports).not.toHaveBeenCalled();
+      expect(host.insert).not.toHaveBeenCalled();
+      expect(mutations(host.events)).toEqual([]);
+      expect(snapshot.used).toBe(false);
+    });
+
+    it("imports the same plans on Word PC without asking", async () => {
+      delete window.WORD_IN_PLACE_APPLY;
+      const profile = { profile: "word-pc-16.0.20326" } as const;
+      const first = await realistic(profile);
+      const sections = await applyWordDocumentPlan(
+        sectionChange(first.snapshot),
+        first.snapshot,
+        "message-A",
+      );
+      expect(sections.status, report(sections)).toBe("applied");
+      expect(sections.outcome?.route).toBe("import");
+
+      const second = await realistic(profile);
+      const scoped = await applyWordDocumentPlan(
+        await statusEdit(second.snapshot),
+        second.snapshot,
+        "message-A",
+      );
+      expect(scoped.status, report(scoped)).toBe("applied");
+      expect(scoped.outcome?.route).toBe("import");
+      expect(imports).toHaveBeenCalledTimes(2);
+    });
+  },
+);

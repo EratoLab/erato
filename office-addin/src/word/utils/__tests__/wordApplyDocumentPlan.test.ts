@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { parseWordDocumentPlan } from "@erato/frontend/word-review";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setWordWebImport } from "../../../test/mocks/word/applyPolicy";
 import {
   examplePlan,
+  packageXml,
+  paragraph,
   readySnapshot,
   wordSerializationNoise,
 } from "../../../test/mocks/word/authoringFixtures";
@@ -448,5 +452,134 @@ describe("coherent structural execution", () => {
     );
     expect(result.diagnostic).toEqual({ stage: "validate", reason: "expired" });
     expect(host.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("whole-body writes on Word for the web", () => {
+  const context = {
+    chatId: "chat-A",
+    messageId: "message-A",
+    toolCallId: "read",
+  };
+  beforeEach(() => {
+    vi.stubGlobal("Office", {
+      context: {
+        diagnostics: { host: "Word", platform: "OfficeOnline" },
+        requirements: { isSetSupported: () => true },
+      },
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+  });
+
+  it("asks before replacing the body, then applies the same plan once confirmed and reverts it", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    const plan = JSON.stringify(examplePlan(s.token));
+    const save = vi.fn();
+    expect(await applyWordDocumentPlan(plan, s, "message-A", save)).toEqual({
+      status: "blocked",
+      diagnostic: {
+        stage: "validate",
+        reason: "import-needs-confirmation",
+        details: { route: "body", fallbackReasons: [] },
+      },
+    });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(s.used).toBe(false);
+
+    const applied = await applyWordDocumentPlan(
+      plan,
+      s,
+      "message-A",
+      save,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(applied.status).toBe("applied");
+    expect(applied.outcome?.route).toBe("body");
+    expect(save).toHaveBeenCalledWith(s.ooxml);
+    expect(host.insert).toHaveBeenCalledTimes(1);
+    expect(
+      (await revertWordDocumentPlan(applied.before!, applied.afterFingerprint!))
+        .status,
+    ).toBe("reverted");
+    expect(host.get()).toBe(s.ooxml);
+  });
+
+  it("refuses a body replace the deployment turned off for the web", async () => {
+    setWordWebImport("off");
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(examplePlan(s.token)),
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(result.diagnostic).toMatchObject({
+      stage: "validate",
+      reason: "import-disabled",
+      details: { route: "body" },
+    });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(s.used).toBe(false);
+  });
+
+  it("never replaces the body for a scoped table-cell edit, even once confirmed", async () => {
+    const cell = (text: string) => `<w:tc><w:tcPr/>${paragraph(text)}</w:tc>`;
+    const s = readySnapshot(
+      packageXml(
+        paragraph("Allocation") +
+          `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell("Team")}${cell("Hours")}</w:tr><w:tr>${cell("East")}${cell("18")}</w:tr></w:tbl>` +
+          paragraph("After"),
+      ),
+    );
+    const host = word(s.ooxml);
+    const session = new WordDocumentReadSession();
+    session.activate(s, context);
+    const read = await session.execute(
+      {
+        snapshot: s.token,
+        documentIdentity: s.identity,
+        table_cell: { header: "hours", rowLabel: "east" },
+      },
+      context,
+    );
+    if (!read.ok) throw new Error(read.error);
+    const { readToken, target } = read.result as {
+      readToken: string;
+      target: Record<string, unknown>;
+    };
+    const submitted = await createWordDocumentSubmissionExecutor(session)(
+      { snapshot: s.token, readToken, table_cell: { ...target, text: "21" } },
+      { ...context, toolCallId: "submit" },
+    );
+    if (!submitted.ok) throw new Error(submitted.error);
+    const plan = parseWordDocumentPlan(
+      JSON.stringify((submitted.result as { plan: unknown }).plan),
+    )!;
+    expect(plan.readToken).toBe(readToken);
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(plan),
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(result.diagnostic).toEqual({
+      stage: "validate",
+      reason: "scoped-needs-in-place",
+      details: { route: "body", fallbackReasons: [], readScope: "table-cell" },
+    });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(s.used).toBe(false);
   });
 });

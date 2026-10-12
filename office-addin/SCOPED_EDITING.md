@@ -252,6 +252,12 @@ changes in Word, and the read contract says so while tracking is on.
   (and so rules out in-place writing). Defaults: PC and Mac in-place off and
   import allowed; the web in-place on and import only after confirmation. Users
   cannot change these; a pane served without them uses the same defaults.
+  Apply enforces the import switch itself (`wordWholeDocumentWrite`): under
+  `confirm` a whole-document write (the import, or the body route's whole-body
+  Replace) runs only when the caller passes the user's confirmation, under `off`
+  never, and a plan from a scoped read never takes one unless the switch is
+  `allowed`. A refused plan writes nothing and keeps its capture, so a confirmed
+  retry still applies; Revert of a confirmed import is not gated.
 - **Kill switch**: `window.WORD_FORCE_IMPORT_APPLY = true`, injected by the
   backend or set from `VITE_WORD_FORCE_IMPORT_APPLY=true` at build time. In-place
   writing is off on every host, and tracked captures are refused as before.

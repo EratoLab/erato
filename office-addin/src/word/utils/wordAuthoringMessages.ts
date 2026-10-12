@@ -68,6 +68,24 @@ export function wordDocumentDiagnosticText(
         });
   if (diagnostic.reason === "tracking" && diagnostic.details?.fallbackReasons)
     return wordTrackingNeedsImportText();
+  if (diagnostic.reason === "import-needs-confirmation")
+    return t({
+      id: "officeAddin.word.authoring.importNeedsConfirmation",
+      message:
+        "This change replaces the whole document, which needs your confirmation first. Nothing was applied.",
+    });
+  if (diagnostic.reason === "import-disabled")
+    return t({
+      id: "officeAddin.word.authoring.importDisabled",
+      message:
+        "This change needs a full-document rewrite, which is turned off for this version of Word. Nothing was applied. Ask for a smaller edit that can be written in place.",
+    });
+  if (diagnostic.reason === "scoped-needs-in-place")
+    return t({
+      id: "officeAddin.word.authoring.scopedNeedsInPlace",
+      message:
+        "This targeted edit can't be written in place, and a targeted edit never replaces the whole document. Nothing was applied.",
+    });
   if (
     diagnostic.reason === "host-unavailable" ||
     diagnostic.reason === "wrong-request"

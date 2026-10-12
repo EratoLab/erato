@@ -2527,8 +2527,18 @@ msgstr "La réécriture n’a pas pu être appliquée. Le document n’a pas ét
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled"
+msgstr "Cette modification nécessite de réécrire tout le document, ce qui est désactivé pour cette version de Word. Rien n'a été appliqué. Demandez une modification plus limitée qui puisse être écrite directement dans le document."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importedContent"
 msgstr "Le corps contient des éléments importés que Word n’a pas encore convertis en blocs de document lisibles."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importNeedsConfirmation"
+msgstr "Cette modification remplace tout le document et nécessite d'abord votre confirmation. Rien n'a été appliqué."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2760,6 +2770,11 @@ msgstr "Le document a changé après l’application. Le rétablissement n’a p
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.sameOddEvenPages"
 #~ msgstr "Utiliser les mêmes en-têtes et pieds de page sur les pages paires et impaires"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.scopedNeedsInPlace"
+msgstr "Cette modification ciblée ne peut pas être écrite directement dans le document, et une modification ciblée ne remplace jamais tout le document. Rien n'a été appliqué."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

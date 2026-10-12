@@ -2527,8 +2527,18 @@ msgstr "Die Überarbeitung konnte nicht angewendet werden. Das Dokument wurde ni
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled"
+msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die für diese Word-Version ausgeschaltet ist. Es wurde nichts angewendet. Bitten Sie um eine kleinere Änderung, die direkt im Dokument geschrieben werden kann."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importedContent"
 msgstr "Der Dokumentinhalt enthält importierte Inhalte, die Word noch nicht in lesbare Dokumentblöcke umgewandelt hat."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importNeedsConfirmation"
+msgstr "Diese Änderung ersetzt das gesamte Dokument und muss zuerst von Ihnen bestätigt werden. Es wurde nichts angewendet."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2760,6 +2770,11 @@ msgstr "Das Dokument wurde nach dem Anwenden verändert. Die Wiederherstellung w
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.sameOddEvenPages"
 #~ msgstr "Auf geraden und ungeraden Seiten dieselben Kopf- und Fußzeilen verwenden"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.scopedNeedsInPlace"
+msgstr "Diese gezielte Änderung kann nicht direkt im Dokument geschrieben werden, und eine gezielte Änderung ersetzt nie das gesamte Dokument. Es wurde nichts angewendet."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

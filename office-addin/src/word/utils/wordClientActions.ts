@@ -45,6 +45,8 @@ export interface WordClientActionContext {
   /** Retain recovery before entering a structural write, even if it later fails. */
   onBeforeDocumentWrite?: (before: string) => void;
   onStage?: (stage: WordApplyStage) => void;
+  /** Document plans: the user confirmed a whole-document write where the host's policy asks first. */
+  importConfirmed?: boolean;
 }
 
 export interface WordClientActionRun {
@@ -92,6 +94,7 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
         messageId,
         onBeforeDocumentWrite,
         onStage,
+        importConfirmed,
       }) => {
         const result = await applyWordDocumentPlan(
           fenceContent,
@@ -99,6 +102,7 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
           messageId,
           onBeforeDocumentWrite,
           onStage,
+          { importConfirmed },
         );
         return {
           ok: result.status === "applied",

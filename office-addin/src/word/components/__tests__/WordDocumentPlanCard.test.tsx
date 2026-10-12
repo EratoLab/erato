@@ -9,10 +9,19 @@ import {
   within,
 } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
+import { allowWordWebImport } from "../../../test/mocks/word/applyPolicy";
 import {
   examplePlan,
   packageXml,
@@ -1461,6 +1470,7 @@ describe("route preview", () => {
   });
 
   it("says compatibility mode makes every rewrite a full replacement, and Apply follows it", async () => {
+    onTestFinished(allowWordWebImport());
     localStorage.setItem(WORD_COMPATIBILITY_MODE_KEY, "1");
     const { word } = await mountRealistic(
       (s) => statusRewritePlan(s, "Status: revised."),

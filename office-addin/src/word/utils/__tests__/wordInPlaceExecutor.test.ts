@@ -34,6 +34,7 @@ import { predictWordBodyParagraphs } from "../wordLiveParagraphs";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type {
+  WordDocumentApplyOptions,
   WordDocumentApplyResult,
   WordDocumentRevertResult,
 } from "../wordApplyDocumentPlan";
@@ -118,12 +119,15 @@ const apply = (
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,
   onBeforeWrite?: (before: string) => void,
+  options?: WordDocumentApplyOptions,
 ) =>
   applyWordDocumentPlan(
     JSON.stringify(plan),
     snapshot,
     snapshot.ownerMessageId,
     onBeforeWrite,
+    undefined,
+    options,
   );
 const report = (
   result: WordDocumentApplyResult | WordDocumentRevertResult,
@@ -394,6 +398,8 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     const result = await apply(
       rewrite(snapshot, [[STATUS, { text: "Status: imported." }]]),
       snapshot,
+      undefined,
+      { importConfirmed: true },
     );
     expect(result.status, report(result)).toBe("applied");
     expect(result.outcome?.route).toBe("import");
@@ -461,7 +467,7 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     expect(reverted.status, report(reverted, "revert")).toBe("stale");
   });
 
-  it("falls back to the import before saving anything when body.paragraphs differs from the package", async () => {
+  it("falls back to the import before saving anything when body.paragraphs differs from the package, on the web only once confirmed", async () => {
     const xml = inPlaceFixture((doc) => {
       const body = doc.getElementsByTagNameNS(W, "body")[0];
       const holder = new DOMParser().parseFromString(
@@ -478,11 +484,27 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     expect(snapshot.issue).toBeUndefined();
     const save = vi.fn();
     const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
-    const result = await apply(
-      rewrite(snapshot, [[STATUS, { text: "Status: imported." }]]),
-      snapshot,
-      save,
-    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const plan = rewrite(snapshot, [[STATUS, { text: "Status: imported." }]]);
+    const unconfirmed = await apply(plan, snapshot, save);
+    expect(unconfirmed.status).toBe("blocked");
+    expect(unconfirmed.diagnostic).toMatchObject({
+      stage: "validate",
+      reason: "import-needs-confirmation",
+      details: {
+        route: "import",
+        routeReason: "alignment",
+        fallbackReasons: ["alignment"],
+      },
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(mutations(host.events)).toEqual([]);
+    expect(snapshot.used).toBe(false);
+
+    const result = await apply(plan, snapshot, save, {
+      importConfirmed: true,
+    });
     expect(result.status, report(result)).toBe("applied");
     expect(result.outcome?.route).toBe("import");
     expect(save).toHaveBeenCalledOnce();

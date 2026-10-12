@@ -2527,8 +2527,18 @@ msgstr "No se pudo aplicar la reescritura. No se realizaron cambios en el docume
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled"
+msgstr "Este cambio requiere reescribir todo el documento, lo que está desactivado para esta versión de Word. No se aplicó nada. Pida una modificación más pequeña que pueda escribirse directamente en el documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importedContent"
 msgstr "El cuerpo contiene contenido importado que Word aún no ha convertido en bloques de documento legibles."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importNeedsConfirmation"
+msgstr "Este cambio reemplaza todo el documento y primero necesita su confirmación. No se aplicó nada."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2760,6 +2770,11 @@ msgstr "El documento cambió después de aplicar la reescritura. No se revirtió
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.sameOddEvenPages"
 #~ msgstr "Usar los mismos encabezados y pies de página en páginas pares e impares"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.scopedNeedsInPlace"
+msgstr "Esta modificación puntual no puede escribirse directamente en el documento, y una modificación puntual nunca reemplaza todo el documento. No se aplicó nada."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
