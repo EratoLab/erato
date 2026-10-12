@@ -328,11 +328,20 @@ function previewOf(
     shape: snapshot.shape,
     story: snapshot.story,
     truncated: snapshot.truncated,
-    mayRewrite:
-      support.canRewrite &&
-      snapshot.story === "main" &&
-      WORD_SELECTION_REPLACE_SHAPES.has(snapshot.shape),
+    mayRewrite: wordSelectionMayRewrite(snapshot, support),
   };
+}
+
+/** The host, story and shape allow a rewrite, before the passage's own content is checked. */
+export function wordSelectionMayRewrite(
+  snapshot: Pick<WordSelectionSnapshot, "story" | "shape">,
+  support: Pick<WordSelectionSupport, "canRewrite">,
+): boolean {
+  return (
+    support.canRewrite &&
+    snapshot.story === "main" &&
+    WORD_SELECTION_REPLACE_SHAPES.has(snapshot.shape)
+  );
 }
 
 /**

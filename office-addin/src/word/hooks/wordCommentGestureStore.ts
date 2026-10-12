@@ -30,7 +30,15 @@ export const NO_WORD_COMMENT_GESTURES: WordCommentGestures = {
   includeOpenComments: false,
 };
 
+/** What one Send spent of the gestures that last for one message. */
+export type WordCommentSpentGestures = Pick<
+  WordCommentGestures,
+  "override" | "withoutComments"
+>;
+
 let snapshot = NO_WORD_COMMENT_GESTURES;
+/** The latest Send's spending, while nothing has replaced it. */
+let spent: WordCommentSpentGestures | null = null;
 const listeners = new Set<() => void>();
 
 function publish(next: WordCommentGestures) {
@@ -58,22 +66,39 @@ export const wordCommentGestureStore = {
   getSnapshot,
   useSnapshot: () => useSyncExternalStore(subscribe, getSnapshot),
   set(change: Partial<Omit<WordCommentGestures, "pick">>) {
+    if ("override" in change || "withoutComments" in change) spent = null;
     publish({ ...snapshot, ...change });
   },
   pick(event: WordCommentPickEvent) {
     publish({ ...snapshot, pick: nextWordCommentPick(snapshot.pick, event) });
   },
   /** A Send spends the switch and "Send without comments"; the pick stays. */
-  sent() {
+  sent(): WordCommentSpentGestures {
+    const given = {
+      override: snapshot.override,
+      withoutComments: snapshot.withoutComments,
+    };
+    spent = given;
     publish({
       ...snapshot,
       pick: nextWordCommentPick(snapshot.pick, { kind: "send" }),
       override: null,
       withoutComments: false,
     });
+    return given;
+  },
+  /**
+   * A Send that never reached the server gives back what it spent, as its draft comes back, unless
+   * the user has said something newer since or left the chat or the document.
+   */
+  unspend(given: WordCommentSpentGestures) {
+    if (spent !== given) return;
+    spent = null;
+    publish({ ...snapshot, ...given });
   },
   /** Another document forgets its refs; another chat also turns "Include open comments" off. */
   leave(scope: "chat" | "document") {
+    spent = null;
     publish({
       ...NO_WORD_COMMENT_GESTURES,
       includeOpenComments: scope === "document" && snapshot.includeOpenComments,
@@ -81,6 +106,7 @@ export const wordCommentGestureStore = {
   },
   resetForTests() {
     snapshot = NO_WORD_COMMENT_GESTURES;
+    spent = null;
     listeners.clear();
   },
 };

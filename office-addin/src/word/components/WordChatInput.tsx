@@ -88,7 +88,11 @@ import {
 import { wordHostPlatform } from "../utils/wordHostPlatform";
 import { captureWordImageAssets } from "../utils/wordImageAssets";
 import { emptySelectionCapture } from "../utils/wordSelectionAnchor";
-import { captureWordSelection } from "../utils/wordSelectionCapture";
+import {
+  captureWordSelection,
+  wordSelectionMayRewrite,
+} from "../utils/wordSelectionCapture";
+import { currentWordSelectionSupport } from "../utils/wordSelectionSupport";
 import { markWordSend } from "../utils/wordSendTiming";
 import {
   useWordCommentPrecedence,
@@ -342,7 +346,8 @@ export function WordChatInput({
     withoutComments,
   });
   const commentCoverage = wordCommentCoverageInfo(livePlan, commentList, {
-    document: chipEnabled,
+    // A passage or a thread goes instead of the document, and reads follow what went.
+    document: chipEnabled && !passageGoes && livePlan.carrier.kind !== "thread",
     picked: pickRef !== null,
     openComments: includeOpenComments,
   });
@@ -511,7 +516,7 @@ export function WordChatInput({
         selectionDue,
         documentIncluded: chipEnabled,
       });
-      wordCommentGestureStore.sent();
+      const spentGestures = wordCommentGestureStore.sent();
       if (!chipEnabled && !selectionDue && !commentsDue) {
         stagePendingCapture(null);
         send(undefined, null);
@@ -542,8 +547,12 @@ export function WordChatInput({
         );
       };
       const pickRef = commentPick?.ref ?? null;
-      const gesturesFor = (picked: string | null): WordCommentReadGestures => ({
-        document: chipEnabled,
+      /** The document gesture holds only when the document went: a passage or a thread replaces it. */
+      const gesturesFor = (
+        picked: string | null,
+        document: boolean,
+      ): WordCommentReadGestures => ({
+        document,
         picked,
         openComments: includeOpenComments,
       });
@@ -582,6 +591,7 @@ export function WordChatInput({
         read: WordCommentSendRead | null,
         passage: { rewritable: boolean } | null,
         signal: AbortSignal,
+        sent: { document: boolean; due: boolean },
       ): Promise<{
         plan: WordCommentSendPlan;
         pick: string | null;
@@ -595,9 +605,9 @@ export function WordChatInput({
           pickFound: !!pickRef && wordCommentSendable(read, pickRef),
           override: commentOverride,
           withoutComments,
-          documentIncluded: chipEnabled,
+          documentIncluded: sent.document,
           includeOpenComments,
-          readFailed: commentsDue && !read,
+          readFailed: sent.due && !read,
         };
         for (;;) {
           const plan = resolveWordCommentSend(input);
@@ -624,6 +634,7 @@ export function WordChatInput({
       const sendThread = (
         read: WordCommentSendRead | null,
         decided: { plan: WordCommentSendPlan; pick: string | null },
+        inventory?: WordCommentInventory,
       ) => {
         const { carrier } = decided.plan;
         if (
@@ -658,8 +669,10 @@ export function WordChatInput({
           ),
         );
         activateCommentReads({
-          gestures: gesturesFor(decided.pick),
+          gestures: gesturesFor(decided.pick, false),
           selection: read.selection,
+          // Later reads number paragraphs as thread_json does.
+          ...(inventory ? { inventory } : {}),
           withheld: false,
         });
         return { actionFacet, hostContextIdentity: documentIdentity };
@@ -670,11 +683,47 @@ export function WordChatInput({
         settleCaptureRef.current = null;
         setSlowCapture(false);
       };
+      /**
+       * Neither a passage nor the document: only a pick, the caret's thread or the open threads. A
+       * document send that ends up without the document comes here too, so it keeps the pick.
+       */
+      const prepareComments: AddinSendPreparation["run"] = async (signal) => {
+        const comments = await readSendComments(null, {
+          replies: includeOpenComments && !pickRef ? "all" : "requested",
+        });
+        if (signal.aborted || contextChanged()) return null;
+        const decided = await decideComments(comments, null, signal, {
+          document: false,
+          due: true,
+        });
+        if (!decided) return null;
+        const thread = sendThread(comments, decided);
+        if (thread) return thread;
+        stagePendingCapture(null);
+        return { actionFacet: undefined, hostContextIdentity: null };
+      };
+      /** The document did not go after all; the comments go as they would without it. */
+      const withoutDocument = (
+        signal: AbortSignal,
+        withheld = false,
+      ): ReturnType<AddinSendPreparation["run"]> => {
+        if (
+          !withheld &&
+          wordCommentsDue({
+            advertised: commentAdvertised,
+            withoutComments,
+            selectionDue: false,
+            documentIncluded: false,
+          })
+        )
+          return prepareComments(signal);
+        stagePendingCapture(null);
+        return Promise.resolve({
+          actionFacet: undefined,
+          hostContextIdentity: null,
+        });
+      };
       const prepareDocument: AddinSendPreparation["run"] = async (signal) => {
-        const withoutDocument = () => {
-          stagePendingCapture(null);
-          return { actionFacet: undefined, hostContextIdentity: null };
-        };
         // Neither depends on the document read, so both start alongside it.
         const images =
           authoringAvailable && inputFileIds?.length
@@ -709,12 +758,39 @@ export function WordChatInput({
           if (outcome.kind === "aborted" || signal.aborted) return null;
           if (contextChanged()) return null;
           let build: WordDocumentBuild | null;
-          if (outcome.kind === "skipped") return withoutDocument();
+          if (outcome.kind === "skipped") return await withoutDocument(signal);
           if (outcome.kind === "timeout") {
             build = previousCapture();
             setCaptureNotice(build ? "previous-capture" : "not-included");
-            if (!build) return withoutDocument();
+            if (!build) return await withoutDocument(signal);
           } else build = outcome.build;
+          if (!readEnabledRef.current) {
+            clearReadSession();
+            return await withoutDocument(signal);
+          }
+          // The capture this message sends numbers the anchors, an earlier one after a timeout too:
+          // an anchor its paragraph ids no longer place is counted, never numbered another way.
+          const inventory = build
+            ? wordCommentInventoryFromCapture(build.ordinalMap)
+            : undefined;
+          // Read while the images and the budget call are still out; a thread sent instead needs neither.
+          const comments = commentsDue
+            ? await readSendComments(null, {
+                inventory,
+                replies:
+                  commentAdvertised.map.size > 0 && wordHostPlatform() !== "Mac"
+                    ? "all"
+                    : "requested",
+              })
+            : null;
+          if (signal.aborted || contextChanged()) return null;
+          const decided = await decideComments(comments, null, signal, {
+            document: true,
+            due: commentsDue,
+          });
+          if (!decided) return null;
+          const thread = sendThread(comments, decided, inventory);
+          if (thread) return thread;
           const captured = images && (await images);
           if (build?.authoring && !build.authoring.issue && captured) {
             build.authoring.assets = captured.assets;
@@ -732,27 +808,8 @@ export function WordChatInput({
           if (signal.aborted || contextChanged()) return null;
           if (!readEnabledRef.current) {
             clearReadSession();
-            return withoutDocument();
+            return await withoutDocument(signal, decided.withheld);
           }
-          // An earlier capture's paragraph ids may no longer place today's anchors.
-          const inventory =
-            build && outcome.kind === "build"
-              ? wordCommentInventoryFromCapture(build.ordinalMap)
-              : undefined;
-          const comments = commentsDue
-            ? await readSendComments(null, {
-                inventory,
-                replies:
-                  commentAdvertised.map.size > 0 && wordHostPlatform() !== "Mac"
-                    ? "all"
-                    : "requested",
-              })
-            : null;
-          if (signal.aborted || contextChanged()) return null;
-          const decided = await decideComments(comments, null, signal);
-          if (!decided) return null;
-          const thread = sendThread(comments, decided);
-          if (thread) return thread;
           const capturedIssue = build?.authoring?.issue;
           const capturedDetails = build?.authoring?.issueDetails;
           if (build) build = withWordReviewFallback(build, availableFacetIds);
@@ -834,9 +891,9 @@ export function WordChatInput({
           }
           if (actionFacet && build)
             activateCommentReads({
-              gestures: gesturesFor(decided.pick),
+              gestures: gesturesFor(decided.pick, true),
               selection: comments?.selection ?? null,
-              inventory: wordCommentInventoryFromCapture(build.ordinalMap),
+              inventory,
               headings: wordCommentHeadingsFromBuild(build.headings),
               withheld: decided.withheld,
             });
@@ -848,20 +905,6 @@ export function WordChatInput({
           signal.removeEventListener("abort", stopEstimate);
           stopEstimate();
         }
-      };
-
-      /** Neither a passage nor the document: only a pick, the caret's thread or the open threads. */
-      const prepareComments: AddinSendPreparation["run"] = async (signal) => {
-        const comments = await readSendComments(null, {
-          replies: includeOpenComments && !pickRef ? "all" : "requested",
-        });
-        if (signal.aborted || contextChanged()) return null;
-        const decided = await decideComments(comments, null, signal);
-        if (!decided) return null;
-        const thread = sendThread(comments, decided);
-        if (thread) return thread;
-        stagePendingCapture(null);
-        return { actionFacet: undefined, hostContextIdentity: null };
       };
 
       // The selection captured now wins over what the chip showed (D-9).
@@ -891,10 +934,20 @@ export function WordChatInput({
             ? await readSendComments(passage, { replies: "requested" })
             : null;
           if (signal.aborted || contextChanged()) return null;
+          // The setting is judged as the chip judged it: a hazard in the passage found only now
+          // rules out its Replace, not the comment the chip showed.
           const decided = await decideComments(
             comments,
-            { rewritable: selection.role === "rewrite" },
+            {
+              rewritable:
+                selection.role === "rewrite" ||
+                wordSelectionMayRewrite(
+                  selection,
+                  currentWordSelectionSupport(),
+                ),
+            },
             signal,
+            { document: false, due: commentsDue },
           );
           if (!decided) return null;
           const thread = sendThread(comments, decided);
@@ -912,7 +965,7 @@ export function WordChatInput({
             ),
           );
           activateCommentReads({
-            gestures: gesturesFor(decided.pick),
+            gestures: gesturesFor(decided.pick, false),
             selection: passage,
             withheld: decided.withheld,
           });
@@ -956,6 +1009,7 @@ export function WordChatInput({
           }
         },
         onAbandoned: () => {
+          wordCommentGestureStore.unspend(spentGestures);
           decideCommentsRef.current?.({ kind: "abort" });
           clearReadSession();
           clearCommentSession();
