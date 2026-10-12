@@ -17,6 +17,7 @@ import {
   durationFromTracePartsOrLegacyMessageTimestamps,
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
+import { WordCommentReadNotice } from "@/components/ui/WordReview/WordCommentReadNotice";
 import {
   isWordPlanToolPart,
   isWordSubmitPlanPart,
@@ -1481,6 +1482,7 @@ export const MessageContent = memo(function MessageContent({
         </pre>
         {messageId && <ClientToolFileApprovals messageId={messageId} />}
         <LocalSearchCoverageNotice content={content} />
+        <WordCommentReadNotice content={content} />
       </article>
     );
   }
@@ -1644,6 +1646,7 @@ export const MessageContent = memo(function MessageContent({
       )}
       {messageId && <ClientToolFileApprovals messageId={messageId} />}
       <LocalSearchCoverageNotice content={content} />
+      <WordCommentReadNotice content={content} />
     </article>
   );
 });

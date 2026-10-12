@@ -2,6 +2,7 @@
 export * from "./wordBlockFormatting";
 export * from "./wordBuiltInStyles";
 export * from "./wordCommentContext";
+export * from "./wordCommentReads";
 export * from "./wordDocumentCapture";
 export * from "./wordDocumentPlan";
 export * from "./wordEditPlan";

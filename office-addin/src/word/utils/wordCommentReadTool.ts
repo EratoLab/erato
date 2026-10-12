@@ -51,6 +51,7 @@ import type {
 } from "@erato/frontend/library";
 import type {
   WordCommentEnvelope,
+  WordCommentReadView,
   WordCommentStatus,
   WordCommentThread,
   WordCommentVs,
@@ -131,7 +132,7 @@ export type WordCommentReadThread = WordCommentThread & {
   replies_unread?: true;
 };
 
-export type WordCommentReadView = "near" | "section" | "document" | "map";
+export type { WordCommentReadView };
 
 export type WordCommentReadResultJson = Omit<
   WordCommentEnvelope,
@@ -145,6 +146,8 @@ export type WordCommentReadResultJson = Omit<
   complete: boolean;
   /** Matching threads beyond the selection's nearest ones were held back for want of a gesture. */
   capped: boolean;
+  /** Matching threads after this page, left for the cursor; held-back threads are not among them. */
+  remaining: number;
   /** What was read and what was left out, without comment text or names: kept in replay receipts. */
   coverage_line: string;
   /** At most 512 B of "ref author ¶ status" tuples: kept in replay receipts. */
@@ -875,6 +878,7 @@ export class WordCommentReadSession {
       cursor: cursor ?? null,
       complete: !cursor,
       capped: false,
+      remaining: map.rows.length - start - page.index.length,
       coverage_line: page.coverage.line,
       digest: digestOf(page.index),
       contentNotice: WORD_READ_COMMENTS_CONTENT_NOTICE,
@@ -1087,6 +1091,7 @@ export class WordCommentReadSession {
       cursor,
       complete: !more && plan.outside === 0,
       capped: plan.outside > 0,
+      remaining: plan.ordered.length - start - page.length,
       coverage_line: line,
       digest: digestOf(
         threads.map((t) => ({

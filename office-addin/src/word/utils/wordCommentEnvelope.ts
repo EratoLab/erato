@@ -27,6 +27,7 @@ import type {
   WordCommentSelection,
   WordCommentThread,
   WordCommentWhere,
+  WordCommentWhy,
 } from "@erato/frontend/word-review";
 
 /**
@@ -447,6 +448,7 @@ export interface WordCommentEnvelopeInput {
   essential?: readonly string[];
   selection?: WordCommentSelection;
   sections?: WordCommentSections;
+  why?: WordCommentWhy;
   cursor?: string;
   targetBytes?: number;
   maxBytes?: number;
@@ -548,6 +550,7 @@ export function buildWordCommentEnvelope(
       threads: kept.map((t) => t.thread),
       index,
       ...(model.legacy ? { legacy: true as const } : {}),
+      ...(input.why ? { why: input.why } : {}),
       ...(input.cursor ? { cursor: input.cursor } : {}),
     };
     const json = JSON.stringify(envelope);

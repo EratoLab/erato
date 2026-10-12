@@ -207,6 +207,7 @@ const threadEnvelope = envelope({
   selection: undefined,
   threads: [above, inside],
   coverage: coverage({ sent_full: 1, not_shown: 8 }),
+  why: "chosen",
 });
 const mapEnvelope = envelope({
   scope: "document",
@@ -503,6 +504,15 @@ describe("parseWordCommentContext", () => {
 
     expect(parsed?.index).toEqual([{ ...rows[0], r: null }]);
     expect(parsed).not.toHaveProperty("cursor");
+  });
+
+  it("drops a why it does not know", () => {
+    expect(
+      parseWordCommentEnvelope({ ...threadEnvelope, why: "picked" }),
+    ).not.toHaveProperty("why");
+    expect(
+      parseWordCommentEnvelope({ ...threadEnvelope, why: "cursor" })?.why,
+    ).toBe("cursor");
   });
 
   it("reads an entry's missing time fields as unknown", () => {

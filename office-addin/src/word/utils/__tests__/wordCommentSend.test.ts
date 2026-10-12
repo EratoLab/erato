@@ -666,6 +666,11 @@ describe("the arguments a Send carries, from the ERMAIN-947 fixture", () => {
     });
     expect(envelope?.threads).toEqual([thread]);
     expect(envelope?.coverage.sent_full).toBe(1);
+    expect(envelope).not.toHaveProperty("why");
+
+    const atCaret = wordCommentThreadArgs(read, t1, "cursor");
+    expect(atCaret.threadJson).toBe(threadJson);
+    expect(parseWordCommentEnvelope(atCaret.commentsJson)?.why).toBe("cursor");
   });
 
   it("Include open comments sends every open thread with an empty thread_json", async () => {

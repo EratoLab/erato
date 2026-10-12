@@ -47,6 +47,8 @@ export const isWordCommentEntryRef = (value: unknown): value is string =>
 
 export type WordCommentScope = "selection" | "thread" | "document" | "read";
 export type WordCommentStatus = "open" | "resolved";
+/** Why a thread facet carries its thread: the user chose it, the caret is in it, or the "Word behavior" default. */
+export type WordCommentWhy = "chosen" | "cursor" | "default";
 
 /** Where an anchor lies relative to the captured selection, from coordinates. */
 export type WordCommentVs =
@@ -175,6 +177,7 @@ export interface WordCommentEnvelope {
   index: WordCommentMapRow[];
   /** The file has no stable comment ids, so threads are matched by content. */
   legacy?: true;
+  why?: WordCommentWhy;
   /** Continues a page that ended with complete:false, through word_read_comments. */
   cursor?: string;
 }
@@ -224,8 +227,14 @@ const VS: ReadonlySet<unknown> = new Set<WordCommentVs>([
   "after",
   ...IN_SELECTION,
 ]);
+const WHYS: ReadonlySet<unknown> = new Set<WordCommentWhy>([
+  "chosen",
+  "cursor",
+  "default",
+]);
 const isScope = (value: unknown): value is WordCommentScope =>
   SCOPES.has(value);
+const isWhy = (value: unknown): value is WordCommentWhy => WHYS.has(value);
 const isStatus = (value: unknown): value is WordCommentStatus =>
   STATUSES.has(value);
 const isVs = (value: unknown): value is WordCommentVs => VS.has(value);
@@ -492,6 +501,7 @@ export function parseWordCommentEnvelope(
     threads: listOf(source.threads, threadOf),
     index: listOf(source.index, mapRowOf),
     ...trueFlags(source, ["legacy"]),
+    ...(isWhy(source.why) ? { why: source.why } : {}),
     ...(isString(source.cursor) && source.cursor !== ""
       ? { cursor: source.cursor }
       : {}),

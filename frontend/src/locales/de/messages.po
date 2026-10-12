@@ -2054,6 +2054,111 @@ msgstr "Archivierung des Chats konnte nicht aufgehoben werden"
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.count"
+msgstr "{count, plural, one {# Kommentar} other {# Kommentare}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.hide"
+msgstr "Kommentare ausblenden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.map"
+msgstr "Kommentarübersicht"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.matchedByContent"
+msgstr "über den Inhalt zugeordnet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.notShown"
+msgstr "{count, plural, one {# nicht angezeigt} other {# nicht angezeigt}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.omittedReplies"
+msgstr "{omitted, plural, one {# frühere Antwort wurde nicht gesendet} other {# frühere Antworten wurden nicht gesendet}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.on"
+msgstr "zu „{quote}“"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.open"
+msgstr "Offene Kommentare"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.openStatus"
+msgstr "Offen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.passage"
+msgstr "Ausgewählte Passage"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.point"
+msgstr "an einer Stelle ohne markierten Text"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.replies"
+msgstr "{count, plural, one {# Antwort} other {# Antworten}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.resolved"
+msgstr "Erledigt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.sentContext"
+msgstr "Gesendeter Kontext: {summary}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.show"
+msgstr "Kommentare anzeigen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.thread"
+msgstr "Kommentar von {author}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.threads"
+msgstr "{listed, plural, one {# Kommentar} other {# Kommentare}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.timeUnknown"
+msgstr "Zeit unbekannt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.chosen"
+msgstr "Von Ihnen gewählt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.cursor"
+msgstr "An Ihrem Cursor"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.default"
+msgstr "Ihr Standard"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ActionFacetContext.tsx
 msgid "chat.message.action_facet.selection_label"
 msgstr "Auswahl"
@@ -2344,6 +2449,46 @@ msgstr "Modell von {fromModel} zu {toModel} geändert"
 #: src/components/ui/Message/ModelSwitchMarker.tsx
 #~ msgid "chat.message.modelSwitched"
 #~ msgstr "Das Modell wurde gewechselt. Wenn du diese Unterhaltung mit einem anderen Modell fortsetzt, kann dies den Kontext beeinflussen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.all"
+msgstr "{count, plural, one {# Kommentar gelesen} other {# Kommentare gelesen}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.failed"
+msgstr "Kommentare wurden nicht gelesen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.map"
+msgstr "{count, plural, one {Kommentarübersicht gelesen: # Kommentar} other {Kommentarübersicht gelesen: # Kommentare}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.near"
+msgstr "{count, plural, one {# Kommentar in der Nähe gelesen} other {# Kommentare in der Nähe gelesen}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.notShown"
+msgstr "{notShown, plural, one {# nicht angezeigt} other {# nicht angezeigt}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.open"
+msgstr "{count, plural, one {# offenen Kommentar gelesen} other {# offene Kommentare gelesen}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.resolved"
+msgstr "{count, plural, one {# erledigten Kommentar gelesen} other {# erledigte Kommentare gelesen}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.section"
+msgstr "{count, plural, one {# Kommentar in einem Abschnitt gelesen} other {# Kommentare in einem Abschnitt gelesen}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/MessageList/MessageEditor.tsx

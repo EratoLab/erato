@@ -46,6 +46,7 @@ import type {
 } from "./wordCommentRefs";
 import type {
   WordCommentVs,
+  WordCommentWhy,
   WordDocumentCapture,
 } from "@erato/frontend/word-review";
 
@@ -67,7 +68,7 @@ export type WordCommentPrecedence = "selection" | "comment";
 /** The chip's switch for one message, in either direction. */
 export type WordCommentOverride = "comment" | "passage";
 /** "Chosen by you", "At your cursor", "Your default". */
-export type WordCommentWhy = "chosen" | "cursor" | "default";
+export type { WordCommentWhy };
 /** Nothing is sent until the user decides. */
 export type WordCommentBlock = "choose-comment" | "picked-gone" | "read-failed";
 /** How a blocked Send goes on: without comments, with a thread the user chose, or not at all. */
@@ -431,6 +432,7 @@ function envelopeOf(
   scope: "selection" | "thread" | "document",
   full: readonly string[],
   essential: readonly string[],
+  why: WordCommentWhy | null = null,
 ) {
   return buildWordCommentEnvelope({
     scope,
@@ -442,6 +444,7 @@ function envelopeOf(
     ...(read.selection
       ? { selection: wordCommentSelection(read.selection) }
       : {}),
+    ...(why ? { why } : {}),
   });
 }
 
@@ -453,10 +456,14 @@ export function wordAnchoredCommentsArg(
   return envelopeOf(read, "selection", threads, threads).json;
 }
 
-/** word_comment_thread's arguments for one thread, or for the open threads with an empty thread_json. */
+/**
+ * word_comment_thread's arguments for one thread, or for the open threads with an empty
+ * thread_json. The envelope says why the thread goes, so the sent message can say it too.
+ */
 export function wordCommentThreadArgs(
   read: WordCommentSendRead,
   ref: string | null,
+  why: WordCommentWhy | null = null,
 ): { threadJson: string; commentsJson: string } {
   if (ref === null) {
     const open = read.model.threads
@@ -467,7 +474,7 @@ export function wordCommentThreadArgs(
       commentsJson: envelopeOf(read, "document", open, []).json,
     };
   }
-  const built = envelopeOf(read, "thread", [ref], [ref]);
+  const built = envelopeOf(read, "thread", [ref], [ref], why);
   const thread = built.envelope.threads.find((t) => t.id === ref);
   return {
     threadJson: thread ? JSON.stringify(thread) : "",

@@ -458,6 +458,7 @@ describe("WordChatInput comment context", () => {
       expect(thread?.id).toBe(refOf("T1"));
       const around = envelope(result?.actionFacet?.args?.comments_json);
       expect(around.scope).toBe("thread");
+      expect(around.why).toBe("default");
       expect(around.threads).toEqual([thread]);
       expect(result?.hostContextIdentity).toBe(IDENTITY);
       expect(staged.at(-1)).not.toHaveProperty("selection");
@@ -469,7 +470,9 @@ describe("WordChatInput comment context", () => {
       renderInput();
       act(() => wordCommentGestureStore.set({ override: "comment" }));
       send();
-      expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
+      const switched = (await prepared())?.actionFacet;
+      expect(switched?.id).toBe("word_comment_thread");
+      expect(envelope(switched?.args?.comments_json).why).toBe("chosen");
 
       send();
       expect((await prepared())?.actionFacet?.id).toBe("word_selection");
@@ -578,6 +581,9 @@ describe("WordChatInput comment context", () => {
       );
       expect(thread?.id).toBe(refOf("T1"));
       expect(thread?.where.vs).toBe("at_caret");
+      expect(envelope(result?.actionFacet?.args?.comments_json).why).toBe(
+        "cursor",
+      );
     });
 
     it("sends nothing for a caret in two anchors until the user decides", async () => {
@@ -632,6 +638,9 @@ describe("WordChatInput comment context", () => {
         expect(
           parseWordCommentThread(result?.actionFacet?.args?.thread_json)?.id,
         ).toBe(t1);
+        expect(envelope(result?.actionFacet?.args?.comments_json).why).toBe(
+          "chosen",
+        );
       }
 
       act(() =>
@@ -662,6 +671,7 @@ describe("WordChatInput comment context", () => {
       expect(result?.actionFacet?.args?.thread_json).toBe("");
       const open = envelope(result?.actionFacet?.args?.comments_json);
       expect(open.scope).toBe("document");
+      expect(open).not.toHaveProperty("why");
       expect(open.threads.length + open.index.length).toBe(13);
     });
   });

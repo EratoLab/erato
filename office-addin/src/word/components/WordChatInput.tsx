@@ -623,6 +623,7 @@ export function WordChatInput({
         const { threadJson, commentsJson } = wordCommentThreadArgs(
           read,
           carrier.kind === "thread" ? carrier.ref : null,
+          decided.plan.why,
         );
         const actionFacet = resolveWordCommentThreadFacet({
           documentName: resolveWordDocumentName(),

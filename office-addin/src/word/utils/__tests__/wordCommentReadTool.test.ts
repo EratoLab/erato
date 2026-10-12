@@ -191,6 +191,7 @@ describe("near reads", () => {
       capped: true,
       complete: false,
       cursor: null,
+      remaining: 0,
     });
     expect(result.coverage_line).toContain(
       "6 more matching threads lie beyond the 3 nearest above and below the selection",
@@ -525,6 +526,7 @@ describe("paging", () => {
       expect(bytes(result)).toBeLessThanOrEqual(WORD_READ_COMMENTS_PAGE_BYTES);
       expect(result.threads.length).toBeGreaterThan(0);
       seen.push(...keysOf(result));
+      expect(result.remaining).toBe(32 - seen.length);
       if (!result.cursor) break;
       expect(result.complete).toBe(false);
       expect(result.coverage_line).toContain(
@@ -574,7 +576,12 @@ describe("paging", () => {
     install();
     activate({ gestures: { document: true } });
     const result = await read({ cursor: "map:0" });
-    expect(result).toMatchObject({ view: "map", threads: [], cursor: null });
+    expect(result).toMatchObject({
+      view: "map",
+      threads: [],
+      cursor: null,
+      remaining: 0,
+    });
     expect(result.index).toHaveLength(14);
     expect(result.index[0]).toMatchObject({
       sec: "Introduction",

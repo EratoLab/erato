@@ -76,6 +76,9 @@ export type { ButtonVariant } from "@/components/ui/Controls/Button";
 export { COLLAPSE_DURATION_MS } from "@/components/ui/Controls/Collapse";
 export { Collapse } from "@/components/ui/Controls/Collapse";
 export type { CollapseProps } from "@/components/ui/Controls/Collapse";
+export { DisclosureChevron } from "@/components/ui/Controls/DisclosureChevron";
+export type { DisclosureChevronProps } from "@/components/ui/Controls/DisclosureChevron";
+export type { DisclosureChevronSize } from "@/components/ui/Controls/DisclosureChevron";
 export { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuProps } from "@/components/ui/Controls/DropdownMenu";
@@ -407,4 +410,7 @@ export { setWordLiveCards } from "@/components/ui/WordReview/useWordHistoryMessa
 export { useWordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 export { useWordMessageLineage } from "@/components/ui/WordReview/useWordHistoryMessage";
 export type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
+export { WordCommentSentContext } from "@/components/ui/WordReview/WordCommentContextView";
+export { wordCommentContextSent } from "@/components/ui/WordReview/WordCommentContextView";
+export { WordCommentReadNotice } from "@/components/ui/WordReview/WordCommentReadNotice";
 export { wordKeptMarkersLabelled } from "@/components/ui/WordReview/wordKeptMarkerLabels";
