@@ -579,6 +579,9 @@ export async function revertWordSelection(
       const cells = targets.map(({ backup, paragraph }) =>
         backup.tableNestingLevel > 0 ? queueWordCellTable(paragraph) : null,
       );
+      guard.extendTimeout(
+        covered.length * WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+      );
       await context.sync();
       const cellTables = cells.map((cell) => cell?.() ?? null);
       if (!unchanged()) return "stale";

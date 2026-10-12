@@ -214,9 +214,10 @@ function replyCommentIds(
 }
 
 /**
- * Whether the part holds only one end of a comment's range. A cell paragraph's package is cut from
- * its whole row's (wordCellParagraphOoxml), whose parts still name a comment that reaches from it
- * into another paragraph of the row.
+ * Whether the part holds only one end of a comment's range, refused defensively: no host has given
+ * a body paragraph such a package. A cell paragraph's package is cut from its whole row's
+ * (wordCellParagraphOoxml) and might hold one end of a comment that reaches into another paragraph
+ * of the row, but that case is not measured.
  */
 function holdsOneEndOnly(part: Element): boolean {
   const marked = (name: string) =>

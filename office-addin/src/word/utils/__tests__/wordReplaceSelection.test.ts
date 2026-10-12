@@ -2305,7 +2305,8 @@ describe.each(HOSTS)(
         await hang.reached;
         await vi.advanceTimersByTimeAsync(
           WORD_REVERT_SELECTION_TIMEOUT_MS +
-            WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+            WORD_REVERT_SELECTION_MS_PER_PARAGRAPH +
+            WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
         );
         expect(done).toBe(false);
         await vi.advanceTimersByTimeAsync(WORD_COMMENT_ANCHOR_CHECK_MS);
@@ -2319,12 +2320,51 @@ describe.each(HOSTS)(
       },
     );
 
+    it("gives the restore's comment listing its allowance per covered paragraph", async () => {
+      const measure = install();
+      const measured = await apply(measure, { p: "SC1" }, () => SC1);
+      const start = measure.syncCount();
+      await revert(measured);
+      const offset =
+        measure
+          .syncLog()
+          .find(
+            (entry) =>
+              entry.index > start &&
+              entry.commands.includes("CommentCollection"),
+          )!.index - start;
+      uninstallWordSelectionHost();
+
+      const host = install();
+      const result = await apply(host, { p: "SC1" }, () => SC1);
+      const writes = host.writeSyncs().length;
+      vi.useFakeTimers();
+      const hang = host.hangSync({ at: host.syncCount() + offset });
+      let done = false;
+      const restore = revert(result).finally(() => {
+        done = true;
+      });
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(
+        WORD_REVERT_SELECTION_TIMEOUT_MS +
+          WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+      );
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(
+        WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+      );
+      expect(await restore).toMatchObject({ status: "failed", timedOut: true });
+      hang.release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.writeSyncs()).toHaveLength(writes);
+    });
+
     describe("in a legacy file without commentsIds", () => {
       it.each([
         ["the middle of an anchor", { p: "MA2" }, () => "MA2 Rewritten."],
         ["a kept comment", { p: "MC1" }, keptComment],
       ] as const)(
-        "restores %s, its marks counted",
+        "restores %s with every comment's anchor as it was",
         async (_, target, fence) => {
           const host = install({ legacyComments: true });
           const before = documentOf(host);
