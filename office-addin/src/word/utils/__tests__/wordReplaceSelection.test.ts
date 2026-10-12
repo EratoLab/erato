@@ -4,6 +4,7 @@ import {
   installWordSelectionHost,
   SV2_MAIN_DOCUMENT,
   uninstallWordSelectionHost,
+  V3C_MULTI_DOCUMENT,
 } from "../../../test/mocks/word/selectionHost";
 import {
   replaceWordSelection,
@@ -536,6 +537,65 @@ describe.each(HOSTS)("replaceWordSelection on %s", (flavour) => {
     ).toMatchObject({
       status: "tracking",
     });
+  });
+
+  it.each([
+    ["PL1", "oscar papa.", "LI1", REWRITE],
+    ["FD1", "after words.", "HT1", "FD1 Feld vor \u27E61\u27E7 Feld danach."],
+  ] as const)(
+    "refuses %s once a comment reaching into the next paragraph was added since Send, and writes nothing",
+    async (p, text, next, rewrite) => {
+      const host = install();
+      const capture = await captureOf(host, { p });
+      expect(capture.selection).toMatchObject({ role: "rewrite" });
+      host.addComment({ p, text, to: { p: next, text: next } });
+      const before = host.ooxml({ p });
+      expect(await replace(capture, rewrite)).toMatchObject({
+        status: "refused",
+        code: "UNSUPPORTED_CONTENT",
+      });
+      expect(host.writeSyncs()).toEqual([]);
+      expect(host.ooxml({ p })).toBe(before);
+    },
+  );
+
+  it("keeps a comment's id through a write of its paragraph and its Undo", async () => {
+    const host = install();
+    const ids = host.comments().map((comment) => comment.id);
+    const capture = await captureOf(host, { p: "CM1" });
+    const result = await replace(
+      capture,
+      "CM1 Kommentierte Phrase\u27E61\u27E7 nach dem Kommentar.",
+    );
+    expect(result).toMatchObject({ status: "applied" });
+    expect(host.comments().map((comment) => comment.id)).toEqual(ids);
+    if (result.status !== "applied" || !result.backups)
+      throw new Error("not applied");
+    expect(
+      await revertWordSelection(result.backups, result.written),
+    ).toMatchObject({ status: "reverted" });
+    expect(host.comments().map((comment) => comment.id)).toEqual(ids);
+  });
+
+  it("rewrites and undoes the middle paragraph of a comment's anchor, which keeps its marks", async () => {
+    const host = install(V3C_MULTI_DOCUMENT);
+    const comments = host.comments();
+    const capture = await captureOf(host, { p: "MA2" });
+    const result = await replace(capture, "MA2 Middle paragraph rewritten.");
+    expect(result).toMatchObject({ status: "applied" });
+    expect(host.comments()[0]).toEqual({
+      id: comments[0].id,
+      anchor: comments[0].anchor.replace(
+        "MA2 Middle anchored paragraph charlie delta words.",
+        "MA2 Middle paragraph rewritten.",
+      ),
+    });
+    if (result.status !== "applied" || !result.backups)
+      throw new Error("not applied");
+    expect(
+      await revertWordSelection(result.backups, result.written),
+    ).toMatchObject({ status: "reverted" });
+    expect(host.comments()).toEqual(comments);
   });
 });
 

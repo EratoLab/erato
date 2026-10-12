@@ -36,6 +36,7 @@ import {
   queueWordSections,
   readWordStory,
   sameCellTable,
+  settleTargetVerification,
   wordParagraphsEndingSection,
   queueParagraphSpanChecks,
 } from "./wordSelectionTarget";
@@ -338,7 +339,11 @@ export async function replaceWordSelection(args: {
         support,
       );
       await context.sync();
-      const check = checkTargetVerification(selection, verify(), support);
+      const check = checkTargetVerification(
+        selection,
+        await settleTargetVerification(context, verify(), guard),
+        support,
+      );
       if ("refused" in check)
         return { refused: check.refused as WordSelectionRefusal };
       const changed = proof.parts
