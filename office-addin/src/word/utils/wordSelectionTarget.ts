@@ -35,6 +35,7 @@ import type {
   WordParagraphAnchor,
   WordParagraphEntry,
 } from "./wordParagraphResolver";
+import type { WordRunGuard } from "./wordRunGuard";
 import type {
   WordSelectionHazards,
   WordSelectionParagraph,
@@ -48,8 +49,17 @@ import type { WordSelectionSpanSlice } from "./wordSelectionSpan";
 import type { WordSelectionSupport } from "./wordSelectionSupport";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const W14 = "http://schemas.microsoft.com/office/word/2010/wordml";
+const W15 = "http://schemas.microsoft.com/office/word/2012/wordml";
+const W16CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 
 export const WORD_SELECTION_SHOW_TIMEOUT_MS = 10_000;
+/**
+ * Added to a run's timeout per comment whose anchor queueWordCommentAnchors compares.
+ * Word for the web mapped 50 anchors in 33.6 s (ERMAIN-947 P-PERF).
+ */
+export const WORD_COMMENT_ANCHOR_CHECK_MS = 1_000;
 
 /** The body's paragraphs: proxies, IDs and identity texts for the resolver, and paragraph.text. */
 export interface WordStoryRead {
@@ -84,14 +94,27 @@ export interface WordParagraphSpanChecks {
   objectHazards: WordSelectionHazards;
   /** Range.getBookmarks, other than Word's own _GoBack; null where they are not listed. */
   bookmarks: string[] | null;
+  /**
+   * Listed comments the OOXML does not hold, which settleWordCommentAnchors may still find to lie
+   * around the paragraph; until then they count as a commentMark. Null when there are none, or
+   * when the package cannot tell which ones they are.
+   */
+  commentsOutside: WordCommentsOutside | null;
+}
+
+/** A paragraph and the comments getComments listed for it that its own OOXML does not hold. */
+export interface WordCommentsOutside {
+  paragraph: Word.Paragraph;
+  comments: Word.Comment[];
 }
 
 /**
  * A whole paragraph's own OOXML, which is both the hazard scan's input and the Undo backup, and the
- * content controls and fields the OOXML can miss around it (PF3). All are reads Word for the web
- * leaves the document unchanged by: no range inside the paragraph is built. `inCell` tells it to
- * find which cell the paragraph is in, so its own OOXML can be cut out of a whole row.
- * `listBookmarks` also lists its bookmarks, where the OOXML is not known to show them all.
+ * content controls, fields and comments the OOXML can miss around it (PF3, ERMAIN-955). All are
+ * reads Word for the web leaves the document unchanged by: no range inside the paragraph is built.
+ * `inCell` tells it to find which cell the paragraph is in, so its own OOXML can be cut out of a
+ * whole row. `listBookmarks` also lists its bookmarks, where the OOXML is not known to show them
+ * all.
  */
 export function queueParagraphSpanChecks(
   paragraph: Word.Paragraph,
@@ -99,6 +122,8 @@ export function queueParagraphSpanChecks(
   listBookmarks = false,
 ): () => WordParagraphSpanChecks {
   const ooxml = paragraph.getOoxml();
+  const comments = paragraph.getComments();
+  comments.load("items/id");
   // Adjacent ones too: one that starts or ends right at the text's edge, or an empty one there,
   // may move or go when the text is rewritten.
   const bookmarks = listBookmarks
@@ -118,21 +143,258 @@ export function queueParagraphSpanChecks(
   // Includes a revision of the paragraph mark, which the web's paragraph OOXML does not show.
   const revisions = paragraph.getTrackedChanges();
   revisions.load("items/type");
-  return () => ({
-    ooxml:
+  return () => {
+    const own =
       cell && !cell.isNullObject
         ? wordCellParagraphOoxml(ooxml.value, cell.cellIndex, paragraph.text)
-        : ooxml.value,
-    objectHazards: {
-      ...(controls.items.length > 0 || !parent.isNullObject
-        ? { contentControl: true }
-        : {}),
-      ...(fields.items.length > 0 ? { field: true } : {}),
-      ...(revisions.items.length > 0 ? { trackedChange: true } : {}),
-    },
-    bookmarks:
-      bookmarks?.value.filter((name) => name !== WORD_BOOKMARK) ?? null,
+        : ooxml.value;
+    const outside = wordListedCommentsOutside(paragraph, own, comments.items);
+    return {
+      ooxml: own,
+      objectHazards: {
+        ...(controls.items.length > 0 || !parent.isNullObject
+          ? { contentControl: true }
+          : {}),
+        ...(fields.items.length > 0 ? { field: true } : {}),
+        ...(revisions.items.length > 0 ? { trackedChange: true } : {}),
+        ...(outside ? { commentMark: true } : {}),
+      },
+      bookmarks:
+        bookmarks?.value.filter((name) => name !== WORD_BOOKMARK) ?? null,
+      commentsOutside: outside === "uncertain" ? null : outside,
+    };
+  };
+}
+
+/** The comments getComments listed for a paragraph that its own OOXML does not hold. */
+export interface WordCommentsOutsidePackage {
+  /** As String(Comment.id): Word for the web gives Comment.id as a number. */
+  missing: string[];
+  /**
+   * Which ones are missing cannot be told, so `missing` names every listed one: a legacy package
+   * marks fewer comments in the paragraph than were listed and has no ids, or the package holds
+   * only one end of a comment's range.
+   */
+  uncertain: boolean;
+}
+
+function packagePart(doc: Document, name: string): Element | null {
+  const part = Array.from(doc.getElementsByTagNameNS(PKG, "part")).find(
+    (p) =>
+      (p.getAttributeNS(PKG, "name") ?? p.getAttribute("pkg:name")) === name,
+  );
+  return (
+    part?.getElementsByTagNameNS(PKG, "xmlData")[0]?.firstElementChild ?? null
+  );
+}
+
+/** The w:ids of replies, whose last paragraph commentsExtended gives a parent. */
+function replyCommentIds(
+  comments: Element,
+  extended: Element | null,
+): Set<string> {
+  if (!extended) return new Set();
+  const children = new Set(
+    Array.from(extended.getElementsByTagNameNS(W15, "commentEx"))
+      .filter((entry) => entry.hasAttributeNS(W15, "paraIdParent"))
+      .map((entry) => entry.getAttributeNS(W15, "paraId")?.toUpperCase()),
+  );
+  return new Set(
+    Array.from(comments.getElementsByTagNameNS(W, "comment")).flatMap(
+      (comment) => {
+        const paragraphs = comment.getElementsByTagNameNS(W, "p");
+        const last = paragraphs[paragraphs.length - 1];
+        return last &&
+          children.has(last.getAttributeNS(W14, "paraId")?.toUpperCase())
+          ? [comment.getAttributeNS(W, "id") ?? ""]
+          : [];
+      },
+    ),
+  );
+}
+
+/**
+ * Whether the part holds only one end of a comment's range, refused defensively: no host has given
+ * a body paragraph such a package. A cell paragraph's package is cut from its whole row's
+ * (wordCellParagraphOoxml) and might hold one end of a comment that reaches into another paragraph
+ * of the row, but that case is not measured.
+ */
+function holdsOneEndOnly(part: Element): boolean {
+  const marked = (name: string) =>
+    new Set(
+      Array.from(
+        part.getElementsByTagNameNS(W, name),
+        (mark) => mark.getAttributeNS(W, "id") ?? "",
+      ),
+    );
+  const starts = marked("commentRangeStart");
+  const ends = marked("commentRangeEnd");
+  return (
+    [...starts].some((id) => !ends.has(id)) ||
+    [...ends].some((id) => !starts.has(id))
+  );
+}
+
+/**
+ * Which of the comments getComments listed for a paragraph its own OOXML leaves out. Word leaves a
+ * comment whose anchor spans paragraphs out of each one's package, marks and parts alike, while
+ * getComments lists it there (F-13). A comment is held where commentsIds gives its durableId,
+ * which Comment.id spells in decimal (F-2), and the package holds both ends of every comment range
+ * it has. A legacy package has comments but no commentsIds (the web never writes them for such
+ * files), so its root comments marked in the paragraph, by a start or a reference, are counted
+ * instead.
+ */
+export function wordCommentsOutsidePackage(
+  ooxml: string,
+  listed: readonly (string | number)[],
+): WordCommentsOutsidePackage {
+  const ids = listed.map(String);
+  if (!ids.length) return { missing: [], uncertain: false };
+  const doc = new DOMParser().parseFromString(ooxml, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length)
+    return { missing: ids, uncertain: true };
+  if (
+    holdsOneEndOnly(
+      packagePart(doc, "/word/document.xml") ?? doc.documentElement,
+    )
+  )
+    return { missing: ids, uncertain: true };
+  const commentsIds = packagePart(doc, "/word/commentsIds.xml");
+  if (commentsIds) {
+    const held = new Set(
+      Array.from(
+        commentsIds.getElementsByTagNameNS(W16CID, "commentId"),
+        (entry) =>
+          String(parseInt(entry.getAttributeNS(W16CID, "durableId") ?? "", 16)),
+      ),
+    );
+    return { missing: ids.filter((id) => !held.has(id)), uncertain: false };
+  }
+  const comments = packagePart(doc, "/word/comments.xml");
+  if (!comments) return { missing: ids, uncertain: false };
+  const paragraph = wordParagraphElement(ooxml)?.paragraph;
+  if (!paragraph) return { missing: ids, uncertain: true };
+  const replies = replyCommentIds(
+    comments,
+    packagePart(doc, "/word/commentsExtended.xml"),
+  );
+  const marked = new Set(
+    ["commentRangeStart", "commentReference"]
+      .flatMap((name) =>
+        Array.from(
+          paragraph.getElementsByTagNameNS(W, name),
+          (mark) => mark.getAttributeNS(W, "id") ?? "",
+        ),
+      )
+      .filter((id) => !replies.has(id)),
+  );
+  return ids.length > marked.size
+    ? { missing: ids, uncertain: true }
+    : { missing: [], uncertain: false };
+}
+
+/**
+ * The comments listed for `paragraph` that `ooxml`, its own package, does not hold: null when it
+ * holds them all, and "uncertain" when it lacks some but cannot tell which.
+ */
+export function wordListedCommentsOutside(
+  paragraph: Word.Paragraph,
+  ooxml: string,
+  listed: readonly Word.Comment[],
+): WordCommentsOutside | "uncertain" | null {
+  const { missing, uncertain } = wordCommentsOutsidePackage(
+    ooxml,
+    listed.map((comment) => comment.id),
+  );
+  if (missing.length === 0) return null;
+  if (uncertain) return "uncertain";
+  const ids = new Set(missing);
+  return {
+    paragraph,
+    comments: listed.filter((comment) => ids.has(String(comment.id))),
+  };
+}
+
+/**
+ * Queued only: the anchor of each comment `outside` names, compared with its paragraph; null when
+ * there is none to compare. Read after the sync, it gives per entry the ids of the comments whose
+ * anchor lies strictly around the paragraph, as it does around the middle one of three: a write of
+ * the paragraph's own OOXML moves no mark of theirs. A mark at or inside its edge, even an
+ * anchor's start at its first character, would move or go (ERMAIN-955), so every other relation
+ * leaves the id out. Null too where the host does not compare anchors (Word for the web), so each
+ * such comment keeps its paragraph context only.
+ */
+export function queueWordCommentAnchors(
+  outside: readonly (WordCommentsOutside | "uncertain" | null)[],
+  support: Pick<WordSelectionSupport, "comparesCommentAnchors">,
+  guard?: Pick<WordRunGuard, "extendTimeout">,
+): (() => Set<string>[]) | null {
+  if (!support.comparesCommentAnchors) return null;
+  const relations = outside.map((each) => {
+    if (!each || each === "uncertain") return [];
+    const whole = each.paragraph.getRange("Whole");
+    // Seen from the comment, an anchor around the paragraph Contains it.
+    return each.comments.map((comment) => ({
+      id: String(comment.id),
+      relation: comment.getRange().compareLocationWith(whole),
+    }));
   });
+  const compared = relations.reduce((sum, each) => sum + each.length, 0);
+  if (compared === 0) return null;
+  guard?.extendTimeout(compared * WORD_COMMENT_ANCHOR_CHECK_MS);
+  return () =>
+    relations.map(
+      (each) =>
+        new Set(
+          each
+            .filter(({ relation }) => relation.value === "Contains")
+            .map(({ id }) => id),
+        ),
+    );
+}
+
+/** Whether each comment `outside` names lies around its paragraph: among `around`. */
+export function wordCommentsAround(
+  outside: WordCommentsOutside | "uncertain" | null,
+  around: ReadonlySet<string> | undefined,
+): boolean {
+  if (outside === null) return true;
+  if (outside === "uncertain") return false;
+  return outside.comments.every(
+    (comment) => around?.has(String(comment.id)) ?? false,
+  );
+}
+
+/**
+ * Lifts the commentMark the span checks gave a paragraph for comments its OOXML does not hold,
+ * where each lies around it (queueWordCommentAnchors).
+ */
+function settledChecks(
+  read: WordParagraphSpanChecks,
+  around: ReadonlySet<string> | undefined,
+): WordParagraphSpanChecks {
+  if (!read.commentsOutside) return read;
+  const objectHazards = { ...read.objectHazards };
+  if (wordCommentsAround(read.commentsOutside, around))
+    delete objectHazards.commentMark;
+  return { ...read, objectHazards, commentsOutside: null };
+}
+
+/** The span checks with their comment anchors settled, in one more sync where there are any. */
+export async function settleWordCommentAnchors(
+  context: Word.RequestContext,
+  reads: readonly WordParagraphSpanChecks[],
+  support: Pick<WordSelectionSupport, "comparesCommentAnchors">,
+  guard?: Pick<WordRunGuard, "extendTimeout">,
+): Promise<WordParagraphSpanChecks[]> {
+  const anchors = queueWordCommentAnchors(
+    reads.map((read) => read.commentsOutside),
+    support,
+    guard,
+  );
+  if (anchors) await context.sync();
+  const around = anchors?.() ?? [];
+  return reads.map((read, i) => settledChecks(read, around[i]));
 }
 
 /** The bookmarks Range.getBookmarks listed that the paragraph's own OOXML does not show. */
@@ -156,11 +418,12 @@ export interface WordKeptParagraphEvaluation {
 }
 
 /**
- * What still keeps a paragraph with kept items from being rewritten: a revision, a bookmark its
- * OOXML left out, complex-script text, or formatting its part's rewrite would drop, as the plain
- * path refuses it (mixed colour, highlight, font, size or character style, and superscript or
- * subscript). Only the part's own text runs are judged; the rest of the paragraph is written as it
- * was, its bookmarks included. `formatted`: the rewrite keeps the part's format spans.
+ * What still keeps a paragraph with kept items from being rewritten: a revision, a bookmark or a
+ * comment its OOXML left out, complex-script text, or formatting its part's rewrite would drop, as
+ * the plain path refuses it (mixed colour, highlight, font, size or character style, and
+ * superscript or subscript). Only the part's own text runs are judged; the rest of the paragraph
+ * is written as it was, its bookmarks included. `formatted`: the rewrite keeps the part's format
+ * spans.
  */
 export function evaluateKeptParagraph(
   checks: WordParagraphSpanChecks,
@@ -182,6 +445,7 @@ export function evaluateKeptParagraph(
         ? { trackedChange: true }
         : {}),
       ...(bookmarksHidden(checks) ? { bookmark: true } : {}),
+      ...(checks.objectHazards.commentMark ? { commentMark: true } : {}),
       ...(loss === null ? { unsupportedFormatting: true } : {}),
       ...(loss?.other ? { mixedFormatting: true } : {}),
       ...(loss?.script ? { mixedScript: true } : {}),
@@ -465,6 +729,20 @@ export function queueTargetVerification(
     })),
     trackingMode: String(context.document.changeTrackingMode),
   });
+}
+
+/** A final read with its comment anchors settled by `around` (queueWordCommentAnchors). */
+export function settleTargetVerification(
+  verification: WordTargetVerification,
+  around: readonly ReadonlySet<string>[],
+): WordTargetVerification {
+  return {
+    ...verification,
+    paragraphs: verification.paragraphs.map((live, i) => ({
+      ...live,
+      checks: settledChecks(live.checks, around[i]),
+    })),
+  };
 }
 
 export type WordTargetCheck =

@@ -5,6 +5,7 @@ import {
   installWordSelectionHost,
   SV2_MAIN_DOCUMENT,
   uninstallWordSelectionHost,
+  V3C_MULTI_DOCUMENT,
 } from "../selectionHost";
 
 import type {
@@ -1678,5 +1679,139 @@ describe("test controls", () => {
       return paragraphs.items[0].uniqueLocalId;
     });
     expect(id).toBeNull();
+  });
+});
+
+describe.each(HOSTS)("comments on %s", (flavour) => {
+  const desktop = flavour !== "web";
+  const MA = "2010680536";
+  const MB = "27818680";
+  const MC = "1794550156";
+  const install = (options: { legacyComments?: boolean } = {}) =>
+    installWordSelectionHost(V3C_MULTI_DOCUMENT, { host: flavour, ...options });
+  const listed = (tag: string) =>
+    Word.run(async (context) => {
+      const comments = (await tagged(context, tag)).getComments();
+      comments.load("items/id");
+      await context.sync();
+      return comments.items.map((comment) => comment.id as unknown);
+    });
+
+  it("lists a paragraph's comments by their decimal durableId, a number on the web", async () => {
+    install();
+    const id = (value: string) => (desktop ? value : Number(value));
+    expect(await listed("MA1")).toEqual([id(MA)]);
+    // F-11: the web misses the paragraph in the middle of an anchor.
+    expect(await listed("MA2")).toEqual(desktop ? [MA] : []);
+    expect(await listed("MA3")).toEqual([id(MA)]);
+    expect(await listed("MB1")).toEqual([id(MB)]);
+    expect(await listed("MC1")).toEqual([id(MC)]);
+    expect(await listed("SB1")).toEqual([]);
+  });
+
+  it("relates each comment's range to a paragraph as Office.js does", async () => {
+    install();
+    const relations = await Word.run(async (context) => {
+      const comments = context.document.body.getComments();
+      comments.load("items/id");
+      await context.sync();
+      const byId = new Map(
+        comments.items.map((comment) => [String(comment.id), comment]),
+      );
+      const compare = async (id: string, tag: string) =>
+        byId
+          .get(id)!
+          .getRange()
+          .compareLocationWith((await tagged(context, tag)).getRange("Whole"));
+      const results = [
+        await compare(MA, "MA1"),
+        await compare(MA, "MA2"),
+        await compare(MA, "MA3"),
+        await compare(MB, "MB1"),
+        await compare(MB, "MB2"),
+        await compare(MB, "MB3"),
+        await compare(MC, "MC1"),
+      ];
+      const anchor = byId.get(MB)!.getRange();
+      anchor.load("text");
+      await context.sync();
+      return [...results.map((result) => result.value), anchor.text];
+    });
+    expect(relations).toEqual([
+      "ContainsStart",
+      "Contains",
+      "OverlapsBefore",
+      "OverlapsAfter",
+      "Contains",
+      "OverlapsBefore",
+      "Inside",
+      "anchor starts india juliet words.\rMB2 Middle kilo lima words.\rMB3 Anchor ends mike november here",
+    ]);
+  });
+
+  it("puts a comment's marks and parts into a package only when it holds the whole anchor", async () => {
+    const host = install();
+    const paragraph = (tag: string) => host.ooxml({ p: tag, part: "Whole" });
+    for (const tag of ["MA1", "MA2", "MA3", "MB1", "MB3"])
+      expect(paragraph(tag)).not.toMatch(/<w:comment|\/word\/comments/);
+    expect(paragraph("MC1")).toMatch(
+      /<w:commentRangeStart w:id="(\d+)"\/>.*sierra tango.*<w:commentRangeEnd w:id="\1"\/><w:r><w:commentReference w:id="\1"\/><\/w:r>/,
+    );
+    expect(paragraph("MC1")).toMatch(
+      /pkg:name="\/word\/comments.xml".*pkg:name="\/word\/commentsExtended.xml".*w16cid:durableId="6AF6A98C"/,
+    );
+    const range = host.ooxml({ p: "MA1", to: { p: "MA3" } });
+    expect(range).toMatch(
+      /<w:commentRangeStart w:id="\d+"\/>.*MA1 First.*MA3 Last.*<w:commentReference/,
+    );
+    expect(range).toContain('w16cid:durableId="77D88CD8"');
+    const legacy = install({ legacyComments: true }).ooxml({ p: "MC1" });
+    expect(legacy).toContain("/word/comments.xml");
+    expect(legacy).not.toContain("commentsIds");
+  });
+
+  it("keeps a comment's id through an insertOoxml of its paragraph's own package", async () => {
+    const host = install();
+    const before = host.comments();
+    await Word.run(async (context) => {
+      const paragraph = await tagged(context, "MC1");
+      const ooxml = paragraph.getOoxml();
+      await context.sync();
+      paragraph.insertOoxml(ooxml.value, "Replace");
+      await context.sync();
+    });
+    expect(host.comments()).toEqual(before);
+    expect(await listed("MC1")).toEqual([desktop ? MC : Number(MC)]);
+  });
+
+  it("adds a comment across paragraphs, its reference after the target's text", async () => {
+    const host = install();
+    const id = host.addComment({
+      p: "SA1",
+      text: "group A.",
+      to: { p: "MA1", text: "MA1 First" },
+    });
+    expect(host.comments()).toContainEqual({
+      id,
+      anchor: "group A.\rMA1 First",
+    });
+    expect(host.text({ p: "MA1" })).toMatch(
+      desktop ? /^MA1 First anchored/ : /^MA1 First\u0005 anchored/,
+    );
+    expect(await listed("SA1")).toEqual([desktop ? id : Number(id)]);
+  });
+
+  it("gates getComments at WordApi 1.4", async () => {
+    installWordSelectionHost(V3C_MULTI_DOCUMENT, {
+      host: flavour,
+      requirements: "ltsc2021",
+    });
+    expect(
+      await errorCode(async (context) => {
+        const comments = context.document.body.getComments();
+        comments.load("items/id");
+        await context.sync();
+      }),
+    ).toBe("ApiNotFound");
   });
 });
