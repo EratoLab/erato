@@ -8,6 +8,7 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { clientOperationHandlerRegistry } from "./handlers";
+import { withClientCallLock } from "./operationLock";
 
 import type { ClientOperationHandlerRegistry } from "./handlers";
 import type {
@@ -78,24 +79,24 @@ export interface ClientOperationHandler {
   matches?(request: OperationRequest): boolean;
   /** Skips the claim for this sweep, e.g. while the live call still runs here. */
   defer?(request: OperationRequest): boolean;
-  prepare(signal: AbortSignal): Promise<void>;
+  prepare?(signal: AbortSignal): Promise<void>;
   executor(): ExecutorBinding | undefined;
   execute(
     request: OperationRequest,
     claim: ClaimClientOperationResponse,
     signal: AbortSignal,
   ): Promise<OperationResult | undefined>;
-  settled(request: OperationRequest, signal: AbortSignal): Promise<void>;
-  recover(signal: AbortSignal): Promise<void>;
-  review(
+  settled?(request: OperationRequest, signal: AbortSignal): Promise<void>;
+  recover?(signal: AbortSignal): Promise<void>;
+  review?(
     request: OperationRequest,
     claim: ClaimClientOperationResponse,
     signal: AbortSignal,
   ): Promise<void>;
-  status(request: OperationRequest, status: CoordinatorStatus): void;
-  retain(ids: Set<string>): void;
-  reset(): void;
-  dispose(): void;
+  status?(request: OperationRequest, status: CoordinatorStatus): void;
+  retain?(ids: Set<string>): void;
+  reset?(): void;
+  dispose?(): void;
 }
 function sameBinding(a: ExecutorBinding, b: ExecutorBinding): boolean {
   return (
@@ -134,7 +135,7 @@ export class ClientOperationCoordinator {
     this.#unsubscribe();
     this.#operations.clear();
     this.#claims.clear();
-    this.#builtIns.forEach((handler) => handler.dispose());
+    this.#builtIns.forEach((handler) => handler.dispose?.());
   }
   #handlers(): readonly ClientOperationHandler[] {
     return [...this.#builtIns, ...this.registry.handlers()];
@@ -203,14 +204,14 @@ export class ClientOperationCoordinator {
       if (!page.enabled) {
         this.#operations.clear();
         this.#claims.clear();
-        this.#handlers().forEach((handler) => handler.reset());
+        this.#handlers().forEach((handler) => handler.reset?.());
         return;
       }
       if (!prepared) {
         prepared = true;
         for (const handler of this.#handlers()) {
           try {
-            await handler.prepare(this.#abort.signal);
+            await handler.prepare?.(this.#abort.signal);
           } catch {
             /* No native diagnostics leave the handler. */
           }
@@ -243,9 +244,9 @@ export class ClientOperationCoordinator {
           continue;
         }
         if (operation.state === "ready" || operation.state === "continuing") {
-          handler.status(request, "continuing");
+          handler.status?.(request, "continuing");
           try {
-            await handler.settled(request, this.#abort.signal);
+            await handler.settled?.(request, this.#abort.signal);
           } catch {
             /* Receipt recovery can wait for the device. */
           }
@@ -260,39 +261,16 @@ export class ClientOperationCoordinator {
         if (operation.state === "completed") continue;
         const executor = handler.executor();
         if (!executor || !sameBinding(executor, request.binding)) {
-          handler.status(request, executor ? "another_device" : "unavailable");
+          handler.status?.(
+            request,
+            executor ? "another_device" : "unavailable",
+          );
           continue;
         }
         if (handler.defer?.(request)) continue;
-        try {
-          const claim = await this.#claim(request, handler);
-          const result = await handler.execute(
-            request,
-            claim,
-            this.#abort.signal,
-          );
-          this.#check();
-          if (!result) continue;
-          await this.api.complete(
-            request,
-            claim.claim_token,
-            result,
-            this.#abort.signal,
-          );
-          this.#check();
-          try {
-            await handler.settled(request, this.#abort.signal);
-          } catch {
-            /* Recover the durable receipt on reconnect. */
-          }
-          this.#check();
-          handler.status(request, "continuing");
-          await this.api.continue(request.attempt_id, this.#abort.signal);
-        } catch {
-          this.#claims.delete(
-            request.attempt_id,
-          ); /* Never upload executor exceptions. */
-        }
+        await withClientCallLock(request.message_id, request.tool_call_id, () =>
+          this.#run(request, handler),
+        );
       }
       after = page.after;
     } while (after);
@@ -302,13 +280,43 @@ export class ClientOperationCoordinator {
         this.#claims.delete(id);
       }
     for (const handler of this.#handlers()) {
-      handler.retain(seen);
+      handler.retain?.(seen);
       try {
-        await handler.recover(this.#abort.signal);
+        await handler.recover?.(this.#abort.signal);
       } catch {
         /* Bounded receipt recovery on the next sweep. */
       }
       this.#check();
+    }
+  }
+  async #run(
+    request: OperationRequest,
+    handler: ClientOperationHandler,
+  ): Promise<void> {
+    try {
+      const claim = await this.#claim(request, handler);
+      const result = await handler.execute(request, claim, this.#abort.signal);
+      this.#check();
+      if (!result) return;
+      await this.api.complete(
+        request,
+        claim.claim_token,
+        result,
+        this.#abort.signal,
+      );
+      this.#check();
+      try {
+        await handler.settled?.(request, this.#abort.signal);
+      } catch {
+        /* Recover the durable receipt on reconnect. */
+      }
+      this.#check();
+      handler.status?.(request, "continuing");
+      await this.api.continue(request.attempt_id, this.#abort.signal);
+    } catch {
+      this.#claims.delete(
+        request.attempt_id,
+      ); /* Never upload executor exceptions. */
     }
   }
   async review(id: string): Promise<void> {
@@ -318,7 +326,7 @@ export class ClientOperationCoordinator {
     try {
       const claim = await this.#claim(operation.request, handler, true);
       this.#check();
-      await handler.review(operation.request, claim, this.#abort.signal);
+      await handler.review?.(operation.request, claim, this.#abort.signal);
     } catch {
       /* Review errors stay local. */
     }

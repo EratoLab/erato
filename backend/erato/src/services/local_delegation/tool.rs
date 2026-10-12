@@ -113,9 +113,6 @@ impl crate::services::client_operations::OperationKind for LocalEvidenceKind {
     fn attempt_ttl(&self) -> chrono::Duration {
         chrono::Duration::seconds(ATTEMPT_TTL_SECS)
     }
-    fn claim_lease(&self) -> chrono::Duration {
-        chrono::Duration::minutes(5)
-    }
     fn reoffer_after_result(
         &self,
         result: &crate::services::client_operations::OperationResult,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import { registerOperationExecutor } from "@/lib/clientOperations/registration";
+import { fakeWebLocks } from "@/test/webLocks";
 
 import { handleClientToolCall } from "./handleClientToolCall";
 import { handleToolCallUpdate } from "./handleToolCallUpdate";
@@ -187,8 +188,12 @@ describe("handleClientToolCall", () => {
       unregister();
     });
 
-    it("stays in flight until its result POST settles, then requests a sweep", async () => {
-      let respond!: (response: { ok: boolean; status: number }) => void;
+    it("stays in flight until its result POST settles, then sweeps for a stored call", async () => {
+      let respond!: (response: {
+        ok: boolean;
+        status: number;
+        json: () => Promise<unknown>;
+      }) => void;
       fetchMock.mockReturnValueOnce(
         new Promise((resolve) => {
           respond = resolve;
@@ -199,10 +204,37 @@ describe("handleClientToolCall", () => {
       expect(isClientToolCallInFlight("call-1")).toBe(true);
       expect(sweep).not.toHaveBeenCalled();
 
-      respond({ ok: true, status: 200 });
+      respond({
+        ok: true,
+        status: 200,
+        json: async () => ({ delivered: true, stored: true }),
+      });
       await pending;
       expect(isClientToolCallInFlight("call-1")).toBe(false);
       expect(sweep).toHaveBeenCalledTimes(1);
+    });
+
+    it("requests no sweep when the live answer settled nothing stored", async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ delivered: true, stored: false }),
+      });
+      await handleClientToolCall(makeEvent(), deps);
+      expect(sweep).not.toHaveBeenCalled();
+    });
+
+    it("skips a call another pane of this browser already runs", async () => {
+      const executor = vi.fn(async () => ({ ok: true as const, result: null }));
+      registerClientToolExecutor("fetch_availability", executor);
+      const restore = fakeWebLocks(new Set(["erato.client-call:msg-1:call-1"]));
+      try {
+        await handleClientToolCall(makeEvent(), deps);
+      } finally {
+        restore();
+      }
+      expect(executor).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("keeps a conflicting call answered without requesting a sweep", async () => {

@@ -544,7 +544,9 @@ async fn live_fetch_availability_result_creates_no_attempt(pool: Pool<Postgres>)
                 let bound =
                     post_live(&setup.state, setup.chat_id, &call, body, Some(&mailbox())).await;
                 bound.assert_status_ok();
-                assert_eq!(bound.json::<Value>()["delivered"], true);
+                let answered = bound.json::<Value>();
+                assert_eq!(answered["delivered"], true);
+                assert_eq!(answered["stored"], false);
             }
         )
     })
@@ -557,6 +559,29 @@ async fn live_fetch_availability_result_creates_no_attempt(pool: Pool<Postgres>)
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0]["status"], "success");
     assert_eq!(seen[0]["result"], availability());
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn late_live_result_settles_an_unclaimed_park_and_reports_it(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = park(&setup).await;
+    let call = (request.message_id, request.tool_call_id.clone());
+    let late = post_live(
+        &setup.state,
+        setup.chat_id,
+        &call,
+        json!({"result":availability()}),
+        Some(&mailbox()),
+    )
+    .await;
+    late.assert_status_ok();
+    let answered = late.json::<Value>();
+    assert_eq!(answered["delivered"], true);
+    assert_eq!(answered["stored"], true);
+    assert_eq!(
+        attempt(&setup.state, request.attempt_id).await.state,
+        AttemptState::Ready
+    );
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

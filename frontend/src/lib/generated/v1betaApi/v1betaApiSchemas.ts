@@ -1174,6 +1174,11 @@ export type ClientToolResultResponse = {
    * benign no-op (already delivered, timed out, aborted, or unknown id).
    */
   delivered: boolean;
+  /**
+   * True if this result settled a parked client operation, which the
+   * sender then continues.
+   */
+  stored: boolean;
 };
 
 /**

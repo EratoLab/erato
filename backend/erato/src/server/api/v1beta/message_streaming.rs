@@ -2591,6 +2591,9 @@ pub struct ClientToolResultResponse {
     /// True if a suspended generation received this result; false if it was a
     /// benign no-op (already delivered, timed out, aborted, or unknown id).
     delivered: bool,
+    /// True if this result settled a parked client operation, which the
+    /// sender then continues.
+    stored: bool,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -15861,7 +15864,10 @@ pub async fn client_tool_result(
                         .await,
                     ClientToolDelivery::Delivered
                 ) {
-                    return Ok(Json(ClientToolResultResponse { delivered: true }));
+                    return Ok(Json(ClientToolResultResponse {
+                        delivered: true,
+                        stored: false,
+                    }));
                 }
             }
             let row = crate::services::client_operations::store::for_call(
@@ -15958,7 +15964,10 @@ pub async fn client_tool_result(
                             "Operation is no longer open".into(),
                         )
                     })?;
-                    return Ok(Json(ClientToolResultResponse { delivered: true }));
+                    return Ok(Json(ClientToolResultResponse {
+                        delivered: true,
+                        stored: true,
+                    }));
                 }
             }
         }
@@ -16007,7 +16016,10 @@ pub async fn client_tool_result(
                     format!("Failed to deliver client tool result: {error}"),
                 )
             })?;
-        return Ok(Json(ClientToolResultResponse { delivered: true }));
+        return Ok(Json(ClientToolResultResponse {
+            delivered: true,
+            stored: false,
+        }));
     }
 
     let task = task.expect("task checked above");
@@ -16045,6 +16057,7 @@ pub async fn client_tool_result(
     // aborted) is a benign idempotent no-op — never a 4xx/5xx.
     Ok(Json(ClientToolResultResponse {
         delivered: matches!(delivery, ClientToolDelivery::Delivered),
+        stored: false,
     }))
 }
 

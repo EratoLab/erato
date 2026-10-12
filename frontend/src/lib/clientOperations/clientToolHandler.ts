@@ -127,20 +127,4 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
     signal.throwIfAborted();
     return outcome ? toOperationResult(request, outcome) : failed(request);
   }
-  prepare(): Promise<void> {
-    return Promise.resolve();
-  }
-  settled(): Promise<void> {
-    return Promise.resolve();
-  }
-  recover(): Promise<void> {
-    return Promise.resolve();
-  }
-  review(): Promise<void> {
-    return Promise.resolve();
-  }
-  status(): void {}
-  retain(): void {}
-  reset(): void {}
-  dispose(): void {}
 }

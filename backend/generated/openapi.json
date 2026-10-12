@@ -6562,12 +6562,17 @@
       "ClientToolResultResponse": {
         "type": "object",
         "required": [
-          "delivered"
+          "delivered",
+          "stored"
         ],
         "properties": {
           "delivered": {
             "type": "boolean",
             "description": "True if a suspended generation received this result; false if it was a\nbenign no-op (already delivered, timed out, aborted, or unknown id)."
+          },
+          "stored": {
+            "type": "boolean",
+            "description": "True if this result settled a parked client operation, which the\nsender then continues."
           }
         }
       },

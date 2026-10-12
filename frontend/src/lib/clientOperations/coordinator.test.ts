@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { resetClientToolRegistryForTests } from "@/hooks/chat/clientToolExecutors";
+import { fakeWebLocks } from "@/test/webLocks";
 
 import { ClientToolOperationHandler } from "./clientToolHandler";
 import { ClientOperationCoordinator, clientOperationApi } from "./coordinator";
@@ -188,13 +189,34 @@ describe("ClientOperationCoordinator handler registry", () => {
     coordinator.dispose();
   });
 
+  it("skips an operation another pane of this browser already runs", async () => {
+    const request = operation();
+    const restore = fakeWebLocks(
+      new Set([`erato.client-call:${request.message_id}:avail-call`]),
+    );
+    try {
+      const { api } = fakeApi(request);
+      const { registry, coordinator } = coordinatorWith(api);
+      const availability = toolHandler();
+      registry.register(availability.handler);
+      await coordinator.reconcile();
+      expect(api.claim).not.toHaveBeenCalled();
+      expect(availability.run).not.toHaveBeenCalled();
+      coordinator.dispose();
+    } finally {
+      restore();
+    }
+  });
+
   it("disposes its built-in handlers but leaves registered ones to the shell", async () => {
     const { api } = fakeApi();
-    const builtIn = toolHandler("create_draft").handler;
-    const builtInDispose = vi.spyOn(builtIn, "dispose");
+    const builtInDispose = vi.fn();
+    const builtIn: ClientOperationHandler = toolHandler("create_draft").handler;
+    builtIn.dispose = builtInDispose;
     const { registry, coordinator } = coordinatorWith(api, [builtIn]);
-    const registered = toolHandler().handler;
-    const registeredDispose = vi.spyOn(registered, "dispose");
+    const registeredDispose = vi.fn();
+    const registered: ClientOperationHandler = toolHandler().handler;
+    registered.dispose = registeredDispose;
     registry.register(registered);
     coordinator.dispose();
     expect(builtInDispose).toHaveBeenCalledTimes(1);
