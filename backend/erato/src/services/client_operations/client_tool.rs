@@ -146,6 +146,29 @@ impl OperationKind for ConfiguredClientToolKind {
                 if error.code == "validation_failed" =>
             {
                 bounded_message(error)?;
+                if self.host == ClientToolHostContext::WordDocument
+                    && let Some(validation) = &error.validation
+                {
+                    let payload = json!({"validation_errors": validation.issues, "submission_feedback": validation.feedback});
+                    if serialized_len(&payload) > MAX_INPUT_BYTES {
+                        return Err("Read diagnostics too large".into());
+                    }
+                    let crate::services::client_tools::ClientToolOutcome::ValidationFailed(
+                        issues,
+                        feedback,
+                    ) = crate::services::client_tools::ClientToolOutcome::from_payload(&payload)
+                    else {
+                        return Err("Invalid read diagnostics".into());
+                    };
+                    let mut output = json!({"status":"error", "error":"Document read validation failed", "validation_errors":issues});
+                    if let Some(feedback) = feedback {
+                        output["submission_feedback"] = json!(feedback);
+                    }
+                    return Ok(ValidatedResult {
+                        output,
+                        succeeded: false,
+                    });
+                }
                 Ok(ValidatedResult {
                     output: json!({"status":"error","error":"Client tool validation failed"}),
                     succeeded: false,
@@ -160,6 +183,61 @@ impl OperationKind for ConfiguredClientToolKind {
 mod tests {
     use super::*;
     use crate::config::ClientToolDurableConfig;
+
+    #[test]
+    fn word_read_rejections_keep_bounded_diagnostics_on_both_paths() {
+        use crate::services::client_tools::{
+            ClientToolOutcome, ClientToolSubmissionFeedback, SubmissionRecovery,
+        };
+        let mut kind = kind(None);
+        kind.host = ClientToolHostContext::WordDocument;
+        let mut request = request();
+        request.binding.host_context.as_mut().unwrap().kind = "word_document".into();
+        let outcome = ClientToolOutcome::from_payload(&json!({
+            "validation_errors": [{"path":"/snapshot","code":"capture-unavailable","message":"x".repeat(2000)}],
+            "submission_feedback": {"terminal":true,"recovery":"cannot_continue"}
+        }));
+        let result = from_fast_result(&request, outcome).unwrap();
+        assert!(result.result.is_none());
+        let validated = kind.validate_result(&request, &result).unwrap();
+        assert!(!validated.succeeded);
+        assert_eq!(
+            validated.output["validation_errors"][0]["message"]
+                .as_str()
+                .unwrap()
+                .len(),
+            512
+        );
+        assert!(matches!(
+            ClientToolOutcome::from_payload(&validated.output),
+            ClientToolOutcome::ValidationFailed(
+                _,
+                Some(ClientToolSubmissionFeedback {
+                    recovery: SubmissionRecovery::CannotContinue,
+                    ..
+                })
+            )
+        ));
+        let mut malformed = result.clone();
+        malformed
+            .error
+            .as_mut()
+            .unwrap()
+            .validation
+            .as_mut()
+            .unwrap()
+            .issues
+            .clear();
+        assert!(kind.validate_result(&request, &malformed).is_err());
+        kind.host = ClientToolHostContext::OutlookMailbox;
+        assert!(
+            kind.validate_result(&request, &result)
+                .unwrap()
+                .output
+                .get("validation_errors")
+                .is_none()
+        );
+    }
 
     const SCHEMA: &str =
         r#"{"type":"object","required":["busy"],"properties":{"busy":{"type":"array"}}}"#;
@@ -232,6 +310,7 @@ mod tests {
             outcome,
             result: value,
             error: error.map(|(code, message)| OperationError {
+                validation: None,
                 code: code.into(),
                 message,
             }),

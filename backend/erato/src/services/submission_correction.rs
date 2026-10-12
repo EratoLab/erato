@@ -148,6 +148,7 @@ impl SubmissionCorrection {
             }
             ClientToolOutcome::Cancelled { reason } => self.stop(match reason.as_str() {
                 "timeout" => SubmissionReason::Timeout,
+                "context_unavailable" => SubmissionReason::ContextUnavailable,
                 "submission_attempt_limit" => SubmissionReason::AttemptsExhausted,
                 _ => SubmissionReason::Cancelled,
             }),
@@ -166,6 +167,23 @@ impl SubmissionCorrection {
                 }
             }
             ClientToolOutcome::Error(_) => self.stop(SubmissionReason::CapabilityUnavailable),
+        }
+    }
+
+    pub fn record_read(&mut self, result: &ClientToolOutcome) {
+        match result {
+            ClientToolOutcome::ValidationFailed(_, Some(feedback))
+                if feedback.recovery == SubmissionRecovery::CannotContinue =>
+            {
+                self.stop(SubmissionReason::ContextUnavailable)
+            }
+            ClientToolOutcome::Cancelled { reason } => self.stop(match reason.as_str() {
+                "timeout" => SubmissionReason::Timeout,
+                "context_unavailable" => SubmissionReason::ContextUnavailable,
+                _ => SubmissionReason::Cancelled,
+            }),
+            ClientToolOutcome::Error(_) => self.stop(SubmissionReason::CapabilityUnavailable),
+            _ => {}
         }
     }
 

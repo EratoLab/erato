@@ -74,7 +74,19 @@ export function toOperationResult(
   if (outcome.validationErrors?.length)
     return settle(request, {
       outcome: "rejected",
-      error: { code: "validation_failed" },
+      error: {
+        code: "validation_failed",
+        ...(request.binding.host_context?.kind === "word_document"
+          ? {
+              validation: {
+                issues: outcome.validationErrors,
+                ...(outcome.submissionFeedback
+                  ? { feedback: outcome.submissionFeedback }
+                  : {}),
+              },
+            }
+          : {}),
+      },
     });
   return failed(request, outcome.error);
 }

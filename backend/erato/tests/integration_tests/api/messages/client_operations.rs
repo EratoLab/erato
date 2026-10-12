@@ -1064,6 +1064,7 @@ async fn repeated_parks_do_not_mint_new_submission_allowances(pool: Pool<Postgre
         rejected.outcome = OperationOutcome::Rejected;
         rejected.result = None;
         rejected.error = Some(OperationError {
+            validation: None,
             code: "validation_failed".into(),
             message: None,
         });
@@ -1649,6 +1650,7 @@ async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool
     rejected.outcome = OperationOutcome::Rejected;
     rejected.result = None;
     rejected.error = Some(OperationError {
+        validation: None,
         code: "validation_failed".into(),
         message: None,
     });
@@ -1919,6 +1921,7 @@ async fn post_claimed_result(
         if !accepted {
             result.outcome = OperationOutcome::Rejected;
             result.error = Some(OperationError {
+                validation: None,
                 code: "validation_failed".into(),
                 message: None,
             });

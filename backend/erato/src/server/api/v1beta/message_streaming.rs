@@ -7379,6 +7379,14 @@ async fn stream_generate_chat_completion<'a>(
                 if let Some(request) = &durable_request {
                     task.register_client_operation(request.clone()).await?;
                 }
+                let live_submission = submission.is_some()
+                    && durable_request.is_none()
+                    && task.uses_shared_client_transport();
+                if live_submission && !task.client_transport_connected().await {
+                    validation_failure = Some(ClientToolOutcome::Cancelled {
+                        reason: "context_unavailable".into(),
+                    });
+                }
                 let server_refused = validation_failure.is_some();
                 let outcome = if let Some(failure) = validation_failure {
                     failure
@@ -7398,7 +7406,7 @@ async fn stream_generate_chat_completion<'a>(
                         send_background_event(
                             task,
                             StreamingEvent::ClientToolCall {
-                                requires_transport: durable_request.is_some()
+                                requires_transport: (durable_request.is_some() || live_submission)
                                     && task.uses_shared_client_transport(),
                                 message_id: assistant_message_id,
                                 content_index,
@@ -7422,7 +7430,7 @@ async fn stream_generate_chat_completion<'a>(
                         // during the park, so a dropped SSE connection here must NOT
                         // abort the generation. The broadcast + resume history is the
                         // durable signal path.
-                        if (durable_request.is_none()
+                        if ((!live_submission && durable_request.is_none())
                             || task.original_transport_can_execute().await)
                             && let Err(error) = call_message.send_event_report(tx.clone()).await
                         {
@@ -7445,6 +7453,7 @@ async fn stream_generate_chat_completion<'a>(
                     enum Park {
                         Delivered(ClientToolOutcome),
                         Aborted,
+                        TransportUnavailable,
                         TimedOut,
                     }
                     let park = if inbox_only {
@@ -7457,7 +7466,9 @@ async fn stream_generate_chat_completion<'a>(
                                 Err(_) => Park::TimedOut,
                             },
                             _ = task.wait_for_abort() => Park::Aborted,
-                            _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
+                            _ = task.wait_for_client_disconnect(), if durable_request.is_some() || live_submission => {
+                                if live_submission { Park::TransportUnavailable } else { Park::TimedOut }
+                            },
                             _ = tokio::time::sleep(tokio::time::Duration::from_millis(
                                 park_timeout_ms,
                             )) => Park::TimedOut,
@@ -7496,6 +7507,9 @@ async fn stream_generate_chat_completion<'a>(
 
                     match park {
                         Park::Delivered(outcome) => outcome,
+                        Park::TransportUnavailable => ClientToolOutcome::Cancelled {
+                            reason: "context_unavailable".into(),
+                        },
                         Park::TimedOut if withdrawn => ClientToolOutcome::Cancelled {
                             reason: "withdrawn".to_string(),
                         },
@@ -7643,13 +7657,7 @@ async fn stream_generate_chat_completion<'a>(
                     .is_some_and(|charge| charge.recovery_read)
                     && let Some(correction) = submission_correction.as_mut()
                 {
-                    use crate::services::submission_correction::SubmissionReason;
-                    match &outcome {
-                        ClientToolOutcome::ValidationFailed(_, Some(feedback)) if feedback.recovery == crate::services::client_tools::SubmissionRecovery::CannotContinue => correction.stop(SubmissionReason::ContextUnavailable),
-                        ClientToolOutcome::Cancelled { reason } => correction.stop(if reason == "timeout" { SubmissionReason::Timeout } else { SubmissionReason::Cancelled }),
-                        ClientToolOutcome::Error(_) => correction.stop(SubmissionReason::CapabilityUnavailable),
-                        _ => {},
-                    }
+                    correction.record_read(&outcome);
                     exit_after_join |= !correction.pending();
                 }
                 if let Some(submission) = submission {

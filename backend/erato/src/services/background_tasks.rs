@@ -1545,31 +1545,28 @@ impl StreamingTask {
         )
     }
 
-    pub async fn wait_for_client_disconnect(&self) {
-        loop {
-            let connected = if self.shared_transport.load(Ordering::Acquire) {
-                if let Some(db) = &self.db {
-                    match crate::services::client_operations::transport::owner(
-                        db,
-                        self.generation_id,
-                    )
-                    .await
-                    {
-                        Ok(owner) => matches!(owner, Some(Some(_))),
-                        Err(error) => {
-                            tracing::warn!(%error, "Cannot determine client transport connectivity");
-                            true
-                        }
-                    }
-                } else {
-                    self.original_transport_connected.load(Ordering::Acquire)
+    pub async fn client_transport_connected(&self) -> bool {
+        if self.shared_transport.load(Ordering::Acquire)
+            && let Some(db) = &self.db
+        {
+            return match crate::services::client_operations::transport::owner(
+                db,
+                self.generation_id,
+            )
+            .await
+            {
+                Ok(owner) => matches!(owner, Some(Some(_))),
+                Err(error) => {
+                    tracing::warn!(%error, "Cannot determine client transport connectivity");
+                    true
                 }
-            } else {
-                self.original_transport_connected.load(Ordering::Acquire)
             };
-            if !connected {
-                return;
-            }
+        }
+        self.original_transport_connected.load(Ordering::Acquire)
+    }
+
+    pub async fn wait_for_client_disconnect(&self) {
+        while self.client_transport_connected().await {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }

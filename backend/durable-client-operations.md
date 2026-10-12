@@ -134,8 +134,11 @@ initialization still fails closed on a database error, since the write may have
 committed and another stream could acquire that row.
 Ownership adds one row initialization per eligible generation, heartbeat writes
 and ownership reads around client-call delivery/waits. Generations without an
-eligible durable tool retain their existing client-tool behavior. Word opt-in
-and its document/pane binding remain Part 2 of ERMAIN-912.
+eligible durable tool retain their existing client-tool behavior. Word reads can use the same ownership with a `word_document` binding. A live-only
+validated submission in a generation using shared ownership is delivered only to
+the owner; no owner at dispatch or ownership loss while waiting ends it immediately
+with an unresolved `context_unavailable` submission outcome. Other non-durable
+calls retain their existing delivery and timeout behavior.
 
 A kind with `requires_binding()` (local evidence and compiled test kinds) makes a
 valid `X-Erato-Executor` binding mandatory when the flag is enabled; without one
@@ -185,10 +188,12 @@ An opted-in call's fast result passes the kind validator too, so the model sees
 the kind's `{"status":"success","result":…}` wrapper on both paths.
 `OperationError.message` (at most 1024 characters, control characters replaced)
 is forwarded only by `client_tool.v1`, matching legacy client-tool errors. Like
-them, it reaches tool-call telemetry. Client `validation_errors` do not survive
-opt-in: `rejected` carries only `validation_failed`, on the live path too, and the
-model sees fixed text. A tool that relies on correctable diagnostics must not opt
-in until the kind carries bounded issues; Word tools decide this under ERMAIN-912.
+them, it reaches tool-call telemetry. For Outlook, `rejected` carries only `validation_failed` and fixed text, on the
+live path too. The Word family also accepts `error.validation` with `issues` and
+optional `feedback`, using the existing client validation parser: at most 16 issues,
+512 characters per path/message and 64 per code. The diagnostic envelope is capped
+at 64 KiB. Lost-capture `cannot_continue` feedback on a parked recovery read stops
+correction before any further inference; successful reads preserve its counters.
 Continuation resolves original tool identities against current configuration and
 re-prepares their schemas/timeouts. It retains consumed counters and never raises
 the original submission limit or removes submission semantics during that turn.
@@ -304,6 +309,21 @@ address; it is not authenticated. The security boundary remains the account, cha
 authorization and the per-tool decision. Routing depends only on the device id
 and the digest. Readiness to execute belongs to the handler. A pane without a
 calendar fetcher still answers live calls with its error, and never claims.
+
+The Word add-in's `word_document` binding uses the same per-origin device ID.
+Its identity is SHA-256 of the JSON pair `[documentIdentity, paneInstance]`.
+`documentIdentity` is the existing pane document URL or unsaved-document identity;
+`paneInstance` is a random UUID held only in pane memory. No raw URL is included in this
+binding, no identifier is written into the document, and a reload or another pane
+cannot acquire the original transport or claim its reads.
+
+Only `word/read_document_blocks` opts in. Its executor checks the existing
+chat/message-owned capture before and after asynchronous work. A cleared, consumed
+or replaced capture returns validation feedback, never an implicit recapture.
+`word/submit_document_plan` remains a live-only validated submission. Its five
+attempts and declared recovery reads come from the configuration overlay; durable
+submissions remain forbidden until ERMAIN-944. Enablement still requires the
+feature flag and host qualification (Word PC followed by Word on the web).
 
 Decided open questions:
 

@@ -2853,6 +2853,7 @@ export type OperationError = {
    * Executor text, at most 1024 characters. Only a kind validator may forward it.
    */
   message?: string;
+  validation?: OperationValidation;
 };
 
 export type OperationOutcome = "succeeded" | "rejected" | "failed" | "unknown";
@@ -2921,6 +2922,14 @@ export type OperationResult = {
   operation_id: string;
   outcome: OperationOutcome;
   result?: null | OperationValue;
+};
+
+/**
+ * Bounded client-tool diagnostics; only the Word host family forwards them.
+ */
+export type OperationValidation = {
+  feedback?: ClientToolSubmissionFeedback;
+  issues: ClientToolValidationIssue[];
 };
 
 export type OperationValue =

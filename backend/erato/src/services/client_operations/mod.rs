@@ -130,10 +130,23 @@ pub enum OperationPayload {
 #[serde(deny_unknown_fields)]
 pub struct OperationError {
     pub code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub validation: Option<OperationValidation>,
     /// Executor text, at most 1024 characters. Only a kind validator may forward it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub message: Option<String>,
+}
+
+/// Bounded client-tool diagnostics; only the Word host family forwards them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OperationValidation {
+    pub issues: Vec<crate::services::client_tools::ClientToolValidationIssue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub feedback: Option<crate::services::client_tools::ClientToolSubmissionFeedback>,
 }
 
 /// Longest executor error message a kind may accept, in characters.
@@ -357,18 +370,25 @@ pub fn from_fast_result(
             Some(OperationValue::Value { value }),
             None,
         ),
-        ClientToolOutcome::ValidationFailed(..) => (
+        ClientToolOutcome::ValidationFailed(issues, feedback) => (
             OperationOutcome::Rejected,
             None,
             Some(OperationError {
                 code: "validation_failed".into(),
                 message: None,
+                validation: request
+                    .binding
+                    .host_context
+                    .as_ref()
+                    .filter(|host| host.kind == "word_document")
+                    .map(|_| OperationValidation { issues, feedback }),
             }),
         ),
         ClientToolOutcome::Error(message) => (
             OperationOutcome::Failed,
             None,
             Some(OperationError {
+                validation: None,
                 code: "execution_failed".into(),
                 message: clean_message(
                     &message
@@ -428,6 +448,7 @@ pub fn fast_result_or_refusal(
         outcome: OperationOutcome::Rejected,
         result: None,
         error: Some(OperationError {
+            validation: None,
             code: "invalid_operation_result".into(),
             message: None,
         }),

@@ -248,8 +248,31 @@ export class WordDocumentReadSession {
   }
 
   execute: ClientToolExecutor = async (input, context) => {
+    const capture = context && this.snapshotForSubmission(context);
     const result = await this.executeRead(input, context);
-    if (result.ok) return result;
+    if (result.ok) {
+      if (
+        capture &&
+        context &&
+        this.snapshotForSubmission(context) === capture &&
+        !capture.used &&
+        !capture.revoked &&
+        !context.signal?.aborted
+      )
+        return result;
+      return {
+        ok: false,
+        error: "The document capture is no longer available.",
+        validationErrors: [
+          {
+            path: "/snapshot",
+            code: "capture-unavailable",
+            message: "Start a new request with the document included.",
+          },
+        ],
+        submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+      };
+    }
     const snapshot = context && this.snapshotForSubmission(context);
     if (
       !snapshot ||

@@ -10023,6 +10023,9 @@
           "message": {
             "type": "string",
             "description": "Executor text, at most 1024 characters. Only a kind validator may forward it."
+          },
+          "validation": {
+            "$ref": "#/components/schemas/OperationValidation"
           }
         },
         "additionalProperties": false
@@ -10182,6 +10185,25 @@
                 "$ref": "#/components/schemas/OperationValue"
               }
             ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperationValidation": {
+        "type": "object",
+        "description": "Bounded client-tool diagnostics; only the Word host family forwards them.",
+        "required": [
+          "issues"
+        ],
+        "properties": {
+          "feedback": {
+            "$ref": "#/components/schemas/ClientToolSubmissionFeedback"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientToolValidationIssue"
+            }
           }
         },
         "additionalProperties": false
