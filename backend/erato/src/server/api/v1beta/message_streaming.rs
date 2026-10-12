@@ -5965,7 +5965,14 @@ async fn stream_generate_chat_completion<'a>(
             .as_ref()
             .is_some_and(|correction| !correction.pending())
         {
-            break 'loop_call_turns Ok((current_message_content, None));
+            // No inference ran in this continuation; retain the parked turn's usage and trace.
+            let message =
+                get_message_by_id(&app_state.db, policy, subject, &assistant_message_id).await?;
+            let metadata = message
+                .generation_metadata
+                .map(serde_json::from_value::<GenerationMetadata>)
+                .transpose()?;
+            break 'loop_call_turns Ok((current_message_content, metadata));
         }
         tracing::debug!("Starting chat completion turn {}", current_turn);
         let chat_provider_metric_label = chat_provider_id.unwrap_or("unknown");
@@ -7671,6 +7678,9 @@ async fn stream_generate_chat_completion<'a>(
                         content: response_text,
                     },
                 ));
+                if exit_after_join {
+                    break 'pop_calls;
+                }
                 continue;
             }
 

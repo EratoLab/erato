@@ -367,11 +367,14 @@ async fn unavailable_recovery_context_stops_without_another_submission(pool: Poo
         pool,
         vec![
             submission("call_854_plan", json!("draft")),
-            ModelStep::Tools(vec![(
-                "call_854_read",
-                "read_context",
-                json!({"title":"scope"}),
-            )]),
+            ModelStep::Tools(vec![
+                ("call_854_read", "read_context", json!({"title":"scope"})),
+                (
+                    "call_854_after_failure",
+                    "unrelated_work",
+                    json!({"title":"must not dispatch"}),
+                ),
+            ]),
         ],
         vec![
             rejected("read_current_context"),
@@ -385,6 +388,13 @@ async fn unavailable_recovery_context_stops_without_another_submission(pool: Poo
     )
     .await;
     assert_eq!(requests.len(), 2);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["message_type"] == "client_tool_call")
+            .count(),
+        2
+    );
     assert_eq!(final_outcome(&events)["reason"], "context_unavailable");
     assert_eq!(final_outcome(&events)["attempts_used"], 1);
 }
@@ -557,6 +567,34 @@ async fn responses_prose_retry_replays_reasoning_with_required_summary(pool: Poo
     assert_eq!(final_outcome(&events)["attempts_used"], 3);
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn submission_withdrawn_at_approval_preserves_parked_generation_metadata(
+    pool: Pool<Postgres>,
+) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::Tools(vec![(
+                "call_854_task",
+                "delegate_task",
+                json!({"task":"Research context","facet_ids":["plan"]}),
+            )]),
+        ],
+        vec![],
+        ScenarioOptions {
+            task_approval: true,
+            budget_decision: Some("reject"),
+            check_metadata: true,
+            withdraw_submission_on_approval: true,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(final_outcome(&events)["reason"], "capability_unavailable");
+}
+
 async fn run_submission(
     pool: Pool<Postgres>,
     attempts: Vec<Vec<(&'static str, Value)>>,
@@ -607,6 +645,7 @@ struct ScenarioOptions {
     task_approval: bool,
     responses: bool,
     check_metadata: bool,
+    withdraw_submission_on_approval: bool,
 }
 
 impl Default for ScenarioOptions {
@@ -622,6 +661,7 @@ impl Default for ScenarioOptions {
             task_approval: false,
             responses: false,
             check_metadata: false,
+            withdraw_submission_on_approval: false,
         }
     }
 }
@@ -643,6 +683,7 @@ async fn run_scenario(
         task_approval,
         responses,
         check_metadata,
+        withdraw_submission_on_approval,
     } = options;
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
@@ -799,11 +840,28 @@ async fn run_scenario(
                     })
                 })
                 .expect("budget approval");
-            server
+            let mut continuation_state = state.clone();
+            if withdraw_submission_on_approval {
+                continuation_state.config.client_tools.tools.remove("draft");
+            }
+            let continuation_server = app_server(continuation_state);
+            let response = continuation_server
                 .post("/api/v1beta/me/messages/continuestream")
                 .with_bearer_token(TEST_JWT_TOKEN)
                 .json(&json!({"message_id":row.id,"decision":decision}))
-                .await
+                .await;
+            if withdraw_submission_on_approval {
+                let completed = Messages::find_by_id(row.id)
+                    .one(&state.db)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    completed.generation_metadata.as_ref().unwrap()["langfuse_trace_id"],
+                    row.generation_metadata.as_ref().unwrap()["langfuse_trace_id"]
+                );
+            }
+            response
         } else {
             response
         }
