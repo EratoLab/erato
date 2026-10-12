@@ -5,6 +5,7 @@ import {
   DocumentIcon,
   SpinnerIcon,
   registerClientToolExecutor,
+  useProfile,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -37,6 +38,13 @@ import {
 import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
 import { checkWordAuthoringBudget } from "../utils/wordAuthoringBudget";
 import { wordAuthoringIssueText } from "../utils/wordAuthoringMessages";
+import { wordCommentHeadingsFromBuild } from "../utils/wordCommentMap";
+import { wordCommentSelectionCoordinates } from "../utils/wordCommentPositions";
+import {
+  wordCommentReadSession,
+  WORD_READ_COMMENTS_TOOL,
+} from "../utils/wordCommentReadTool";
+import { wordCommentInventoryFromCapture } from "../utils/wordCommentReader";
 import { resolveWordDocumentName } from "../utils/wordDocumentIdentity";
 import { bindWordDocumentReadRequest } from "../utils/wordDocumentReadRequest";
 import {
@@ -60,6 +68,7 @@ import type {
 import type { AddinChatInputCoreProps } from "../../core/AddinChatInputCore";
 import type { WordDocumentPreview } from "../hooks/useWordDocumentSource";
 import type { WordDocumentBuild } from "../utils/buildWordDocumentArgs";
+import type { WordCommentReadActivation } from "../utils/wordCommentReadTool";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export interface WordChatInputProps {
@@ -221,13 +230,26 @@ export function WordChatInput({
   sendingContextRef.current = { chatId, documentIdentity };
   const readEnabledRef = useRef(chipEnabled);
   readEnabledRef.current = chipEnabled;
+  const { profile } = useProfile();
+  const principalEmail = profile?.email ?? null;
   const stopRequestBindingRef = useRef<(() => void) | undefined>(undefined);
   const clearReadSession = useCallback(() => {
     stopRequestBindingRef.current?.();
     stopRequestBindingRef.current = undefined;
     wordDocumentReadSession.clear();
   }, []);
+  // Comment reads also serve a selection sent without the document, so inclusion does not clear them.
+  const stopCommentBindingRef = useRef<(() => void) | undefined>(undefined);
+  const clearCommentSession = useCallback(() => {
+    stopCommentBindingRef.current?.();
+    stopCommentBindingRef.current = undefined;
+    wordCommentReadSession.clear();
+  }, []);
   useEffect(() => {
+    const unregisterComments = registerClientToolExecutor(
+      WORD_READ_COMMENTS_TOOL,
+      wordCommentReadSession.execute,
+    );
     const submit = createWordDocumentSubmissionExecutor(
       wordDocumentReadSession,
     );
@@ -248,9 +270,11 @@ export function WordChatInput({
     return () => {
       unregister();
       unregisterSubmit();
+      unregisterComments();
       clearReadSession();
+      clearCommentSession();
     };
-  }, [clearReadSession]);
+  }, [clearReadSession, clearCommentSession]);
   useEffect(() => {
     if (!chipEnabled) {
       settleCaptureRef.current?.({ kind: "skipped" });
@@ -276,6 +300,7 @@ export function WordChatInput({
     ) => {
       if (preparingRef.current) return;
       clearReadSession();
+      clearCommentSession();
       setSelectionReadFailed(false);
       setCaptureNotice(null);
       const send = (
@@ -310,6 +335,24 @@ export function WordChatInput({
         sendingContextRef.current.documentIdentity !== documentIdentity;
       const resolvedModelId =
         modelId ?? chatInputProps.controlledSelectedModel?.chat_provider_id;
+      const activateCommentReads = (
+        activation: Pick<
+          WordCommentReadActivation,
+          "gestures" | "selection" | "inventory" | "headings"
+        >,
+      ) => {
+        const token = wordCommentReadSession.activate({
+          ...activation,
+          identity: documentIdentity,
+          people: { principalEmail },
+          documentIncluded: () => readEnabledRef.current,
+        });
+        stopCommentBindingRef.current = bindWordDocumentReadRequest(
+          wordCommentReadSession,
+          token,
+          chatId,
+        );
+      };
       const finishPreparing = () => {
         preparingRef.current = false;
         settleCaptureRef.current = null;
@@ -446,6 +489,12 @@ export function WordChatInput({
               chatId,
             );
           }
+          if (actionFacet && build)
+            activateCommentReads({
+              gestures: { document: true },
+              inventory: wordCommentInventoryFromCapture(build.ordinalMap),
+              headings: wordCommentHeadingsFromBuild(build.headings),
+            });
           return {
             actionFacet,
             hostContextIdentity: actionFacet ? documentIdentity : null,
@@ -479,6 +528,10 @@ export function WordChatInput({
           stagePendingCapture(
             emptySelectionCapture(documentIdentity, selection),
           );
+          activateCommentReads({
+            gestures: { document: chipEnabled },
+            selection: wordCommentSelectionCoordinates(selection),
+          });
           return { actionFacet, hostContextIdentity: documentIdentity };
         }
         if (chipEnabled) return prepareDocument(signal);
@@ -512,6 +565,7 @@ export function WordChatInput({
         },
         onAbandoned: () => {
           clearReadSession();
+          clearCommentSession();
           stagePendingCapture(null);
           finishPreparing();
         },
@@ -526,10 +580,12 @@ export function WordChatInput({
       captureExpectedSlow,
       chatInputProps,
       chipEnabled,
+      clearCommentSession,
       clearReadSession,
       documentIdentity,
       markSent,
       previousCapture,
+      principalEmail,
       selectionDue,
       stagePendingCapture,
     ],

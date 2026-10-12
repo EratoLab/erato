@@ -103,6 +103,7 @@ const documentBuild = (): WordDocumentBuild =>
     },
     coverage: { hasContent: true, paragraphsSent: 1 },
     ordinalMap: new Map(),
+    headings: new Map(),
     renderedOrdinals: new Set([1]),
     partialOrdinal: null,
   }) as unknown as WordDocumentBuild;
