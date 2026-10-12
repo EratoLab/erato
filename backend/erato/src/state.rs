@@ -323,9 +323,10 @@ impl AppState {
 
         Ok(Self {
             db,
-            client_operations: crate::services::local_delegation::tool::registry(
+            client_operations: crate::services::client_operations::registry(
+                &config,
                 local_delegation_signer.as_ref(),
-            ),
+            )?,
             local_delegation_signer,
             ms_teams_bot,
             entra_group_overage,

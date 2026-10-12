@@ -117,6 +117,13 @@ pub(super) async fn authorize_open_operation(
     if crate::models::chat::chat_is_delegated_run(&chat) {
         return Ok(false);
     }
+    // A configured tool's call is never offered or dispatched under Never, so a
+    // Never saved after it parked withdraws it. Ask and Always keep the call.
+    if me.profile.client_tool_decisions.get(&request.operation_id)
+        == Some(&crate::models::user_preference::ClientToolDecision::NeverAllow)
+    {
+        return Ok(false);
+    }
     Ok(state.config.client_tools.tools.values().any(|tool| {
         tool.qualified_name() == request.operation_id
             && super::message_streaming::is_qualified_tool_allowed(

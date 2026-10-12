@@ -40,12 +40,13 @@ describe("wordSelectionSupport", () => {
         keepsItems: true,
         keptItemParagraphs: null,
         listsBookmarks,
+        comparesCommentAnchors: true,
         reason: null,
       });
     },
   );
 
-  it("rewrites without complex-script setters on the web, where pictures shift offsets and styles come from OOXML", () => {
+  it("rewrites without complex-script setters or comment anchor reads on the web, where pictures shift offsets and styles come from OOXML", () => {
     expect(
       wordSelectionSupport(host({ WordApi: "1.11" }), "OfficeOnline"),
     ).toEqual({
@@ -60,6 +61,7 @@ describe("wordSelectionSupport", () => {
       keepsItems: true,
       keptItemParagraphs: 5,
       listsBookmarks: false,
+      comparesCommentAnchors: false,
       reason: null,
     });
   });
@@ -91,6 +93,7 @@ describe("wordSelectionSupport", () => {
       keepsItems: false,
       keptItemParagraphs: null,
       listsBookmarks: false,
+      comparesCommentAnchors: true,
       reason: "host_unsupported",
     });
   });
@@ -142,6 +145,7 @@ describe("wordSelectionSupport", () => {
       prefixRanges: false,
       styleFontSource: "ooxml",
       twinsFollowLatin: false,
+      comparesCommentAnchors: false,
     });
   });
 });

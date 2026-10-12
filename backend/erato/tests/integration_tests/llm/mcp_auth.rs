@@ -33,6 +33,9 @@ fn mcp_server_config(
         wait_tools: vec![],
         authentication,
         max_session_idle_seconds: None,
+        default_tool_annotations: Default::default(),
+        override_tool_annotations: Default::default(),
+        tools: Default::default(),
     }
 }
 

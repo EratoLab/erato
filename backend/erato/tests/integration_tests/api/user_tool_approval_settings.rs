@@ -29,6 +29,9 @@ fn files_server_config() -> McpServerConfig {
         wait_tools: vec![],
         authentication: McpServerAuthenticationConfig::None,
         max_session_idle_seconds: None,
+        default_tool_annotations: Default::default(),
+        override_tool_annotations: Default::default(),
+        tools: Default::default(),
     }
 }
 

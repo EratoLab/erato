@@ -970,6 +970,7 @@ export type ChatMessage = {
    * The unique ID of the sibling message, if any
    */
   sibling_message_id?: string;
+  submission_outcome?: SubmissionOutcome;
   task_result?: TaskResultInput;
   /**
    * When the message was last updated
@@ -1174,6 +1175,11 @@ export type ClientToolResultResponse = {
    * benign no-op (already delivered, timed out, aborted, or unknown id).
    */
   delivered: boolean;
+  /**
+   * True if this result settled a parked client operation, which the
+   * sender then continues.
+   */
+  stored: boolean;
 };
 
 /**
@@ -1181,6 +1187,7 @@ export type ClientToolResultResponse = {
  */
 export type ClientToolSubmissionFeedback = {
   draft?: null | ClientToolDraftReference;
+  recovery?: SubmissionRecovery;
   /**
    * Ends an opt-in submission turn without accepting an artifact.
    */
@@ -2314,14 +2321,15 @@ export type McpServerTool = {
  */
 export type McpServerToolAnnotations = {
   /**
-   * Whether the server declared any hints at all. Defaults are the
-   * pessimistic reading, so an unannotated tool is not read-only.
+   * Whether effective annotations are present, from the server or operator
+   * configuration. This flag does not describe their source.
    */
   annotated: boolean;
   destructive_hint: boolean;
   idempotent_hint: boolean;
   open_world_hint: boolean;
   read_only_hint: boolean;
+  sources: McpToolAnnotationSources;
 };
 
 /**
@@ -2338,6 +2346,29 @@ export type McpServerToolUserDecision =
   | "always_allow"
   | "ask"
   | "denied";
+
+/**
+ * The winning declaration for one effective MCP tool hint.
+ */
+export type McpToolAnnotationSource =
+  | "tool_override"
+  | "server_override"
+  | "global_override"
+  | "server_supplied"
+  | "tool_default"
+  | "server_default"
+  | "global_default"
+  | "protocol_default";
+
+/**
+ * Sources are independent: a tool can inherit each hint from a different scope.
+ */
+export type McpToolAnnotationSources = {
+  destructive_hint: McpToolAnnotationSource;
+  idempotent_hint: McpToolAnnotationSource;
+  open_world_hint: McpToolAnnotationSource;
+  read_only_hint: McpToolAnnotationSource;
+};
 
 /**
  * What actually happens when the tool is called, once the user's stored
@@ -2818,6 +2849,10 @@ export type NothingToReactError = {
 
 export type OperationError = {
   code: string;
+  /**
+   * Executor text, at most 1024 characters. Only a kind validator may forward it.
+   */
+  message?: string;
 };
 
 export type OperationOutcome = "succeeded" | "rejected" | "failed" | "unknown";
@@ -3542,6 +3577,42 @@ export type StartingAssistantResponse = {
  */
 export type StartingAssistantSource = "user_pick" | "audience_pin";
 
+export type SubmissionOutcome = {
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  attempts_used: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  max_attempts: number;
+  reason?: null | SubmissionReason;
+  status: SubmissionStatus;
+};
+
+export type SubmissionReason =
+  | "validation_failed"
+  | "attempts_exhausted"
+  | "model_stopped"
+  | "recovery_reads_exhausted"
+  | "terminal_validation"
+  | "context_unavailable"
+  | "capability_unavailable"
+  | "provider_error"
+  | "timeout"
+  | "cancelled"
+  | "user_requested_answer"
+  | "user_stopped";
+
+export type SubmissionRecovery =
+  | "repair_arguments"
+  | "read_current_context"
+  | "cannot_continue";
+
+export type SubmissionStatus = "correcting" | "accepted" | "unresolved";
+
 /**
  * The marker on a delivered task result's user row.
  *
@@ -4094,8 +4165,7 @@ export type UserProfile = {
   /**
    * List of groups the user belongs to.
    *
-   * This is derived from the `groups` claim in the ID token.
-   * If the claim is not present, this will be an empty list.
+   * Derived from the ID token's `groups` claim, or Microsoft Graph for Entra overage.
    */
   groups: string[];
   id: string;
@@ -4104,7 +4174,7 @@ export type UserProfile = {
    */
   name?: string;
   /**
-   * Organization group IDs from the `groups` claim.
+   * Organization membership IDs from the token or Entra overage resolution.
    *
    * These can be used as subject_id when creating share grants
    * with subject_id_type "organization_group_id".

@@ -1,10 +1,11 @@
 use crate::config::{
     AppConfig, McpRuntimeConfig, McpServerAuthenticationConfig, McpServerConfig,
-    McpServerForwardedCredential,
+    McpServerForwardedCredential, McpToolAnnotationsConfig,
 };
 use crate::metrics::report_mcp_active_sessions_for_server;
 use crate::services::mcp_manager::{McpRequestAuthContext, ToolDiscoveryResult};
 use crate::services::mcp_oauth::resolve_oauth_access_token;
+use crate::services::mcp_tool_annotations::{ResolvedMcpTool, resolve_tool_annotations};
 use crate::services::mcp_transports::{ProgressClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
 use futures::future::join_all;
@@ -36,7 +37,7 @@ struct McpSession {
     #[allow(dead_code)]
     server_id: String,
     /// Cached list of available tools
-    tools: Vec<Tool>,
+    tools: Vec<ResolvedMcpTool>,
     /// Timestamp of last activity (tool call or tool list request)
     last_activity: SystemTime,
     /// Maximum idle time before this session is evicted
@@ -53,17 +54,16 @@ impl McpSession {
     /// Create a new session by connecting to the MCP server
     async fn new(
         server_id: String,
-        config: &McpServerConfig,
+        config: &McpSessionConfig,
         auth_context: &McpRequestAuthContext<'_>,
-        default_max_idle_seconds: u64,
     ) -> Result<Self, Report> {
         debug!(
             server_id = %server_id,
-            transport_type = %config.transport_type,
+            transport_type = %config.server.transport_type,
             "Creating MCP service connection"
         );
 
-        let service = create_mcp_service(&server_id, config, auth_context)
+        let service = create_mcp_service(&server_id, &config.server, auth_context)
             .await
             .map_err(|e| eyre!("Failed to create MCP service: {}", e))?;
 
@@ -91,13 +91,19 @@ impl McpSession {
             _service: service, // Keep the service alive!
             peer,
             server_id,
-            tools: filter_tools_by_server_config(tools_result.tools, config),
+            tools: filter_tools_by_server_config(tools_result.tools, &config.server)
+                .into_iter()
+                .map(|tool| {
+                    resolve_tool_annotations(
+                        tool,
+                        &config.server,
+                        &config.default_tool_annotations,
+                        &config.override_tool_annotations,
+                    )
+                })
+                .collect(),
             last_activity: SystemTime::now(),
-            max_idle_duration: Duration::from_secs(
-                config
-                    .max_session_idle_seconds
-                    .unwrap_or(default_max_idle_seconds),
-            ),
+            max_idle_duration: Duration::from_secs(config.max_idle_seconds),
         })
     }
 
@@ -196,7 +202,7 @@ pub struct McpServerToolEnumeration {
     /// Already filtered by the server's `allow_tools` / `exclude_tools`, so
     /// these rows are exactly what a generation can see. Empty unless
     /// `status` is `Success`.
-    pub tools: Vec<Tool>,
+    pub tools: Vec<ResolvedMcpTool>,
 }
 
 /// Manages MCP sessions on a per-chat basis
@@ -220,6 +226,34 @@ impl Drop for McpSessionManager {
 struct McpSessionManagerConfig {
     server_configs: HashMap<String, McpServerConfig>,
     default_max_idle_seconds: u64,
+    default_tool_annotations: McpToolAnnotationsConfig,
+    override_tool_annotations: McpToolAnnotationsConfig,
+}
+
+/// Everything that can affect a cached connection and its resolved tools.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct McpSessionConfig {
+    server: McpServerConfig,
+    max_idle_seconds: u64,
+    default_tool_annotations: McpToolAnnotationsConfig,
+    override_tool_annotations: McpToolAnnotationsConfig,
+}
+
+impl McpSessionManagerConfig {
+    fn session_config(&self, server_id: &str) -> Result<McpSessionConfig, Report> {
+        let server = self
+            .server_configs
+            .get(server_id)
+            .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?;
+        Ok(McpSessionConfig {
+            server: server.clone(),
+            max_idle_seconds: server
+                .max_session_idle_seconds
+                .unwrap_or(self.default_max_idle_seconds),
+            default_tool_annotations: self.default_tool_annotations,
+            override_tool_annotations: self.override_tool_annotations,
+        })
+    }
 }
 
 impl McpSessionManager {
@@ -289,6 +323,8 @@ impl McpSessionManager {
         let configuration = Arc::new(RwLock::new(McpSessionManagerConfig {
             server_configs,
             default_max_idle_seconds,
+            default_tool_annotations: config.mcp_servers_global.default_tool_annotations,
+            override_tool_annotations: config.mcp_servers_global.override_tool_annotations,
         }));
 
         // Spawn background cleanup task
@@ -315,6 +351,10 @@ impl McpSessionManager {
             .max_session_idle_seconds
             .unwrap_or(60 * 60);
         let mut configuration = self.configuration.write().await;
+        let global_annotations_changed = configuration.default_tool_annotations
+            != config.mcp_servers_global.default_tool_annotations
+            || configuration.override_tool_annotations
+                != config.mcp_servers_global.override_tool_annotations;
         let mut changed_server_ids: HashSet<String> = configuration
             .server_configs
             .keys()
@@ -323,6 +363,7 @@ impl McpSessionManager {
                 let previous = configuration.server_configs.get(*server_id);
                 let next = config.mcp_servers.get(*server_id);
                 previous != next
+                    || global_annotations_changed
                     || previous.is_some_and(|server| {
                         server
                             .max_session_idle_seconds
@@ -337,6 +378,9 @@ impl McpSessionManager {
 
         configuration.server_configs.clone_from(&config.mcp_servers);
         configuration.default_max_idle_seconds = next_default_max_idle_seconds;
+        configuration.default_tool_annotations = config.mcp_servers_global.default_tool_annotations;
+        configuration.override_tool_annotations =
+            config.mcp_servers_global.override_tool_annotations;
 
         let mut sessions = self.sessions.write().await;
         sessions.retain(|(_, server_id, _), _| !changed_server_ids.contains(server_id));
@@ -427,62 +471,46 @@ impl McpSessionManager {
         server_id: &str,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<SessionKey, Report> {
-        // Everything the connect needs is copied out before any await.
-        // `McpSession::new` dials the server and lists its tools, and tokio's
-        // RwLock is write-preferring: a `reconfigure` queued behind a read
-        // guard held across that round trip would stall every later reader,
-        // including the `configured_server_ids` that each in-flight tool call
-        // takes on its way out.
-        let (config, default_max_idle_seconds) = {
-            let configuration = self.configuration.read().await;
-            let config = configuration
-                .server_configs
-                .get(server_id)
-                .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?
-                .clone();
-            (config, configuration.default_max_idle_seconds)
-        };
+        loop {
+            // Copy the snapshot before network awaits. Configuration guards must
+            // never span authentication or connection setup.
+            let config = self.configuration.read().await.session_config(server_id)?;
+            let key = (
+                chat_id,
+                server_id.to_string(),
+                Self::session_auth_key(server_id, &config.server, auth_context).await?,
+            );
 
-        let key = (
-            chat_id,
-            server_id.to_string(),
-            Self::session_auth_key(server_id, &config, auth_context).await?,
-        );
-
-        // Check if session already exists
-        {
-            let sessions_guard = self.sessions.read().await;
-            if sessions_guard.contains_key(&key) {
-                return Ok(key);
+            {
+                let configuration = self.configuration.read().await;
+                if configuration.session_config(server_id)? != config {
+                    continue;
+                }
+                if self.sessions.read().await.contains_key(&key) {
+                    return Ok(key);
+                }
             }
+
+            debug!(chat_id = %chat_id, server_id = %server_id, "Creating new MCP session");
+            let session = McpSession::new(server_id.to_string(), &config, auth_context).await;
+
+            // Keep this guard through insertion: reconfigure takes the same
+            // configuration-then-sessions lock order. A reload during connection
+            // setup cannot put a stale tool list back into the cache.
+            let configuration = self.configuration.read().await;
+            if configuration.session_config(server_id)? != config {
+                continue;
+            }
+            let session = session?;
+            let mut sessions = self.sessions.write().await;
+            sessions.entry(key.clone()).or_insert(session);
+            Self::update_active_session_metrics(
+                &sessions,
+                configuration.server_configs.keys().cloned(),
+            );
+            info!(chat_id = %chat_id, server_id = %server_id, "Created new MCP session");
+            return Ok(key);
         }
-
-        debug!(
-            chat_id = %chat_id,
-            server_id = %server_id,
-            "Creating new MCP session"
-        );
-
-        let session = McpSession::new(
-            server_id.to_string(),
-            &config,
-            auth_context,
-            default_max_idle_seconds,
-        )
-        .await?;
-
-        let configured_server_ids = self.configured_server_ids().await;
-        let mut sessions_guard = self.sessions.write().await;
-        sessions_guard.entry(key.clone()).or_insert(session);
-        Self::update_active_session_metrics(&sessions_guard, configured_server_ids.into_iter());
-
-        info!(
-            chat_id = %chat_id,
-            server_id = %server_id,
-            "Created new MCP session"
-        );
-
-        Ok(key)
     }
 
     /// Remove a session from the cache (used when a session becomes invalid)
@@ -637,7 +665,7 @@ impl McpSessionManager {
                 for tool in &session.tools {
                     all_tools.push(ManagedTool {
                         server_id: server_id.clone(),
-                        tool: tool.clone(),
+                        tool: tool.tool.clone(),
                     });
                 }
             }
@@ -1011,6 +1039,9 @@ mod tests {
             wait_tools: vec![],
             authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         }
     }
 

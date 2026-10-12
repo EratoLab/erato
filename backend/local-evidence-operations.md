@@ -60,6 +60,8 @@ posted upstream; explicit user cancellation is an authenticated cloud intent.
 
 The shared shell coordinator owns list pagination, capability routing, claims,
 result retries and continuation. Each sweep starts pagination from the beginning.
+The local evidence handler is built into the coordinator, beside the handlers a
+shell registers (ERMAIN-911); a claimed invalid result still gets 400.
 The sidecar handler owns challenge/bind/start/status/review/read/upload/ack only.
 Account disposal aborts outstanding work; pane closure leaves accepted native jobs
 running. Another authenticated frontend may continue an accepted cloud result
@@ -76,7 +78,7 @@ without the original device. Native receipt delivery can wait for that device.
 | Sidecar list/claim/cancel/resume routes | Generic client-operation APIs. |
 | Native context/upload/receipt routes | Retained as the kind adapter, with transaction-generic result acceptance. |
 | Hard-coded initial offer/dispatch | Compiled kind offer policy and inherited authenticated executor context. |
-| `LocalTaskCoordinator` private cloud lifecycle | Generic coordinator plus `LocalEvidenceHandler`. |
+| `LocalTaskCoordinator` private cloud lifecycle | Generic coordinator with built-in `LocalEvidenceHandler`, beside a shell handler registry. |
 | Native schemas and consent RPCs | Preserved at 0.1.28. |
 
 Existing approval/compaction invariants remain: name-keyed

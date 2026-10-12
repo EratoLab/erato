@@ -36,8 +36,12 @@ import {
   queueWordSections,
   readWordStory,
   sameCellTable,
+  settleTargetVerification,
+  wordCommentsAround,
+  wordListedCommentsOutside,
   wordParagraphsEndingSection,
   queueParagraphSpanChecks,
+  queueWordCommentAnchors,
 } from "./wordSelectionTarget";
 
 import type { WordApplyStage } from "./wordApplyProgress";
@@ -331,14 +335,33 @@ export async function replaceWordSelection(args: {
         proof.paragraphs,
       );
       if (ends.some(Boolean)) return { refused: "UNSUPPORTED_CONTENT" };
-      const verify = queueTargetVerification(
-        context,
-        proof.parts,
-        selection.paragraphs,
-        support,
-      );
+      const queueVerification = () =>
+        queueTargetVerification(
+          context,
+          proof.parts,
+          selection.paragraphs,
+          support,
+        );
+      let verify = queueVerification();
       await context.sync();
-      const check = checkTargetVerification(selection, verify(), support);
+      let verification = verify();
+      // Comments a paragraph's OOXML does not hold are compared with it in a sync of their own, so
+      // the final read is made again in that sync.
+      const anchors = queueWordCommentAnchors(
+        verification.paragraphs.map((live) => live.checks.commentsOutside),
+        support,
+        guard,
+      );
+      if (anchors) {
+        guard.extendTimeout(
+          selection.paragraphs.length *
+            WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+        );
+        verify = queueVerification();
+        await context.sync();
+        verification = settleTargetVerification(verify(), anchors());
+      }
+      const check = checkTargetVerification(selection, verification, support);
       if ("refused" in check)
         return { refused: check.refused as WordSelectionRefusal };
       const changed = proof.parts
@@ -468,7 +491,7 @@ export async function replaceWordSelection(args: {
 
 export type WordSelectionRevertStatus =
   | "reverted"
-  /** The written text changed since, so restoring would overwrite later work. */
+  /** The written text or its comments changed since, so restoring would overwrite later work. */
   | "stale"
   | "tracking"
   | "failed"
@@ -484,14 +507,16 @@ export interface WordSelectionRevertResult {
 
 /**
  * Restores the paragraphs a Replace wrote from their OOXML before the write, only while every
- * covered paragraph still holds exactly the written text. All are restored in one sync, last to
- * first, so Word's own Undo takes them back in one step too. The restore shows only in a later
- * Word.run on the web (PF4), so it is verified in one.
+ * covered paragraph still holds exactly the written text, and every restored one lists no comment
+ * its backup lacks but, on desktop, one whose anchor lies around it. All are restored in one sync,
+ * last to first, so Word's own Undo takes them back in one step too. The restore shows only in a
+ * later Word.run on the web (PF4), so it is verified in one.
  */
 export async function revertWordSelection(
   backups: readonly WordSelectionBackup[],
   written: WordSelectionWritten,
 ): Promise<WordSelectionRevertResult> {
+  const support = currentWordSelectionSupport();
   const run = await runWordGuarded<
     | {
         positions: number[];
@@ -529,11 +554,48 @@ export async function revertWordSelection(
         targets.map(({ paragraph }) => paragraph),
       );
       if (ends.some(Boolean)) return "stale";
+      // The text is read again in each sync that follows the check above, so that the last one
+      // before the write still proves it.
+      const covered = positions.map((position) => story.items[position]);
+      const listComments = () => {
+        for (const paragraph of covered) paragraph.load("text");
+        return targets.map(({ paragraph }) => {
+          const comments = paragraph.getComments();
+          comments.load("items/id");
+          return comments;
+        });
+      };
+      const unchanged = () =>
+        covered.every(
+          (paragraph, i) => paragraph.text === written.rangeTexts[i],
+        );
+      // A backup holds the marks only of the comments that lay wholly in its paragraph before the
+      // write; restored over one that lists another, it would move or drop that comment's marks.
+      const outsideOf = (listed: Word.CommentCollection[]) =>
+        targets.map(({ backup, paragraph }, i) =>
+          wordListedCommentsOutside(paragraph, backup.ooxml, listed[i].items),
+        );
+      let listed = listComments();
       const cells = targets.map(({ backup, paragraph }) =>
         backup.tableNestingLevel > 0 ? queueWordCellTable(paragraph) : null,
       );
-      if (cells.some(Boolean)) await context.sync();
+      guard.extendTimeout(
+        covered.length * WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
+      );
+      await context.sync();
       const cellTables = cells.map((cell) => cell?.() ?? null);
+      if (!unchanged()) return "stale";
+      let outside = outsideOf(listed);
+      const anchors = queueWordCommentAnchors(outside, support, guard);
+      if (anchors) {
+        listed = listComments();
+        await context.sync();
+        if (!unchanged()) return "stale";
+        outside = outsideOf(listed);
+      }
+      const around = anchors?.() ?? [];
+      if (!outside.every((each, i) => wordCommentsAround(each, around[i])))
+        return "stale";
       guard.beforeWrite();
       for (const { backup, paragraph } of [...targets].reverse())
         paragraph.insertOoxml(backup.ooxml, "Replace");

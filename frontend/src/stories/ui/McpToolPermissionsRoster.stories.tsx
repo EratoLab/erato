@@ -42,6 +42,12 @@ const tool = (
       idempotent_hint: readOnly,
       open_world_hint: false,
       annotated,
+      sources: {
+        read_only_hint: annotated ? "server_supplied" : "protocol_default",
+        destructive_hint: annotated ? "server_supplied" : "protocol_default",
+        idempotent_hint: annotated ? "server_supplied" : "protocol_default",
+        open_world_hint: annotated ? "server_supplied" : "protocol_default",
+      },
     },
     policy: readOnly ? "auto" : "ask",
     user_decision: "none",

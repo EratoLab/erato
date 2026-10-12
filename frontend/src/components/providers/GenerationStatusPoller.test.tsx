@@ -531,4 +531,79 @@ describe("GenerationStatusPoller effects", () => {
     rerender();
     expect(invalidationsFor(messagesKey)).toBe(2);
   });
+
+  it("refetches the open chat once when its parked turn ends between two polls", () => {
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    useGenerationStatusStore.getState().setCurrentChatId("origin");
+
+    emit({
+      chats: [generatingEntry({ chat_id: "origin", state: "action_required" })],
+    });
+    const view = renderPoller();
+    const rerender = () =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <GenerationStatusPoller />
+        </QueryClientProvider>,
+      );
+    expect(invalidationsFor(messagesKey)).toBe(0);
+
+    const finished = {
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          state: "completed",
+          ended_at: "2026-08-19T12:00:04.000Z",
+        }),
+      ],
+    };
+    emit(finished);
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    emit(finished);
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+  });
+
+  it("leaves a parked chat the user is not looking at and a turn last seen running alone", () => {
+    const originKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    const otherKey = chatMessagesQuery({
+      pathParams: { chatId: "other" },
+    }).queryKey;
+    useGenerationStatusStore.getState().setCurrentChatId("origin");
+
+    emit({
+      chats: [
+        generatingEntry({ chat_id: "origin" }),
+        generatingEntry({ chat_id: "other", state: "action_required" }),
+      ],
+    });
+    const view = renderPoller();
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          state: "completed",
+          ended_at: "2026-08-19T12:00:04.000Z",
+        }),
+        generatingEntry({
+          chat_id: "other",
+          state: "completed",
+          ended_at: "2026-08-19T12:00:04.000Z",
+        }),
+      ],
+    });
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <GenerationStatusPoller />
+      </QueryClientProvider>,
+    );
+    expect(invalidationsFor(originKey)).toBe(0);
+    expect(invalidationsFor(otherKey)).toBe(0);
+  });
 });

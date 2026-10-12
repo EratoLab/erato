@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { handleMessageComplete } from "../../handlers/handleMessageComplete";
 import { useMessagingStore } from "../messagingStore";
 
 const persisted = {
@@ -75,6 +76,40 @@ describe("messagingStore getRenderableMessages", () => {
     expect(rendered.content).toHaveLength(4);
     expect(rendered.status).toBe("complete");
   });
+
+  it.each(["accepted", "unresolved"] as const)(
+    "renders the completed %s outcome before history refetch",
+    (status) => {
+      const outcome = { status, attempts_used: 2, max_attempts: 5 };
+      useMessagingStore
+        .getState()
+        .setStreaming(
+          { isStreaming: true, currentMessageId: persisted.id },
+          "chat1",
+        );
+      handleMessageComplete(
+        {
+          message_type: "assistant_message_completed",
+          message_id: persisted.id,
+          message: {
+            id: persisted.id,
+            content: streamedContent,
+            submission_outcome: outcome,
+          },
+        } as Parameters<typeof handleMessageComplete>[0],
+        "chat1",
+      );
+      expect(
+        useMessagingStore.getState().getRenderableMessages("chat1")[
+          persisted.id
+        ].submission_outcome,
+      ).toEqual(outcome);
+      useMessagingStore.getState().resetStreaming("chat1");
+      expect(
+        useMessagingStore.getState().getStreaming("chat1").submissionOutcome,
+      ).toBeUndefined();
+    },
+  );
 
   it("returns to the persisted copy once finalization is over", () => {
     useMessagingStore.getState().setStreaming(
