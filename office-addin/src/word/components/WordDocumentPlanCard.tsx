@@ -374,7 +374,11 @@ export function WordDocumentPlanCard({
     ],
   );
   const execute = useCallback(() => run(false), [run]);
-  const buildSummary = useCallback(() => (ready ? plan : null), [ready, plan]);
+  // The refusal offers no Apply, so a consent card behind it could never be answered.
+  const buildSummary = useCallback(
+    () => (ready && !refusal ? plan : null),
+    [ready, refusal, plan],
+  );
   const { confirmCard, isConfirmPending, allowCard, denyCard } =
     useClientActionConfirmFlow<WordDocumentPlan, WordClientAction>({
       promptScope: entry.promptScope,
@@ -394,6 +398,9 @@ export function WordDocumentPlanCard({
       expectedItemIdentity: artifact?.itemIdentity,
       currentItemIdentity: host.documentIdentity,
     });
+  useEffect(() => {
+    if (refusal && confirmCard) denyCard(confirmCard);
+  }, [refusal, confirmCard, denyCard]);
   const recoverySlot =
     host.revertSlot?.batchKey === key &&
     host.revertSlot.identity === host.documentIdentity
@@ -547,6 +554,7 @@ export function WordDocumentPlanCard({
     }
   };
   const askAgainInPlace = () => {
+    if (confirmCard) denyCard(confirmCard);
     const message = messageId ? messages[messageId] : undefined;
     const request = message?.previous_message_id
       ? extractTextFromContent(messages[message.previous_message_id]?.content)

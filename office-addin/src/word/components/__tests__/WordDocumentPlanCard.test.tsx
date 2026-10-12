@@ -65,6 +65,7 @@ import {
 } from "../../utils/wordInPlaceCapabilities";
 import {
   WORD_COMPATIBILITY_MODE_KEY,
+  latchWordInPlace,
   resetWordInPlaceLatchForTests,
 } from "../../utils/wordInPlaceSwitch";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
@@ -81,6 +82,8 @@ import type { ReactNode } from "react";
 
 const mock = vi.hoisted(() => {
   const artifact: Record<string, unknown> = {};
+  /** Consent cards holding the chat's queued messages, as `${chatId}:${id}`. */
+  const pendingConfirmations = new Set<string>();
   return {
     artifact,
     decisions: {},
@@ -89,6 +92,11 @@ const mock = vi.hoisted(() => {
     content: [] as unknown[],
     request: "",
     restoreRequest: vi.fn(),
+    pendingConfirmations,
+    registerConfirmation: (chatId: string, id: string) =>
+      void pendingConfirmations.add(`${chatId}:${id}`),
+    unregisterConfirmation: (chatId: string, id: string) =>
+      void pendingConfirmations.delete(`${chatId}:${id}`),
   };
 });
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
@@ -111,12 +119,13 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
       },
     },
     messageOrder: [String(mock.artifact.messageId)],
+    currentChatId: "chat-A",
   }),
   usePersistedState: () => [mock.decisions, mock.setDecisions],
   useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
     select({
-      registerConfirmation: () => {},
-      unregisterConfirmation: () => {},
+      registerConfirmation: mock.registerConfirmation,
+      unregisterConfirmation: mock.unregisterConfirmation,
     }),
   ActionConfirmationCard: ({
     onAllowOnce,
@@ -333,19 +342,21 @@ function renderRealisticCard(
     renderedOrdinals: new Set(),
     partialOrdinal: null,
   };
-  return render(
+  const captures = new Map([[messageId, capture]]);
+  const card = () => (
     <WordWriteProvider
       documentIdentity="doc-A"
-      capturesByAssistantMessageId={new Map([[messageId, capture]])}
+      capturesByAssistantMessageId={captures}
       restoreRequest={mock.restoreRequest}
     >
       <WordHostCardRenderer
         language="erato-word-document-plan"
         content={content}
       />
-    </WordWriteProvider>,
-    { wrapper: TestTheme },
+    </WordWriteProvider>
   );
+  const view = render(card(), { wrapper: TestTheme });
+  return { ...view, refresh: () => view.rerender(card()) };
 }
 beforeEach(() => {
   i18n.load("en", frontendMessages);
@@ -356,6 +367,7 @@ beforeEach(() => {
   mock.content = [];
   mock.request = "";
   mock.restoreRequest.mockClear();
+  mock.pendingConfirmations.clear();
   mock.artifact = {
     facetId: "word_document_authoring",
     messageId: globalThis.crypto.randomUUID(),
@@ -1349,8 +1361,11 @@ async function mountRealistic(
     String(mock.artifact.messageId),
     tracking,
   );
-  renderRealisticCard(snapshot, JSON.stringify(makePlan(snapshot)));
-  return { word, snapshot, coauthoringRead };
+  const { refresh } = renderRealisticCard(
+    snapshot,
+    JSON.stringify(makePlan(snapshot)),
+  );
+  return { word, snapshot, coauthoringRead, refresh };
 }
 
 const routeText = () => screen.getByTestId("word-plan-route").textContent;
@@ -2078,6 +2093,49 @@ describe("confirmed whole-document replacement on Word for the web", () => {
       screen.getByRole("button", { name: "Ask again for in-place edits" }),
     ).toBeVisible();
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("opens no consent card behind a refusal, so the chat's queued messages are not held", async () => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    autoPrompt();
+    await mountRealistic(scopedStatusPlan, { profile: "word-web" });
+    await act(async () => {});
+    expect(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(mock.pendingConfirmations.size).toBe(0);
+  });
+
+  it("releases a consent card once a refusal takes its place", async () => {
+    autoPrompt();
+    const { refresh } = await mountRealistic(scopedStatusPlan, {
+      profile: "word-web",
+    });
+    expect(
+      await screen.findByRole("button", { name: "Allow once" }),
+    ).toBeVisible();
+    expect(mock.pendingConfirmations.size).toBe(1);
+
+    latchWordInPlace("verify-mismatch");
+    refresh();
+    expect(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    ).toBeVisible();
+    expect(mock.pendingConfirmations.size).toBe(0);
+  });
+
+  it("releases the consent card the confirmation stands in for when the user asks again", async () => {
+    autoPrompt();
+    await mountRealistic(sectionsPlan, { profile: "word-web" });
+    await act(async () => {});
+    expect(confirmBox()).not.toBeChecked();
+    expect(mock.pendingConfirmations.size).toBe(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    );
+    expect(mock.pendingConfirmations.size).toBe(0);
+    expect(confirmBox()).not.toBeChecked();
   });
 
   it("offers no Apply where the deployment turned the import off", async () => {
