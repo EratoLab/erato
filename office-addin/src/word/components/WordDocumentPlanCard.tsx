@@ -433,12 +433,14 @@ export function WordDocumentPlanCard({
     ["done", "write-failed", "revert-failed"].includes(review.status) &&
     review.documentPlanStatus !== "revert-stale" &&
     !!recoverySlot?.afterFingerprint;
-  const revertRefused =
-    revertable &&
-    !!wordRevertImportRefusal(
-      recoverySlot.ooxml,
-      recoverySlot.afterFingerprint,
-    );
+  // Decoding the backup is costly, so it is not redone on every render.
+  const revertRefused = useMemo(
+    () =>
+      revertable &&
+      !!slotOoxml &&
+      !!wordRevertImportRefusal(slotOoxml, slotAfter),
+    [revertable, slotOoxml, slotAfter],
+  );
   const canRevert = revertable && !revertRefused;
   const revert = async () => {
     const slot = host.revertSlot;
