@@ -16,9 +16,16 @@ import {
   wordCommentIdOfRef,
   wordCommentSendExact,
 } from "../utils/wordCommentSend";
+import {
+  subscribeWordDocumentChanged,
+  wordParagraphEventsActive,
+} from "../utils/wordDocumentChangeSignal";
 
 import type { WordCommentSelectionCoordinates } from "../utils/wordCommentPositions";
-import type { WordCommentReadResult } from "../utils/wordCommentReader";
+import type {
+  WordCommentAnchorCache,
+  WordCommentReadResult,
+} from "../utils/wordCommentReader";
 import type { WordCommentRefRegistry } from "../utils/wordCommentRefs";
 import type {
   WordCommentStatus,
@@ -184,7 +191,9 @@ export interface UseWordCommentsOptions {
  * No package is read for exact anchors, so a read costs no OOXML on the web unless a commented
  * paragraph has hidden text; on desktop the first read of a document learns whether it is legacy,
  * so even the picker's refs come from content where ids do not last (O-17). Reads never overlap;
- * one asked for during a read runs once after it.
+ * one asked for during a read runs once after it. A selection change while Word lists the same
+ * comments and no paragraph event has fired since keeps the earlier read's anchors; focus, refresh
+ * and every Send read them all again.
  */
 export function useWordComments({
   documentIdentity,
@@ -198,7 +207,9 @@ export function useWordComments({
   const [list, setList] = useState(NO_WORD_COMMENT_LIST);
   const wantedRef = useRef({ detailed, picked });
   wantedRef.current = { detailed, picked };
-  const scheduleRef = useRef<(delayMs: number) => void>(() => {});
+  const scheduleRef = useRef<(delayMs: number, full: boolean) => void>(
+    () => {},
+  );
 
   useEffect(() => {
     setList(NO_WORD_COMMENT_LIST);
@@ -206,10 +217,19 @@ export function useWordComments({
     let active = true;
     let running = false;
     let again = false;
+    let fullWanted = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const anchors: WordCommentAnchorCache = { generation: 0, snapshot: null };
+    const stopChanges = subscribeWordDocumentChanged(() => {
+      anchors.generation += 1;
+      anchors.snapshot = null;
+    });
 
     const readOnce = async () => {
       const wanted = wantedRef.current;
+      // Without paragraph events an edit leaves no trace, so the anchors are read again.
+      const reuse = !fullWanted && wordParagraphEventsActive();
+      fullWanted = false;
       const registry = wordCommentRefRegistry(documentIdentity);
       const pickedId = wanted.picked
         ? wordCommentIdOfRef(registry, wanted.picked)
@@ -222,6 +242,7 @@ export function useWordComments({
         replies: wanted.detailed ? "all" : "requested",
         exact: (records, live) =>
           wordCommentSendExact(records, { passage: null, live, pickedId }),
+        anchors: { cache: anchors, reuse },
         ...(wanted.detailed
           ? {
               onProgress: (done: number, total: number, phase: string) => {
@@ -261,8 +282,9 @@ export function useWordComments({
         running = false;
       }
     };
-    const schedule = (delayMs: number) => {
+    const schedule = (delayMs: number, full: boolean) => {
       if (!active) return;
+      if (full) fullWanted = true;
       clearTimeout(timer);
       timer = setTimeout(() => {
         timer = undefined;
@@ -272,20 +294,21 @@ export function useWordComments({
     scheduleRef.current = schedule;
 
     const unsubscribe = subscribeToOfficeSelectionChanged({
-      onSelectionChanged: () => schedule(WORD_COMMENTS_DEBOUNCE_MS),
+      onSelectionChanged: () => schedule(WORD_COMMENTS_DEBOUNCE_MS, false),
     });
-    const onFocus = () => schedule(0);
+    const onFocus = () => schedule(0, true);
     globalThis.addEventListener("focus", onFocus);
-    schedule(0);
+    schedule(0, true);
     return () => {
       active = false;
       clearTimeout(timer);
       unsubscribe();
+      stopChanges();
       globalThis.removeEventListener("focus", onFocus);
       scheduleRef.current = () => {};
     };
   }, [documentIdentity, enabled]);
 
-  const refresh = useCallback(() => scheduleRef.current(0), []);
+  const refresh = useCallback(() => scheduleRef.current(0, true), []);
   return { list, refresh };
 }

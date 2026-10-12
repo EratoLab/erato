@@ -313,6 +313,32 @@ export interface WordCommentDateUtc {
   otherwise: boolean | null;
 }
 
+/** What one read placed, kept for the next read of the same document. */
+export interface WordCommentAnchorSnapshot {
+  generation: number;
+  /** String(Comment.id), in the order Word listed the comments. */
+  ids: readonly string[];
+  inventory: WordCommentInventory;
+  /** In the same order as `ids`. */
+  threads: readonly {
+    anchor: WordCommentCoarseAnchor | null;
+    order: number;
+    placement?: WordCommentPlacement;
+    /** Its range was read, so reading it again is no new read (gate F1). */
+    ranged: boolean;
+  }[];
+  dateUtc: WordCommentDateUtc;
+}
+
+/**
+ * Anchors kept between reads of one document. Its owner bumps `generation` whenever the body may
+ * have changed; a snapshot of another generation, or of other comments, is never reused.
+ */
+export interface WordCommentAnchorCache {
+  generation: number;
+  snapshot: WordCommentAnchorSnapshot | null;
+}
+
 export interface WordCommentReadOptions {
   /** The Send capture's paragraphs; without them a light read of the body supplies the ordinals. */
   inventory?: WordCommentInventory;
@@ -351,6 +377,13 @@ export interface WordCommentReadOptions {
   ) => void;
   /** A millisecond clock for the budgets and timings. */
   now?: () => number;
+  /**
+   * Keeps a read's anchors for the next one. With `reuse`, while Word lists the same comments in
+   * the same generation, the read takes the kept anchors and reads only the selection, the ranges
+   * reaching its paragraphs and the replies: no body, no anchor and no order. Only for reads with
+   * `packages: false` and a known `legacy`.
+   */
+  anchors?: { cache: WordCommentAnchorCache; reuse: boolean };
 }
 
 interface Live {
@@ -588,6 +621,9 @@ async function readThreads(
   session.end(1);
   markRepeatedIds(live, session);
   diagnostics.threads = live.length;
+  const anchors = options.packages === false ? options.anchors : undefined;
+  const generation = anchors?.cache.generation ?? 0;
+  const ids = live.map(({ record }) => record.id);
   if (live.length === 0)
     return {
       ok: true,
@@ -598,6 +634,12 @@ async function readThreads(
       selection: null,
       diagnostics,
     };
+
+  const kept =
+    anchors?.reuse && options.legacy != null && !options.inventory
+      ? keptAnchors(anchors.cache, ids)
+      : null;
+  if (kept) return readFromKept(context, session, options, live, kept);
 
   const inventory =
     options.inventory ?? (await readLightInventory(context, session));
@@ -649,12 +691,141 @@ async function readThreads(
     0,
   );
   countOutcomes(diagnostics.counts, records);
+  const dateUtc = notes.dateUtc();
+  if (
+    anchors &&
+    anchors.cache.generation === generation &&
+    placedWhole(diagnostics)
+  )
+    anchors.cache.snapshot = {
+      generation,
+      ids,
+      inventory,
+      threads: live.map(({ record, range }) => ({
+        anchor: record.anchor,
+        order: record.order,
+        ...(record.placement ? { placement: record.placement } : {}),
+        ranged: !!range,
+      })),
+      dateUtc,
+    };
   return {
     ok: true,
     threads: records,
     inventory,
     legacy,
-    dateUtc: notes.dateUtc(),
+    dateUtc,
+    selection: selection?.info ?? null,
+    diagnostics,
+  };
+}
+
+/** Every anchor was read or withheld for hidden text, and the order was decided, without an error. */
+function placedWhole(diagnostics: WordCommentReadDiagnostics): boolean {
+  return (
+    diagnostics.errors.every((e) => e.phase === "replies") &&
+    diagnostics.counts.anchorsSkipped === 0 &&
+    diagnostics.phases.every(
+      (p) =>
+        !p.exhausted &&
+        (p.phase !== "order" || p.done === p.total) &&
+        (p.phase !== "hidden" || p.done === p.total),
+    )
+  );
+}
+
+function keptAnchors(
+  cache: WordCommentAnchorCache,
+  ids: readonly string[],
+): WordCommentAnchorSnapshot | null {
+  const kept = cache.snapshot;
+  return kept &&
+    kept.generation === cache.generation &&
+    kept.ids.length === ids.length &&
+    kept.ids.every((id, i) => id === ids[i])
+    ? kept
+    : null;
+}
+
+/** The anchor reaches the selection's paragraphs, or its paragraph is unknown. */
+function reaches(
+  record: WordCommentThreadRecord,
+  first: number,
+  last: number,
+): boolean {
+  const from = record.anchor?.first.ordinal ?? null;
+  const to = record.anchor?.last.ordinal ?? from;
+  return from === null || to === null || (from <= last && to >= first);
+}
+
+/**
+ * A read over kept anchors: the comments as Word lists them now, placed where the kept read placed
+ * them, related to the live selection through the ranges of the anchors reaching its paragraphs.
+ */
+async function readFromKept(
+  context: Word.RequestContext,
+  session: Session,
+  options: WordCommentReadOptions,
+  live: readonly Live[],
+  kept: WordCommentAnchorSnapshot,
+): Promise<WordCommentReadResult> {
+  const { diagnostics } = session;
+  const budgets = { ...WORD_COMMENT_READ_BUDGETS_MS, ...options.budgetsMs };
+  const { inventory } = kept;
+  diagnostics.inventory = inventory.source;
+  live.forEach(({ record }, i) => {
+    const thread = kept.threads[i];
+    record.anchor = thread.anchor;
+    record.order = thread.order;
+    if (thread.placement) record.placement = thread.placement;
+  });
+  const sorted = [...live].sort((a, b) => a.record.order - b.record.order);
+  const selection = options.selection
+    ? await readLiveSelection(context, session, inventory)
+    : null;
+  const { first, last } = selection?.info ?? { first: null, last: null };
+  if (selection && first !== null && last !== null) {
+    // Only ranges the kept read already read: a new one could unhide text on the web (gate F1).
+    const around = live.filter(
+      ({ record }, i) => kept.threads[i].ranged && reaches(record, first, last),
+    );
+    session.begin("anchors", around.length);
+    const ranges = around.map(({ comment }) => comment.getRange());
+    try {
+      if (around.length > 0) await session.sync();
+      around.forEach((thread, i) => {
+        thread.range = ranges[i];
+      });
+      session.end(around.length);
+    } catch (error) {
+      session.note(error);
+      session.end(0);
+    }
+    await relateSelection(session, sorted, selection);
+  }
+  const records = sorted.map((thread) => thread.record);
+  const asked = requested(
+    options.exact?.(records, selection?.info ?? null) ?? [],
+    sorted,
+  );
+  await readReplies(
+    session,
+    options.replies === "requested" ? asked : sorted,
+    budgets.replies,
+  );
+  const legacy = options.legacy ?? null;
+  diagnostics.legacy = legacy;
+  diagnostics.replies = records.reduce(
+    (sum, record) => sum + (record.replies?.length ?? 0),
+    0,
+  );
+  countOutcomes(diagnostics.counts, records);
+  return {
+    ok: true,
+    threads: records,
+    inventory,
+    legacy,
+    dateUtc: kept.dateUtc,
     selection: selection?.info ?? null,
     diagnostics,
   };
@@ -738,13 +909,9 @@ async function relateSelection(
 ) {
   const { first, last } = selection.info;
   if (first === null || last === null) return;
-  const around = sorted.filter(({ range, record }) => {
-    const from = record.anchor?.first.ordinal ?? null;
-    const to = record.anchor?.last.ordinal ?? from;
-    return (
-      !!range && (from === null || to === null || (from <= last && to >= first))
-    );
-  });
+  const around = sorted.filter(
+    ({ range, record }) => !!range && reaches(record, first, last),
+  );
   session.begin("relations", around.length);
   let done = 0;
   for (const batch of chunks(around, WORD_COMMENT_SYNC_THREADS)) {

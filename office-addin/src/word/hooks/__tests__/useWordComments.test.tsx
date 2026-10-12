@@ -2,6 +2,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  generatedCommentDocument,
   installWordCommentHost,
   uninstallWordCommentHost,
 } from "../../../test/mocks/word/commentHost";
@@ -19,6 +20,19 @@ import type { UseWordCommentsOptions } from "../useWordComments";
 
 const broker = vi.hoisted(() => ({
   subscribers: new Set<{ onSelectionChanged: () => void }>(),
+}));
+
+const changes = vi.hoisted(() => ({
+  listeners: new Set<() => void>(),
+  paragraphEvents: true,
+}));
+
+vi.mock("../../utils/wordDocumentChangeSignal", () => ({
+  subscribeWordDocumentChanged: (listener: () => void) => {
+    changes.listeners.add(listener);
+    return () => changes.listeners.delete(listener);
+  },
+  wordParagraphEventsActive: () => changes.paragraphEvents,
 }));
 
 vi.mock("../../../hooks/officeSelectionChangedBroker", () => ({
@@ -83,6 +97,8 @@ describe("useWordComments", () => {
     uninstallWordCommentHost();
     forgetWordCommentRefs();
     broker.subscribers.clear();
+    changes.listeners.clear();
+    changes.paragraphEvents = true;
   });
 
   it.each(["pc", "web"] as const)(
@@ -281,5 +297,72 @@ describe("useWordComments", () => {
     expect(refOf(list, "T1").lastActivity).toEqual(
       new Date("2026-09-03T08:15:30Z"),
     );
+  });
+
+  describe("a caret pause", () => {
+    const bodyRead = () => word.calls().includes("paragraphs.load");
+    /** Mounts on a passage over T1, then moves the caret into T6 and T7's paragraph. */
+    const moveCaret = async (before?: () => void) => {
+      install({ host: "web", selection: PASSAGE_OVER_T1 });
+      const hook = mount();
+      await ready(hook);
+      install({ host: "web", selection: { tag: "T6P", offset: 20 } });
+      act(() => {
+        before?.();
+        fireSelectionChanged();
+      });
+      await waitFor(() =>
+        expect(hook.result.current.list.selection.kind).toBe("caret"),
+      );
+      return hook;
+    };
+
+    it("keeps the anchors while Word lists the same comments and no paragraph changed", async () => {
+      const hook = await moveCaret();
+      const kept = hook.result.current.list;
+
+      expect(bodyRead()).toBe(false);
+      expect(word.rangesRead().sort()).toEqual(["T6", "T7", "T7b"]);
+      expect(kept.selection).toEqual({
+        kind: "caret",
+        threads: [refOf(kept, "T6").ref, refOf(kept, "T7").ref],
+      });
+      expect(refOf(kept, "T6").replies).not.toBeNull();
+
+      install({ host: "web", selection: { tag: "T6P", offset: 20 } });
+      act(() => hook.result.current.refresh());
+      await waitFor(() => expect(bodyRead()).toBe(true));
+      await ready(hook);
+      expect(hook.result.current.list).toEqual(kept);
+    });
+
+    it("reads the anchors again after a paragraph changed", async () => {
+      await moveCaret(() => {
+        for (const listener of changes.listeners) listener();
+      });
+      expect(bodyRead()).toBe(true);
+    });
+
+    it("reads the anchors again where Word sends no paragraph events", async () => {
+      changes.paragraphEvents = false;
+      await moveCaret();
+      expect(bodyRead()).toBe(true);
+    });
+
+    it("reads the anchors again once the comments changed", async () => {
+      install({ host: "web", selection: PASSAGE_OVER_T1 });
+      const hook = mount();
+      await ready(hook);
+      install({
+        host: "web",
+        document: generatedCommentDocument({ paragraphs: 3 }),
+        selection: { tag: "G2", offset: 3 },
+      });
+      act(() => fireSelectionChanged());
+      await waitFor(() =>
+        expect(hook.result.current.list.threads).toHaveLength(3),
+      );
+      expect(bodyRead()).toBe(true);
+    });
   });
 });

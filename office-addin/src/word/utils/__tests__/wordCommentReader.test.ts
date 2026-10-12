@@ -23,6 +23,7 @@ import type {
   CommentHostOptions,
 } from "../../../test/mocks/word/commentHost";
 import type {
+  WordCommentAnchorCache,
   WordCommentReadOptions,
   WordCommentThreadRecord,
 } from "../wordCommentReader";
@@ -814,6 +815,115 @@ describe("the user's selection", () => {
     const result = await read({ selection: { tag: "T1P", offset: 25 } });
     expect(result.selection).toBeNull();
     expect(host.calls()).not.toContain("document.getSelection");
+  });
+});
+
+describe("anchors kept between reads", () => {
+  const NO_ANCHORS = (): WordCommentAnchorCache => ({
+    generation: 0,
+    snapshot: null,
+  });
+  async function readWith(
+    hostOptions: CommentHostOptions,
+    anchors: { cache: WordCommentAnchorCache; reuse: boolean },
+    options: Omit<WordCommentReadOptions, "now" | "anchors"> = {},
+  ) {
+    return read(hostOptions, {
+      selection: true,
+      packages: false,
+      legacy: false,
+      replies: "requested",
+      exact: (_threads, live) =>
+        live?.first == null ? [] : askFor("T6", "T7")(),
+      anchors,
+      ...options,
+    });
+  }
+  const view = (result: Awaited<ReturnType<typeof read>>) => ({
+    selection: result.selection,
+    threads: result.threads.map((t) => ({
+      id: t.id,
+      order: t.order,
+      anchor: t.anchor,
+      placement: t.placement,
+      selection: t.selection,
+      replies: t.replies?.length ?? null,
+    })),
+  });
+  const PASSAGE_T1 = { tag: "T1P", offset: 22, to: { tag: "T1P", offset: 33 } };
+  const T6_CARET = { tag: "T6P", offset: 20 };
+
+  it.each(HOSTS)(
+    "relate a moved caret as a full read does, reading only the ranges around it, on %s",
+    async (h) => {
+      const cache = NO_ANCHORS();
+      await readWith(
+        { host: h, selection: PASSAGE_T1 },
+        { cache, reuse: false },
+      );
+      expect(cache.snapshot?.ids).toHaveLength(ROOTS.length);
+
+      const kept = await readWith(
+        { host: h, selection: T6_CARET },
+        { cache, reuse: true },
+      );
+      expect(host.calls()).not.toContain("paragraphs.load");
+      expect([...host.rangesRead()].sort()).toEqual(["T6", "T7", "T7b"]);
+      expect(host.unhidden()).toEqual([]);
+
+      const full = await readWith(
+        { host: h, selection: T6_CARET },
+        { cache: NO_ANCHORS(), reuse: true },
+      );
+      expect(host.calls()).toContain("paragraphs.load");
+      expect(view(kept)).toEqual(view(full));
+    },
+  );
+
+  it("read everything again in a later generation or for other comments", async () => {
+    const cache = NO_ANCHORS();
+    await readWith({ selection: PASSAGE_T1 }, { cache, reuse: false });
+    cache.generation += 1;
+    await readWith({ selection: T6_CARET }, { cache, reuse: true });
+    expect(host.calls()).toContain("paragraphs.load");
+
+    const other = await readWith(
+      {
+        document: generatedCommentDocument({ paragraphs: 3 }),
+        selection: { tag: "G2", offset: 3 },
+      },
+      { cache, reuse: true },
+      { exact: () => [] },
+    );
+    expect(host.calls()).toContain("paragraphs.load");
+    expect(other.threads).toHaveLength(3);
+  });
+
+  it("keep nothing from a read that did not place every anchor", async () => {
+    const cache = NO_ANCHORS();
+    await readWith(
+      { selection: PASSAGE_T1 },
+      { cache, reuse: false },
+      { budgetsMs: { anchors: 0 } },
+    );
+    expect(cache.snapshot).toBeNull();
+  });
+
+  it("never read a range the kept read left alone for hidden text", async () => {
+    const cache = NO_ANCHORS();
+    await readWith(
+      { host: "web", selection: PASSAGE_T1 },
+      { cache, reuse: false },
+    );
+    const kept = await readWith(
+      { host: "web", selection: { tag: "T10P", offset: 3 } },
+      { cache, reuse: true },
+    );
+    expect(host.rangesRead()).not.toContain("T10");
+    expect(host.unhidden()).toEqual([]);
+    expect(thread(kept.threads, "T10").anchor?.first.ordinal).toBe(
+      host.ordinalOf("T10P"),
+    );
   });
 });
 
