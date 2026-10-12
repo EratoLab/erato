@@ -3009,6 +3009,26 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Reemplazar el pasaje seleccionado"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.comments.blocked.chooseComment"
+msgstr "El cursor está en más de un comentario, así que Erato no sabe a cuál te refieres."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.comments.blocked.pickedGone"
+msgstr "El comentario que elegiste ya no está en el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.comments.blocked.readFailed"
+msgstr "Erato no pudo leer los comentarios en Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.comments.sendWithout"
+msgstr "Enviar sin comentarios"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Termina después de"
@@ -4577,6 +4597,11 @@ msgstr "La lectura del documento tardó demasiado, así que Erato usó una copia
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.send.readingComments"
+msgstr "Leyendo los comentarios…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.readingDocument"
 msgstr "Leyendo el documento…"
 
@@ -4609,6 +4634,31 @@ msgstr "Aplica la reescritura completa sin preguntar, solo si el documento sigue
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysReplaceSelection"
 msgstr "Reemplaza el pasaje seleccionado sin preguntar, solo si no cambió desde tu solicitud. Deshacer está disponible mientras el control de cambios esté desactivado."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.comment"
+msgstr "Trabajar en el comentario"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.comment.helper"
+msgstr "Erato no ofrece reemplazar el texto."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.legend"
+msgstr "Cuando el texto que seleccionas tiene comentarios, Erato debe:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.selection"
+msgstr "Trabajar en el texto seleccionado (predeterminado)"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.selection.helper"
+msgstr "Los comentarios se envían junto con él y Erato puede ofrecer reemplazar el texto."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

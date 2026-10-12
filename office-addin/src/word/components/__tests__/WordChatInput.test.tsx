@@ -38,6 +38,7 @@ vi.mock("../../wordPreferences", () => ({
     preferences.includeByDefault,
     preferences.setIncludeByDefault,
   ],
+  useWordCommentPrecedence: () => ["selection", () => {}],
 }));
 
 vi.mock("../../../core/AddinChatInputCore", () => ({

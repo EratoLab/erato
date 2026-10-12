@@ -1,10 +1,15 @@
 import {
   MAX_WORD_SCOPE_BYTES,
   MAX_WORD_SCOPE_TARGETS,
+  WORD_COMMENT_MAP_ARG,
+  WORD_COMMENT_THREAD_FACET_ID,
+  WORD_COMMENTS_JSON_ARG,
+  WORD_THREAD_JSON_ARG,
 } from "@erato/frontend/word-review";
 
 import { wordSelectionWithoutKeptItems } from "./wordSelectionAnchor";
 import { wordSelectionFacetArgs } from "./wordSelectionArgs";
+import { advertisedFacetArgs } from "../../core/clientActions/actionFacetArgs";
 
 import type {
   WordDocumentArgs,
@@ -51,6 +56,7 @@ export function resolveWordSelectionFacet(input: {
   documentIdentity: string;
   availableFacetIds: ReadonlySet<string>;
   availableFacetArgs: ReadonlyMap<string, ReadonlySet<string>>;
+  anchoredComments?: string;
 }): ActionFacetRequest | undefined {
   if (
     !wordSelectionFacetAvailable(
@@ -107,6 +113,10 @@ export interface WordActionFacetInput {
   hasContent: boolean;
   authoring?: WordAuthoringSnapshot;
   availableFacetIds: ReadonlySet<string>;
+  /** Optional arguments, such as comment_map, go only where they are advertised. */
+  availableFacetArgs?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** The whole document's comment map (wordCommentSend.ts); empty without one. */
+  commentMap?: string;
 }
 
 /** Supply every configured argument to avoid literal placeholders.
@@ -116,6 +126,10 @@ export function resolveWordActionFacet(
 ): ActionFacetRequest | undefined {
   if (!input.chipEnabled) return undefined;
   if (input.documentArgs === null) return undefined;
+  const commentMap = (facetId: string): Record<string, string> =>
+    input.availableFacetArgs?.get(facetId)?.has(WORD_COMMENT_MAP_ARG)
+      ? { [WORD_COMMENT_MAP_ARG]: input.commentMap ?? "" }
+      : {};
 
   if (input.authoring && input.availableFacetIds.has(WORD_AUTHORING_FACET_ID)) {
     return {
@@ -129,6 +143,7 @@ export function resolveWordActionFacet(
         ),
         document_snapshot: input.authoring.token,
         authoring_status: wordAuthoringStatus(input.authoring),
+        ...commentMap(WORD_AUTHORING_FACET_ID),
       },
     };
   }
@@ -146,6 +161,7 @@ export function resolveWordActionFacet(
         paragraphs_total: input.documentArgs.paragraphs_total,
         truncation_note: input.documentArgs.truncation_note,
         document_identity: input.documentIdentity,
+        ...commentMap(WORD_DOCUMENT_REVIEW_FACET_ID),
       },
     };
   }
@@ -157,6 +173,40 @@ export function resolveWordActionFacet(
       document_name: input.documentName,
       document_identity: input.documentIdentity,
     },
+  };
+}
+
+/**
+ * word_comment_thread (O-26): one thread in thread_json and the envelope around it in
+ * comments_json; an empty thread_json carries the open threads alone. Unavailable unless both are
+ * advertised.
+ */
+export function resolveWordCommentThreadFacet(input: {
+  documentName: string;
+  documentIdentity: string;
+  threadJson: string;
+  commentsJson: string;
+  availableFacetIds: ReadonlySet<string>;
+  availableFacetArgs: ReadonlyMap<string, ReadonlySet<string>>;
+}): ActionFacetRequest | undefined {
+  const allowed = input.availableFacetArgs.get(WORD_COMMENT_THREAD_FACET_ID);
+  if (
+    !input.availableFacetIds.has(WORD_COMMENT_THREAD_FACET_ID) ||
+    !allowed?.has(WORD_THREAD_JSON_ARG) ||
+    !allowed.has(WORD_COMMENTS_JSON_ARG)
+  )
+    return undefined;
+  return {
+    id: WORD_COMMENT_THREAD_FACET_ID,
+    args: advertisedFacetArgs(
+      {
+        document_name: input.documentName,
+        document_identity: input.documentIdentity,
+        [WORD_THREAD_JSON_ARG]: input.threadJson,
+        [WORD_COMMENTS_JSON_ARG]: input.commentsJson,
+      },
+      allowed,
+    ),
   };
 }
 

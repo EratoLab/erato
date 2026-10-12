@@ -3,6 +3,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  useWordCommentPrecedence,
   useWordIncludeDocumentByDefault,
   WORD_PREFERENCES_KEY,
 } from "../wordPreferences";
@@ -95,5 +96,67 @@ describe("useWordIncludeDocumentByDefault", () => {
 
     deploymentDefault(true);
     expect(includeDocument()).toBe(true);
+  });
+});
+
+describe("useWordCommentPrecedence", () => {
+  afterEach(() => {
+    localStorage.removeItem(WORD_PREFERENCES_KEY);
+    delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+  });
+
+  const precedence = () =>
+    renderHook(() => useWordCommentPrecedence()).result.current[0];
+
+  it("works on the selected text until the user chooses, whatever the deployment sets", () => {
+    expect(precedence()).toBe("selection");
+    deploymentDefault(false);
+    expect(precedence()).toBe("selection");
+  });
+
+  it("saves the choice beside the document default, keeping both", () => {
+    deploymentDefault(true);
+    const include = renderHook(() => useWordIncludeDocumentByDefault());
+    const comment = renderHook(() => useWordCommentPrecedence());
+
+    act(() => include.result.current[1](false));
+    act(() => comment.result.current[1]("comment"));
+
+    expect(JSON.parse(localStorage.getItem(WORD_PREFERENCES_KEY)!)).toEqual({
+      includeDocumentByDefault: false,
+      commentPrecedence: "comment",
+    });
+    expect(precedence()).toBe("comment");
+    expect(includeDocument()).toBe(false);
+
+    act(() => include.result.current[1](true));
+    expect(precedence()).toBe("comment");
+  });
+
+  it.each([
+    [
+      "both fields",
+      '{"includeDocumentByDefault":false,"commentPrecedence":"comment"}',
+      false,
+      "comment",
+    ],
+    ["only the precedence", '{"commentPrecedence":"comment"}', true, "comment"],
+    [
+      "an unknown precedence",
+      '{"includeDocumentByDefault":false,"commentPrecedence":"thread"}',
+      false,
+      "selection",
+    ],
+    [
+      "a broken document default",
+      '{"includeDocumentByDefault":"no","commentPrecedence":"comment"}',
+      true,
+      "comment",
+    ],
+  ])("parses storage holding %s", (_, raw, include, chosen) => {
+    deploymentDefault(true);
+    localStorage.setItem(WORD_PREFERENCES_KEY, raw);
+    expect(includeDocument()).toBe(include);
+    expect(precedence()).toBe(chosen);
   });
 });
