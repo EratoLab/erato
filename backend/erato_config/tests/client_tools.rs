@@ -44,3 +44,27 @@ fn existing_client_tool_configuration_does_not_require_new_client_headers() {
     .unwrap();
     assert!(!tool.requires_client_registration);
 }
+
+#[test]
+fn tools_without_durable_serialize_as_before() {
+    let tool: ClientToolConfig = serde_json::from_value(serde_json::json!({
+        "name": "fetch_availability", "description": "Calendar read", "parameters": "{}"
+    }))
+    .unwrap();
+    assert!(tool.durable.is_none());
+    assert!(
+        serde_json::to_value(&tool)
+            .unwrap()
+            .get("durable")
+            .is_none()
+    );
+    let durable: ClientToolConfig = serde_json::from_value(serde_json::json!({
+        "name": "fetch_availability", "description": "Calendar read", "parameters": "{}",
+        "durable": {"host_context": "outlook_mailbox"}
+    }))
+    .unwrap();
+    let value = serde_json::to_value(&durable).unwrap();
+    assert_eq!(value["durable"]["host_context"], "outlook_mailbox");
+    assert_eq!(value["durable"]["attempt_expiry_secs"], 3600);
+    assert_eq!(value["durable"]["claim_lease_secs"], 120);
+}

@@ -1669,6 +1669,50 @@ impl AppConfig {
                     qualified, e
                 ),
             }
+            if let Some(durable) = &tool.durable {
+                if tool.submission.is_some() {
+                    panic!(
+                        "Client tool '{}' cannot combine durable with submission.",
+                        qualified
+                    );
+                }
+                if let Some(schema) = &durable.result_schema {
+                    let compiled = serde_json::from_str::<serde_json::Value>(schema)
+                        .map_err(|error| error.to_string())
+                        .and_then(|value| crate::client_tool_schema::compile(&value));
+                    if let Err(error) = compiled {
+                        panic!(
+                            "Client tool '{}' has an invalid durable.result_schema: {}",
+                            qualified, error
+                        );
+                    }
+                }
+                if !(60..=86400).contains(&durable.attempt_expiry_secs) {
+                    panic!(
+                        "Client tool '{}' durable.attempt_expiry_secs must be 60–86400.",
+                        qualified
+                    );
+                }
+                // The floor keeps a slow mailbox read from outliving its claim.
+                if !(60..=900).contains(&durable.claim_lease_secs)
+                    || durable.claim_lease_secs > durable.attempt_expiry_secs
+                {
+                    panic!(
+                        "Client tool '{}' durable.claim_lease_secs must be 60–900 and at most attempt_expiry_secs.",
+                        qualified
+                    );
+                }
+                // Expiry counts from dispatch, so a timeout park must still leave a full lease.
+                let timeout_ms = tool.timeout_ms.unwrap_or(DEFAULT_CLIENT_TOOL_TIMEOUT_MS);
+                if durable.attempt_expiry_secs.saturating_mul(1000)
+                    < timeout_ms.saturating_add(durable.claim_lease_secs.saturating_mul(1000))
+                {
+                    panic!(
+                        "Client tool '{}' durable.attempt_expiry_secs must cover timeout_ms plus claim_lease_secs.",
+                        qualified
+                    );
+                }
+            }
         }
 
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
@@ -4967,8 +5011,9 @@ pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_promp
 /// `[client_tools]` sibling keys that set global settings for all client tools.
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ClientToolsConfig {
-    /// Enable durable escalation for compiled, registered operation kinds.
-    /// No production kinds are registered by the neutral foundation.
+    /// Enable durable escalation for compiled, registered operation kinds:
+    /// native local evidence, and configured tools that opt in with a
+    /// `[client_tools.tools.<id>.durable]` table.
     #[serde(default)]
     pub durable_operations_enabled: bool,
     /// Client tools keyed by config tool id. The id is the override handle; the
@@ -5041,6 +5086,62 @@ pub struct ClientToolConfig {
     /// stored message keeps the complete arguments and result.
     #[serde(default)]
     pub replay: ClientToolReplayConfig,
+
+    /// Opt this tool into durable client operations. While
+    /// `client_tools.durable_operations_enabled` is on, a call whose stream
+    /// drops or times out parks durably for the same device and host context
+    /// instead of ending as a timeout. Not allowed together with `submission`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub durable: Option<ClientToolDurableConfig>,
+}
+
+/// `[client_tools.tools.<id>.durable]`. Selects a compiled host family, never
+/// an executor, realm or device.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet)]
+pub struct ClientToolDurableConfig {
+    /// Host context an executor binding must carry for the call to park, e.g.
+    /// `outlook_mailbox`. Calls without a matching binding keep the in-memory path.
+    pub host_context: ClientToolHostContext,
+    /// Optional JSON Schema (as a JSON string, top-level `type = "object"`) that
+    /// a successful result must satisfy. A failing result reaches the model as
+    /// fixed feedback, never verbatim.
+    #[serde(default)]
+    pub result_schema: Option<String>,
+    /// Seconds from dispatch that a call stays claimable once parked. Must be
+    /// 60–86400 and cover the tool's `timeout_ms` plus `claim_lease_secs`.
+    /// Default: 3600.
+    #[serde(default = "default_durable_attempt_expiry_secs")]
+    pub attempt_expiry_secs: u64,
+    /// Seconds a claiming executor holds the call before another claim may
+    /// replace it. Must be 60–900 and at most `attempt_expiry_secs`. Default: 120.
+    #[serde(default = "default_durable_claim_lease_secs")]
+    pub claim_lease_secs: u64,
+}
+
+fn default_durable_attempt_expiry_secs() -> u64 {
+    3600
+}
+
+fn default_durable_claim_lease_secs() -> u64 {
+    120
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolHostContext {
+    /// The Outlook add-in's signed-in mailbox.
+    OutlookMailbox,
+}
+
+impl ClientToolHostContext {
+    /// The `host_context.kind` an executor binding carries for this family.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::OutlookMailbox => "outlook_mailbox",
+        }
+    }
 }
 
 /// `[client_tools.tools.<id>.replay]`. Applies only to calls from earlier user
@@ -5140,6 +5241,9 @@ pub enum ClientToolNativeSchema {
 
 /// Default namespace for a client tool when none is configured.
 pub const DEFAULT_CLIENT_TOOL_NAMESPACE: &str = "client";
+
+/// Park timeout of a client tool without `timeout_ms`.
+pub const DEFAULT_CLIENT_TOOL_TIMEOUT_MS: u64 = 60_000;
 
 impl ClientToolConfig {
     /// The tool's namespace, or the `client` default.

@@ -1,3 +1,7 @@
+import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
+import { withClientCallLock } from "@/lib/clientOperations/operationLock";
+import { operationExecutorBinding } from "@/lib/clientOperations/registration";
+
 import {
   getClientToolExecutor,
   isClientToolResultLocalOnly,
@@ -10,6 +14,7 @@ import {
 
 import type {
   ClientToolResultRequest,
+  ClientToolResultResponse,
   MessageSubmitStreamingResponseClientToolCall,
   Value,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -50,51 +55,75 @@ export async function handleClientToolCall(
   markClientToolCallAnswered(tool_call_id);
 
   const base = { chat_id: chatId, message_id, tool_call_id };
-  let body: ClientToolResultRequest;
 
   const executor = getClientToolExecutor(tool_name);
   if (!executor) {
-    body = {
-      ...base,
-      error: `No client-tool executor registered for "${tool_name}"`,
-    };
-  } else {
+    await postClientToolResult(
+      {
+        ...base,
+        error: `No client-tool executor registered for "${tool_name}"`,
+      },
+      tool_name,
+      tool_call_id,
+      deps,
+    );
+    return;
+  }
+  const run = async () => {
     // Tracked so the user stop pathway can abort the execution mid-flight;
-    // an aborted executor settles like any failure and POSTs its error.
+    // an aborted executor settles like any failure and POSTs its error. Held
+    // until the POST settles, so a parked operation's handler defers its claim.
     const signal = trackClientToolCallAbort(tool_call_id, chatId);
     try {
-      const outcome = await executor(input ?? null, {
-        toolCallId: tool_call_id,
-        messageId: message_id,
-        chatId,
-        signal,
-      });
-      if (outcome.disposition === "local_only") return;
-      body = outcome.ok
-        ? // Coalesce to explicit null so an empty success is delivered as a
-          // result, not treated by the backend as "no result → tool error".
-          {
-            ...base,
-            result: (outcome.result ?? null) as unknown as Value,
-            file_upload_ids: outcome.fileUploadIds,
-          }
-        : {
-            ...base,
-            error: outcome.error,
-            validation_errors: outcome.validationErrors,
-            submission_feedback: outcome.submissionFeedback,
-          };
-    } catch (error) {
-      body = {
-        ...base,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      let body: ClientToolResultRequest;
+      try {
+        const outcome = await executor(input ?? null, {
+          toolCallId: tool_call_id,
+          messageId: message_id,
+          chatId,
+          signal,
+        });
+        if (outcome.disposition === "local_only") return;
+        body = outcome.ok
+          ? // Coalesce to explicit null so an empty success is delivered as a
+            // result, not treated by the backend as "no result → tool error".
+            {
+              ...base,
+              result: (outcome.result ?? null) as unknown as Value,
+              file_upload_ids: outcome.fileUploadIds,
+            }
+          : {
+              ...base,
+              error: outcome.error,
+              validation_errors: outcome.validationErrors,
+              submission_feedback: outcome.submissionFeedback,
+            };
+      } catch (error) {
+        body = {
+          ...base,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+      await postClientToolResult(body, tool_name, tool_call_id, deps);
     } finally {
       releaseClientToolCallAbort(tool_call_id);
     }
-  }
+  };
+  // A call that can park may already run in another pane of this browser.
+  if (operationExecutorBinding(tool_name))
+    await withClientCallLock(message_id, tool_call_id, run);
+  else await run();
+}
 
-  if (isClientToolResultLocalOnly(tool_name)) return;
+async function postClientToolResult(
+  body: ClientToolResultRequest,
+  toolName: string,
+  toolCallId: string,
+  deps: HandleClientToolCallDeps,
+): Promise<void> {
+  if (isClientToolResultLocalOnly(toolName)) return;
+  // A call with a durable operation identity only accepts its submit binding.
+  const binding = operationExecutorBinding(toolName);
   try {
     const response = await fetch("/api/v1beta/me/messages/clienttoolresult", {
       method: "POST",
@@ -102,18 +131,28 @@ export async function handleClientToolCall(
         "Content-Type": "application/json",
         ...deps.getAuthHeaders(),
         ...(deps.extraHeaders ?? {}),
+        ...(binding ? { "X-Erato-Executor": JSON.stringify(binding) } : {}),
       },
       body: JSON.stringify(body),
     });
-    if (!response.ok) {
-      // Un-mark so a resumestream replay can retry (executors are idempotent).
-      unmarkClientToolCallAnswered(tool_call_id);
-      console.warn(
-        `[client_tool_call] result POST returned ${response.status}`,
-      );
+    if (response.ok) {
+      if (binding) {
+        const settled = (await response
+          .json()
+          .catch(() => ({}))) as Partial<ClientToolResultResponse>;
+        // A result that settled a parked operation is continued from here.
+        if (settled.stored) requestClientOperationSweep();
+      }
+      return;
     }
+    // Un-mark so a resumestream replay can retry (executors are idempotent),
+    // unless a durable operation already owns the bound call: a replay would
+    // only conflict again.
+    if (!binding || response.status !== 409)
+      unmarkClientToolCallAnswered(toolCallId);
+    console.warn(`[client_tool_call] result POST returned ${response.status}`);
   } catch (error) {
-    unmarkClientToolCallAnswered(tool_call_id);
+    unmarkClientToolCallAnswered(toolCallId);
     console.warn("[client_tool_call] result POST failed", error);
   }
 }

@@ -314,6 +314,8 @@ export const DEFAULT_STUBS = {
   // tests, so the add-in only needs the identity or empty result.
   chatDetailQuery: () => ({ queryKey: ["chat-detail"] }),
   chatMessagesQuery: () => ({ queryKey: ["chat-messages"] }),
+  clientOperationDeviceId: () => undefined,
+  ClientToolOperationHandler: class {},
   componentRegistry: {},
   createBrowserClientInfo: (info: unknown) => info,
   dynamicActivate: async () => {},
@@ -324,8 +326,11 @@ export const DEFAULT_STUBS = {
   hasSupportedOperations: () => false,
   mapMessageToUiMessage: (message: unknown) => message,
   recentChatsQuery: () => ({ queryKey: ["recent-chats"] }),
+  registerClientOperationHandler: () => noop,
   registerClientToolExecutor: () => noop,
+  registerOperationExecutor: () => noop,
   removeArchivedChatFromLists: async () => noop,
+  requestClientOperationSweep: noop,
   resolveComponentOverride: (override: unknown, fallback: unknown) =>
     override ?? fallback,
   seedGenerationStatusFromListing: noop,

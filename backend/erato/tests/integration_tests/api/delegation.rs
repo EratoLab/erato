@@ -1497,6 +1497,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            durable: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -8269,6 +8270,7 @@ async fn a_task_planned_on_a_word_turn_gets_no_word_client_tools(pool: Pool<Post
                 timeout_ms: None,
                 submission: None,
                 replay: Default::default(),
+                durable: None,
             },
         );
         let mut word_tools = config.facets.facets["files"].clone();
@@ -12753,6 +12755,7 @@ async fn react_offers_optional_client_tools_only_when_registered(pool: Pool<Post
                 timeout_ms: None,
                 submission: None,
                 replay: Default::default(),
+                durable: None,
             },
         );
     }

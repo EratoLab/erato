@@ -551,6 +551,17 @@ export {
   type ClientToolValidationIssue,
   type ClientToolCallContext,
 } from "@/hooks/chat/clientToolExecutors";
+// Durable client operations: a shell registers handlers for parked calls and
+// advertises the executor binding that may claim them.
+export {
+  registerClientOperationHandler,
+  requestClientOperationSweep,
+} from "@/lib/clientOperations/handlers";
+export { ClientToolOperationHandler } from "@/lib/clientOperations/clientToolHandler";
+export { registerOperationExecutor } from "@/lib/clientOperations/registration";
+export { clientOperationDeviceId } from "@/lib/clientOperations/deviceId";
+export type { ClientOperationHandler } from "@/lib/clientOperations/coordinator";
+export type { ExecutorBinding } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export { createLogger } from "@/utils/debugLogger";
 export {
   copyEmailToClipboard,

@@ -1,4 +1,4 @@
-//! Offline compilation of configured submission schemas. No HTTP or file references.
+//! Offline compilation of configured submission and result schemas. No HTTP or file references.
 
 use serde_json::Value;
 
@@ -9,13 +9,13 @@ impl jsonschema::Retrieve for NoExternalReferences {
         &self,
         _uri: &jsonschema::Uri<String>,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        Err("Submission schemas must use local references".into())
+        Err("Client tool schemas must use local references".into())
     }
 }
 
 pub fn compile(schema: &Value) -> Result<jsonschema::Validator, String> {
     if schema.get("type").and_then(Value::as_str) != Some("object") {
-        return Err("Submission parameters must have type = object".into());
+        return Err("Client tool schemas must have type = object".into());
     }
     jsonschema::options()
         .with_retriever(NoExternalReferences)

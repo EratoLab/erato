@@ -4995,7 +4995,9 @@ validation. Enabling this setting does not register an executor or make arbitrar
 client tools durable. Native local evidence is registered only when
 `desktop_sidecar.local_delegation.enabled` is also enabled and its signing policy
 is valid. Its scoped child offer additionally requires an authenticated native
-context and matching executor capability from the submitting frontend.
+context and matching executor capability from the submitting frontend. Configured
+client tools become durable only through their own
+[`durable`](#client_toolstoolskeydurable) table.
 
 Eligible `consent: none` calls retain the ordinary in-memory fast path. Native
 review operations enter the durable inbox immediately. On disconnect or timeout,
@@ -5003,6 +5005,61 @@ they may park in the logged operation inbox and later continue under a fresh
 authenticated request. Existing generation leases coordinate backend replicas;
 no backend credentials are stored with an operation. Kinds may impose narrower
 rollout restrictions, including single-replica execution.
+
+Turning the setting on also enables the generation lease identity guard and its
+compare-and-set path. After a durable park, a short SSE drop no longer ends the
+call as a timeout: the turn detaches and the frontend resumes it from the
+operation inbox.
+
+#### `client_tools.tools.<key>.durable`
+
+{/* erato_toml_config_key: client_tools.tools.<key>.durable.host_context */}
+{/* erato_toml_config_key: client_tools.tools.<key>.durable.result_schema */}
+{/* erato_toml_config_key: client_tools.tools.<key>.durable.attempt_expiry_secs */}
+{/* erato_toml_config_key: client_tools.tools.<key>.durable.claim_lease_secs */}
+
+Opts one configured client tool into durable operations. It takes effect only
+while `client_tools.durable_operations_enabled` is on. A call that runs keeps the
+in-memory fast path. If the client's stream drops or the call reaches its
+`timeout_ms`, the call parks in the operation inbox instead of ending as a
+timeout. An executor with the same device and host context can then answer it,
+for example after a reconnect or from a second tab, and the turn resumes.
+
+```toml
+[client_tools.tools.outlook_fetch_availability.durable]
+host_context = "outlook_mailbox"
+attempt_expiry_secs = 3600
+claim_lease_secs = 120
+result_schema = '''{"type":"object","required":["busy"],"properties":{"busy":{"type":"array"}}}'''
+```
+
+- **`host_context`** _(required)_ - The host family whose executor binding the
+  call needs. `outlook_mailbox` is the Outlook add-in's signed-in mailbox. A call
+  without a matching `X-Erato-Executor` binding keeps the in-memory path. This
+  happens with older clients, Teams, or a desktop sidecar binding.
+- **`result_schema`** _(optional)_ - A JSON Schema string with top-level
+  `type = "object"` that a successful result must satisfy. A result that fails
+  it, or any malformed result, reaches the model as fixed feedback, never verbatim.
+- **`attempt_expiry_secs`** _(default: 3600, range: 60–86400)_ - How long a
+  parked call stays claimable, counted from when the call was dispatched. It must
+  cover the tool's `timeout_ms` (default 60000) plus `claim_lease_secs`. An
+  expired call continues the turn as `expired`.
+- **`claim_lease_secs`** _(default: 120, range: 60–900)_ - How long a claiming
+  executor holds the call before another claim may replace it. It must not
+  exceed `attempt_expiry_secs`.
+
+Per-tool decisions still apply. `ask` shows the approval card before the call
+runs. Once approved, the call parks like any other, and it does not prompt again
+when it completes later on the same device. If an approval is answered from another
+device or client, no call of an opted-in tool parks for the rest of that turn;
+they keep the in-memory path. `never_allow` tools are neither offered nor run.
+A decision changed to `never_allow` after a call parked withdraws it. Claims are
+never allowed across devices. A tool with `submission` cannot be durable. Results
+must be JSON; tools that return files must not opt in. Opting in also drops the
+client's per-field validation errors: a result the client rejects reaches the
+model as fixed `validation_failed` text, on the live path too, so tools that rely
+on correctable validation errors must not opt in. Every backend replica must load
+the same `durable` tables.
 
 #### `client_tools.tools.<key>.requires_client_registration`
 

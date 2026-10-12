@@ -2228,6 +2228,9 @@ pub struct ContinueStreamRequest {
     /// The `X-Erato-Client-Tools` of the device answering, when it sent one.
     #[serde(skip)]
     registered_client_tools: Option<Vec<String>>,
+    /// The `X-Erato-Executor` of the device answering, when it sent a valid one.
+    #[serde(skip)]
+    executor: Option<crate::services::client_operations::ExecutorBinding>,
 }
 
 impl ContinueStreamRequest {
@@ -2248,6 +2251,7 @@ impl ContinueStreamRequest {
                 .collect(),
             decision: None,
             registered_client_tools: None,
+            executor: None,
         }
     }
 }
@@ -2587,6 +2591,9 @@ pub struct ClientToolResultResponse {
     /// True if a suspended generation received this result; false if it was a
     /// benign no-op (already delivered, timed out, aborted, or unknown id).
     delivered: bool,
+    /// True if this result settled a parked client operation, which the
+    /// sender then continues.
+    stored: bool,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -5652,7 +5659,7 @@ async fn stream_generate_chat_completion<'a>(
     // iteration against `max_tool_calls_per_message`, but this park time is NOT a
     // generation wall-clock budget. A per-facet `client_tool.timeout_ms` (see
     // the park below) overrides this default per tool.
-    const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = 60_000;
+    const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = crate::config::DEFAULT_CLIENT_TOOL_TIMEOUT_MS;
     struct PendingWait {
         /// Where the call sat in the batch, so its answer is fed back in call
         /// order like every other.
@@ -5674,6 +5681,12 @@ async fn stream_generate_chat_completion<'a>(
     let continuing_client_tools = resume
         .as_ref()
         .and_then(|resume| resume.continuing_client_tools.clone());
+    // Only an approval continuation has an answering device; an operation
+    // continuation is detached and keeps the turn's own binding.
+    let approving_executor = resume
+        .as_ref()
+        .filter(|resume| resume.operation_attempt.is_none())
+        .map(|resume| resume.continuing_executor.clone());
     let (mut unfinished_tool_calls, approved_task_call_ids): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
@@ -6924,8 +6937,9 @@ async fn stream_generate_chat_completion<'a>(
                 let tool_policy = offered_client_tools.get(&tool_name);
                 // Read on every call like an MCP decision, so one stored while
                 // the turn runs holds. A call the user just approved on a card
-                // is not asked about again, and a registered operation kind
-                // asks through its own consent policy instead.
+                // is not asked about again. A compiled operation kind asks
+                // through its own consent policy instead; a configured durable
+                // tool keeps the user's decision.
                 let gate = match tool_policy {
                     Some(policy) if !approved_task_call_ids.contains(&call_id) => {
                         let qualified_name = policy.config.qualified_name();
@@ -6945,7 +6959,7 @@ async fn stream_generate_chat_completion<'a>(
                                 && app_state
                                     .client_operations
                                     .for_operation(&qualified_name)
-                                    .is_some();
+                                    .is_some_and(|kind| !kind.gated_by_user_decision());
                         match gate_client_tool_call(
                             policy.config.namespace_or_default(),
                             &unfinished_tool_call,
@@ -7064,14 +7078,14 @@ async fn stream_generate_chat_completion<'a>(
                 } else {
                     0
                 };
-                if app_state.config.client_tools.durable_operations_enabled
-                    && tool_policy.is_some_and(|policy| {
+                let operation_kind = tool_policy
+                    .filter(|_| app_state.config.client_tools.durable_operations_enabled)
+                    .and_then(|policy| {
                         app_state
                             .client_operations
                             .for_operation(&policy.config.qualified_name())
-                            .is_some()
-                    })
-                {
+                    });
+                if let Some(kind) = operation_kind {
                     tool_charges
                         .entry(call_id.clone())
                         .or_default()
@@ -7079,7 +7093,7 @@ async fn stream_generate_chat_completion<'a>(
                         .get_or_insert_with(|| {
                             crate::services::client_operations::OperationIdentity {
                                 attempt_id: Uuid::new_v4(),
-                                expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                                expires_at: chrono::Utc::now() + kind.attempt_ttl(),
                             }
                         });
                 }
@@ -7103,10 +7117,17 @@ async fn stream_generate_chat_completion<'a>(
                 });
                 let durable_request = if app_state.config.client_tools.durable_operations_enabled {
                     tool_policy.and_then(|policy| {
-                        let kind = app_state
-                            .client_operations
-                            .for_operation(&policy.config.qualified_name())?;
+                        let kind = operation_kind?;
                         let binding = policy.executor.as_ref()?;
+                        // An approval answered by another executor never parks
+                        // the call for the device that submitted the turn.
+                        if kind.gated_by_user_decision()
+                            && approving_executor
+                                .as_ref()
+                                .is_some_and(|approving| approving.as_ref() != Some(binding))
+                        {
+                            return None;
+                        }
                         (kind.realm() == binding.realm
                             && kind.validate_input(&tool_input, binding).is_ok())
                         .then(|| {
@@ -7135,14 +7156,10 @@ async fn stream_generate_chat_completion<'a>(
                 } else {
                     None
                 };
-                if app_state.config.client_tools.durable_operations_enabled
-                    && durable_request.is_none()
-                    && tool_policy.is_some_and(|policy| {
-                        app_state
-                            .client_operations
-                            .for_operation(&policy.config.qualified_name())
-                            .is_some()
-                    })
+                // A configured durable tool without an eligible binding keeps
+                // today's in-memory path instead of failing.
+                if durable_request.is_none()
+                    && operation_kind.is_some_and(|kind| kind.requires_binding())
                 {
                     validation_failure = Some(ClientToolOutcome::Error(
                         "Client operation binding is unavailable.".into(),
@@ -7232,18 +7249,42 @@ async fn stream_generate_chat_completion<'a>(
                         }
                     };
 
+                    // The gate read the decision before dispatch. A Never saved while
+                    // the call waited settles it as withdrawn: no park, no raced-in result.
+                    let withdrawn = match (&park, &durable_request, operation_kind) {
+                        (Park::TimedOut, Some(request), Some(kind))
+                            if kind.gated_by_user_decision() =>
+                        {
+                            crate::models::user_preference::find_client_tool_decision(
+                                &app_state.db,
+                                &request.account_id,
+                                &request.operation_id,
+                            )
+                            .await?
+                                == Some(
+                                    crate::models::user_preference::ClientToolDecision::NeverAllow,
+                                )
+                        }
+                        _ => false,
+                    };
+                    let escalate =
+                        matches!(park, Park::TimedOut) && durable_request.is_some() && !withdrawn;
+
                     // Drop the pending entry, then settle the timeout/abort-vs-
                     // delivery boundary race: if the client's result landed just as
                     // we gave up, prefer it over discarding (and over the endpoint
                     // having reported a spurious success).
-                    if !matches!(park, Park::TimedOut) || durable_request.is_none() {
+                    if !escalate {
                         task.remove_pending_client_tool(&call_id).await;
                     }
                     let raced_in = result_rx.try_recv().ok();
 
                     match park {
                         Park::Delivered(outcome) => outcome,
-                        Park::TimedOut if raced_in.is_none() && durable_request.is_some() => {
+                        Park::TimedOut if withdrawn => ClientToolOutcome::Cancelled {
+                            reason: "withdrawn".to_string(),
+                        },
+                        Park::TimedOut if raced_in.is_none() && escalate => {
                             upsert_tool_use(
                                 &mut current_message_content,
                                 ToolUse {
@@ -11510,6 +11551,7 @@ mod tests {
             decisions: Vec::new(),
             decision: Some(decision),
             registered_client_tools: None,
+            executor: None,
         }
     }
 
@@ -11525,6 +11567,7 @@ mod tests {
                 .collect(),
             decision: None,
             registered_client_tools: None,
+            executor: None,
         }
     }
 
@@ -11723,6 +11766,7 @@ mod tests {
             decisions: Vec::new(),
             decision: None,
             registered_client_tools: None,
+            executor: None,
         };
         assert!(matches!(
             resolve_submitted_decisions(&empty, &open),
@@ -15876,7 +15920,10 @@ pub async fn client_tool_result(
                         .await,
                     ClientToolDelivery::Delivered
                 ) {
-                    return Ok(Json(ClientToolResultResponse { delivered: true }));
+                    return Ok(Json(ClientToolResultResponse {
+                        delivered: true,
+                        stored: false,
+                    }));
                 }
             }
             let row = crate::services::client_operations::store::for_call(
@@ -15973,7 +16020,10 @@ pub async fn client_tool_result(
                             "Operation is no longer open".into(),
                         )
                     })?;
-                    return Ok(Json(ClientToolResultResponse { delivered: true }));
+                    return Ok(Json(ClientToolResultResponse {
+                        delivered: true,
+                        stored: true,
+                    }));
                 }
             }
         }
@@ -16022,7 +16072,10 @@ pub async fn client_tool_result(
                     format!("Failed to deliver client tool result: {error}"),
                 )
             })?;
-        return Ok(Json(ClientToolResultResponse { delivered: true }));
+        return Ok(Json(ClientToolResultResponse {
+            delivered: true,
+            stored: false,
+        }));
     }
 
     let task = task.expect("task checked above");
@@ -16060,6 +16113,7 @@ pub async fn client_tool_result(
     // aborted) is a benign idempotent no-op — never a 4xx/5xx.
     Ok(Json(ClientToolResultResponse {
         delivered: matches!(delivery, ClientToolDelivery::Delivered),
+        stored: false,
     }))
 }
 
@@ -16966,6 +17020,7 @@ pub async fn continue_message_sse(
     request.registered_client_tools = headers
         .contains_key("X-Erato-Client-Tools")
         .then(|| crate::services::client_tools::registered_client_tools(&headers));
+    request.executor = crate::services::client_operations::ExecutorBinding::from_headers(&headers);
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     start_continuation(&app_state, &policy, &me_user, request, tx).await?;
     let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
@@ -16991,6 +17046,8 @@ pub(crate) struct ParkedTurnResume {
     /// The client tools the device continuing this turn registered, when it
     /// said. `None` keeps the registration the turn started with.
     pub continuing_client_tools: Option<Vec<String>>,
+    /// The executor binding of the device answering an approval, if it sent one.
+    pub continuing_executor: Option<crate::services::client_operations::ExecutorBinding>,
 }
 
 /// How a continuation reached the worker, decided before the generation lease
@@ -17202,6 +17259,7 @@ async fn resume_parked_child(
                 .collect(),
             decision: None,
             registered_client_tools: None,
+            executor: None,
         };
         let resumed = run_child_approval_continuation(
             app_state.clone(),
@@ -18385,6 +18443,7 @@ pub(crate) async fn run_continuation(
         approval_request.pending_tool_calls,
         None,
         request.registered_client_tools.clone(),
+        request.executor.clone(),
     )
     .await
 }
@@ -18409,7 +18468,7 @@ fn append_operation_kind_offers(
         return Ok(());
     }
     let mut kinds: Vec<_> = app_state.client_operations.kinds().collect();
-    kinds.sort_by_key(|kind| kind.operation_id());
+    kinds.sort_by(|a, b| a.operation_id().cmp(b.operation_id()));
     for kind in kinds {
         if original_selection.is_some_and(|selection| {
             !selection
@@ -18485,6 +18544,7 @@ async fn resume_parked_generation(
     pending_from_park: Vec<crate::models::message::PendingToolCall>,
     operation_attempt: Option<Uuid>,
     continuing_client_tools: Option<Vec<String>>,
+    continuing_executor: Option<crate::services::client_operations::ExecutorBinding>,
 ) -> Result<(), Report> {
     let mcp = app_state.mcp_state().await;
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
@@ -18903,6 +18963,7 @@ async fn resume_parked_generation(
         initial_unfinished_tool_calls: pending_tool_calls,
         approved_task_call_ids,
         continuing_client_tools,
+        continuing_executor,
     });
 
     let chat_options =
@@ -19191,6 +19252,7 @@ pub(crate) async fn run_client_operation_continuation(
         Vec::new(),
         pending_calls,
         Some(attempt_id),
+        None,
         None,
     )
     .await

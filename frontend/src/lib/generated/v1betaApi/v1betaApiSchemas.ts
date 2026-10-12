@@ -1174,6 +1174,11 @@ export type ClientToolResultResponse = {
    * benign no-op (already delivered, timed out, aborted, or unknown id).
    */
   delivered: boolean;
+  /**
+   * True if this result settled a parked client operation, which the
+   * sender then continues.
+   */
+  stored: boolean;
 };
 
 /**
@@ -2818,6 +2823,10 @@ export type NothingToReactError = {
 
 export type OperationError = {
   code: string;
+  /**
+   * Executor text, at most 1024 characters. Only a kind validator may forward it.
+   */
+  message?: string;
 };
 
 export type OperationOutcome = "succeeded" | "rejected" | "failed" | "unknown";

@@ -99,7 +99,7 @@ fn page_result(request: &OperationRequest, executor: ExecutorBinding) -> Operati
         executor,
     }
 }
-fn turn_requests(recorder: &RequestBodyRecorder) -> Vec<Value> {
+pub(super) fn turn_requests(recorder: &RequestBodyRecorder) -> Vec<Value> {
     recorder
         .bodies()
         .iter()
@@ -237,7 +237,7 @@ async fn park(state: &erato::state::AppState, chat_id: Uuid) -> OperationRequest
     assert_eq!(chat.generation_state.as_deref(), Some("awaiting_approval"));
     request
 }
-async fn wait_completed(state: &erato::state::AppState, id: Uuid) {
+pub(super) async fn wait_completed(state: &erato::state::AppState, id: Uuid) {
     tokio::time::timeout(Duration::from_secs(20), async {
         loop {
             if attempts::Entity::find_by_id(id)
@@ -382,6 +382,30 @@ async fn durable_timeout_claim_and_continue_on_another_replica(pool: Pool<Postgr
     let params: GenerationParameters =
         serde_json::from_value(message.generation_parameters.unwrap()).unwrap();
     assert_eq!(params.turn_consumption.tool_calls, 1);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn ask_decision_does_not_gate_a_compiled_kind(pool: Pool<Postgres>) {
+    let (state, _mock, _recorder, chat_id) = setup(pool, 10).await;
+    app_server(state.clone())
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"client_tool_decisions":{"client/read_document_page":"ask"}}))
+        .await
+        .assert_status_ok();
+    let request = park(&state, chat_id).await;
+    assert_eq!(request.consent, ConsentPolicy::None);
+    let message = Messages::find_by_id(request.message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !message
+            .raw_message
+            .to_string()
+            .contains("tool_approval_request")
+    );
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -1035,6 +1059,7 @@ async fn repeated_parks_do_not_mint_new_submission_allowances(pool: Pool<Postgre
         rejected.result = None;
         rejected.error = Some(OperationError {
             code: "validation_failed".into(),
+            message: None,
         });
         store::accept(
             &state.db,
@@ -1619,6 +1644,7 @@ async fn crash_after_call_charge_reuses_counts_and_execution_identity(pool: Pool
     rejected.result = None;
     rejected.error = Some(OperationError {
         code: "validation_failed".into(),
+        message: None,
     });
     store::accept(
         &state.db,
@@ -1888,6 +1914,7 @@ async fn post_claimed_result(
             result.outcome = OperationOutcome::Rejected;
             result.error = Some(OperationError {
                 code: "validation_failed".into(),
+                message: None,
             });
         }
     } else {

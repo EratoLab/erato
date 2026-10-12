@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
+import { registerOperationExecutor } from "@/lib/clientOperations/registration";
+import { fakeWebLocks } from "@/test/webLocks";
+
 import { handleClientToolCall } from "./handleClientToolCall";
 import { handleToolCallUpdate } from "./handleToolCallUpdate";
 import {
   abortClientToolCalls,
+  hasClientToolCallBeenAnswered,
+  isClientToolCallInFlight,
   registerClientToolExecutor,
   registerLocalOnlyClientTools,
   resetClientToolRegistryForTests,
@@ -118,6 +124,148 @@ describe("handleClientToolCall", () => {
       tool_call_id: "call-1",
       result: { slots: 3 },
     });
+  });
+
+  it("sends the tool's own executor binding only when one is registered", async () => {
+    registerClientToolExecutor("fetch_availability", async () => ({
+      ok: true,
+      result: null,
+    }));
+    await handleClientToolCall(makeEvent(), deps);
+    const unbound = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(unbound.headers).not.toHaveProperty("X-Erato-Executor");
+
+    const binding = {
+      device_id: "pane-device-000000",
+      realm: "office-addin" as const,
+      host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+    };
+    const unregister = [
+      registerOperationExecutor("fetch_availability", () => binding, {
+        yields: true,
+      }),
+      registerOperationExecutor("local_collect_evidence", () => ({
+        device_id: "sidecar-device",
+        realm: "desktop-sidecar",
+      })),
+    ];
+    try {
+      await handleClientToolCall(makeEvent({ tool_call_id: "call-2" }), deps);
+      const bound = fetchMock.mock.calls[1][1] as RequestInit;
+      expect(
+        (bound.headers as Record<string, string>)["X-Erato-Executor"],
+      ).toBe(JSON.stringify(binding));
+    } finally {
+      unregister.forEach((cleanup) => cleanup());
+    }
+  });
+
+  describe("with an operation binding", () => {
+    const sweep = vi.fn<() => void>();
+    let unregister: () => void;
+    let unsubscribe: () => void;
+
+    beforeEach(() => {
+      unregister = registerOperationExecutor(
+        "fetch_availability",
+        () => ({
+          device_id: "pane-device-000000",
+          realm: "office-addin",
+          host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+        }),
+        { yields: true },
+      );
+      sweep.mockClear();
+      unsubscribe = clientOperationHandlerRegistry.subscribe(sweep);
+      registerClientToolExecutor("fetch_availability", async () => ({
+        ok: true,
+        result: null,
+      }));
+    });
+
+    afterEach(() => {
+      unsubscribe();
+      unregister();
+    });
+
+    it("stays in flight until its result POST settles, then sweeps for a stored call", async () => {
+      let respond!: (response: {
+        ok: boolean;
+        status: number;
+        json: () => Promise<unknown>;
+      }) => void;
+      fetchMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          respond = resolve;
+        }),
+      );
+      const pending = handleClientToolCall(makeEvent(), deps);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(isClientToolCallInFlight("call-1")).toBe(true);
+      expect(sweep).not.toHaveBeenCalled();
+
+      respond({
+        ok: true,
+        status: 200,
+        json: async () => ({ delivered: true, stored: true }),
+      });
+      await pending;
+      expect(isClientToolCallInFlight("call-1")).toBe(false);
+      expect(sweep).toHaveBeenCalledTimes(1);
+    });
+
+    it("requests no sweep when the live answer settled nothing stored", async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ delivered: true, stored: false }),
+      });
+      await handleClientToolCall(makeEvent(), deps);
+      expect(sweep).not.toHaveBeenCalled();
+    });
+
+    it("skips a call another pane of this browser already runs", async () => {
+      const executor = vi.fn(async () => ({ ok: true as const, result: null }));
+      registerClientToolExecutor("fetch_availability", executor);
+      const restore = fakeWebLocks(new Set(["erato.client-call:msg-1:call-1"]));
+      try {
+        await handleClientToolCall(makeEvent(), deps);
+      } finally {
+        restore();
+      }
+      expect(executor).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("keeps a conflicting call answered without requesting a sweep", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 409 });
+      await handleClientToolCall(makeEvent(), deps);
+      expect(hasClientToolCallBeenAnswered("call-1")).toBe(true);
+      expect(isClientToolCallInFlight("call-1")).toBe(false);
+
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 503 });
+      await handleClientToolCall(makeEvent({ tool_call_id: "call-2" }), deps);
+      expect(hasClientToolCallBeenAnswered("call-2")).toBe(false);
+      expect(sweep).not.toHaveBeenCalled();
+    });
+  });
+
+  it("requests no sweep for an unbound call and lets its conflict retry", async () => {
+    const sweep = vi.fn<() => void>();
+    const unsubscribe = clientOperationHandlerRegistry.subscribe(sweep);
+    try {
+      registerClientToolExecutor("fetch_availability", async () => ({
+        ok: true,
+        result: null,
+      }));
+      await handleClientToolCall(makeEvent(), deps);
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 409 });
+      await handleClientToolCall(makeEvent({ tool_call_id: "call-2" }), deps);
+      expect(hasClientToolCallBeenAnswered("call-2")).toBe(false);
+      expect(sweep).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
   });
 
   it("delivers attachment file references through the ordinary result endpoint", async () => {

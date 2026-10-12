@@ -148,6 +148,8 @@ export function GenerationStatusPoller({
   const queryClient = useQueryClient();
   /** Chat ids that were running or parked in the PREVIOUS snapshot. */
   const liveChatIdsRef = useRef<Set<string>>(new Set());
+  /** Chat ids that were parked in the PREVIOUS snapshot. */
+  const parkedChatIdsRef = useRef<Set<string>>(new Set());
   /** When the listing backstop last fired, as `Date.now()`. */
   const lastListingRefreshRef = useRef(0);
   /** `chatId:startedAt` of the task-result turn already reacted to. */
@@ -188,13 +190,17 @@ export function GenerationStatusPoller({
     // on every tick, which would refetch every cached listing variant every
     // three seconds for the length of the task.
     const previouslyLive = liveChatIdsRef.current;
+    const previouslyParked = parkedChatIdsRef.current;
     const live = new Set<string>();
+    const parked = new Set<string>();
     for (const entry of data.chats) {
       if (entry.state === "running" || entry.state === "action_required") {
         live.add(entry.chat_id);
       }
+      if (entry.state === "action_required") parked.add(entry.chat_id);
     }
     liveChatIdsRef.current = live;
+    parkedChatIdsRef.current = parked;
     // The gate is the store's view of `delegated_runs_in_flight`, which goes
     // false once the delivery reaches `delivered` — i.e. for exactly the case
     // below. It survives because the store is only re-seeded by the NEXT
@@ -262,6 +268,21 @@ export function GenerationStatusPoller({
           void queryClient.invalidateQueries({ queryKey: messagesKey });
         }
       }
+    }
+
+    // --- BRANCH C: the open chat's parked turn resumed and ended elsewhere.
+    // A stored client operation is continued by whichever tab or device claims
+    // it; a continuation that fits between two ticks is never seen `running`,
+    // so the attach effect cannot pick it up.
+    if (
+      currentChatId &&
+      previouslyParked.has(currentChatId) &&
+      !live.has(currentChatId)
+    ) {
+      void queryClient.invalidateQueries({
+        queryKey: chatMessagesQuery({ pathParams: { chatId: currentChatId } })
+          .queryKey,
+      });
     }
   }, [data, dataUpdatedAt, queryClient]);
 

@@ -1,5 +1,6 @@
 //! Logged, account-scoped attempts for explicitly registered client operations.
 //! Model history remains on the message row; no composed request is stored here.
+pub mod client_tool;
 pub mod store;
 
 use chrono::{DateTime, Utc};
@@ -128,6 +129,24 @@ pub enum OperationPayload {
 #[serde(deny_unknown_fields)]
 pub struct OperationError {
     pub code: String,
+    /// Executor text, at most 1024 characters. Only a kind validator may forward it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub message: Option<String>,
+}
+
+/// Longest executor error message a kind may accept, in characters.
+pub const MAX_OPERATION_MESSAGE_CHARS: usize = 1024;
+
+/// One line of executor text: control characters become spaces, and blank
+/// text is no message at all.
+pub fn clean_message(message: &str) -> Option<String> {
+    let cleaned: String = message
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    let cleaned = cleaned.trim();
+    (!cleaned.is_empty()).then(|| cleaned.to_string())
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -144,8 +163,9 @@ pub struct OperationResult {
     pub executor: ExecutorBinding,
 }
 
-/// Only a kind validator constructs the model-visible result. Raw receipts and
-/// executor errors are never automatically forwarded to the model or telemetry.
+/// Only a kind validator constructs the model-visible result. Raw receipts are
+/// never forwarded; `client_tool.v1` forwards a bounded executor message, as
+/// the legacy fast path does.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ValidatedResult {
     pub output: Value,
@@ -172,7 +192,7 @@ pub struct OperationToolOffer {
 
 pub trait OperationKind: Send + Sync {
     fn kind(&self) -> &'static str;
-    fn operation_id(&self) -> &'static str;
+    fn operation_id(&self) -> &str;
     fn realm(&self) -> ExecutionRealm;
     fn consent(&self) -> ConsentPolicy;
     /// No offer, including no child-run exception, unless the kind explicitly
@@ -188,6 +208,28 @@ pub trait OperationKind: Send + Sync {
     fn allow_cross_device(&self) -> bool {
         false
     }
+    fn attempt_ttl(&self) -> chrono::Duration {
+        chrono::Duration::hours(24)
+    }
+    /// Bounded by the attempt's expiry when claimed.
+    fn claim_lease(&self) -> chrono::Duration {
+        chrono::Duration::minutes(5)
+    }
+    /// Configured tools keep the user's per-tool decision (the approval card)
+    /// before dispatch; compiled kinds ask through their own consent policy.
+    fn gated_by_user_decision(&self) -> bool {
+        false
+    }
+    /// Without a valid binding the call fails instead of keeping the
+    /// in-memory path, as a kind that must never run unbound requires.
+    fn requires_binding(&self) -> bool {
+        true
+    }
+    /// Settle a malformed claimed result as fixed feedback instead of refusing
+    /// it, so a configured tool's executor cannot loop on its own output.
+    fn settle_invalid_claimed(&self) -> bool {
+        false
+    }
     /// An explicit per-kind eligibility check; ordinary delegated client tools
     /// remain suppressed unless a kind supplies a bound, authorized operation.
     fn validate_input(&self, input: &Value, binding: &ExecutorBinding) -> Result<(), String>;
@@ -198,8 +240,9 @@ pub trait OperationKind: Send + Sync {
     ) -> Result<ValidatedResult, String>;
 }
 
-/// Production starts empty. Adding a kind requires compiled validation and its
-/// own qualification; configuration cannot register an arbitrary JSON executor.
+/// Keyed by qualified operation id. Every kind is compiled: configuration may
+/// only opt a configured tool into the generic `client_tool.v1` kind (see
+/// [`registry`]), never register an arbitrary JSON executor.
 #[derive(Clone, Default)]
 pub struct OperationRegistry(HashMap<String, Arc<dyn OperationKind>>);
 
@@ -225,6 +268,33 @@ impl OperationRegistry {
                 && kind.consent() == request.consent
         })
     }
+}
+
+/// Local evidence when its signer exists, plus one `client_tool.v1` instance per
+/// configured tool with a `durable` table while durable operations are enabled.
+pub fn registry(
+    config: &crate::config::AppConfig,
+    signer: Option<&Arc<crate::services::local_delegation::signing::Signer>>,
+) -> Result<OperationRegistry, eyre::Report> {
+    let mut registry = crate::services::local_delegation::tool::registry(signer);
+    if config.client_tools.durable_operations_enabled {
+        for tool in config.client_tools.tools.values() {
+            let Some(kind) =
+                client_tool::ConfiguredClientToolKind::from_config(tool).map_err(|error| {
+                    eyre::eyre!(
+                        "Client tool '{}' cannot be durable: {error}",
+                        tool.qualified_name()
+                    )
+                })?
+            else {
+                continue;
+            };
+            registry
+                .register(Arc::new(kind))
+                .map_err(|error| eyre::eyre!("Client tool '{}': {error}", tool.qualified_name()))?;
+        }
+    }
+    Ok(registry)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -285,13 +355,20 @@ pub fn from_fast_result(
             None,
             Some(OperationError {
                 code: "validation_failed".into(),
+                message: None,
             }),
         ),
-        ClientToolOutcome::Error(_) => (
+        ClientToolOutcome::Error(message) => (
             OperationOutcome::Failed,
             None,
             Some(OperationError {
                 code: "execution_failed".into(),
+                message: clean_message(
+                    &message
+                        .chars()
+                        .take(MAX_OPERATION_MESSAGE_CHARS)
+                        .collect::<String>(),
+                ),
             }),
         ),
         _ => return Err(eyre::eyre!("Unsupported durable result envelope")),
@@ -345,7 +422,54 @@ pub fn fast_result_or_refusal(
         result: None,
         error: Some(OperationError {
             code: "invalid_operation_result".into(),
+            message: None,
         }),
         executor: request.binding.clone(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fast_errors_keep_a_cleaned_bounded_message() {
+        let request = OperationRequest {
+            attempt_id: Uuid::new_v4(),
+            operation_id: "outlook/fetch_availability".into(),
+            kind: client_tool::CLIENT_TOOL_KIND.into(),
+            realm: ExecutionRealm::OfficeAddin,
+            chat_id: Uuid::new_v4(),
+            message_id: Uuid::new_v4(),
+            tool_call_id: "call".into(),
+            account_id: Uuid::new_v4(),
+            binding: ExecutorBinding {
+                device_id: "device-one".into(),
+                realm: ExecutionRealm::OfficeAddin,
+                host_context: None,
+            },
+            base_revision: None,
+            consent: ConsentPolicy::None,
+            expires_at: Utc::now(),
+            input: serde_json::json!({}),
+        };
+        let error = |message: String| {
+            from_fast_result(
+                &request,
+                crate::services::client_tools::ClientToolOutcome::Error(message),
+            )
+            .unwrap()
+            .error
+            .unwrap()
+        };
+        let long = format!(
+            "first\nline {}",
+            "x".repeat(2 * MAX_OPERATION_MESSAGE_CHARS)
+        );
+        let bounded = error(long).message.unwrap();
+        assert!(bounded.starts_with("first line x"));
+        assert_eq!(bounded.chars().count(), MAX_OPERATION_MESSAGE_CHARS);
+        assert_eq!(error("\r\n".into()).message, None);
+        assert_eq!(error("\r\n".into()).code, "execution_failed");
+    }
 }
