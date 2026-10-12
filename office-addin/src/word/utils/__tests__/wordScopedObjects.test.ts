@@ -1229,7 +1229,7 @@ describe("scoped edits where the whole-document import needs confirmation", () =
     async (reason) => {
       const edits = await realistic();
       const result = await edits[reason]();
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         ok: false,
         error: "Scoped edit needs a full-document rewrite.",
         validationErrors: [
@@ -1238,11 +1238,12 @@ describe("scoped edits where the whole-document import needs confirmation", () =
             code: "web-needs-whole-document",
             message: expect.stringMatching(
               new RegExp(
-                `because of: ${reason}\\b.*tell the user that this change needs Word for Windows or Mac\\.$`,
+                `because of: ${reason}\\b.*Resubmit only edits that can be written in place.*tell the user that this change needs Word for Windows or Mac\\.$`,
               ),
             ),
           },
         ],
+        submissionFeedback: { recovery: "repair_arguments", terminal: false },
       });
       expect((await edits.reword()).ok).toBe(true);
     },

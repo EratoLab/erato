@@ -20,7 +20,7 @@ import {
 } from "./wordDocumentXml";
 import { wordHostPlatform } from "./wordHostPlatform";
 import { wordInPlaceFallbacks } from "./wordInPlacePlan";
-import { routeWordDocumentPlan } from "./wordInPlaceRoute";
+import { routeWordDocumentPlan, wordPlanReadScope } from "./wordInPlaceRoute";
 import {
   isWordTrackingMode,
   wordInPlaceAvailability,
@@ -64,6 +64,7 @@ export function createWordDocumentSubmissionExecutor(
         "incomplete-read",
         "expired",
         "outside-read-scope",
+        "in-place-unavailable",
       ].includes(code),
     );
     return {
@@ -174,7 +175,6 @@ function createSubmissionExecutor(
         value,
         context,
         session,
-        kind,
       );
       // The read session may have been cleared while preparation was pending.
       if (
@@ -254,7 +254,6 @@ async function prepareWordDocumentSubmission(
   input: unknown,
   context: ClientToolCallContext | undefined,
   session: WordDocumentReadSession,
-  kind?: WordScopedSubmissionKind,
 ): Promise<ClientToolExecutionResult> {
   if (!context || context.signal?.aborted)
     return {
@@ -336,22 +335,9 @@ async function prepareWordDocumentSubmission(
           ],
         };
     }
-    const wholeDocument =
-      kind && scopedWholeDocumentReasons(plan, snapshot, prepared);
-    if (wholeDocument) {
-      const web = wordApplyHost(wordHostPlatform()) === "web";
-      return {
-        ok: false,
-        error: "Scoped edit needs a full-document rewrite.",
-        validationErrors: [
-          {
-            path: "",
-            code: "web-needs-whole-document",
-            message: `${web ? "Word for the web" : "This Word host"} writes scoped edits and table-cell changes only in place, and this edit needs a full-document rewrite because of: ${wholeDocument.join(", ")}. Resubmit only edits that can be written in place, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that this change ${web ? "needs Word for Windows or Mac" : "can't be made in this version of Word"}.`,
-          },
-        ],
-      };
-    }
+    const wholeDocument = scopedWholeDocumentReasons(plan, snapshot, prepared);
+    if (wholeDocument)
+      return scopedWholeDocumentRefusal(wholeDocument, snapshot);
   } catch (error) {
     // Return schema paths and constraints, never document contents, in parser diagnostics.
     const hints: Record<string, string> = {
@@ -397,17 +383,27 @@ async function prepareWordDocumentSubmission(
   };
 }
 
+interface WordScopedWholeDocument {
+  reasons: string[];
+  /** In-place writing is off for the host or session, so no edit could be written in place. */
+  hostWide: boolean;
+}
+
 /**
- * Apply never lets a scoped plan replace the whole document unless the host's policy allows that
- * outright, so a scoped edit the in-place writer cannot take is refused here, where the model can
- * still resubmit, rather than on the card.
+ * Apply never lets a plan from a scoped read replace the whole document unless the host's policy
+ * allows that outright, so such a plan the in-place writer cannot take is refused here, where the
+ * model can still resubmit, rather than on the card.
  */
 function scopedWholeDocumentReasons(
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,
   prepared: WordAuthoringSnapshot,
-): string[] | undefined {
-  if (wordApplyPolicy().wholeDocumentImport === "allowed") return undefined;
+): WordScopedWholeDocument | undefined {
+  if (
+    !wordPlanReadScope(plan, snapshot) ||
+    wordApplyPolicy().wholeDocumentImport === "allowed"
+  )
+    return undefined;
   const availability = wordInPlaceAvailability();
   const caps = wordInPlaceCapabilitiesUnder(snapshot.trackingMode);
   const route = routeWordDocumentPlan(
@@ -418,16 +414,53 @@ function scopedWholeDocumentReasons(
     prepared,
   );
   if (route.route === "in-place") return undefined;
-  if (route.route === "body") return ["no-package"];
+  if (route.route === "body")
+    return { reasons: ["no-package"], hostWide: true };
+  if (!availability.enabled)
+    return { reasons: [availability.reason], hostWide: true };
   let reasons: string[] = [];
   try {
-    reasons = availability.enabled
-      ? wordInPlaceFallbacks(plan, snapshot, caps, prepared)
-      : [availability.reason];
+    reasons = wordInPlaceFallbacks(plan, snapshot, caps, prepared);
   } catch {
     // The route already read the classifier failure as program-mismatch.
   }
-  return reasons.length ? reasons : [route.reason];
+  return {
+    reasons: reasons.length ? reasons : [route.reason],
+    hostWide: false,
+  };
+}
+
+/** Where nothing can be written in place, a smaller scoped edit cannot help; under `confirm` a full
+ * plan still reaches the card's confirmation. */
+function scopedWholeDocumentRefusal(
+  { reasons, hostWide }: WordScopedWholeDocument,
+  snapshot: WordAuthoringSnapshot,
+): ClientToolExecutionResult {
+  const web = wordApplyHost(wordHostPlatform()) === "web";
+  const host = web ? "Word for the web" : "This Word host";
+  const because = `because of: ${reasons.join(", ")}.`;
+  const fullPlan =
+    hostWide &&
+    wordApplyPolicy().wholeDocumentImport === "confirm" &&
+    !snapshot.completeReadIssue;
+  const message = !hostWide
+    ? `${host} writes edits from a scoped read only in place, and this edit needs a full-document rewrite ${because} Resubmit only edits that can be written in place, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that this change ${web ? "needs Word for Windows or Mac" : "can't be made in this version of Word"}.`
+    : `${host} can't write any edit in place right now ${because} An edit from a scoped read never replaces the whole document, so ${
+        fullPlan
+          ? "complete the full read and submit a full-document plan instead; the user is asked to confirm before it replaces the whole document."
+          : "tell the user that this change can't be made in this version of Word right now."
+      }`;
+  return {
+    ok: false,
+    error: "Scoped edit needs a full-document rewrite.",
+    validationErrors: [
+      {
+        path: "",
+        code: fullPlan ? "in-place-unavailable" : "web-needs-whole-document",
+        message,
+      },
+    ],
+  };
 }
 
 const object = (value: unknown): value is Record<string, unknown> =>

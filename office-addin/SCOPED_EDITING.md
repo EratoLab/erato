@@ -287,10 +287,17 @@ changes in Word, and the read contract says so while tracking is on.
   live in-place fallback that needs it turns the card back into this choice.
   Where the switch refuses, the card says why and offers Copy draft and "Ask
   again for in-place edits" instead of Apply.
-  Submission refuses a `scoped_edit` or `table_cell` whose route is not in place
-  unless the switch is `allowed` (`web-needs-whole-document`, with the fallback
-  codes, or `no-package` for a body-only capture), so the model resubmits an
-  in-place edit or tells the user; full plans are accepted and the card asks.
+  Submission refuses a plan from a scoped read (a `scoped_edit`, or a
+  `table_cell` under a cell-scoped token) whose route is not in place unless the
+  switch is `allowed`. When the change needs the import
+  (`web-needs-whole-document`, with the fallback codes), the model resubmits an
+  in-place edit or tells the user. When in-place writing is off for the host or
+  session (its availability reason, or `no-package` for a body-only capture), no
+  smaller edit helps: under `confirm` the refusal is `in-place-unavailable` with
+  recovery `read_current_context`, pointing the model to the complete read and a
+  full plan; under `off`, or for a document too large for a complete read, the
+  model tells the user. Full plans, and a `table_cell` from the complete read,
+  are accepted and the card asks.
 - **Word refusing the write**: a whole-document import or body Replace that
   Word rejects with `NotAllowed` (Word for the web over a content control it
   cannot edit, such as a date picker, which no API reports beforehand) is

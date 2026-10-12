@@ -731,10 +731,11 @@ describe("whole-body writes on Word for the web", () => {
       ok: false,
       validationErrors: [
         {
-          code: "web-needs-whole-document",
+          code: "in-place-unavailable",
           message: expect.stringContaining("because of: no-package."),
         },
       ],
+      submissionFeedback: { recovery: "read_current_context", terminal: false },
     });
     const restore = allowWordWebImport();
     const submitted = await submit(edit, { ...context, toolCallId: "allowed" });
