@@ -580,6 +580,35 @@ describe("legacy files (F-2a, O-17)", () => {
   );
 });
 
+describe("dateUtc from the packages read (F-4)", () => {
+  it("names the comments the packages showed with and without dateUtc", async () => {
+    const result = await read({}, { exact: askFor("T1", "T5") });
+    expect(Object.fromEntries(result.dateUtc.byId)).toEqual({
+      [host.commentId("T1")]: true,
+      [host.commentId("R1a")]: true,
+      [host.commentId("R1b")]: true,
+      [host.commentId("T5")]: false,
+    });
+    expect(result.dateUtc.otherwise).toBeNull();
+  });
+
+  it("takes dateUtc for the rest when every comment shown had one", async () => {
+    const result = await read({}, { exact: askFor("T1") });
+    expect(result.dateUtc.otherwise).toBe(true);
+  });
+
+  it("knows nothing when no package was read", async () => {
+    const result = await read({ document: { body: [], comments: {} } });
+    expect(result.dateUtc).toEqual({ byId: new Map(), otherwise: null });
+  });
+
+  it("finds no dateUtc in a legacy file", async () => {
+    const result = await read({ legacy: true }, { exact: askFor("T1") });
+    expect(result.dateUtc.byId.size).toBe(0);
+    expect(result.dateUtc.otherwise).toBe(false);
+  });
+});
+
 describe("renderWordCommentReadReport", () => {
   it("lists phases with syncs and timings", async () => {
     const result = await read({}, { exact: askFor("T1") });

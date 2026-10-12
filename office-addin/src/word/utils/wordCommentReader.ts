@@ -262,9 +262,24 @@ export type WordCommentReadResult =
       inventory: WordCommentInventory | null;
       /** No commentsIds in the file: ids hold for this pane session only (F-2a, O-17). Null: unknown. */
       legacy: boolean | null;
+      dateUtc: WordCommentDateUtc;
       diagnostics: WordCommentReadDiagnostics;
     }
   | { ok: false; error: string; diagnostics: WordCommentReadDiagnostics };
+
+/**
+ * Whether creationDate came from dateUtc, as the packages read show it (F-4): without one, desktop
+ * reads w:date in the host's zone. Only the comments of the paragraphs read are known.
+ */
+export interface WordCommentDateUtc {
+  /** By String(Comment.id) of comments and replies. */
+  byId: ReadonlyMap<string, boolean>;
+  /**
+   * For the comments no package showed: true when every comment the packages showed had dateUtc,
+   * false when none had, null when they differed or no package showed one.
+   */
+  otherwise: boolean | null;
+}
 
 export interface WordCommentReadOptions {
   /** The Send capture's paragraphs; without them a light read of the body supplies the ordinals. */
@@ -521,6 +536,7 @@ async function readThreads(
       threads: [],
       inventory: options.inventory ?? null,
       legacy: null,
+      dateUtc: new PackageNotes().dateUtc(),
       diagnostics,
     };
 
@@ -537,8 +553,10 @@ async function readThreads(
     options.replies === "requested" ? asked : sorted,
     budgets.replies,
   );
-  let legacy = await placeExact(session, sorted, asked, budgets.exact);
-  legacy ??= await probeLegacy(session, sorted);
+  const notes = new PackageNotes();
+  await placeExact(session, sorted, asked, budgets.exact, notes);
+  if (notes.legacy === null) await probeLegacy(session, sorted, notes);
+  const legacy = notes.legacy;
 
   diagnostics.legacy = legacy;
   diagnostics.replies = records.reduce(
@@ -546,7 +564,14 @@ async function readThreads(
     0,
   );
   countOutcomes(diagnostics.counts, records);
-  return { ok: true, threads: records, inventory, legacy, diagnostics };
+  return {
+    ok: true,
+    threads: records,
+    inventory,
+    legacy,
+    dateUtc: notes.dateUtc(),
+    diagnostics,
+  };
 }
 
 function markRepeatedIds(live: readonly Live[], session: Session) {
@@ -1166,7 +1191,38 @@ function textsOf(
 interface ExactContext {
   sorted: readonly Live[];
   web: boolean;
-  noteLegacy: (read: WordCommentPackageRead | null) => void;
+  notePackage: (read: WordCommentPackageRead | null) => void;
+}
+
+/** What the packages read show about the file: commentsIds at all, and dateUtc per comment. */
+class PackageNotes {
+  legacy: boolean | null = null;
+  private readonly utc = new Map<string, boolean>();
+  private withUtc = 0;
+  private withoutUtc = 0;
+
+  note(read: WordCommentPackageRead | null) {
+    if (!read || read.comments.length === 0) return;
+    this.legacy ??= read.legacy;
+    for (const comment of read.comments) {
+      const has = comment.dateUtc !== null;
+      if (has) this.withUtc += 1;
+      else this.withoutUtc += 1;
+      if (comment.commentId !== null) this.utc.set(comment.commentId, has);
+    }
+  }
+
+  dateUtc(): WordCommentDateUtc {
+    return {
+      byId: new Map(this.utc),
+      otherwise:
+        this.withUtc > 0 && this.withoutUtc === 0
+          ? true
+          : this.withoutUtc > 0 && this.withUtc === 0
+            ? false
+            : null,
+    };
+  }
 }
 
 function samePlace(a: WordCommentParagraphRef, b: WordCommentParagraphRef) {
@@ -1186,7 +1242,7 @@ function paragraphJob(threads: Live[], ctx: ExactContext): Job {
     return () => {
       const texts = textsOf(paragraph, identity, anchor.first);
       const read = readWordCommentParagraphPackage(ooxml.value, texts);
-      ctx.noteLegacy(read);
+      ctx.notePackage(read);
       const spans = read?.legacy
         ? joinWordCommentSpansByContent(
             read,
@@ -1246,7 +1302,7 @@ function textJob(thread: Live, ctx: ExactContext): Step {
       packages.forEach((ooxml, i) => {
         if (!ooxml) return;
         const read = readWordCommentParagraphPackage(ooxml.value, texts[i]);
-        ctx.noteLegacy(read);
+        ctx.notePackage(read);
         views[i] = read?.views[0] ?? null;
       });
       return finish();
@@ -1291,7 +1347,7 @@ function rangeJob(thread: Live, ctx: ExactContext): Job {
           inCell: p.tableNestingLevel > 0,
         }));
         const read = readWordCommentRangePackage(ooxml.value, texts);
-        ctx.noteLegacy(read);
+        ctx.notePackage(read);
         const spans = read?.legacy
           ? joinWordCommentSpansByContent(
               read,
@@ -1363,28 +1419,24 @@ async function runSteps(session: Session, starts: readonly Step[]) {
 
 /**
  * Exact anchors for the requested threads, in the order asked, a few paragraphs per sync. Past the
- * budget the rest keep their paragraph-level anchor, marked as such. Returns whether the packages
- * read show a legacy file, or null when none had comments.
+ * budget the rest keep their paragraph-level anchor, marked as such. The packages read go to notes.
  */
 async function placeExact(
   session: Session,
   sorted: readonly Live[],
   asked: readonly Live[],
   budgetMs: number,
-): Promise<boolean | null> {
-  let legacy: boolean | null = null;
+  notes: PackageNotes,
+) {
   const ctx: ExactContext = {
     sorted,
     web: session.diagnostics.host === "OfficeOnline",
-    noteLegacy: (read) => {
-      if (legacy === null && read && read.comments.length > 0)
-        legacy = read.legacy;
-    },
+    notePackage: (read) => notes.note(read),
   };
   session.begin("exact", asked.length, budgetMs);
   if (asked.length === 0) {
     session.end(0);
-    return null;
+    return;
   }
   const jobs = jobsFor(asked, ctx);
   let done = asked.length - jobs.reduce((n, job) => n + job.threads.length, 0);
@@ -1416,16 +1468,16 @@ async function placeExact(
     session.advance(done);
   }
   session.end(done);
-  return legacy;
 }
 
 /** One commented paragraph's package tells whether the file has commentsIds at all. */
 async function probeLegacy(
   session: Session,
   sorted: readonly Live[],
-): Promise<boolean | null> {
+  notes: PackageNotes,
+) {
   const thread = sorted.find((t) => t.record.anchor?.single && t.first);
-  if (!thread?.first || !thread.record.anchor) return null;
+  if (!thread?.first || !thread.record.anchor) return;
   session.begin("legacy", 1);
   const paragraph = thread.first;
   const ref = thread.record.anchor.first;
@@ -1433,17 +1485,17 @@ async function probeLegacy(
   const ooxml = paragraph.getOoxml();
   try {
     await session.sync();
-    const read = readWordCommentParagraphPackage(ooxml.value, {
-      rangeText: paragraph.text,
-      inCell: ref.nesting > 0,
-      ...(ref.cell ? { cellIndex: ref.cell.cell } : {}),
-    });
+    notes.note(
+      readWordCommentParagraphPackage(ooxml.value, {
+        rangeText: paragraph.text,
+        inCell: ref.nesting > 0,
+        ...(ref.cell ? { cellIndex: ref.cell.cell } : {}),
+      }),
+    );
     session.end(1);
-    return read && read.comments.length > 0 ? read.legacy : null;
   } catch (error) {
     session.note(error);
     session.end(0);
-    return null;
   }
 }
 
