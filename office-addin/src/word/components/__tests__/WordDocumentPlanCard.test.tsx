@@ -1,6 +1,12 @@
 import { ConversationMessagesProvider } from "@erato/frontend/library";
+import {
+  canonicalWordPlan,
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { i18n } from "@lingui/core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -21,7 +27,10 @@ import {
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
-import { allowWordWebImport } from "../../../test/mocks/word/applyPolicy";
+import {
+  allowWordWebImport,
+  setWordWebImport,
+} from "../../../test/mocks/word/applyPolicy";
 import {
   examplePlan,
   packageXml,
@@ -42,6 +51,7 @@ import {
 } from "../../../test/mocks/word/realisticWordFixtures";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { buildWordArtifact } from "../../utils/buildWordArtifact";
+import { WORD_CLIENT_ACTIONS } from "../../utils/wordClientActions";
 import { WordDocumentReadSession } from "../../utils/wordDocumentReadTool";
 import {
   createWordDocumentSubmissionExecutor,
@@ -77,6 +87,8 @@ const mock = vi.hoisted(() => {
     setDecisions: vi.fn(),
     messageStatus: "completed",
     content: [] as unknown[],
+    request: "",
+    restoreRequest: vi.fn(),
   };
 });
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
@@ -85,11 +97,17 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
   useHostArtifact: () => mock.artifact,
   useChatContext: () => ({
     messages: {
+      request: {
+        id: "request",
+        role: "user",
+        content: [{ content_type: "text", text: mock.request }],
+      },
       [String(mock.artifact.messageId)]: {
         id: String(mock.artifact.messageId),
         status: mock.messageStatus,
         role: "assistant",
         content: mock.content,
+        previous_message_id: "request",
       },
     },
     messageOrder: [String(mock.artifact.messageId)],
@@ -208,6 +226,7 @@ function setup(
       <WordWriteProvider
         documentIdentity="doc-A"
         capturesByAssistantMessageId={new Map([[messageId, capture]])}
+        restoreRequest={mock.restoreRequest}
       >
         <WordHostCardRenderer
           language="erato-word-document-plan"
@@ -318,6 +337,7 @@ function renderRealisticCard(
     <WordWriteProvider
       documentIdentity="doc-A"
       capturesByAssistantMessageId={new Map([[messageId, capture]])}
+      restoreRequest={mock.restoreRequest}
     >
       <WordHostCardRenderer
         language="erato-word-document-plan"
@@ -334,6 +354,8 @@ beforeEach(() => {
   mock.setDecisions.mockClear();
   mock.messageStatus = "completed";
   mock.content = [];
+  mock.request = "";
+  mock.restoreRequest.mockClear();
   mock.artifact = {
     facetId: "word_document_authoring",
     messageId: globalThis.crypto.randomUUID(),
@@ -1776,5 +1798,272 @@ describe("apply outcomes", () => {
         word.events.filter((e) => e.startsWith("select:paragraphs:")),
       ).toHaveLength(1),
     );
+  });
+});
+
+const sectionsPlan = (s: WordAuthoringSnapshot): WordDocumentPlan => ({
+  ...statusRewritePlan(s, "Status: revised."),
+  sections: [
+    { id: "final", source: "section-1", layout: { orientation: "landscape" } },
+  ],
+});
+const SECTIONS_ROUTE =
+  "Replaces the whole document because it changes sections or page layout.";
+const WEB_IMPORT_STATEMENTS = [
+  "Word's Undo can't reverse this change, and Erato's Undo works only until someone edits the document.",
+  "People editing at the same time may lose their latest changes.",
+  "Comment dates and resolved flags may change.",
+];
+const confirmBox = () =>
+  screen.getByRole("checkbox", {
+    name: "I understand. Replace the whole document.",
+  });
+const applyButton = () => screen.getByRole("button", { name: APPLY_LABEL });
+const spyOnApply = () =>
+  vi.spyOn(WORD_CLIENT_ACTIONS.get("word.apply_document_plan")!, "execute");
+const autoPrompt = (decision?: "always") => {
+  mock.artifact.clientActionPresentation = "auto_prompt";
+  mock.artifact.proposedClientAction = "word.apply_document_plan";
+  if (decision)
+    mock.decisions = {
+      "word_document_authoring/word.apply_document_plan": decision,
+    };
+};
+
+/** The status rewrite submitted under a scoped read of that paragraph alone. */
+function scopedStatusPlan(s: WordAuthoringSnapshot): WordDocumentPlan {
+  const plan = {
+    ...statusRewritePlan(s, "Status: revised."),
+    readToken: "scope-1",
+  };
+  const status = s.blocks.find((b) => b.text.startsWith("Status"))!;
+  const normalized = normalizeWordDocumentPlan(
+    parseWordDocumentPlan(JSON.stringify(plan))!,
+    s,
+  );
+  s.readScopes = new Map([
+    [
+      "scope-1",
+      {
+        kind: "objects",
+        snapshot: s.token,
+        identity: s.identity,
+        fingerprint: s.fingerprint,
+        targets: [
+          {
+            ref: status.ref,
+            kind: "paragraph",
+            text: "",
+            bodyRef: status.ref,
+            detail: {},
+          },
+        ],
+        plans: new Set([canonicalWordPlan(normalized)]),
+      },
+    ],
+  ]);
+  return plan;
+}
+
+/** body.paragraphs on the web also lists this text box's paragraph, so in place falls back live. */
+function textBoxPackageXml(): string {
+  return editWordPackage(realisticWordPackageXml(), (doc) => {
+    const body = doc.getElementsByTagNameNS(W, "body")[0];
+    const holder = new DOMParser().parseFromString(
+      `<w:p xmlns:w="${W}"><w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>`,
+      "application/xml",
+    ).documentElement;
+    body.insertBefore(doc.importNode(holder, true), body.firstChild);
+  });
+}
+
+describe("confirmed whole-document replacement on Word for the web", () => {
+  afterEach(() => {
+    delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+  });
+
+  it("replaces Apply with an unticked confirmation naming the costs, then imports once ticked", async () => {
+    mock.decisions = {
+      "word_document_authoring/word.apply_document_plan": "always",
+    };
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    expect(routeText()).toBe(SECTIONS_ROUTE);
+    for (const statement of WEB_IMPORT_STATEMENTS)
+      expect(screen.getByText(statement)).toBeVisible();
+    expect(confirmBox()).not.toBeChecked();
+    expect(applyButton()).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    fireEvent.click(applyButton());
+    expect(execute).not.toHaveBeenCalled();
+
+    fireEvent.click(confirmBox());
+    expect(applyButton()).toBeEnabled();
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(execute.mock.calls[0][0]).toMatchObject({ importConfirmed: true });
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("never imports automatically under Always allow, and asks for the tick instead", async () => {
+    autoPrompt("always");
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    await act(async () => {});
+    expect(execute).not.toHaveBeenCalled();
+    expect(word.insert).not.toHaveBeenCalled();
+    expect(confirmBox()).not.toBeChecked();
+    expect(applyButton()).toBeDisabled();
+
+    fireEvent.click(confirmBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(execute.mock.calls).toEqual([
+      [expect.objectContaining({ importConfirmed: true })],
+    ]);
+    expect(
+      screen.queryByText("Automatic action under your Always allow setting."),
+    ).toBeNull();
+  });
+
+  it("stands in for the consent card, and Cancel declines the plan", async () => {
+    autoPrompt();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    expect(confirmBox()).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      await screen.findByText("Proposal declined. Nothing was written."),
+    ).toBeVisible();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("asks again for in-place edits with the previous request, and copies the draft", async () => {
+    mock.request = "Make the last section landscape.";
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    );
+    expect(mock.restoreRequest).toHaveBeenCalledWith(
+      "Make the last section landscape.\n\nPlease make only changes that can be edited in place, without replacing the whole document.",
+    );
+    expect(
+      screen.getByText(
+        "Your request is back in the message box, asking for in-place edits only. Review it, then send.",
+      ),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy draft" }));
+    await screen.findByText("Draft copied.");
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(writeText.mock.calls[0][0]).toContain("Status: revised.");
+    expect(confirmBox()).not.toBeChecked();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("turns a live fallback to the import back into the confirmation, not an error", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      {
+        profile: "word-web",
+        includeTextBoxParagraphs: true,
+        xml: textBoxPackageXml(),
+      },
+    );
+    expect(routeText()).toBe("Edits 1 passage in place.");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    apply();
+    expect(await screen.findByRole("checkbox")).not.toBeChecked();
+    expect(routeText()).toBe(
+      "Replaces the whole document because this change can't be written in place.",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(applyButton()).toBeDisabled();
+    expect(word.insert).not.toHaveBeenCalled();
+
+    fireEvent.click(confirmBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(
+      execute.mock.calls.map(([context]) => context.importConfirmed),
+    ).toEqual([false, true]);
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a scoped edit that would need the import, with Copy draft and Ask again but no Apply", async () => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    const execute = spyOnApply();
+    await mountRealistic(scopedStatusPlan, { profile: "word-web" });
+    expect(
+      screen.getByText(
+        "This targeted edit can't be written in place in this version of Word, and a targeted edit never replaces the whole document.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByTestId("word-plan-route")).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    ).toBeVisible();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("offers no Apply where the deployment turned the import off", async () => {
+    onTestFinished(setWordWebImport("off"));
+    autoPrompt("always");
+    const execute = spyOnApply();
+    await mountRealistic(sectionsPlan, { profile: "word-web" });
+    await act(async () => {});
+    expect(
+      screen.getByText(
+        "This change needs a full-document rewrite, which your organization has turned off for this version of Word.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("needs the tick for the body route as well", async () => {
+    const state = setup();
+    vi.stubGlobal("Office", {
+      context: { diagnostics: { platform: "OfficeOnline" } },
+    });
+    state.mount();
+    expect(routeText()).toBe("Replaces the document body.");
+    expect(applyButton()).toBeDisabled();
+    fireEvent.click(confirmBox());
+    apply();
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledOnce();
+  });
+
+  it("keeps Apply and Always allow for the same import on Word PC", async () => {
+    autoPrompt();
+    const { word } = await mountRealistic(sectionsPlan);
+    expect(routeText()).toBe(SECTIONS_ROUTE);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Always allow" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
   });
 });

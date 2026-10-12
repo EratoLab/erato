@@ -3024,6 +3024,61 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Ausgewählte Passage ersetzen"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.askAgain"
+msgstr "Erneut nach direkten Bearbeitungen fragen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.importConfirm.askAgainNote"
+msgstr "Ihre Anfrage steht wieder im Nachrichtenfeld, ergänzt um die Bitte, nur direkt im Dokument zu bearbeiten. Prüfen Sie sie und senden Sie sie dann."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.coauthors"
+msgstr "Personen, die gleichzeitig bearbeiten, können ihre letzten Änderungen verlieren."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.comments"
+msgstr "Das Datum von Kommentaren und ihr Status „Gelöst“ können sich ändern."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.eratoUndo"
+msgstr "„Rückgängig“ in Erato funktioniert nur, bis jemand das Dokument bearbeitet."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importConfirm.inPlaceRequest"
+msgstr "Bitte nur Änderungen vornehmen, die direkt im Dokument bearbeitet werden können, ohne das gesamte Dokument zu ersetzen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.label"
+msgstr "Ersetzen des gesamten Dokuments bestätigen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.tick"
+msgstr "Ich habe verstanden. Gesamtes Dokument ersetzen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.undo"
+msgstr "„Rückgängig“ in Word kann diese Änderung nicht zurücknehmen, und „Rückgängig“ in Erato funktioniert nur, bis jemand das Dokument bearbeitet."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.disabled"
+msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Ihre Organisation für diese Word-Version ausgeschaltet hat."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.scoped"
+msgstr "Diese gezielte Änderung kann in dieser Word-Version nicht direkt im Dokument geschrieben werden, und eine gezielte Änderung ersetzt nie das gesamte Dokument."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Endet nach"
@@ -3602,6 +3657,7 @@ msgid "officeAddin.word.review.batchScopeAll"
 msgstr "Jede vorgeschlagene Änderung wird angewendet, auch in durch Filter ausgeblendeten Zeilen. Seit der Anfrage veränderte Absätze werden übersprungen und aufgelistet."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Abbrechen"

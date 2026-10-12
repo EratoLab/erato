@@ -3024,6 +3024,61 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Remplacer le passage sélectionné"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.askAgain"
+msgstr "Redemander des modifications directes"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.importConfirm.askAgainNote"
+msgstr "Votre demande est de nouveau dans la zone de message, avec la consigne de ne modifier le document que directement. Vérifiez-la, puis envoyez-la."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.coauthors"
+msgstr "Les personnes qui modifient le document en même temps peuvent perdre leurs dernières modifications."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.comments"
+msgstr "Les dates des commentaires et leur état « résolu » peuvent changer."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.eratoUndo"
+msgstr "L’annulation dans Erato ne fonctionne que jusqu’à ce que quelqu’un modifie le document."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importConfirm.inPlaceRequest"
+msgstr "Merci de n’apporter que des modifications pouvant être faites directement dans le document, sans remplacer tout le document."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.label"
+msgstr "Confirmer le remplacement de tout le document"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.tick"
+msgstr "J’ai compris. Remplacer tout le document."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.undo"
+msgstr "L’annulation de Word ne peut pas revenir sur cette modification, et celle d’Erato ne fonctionne que jusqu’à ce que quelqu’un modifie le document."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.disabled"
+msgstr "Cette modification nécessite de réécrire tout le document, ce que votre organisation a désactivé pour cette version de Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.scoped"
+msgstr "Cette modification ciblée ne peut pas être écrite directement dans le document dans cette version de Word, et une modification ciblée ne remplace jamais tout le document."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Se termine après"
@@ -3602,6 +3657,7 @@ msgid "officeAddin.word.review.batchScopeAll"
 msgstr "Chaque modification proposée est appliquée, y compris les lignes masquées par les filtres. Les paragraphes modifiés depuis la demande sont ignorés et listés."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Annuler"

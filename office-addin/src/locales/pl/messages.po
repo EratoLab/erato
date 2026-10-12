@@ -3024,6 +3024,61 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Zastąp zaznaczony fragment"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.askAgain"
+msgstr "Zapytaj ponownie o edycję bezpośrednią"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.importConfirm.askAgainNote"
+msgstr "Twoja prośba jest z powrotem w polu wiadomości, z dopiskiem, aby edytować wyłącznie bezpośrednio w dokumencie. Sprawdź ją, a następnie wyślij."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.coauthors"
+msgstr "Osoby edytujące dokument w tym samym czasie mogą utracić swoje ostatnie zmiany."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.comments"
+msgstr "Daty komentarzy i ich oznaczenie „Rozwiązany” mogą się zmienić."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.eratoUndo"
+msgstr "Funkcja „Cofnij” w Erato działa tylko do chwili, gdy ktoś zmieni dokument."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importConfirm.inPlaceRequest"
+msgstr "Wprowadź tylko zmiany, które można edytować bezpośrednio w dokumencie, bez zastępowania całego dokumentu."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.label"
+msgstr "Potwierdź zastąpienie całego dokumentu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.tick"
+msgstr "Rozumiem. Zastąp cały dokument."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.undo"
+msgstr "Funkcja „Cofnij” w programie Word nie może odwrócić tej zmiany, a funkcja „Cofnij” w Erato działa tylko do chwili, gdy ktoś zmieni dokument."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.disabled"
+msgstr "Ta zmiana wymaga przepisania całego dokumentu, co Twoja organizacja wyłączyła w tej wersji programu Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.scoped"
+msgstr "Tej ukierunkowanej zmiany nie można zapisać bezpośrednio w dokumencie w tej wersji programu Word, a ukierunkowana zmiana nigdy nie zastępuje całego dokumentu."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Kończy się po"
@@ -3602,6 +3657,7 @@ msgid "officeAddin.word.review.batchScopeAll"
 msgstr "Stosowana jest każda proponowana zmiana, także w wierszach ukrytych przez filtry. Akapity zmienione od czasu prośby są pomijane i wymieniane."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Anuluj"

@@ -3024,6 +3024,61 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Replace the selected passage"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.askAgain"
+msgstr "Ask again for in-place edits"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.importConfirm.askAgainNote"
+msgstr "Your request is back in the message box, asking for in-place edits only. Review it, then send."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.coauthors"
+msgstr "People editing at the same time may lose their latest changes."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.comments"
+msgstr "Comment dates and resolved flags may change."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.eratoUndo"
+msgstr "Erato's Undo works only until someone edits the document."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importConfirm.inPlaceRequest"
+msgstr "Please make only changes that can be edited in place, without replacing the whole document."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.label"
+msgstr "Confirm replacing the whole document"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.tick"
+msgstr "I understand. Replace the whole document."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.undo"
+msgstr "Word's Undo can't reverse this change, and Erato's Undo works only until someone edits the document."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.disabled"
+msgstr "This change needs a full-document rewrite, which your organization has turned off for this version of Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.scoped"
+msgstr "This targeted edit can't be written in place in this version of Word, and a targeted edit never replaces the whole document."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Ends after"
@@ -3602,6 +3657,7 @@ msgid "officeAddin.word.review.batchScopeAll"
 msgstr "Every proposed edit is applied, including rows hidden by filters. Paragraphs changed since the request are skipped and listed."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Cancel"

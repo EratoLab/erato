@@ -5,7 +5,11 @@ import { wordRouteGroup } from "./wordInPlaceRoute";
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
 import type { WordApplyAdjustment } from "./wordFullDocumentComparison";
-import type { WordPlanRoute, WordRouteGroup } from "./wordInPlaceRoute";
+import type {
+  WordPlanRoute,
+  WordRouteGroup,
+  WordWholeDocumentRefusal,
+} from "./wordInPlaceRoute";
 import type { WordPlanIssue } from "@erato/frontend/word-review";
 
 export function wordDocumentDiagnosticText(
@@ -92,6 +96,32 @@ export function wordDocumentDiagnosticText(
   )
     return wordAuthoringIssueText("no-capture");
   return wordAuthoringIssueText(diagnostic.reason);
+}
+
+/** Before Apply, where the host's policy rules out replacing the whole document for this plan. */
+export function wordWholeDocumentRefusalText(
+  reason: WordWholeDocumentRefusal,
+): string {
+  return reason === "scoped-needs-in-place"
+    ? t({
+        id: "officeAddin.word.importRefusal.scoped",
+        message:
+          "This targeted edit can't be written in place in this version of Word, and a targeted edit never replaces the whole document.",
+      })
+    : t({
+        id: "officeAddin.word.importRefusal.disabled",
+        message:
+          "This change needs a full-document rewrite, which your organization has turned off for this version of Word.",
+      });
+}
+
+/** Appended to the restored request when the user asks again for edits that keep the document. */
+export function wordInPlaceRequestText(): string {
+  return t({
+    id: "officeAddin.word.importConfirm.inPlaceRequest",
+    message:
+      "Please make only changes that can be edited in place, without replacing the whole document.",
+  });
 }
 
 function wordTrackingNeedsImportText(): string {

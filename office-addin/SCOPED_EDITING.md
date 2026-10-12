@@ -258,6 +258,12 @@ changes in Word, and the read contract says so while tracking is on.
   never, and a plan from a scoped read never takes one unless the switch is
   `allowed`. A refused plan writes nothing and keeps its capture, so a confirmed
   retry still applies; Revert of a confirmed import is not gated.
+  The plan card (`WordImportConfirm`) asks for that confirmation in place of
+  Apply and the consent card: it names the costs, and Apply stays disabled until
+  an unticked box is ticked. Always allow and auto-prompt never pass it, and a
+  live in-place fallback that needs it turns the card back into this choice.
+  Where the switch refuses, the card says why and offers Copy draft and "Ask
+  again for in-place edits" instead of Apply.
 - **Kill switch**: `window.WORD_FORCE_IMPORT_APPLY = true`, injected by the
   backend or set from `VITE_WORD_FORCE_IMPORT_APPLY=true` at build time. In-place
   writing is off on every host, and tracked captures are refused as before.

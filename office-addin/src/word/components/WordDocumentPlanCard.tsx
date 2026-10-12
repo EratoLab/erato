@@ -2,6 +2,7 @@ import {
   Button,
   Alert,
   CopyErrorButton,
+  extractTextFromContent,
   useChatContext,
   useHostArtifact,
   useWordMessageLineage,
@@ -22,6 +23,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
+import { WordImportConfirm, WordImportRefusal } from "./WordImportConfirm";
 import {
   isAutomaticWordRun,
   WordApplyButton,
@@ -47,10 +49,12 @@ import {
   revertWordDocumentPlan,
   wordRevertMechanism,
 } from "../utils/wordApplyDocumentPlan";
+import { wordApplyHost, wordApplyPolicy } from "../utils/wordApplyPolicy";
 import {
   wordApplyAdjustmentText,
   wordAuthoringIssueText,
   wordDocumentDiagnosticText,
+  wordInPlaceRequestText,
   wordPartlyWrittenText,
   wordPlanAdjustedText,
   wordRoutePreviewText,
@@ -69,10 +73,12 @@ import {
   wordPlanDraftText,
 } from "../utils/wordDocumentXml";
 import { WORD_VISIBLE_ADJUSTMENTS } from "../utils/wordFullDocumentComparison";
+import { wordHostPlatform } from "../utils/wordHostPlatform";
 import { wordInPlaceCapabilities } from "../utils/wordInPlaceCapabilities";
 import {
   routeWordDocumentPlan,
   wordPlanPassages,
+  wordWholeDocumentWrite,
 } from "../utils/wordInPlaceRoute";
 import { wordInPlaceAvailability } from "../utils/wordInPlaceSwitch";
 import {
@@ -85,8 +91,11 @@ import {
 } from "../utils/wordReviewLocation";
 import {
   EMPTY_WORD_REVIEW,
+  isWordWholeDocumentBlock,
   wordMismatchedPassages,
   wordPlanOutcomeState,
+  wordWholeDocumentBlockRoute,
+  wordWholeDocumentBlockWrite,
 } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
@@ -180,8 +189,10 @@ export function WordDocumentPlanCard({
     offered;
   const availability = wordInPlaceAvailability();
   const unavailable = availability.enabled ? undefined : availability.reason;
-  const routePreview = useMemo(() => {
-    if (!ready || !plan || !snapshot) return undefined;
+  // Kept while applying, so a confirmed Apply keeps its busy button in place.
+  const routable = ready || applying;
+  const routing = useMemo(() => {
+    if (!routable || !plan || !snapshot) return undefined;
     try {
       const compiled = captureWordAuthoringSnapshot(
         compileWordDocumentPlan(plan, snapshot),
@@ -191,106 +202,147 @@ export function WordDocumentPlanCard({
         "verify",
       );
       if (compiled.issue) return undefined;
-      return wordRoutePreviewText(
-        routeWordDocumentPlan(
-          plan,
-          snapshot,
-          unavailable
-            ? { enabled: false, reason: unavailable }
-            : { enabled: true },
-          wordInPlaceCapabilities(),
-          compiled,
-        ),
-        wordPlanPassages(plan),
+      const route = routeWordDocumentPlan(
+        plan,
+        snapshot,
+        unavailable
+          ? { enabled: false, reason: unavailable }
+          : { enabled: true },
+        wordInPlaceCapabilities(),
+        compiled,
       );
+      return {
+        text: wordRoutePreviewText(route, wordPlanPassages(plan)),
+        write: wordWholeDocumentWrite(route, plan, snapshot, wordApplyPolicy()),
+      };
     } catch {
       return undefined;
     }
-  }, [ready, plan, snapshot, unavailable]);
-  const execute = useCallback(async () => {
-    if (!ready || !capture || !host.beginOperation()) return false;
-    host.updateReview(key, {
-      status: "applying",
-      applyStage: "checking",
-      capture,
-      documentPlanDiagnostic: undefined,
-      documentPlanOutcome: undefined,
-    });
-    try {
-      const run = await entry.execute({
-        fenceContent: content,
+  }, [routable, plan, snapshot, unavailable]);
+  const routePreview = routing?.text;
+  const block = review.wholeDocumentBlock;
+  const wholeDocument = block
+    ? wordWholeDocumentBlockWrite(block)
+    : routing?.write;
+  const confirmImport = offered && wholeDocument?.write === "confirm";
+  const refusal =
+    offered && wholeDocument?.write === "refuse"
+      ? wholeDocument.reason
+      : undefined;
+  const run = useCallback(
+    async (importConfirmed: boolean) => {
+      // Always allow and auto-prompt reach this too; only the card's own tick confirms.
+      if (
+        !ready ||
+        !capture ||
+        refusal ||
+        (confirmImport && !importConfirmed) ||
+        !host.beginOperation()
+      )
+        return false;
+      host.updateReview(key, {
+        status: "applying",
+        applyStage: "checking",
         capture,
-        messageId,
-        onStage: (applyStage) => host.updateReview(key, { applyStage }),
-        onBeforeDocumentWrite: (before) => {
-          if (messageId)
-            host.setRevertSlot({
-              messageId,
-              batchKey: key,
-              identity: capture.identity,
-              ooxml: before,
-            });
-        },
+        documentPlanDiagnostic: undefined,
+        documentPlanOutcome: undefined,
       });
-      const result = run.documentPlanResult;
-      if (result?.before) {
-        host.invalidateLocations();
-        host.setRevertSlot(
-          messageId
-            ? {
+      try {
+        const outcome = await entry.execute({
+          fenceContent: content,
+          capture,
+          messageId,
+          onStage: (applyStage) => host.updateReview(key, { applyStage }),
+          onBeforeDocumentWrite: (before) => {
+            if (messageId)
+              host.setRevertSlot({
                 messageId,
                 batchKey: key,
                 identity: capture.identity,
-                ooxml: result.before,
-                afterFingerprint: result.afterFingerprint,
-              }
-            : null,
-        );
+                ooxml: before,
+              });
+          },
+          importConfirmed,
+        });
+        const result = outcome.documentPlanResult;
+        if (
+          result?.status === "blocked" &&
+          isWordWholeDocumentBlock(result.diagnostic)
+        ) {
+          host.updateReview(key, {
+            applyStage: undefined,
+            status: "idle",
+            wholeDocumentBlock: result.diagnostic,
+          });
+          return false;
+        }
+        if (result?.before) {
+          host.invalidateLocations();
+          host.setRevertSlot(
+            messageId
+              ? {
+                  messageId,
+                  batchKey: key,
+                  identity: capture.identity,
+                  ooxml: result.before,
+                  afterFingerprint: result.afterFingerprint,
+                }
+              : null,
+          );
+        }
+        host.updateReview(key, {
+          applyStage: undefined,
+          status: outcome.ok
+            ? "done"
+            : result?.status === "interrupted"
+              ? "write-failed"
+              : "error",
+          documentPlanStatus: result?.status,
+          documentPlanDiagnostic: result?.diagnostic,
+          documentPlanOutcome: result?.outcome,
+          wholeDocumentBlock: undefined,
+          detailsExpanded: false,
+          automatic:
+            !importConfirmed &&
+            isAutomaticWordRun({
+              presentation: artifact?.clientActionPresentation,
+              decisions,
+              facetId,
+              action: entry.action,
+              enforcedAskActions,
+            }),
+        });
+        return outcome.ok;
+      } catch {
+        host.updateReview(key, {
+          applyStage: undefined,
+          status: "write-failed",
+          documentPlanStatus: "interrupted",
+          documentPlanDiagnostic: { stage: "write", reason: "host-error" },
+          wholeDocumentBlock: undefined,
+        });
+        return false;
+      } finally {
+        host.endOperation();
       }
-      host.updateReview(key, {
-        applyStage: undefined,
-        status: run.ok
-          ? "done"
-          : result?.status === "interrupted"
-            ? "write-failed"
-            : "error",
-        documentPlanStatus: result?.status,
-        documentPlanDiagnostic: result?.diagnostic,
-        documentPlanOutcome: result?.outcome,
-        detailsExpanded: false,
-        automatic: isAutomaticWordRun({
-          presentation: artifact?.clientActionPresentation,
-          decisions,
-          facetId,
-          action: entry.action,
-          enforcedAskActions,
-        }),
-      });
-      return run.ok;
-    } catch {
-      host.updateReview(key, {
-        applyStage: undefined,
-        status: "write-failed",
-        documentPlanStatus: "interrupted",
-        documentPlanDiagnostic: { stage: "write", reason: "host-error" },
-      });
-      return false;
-    } finally {
-      host.endOperation();
-    }
-  }, [
-    ready,
-    capture,
-    host,
-    key,
-    entry,
-    content,
-    messageId,
-    artifact,
-    decisions,
-    facetId,
-    enforcedAskActions,
-  ]);
+    },
+    [
+      ready,
+      capture,
+      refusal,
+      confirmImport,
+      host,
+      key,
+      entry,
+      content,
+      messageId,
+      artifact,
+      decisions,
+      facetId,
+      enforcedAskActions,
+    ],
+  );
+  const execute = useCallback(() => run(false), [run]);
   const buildSummary = useCallback(() => (ready ? plan : null), [ready, plan]);
   const { confirmCard, isConfirmPending, allowCard, denyCard } =
     useClientActionConfirmFlow<WordDocumentPlan, WordClientAction>({
@@ -456,6 +508,26 @@ export function WordDocumentPlanCard({
       failed();
     }
   };
+  const askAgainInPlace = () => {
+    const message = messageId ? messages[messageId] : undefined;
+    const request = message?.previous_message_id
+      ? extractTextFromContent(messages[message.previous_message_id]?.content)
+      : "";
+    host.restoreRequest(
+      [request, wordInPlaceRequestText()].filter(Boolean).join("\n\n"),
+    );
+    setCopyNote(
+      t({
+        id: "officeAddin.word.importConfirm.askAgainNote",
+        message:
+          "Your request is back in the message box, asking for in-place edits only. Review it, then send.",
+      }),
+    );
+  };
+  const deny = () => {
+    if (confirmCard) denyCard(confirmCard);
+    host.updateReview(key, { status: "denied", capture });
+  };
   const completed = ["done", "denied", "reverted"].includes(review.status);
   const collapsed = completed && !review.detailsExpanded;
   const outcomeState = wordPlanOutcomeState(review);
@@ -586,7 +658,36 @@ export function WordDocumentPlanCard({
                   else cannotLocate();
                 }
               : undefined,
-        apply: (
+        apply: refusal ? (
+          idle && (
+            <WordImportRefusal reason={refusal} onAskAgain={askAgainInPlace} />
+          )
+        ) : confirmImport && (idle || applying) ? (
+          <WordImportConfirm
+            key={key}
+            routeText={
+              block
+                ? wordRoutePreviewText(
+                    wordWholeDocumentBlockRoute(block),
+                    wordPlanPassages(plan),
+                  )
+                : routePreview
+            }
+            web={wordApplyHost(wordHostPlatform()) === "web"}
+            applyLabel={applyLabel}
+            canApply={ready && !host.operationInProgress}
+            applying={applying}
+            applyStage={review.applyStage}
+            onApply={() =>
+              void run(true).then(() => {
+                // The tick is this plan's consent, so a pending consent card is settled with it.
+                if (confirmCard) denyCard(confirmCard);
+              })
+            }
+            onAskAgain={askAgainInPlace}
+            onCancel={deny}
+          />
+        ) : (
           <>
             {routePreview && idle && offered && (
               <p className="word-review__hint" data-testid="word-plan-route">

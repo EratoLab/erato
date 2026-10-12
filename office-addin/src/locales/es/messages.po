@@ -3024,6 +3024,61 @@ msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Reemplazar el pasaje seleccionado"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.askAgain"
+msgstr "Volver a pedir ediciones directas"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.importConfirm.askAgainNote"
+msgstr "Tu solicitud vuelve a estar en el cuadro de mensaje, pidiendo solo ediciones directas en el documento. Revísala y envíala."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.coauthors"
+msgstr "Las personas que editen al mismo tiempo pueden perder sus últimos cambios."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.comments"
+msgstr "Las fechas de los comentarios y su estado de resuelto pueden cambiar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.eratoUndo"
+msgstr "«Deshacer» de Erato solo funciona hasta que alguien edite el documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importConfirm.inPlaceRequest"
+msgstr "Por favor, haz solo cambios que puedan editarse directamente en el documento, sin reemplazar todo el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.label"
+msgstr "Confirmar el reemplazo de todo el documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.tick"
+msgstr "Lo entiendo. Reemplazar todo el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.undo"
+msgstr "«Deshacer» de Word no puede revertir este cambio, y «Deshacer» de Erato solo funciona hasta que alguien edite el documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.disabled"
+msgstr "Este cambio requiere reescribir todo el documento, algo que tu organización ha desactivado para esta versión de Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.scoped"
+msgstr "Esta modificación puntual no puede escribirse directamente en el documento en esta versión de Word, y una modificación puntual nunca reemplaza todo el documento."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.layout.boundary"
 #~ msgstr "Termina después de"
@@ -3602,6 +3657,7 @@ msgid "officeAddin.word.review.batchScopeAll"
 msgstr "Se aplica cada cambio propuesto, incluidas las filas ocultas por filtros. Los párrafos modificados desde la solicitud se omiten y se enumeran."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Cancelar"
