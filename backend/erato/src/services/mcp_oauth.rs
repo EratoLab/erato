@@ -199,6 +199,13 @@ pub async fn start_oauth_authorization(
 ) -> Result<String, AuthError> {
     let mut manager =
         authorization_manager(app_state, user_id, mcp_server_id, config, oauth2).await?;
+    // Only authorization start consumes these parameters. Include the server id
+    // in warnings without logging parameter values or the authorization URL.
+    {
+        let span = tracing::warn_span!("mcp_oauth_authorization_params", mcp_server_id);
+        let _entered = span.enter();
+        manager.set_authorization_params(oauth2.authorization_params.clone());
+    }
     let metadata = manager.resolve_metadata().await?.metadata;
     trace!(
         mcp_server_id,

@@ -3831,6 +3831,54 @@ that value. Scope selection and authorization-server discovery still apply.
 See [OAuth resource selection](./features/mcp_servers#oauth-resource-selection)
 for precedence, compatibility, and a complete configuration example.
 
+#### `mcp_servers.<server-id>.authentication.oauth2.authorization_params`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.authorization_params.<key> */}
+
+Additional query parameters sent only to the OAuth authorization URL. They are
+never added to discovery, client registration, code exchange, or token refresh
+requests. An omitted or empty map preserves the existing authorization behavior.
+
+Values are literal strings: do not URL-encode them. Each configured parameter
+replaces all endpoint query pairs with the same case-sensitive name and appears
+once, form-encoded, after other parameters in ascending key order. Other pairs
+retain their values, order, and multiplicity.
+
+Erato ignores empty names and the following protected names (ignoring ASCII
+case), emitting a WARN message when authorization starts: `response_type`,
+`client_id`, `client_secret`, `redirect_uri`, `scope`, `state`, `code_challenge`,
+`code_challenge_method`, `resource`, `response_mode`, `request`, and `request_uri`.
+Use the existing dedicated client, scopes, and resource settings instead.
+The warning includes the parameter name, never its value.
+
+Values must not contain secrets: the authorization URL is visible in the user's
+browser and may appear in browser history or proxy logs. Discovery and callback
+issuer checks still use the authorization server's metadata.
+
+Like other configuration maps, this table merges by key across sources. An empty
+override table does not remove inherited entries; remove them from the source
+that defines them. Use TOML for case-sensitive parameter names, since environment
+variable names are lowercased. Reloading changed settings invalidates that
+server's cached MCP sessions but does not delete stored OAuth grants. New values
+take effect on the next authorization; users with existing grants must reconnect
+to authorize with them.
+
+**Type:** `object<string, string>`
+
+**Default:** `{}`
+
+**Example:**
+
+```toml
+[mcp_servers.tickets.authentication.oauth2.authorization_params]
+audience = "api.atlassian.com"
+prompt = "consent"
+```
+
+These illustrate provider-specific settings; they do not establish complete
+Atlassian compatibility. The provider must also support Erato's discovery,
+PKCE, token exchange, and refresh behavior.
+
 #### `mcp_servers.<server-id>.authentication.oauth2.scopes`
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.scopes */}

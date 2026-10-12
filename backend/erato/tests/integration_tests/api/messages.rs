@@ -3526,6 +3526,7 @@ async fn test_message_submit_records_mcp_server_needing_oauth_authorization(pool
                     client_secret: None,
                     scopes: vec![],
                     client_name: None,
+                    authorization_params: Default::default(),
                 },
             },
         ),

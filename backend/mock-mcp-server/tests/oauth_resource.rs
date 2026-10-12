@@ -1,5 +1,5 @@
 use erato_mcp_oauth::AuthorizationManager;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use mock_mcp_server::oauth::{self, OAuthConfig, MCP_PATH, MISMATCH, RESOURCE, SCOPE};
 use reqwest::{Client, StatusCode, Url};
@@ -20,6 +20,7 @@ struct Fixture {
     config: OAuthConfig,
     client: Client,
     task: tokio::task::JoinHandle<()>,
+    authorization_params: BTreeMap<String, String>,
 }
 
 impl Drop for Fixture {
@@ -54,6 +55,7 @@ impl Fixture {
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .unwrap(),
+            authorization_params: BTreeMap::new(),
         }
     }
 
@@ -73,6 +75,7 @@ impl Fixture {
         )
         .await
         .unwrap();
+        manager.set_authorization_params(self.authorization_params.clone());
         manager.set_credential_store(credentials.clone());
         manager.set_state_store(states.clone());
         let metadata = manager.resolve_metadata().await.unwrap().metadata;
@@ -381,6 +384,95 @@ async fn configured_headers_reach_discovery_exchange_and_refresh() {
     )
     .await;
     fixture.round_trip(None).await;
+}
+
+#[tokio::test]
+async fn authorization_params_reach_authorize_but_not_registration_exchange_or_refresh() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let token_requests = Arc::new(AtomicUsize::new(0));
+    let registration_requests = Arc::new(AtomicUsize::new(0));
+    let tokens = token_requests.clone();
+    let registrations = registration_requests.clone();
+    let mut fixture = Fixture::with_router(
+        |_| {},
+        |router| {
+            router.layer(axum::middleware::from_fn(
+                move |request: axum::extract::Request, next: axum::middleware::Next| {
+                    let tokens = tokens.clone();
+                    let registrations = registrations.clone();
+                    async move {
+                        let path = request.uri().path().to_owned();
+                        let pairs = url::form_urlencoded::parse(
+                            request.uri().query().unwrap_or_default().as_bytes(),
+                        )
+                        .into_owned()
+                        .collect::<Vec<_>>();
+                        if path == "/oauth/authorize" {
+                            for (key, value) in [
+                                ("audience", "https://api.example.com"),
+                                ("prompt", "consent"),
+                            ] {
+                                assert_eq!(pairs.iter().filter(|(name, _)| name == key).count(), 1);
+                                assert!(pairs.contains(&(key.into(), value.into())));
+                            }
+                        } else {
+                            assert!(!pairs
+                                .iter()
+                                .any(|(key, _)| key == "audience" || key == "prompt"));
+                        }
+                        if path == "/oauth/token" || path == "/oauth/register" {
+                            let (parts, body) = request.into_parts();
+                            let bytes = axum::body::to_bytes(body, 1024 * 1024).await.unwrap();
+                            if path == "/oauth/token" {
+                                tokens.fetch_add(1, Ordering::SeqCst);
+                                let params: Params =
+                                    url::form_urlencoded::parse(&bytes).into_owned().collect();
+                                assert!(!params.contains_key("audience"));
+                                assert!(!params.contains_key("prompt"));
+                            } else {
+                                registrations.fetch_add(1, Ordering::SeqCst);
+                                let params: serde_json::Value =
+                                    serde_json::from_slice(&bytes).unwrap();
+                                assert!(params.get("audience").is_none());
+                                assert!(params.get("prompt").is_none());
+                            }
+                            return next
+                                .run(axum::extract::Request::from_parts(
+                                    parts,
+                                    axum::body::Body::from(bytes),
+                                ))
+                                .await;
+                        }
+                        next.run(request).await
+                    }
+                },
+            ))
+        },
+    )
+    .await;
+    fixture.authorization_params = BTreeMap::from([
+        ("audience".into(), "https://api.example.com".into()),
+        ("prompt".into(), "consent".into()),
+        ("State".into(), "must-be-ignored".into()),
+        ("resource".into(), "https://wrong.example.com".into()),
+    ]);
+    let mut manager = fixture
+        .manager(
+            None,
+            &InMemoryCredentialStore::new(),
+            &InMemoryStateStore::new(),
+        )
+        .await;
+    manager
+        .register_client("Erato test", "http://localhost/callback", &[SCOPE])
+        .await
+        .unwrap();
+    fixture.round_trip(None).await;
+    assert_eq!(registration_requests.load(Ordering::SeqCst), 1);
+    assert_eq!(token_requests.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]

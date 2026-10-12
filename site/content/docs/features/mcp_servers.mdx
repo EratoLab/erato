@@ -563,6 +563,27 @@ flowchart LR
     E -->|Authorization: Bearer refreshed user token| MCP
 ```
 
+#### Additional OAuth authorization parameters
+
+For providers requiring additional authorization query parameters, configure a
+per-server string map:
+
+```toml
+[mcp_servers.tickets.authentication.oauth2.authorization_params]
+audience = "api.atlassian.com"
+prompt = "consent"
+```
+
+Erato sends these literal values only in the browser's authorization URL, never
+in client registration, code exchange, or refresh requests. Do not put secrets
+in this map or pre-encode values. Protected OAuth flow parameters are ignored
+with a WARN message when authorization starts. The map does not change discovery,
+PKCE, issuer validation, or the provider's token request format; these settings
+alone do not guarantee Atlassian compatibility.
+
+See the [configuration reference](../configuration#mcp_serversserver-idauthenticationoauth2authorization_params)
+for protected names, replacement rules, configuration merging, and reconnect behavior.
+
 #### OAuth resource selection
 
 `mcp_servers.<server-id>.authentication.oauth2.resource` controls the OAuth
