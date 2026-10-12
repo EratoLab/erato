@@ -4972,12 +4972,16 @@ result_schema = '''{"type":"object","required":["busy"],"properties":{"busy":{"t
 
 Per-tool decisions still apply. `ask` shows the approval card before the call
 runs. Once approved, the call parks like any other, and it does not prompt again
-when it completes later on the same device. A call approved from another device or
-client keeps the in-memory path. `never_allow` tools are neither offered nor run.
+when it completes later on the same device. If an approval is answered from another
+device or client, no call of an opted-in tool parks for the rest of that turn;
+they keep the in-memory path. `never_allow` tools are neither offered nor run.
 A decision changed to `never_allow` after a call parked withdraws it. Claims are
 never allowed across devices. A tool with `submission` cannot be durable. Results
-must be JSON; tools that return files must not opt in. Every backend replica
-must load the same `durable` tables.
+must be JSON; tools that return files must not opt in. Opting in also drops the
+client's per-field validation errors: a result the client rejects reaches the
+model as fixed `validation_failed` text, on the live path too, so tools that rely
+on correctable validation errors must not opt in. Every backend replica must load
+the same `durable` tables.
 
 #### `client_tools.tools.<key>.requires_client_registration`
 

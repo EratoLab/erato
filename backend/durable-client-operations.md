@@ -85,9 +85,14 @@ for `fetch_availability`. It picks a handler by `kind` and
 the handler's optional `matches(request)`. The generic handler matches its tool's
 bare name in any namespace, as the live call's executor lookup does, because the
 namespace is deployment configuration. A handler's `defer(request)` skips the
-claim while the same JS context still runs the live call or posts its result. That
-POST settles the unclaimed attempt through the fast path and then requests a
-sweep, so a drop on the same pane resumes without waiting for the 10 s poll. A
+claim while the same JS context still runs the live call or posts its result.
+Panes and tabs of one browser share the device id, so the server would give them
+the same claim token. A Web Lock named after the message and tool call keeps one
+execution per browser: a coordinator takes it only when it is free, and the live
+path holds it while a call with an operation executor runs and posts. Without Web
+Locks every context runs, as before. A POST that settles the unclaimed attempt
+through the fast path answers `stored: true`, and only then does the pane request
+a sweep, so a drop on the same pane resumes without waiting for the 10 s poll. A
 `client_tool_pending` part also requests a sweep, for a pane whose executor is not
 running. That sweep can race the generation's release after the park; a refused
 claim waits for the poll. A pane without a matching handler leaves the operation
@@ -111,6 +116,8 @@ in-memory path in these cases:
 - a binding of another realm or host family, such as a ready sidecar's;
 - invalid input;
 - an approval answered from another executor, with a different or no header.
+  This keeps every decision-gated call of that continuation in memory, not only
+  the approved one.
 
 Roll out the coordinator/header support before enabling a kind. The live
 `clienttoolresult` POST carries the tool's own executor header. An executor that
@@ -276,8 +283,9 @@ Decided open questions:
 - **Teams-originated calls (`needs_client`).** Teams sends no `X-Erato-Executor`,
   so its calls never escalate and `needs_client` is unchanged.
 - **Approval from another executor.** The continuation captures the answering
-  device's binding. A mismatch keeps the legacy path; the call never parks for a
-  device that did not approve it.
+  device's binding. A mismatch keeps the legacy path for every decision-gated
+  call the continuation dispatches, not only the approved one: none of them parks
+  for a device that did not approve it.
 - **Flag off, header sent.** The add-in sends its binding whatever the server
   flag says. Nothing reads it, and it holds no raw address. Gating the header on
   `/me/client-operations` is not worth the coupling.
@@ -289,7 +297,7 @@ Turning the flag on has costs beyond configured tools. Generation starts take th
 compare-and-set lease path with the lease identity guard. Every abort runs the
 inbox abort transaction. Late results probe the logged inbox. For an opted-in tool,
 a brief SSE drop now parks and detaches the turn instead of waiting out
-`timeout_ms`. The sweep after the pane's result POST, the `client_tool_pending`
+`timeout_ms`. The sweep after a result POST that answers `stored`, the `client_tool_pending`
 nudge or the 10 s inbox poll recovers it.
 
 Production opt-in lives in the private configuration package
