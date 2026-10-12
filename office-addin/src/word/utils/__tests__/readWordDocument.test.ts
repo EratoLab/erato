@@ -199,6 +199,21 @@ describe("readWordDocument", () => {
           11000,
         ),
       ],
+      [
+        "a refusal with another Office code",
+        new WordDocumentTransferError(
+          "Word could not capture the document.",
+          true,
+          5001,
+        ),
+      ],
+      [
+        "a refusal without an Office code",
+        new WordDocumentTransferError(
+          "Word could not capture the document.",
+          true,
+        ),
+      ],
     ])("keeps today's result for %s", async (_, error) => {
       vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
       vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(error);
@@ -220,6 +235,7 @@ describe("readWordDocument", () => {
         new WordDocumentTransferError(
           "Word could not capture the document.",
           true,
+          11001,
         ),
       );
       const run = word.word.run.getMockImplementation()!;
@@ -265,6 +281,7 @@ describe("readWordDocument", () => {
         new WordDocumentTransferError(
           "Word could not capture the document.",
           true,
+          11001,
         ),
       );
 

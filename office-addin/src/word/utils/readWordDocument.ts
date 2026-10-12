@@ -31,12 +31,13 @@ export type WordDocumentReadResult =
   | { ok: false; error?: string };
 
 /** Word for the web refused to open the file, as it does by design for a sensitivity-labelled
- * document (office-js #6743), so authoring falls back to the body. */
+ * document (office-js #5297), so authoring falls back to the body. */
 export type WordDocumentReadNote = "package-blocked";
 
-/** Office keeps two file handles per document; while both are held getFileAsync fails with this
- * code, which clears once they close, so it never means the file is withheld. */
-const OFFICE_FILE_HANDLES_BUSY = 11000;
+/** getFileAsync's "Network Problem", which Word for the web returns by design for a document whose
+ * sensitivity label withholds the file (office-js #5297). Other refusals, such as 11000 while both
+ * of Office's file handles are held, can clear, so they leave text only and retry at the next send. */
+const OFFICE_FILE_WITHHELD = 11001;
 
 export interface WordAuthoringUnavailable {
   issue: "too-large" | "unavailable";
@@ -123,9 +124,9 @@ export async function readWordDocument(
     if (packaged && result.authoring) {
       step = "full-document capture";
       // A failed full capture must not degrade into a partial rewrite or clear, so authoring is
-      // dropped and only the paragraph text remains. Only a file Word for the web refuses to open
-      // falls back to the body route, whose capture says it is not the whole document; a transfer
-      // that fails part-way, or a document that changes during capture, is retried at the next send.
+      // dropped and only the paragraph text remains. Only a file Word for the web withholds falls
+      // back to the body route, whose capture says it is not the whole document; any other failed
+      // transfer, or a document that changes during capture, is retried at the next send.
       try {
         const full = await withWordTimeout(
           captureWordDocumentPackage(),
@@ -145,7 +146,7 @@ export async function readWordDocument(
         const body =
           error instanceof WordDocumentTransferError &&
           error.refused &&
-          error.officeCode !== OFFICE_FILE_HANDLES_BUSY &&
+          error.officeCode === OFFICE_FILE_WITHHELD &&
           wordHostPlatform() === "OfficeOnline"
             ? await readWordBody(word)
             : undefined;

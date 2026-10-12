@@ -2693,7 +2693,7 @@ msgstr "Word wrote changes, but the result could not be verified. Your original 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.packageBlocked"
-msgstr "Word for the web didn't hand over the complete file, which happens for documents with a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout."
+msgstr "Word for the web didn't hand over the complete file, for example because the document has a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout, and any change replaces the whole body instead of editing passages in place."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -3126,7 +3126,7 @@ msgstr "I understand. Replace the whole document."
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.undo"
-msgstr "Word's Undo can't reverse this change, and Erato's Undo works only until someone edits the document."
+msgstr "Word's Undo can't reverse this change. Erato can't verify the result on Word for the web, and its Restore may not bring back the exact original, which stays available to download."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

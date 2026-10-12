@@ -306,14 +306,15 @@ changes in Word, and the read contract says so while tracking is on.
   reported `stale` and not offered again. If the document changed, the write
   stays `interrupted` and the card names the cause.
 - **Labelled documents**: Word for the web withholds the file of a document
-  with a sensitivity label (office-js #6743): `getFileAsync` refuses to open
-  it. On the web only, such a refusal makes the read fall back to the body
-  (`fullDocument` false), and the chip notes that headers, footers and page
-  layout are out of reach and that any change replaces the whole body; writes
-  take the body route and its confirmation. Error 11000 (both of Office's file
-  handles held), a transfer that fails part-way and a document that changes
-  during capture are not refusals: they, and every failed transfer elsewhere,
-  still leave text only and retry at the next send. Body reads are compared
+  with a sensitivity label (office-js #5297): `getFileAsync` refuses to open
+  it with error 11001 ("Network Problem"). On the web only, that error makes
+  the read fall back to the body (`fullDocument` false), and the chip notes
+  that headers, footers and page layout are out of reach and that any change
+  replaces the whole body; writes take the body route and its confirmation.
+  Any other refusal, such as error 11000 (both of Office's file handles held),
+  a transfer that fails part-way and a document that changes during capture,
+  and every failed transfer elsewhere, still leave text only and retry at the
+  next send. Body reads are compared
   without `w16cid:durableId` on `w:num`, which Word for the web writes afresh at
   every `Body.getOoxml`.
 - **Kill switch**: `window.WORD_FORCE_IMPORT_APPLY = true`, injected by the
