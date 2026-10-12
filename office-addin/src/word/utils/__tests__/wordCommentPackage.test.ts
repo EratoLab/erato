@@ -75,7 +75,6 @@ describe("readWordCommentParagraphPackage", () => {
     "joins T1's root and both reply marks to their Comment ids on %s",
     (host) => {
       const read = readParagraph("T1P", host);
-      expect(read.legacy).toBe(false);
       expect(read.spans.map((s) => [s.wId, s.commentId, s.joinedBy])).toEqual([
         ["0", v3cCommentId("T1"), "durableId"],
         ["1", v3cCommentId("R1a"), "durableId"],
@@ -206,7 +205,6 @@ describe("readWordCommentParagraphPackage", () => {
         const read = readParagraph(tag, host);
         expect(read.spans).toEqual([]);
         expect(read.comments).toEqual([]);
-        expect(read.legacy).toBe(false);
       }
     });
 
@@ -334,7 +332,20 @@ describe("readWordCommentParagraphPackage", () => {
     });
   });
 
-  describe("legacy packages", () => {
+  it("names a legacy file's comments by the session's ids, with no dateUtc and no parents (gate F2)", () => {
+    const sessionIds = (key: string) =>
+      ({ T1: "00000101", R1a: "00000102", R1b: "00000103" })[key] ?? "0";
+    const read = readParagraph("T1P", "web", { legacy: true, sessionIds });
+    expect(read.spans.map((s) => [s.commentId, s.joinedBy])).toEqual([
+      ["257", "durableId"],
+      ["258", "durableId"],
+      ["259", "durableId"],
+    ]);
+    expect(read.comments.every((c) => c.dateUtc === null)).toBe(true);
+    expect(read.comments.map((c) => c.parentWId)).toEqual([null, null, null]);
+  });
+
+  describe("packages without commentsIds", () => {
     const listed = [
       {
         id: "901",
@@ -345,9 +356,8 @@ describe("readWordCommentParagraphPackage", () => {
       { id: "903", content: V3C_COMMENTS.R1b.content.replace(" ", "\r") },
     ];
 
-    it("flags a package without commentsIds and joins none of its marks", () => {
-      const read = readParagraph("T1P", "web", { legacy: true });
-      expect(read.legacy).toBe(true);
+    it("joins none of its marks", () => {
+      const read = readParagraph("T1P", "web", { idless: true });
       expect(read.spans.map((s) => [s.commentId, s.joinedBy])).toEqual([
         [null, null],
         [null, null],
@@ -358,7 +368,7 @@ describe("readWordCommentParagraphPackage", () => {
     });
 
     it("joins each mark by content and anchored text, marked as content", () => {
-      const read = readParagraph("T1P", "web", { legacy: true });
+      const read = readParagraph("T1P", "web", { idless: true });
       expect(
         joinWordCommentSpansByContent(read, listed).map((s) => [
           s.wId,
@@ -373,7 +383,7 @@ describe("readWordCommentParagraphPackage", () => {
     });
 
     it("pairs equal comments in document order, and leaves uneven groups unjoined", () => {
-      const read = readParagraph("T6P", "desktop", { legacy: true });
+      const read = readParagraph("T6P", "desktop", { idless: true });
       const same = (span: WordCommentSpan) => ({
         ...read,
         comments: read.comments.map((c) => ({ ...c, content: "Same." })),
@@ -405,7 +415,7 @@ describe("readWordCommentParagraphPackage", () => {
     });
 
     it("refuses a pair whose anchored text differs", () => {
-      const read = readParagraph("T1P", "desktop", { legacy: true });
+      const read = readParagraph("T1P", "desktop", { idless: true });
       const joined = joinWordCommentSpansByContent(read, [
         { ...listed[0], rangeText: "charlie" },
         listed[1],

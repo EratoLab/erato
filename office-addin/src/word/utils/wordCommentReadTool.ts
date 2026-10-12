@@ -62,9 +62,10 @@ import type {
  * Word on every call, with exact anchors and replies only for the threads a page carries. Without
  * a gesture (the document included, a picked thread or "Include open comments") a read reaches
  * only the threads in or nearest the selection captured at Send: the 3 nearest above and below,
- * open and resolved apart, so no filter or chain of reads walks further. Resolved threads come
- * only through the status filter, a ref the model names, or an anchor at the selection. Results
- * are the comment envelope in JSON, whose text the untrusted frame (ERMAIN-946) wraps whole.
+ * whatever their status, so no filter or chain of reads walks further, and no filter looks at the
+ * threads beyond them. Resolved threads come only through the status filter, a ref the model
+ * names, or an anchor at the selection. Results are the comment envelope in JSON, whose text the
+ * untrusted frame (ERMAIN-946) wraps whole.
  */
 
 export { WORD_READ_COMMENTS_TOOL };
@@ -108,6 +109,8 @@ export interface WordCommentReadActivation {
   people?: WordCommentPeople;
   /** Live document inclusion: false once the user switches it off after Send. */
   documentIncluded?: () => boolean;
+  /** The user sent the request without comments, so no read answers for it. */
+  withheld?: boolean;
 }
 
 export type WordCommentReadRequest = Pick<
@@ -144,7 +147,10 @@ export type WordCommentReadResultJson = Omit<
   cursor: string | null;
   /** Every thread matching this read was returned, and none was held back for want of a gesture. */
   complete: boolean;
-  /** Matching threads beyond the selection's nearest ones were held back for want of a gesture. */
+  /**
+   * Threads of the status asked for lie beyond the selection's nearest ones, held back for want of
+   * a gesture; no author or text filter looked at them.
+   */
   capped: boolean;
   /** Matching threads after this page, left for the cursor; held-back threads are not among them. */
   remaining: number;
@@ -460,23 +466,20 @@ function planRead(
 ): Plan {
   const { gesture, coarse } = context;
   const limit = WORD_COMMENT_NEAR_LIMIT;
-  const nearest = (resolved: boolean) => {
-    const pool = facts.filter((f) => f.resolved === resolved);
-    return [
-      ...pool
-        .filter((f) => f.side === "above")
-        .sort(byRankDown)
-        .slice(0, limit),
-      ...pool
-        .filter((f) => f.side === "below")
-        .sort(byRank)
-        .slice(0, limit),
-    ];
-  };
   const reachable = new Set(
     gesture
       ? facts
-      : [...facts.filter(atSelection), ...nearest(false), ...nearest(true)],
+      : [
+          ...facts.filter(atSelection),
+          ...facts
+            .filter((f) => f.side === "above")
+            .sort(byRankDown)
+            .slice(0, limit),
+          ...facts
+            .filter((f) => f.side === "below")
+            .sort(byRank)
+            .slice(0, limit),
+        ],
   );
   const center =
     query.near?.center.kind === "ref"
@@ -500,9 +503,10 @@ function planRead(
           ? f.mine
           : f.authors.some((a) => a.includes(query.author!)))) &&
       (!query.text || f.texts.some((t) => t.includes(query.text!))));
+  // Filters never run over unreachable threads: a count of their matches would answer for their text.
   const outside = gesture
     ? 0
-    : facts.filter((f) => !reachable.has(f) && matches(f)).length;
+    : facts.filter((f) => !reachable.has(f) && statusAllows(f)).length;
   const candidates = facts.filter((f) => reachable.has(f) && matches(f));
 
   let chosen: Facts[];
@@ -566,12 +570,11 @@ function ownTextBefore(record: WordCommentThreadRecord): string | null {
 /**
  * The visible text before the anchor: its own paragraph's part from the exact anchor, then whole
  * earlier paragraphs whose text the inventory holds, nearest first, up to the limit. Null without
- * an exact anchor. Earlier paragraphs are document text, so they come only with the document.
+ * an exact anchor. All of it is document text, so it is read only with the document included.
  */
 function textBeforeOf(
   record: WordCommentThreadRecord,
   texts: ReadonlyMap<number, string>,
-  withDocument: boolean,
 ): string | null {
   const own = ownTextBefore(record);
   const para = record.anchor?.first.ordinal ?? null;
@@ -580,7 +583,7 @@ function textBeforeOf(
   let length = parts[0].length;
   for (
     let ordinal = para - 1;
-    withDocument && ordinal >= 1 && length < WORD_COMMENT_TEXT_BEFORE_CHARS;
+    ordinal >= 1 && length < WORD_COMMENT_TEXT_BEFORE_CHARS;
     ordinal -= 1
   ) {
     const text = texts.get(ordinal);
@@ -720,6 +723,11 @@ export class WordCommentReadSession {
         "wrong-request",
         `This request has no comment read of its own. ${WORD_COMMENTS_ASK_AGAIN}: tell the user to send the request again.`,
       );
+    if (session.activation.withheld)
+      return fail(
+        "comments-withheld",
+        "The user sent this request without comments, so no comment can be read for it. If the answer needs comments, tell the user to send the request again with comments.",
+      );
     const parsed = parseArguments(input);
     if (!parsed.ok) return fail("read-arguments", parsed.message, parsed.path);
 
@@ -784,6 +792,7 @@ export class WordCommentReadSession {
       ...this.options.readOptions,
       ...options,
       inventory: session.activation.inventory,
+      legacy: session.registry.legacy,
     });
     if (this.session !== session || context.signal?.aborted)
       return context.signal?.aborted
@@ -1012,8 +1021,8 @@ export class WordCommentReadSession {
     const extrasOf = (ref: string) => {
       const record = records.get(ref)!;
       const extras: Partial<WordCommentReadThread> = {};
-      if (query.around === "text_before") {
-        const before = textBeforeOf(record, inventoryTexts, gestures.document);
+      if (query.around === "text_before" && gestures.document) {
+        const before = textBeforeOf(record, inventoryTexts);
         if (before !== null) extras.text_before = before;
       }
       if (view === "section") {
@@ -1080,6 +1089,7 @@ export class WordCommentReadSession {
         query.around === "text_before"
           ? threads.filter((t) => t.text_before === undefined).length
           : 0,
+      document: gestures.document,
       more,
     });
     const { cursor: _cursor, ...envelope } = built.envelope;
@@ -1117,6 +1127,8 @@ export class WordCommentReadSession {
     envelope: WordCommentEnvelope;
     repliesUnread: number;
     noTextBefore: number;
+    /** The document is included, so its text may be read. */
+    document: boolean;
     more: boolean;
   }): string {
     const { query, envelope } = input;
@@ -1155,7 +1167,7 @@ export class WordCommentReadSession {
       {
         text:
           input.outside > 0
-            ? `${plural(input.outside, "more matching thread")} lie beyond the ${WORD_COMMENT_NEAR_LIMIT} nearest above and below the selection: they need the document included, a picked comment or "Include open comments".`
+            ? `${plural(input.outside, "more thread")} with this status ${input.outside === 1 ? "lies" : "lie"} beyond the ${WORD_COMMENT_NEAR_LIMIT} nearest above and below the selection, unfiltered: they need the document included, a picked comment or "Include open comments".`
             : "",
         keep: 7,
       },
@@ -1174,7 +1186,7 @@ export class WordCommentReadSession {
       },
       {
         text: input.noTextBefore
-          ? `No text before the anchor for ${plural(input.noTextBefore, "thread")}.`
+          ? `No text before the anchor for ${plural(input.noTextBefore, "thread")}${input.document ? "" : ": it is document text, which needs the document included"}.`
           : "",
         keep: 1,
       },

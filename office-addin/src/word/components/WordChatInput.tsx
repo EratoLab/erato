@@ -68,6 +68,7 @@ import {
   wordCommentIdOfRef,
   wordCommentMapArg,
   wordCommentSendExact,
+  wordCommentSendable,
   wordCommentSendRead,
   wordCommentSendSelection,
   wordCommentsDue,
@@ -525,7 +526,7 @@ export function WordChatInput({
       const activateCommentReads = (
         activation: Pick<
           WordCommentReadActivation,
-          "gestures" | "selection" | "inventory" | "headings"
+          "gestures" | "selection" | "inventory" | "headings" | "withheld"
         >,
       ) => {
         const token = wordCommentReadSession.activate({
@@ -558,6 +559,7 @@ export function WordChatInput({
         const pickedId = pickRef && wordCommentIdOfRef(registry, pickRef);
         const result = await readWordComments({
           ...options,
+          legacy: registry.legacy,
           selection: true,
           exact: (records, live) =>
             wordCommentSendExact(records, { passage, live, pickedId }),
@@ -580,13 +582,17 @@ export function WordChatInput({
         read: WordCommentSendRead | null,
         passage: { rewritable: boolean } | null,
         signal: AbortSignal,
-      ): Promise<{ plan: WordCommentSendPlan; pick: string | null } | null> => {
+      ): Promise<{
+        plan: WordCommentSendPlan;
+        pick: string | null;
+        withheld: boolean;
+      } | null> => {
         let input: WordCommentSendInput = {
           advertised: commentAdvertised,
           selection: wordCommentSendSelection(read, passage),
           precedence: commentPrecedence,
           pick: pickRef,
-          pickFound: !!pickRef && !!read?.refs.byRef.has(pickRef),
+          pickFound: !!pickRef && wordCommentSendable(read, pickRef),
           override: commentOverride,
           withoutComments,
           documentIncluded: chipEnabled,
@@ -595,7 +601,12 @@ export function WordChatInput({
         };
         for (;;) {
           const plan = resolveWordCommentSend(input);
-          if (!plan.block) return { plan, pick: input.pick };
+          if (!plan.block)
+            return {
+              plan,
+              pick: input.pick,
+              withheld: input.withoutComments,
+            };
           const decision = await waitForCommentDecision(plan.block, signal);
           if (decision.kind === "abort" || signal.aborted || contextChanged())
             return null;
@@ -605,7 +616,7 @@ export function WordChatInput({
               : {
                   ...input,
                   pick: decision.ref,
-                  pickFound: !!read?.refs.byRef.has(decision.ref),
+                  pickFound: wordCommentSendable(read, decision.ref),
                 };
         }
       };
@@ -649,6 +660,7 @@ export function WordChatInput({
         activateCommentReads({
           gestures: gesturesFor(decided.pick),
           selection: read.selection,
+          withheld: false,
         });
         return { actionFacet, hostContextIdentity: documentIdentity };
       };
@@ -826,6 +838,7 @@ export function WordChatInput({
               selection: comments?.selection ?? null,
               inventory: wordCommentInventoryFromCapture(build.ordinalMap),
               headings: wordCommentHeadingsFromBuild(build.headings),
+              withheld: decided.withheld,
             });
           return {
             actionFacet,
@@ -901,6 +914,7 @@ export function WordChatInput({
           activateCommentReads({
             gestures: gesturesFor(decided.pick),
             selection: passage,
+            withheld: decided.withheld,
           });
           return { actionFacet, hostContextIdentity: documentIdentity };
         }

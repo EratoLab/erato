@@ -1,3 +1,4 @@
+import { wordCommentRangeReadable } from "./wordCommentReader";
 import { selectsAcrossParagraphs, selectWordRange } from "./wordReviewLocation";
 import { runWordGuarded } from "./wordRunGuard";
 import { WORD_SELECTION_SHOW_TIMEOUT_MS } from "./wordSelectionTarget";
@@ -9,7 +10,8 @@ import type { WordSelectionShowResult } from "./wordSelectionTarget";
  * the end paragraphs of a range it selects across paragraphs (ERMAIN-932), so there the first
  * paragraph of a longer anchor stands in. selectWordRange marks the select, so the live selection
  * reader takes the passage for Erato's and a picked thread outlives it. An id Word lists twice
- * (F-19) or no longer lists is "changed": either way no single anchor can be shown.
+ * (F-19) or no longer lists is "changed": either way no single anchor can be shown. Off desktop, an
+ * anchor whose range would unhide text before it (gate F1) is not shown.
  */
 export async function showWordComment(
   commentId: string,
@@ -23,6 +25,8 @@ export async function showWordComment(
         (comment) => String(comment.id) === commentId,
       );
       if (matches.length !== 1) return "changed" as const;
+      if (!(await wordCommentRangeReadable(context, comments.items, commentId)))
+        return "unavailable" as const;
       const range = matches[0].getRange();
       let target = range;
       if (!selectsAcrossParagraphs()) {

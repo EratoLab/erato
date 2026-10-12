@@ -25,6 +25,10 @@ import { resolveWordCommentSend } from "../../utils/wordCommentSend";
 import { WORD_SELECTION_ARG_KEYS } from "../../utils/wordSelectionArgs";
 import { WordChatInput } from "../WordChatInput";
 import { WordCommentChip, wordCommentChipView } from "../WordCommentChip";
+import {
+  wordCommentCoverageInfo,
+  wordCommentCoverageLines,
+} from "../WordCommentCoverage";
 
 import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type { CommentHost } from "../../../test/mocks/word/commentHost";
@@ -302,6 +306,27 @@ describe("wordCommentChipView", () => {
     });
   });
 
+  it("counts only the rows the map carries: placed threads, up to its first page", () => {
+    const unplaced = {
+      ...listOf([MAYA, JONAS], { kind: "none" }),
+      unplaced: 3,
+    };
+    expect(viewFor(unplaced, { documentIncluded: true })).toEqual({
+      kind: "map",
+      threads: 2,
+    });
+    const many = listOf(
+      Array.from({ length: 130 }, (_, i) =>
+        thread({ ref: `t${(i + 100).toString(36)}`, pos: i + 1 }),
+      ),
+      { kind: "none" },
+    );
+    expect(viewFor(many, { documentIncluded: true })).toEqual({
+      kind: "map",
+      threads: 100,
+    });
+  });
+
   it("shows nothing when nothing is advertised", () => {
     expect(
       viewFor(onePassage, {
@@ -497,6 +522,41 @@ describe("WordCommentChip", () => {
       "Email addresses of comment authors are never sent.",
     );
     expect(lines).not.toHaveTextContent("Bitte prüfen.");
+  });
+
+  it("says for the map what it leaves out and that resolved comments are in it", () => {
+    const list = {
+      ...listOf([MAYA, thread({ ref: "t2p", status: "resolved" })], {
+        kind: "none",
+      }),
+      unplaced: 3,
+    };
+    const plan = resolveWordCommentSend({
+      advertised: ALL,
+      selection: { kind: "none" },
+      precedence: "selection",
+      pick: null,
+      pickFound: true,
+      override: null,
+      withoutComments: false,
+      documentIncluded: true,
+      includeOpenComments: false,
+      readFailed: false,
+    });
+    const info = wordCommentCoverageInfo(plan, list, {
+      document: true,
+      picked: false,
+      openComments: false,
+    });
+    expect(info).toMatchObject({ sent: { kind: "map", threads: 2 }, rest: 3 });
+    const lines = wordCommentCoverageLines(info!);
+    expect(lines).toContain("3 other comments are not sent.");
+    expect(lines).toContain(
+      "The list includes resolved comments too, each with how it starts.",
+    );
+    expect(lines.join(" ")).not.toContain(
+      "Resolved comments are sent only when",
+    );
   });
 
   it("can take Send without comments back", () => {

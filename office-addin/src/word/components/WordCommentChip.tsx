@@ -4,6 +4,7 @@ import { plural, t } from "@lingui/core/macro";
 import { WordCommentCoverage } from "./WordCommentCoverage";
 import { WordShowInWordButton } from "./WordShowInWordButton";
 import { ACTION_BUTTON_CLASS } from "../../core/clientActions/clientActionButtonStyles";
+import { wordCommentMapListed } from "../utils/wordCommentMap";
 
 import type { WordCommentCoverageInfo } from "./WordCommentCoverage";
 import type {
@@ -109,7 +110,7 @@ export function wordCommentChipView({
     };
   }
   if (carrier.kind === "map" && list.threads.length > 0)
-    return { kind: "map", threads: list.threads.length + list.unplaced };
+    return { kind: "map", threads: wordCommentMapListed(list.threads.length) };
   return { kind: "none" };
 }
 

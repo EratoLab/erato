@@ -3063,6 +3063,11 @@ msgstr "Erledigte Kommentare werden nur gesendet, wenn sie in Ihrer Auswahl lieg
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.resolvedMap"
+msgstr "Die Liste enthält auch erledigte Kommentare, jeweils mit ihrem Anfang."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
 msgid "officeAddin.word.comments.coverage.rest"
 msgstr "{rest, plural, one {# weiterer Kommentar wird nicht gesendet.} other {# weitere Kommentare werden nicht gesendet.}}"
 

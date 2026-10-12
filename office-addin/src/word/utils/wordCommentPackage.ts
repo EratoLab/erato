@@ -38,7 +38,10 @@ export type WordCommentJoin = "durableId" | "content";
 export interface WordPackageComment {
   /** Package-local: Word numbers a package's comments afresh. */
   wId: string;
-  /** String(Comment.id); null without a commentsIds entry, as in every legacy file. */
+  /**
+   * String(Comment.id); null without a commentsIds entry. Word fills commentsIds with the session's
+   * ids even for a file that has none (gate F2), so this is null only in packages Word did not write.
+   */
   commentId: string | null;
   /** The w:id of the comment this one replies to (commentsExtended). */
   parentWId: string | null;
@@ -101,8 +104,6 @@ export interface WordParagraphView {
 }
 
 export interface WordCommentPackageRead {
-  /** No commentsIds part: ids are not stable, and marks join by content only (contract §4.5). */
-  legacy: boolean;
   comments: WordPackageComment[];
   /** One per paragraph given; null where the package and paragraph.text disagree. */
   views: (WordParagraphView | null)[];
@@ -497,10 +498,7 @@ function commentText(comment: Element): string {
     .join("\n");
 }
 
-function packageComments(doc: Document): {
-  comments: WordPackageComment[];
-  hasIds: boolean;
-} {
+function packageComments(doc: Document): WordPackageComment[] {
   const idsPart = doc.getElementsByTagNameNS(W16CID, "commentsIds")[0];
   const durableByParaId = new Map<string, string>();
   for (const entry of Array.from(
@@ -561,7 +559,7 @@ function packageComments(doc: Document): {
       content: commentText(comment),
     };
   });
-  return { comments, hasIds: idsPart !== undefined };
+  return comments;
 }
 
 interface Placed {
@@ -670,11 +668,10 @@ function readPlaced(
         : null,
     };
   });
-  const { comments, hasIds } = packageComments(doc);
+  const comments = packageComments(doc);
   const spans = spansOf(placed, comments);
   return {
     read: {
-      legacy: !hasIds && (comments.length > 0 || spans.length > 0),
       comments,
       views: placed.map((p) => p.view),
       spans,
@@ -776,9 +773,8 @@ function spanText(
 }
 
 /**
- * The legacy fallback (contract §4.5): a file without commentsIds names no comment, so each span
- * the package could not join is matched to a listed comment of the same paragraph by its content
- * and anchored text. Equal ones pair up in order; `listed` must be in document order, never in
+ * The fallback for a package without commentsIds (contract §4.5): each span the package could not
+ * join is matched to a listed comment of the same paragraph by its content and anchored text. Equal ones pair up in order; `listed` must be in document order, never in
  * items order (F-10). A group whose counts or anchors disagree stays unjoined.
  */
 export function joinWordCommentSpansByContent(

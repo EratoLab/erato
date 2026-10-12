@@ -6,7 +6,10 @@ import {
   installWordCommentHost,
   uninstallWordCommentHost,
 } from "../../../test/mocks/word/commentHost";
-import { V3C_ANCHORS } from "../../../test/mocks/word/commentPackages";
+import {
+  V3C_ANCHORS,
+  V3C_COMMENTS,
+} from "../../../test/mocks/word/commentPackages";
 import {
   WORD_COMMENT_SYNC_THREADS,
   readWordComments,
@@ -261,15 +264,34 @@ describe("replies", () => {
 
   it("reads no package without packages: the requested threads get replies only", async () => {
     const result = await read(
-      { host: "web" },
-      { replies: "requested", exact: askFor("T1", "T3"), packages: false },
+      { host: "pc" },
+      {
+        replies: "requested",
+        exact: askFor("T1", "T3"),
+        packages: false,
+        legacy: false,
+      },
     );
     expect(thread(result.threads, "T1").replies).toHaveLength(2);
     expect(thread(result.threads, "T1").placement).toBeUndefined();
     expect(thread(result.threads, "T2").replies).toBeNull();
-    expect(result.legacy).toBeNull();
+    expect(result.legacy).toBe(false);
     expect(host.calls()).not.toContain("paragraph.getOoxml");
     expect(host.calls()).not.toContain("range.getOoxml");
+    expect(phase(result, "exact")).toBeUndefined();
+    expect(phase(result, "legacy")).toBeUndefined();
+  });
+
+  it("reads only the packages of paragraphs with hidden text on the web without packages", async () => {
+    const result = await read(
+      { host: "web" },
+      { replies: "requested", exact: askFor("T1", "T3"), packages: false },
+    );
+    expect(thread(result.threads, "T1").placement).toBeUndefined();
+    expect(thread(result.threads, "T10").placement?.status).toBe("placed");
+    expect(
+      host.calls().filter((call) => call === "paragraph.getOoxml"),
+    ).toHaveLength(1);
     expect(phase(result, "exact")).toBeUndefined();
   });
 
@@ -518,7 +540,7 @@ describe("exact anchors", () => {
 
   it("places selection threads first and degrades the rest honestly past the budget", async () => {
     const onProgress = vi.fn();
-    const asked = ["T8", "T9", "T10", "T11", "T1", "T2", "T3"];
+    const asked = ["T8", "T9", "T6", "T11", "T1", "T2", "T3"];
     const { threads, diagnostics } = await read(
       { host: "web" },
       { exact: askFor(...asked), budgetsMs: { exact: 1500 }, onProgress },
@@ -563,7 +585,7 @@ describe("exact anchors", () => {
   });
 });
 
-describe("legacy files (F-2a, O-17)", () => {
+describe("legacy files (F-2a, O-17, gate F2)", () => {
   it("flags a modern file as not legacy from one probed package", async () => {
     const result = await read();
     expect(result.legacy).toBe(false);
@@ -573,25 +595,124 @@ describe("legacy files (F-2a, O-17)", () => {
     ).toHaveLength(1);
   });
 
-  it.each(HOSTS)(
-    "flags a file without commentsIds and matches its anchors by content on %s",
+  it("probes on past a package without dateUtc until one has it", async () => {
+    const result = await read({}, { exact: askFor("T5") });
+    expect(result.legacy).toBe(false);
+    expect(phase(result, "legacy")).toMatchObject({ done: 1 });
+  });
+
+  it.each(["pc", "mac"] as const)(
+    "takes a file legacy on %s once three packages show no dateUtc, though they carry the session's ids",
     async (h) => {
-      const result = await read(
-        { host: h, legacy: true },
-        { exact: askFor("T1", "T6", "T7", "T8") },
-      );
+      const result = await read({ host: h, legacy: true });
       expect(result.legacy).toBe(true);
-      expect(phase(result, "legacy")).toBeUndefined();
-      for (const key of ["T1", "T6", "T7", "T8"]) {
-        const placement = thread(result.threads, key).placement;
-        expect(placement?.status, key).toBe("placed");
-        expect(placement?.status === "placed" && placement.joinedBy, key).toBe(
-          "content",
-        );
-      }
-      expect(result.diagnostics.counts.matchedByContent).toBe(4);
+      expect(phase(result, "legacy")).toMatchObject({ syncs: 3, done: 3 });
     },
   );
+
+  it("counts the exact phase's packages towards the legacy answer", async () => {
+    const result = await read(
+      { legacy: true },
+      { exact: askFor("T1", "T6", "T7", "T8") },
+    );
+    expect(result.legacy).toBe(true);
+    expect(phase(result, "legacy")).toBeUndefined();
+    for (const key of ["T1", "T6", "T7", "T8"]) {
+      const placement = thread(result.threads, key).placement;
+      expect(placement?.status === "placed" && placement.joinedBy, key).toBe(
+        "durableId",
+      );
+    }
+  });
+
+  it("answers from Word's dates on the web, with no package read for it", async () => {
+    const modern = await read({ host: "web" });
+    expect(modern.legacy).toBe(false);
+    const legacy = await read({ host: "web", legacy: true });
+    expect(legacy.legacy).toBe(true);
+    expect(phase(legacy, "legacy")).toBeUndefined();
+  });
+
+  it("keeps what an earlier read of the document found", async () => {
+    const result = await read({ legacy: true }, { legacy: false });
+    expect(result.legacy).toBe(false);
+    expect(phase(result, "legacy")).toBeUndefined();
+    expect(host.calls()).not.toContain("paragraph.getOoxml");
+  });
+});
+
+describe("hidden text on the web (gate F1)", () => {
+  it("never reads the range of a comment whose paragraph has hidden text", async () => {
+    const result = await read(
+      { host: "web" },
+      { exact: () => ROOTS.map(host.commentId), selection: true },
+    );
+    expect(host.unhidden()).toEqual([]);
+    expect(host.rangesRead()).not.toContain("T10");
+    expect(host.rangesRead()).toContain("T9");
+    const t10 = thread(result.threads, "T10");
+    expect(t10.anchor?.first.ordinal).toBe(host.ordinalOf("T10P"));
+    expect(t10.placement).toMatchObject({
+      status: "placed",
+      joinedBy: "durableId",
+      anchor: { quote: "whiskey xray" },
+      offsets: { start: { range: 19, visible: 12 } },
+    });
+    expect(keysOf(result.threads)).toEqual(ROOTS);
+    expect(result.diagnostics.counts.hiddenParagraphs).toBe(1);
+    expect(phase(result, "hidden")).toMatchObject({ total: 1, done: 1 });
+  });
+
+  it("reads ranges as before on desktop", async () => {
+    const result = await read({ host: "pc" });
+    expect(host.rangesRead()).toContain("T10");
+    expect(phase(result, "hidden")).toBeUndefined();
+  });
+
+  it("reads no package where no commented paragraph has hidden text", async () => {
+    const result = await read({
+      host: "web",
+      document: generatedCommentDocument({ paragraphs: 3 }),
+    });
+    expect(host.calls()).not.toContain("paragraph.getOoxml");
+    expect(result.diagnostics.counts.hiddenParagraphs).toBe(0);
+    expect(result.threads.every((t) => t.anchor !== null)).toBe(true);
+  });
+
+  it("reads no range at all when a package does not explain its paragraph", async () => {
+    const result = await read({
+      host: "web",
+      document: {
+        body: [
+          {
+            tag: "H1",
+            segments: [
+              "Lead ",
+              { hidden: "secret " },
+              { cs: "G1" },
+              "one",
+              { ce: "G1" },
+            ],
+          },
+          {
+            tag: "P2",
+            segments: ["Plain ", { cs: "G2" }, "two", { ce: "G2" }],
+          },
+        ],
+        comments: {
+          G1: { ...V3C_COMMENTS.T1, content: "First." },
+          G2: { ...V3C_COMMENTS.T2, content: "Second." },
+        },
+      },
+    });
+    expect(host.rangesRead()).toEqual([]);
+    expect(host.unhidden()).toEqual([]);
+    expect(result.threads.every((t) => t.anchor === null)).toBe(true);
+    expect(result.diagnostics.counts.anchorsWithheld).toBe(2);
+    expect(renderWordCommentReadReport(result.diagnostics)).toContain(
+      "anchors withheld for hidden text 2",
+    );
+  });
 });
 
 describe("dateUtc from the packages read (F-4)", () => {
@@ -606,9 +727,9 @@ describe("dateUtc from the packages read (F-4)", () => {
     expect(result.dateUtc.otherwise).toBeNull();
   });
 
-  it("takes dateUtc for the rest when every comment shown had one", async () => {
+  it("never takes the comments no package showed for UTC", async () => {
     const result = await read({}, { exact: askFor("T1") });
-    expect(result.dateUtc.otherwise).toBe(true);
+    expect(result.dateUtc.otherwise).toBeNull();
   });
 
   it("knows nothing when no package was read", async () => {
@@ -618,7 +739,7 @@ describe("dateUtc from the packages read (F-4)", () => {
 
   it("finds no dateUtc in a legacy file", async () => {
     const result = await read({ legacy: true }, { exact: askFor("T1") });
-    expect(result.dateUtc.byId.size).toBe(0);
+    expect([...result.dateUtc.byId.values()].every((utc) => !utc)).toBe(true);
     expect(result.dateUtc.otherwise).toBe(false);
   });
 });

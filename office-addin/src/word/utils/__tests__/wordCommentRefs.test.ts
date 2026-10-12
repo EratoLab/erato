@@ -79,10 +79,15 @@ const refsOf = (
 ) => issueWordCommentRefs(registry, threads, legacy).threads.map((t) => t.ref);
 
 /** An id whose unsalted ref is the given one, found by search. */
-function idDerivingTo(ref: string, exclude: readonly string[] = []): string {
+function idDerivingTo(
+  ref: string,
+  exclude: readonly string[] = [],
+  accept: (id: string) => boolean = () => true,
+): string {
   for (let n = 1; n < 2_000_000; n += 1) {
     const id = String(n);
-    if (!exclude.includes(id) && wordCommentRefFor(id) === ref) return id;
+    if (!exclude.includes(id) && accept(id) && wordCommentRefFor(id) === ref)
+      return id;
   }
   throw new Error(`no id derives to ${ref}`);
 }
@@ -188,6 +193,32 @@ describe("collisions and reuse", () => {
     expect(forward).toEqual(backward);
     expect(forward[0]).not.toBe(forward[1]);
     expect(forward).toContain(wordCommentRefFor(a));
+  });
+
+  it("gives a thread added later in the session its salted ref again after a reload", () => {
+    const older = "1332042173";
+    // Sorting by source alone would hand the newer thread the unsalted ref.
+    const newer = idDerivingTo(
+      wordCommentRefFor(older),
+      [older],
+      (id) => id < older,
+    );
+    const threads = [
+      record(newer, { creationDate: new Date("2026-09-04T09:00:00Z") }),
+      record(older),
+    ];
+    const session = createWordCommentRefRegistry("doc");
+    issueWordCommentRefs(session, [threads[1]], false);
+    const before = issueWordCommentRefs(session, threads, false).threads.map(
+      (t) => t.ref,
+    );
+    const rebuilt = issueWordCommentRefs(
+      createWordCommentRefRegistry("doc"),
+      threads,
+      false,
+    ).threads.map((t) => t.ref);
+    expect(rebuilt).toEqual(before);
+    expect(before[1]).toBe(wordCommentRefFor(older));
   });
 
   it("keeps a thread's ref for the session and never reuses a deleted thread's ref", () => {

@@ -36,6 +36,11 @@ import type { WordHostPlatform } from "./wordHostPlatform";
  * items order, which follows end marks on desktop and starts on the web (F-10). getFileAsync and
  * getSelection().getComments() are never used: the first is the v1 route, the second differs by
  * host at anchor edges (F-11).
+ *
+ * Word for the web unhides hidden text in front of an anchor once Comment.getRange(), or anything
+ * on that range, runs, and the change is saved (ERMAIN-948 gate F1); paragraph.text, getText() and
+ * getOoxml() change nothing. Every host but PC and Mac therefore places the threads of a paragraph
+ * with hidden text from its package and never reads their ranges (guardHiddenText).
  */
 
 /** Contract §12: at most this many threads per sync. */
@@ -44,6 +49,8 @@ export const WORD_COMMENT_SYNC_THREADS = 50;
 export const WORD_COMMENT_EXACT_BATCH = 4;
 /** Longer multi-paragraph anchors are placed from their text, not from the range's package. */
 export const WORD_COMMENT_RANGE_PARAGRAPHS_MAX = 40;
+/** Packages without a dateUtc that make a desktop read call the file legacy. */
+export const WORD_COMMENT_LEGACY_PACKAGES = 3;
 /** compareLocationWith calls per sync when ordering threads that share a paragraph or lack one. */
 export const WORD_COMMENT_ORDER_PAIRS_PER_SYNC = 1000;
 export const WORD_COMMENT_ORDER_PAIRS_MAX = 5000;
@@ -56,6 +63,7 @@ export type WordCommentReadPhase =
   | "list"
   | "inventory"
   | "selection"
+  | "hidden"
   | WordCommentBudgetPhase
   | "order"
   | "relations"
@@ -205,7 +213,7 @@ export interface WordCommentThreadRecord extends WordCommentEntryRecord {
   anchor: WordCommentCoarseAnchor | null;
   /** 0-based rank in document order. */
   order: number;
-  /** Only for the threads the exact request named. */
+  /** For the threads the exact request named, and those placed from a package for hidden text. */
   placement?: WordCommentPlacement;
   /**
    * The anchor's compareLocationWith the user's selection, as Word names the relation; only for
@@ -239,6 +247,10 @@ export interface WordCommentReadCounts {
   idsRepeated: number;
   anchorsFailed: number;
   anchorsSkipped: number;
+  /** Paragraphs with comments and hidden text, whose threads were placed from their packages. */
+  hiddenParagraphs: number;
+  /** Threads whose ranges were not read, because a paragraph with hidden text was not explained. */
+  anchorsWithheld: number;
   paragraphsByText: number;
   positionUnknown: number;
   placed: number;
@@ -275,7 +287,10 @@ export type WordCommentReadResult =
       threads: WordCommentThreadRecord[];
       /** Null when there was nothing to place. */
       inventory: WordCommentInventory | null;
-      /** No commentsIds in the file: ids hold for this pane session only (F-2a, O-17). Null: unknown. */
+      /**
+       * Ids hold for this pane session only (F-2a, O-17), as no comment has a dateUtc (see
+       * wordCommentLegacy). Null: unknown.
+       */
       legacy: boolean | null;
       dateUtc: WordCommentDateUtc;
       /** Null unless the read was asked to relate anchors to the selection, or it could not. */
@@ -292,8 +307,8 @@ export interface WordCommentDateUtc {
   /** By String(Comment.id) of comments and replies. */
   byId: ReadonlyMap<string, boolean>;
   /**
-   * For the comments no package showed: true when every comment the packages showed had dateUtc,
-   * false when none had, null when they differed or no package showed one.
+   * For the comments no package showed: false in a legacy file, which has no dateUtc at all, and
+   * otherwise null. A sample of packages never vouches for the rest, so they are never taken as UTC.
    */
   otherwise: boolean | null;
 }
@@ -317,10 +332,16 @@ export interface WordCommentReadOptions {
   /** "requested" reads replies only for the threads `exact` names (Word for Mac lists them slowly). */
   replies?: "all" | "requested";
   /**
-   * False reads no OOXML package (about 0.7 s each on the web): `exact` then only names the threads
-   * whose replies to list, and `legacy` stays unknown, so refs stay those of the ids.
+   * False reads no package for exact anchors (about 0.7 s each on the web): `exact` then only names
+   * the threads whose replies to list. Paragraphs with hidden text off desktop, and on desktop the
+   * packages that tell `legacy` while it is unknown, are read all the same.
    */
   packages?: boolean;
+  /**
+   * What an earlier read of this document found in this pane session; the read then asks no package
+   * for it, so refs keep the source they started with.
+   */
+  legacy?: boolean | null;
   budgetsMs?: Partial<Record<WordCommentBudgetPhase, number>>;
   timeoutMs?: number;
   onProgress?: (
@@ -389,6 +410,8 @@ class Session {
       idsRepeated: 0,
       anchorsFailed: 0,
       anchorsSkipped: 0,
+      hiddenParagraphs: 0,
+      anchorsWithheld: 0,
       paragraphsByText: 0,
       positionUnknown: 0,
       placed: 0,
@@ -441,6 +464,11 @@ class Session {
     if (this.now() - this.started < timing.budgetMs) return false;
     timing.exhausted = true;
     return true;
+  }
+
+  /** For a phase that learns what it covers only after its first sync. */
+  cover(total: number) {
+    if (this.timing) this.timing.total = total;
   }
 
   advance(done: number) {
@@ -577,7 +605,20 @@ async function readThreads(
   const selection = options.selection
     ? await readLiveSelection(context, session, inventory)
     : null;
-  await readAnchors(context, session, live, inventory, budgets.anchors);
+  // Only PC and Mac are known to read comment ranges without changing the document.
+  const desktop = diagnostics.host === "PC" || diagnostics.host === "Mac";
+  const notes = new PackageNotes();
+  const hidden = desktop
+    ? null
+    : await guardHiddenText(
+        context,
+        session,
+        live,
+        inventory,
+        budgets.anchors,
+        notes,
+      );
+  await readAnchors(context, session, live, inventory, budgets.anchors, hidden);
   const sorted = await orderThreads(session, live);
   if (selection) await relateSelection(session, sorted, selection);
   const records = sorted.map((thread) => thread.record);
@@ -591,12 +632,16 @@ async function readThreads(
     options.replies === "requested" ? asked : sorted,
     budgets.replies,
   );
-  const notes = new PackageNotes();
-  if (options.packages !== false) {
-    await placeExact(session, sorted, asked, budgets.exact, notes);
-    if (notes.legacy === null) await probeLegacy(session, sorted, notes);
+  if (options.packages !== false)
+    await placeExact(session, sorted, asked, budgets.exact, notes, desktop);
+  let legacy = options.legacy ?? null;
+  if (legacy === null) {
+    if (!desktop) legacy = undatedFile(records);
+    else {
+      if (notes.undecided()) await probeLegacy(session, sorted, notes);
+      legacy = notes.legacy();
+    }
   }
-  const legacy = notes.legacy;
 
   diagnostics.legacy = legacy;
   diagnostics.replies = records.reduce(
@@ -613,6 +658,35 @@ async function readThreads(
     selection: selection?.info ?? null,
     diagnostics,
   };
+}
+
+/**
+ * A file without commentsIds has no stable ids (F-2a), yet every host's paragraph package carries
+ * commentsIds with the session's ids (gate F2), so their absence never shows. A file without
+ * commentsIds has no commentsExtensible either, as dateUtc is keyed by durableId, and Word invents
+ * no dateUtc: a file without any is taken as legacy. A modern file whose comments all lack one, as
+ * older Word versions write them, is taken as legacy too, and its threads are named by content.
+ */
+function wordCommentLegacy(dated: {
+  withUtc: number;
+  withoutUtc: number;
+}): boolean | null {
+  if (dated.withUtc > 0) return false;
+  return dated.withoutUtc > 0 ? true : null;
+}
+
+/** The web gives creationDate only from dateUtc (F-4), so its dates answer for every thread read. */
+function undatedFile(
+  records: readonly WordCommentThreadRecord[],
+): boolean | null {
+  const entries = records.flatMap((record) => [
+    record,
+    ...(record.replies ?? []),
+  ]);
+  return wordCommentLegacy({
+    withUtc: entries.filter((entry) => entry.creationDate !== null).length,
+    withoutUtc: entries.filter((entry) => entry.creationDate === null).length,
+  });
 }
 
 interface LiveSelection {
@@ -841,17 +915,235 @@ function tableNumbers(nesting: readonly number[]): (number | null)[] {
   });
 }
 
+const REFERENCE_MARK = "\u0005";
+const TEXT_MARKS = /[\u0002\u0005]/g;
+/** What paragraph.text spells without its marks on the web, unless the paragraph has hidden text. */
+const SHOWN_TEXT_OPTIONS = {
+  IncludeHiddenText: false,
+  IncludeTextMarkedAsDeleted: true,
+} as const;
+
+interface HiddenGuard {
+  /** Threads anchored in a paragraph with hidden text, placed from its package. */
+  anchors: Map<Live, RawAnchor>;
+  /** Those paragraphs' ordinals where no paragraph id gives one. */
+  ordinals: Map<RawParagraph, number>;
+  /** A paragraph with hidden text was not fully explained, so no thread's range is read. */
+  withhold: boolean;
+}
+
+interface HiddenRead {
+  index: number;
+  paragraph: Word.Paragraph;
+  /** Only for a paragraph in a table: nothing but text and the package is asked of the rest. */
+  cell: Word.TableCell | null;
+  identity: ReturnType<Word.Paragraph["getText"]>;
+  ooxml: ReturnType<Word.Paragraph["getOoxml"]>;
+}
+
+/**
+ * Whether Show in Word may read this comment's range (gate F1): always on PC and Mac; elsewhere
+ * only when no paragraph with hidden text marks it and every such paragraph is explained.
+ * `comments` are body.getComments() with their ids loaded.
+ */
+export async function wordCommentRangeReadable(
+  context: Word.RequestContext,
+  comments: readonly Word.Comment[],
+  commentId: string,
+): Promise<boolean> {
+  const host = wordHostPlatform();
+  if (host === "PC" || host === "Mac") return true;
+  const session = new Session(Date.now, undefined);
+  session.attach(context);
+  const live: Live[] = comments.map((comment) => ({
+    comment,
+    record: {
+      ...entryOf({
+        id: comment.id,
+        authorName: "",
+        authorEmail: null,
+        creationDate: null,
+        content: "",
+      }),
+      resolved: false,
+      replies: null,
+      readOnly: null,
+      anchor: null,
+      order: 0,
+    },
+  }));
+  const guard = await guardHiddenText(
+    context,
+    session,
+    live,
+    { source: "capture", paragraphs: [] },
+    WORD_COMMENT_READ_BUDGETS_MS.anchors,
+    new PackageNotes(),
+  );
+  return (
+    !guard.withhold &&
+    ![...guard.anchors.keys()].some(({ record }) => record.id === commentId)
+  );
+}
+
+/**
+ * Off desktop (gate F1), a paragraph with a reference (U+0005, F-7) whose paragraph.text holds text
+ * getText() leaves out is read from its own package, and the threads marked there are placed from
+ * it by durableId with no range read. When a package does not explain every reference in its
+ * paragraph, or names a thread the list does not hold once, no thread's range is read at all. A
+ * thread that only starts in such a paragraph has no marks there (F-13) and is not caught.
+ */
+async function guardHiddenText(
+  context: Word.RequestContext,
+  session: Session,
+  live: readonly Live[],
+  inventory: WordCommentInventory,
+  budgetMs: number,
+  notes: PackageNotes,
+): Promise<HiddenGuard> {
+  const guard: HiddenGuard = {
+    anchors: new Map(),
+    ordinals: new Map(),
+    withhold: false,
+  };
+  session.begin("hidden", 0, budgetMs);
+  let done = 0;
+  try {
+    const paragraphs = context.document.body.paragraphs;
+    paragraphs.load("items/uniqueLocalId,items/text,items/tableNestingLevel");
+    await session.sync();
+    const items = paragraphs.items;
+    const marked = items.flatMap((p, i) =>
+      p.text.includes(REFERENCE_MARK) ? [i] : [],
+    );
+    if (marked.length === 0) {
+      session.end(0);
+      return guard;
+    }
+    const shown = marked.map((i) => items[i].getText(SHOWN_TEXT_OPTIONS));
+    await session.sync();
+    const hidden = marked.filter(
+      (i, k) => items[i].text.replace(TEXT_MARKS, "") !== shown[k].value,
+    );
+    session.cover(hidden.length);
+    session.diagnostics.counts.hiddenParagraphs = hidden.length;
+    const byId = new Map<string, Live[]>();
+    for (const thread of live)
+      byId.set(thread.record.id, [
+        ...(byId.get(thread.record.id) ?? []),
+        thread,
+      ]);
+    const positional =
+      inventory.source === "light" &&
+      inventory.paragraphs.length === items.length;
+    for (const batch of chunks(hidden, WORD_COMMENT_EXACT_BATCH)) {
+      if (session.spent()) {
+        guard.withhold = true;
+        break;
+      }
+      const reads = batch.map((index): HiddenRead => {
+        const paragraph = items[index];
+        const cell =
+          paragraph.tableNestingLevel > 0
+            ? paragraph.parentTableCellOrNullObject
+            : null;
+        cell?.load("rowIndex,cellIndex");
+        return {
+          index,
+          paragraph,
+          cell,
+          identity: paragraph.getText(WORD_SELECTION_TEXT_OPTIONS),
+          ooxml: paragraph.getOoxml(),
+        };
+      });
+      await session.sync();
+      for (const read of reads) {
+        const { paragraph, cell } = read;
+        const edge: RawParagraph = {
+          id: wordParagraphId(paragraph.uniqueLocalId),
+          rangeText: paragraph.text,
+          nesting: paragraph.tableNestingLevel,
+          cell:
+            !cell || cell.isNullObject
+              ? null
+              : { row: cell.rowIndex, cell: cell.cellIndex },
+        };
+        // The light inventory lists the same body paragraphs in this run.
+        if (positional) guard.ordinals.set(edge, read.index + 1);
+        if (!placeHidden(read, edge, byId, guard, notes)) guard.withhold = true;
+      }
+      done += batch.length;
+    }
+  } catch (error) {
+    session.note(error);
+    guard.withhold = true;
+  }
+  session.end(done);
+  return guard;
+}
+
+/** True when the package explains its paragraph: every reference, and each thread once. */
+function placeHidden(
+  read: HiddenRead,
+  edge: RawParagraph,
+  byId: ReadonlyMap<string, readonly Live[]>,
+  guard: HiddenGuard,
+  notes: PackageNotes,
+): boolean {
+  const { paragraph } = read;
+  const found = readWordCommentParagraphPackage(read.ooxml.value, {
+    rangeText: paragraph.text,
+    identityText: read.identity.value,
+    inCell: edge.nesting > 0,
+    ...(edge.cell ? { cellIndex: edge.cell.cell } : {}),
+  });
+  notes.note(found);
+  // A view proves that each U+0005 of paragraph.text is a reference the package holds.
+  if (!found?.views[0]) return false;
+  const replies = new Set(
+    found.comments.flatMap((c) => (c.parentWId ? [c.wId] : [])),
+  );
+  let explained = true;
+  for (const span of found.spans) {
+    if (replies.has(span.wId)) continue;
+    const threads = span.commentId ? (byId.get(span.commentId) ?? []) : [];
+    const placement =
+      threads.length === 1 ? placeBySpan(found, found.spans, threads[0]) : null;
+    if (placement?.status !== "placed") {
+      explained = false;
+      continue;
+    }
+    const [thread] = threads;
+    const { start, end } = placement.offsets;
+    const tail =
+      paragraph.text[end.range] === REFERENCE_MARK ? REFERENCE_MARK : "";
+    thread.first = paragraph;
+    thread.last = paragraph;
+    thread.record.placement = placement;
+    guard.anchors.set(thread, {
+      rangeText: paragraph.text.slice(start.range, end.range) + tail,
+      first: edge,
+      last: edge,
+    });
+  }
+  return explained;
+}
+
 async function readAnchors(
   context: Word.RequestContext,
   session: Session,
   live: readonly Live[],
   inventory: WordCommentInventory,
   budgetMs: number,
+  hidden: HiddenGuard | null,
 ) {
-  session.begin("anchors", live.length, budgetMs);
-  const raw = new Map<Live, RawAnchor>();
+  const ranged = live.filter((thread) => !hidden?.anchors.has(thread));
+  const reading = hidden?.withhold ? [] : ranged;
+  session.diagnostics.counts.anchorsWithheld = ranged.length - reading.length;
+  session.begin("anchors", reading.length, budgetMs);
+  const raw = new Map<Live, RawAnchor>(hidden?.anchors ?? []);
   let done = 0;
-  for (const batch of chunks(live, WORD_COMMENT_SYNC_THREADS)) {
+  for (const batch of chunks(reading, WORD_COMMENT_SYNC_THREADS)) {
     if (session.spent()) break;
     const queued = batch.map((thread) => queueAnchor(thread));
     try {
@@ -873,19 +1165,20 @@ async function readAnchors(
     done += batch.length;
     session.advance(done);
   }
-  session.diagnostics.counts.anchorsSkipped = live.length - done;
+  session.diagnostics.counts.anchorsSkipped = reading.length - done;
 
   const byId = idIndex(inventory);
-  const ordinals = new Map<RawParagraph, number>();
+  const ordinals = new Map<RawParagraph, number>(hidden?.ordinals ?? []);
   for (const anchor of raw.values())
     for (const edge of [anchor.first, anchor.last]) {
       const ordinal = edge.id ? byId.get(edge.id) : undefined;
       if (ordinal !== undefined) ordinals.set(edge, ordinal);
     }
+  // A paragraph placed for its hidden text gets no range of its own, not even to prove an ordinal.
   const byText = await proveByText(
     context,
     session,
-    live,
+    reading,
     raw,
     inventory,
     ordinals,
@@ -919,6 +1212,7 @@ async function readAnchors(
       first,
       last,
       single:
+        anchor.first === anchor.last ||
         (!!anchor.first.id && anchor.first.id === anchor.last.id) ||
         (first.ordinal !== null && first.ordinal === last.ordinal) ||
         byText.same.get(thread) === true,
@@ -1047,17 +1341,31 @@ function byId(a: WordCommentThreadRecord, b: WordCommentThreadRecord) {
     : a.id.localeCompare(b.id);
 }
 
+/** Two anchors placed from one paragraph's package, by their offsets in it. */
+function offsetOrder(a: Live, b: Live): number {
+  const x = a.record.placement;
+  const y = b.record.placement;
+  if (x?.status !== "placed" || y?.status !== "placed" || a.first !== b.first)
+    return 0;
+  return (
+    x.offsets.start.range - y.offsets.start.range ||
+    x.offsets.end.range - y.offsets.end.range
+  );
+}
+
 /**
  * Document order of anchor starts, then ends: ordinals first, and compareLocationWith between the
- * comments' ranges where two start in one paragraph or one has no ordinal. The id breaks ties that
- * neither decides, so the order never depends on the order Word lists items in.
+ * comments' ranges where two start in one paragraph or one has no ordinal; anchors placed for
+ * hidden text have no range, and their offsets decide. The id breaks ties that none decides, so
+ * the order never depends on the order Word lists items in.
  */
 async function orderThreads(
   session: Session,
   live: readonly Live[],
 ): Promise<Live[]> {
   const anchored = live.filter(
-    (thread) => thread.range && thread.record.anchor,
+    (thread) =>
+      (thread.range || thread.record.placement) && thread.record.anchor,
   );
   const placed = new Set(anchored);
   const ordinalOf = (thread: Live) =>
@@ -1070,13 +1378,15 @@ async function orderThreads(
     if (ordinal === null) unknown.push(thread);
     else groups.set(ordinal, [...(groups.get(ordinal) ?? []), thread]);
   }
+  const ranged = (a: Live, b: Live) => !!a.range && !!b.range;
   for (const group of [...groups.values(), unknown])
     for (let i = 0; i < group.length; i += 1)
       for (let j = i + 1; j < group.length; j += 1)
-        pairs.push([group[i], group[j]]);
+        if (ranged(group[i], group[j])) pairs.push([group[i], group[j]]);
   for (const thread of unknown)
     for (const other of anchored)
-      if (ordinalOf(other) !== null) pairs.push([thread, other]);
+      if (ordinalOf(other) !== null && ranged(thread, other))
+        pairs.push([thread, other]);
   const asked = pairs.slice(0, WORD_COMMENT_ORDER_PAIRS_MAX);
   session.begin("order", pairs.length);
   const relations = new Map<Live, Map<Live, string>>();
@@ -1113,7 +1423,7 @@ async function orderThreads(
     const x = ordinalOf(a);
     const y = ordinalOf(b);
     if (x !== null && y !== null && x !== y) return x - y;
-    return relationOf(a, b) || byId(a.record, b.record);
+    return offsetOrder(a, b) || relationOf(a, b) || byId(a.record, b.record);
   });
   sorted.forEach((thread, i) => {
     thread.record.order = i;
@@ -1306,20 +1616,22 @@ function textsOf(
 
 interface ExactContext {
   sorted: readonly Live[];
-  web: boolean;
+  /** PC and Mac read a multi-paragraph range's package; ERMAIN-932 saw web engines rewrite it. */
+  rangePackages: boolean;
   notePackage: (read: WordCommentPackageRead | null) => void;
 }
 
-/** What the packages read show about the file: commentsIds at all, and dateUtc per comment. */
+/** What the packages read show: dateUtc per comment, and whether the file has any (legacy). */
 class PackageNotes {
-  legacy: boolean | null = null;
   private readonly utc = new Map<string, boolean>();
   private withUtc = 0;
   private withoutUtc = 0;
+  /** Packages read that held comments. */
+  private packages = 0;
 
   note(read: WordCommentPackageRead | null) {
     if (!read || read.comments.length === 0) return;
-    this.legacy ??= read.legacy;
+    this.packages += 1;
     for (const comment of read.comments) {
       const has = comment.dateUtc !== null;
       if (has) this.withUtc += 1;
@@ -1328,18 +1640,29 @@ class PackageNotes {
     }
   }
 
+  legacy(): boolean | null {
+    return wordCommentLegacy({
+      withUtc: this.withUtc,
+      withoutUtc: this.withoutUtc,
+    });
+  }
+
+  /** One more package could still show a dateUtc that every package so far lacked. */
+  undecided(): boolean {
+    return this.withUtc === 0 && this.packages < WORD_COMMENT_LEGACY_PACKAGES;
+  }
+
   dateUtc(): WordCommentDateUtc {
     return {
       byId: new Map(this.utc),
-      otherwise:
-        this.withUtc > 0 && this.withoutUtc === 0
-          ? true
-          : this.withoutUtc > 0 && this.withUtc === 0
-            ? false
-            : null,
+      otherwise: this.legacy() === true ? false : null,
     };
   }
 }
+
+/** Spans no commentsIds entry named, which only a content join can pair with listed threads. */
+const unjoined = (read: WordCommentPackageRead) =>
+  read.spans.some((span) => !span.commentId);
 
 function samePlace(a: WordCommentParagraphRef, b: WordCommentParagraphRef) {
   return a.ordinal !== null && a.ordinal === b.ordinal;
@@ -1359,18 +1682,19 @@ function paragraphJob(threads: Live[], ctx: ExactContext): Job {
       const texts = textsOf(paragraph, identity, anchor.first);
       const read = readWordCommentParagraphPackage(ooxml.value, texts);
       ctx.notePackage(read);
-      const spans = read?.legacy
-        ? joinWordCommentSpansByContent(
-            read,
-            listedFor(
-              ctx.sorted.filter(
-                (t) =>
-                  t.record.anchor?.single &&
-                  samePlace(t.record.anchor.first, anchor.first),
+      const spans =
+        read && unjoined(read)
+          ? joinWordCommentSpansByContent(
+              read,
+              listedFor(
+                ctx.sorted.filter(
+                  (t) =>
+                    t.record.anchor?.single &&
+                    samePlace(t.record.anchor.first, anchor.first),
+                ),
               ),
-            ),
-          )
-        : (read?.spans ?? []);
+            )
+          : (read?.spans ?? []);
       const view = read?.views[0] ?? wordParagraphViewFromText(texts);
       for (const thread of job.threads)
         thread.record.placement =
@@ -1441,7 +1765,10 @@ function rangeJob(thread: Live, ctx: ExactContext): Job {
       first.ordinal !== null && last.ordinal !== null
         ? last.ordinal - first.ordinal + 1
         : null;
-    if (ctx.web || (span !== null && span > WORD_COMMENT_RANGE_PARAGRAPHS_MAX))
+    if (
+      !ctx.rangePackages ||
+      (span !== null && span > WORD_COMMENT_RANGE_PARAGRAPHS_MAX)
+    )
       return done(textJob(thread, ctx));
     const whole = thread
       .first!.getRange("Whole")
@@ -1464,25 +1791,26 @@ function rangeJob(thread: Live, ctx: ExactContext): Job {
         }));
         const read = readWordCommentRangePackage(ooxml.value, texts);
         ctx.notePackage(read);
-        const spans = read?.legacy
-          ? joinWordCommentSpansByContent(
-              read,
-              listedFor(
-                ctx.sorted.filter((t) => {
-                  const a = t.record.anchor;
-                  return (
-                    !!a &&
-                    first.ordinal !== null &&
-                    last.ordinal !== null &&
-                    a.first.ordinal !== null &&
-                    a.last.ordinal !== null &&
-                    a.first.ordinal >= first.ordinal &&
-                    a.last.ordinal <= last.ordinal
-                  );
-                }),
-              ),
-            )
-          : (read?.spans ?? []);
+        const spans =
+          read && unjoined(read)
+            ? joinWordCommentSpansByContent(
+                read,
+                listedFor(
+                  ctx.sorted.filter((t) => {
+                    const a = t.record.anchor;
+                    return (
+                      !!a &&
+                      first.ordinal !== null &&
+                      last.ordinal !== null &&
+                      a.first.ordinal !== null &&
+                      a.last.ordinal !== null &&
+                      a.first.ordinal >= first.ordinal &&
+                      a.last.ordinal <= last.ordinal
+                    );
+                  }),
+                ),
+              )
+            : (read?.spans ?? []);
         const views = [0, items.length - 1].map(
           (i) => read?.views[i] ?? wordParagraphViewFromText(texts[i]),
         );
@@ -1502,6 +1830,7 @@ function jobsFor(asked: readonly Live[], ctx: ExactContext): Job[] {
   const byParagraph = new Map<string, Job>();
   for (const thread of asked) {
     const anchor = thread.record.anchor;
+    if (thread.record.placement) continue;
     if (!anchor || !thread.first || !thread.last) {
       thread.record.placement = notPlaced(thread, "failed");
       continue;
@@ -1543,10 +1872,11 @@ async function placeExact(
   asked: readonly Live[],
   budgetMs: number,
   notes: PackageNotes,
+  desktop: boolean,
 ) {
   const ctx: ExactContext = {
     sorted,
-    web: session.diagnostics.host === "OfficeOnline",
+    rangePackages: desktop,
     notePackage: (read) => notes.note(read),
   };
   session.begin("exact", asked.length, budgetMs);
@@ -1586,21 +1916,43 @@ async function placeExact(
   session.end(done);
 }
 
-/** One commented paragraph's package tells whether the file has commentsIds at all. */
+/**
+ * Desktop: commented paragraphs' packages, one per sync, until one shows a dateUtc or enough show
+ * none; paragraphs the exact phase read already count.
+ */
 async function probeLegacy(
   session: Session,
   sorted: readonly Live[],
   notes: PackageNotes,
 ) {
-  const thread = sorted.find((t) => t.record.anchor?.single && t.first);
-  if (!thread?.first || !thread.record.anchor) return;
-  session.begin("legacy", 1);
-  const paragraph = thread.first;
-  const ref = thread.record.anchor.first;
-  paragraph.load("text");
-  const ooxml = paragraph.getOoxml();
-  try {
-    await session.sync();
+  const seen = new Set<string>();
+  const candidates = sorted.filter((thread) => {
+    const anchor = thread.record.anchor;
+    if (!anchor?.single || !thread.first || thread.record.placement)
+      return false;
+    const key =
+      anchor.first.ordinal === null
+        ? `t${thread.record.id}`
+        : `o${anchor.first.ordinal}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (candidates.length === 0) return;
+  session.begin("legacy", candidates.length);
+  let done = 0;
+  for (const thread of candidates) {
+    if (!notes.undecided()) break;
+    const paragraph = thread.first!;
+    const ref = thread.record.anchor!.first;
+    paragraph.load("text");
+    const ooxml = paragraph.getOoxml();
+    try {
+      await session.sync();
+    } catch (error) {
+      session.note(error);
+      break;
+    }
     notes.note(
       readWordCommentParagraphPackage(ooxml.value, {
         rangeText: paragraph.text,
@@ -1608,11 +1960,9 @@ async function probeLegacy(
         ...(ref.cell ? { cellIndex: ref.cell.cell } : {}),
       }),
     );
-    session.end(1);
-  } catch (error) {
-    session.note(error);
-    session.end(0);
+    done += 1;
   }
+  session.end(done);
 }
 
 const plural = (n: number, one: string, many = `${one}s`) =>
@@ -1636,10 +1986,12 @@ export function renderWordCommentReadReport(
     [counts.idsRepeated, "ids repeated"],
     [counts.anchorsFailed, "anchors failed"],
     [counts.anchorsSkipped, "anchors skipped"],
+    [counts.anchorsWithheld, "anchors withheld for hidden text"],
     [counts.positionUnknown, "position unknown"],
   ]);
   const placement = listed([
     [counts.placed, "placed"],
+    [counts.hiddenParagraphs, "paragraphs with hidden text from packages"],
     [counts.matchedByContent, "by content"],
     [counts.paragraphsByText, "paragraphs by text"],
     [counts.unplaced, "unplaced"],

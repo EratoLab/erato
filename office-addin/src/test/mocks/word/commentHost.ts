@@ -24,7 +24,8 @@ import type { Mock } from "vitest";
  * - web: Comment.id is a number; items come in start order; creationDate keeps seconds, and is
  *   null without dateUtc; paragraph.text shows U+0005 at references and hidden text; a comment's
  *   range text ends in its U+0005 and joins cells with "\r"; `repliesWithRoot` models comments.xml
- *   out of w:id order, where replies list the root and drop a real reply.
+ *   out of w:id order, where replies list the root and drop a real reply; reading the range of a
+ *   comment whose paragraph has hidden text unhides it (gate F1), which `unhidden()` reports.
  */
 
 export type CommentHostFlavour = "pc" | "mac" | "web";
@@ -152,8 +153,15 @@ export function generatedCommentDocument(
 export interface CommentHostOptions {
   host?: CommentHostFlavour;
   document?: CommentHostDocument;
-  /** No commentsIds in the file: ids change per open, packages carry no commentsIds (F-2a). */
+  /**
+   * No commentsIds, commentsExtensible or dateUtc in the file: ids change per open (F-2a), and
+   * packages carry the session's ids (gate F2).
+   */
   legacy?: boolean;
+  /** Packages carry no comment parts but the comments, as no measured host wrote them. */
+  idless?: boolean;
+  /** Which open of a legacy file this is: each open gives its comments other ids. */
+  open?: number;
   nullParagraphIds?: boolean;
   /** Lists the comments in a seeded shuffle of the host's own order. */
   shuffle?: number;
@@ -200,6 +208,10 @@ export interface CommentHost {
   now(): number;
   /** What Comment.id returns, in the order the host lists comments. */
   listedIds(): (string | number)[];
+  /** Comment keys whose getRange() was called, in call order. */
+  rangesRead(): string[];
+  /** Paragraphs whose hidden text a comment range read unhid on the web (gate F1). */
+  unhidden(): string[];
   /** String(Comment.id) of a comment key. */
   commentId(key: string): string;
   ordinalOf(tag: string): number;
@@ -246,6 +258,12 @@ interface Command {
 interface Laid {
   rangeText: string;
   visible: string;
+  hidden: boolean;
+  /** getText() with these of Word.GetTextOptions. */
+  shown: (options?: {
+    IncludeHiddenText?: boolean;
+    IncludeTextMarkedAsDeleted?: boolean;
+  }) => string;
   starts: Map<string, number>;
   ends: Map<string, number>;
 }
@@ -256,6 +274,20 @@ function lay(segments: readonly Segment[], web: boolean): Laid {
   let visible = "";
   const starts = new Map<string, number>();
   const ends = new Map<string, number>();
+  const shown: Laid["shown"] = (options = {}) =>
+    segments
+      .map((segment) =>
+        typeof segment === "string"
+          ? segment
+          : "hidden" in segment
+            ? options.IncludeHiddenText
+              ? segment.hidden
+              : ""
+            : "del" in segment && options.IncludeTextMarkedAsDeleted
+              ? segment.del
+              : "",
+      )
+      .join("");
   for (const segment of segments) {
     if (typeof segment === "string") {
       rangeText += segment;
@@ -273,7 +305,14 @@ function lay(segments: readonly Segment[], web: boolean): Laid {
       if (web) rangeText += "\u0005";
     }
   }
-  return { rangeText, visible, starts, ends };
+  return {
+    rangeText,
+    visible,
+    hidden: segments.some((s) => typeof s !== "string" && "hidden" in s),
+    shown,
+    starts,
+    ends,
+  };
 }
 
 interface Para {
@@ -358,9 +397,15 @@ export function installWordCommentHost(
     ...options.costs,
   };
   const message = options.errorMessage ?? "The operation failed.";
-  const packageOptions: V3cPackageOptions = options.legacy
-    ? { legacy: true }
-    : {};
+  const packageOptions: V3cPackageOptions = options.idless
+    ? { idless: true }
+    : options.legacy
+      ? {
+          legacy: true,
+          sessionIds: (key) =>
+            Number(idOf(key)).toString(16).toUpperCase().padStart(8, "0"),
+        }
+      : {};
 
   const paragraphs: Para[] = [];
   let tables = 0;
@@ -424,11 +469,13 @@ export function installWordCommentHost(
 
   const idOf = (key: string): string =>
     options.legacy
-      ? String(9_000_000 + keys.indexOf(key) * 7 + 3)
+      ? String(
+          9_000_000 + (options.open ?? 0) * 1000 + keys.indexOf(key) * 7 + 3,
+        )
       : String(parseInt(document.comments[key].durableId, 16));
   const officeId = (key: string) => (web ? Number(idOf(key)) : idOf(key));
   const dateOf = (comment: V3cComment): Date | null => {
-    if (comment.dateUtc) {
+    if (comment.dateUtc && !options.legacy) {
       const date = new Date(comment.dateUtc);
       if (!web) date.setUTCSeconds(0, 0);
       return date;
@@ -450,6 +497,8 @@ export function installWordCommentHost(
   let syncs = 0;
   let clock = 0;
   const callLog: string[] = [];
+  const rangeLog: string[] = [];
+  const unhid = new Set<string>();
   const syncEntries: CommentHostSync[] = [];
   const enqueue = (command: Command) => {
     callLog.push(command.call);
@@ -636,8 +685,8 @@ export function installWordCommentHost(
     get parentTableCellOrNullObject() {
       return new MockTableCell(this.p);
     }
-    getText(_options?: unknown) {
-      return result("paragraph.getText", () => this.p.laid.visible);
+    getText(options?: Parameters<Laid["shown"]>[0]) {
+      return result("paragraph.getText", () => this.p.laid.shown(options));
     }
     getOoxml() {
       return result(
@@ -822,7 +871,11 @@ export function installWordCommentHost(
     }
     getRange() {
       callLog.push("comment.getRange");
-      return new MockRange(anchors.get(this.key)!, this.key);
+      rangeLog.push(this.key);
+      const anchor = anchors.get(this.key)!;
+      const first = paragraphs[anchor.first];
+      if (web && first.laid.hidden) unhid.add(first.tag);
+      return new MockRange(anchor, this.key);
     }
   }
 
@@ -901,6 +954,8 @@ export function installWordCommentHost(
     calls: () => [...callLog],
     now: () => clock,
     listedIds: () => listed.map(officeId),
+    rangesRead: () => [...rangeLog],
+    unhidden: () => [...unhid],
     commentId: idOf,
     ordinalOf: (tag) => {
       const p = byTag.get(tag);

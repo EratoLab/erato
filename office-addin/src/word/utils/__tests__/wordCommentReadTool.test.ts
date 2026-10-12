@@ -167,6 +167,20 @@ afterEach(() => {
   uninstallWordCommentHost();
 });
 
+describe("a request sent without comments", () => {
+  it("reads nothing, not even near the selection", async () => {
+    install();
+    activate({
+      selection: ON_T8,
+      gestures: { document: true },
+      withheld: true,
+    });
+    const refusal = await refused({ near: { selection: true } });
+    expect(refusal.code).toBe("comments-withheld");
+    expect(host.calls()).not.toContain("body.getComments");
+  });
+});
+
 describe("near reads", () => {
   it("stop at the 3 nearest threads above and below the selection without a gesture", async () => {
     install();
@@ -194,8 +208,23 @@ describe("near reads", () => {
       remaining: 0,
     });
     expect(result.coverage_line).toContain(
-      "6 more matching threads lie beyond the 3 nearest above and below the selection",
+      "6 more threads with this status lie beyond the 3 nearest above and below the selection, unfiltered",
     );
+  });
+
+  it("reach 3 threads on each side whatever their status, and filter none beyond them", async () => {
+    install();
+    activate({ selection: ON_T8 });
+    const open = await read({ near: { selection: true } });
+    const resolved = await read({
+      near: { selection: true },
+      status: "resolved",
+    });
+    const reached = new Set([...keysOf(open), ...keysOf(resolved)]);
+    expect([...reached].filter((key) => key !== "T8")).toHaveLength(6);
+    const probe = (text: string) =>
+      read({ near: { selection: true }, text }).then((r) => r.coverage_line);
+    expect(await probe("T1 root")).toBe(await probe("no such words"));
   });
 
   it("read as far as asked with the document included", async () => {
@@ -416,7 +445,6 @@ describe("resolved threads", () => {
       "T1",
       "T3",
       "T4",
-      "T5",
     ]);
     expect(
       keysOf(await read({ near: { selection: true }, status: "all" })),
@@ -496,11 +524,14 @@ describe("text_before", () => {
     expect(t7b.text_before).toBe("T6P Overlap lima mike november");
   });
 
-  it("keeps to the anchor's own paragraph without the document", async () => {
+  it("gives none without the document, as it is document text", async () => {
     install();
     activate({ selection: ON_T8, inventory: captureInventory() });
-    const [t7b] = (await read({ ...above, around: "text_before" })).threads;
-    expect(t7b.text_before).toBe("T6P Overlap lima mike november");
+    const result = await read({ ...above, around: "text_before" });
+    expect(result.threads.some((t) => "text_before" in t)).toBe(false);
+    expect(result.coverage_line).toContain(
+      "No text before the anchor for 2 threads: it is document text, which needs the document included.",
+    );
   });
 
   it("is left out unless asked for", async () => {

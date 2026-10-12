@@ -75,6 +75,11 @@ export interface WordCommentRefRegistry {
   readonly issued: Map<string, string>;
   /** The latest fingerprint per ref. */
   readonly fingerprints: Map<string, WordCommentFingerprint>;
+  /**
+   * Whether a read found the file legacy; later reads pass it on, so no read issues id refs for a
+   * legacy file before one knows (O-17).
+   */
+  legacy: boolean | null;
 }
 
 export type WordCommentRefResolution =
@@ -95,6 +100,7 @@ export function createWordCommentRefRegistry(
     refs: new Map(),
     issued: new Map(),
     fingerprints: new Map(),
+    legacy: null,
   };
 }
 
@@ -204,6 +210,8 @@ interface Pending {
   index: number;
   source: string;
   keys: string[];
+  /** creationDate in ms; null without one. */
+  created: number | null;
 }
 
 function issue(
@@ -225,14 +233,16 @@ function issue(
 
 /**
  * Refs for the threads of one read, in document order. A thread keeps the ref this session gave
- * it; new threads derive theirs in a fixed order of their sources, so neither Word's items order
- * nor the read order changes which of two colliding threads gets the unsalted ref.
+ * it; new threads derive theirs oldest first, then by source, so neither Word's items order nor the
+ * read order changes which of two colliding threads gets the unsalted ref, and a thread added later
+ * in a session, which had to take a salted one, takes it again when a reload rebuilds the refs.
  */
 export function issueWordCommentRefs(
   registry: WordCommentRefRegistry,
   threads: readonly WordCommentThreadRecord[],
   legacy: boolean | null,
 ): WordCommentCaptureRefs {
+  if (legacy !== null) registry.legacy = legacy;
   const byContent = legacy === true;
   const refs: (string | null)[] = threads.map(() => null);
   const used = new Set<string>();
@@ -263,11 +273,14 @@ export function issueWordCommentRefs(
       index,
       source: occurrence > 1 ? `${source}#${occurrence}` : source,
       keys,
+      created: record.creationDate?.getTime() ?? null,
     });
   });
 
-  pending.sort((a, b) =>
-    a.source < b.source ? -1 : a.source > b.source ? 1 : a.index - b.index,
+  pending.sort(
+    (a, b) =>
+      (a.created ?? Infinity) - (b.created ?? Infinity) ||
+      (a.source < b.source ? -1 : a.source > b.source ? 1 : a.index - b.index),
   );
   for (const { index, source, keys } of pending) {
     const ref = issue(registry, source, keys[0]);

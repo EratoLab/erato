@@ -85,6 +85,27 @@ describe("useWordComments", () => {
     broker.subscribers.clear();
   });
 
+  it.each(["pc", "web"] as const)(
+    "names a legacy file's threads by content from the first read on %s, so a reopen keeps them (O-17)",
+    async (host) => {
+      install({ host, legacy: true });
+      const first = await ready(mount());
+      const refs = ["T1", "T2", "T8"].map((key) => refOf(first, key).ref);
+      expect(wordCommentRefRegistry(IDENTITY).legacy).toBe(true);
+      cleanup();
+      forgetWordCommentRefs();
+
+      install({ host, legacy: true, open: 1 });
+      const reopened = await ready(mount());
+      expect(refOf(reopened, "T1").commentId).not.toBe(
+        first.threads[0].commentId,
+      );
+      expect(["T1", "T2", "T8"].map((key) => refOf(reopened, key).ref)).toEqual(
+        refs,
+      );
+    },
+  );
+
   it("lists the placed threads in document order, from roots and coarse anchors only", async () => {
     install({ selection: PASSAGE_OVER_T1 });
     const list = await ready(mount());
@@ -102,9 +123,25 @@ describe("useWordComments", () => {
       text: "T1 root: please check the alpha bravo wording.",
     });
     expect(refOf(list, "T5").quote).toBe("");
-    expect(word.calls()).not.toContain("paragraph.getOoxml");
+    expect(
+      word.calls().filter((call) => call === "paragraph.getOoxml"),
+    ).toHaveLength(1);
     expect(word.calls()).not.toContain("range.getOoxml");
     expect(word.calls()).not.toContain("range.getComments");
+  });
+
+  it("learns once per document whether it is legacy, with one package on desktop", async () => {
+    install({ selection: PASSAGE_OVER_T1 });
+    const hook = mount();
+    await ready(hook);
+    expect(wordCommentRefRegistry(IDENTITY).legacy).toBe(false);
+    act(() => hook.result.current.refresh());
+    await waitFor(() => expect(reads()).toBe(2));
+    await ready(hook);
+
+    expect(
+      word.calls().filter((call) => call === "paragraph.getOoxml"),
+    ).toHaveLength(1);
   });
 
   it("marks the threads in the selected passage from coordinates and lists only their replies", async () => {

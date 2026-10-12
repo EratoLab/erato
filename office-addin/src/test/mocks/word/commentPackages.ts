@@ -349,8 +349,16 @@ function containedThreads(tags: readonly string[]): Set<string> {
 }
 
 export interface V3cPackageOptions {
-  /** No commentsExtended, commentsIds, commentsExtensible or people part. */
+  /**
+   * A file without commentsExtended, commentsIds, commentsExtensible or people: Word's package then
+   * carries the session's ids in commentsIds, a commentsExtended without parents and people, but no
+   * commentsExtensible (gate F2 on v3c-comments-legacy.docx).
+   */
   legacy?: boolean;
+  /** The session's durableId (hex) per comment key in a legacy file; the fixture's otherwise. */
+  sessionIds?: (key: string) => string;
+  /** No commentsExtended, commentsIds, commentsExtensible or people part, as Word never writes. */
+  idless?: boolean;
   /**
    * Word's own re-serialisation of a reference-only comment: an empty range around it (the probe's
    * T5P marks were start, end and reference at 28).
@@ -452,7 +460,10 @@ function packageXml(
         `<w:comments xmlns:w="${W}" xmlns:w14="${W14}" xmlns:r="${R}" xmlns:mc="${MC}" mc:Ignorable="w14">${keys.map(commentXml).join("")}</w:comments>`,
       ),
     );
-    if (!options.legacy)
+    const durableId = (key: string) =>
+      (options.legacy && options.sessionIds?.(key)) ||
+      V3C_COMMENTS[key].durableId;
+    if (!options.idless)
       parts.push(
         part(
           "/word/commentsExtended.xml",
@@ -460,9 +471,10 @@ function packageXml(
           `<w15:commentsEx xmlns:mc="${MC}" xmlns:w15="${W15}" mc:Ignorable="w15">${keys
             .map((key) => {
               const c = V3C_COMMENTS[key];
-              const parent = c.parent
-                ? ` w15:paraIdParent="${V3C_COMMENTS[c.parent].paraId}"`
-                : "";
+              const parent =
+                c.parent && !options.legacy
+                  ? ` w15:paraIdParent="${V3C_COMMENTS[c.parent].paraId}"`
+                  : "";
               return `<w15:commentEx w15:paraId="${c.paraId}"${parent} w15:done="${c.done ? 1 : 0}"/>`;
             })
             .join("")}</w15:commentsEx>`,
@@ -473,21 +485,25 @@ function packageXml(
           `<w16cid:commentsIds xmlns:mc="${MC}" xmlns:w16cid="${W16CID}" mc:Ignorable="w16cid">${keys
             .map(
               (key) =>
-                `<w16cid:commentId w16cid:paraId="${V3C_COMMENTS[key].paraId}" w16cid:durableId="${V3C_COMMENTS[key].durableId}"/>`,
+                `<w16cid:commentId w16cid:paraId="${V3C_COMMENTS[key].paraId}" w16cid:durableId="${durableId(key)}"/>`,
             )
             .join("")}</w16cid:commentsIds>`,
         ),
-        part(
-          "/word/commentsExtensible.xml",
-          `${WML}.commentsExtensible+xml`,
-          `<w16cex:commentsExtensible xmlns:mc="${MC}" xmlns:w16cex="${W16CEX}" mc:Ignorable="w16cex">${keys
-            .filter((key) => V3C_COMMENTS[key].dateUtc)
-            .map(
-              (key) =>
-                `<w16cex:commentExtensible w16cex:durableId="${V3C_COMMENTS[key].durableId}" w16cex:dateUtc="${V3C_COMMENTS[key].dateUtc}"/>`,
-            )
-            .join("")}</w16cex:commentsExtensible>`,
-        ),
+        ...(options.legacy
+          ? []
+          : [
+              part(
+                "/word/commentsExtensible.xml",
+                `${WML}.commentsExtensible+xml`,
+                `<w16cex:commentsExtensible xmlns:mc="${MC}" xmlns:w16cex="${W16CEX}" mc:Ignorable="w16cex">${keys
+                  .filter((key) => V3C_COMMENTS[key].dateUtc)
+                  .map(
+                    (key) =>
+                      `<w16cex:commentExtensible w16cex:durableId="${V3C_COMMENTS[key].durableId}" w16cex:dateUtc="${V3C_COMMENTS[key].dateUtc}"/>`,
+                  )
+                  .join("")}</w16cex:commentsExtensible>`,
+              ),
+            ]),
         part(
           "/word/people.xml",
           `${WML}.people+xml`,

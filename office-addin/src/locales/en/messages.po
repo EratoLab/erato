@@ -3063,6 +3063,11 @@ msgstr "Resolved comments are sent only when they are in your selection or when 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.resolvedMap"
+msgstr "The list includes resolved comments too, each with how it starts."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
 msgid "officeAddin.word.comments.coverage.rest"
 msgstr "{rest, plural, one {# other comment is not sent.} other {# other comments are not sent.}}"
 

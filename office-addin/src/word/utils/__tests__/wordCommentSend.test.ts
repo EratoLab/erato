@@ -715,6 +715,19 @@ describe("the arguments a Send carries, from the ERMAIN-947 fixture", () => {
     });
   });
 
+  it("never shows a time as UTC that no package read showed a dateUtc for (F-4)", async () => {
+    const read = await sendRead({ tag: "T1P", offset: 25 });
+    const timeOf = (key: string) =>
+      read.model.threads.find(({ thread }) => thread.id === refOf(read, key))
+        ?.thread.entries[0];
+    expect(timeOf("T1")).toMatchObject({ at: "2026-09-03T08:15Z" });
+    expect(timeOf("T5")).toMatchObject({
+      at: "2026-09-06T08:00",
+      tz: "unknown",
+    });
+    expect(timeOf("T8")).toMatchObject({ tz: "unknown" });
+  });
+
   it("stages the Send's refs with the capture", async () => {
     const read = await sendRead({ tag: "T1P", offset: 25 });
     const capture = {

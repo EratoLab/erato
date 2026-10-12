@@ -3063,6 +3063,11 @@ msgstr "Les commentaires résolus ne sont envoyés que s’ils se trouvent dans 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.resolvedMap"
+msgstr "La liste inclut aussi les commentaires résolus, chacun avec son début."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
 msgid "officeAddin.word.comments.coverage.rest"
 msgstr "{rest, plural, one {# autre commentaire n’est pas envoyé.} other {# autres commentaires ne sont pas envoyés.}}"
 

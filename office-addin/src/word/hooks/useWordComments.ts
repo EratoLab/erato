@@ -181,8 +181,10 @@ export interface UseWordCommentsOptions {
  * and never on a timer: every Send and every write read again anyway. Each read lists the threads,
  * their coarse anchors and the selection's relation to them; replies only for the threads at the
  * selection and the pick, or for all while the picker is open (Word for Mac lists them slowly).
- * No package is read, so a read costs no OOXML on the web. Reads never overlap; one asked for
- * during a read runs once after it.
+ * No package is read for exact anchors, so a read costs no OOXML on the web unless a commented
+ * paragraph has hidden text; on desktop the first read of a document learns whether it is legacy,
+ * so even the picker's refs come from content where ids do not last (O-17). Reads never overlap;
+ * one asked for during a read runs once after it.
  */
 export function useWordComments({
   documentIdentity,
@@ -216,6 +218,7 @@ export function useWordComments({
       const result = await readWordComments({
         selection: true,
         packages: false,
+        legacy: registry.legacy,
         replies: wanted.detailed ? "all" : "requested",
         exact: (records, live) =>
           wordCommentSendExact(records, { passage: null, live, pickedId }),

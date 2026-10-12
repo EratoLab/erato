@@ -149,7 +149,7 @@ export interface WordCommentSendInput {
   precedence: WordCommentPrecedence;
   /** The picked thread's ref; it stays until another pick, × or a new non-empty selection. */
   pick: string | null;
-  /** The read at Send found the picked thread. */
+  /** The read at Send found and placed the picked thread. */
   pickFound: boolean;
   override: WordCommentOverride | null;
   /** "Send without comments": the chip's × or the answer to a block. */
@@ -414,6 +414,17 @@ export function wordCommentSendRead(input: {
     selection,
     atSelection,
   };
+}
+
+/**
+ * Whether a Send can carry this thread: the read placed it. Word may list a picked thread that the
+ * read could not place, and word_comment_thread with no thread would read as the open comments.
+ */
+export function wordCommentSendable(
+  read: WordCommentSendRead | null,
+  ref: string,
+): boolean {
+  return !!read?.model.threads.some(({ thread }) => thread.id === ref);
 }
 
 /** What §8 sees of a Send: the passage, the caret, or neither. */

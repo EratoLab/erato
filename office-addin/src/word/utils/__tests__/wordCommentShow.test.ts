@@ -69,6 +69,22 @@ describe("showWordComment", () => {
     expect(word.selected()).toEqual(word.anchorOf("T8"));
   });
 
+  it("does not show a web anchor whose range would unhide text before it (gate F1)", async () => {
+    const word = installWordCommentHost({ host: "web" });
+
+    expect(await showWordComment(word.commentId("T10"))).toBe("unavailable");
+    expect(word.rangesRead()).toEqual([]);
+    expect(word.unhidden()).toEqual([]);
+    expect(word.selected()).toBeNull();
+  });
+
+  it("shows T10 on desktop, where reading its range changes nothing", async () => {
+    const word = installWordCommentHost({ host: "pc" });
+
+    expect(await showWordComment(word.commentId("T10"))).toBe("selected");
+    expect(word.selected()).toEqual(word.anchorOf("T10"));
+  });
+
   it("selects nothing for a comment Word no longer lists", async () => {
     const word = installWordCommentHost();
 

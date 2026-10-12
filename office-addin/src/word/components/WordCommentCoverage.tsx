@@ -4,6 +4,7 @@ import { plural, t } from "@lingui/core/macro";
 import { useState } from "react";
 
 import { ACTION_BUTTON_CLASS } from "../../core/clientActions/clientActionButtonStyles";
+import { wordCommentMapListed } from "../utils/wordCommentMap";
 
 import type { WordCommentList } from "../hooks/useWordComments";
 import type { WordCommentSendPlan } from "../utils/wordCommentSend";
@@ -66,8 +67,10 @@ export function wordCommentCoverageInfo(
         { kind: "open-comments", threads: list.counts.open },
         list.counts.open,
       );
-    case "map":
-      return total > 0 ? of({ kind: "map", threads: total }, total) : null;
+    case "map": {
+      const listed = wordCommentMapListed(list.threads.length);
+      return listed > 0 ? of({ kind: "map", threads: listed }, listed) : null;
+    }
     case "none":
       return null;
   }
@@ -149,11 +152,17 @@ export function wordCommentCoverageLines(
           }),
         ]
       : []),
-    t({
-      id: "officeAddin.word.comments.coverage.resolved",
-      message:
-        "Resolved comments are sent only when they are in your selection or when you ask for them.",
-    }),
+    info.sent.kind === "map"
+      ? t({
+          id: "officeAddin.word.comments.coverage.resolvedMap",
+          message:
+            "The list includes resolved comments too, each with how it starts.",
+        })
+      : t({
+          id: "officeAddin.word.comments.coverage.resolved",
+          message:
+            "Resolved comments are sent only when they are in your selection or when you ask for them.",
+        }),
     t({
       id: "officeAddin.word.comments.coverage.emails",
       message: "Email addresses of comment authors are never sent.",

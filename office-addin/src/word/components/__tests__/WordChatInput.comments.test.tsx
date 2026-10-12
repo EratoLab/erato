@@ -19,6 +19,7 @@ import {
 import { wordCommentGestureStore } from "../../hooks/wordCommentGestureStore";
 import { wordSelectionStore } from "../../hooks/wordSelectionStore";
 import { resolveWordSelectionFacet } from "../../utils/wordActionFacet";
+import { wordCommentReadSession } from "../../utils/wordCommentReadTool";
 import { forgetWordCommentRefs } from "../../utils/wordCommentRefs";
 import { wordCommentRefsOf } from "../../utils/wordCommentSend";
 import { resolveWordDocumentName } from "../../utils/wordDocumentIdentity";
@@ -485,6 +486,7 @@ describe("WordChatInput comment context", () => {
         selection: { tag: "T1P", offset: 22, to: { tag: "T1P", offset: 33 } },
       });
       renderInput();
+      const activate = vi.spyOn(wordCommentReadSession, "activate");
       send();
       const run = start();
 
@@ -501,6 +503,10 @@ describe("WordChatInput comment context", () => {
       expect(result?.actionFacet?.args?.anchored_comments).toBe("");
       expect(staged.at(-1)).not.toHaveProperty("commentRefs");
       expect(screen.queryByTestId("word-comment-block")).toBeNull();
+      expect(activate).toHaveBeenLastCalledWith(
+        expect.objectContaining({ withheld: true }),
+      );
+      activate.mockRestore();
     });
   });
 
@@ -647,6 +653,32 @@ describe("WordChatInput comment context", () => {
         wordCommentGestureStore.pick({
           kind: "pick",
           ref: "tzz",
+          selectionKey: null,
+        }),
+      );
+      send();
+      const run = start();
+      expect(await screen.findByTestId("word-comment-block")).toHaveTextContent(
+        "The comment you chose is no longer in the document.",
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send without comments" }),
+      );
+      expect((await finish(run))?.actionFacet).toBeUndefined();
+    });
+
+    it("blocks a picked thread Word lists but the read cannot place, never sending an empty one", async () => {
+      install({ selection: { tag: "T1P", offset: 25 } });
+      renderInput();
+      send();
+      await prepared();
+      const t6 = refOf("T6");
+
+      install({ selection: { tag: "END", offset: 0 }, failRanges: ["T6"] });
+      act(() =>
+        wordCommentGestureStore.pick({
+          kind: "pick",
+          ref: t6,
           selectionKey: null,
         }),
       );

@@ -32,6 +32,13 @@ export const WORD_COMMENT_MAP_AUTHOR_CHARS = 32;
 export const WORD_COMMENT_MAP_HEADING_CHARS = 32;
 export const WORD_COMMENT_MAP_SECTION_CHARS = 60;
 export const WORD_COMMENT_MAP_PAGE_ROWS = 100;
+
+/**
+ * How many rows the map Send carries of this many placed threads: threads without a paragraph get
+ * no row, and the first page stops at its row cap (its byte cap can stop it a little earlier).
+ */
+export const wordCommentMapListed = (placed: number) =>
+  Math.min(placed, WORD_COMMENT_MAP_PAGE_ROWS);
 const CURSOR = /^map:(0|[1-9]\d{0,6})$/;
 
 const encoder = new TextEncoder();
