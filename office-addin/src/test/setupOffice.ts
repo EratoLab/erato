@@ -5,6 +5,10 @@ import "@testing-library/jest-dom/vitest";
 // rejects inside effects on machines with no local VITE_API_ROOT_URL (CI).
 window.API_ROOT_URL ??= "http://erato.test";
 
+// Development builds write Word plans in place on every host (src/app/env.ts); suites that test
+// the per-host deployment policy clear this.
+window.WORD_IN_PLACE_APPLY = true;
+
 // Node 25 ships an experimental top-level `localStorage` that vitest enables
 // via `--localstorage-file`, but without a valid path it surfaces an object
 // whose methods aren't callable. Replace with a deterministic in-memory

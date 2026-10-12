@@ -245,17 +245,26 @@ changes in Word, and the read contract says so while tracking is on.
 
 ### Switches
 
+- **Deployment policy**: `default_settings.word_apply` in the backend config,
+  one table per host (`pc`, `mac`, `web`), read through `wordApplyPolicy`.
+  `in_place` turns the in-place writer on, `whole_document_import` is
+  `allowed`, `confirm` or `off`, and `package_read` off reads only the body
+  (and so rules out in-place writing). Defaults: PC and Mac in-place off and
+  import allowed; the web in-place on and import only after confirmation. Users
+  cannot change these; a pane served without them uses the same defaults.
 - **Kill switch**: `window.WORD_FORCE_IMPORT_APPLY = true`, injected by the
-  backend or set from `VITE_WORD_FORCE_IMPORT_APPLY=true` at build time. Every
-  plan takes the import, and tracked captures are refused as before.
+  backend or set from `VITE_WORD_FORCE_IMPORT_APPLY=true` at build time. In-place
+  writing is off on every host, and tracked captures are refused as before.
+- **In-place override**: `window.WORD_IN_PLACE_APPLY = true` turns in-place
+  writing on for every host. Development builds and
+  `VITE_WORD_IN_PLACE_APPLY=true` set it; the kill switch still wins.
 - **Compatibility mode**: a per-device setting (localStorage
-  `erato.word.forceImportApply`) with the same effect; unreadable storage means
-  off.
+  `erato.word.forceImportApply`) that sends every rewrite to the import;
+  unreadable storage means off.
 - **Latch**: an in-place write that did not verify or was interrupted sends the
   rest of the session to the import, until the pane reloads.
 
 Earlier in-place writes can still be undone in place while any of these is on.
-The copyable report's host line shows `In-place: on` or the reason it is off.
-Release builds keep the kill switch on until the native probes P1–P4 pass on
-Word PC and Word for the web; each further mechanism is enabled only after its
-own probe passes on that platform.
+The copyable report's host line names the host's policy and shows
+`In-place: on` or the reason it is off. Each mechanism is enabled only after its
+own native probe passes on that platform (`wordInPlaceCapabilities.ts`).

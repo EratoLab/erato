@@ -55,8 +55,8 @@ const PENDING: Record<
 
 /**
  * A mechanism is enabled on a platform only after its native probe passed there. text and cell
- * use the insertText primitives the targeted-edit path already runs in production; production
- * builds keep the kill switch on (see injectFrontendEnv) until P1-P4 pass.
+ * use the insertText primitives the targeted-edit path already runs in production. Whether a host
+ * writes in place at all is the deployment's call (wordApplyPolicy).
  */
 export const WORD_IN_PLACE_MECHANISMS: Record<
   WordHostPlatform,

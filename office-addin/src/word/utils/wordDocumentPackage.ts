@@ -1,5 +1,6 @@
 import { createWordXmlComparison } from "@erato/frontend/word-review";
 
+import { wordApplyPolicy } from "./wordApplyPolicy";
 import {
   MAX_WORD_DOCX_BYTES,
   WordDocumentTooLargeError,
@@ -36,6 +37,7 @@ export function currentWordDocumentUrl(): string {
 export function supportsWordDocumentPackage(): boolean {
   const office = globalThis.Office;
   return !!(
+    wordApplyPolicy().packageRead &&
     typeof office?.context?.document?.getFileAsync === "function" &&
     office.context.requirements?.isSetSupported("WordApi", "1.7")
   );

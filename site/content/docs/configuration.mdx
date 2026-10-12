@@ -3139,7 +3139,8 @@ The path must contain the Office add-in frontend artifacts including `manifest.x
 {/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_include_document */}
 
 Default behavior for the Office add-in. These values apply only until a user
-chooses their own preferences in the add-in.
+chooses their own preferences in the add-in. `word_apply` is different: see
+below.
 
 `mode` controls what happens when switching to another Outlook item. Supported
 values are `resume`, `ask`, and `new`. `compose_inherits_from_read` controls
@@ -3150,6 +3151,51 @@ document; users can still remove it from any chat.
 **Default value:** `{ mode = "resume", compose_inherits_from_read = true, word_include_document = true }`
 
 **Type:** `object`
+
+##### `integrations.ms_office.addin.default_settings.word_apply`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.pc.in_place */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.pc.whole_document_import */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.pc.package_read */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.mac.in_place */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.mac.whole_document_import */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.mac.package_read */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.web.in_place */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.web.whole_document_import */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.web.package_read */}
+
+How the Word add-in applies document changes on each Word host: `pc` (Word for
+Windows), `mac` (Word for Mac) and `web` (Word for the web). These are
+deployment switches that users cannot change. The per-device Compatibility mode
+in the add-in only sends more rewrites to the whole-document import.
+
+Each table takes:
+
+- `in_place`: write changes through Word's object model where the add-in
+  supports that change on the host, leaving the rest of the document untouched.
+  When off, rewrites use the whole-document import.
+- `whole_document_import`: whether a change may replace the whole document by
+  import. `allowed` imports without asking, `confirm` only after the user
+  confirms that change, and `off` never imports.
+- `package_read`: read the complete `.docx` file from Word. When off, the
+  add-in reads only the document body, and in-place writing is unavailable
+  because it keeps the complete file as its backup.
+
+A key left out of a table keeps that host's default. On Word for the web the
+import cannot be undone with Word Undo, co-authors may lose concurrent edits,
+and comment dates and resolved flags may change, so it needs confirmation there
+by default.
+
+**Default value:** `{ pc = { in_place = false, whole_document_import = "allowed", package_read = true }, mac = { in_place = false, whole_document_import = "allowed", package_read = true }, web = { in_place = true, whole_document_import = "confirm", package_read = true } }`
+
+**Type:** `object`
+
+**Example:**
+
+```toml
+[integrations.ms_office.addin.default_settings.word_apply.web]
+package_read = false
+```
 
 ##### `integrations.ms_office.addin.manifest`
 

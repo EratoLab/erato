@@ -4,7 +4,8 @@ use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato_config::config::{
     AppConfig, ConfigSourceFile, FileTypeDetectionMode, GenerationConfig, McpRuntimeConfig,
-    ModelReasoningEffort, ModelVerbosity, MsOfficeAddinLaunchEventType, PromptSourceSpecification,
+    ModelReasoningEffort, ModelVerbosity, MsOfficeAddinLaunchEventType,
+    MsOfficeAddinWordApplyPolicy, MsOfficeAddinWordWholeDocumentImport, PromptSourceSpecification,
     RuntimeConfigurationConfig, ServerConfig, SharepointAllDrivesSource,
 };
 use sqlx::Pool;
@@ -244,6 +245,9 @@ icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
 
 [integrations.ms_office.addin.default_settings]
 word_include_document = false
+
+[integrations.ms_office.addin.default_settings.word_apply.web]
+package_read = false
 "#;
 
     temp_file
@@ -298,6 +302,27 @@ word_include_document = false
             .default_settings
             .word_include_document
     );
+    let word_apply = &config
+        .integrations
+        .ms_office
+        .addin
+        .default_settings
+        .word_apply;
+    assert_eq!(
+        word_apply.web_policy(),
+        MsOfficeAddinWordApplyPolicy {
+            in_place: true,
+            whole_document_import: MsOfficeAddinWordWholeDocumentImport::Confirm,
+            package_read: false,
+        }
+    );
+    let desktop = MsOfficeAddinWordApplyPolicy {
+        in_place: false,
+        whole_document_import: MsOfficeAddinWordWholeDocumentImport::Allowed,
+        package_read: true,
+    };
+    assert_eq!(word_apply.pc_policy(), desktop);
+    assert_eq!(word_apply.mac_policy(), desktop);
 }
 
 #[test]
