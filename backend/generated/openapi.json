@@ -8975,12 +8975,13 @@
           "destructive_hint",
           "idempotent_hint",
           "open_world_hint",
-          "annotated"
+          "annotated",
+          "sources"
         ],
         "properties": {
           "annotated": {
             "type": "boolean",
-            "description": "Whether the server declared any hints at all. Defaults are the\npessimistic reading, so an unannotated tool is not read-only."
+            "description": "Whether effective annotations are present, from the server or operator\nconfiguration. This flag does not describe their source."
           },
           "destructive_hint": {
             "type": "boolean"
@@ -8993,6 +8994,10 @@
           },
           "read_only_hint": {
             "type": "boolean"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/McpToolAnnotationSources",
+            "description": "The winning declaration for each hint, resolved by the backend."
           }
         }
       },
@@ -9013,6 +9018,44 @@
           "ask",
           "denied"
         ]
+      },
+      "McpToolAnnotationSource": {
+        "type": "string",
+        "description": "The winning declaration for one effective MCP tool hint.",
+        "enum": [
+          "tool_override",
+          "server_override",
+          "global_override",
+          "server_supplied",
+          "tool_default",
+          "server_default",
+          "global_default",
+          "protocol_default"
+        ]
+      },
+      "McpToolAnnotationSources": {
+        "type": "object",
+        "description": "Sources are independent: a tool can inherit each hint from a different scope.",
+        "required": [
+          "read_only_hint",
+          "destructive_hint",
+          "idempotent_hint",
+          "open_world_hint"
+        ],
+        "properties": {
+          "destructive_hint": {
+            "$ref": "#/components/schemas/McpToolAnnotationSource"
+          },
+          "idempotent_hint": {
+            "$ref": "#/components/schemas/McpToolAnnotationSource"
+          },
+          "open_world_hint": {
+            "$ref": "#/components/schemas/McpToolAnnotationSource"
+          },
+          "read_only_hint": {
+            "$ref": "#/components/schemas/McpToolAnnotationSource"
+          }
+        }
       },
       "McpToolEffectiveState": {
         "type": "string",

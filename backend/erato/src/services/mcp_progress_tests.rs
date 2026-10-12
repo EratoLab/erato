@@ -434,6 +434,176 @@ async fn a_connect_in_flight_does_not_hold_the_configuration_lock() {
 }
 
 #[tokio::test]
+async fn annotation_reload_during_connection_cannot_cache_stale_hints() {
+    use crate::services::mcp_tool_annotations::McpToolAnnotationSource;
+
+    let state = WireServer::default();
+    let (address, server) = serve(
+        Router::new()
+            .route("/mcp", post(http_post_gated_list))
+            .with_state(state.clone()),
+    )
+    .await;
+    let mut config = AppConfig::default();
+    config
+        .mcp_servers
+        .insert("files".into(), streamable(address, "mcp"));
+    config
+        .mcp_servers_global
+        .default_tool_annotations
+        .read_only_hint = Some(false);
+    let manager = Arc::new(McpSessionManager::new(&config));
+    let listing = tokio::spawn({
+        let manager = manager.clone();
+        async move {
+            manager
+                .enumerate_tools("files", &McpRequestAuthContext::default())
+                .await
+        }
+    });
+    state.list_gate.wait_entered().await;
+    let mut next = McpRuntimeConfig::from_app_config(&config);
+    next.mcp_servers_global
+        .default_tool_annotations
+        .read_only_hint = Some(true);
+    assert_eq!(manager.reconfigure(&next).await, vec!["files"]);
+    state.list_gate.release();
+    // The old connection is discarded and a fresh listing uses the new config.
+    tokio::time::timeout(Duration::from_secs(5), state.list_gate.wait_entered())
+        .await
+        .unwrap();
+    state.list_gate.release();
+    let enumeration = tokio::time::timeout(Duration::from_secs(5), listing)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(enumeration.status, McpServerConnectionStatus::Success);
+    assert_eq!(
+        enumeration.tools[0]
+            .tool
+            .annotations
+            .as_ref()
+            .unwrap()
+            .read_only_hint,
+        Some(true)
+    );
+    assert_eq!(
+        enumeration.tools[0].sources.read_only_hint,
+        McpToolAnnotationSource::GlobalDefault
+    );
+    assert_eq!(manager.active_session_count("files").await, 1);
+    server.abort();
+}
+
+#[tokio::test]
+async fn discovery_and_enumeration_share_effective_hints_and_reload_removes_them() {
+    use crate::config::{McpToolAnnotationsConfig, McpToolConfig};
+    use crate::services::mcp_tool_annotations::McpToolAnnotationSource;
+
+    let (address, server) = serve(
+        Router::new()
+            .route("/mcp", post(http_post))
+            .with_state(WireServer::default()),
+    )
+    .await;
+    let mut config = AppConfig::default();
+    config
+        .mcp_servers
+        .insert("files".into(), streamable(address, "mcp"));
+    config
+        .mcp_servers
+        .insert("other".into(), streamable(address, "mcp"));
+    config
+        .mcp_servers_global
+        .default_tool_annotations
+        .read_only_hint = Some(false);
+    let files = config.mcp_servers.get_mut("files").unwrap();
+    files.default_tool_annotations.destructive_hint = Some(false);
+    files.tools.insert(
+        "read_file".into(),
+        McpToolConfig {
+            override_tool_annotations: McpToolAnnotationsConfig {
+                read_only_hint: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    let manager = McpSessionManager::new(&config);
+    let auth = McpRequestAuthContext::default();
+    let discovery = manager
+        .discover_tools_for_server_ids(Uuid::new_v4(), None, &auth)
+        .await;
+    let enumeration = manager.enumerate_tools("files", &auth).await;
+    assert_eq!(enumeration.status, McpServerConnectionStatus::Success);
+    let listed = &enumeration.tools[0];
+    assert_eq!(
+        discovery
+            .tools
+            .iter()
+            .find(|tool| tool.server_id == "files")
+            .unwrap()
+            .tool,
+        listed.tool
+    );
+    assert_eq!(
+        listed.sources.read_only_hint,
+        McpToolAnnotationSource::ToolOverride
+    );
+    assert_eq!(
+        listed.sources.destructive_hint,
+        McpToolAnnotationSource::ServerDefault
+    );
+    assert_eq!(
+        listed.sources.open_world_hint,
+        McpToolAnnotationSource::ProtocolDefault
+    );
+    let other = discovery
+        .tools
+        .iter()
+        .find(|tool| tool.server_id == "other")
+        .unwrap();
+    assert_eq!(
+        other.tool.annotations.as_ref().unwrap().read_only_hint,
+        Some(false)
+    );
+    assert_eq!(manager.active_session_count("files").await, 2);
+
+    let mut next = McpRuntimeConfig::from_app_config(&config);
+    next.mcp_servers.get_mut("files").unwrap().tools.clear();
+    next.mcp_servers
+        .get_mut("files")
+        .unwrap()
+        .default_tool_annotations = Default::default();
+    assert_eq!(manager.reconfigure(&next).await, vec!["files"]);
+    assert_eq!(manager.active_session_count("files").await, 0);
+    assert_eq!(manager.active_session_count("other").await, 1);
+    assert_eq!(
+        manager.enumerate_tools("files", &auth).await.tools[0]
+            .sources
+            .read_only_hint,
+        McpToolAnnotationSource::GlobalDefault
+    );
+
+    next.mcp_servers_global.default_tool_annotations = Default::default();
+    assert_eq!(manager.reconfigure(&next).await, vec!["files", "other"]);
+    assert_eq!(manager.active_session_count("files").await, 0);
+    assert_eq!(manager.active_session_count("other").await, 0);
+    assert!(
+        manager.enumerate_tools("files", &auth).await.tools[0]
+            .tool
+            .annotations
+            .is_none()
+    );
+    assert!(manager.reconfigure(&next).await.is_empty());
+    next.mcp_servers_global.show_frontend_tab = true;
+    next.mcp_servers_global.approval.enabled = true;
+    assert!(manager.reconfigure(&next).await.is_empty());
+    assert_eq!(manager.active_session_count("files").await, 1);
+    server.abort();
+}
+
+#[tokio::test]
 async fn connection_probe_timeout_and_cancellation_close_the_uncached_connection() {
     for cancel in [false, true] {
         let state = WireServer::default();

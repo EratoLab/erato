@@ -14,8 +14,8 @@ use utoipa::ToSchema;
 pub struct McpToolApprovalVerdict {
     /// Hints normalized to the protocol defaults for absent values.
     pub annotations: ToolApprovalAnnotations,
-    /// Whether the server declared any annotations at all. An unannotated
-    /// tool is not read-only: the defaults are the pessimistic reading.
+    /// Whether effective annotations are present from the server or operator
+    /// configuration. An unannotated tool uses pessimistic protocol defaults.
     pub annotated: bool,
     /// Whether the configured policy asks the user before running the tool.
     /// Always false while the approval gate is disabled.
