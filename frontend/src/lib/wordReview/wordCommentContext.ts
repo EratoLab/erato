@@ -136,8 +136,8 @@ export interface WordCommentMapRow {
   q?: string;
   by: string;
   st: WordCommentStatus;
-  /** Reply count. */
-  r: number;
+  /** Reply count; null when the replies were not listed, which Word for Mac does slowly. */
+  r: number | null;
   /** last_at of the thread. */
   at: string | null;
   /** Gist of the thread's comment, about WORD_COMMENT_GIST_CHARS long. */
@@ -175,6 +175,8 @@ export interface WordCommentEnvelope {
   index: WordCommentMapRow[];
   /** The file has no stable comment ids, so threads are matched by content. */
   legacy?: true;
+  /** Continues a page that ended with complete:false, through word_read_comments. */
+  cursor?: string;
 }
 
 export type WordCommentCarrier =
@@ -243,6 +245,7 @@ const isNullable =
 const isString = (value: unknown): value is string => typeof value === "string";
 const isMaybeString = isNullable(isString);
 const isMaybeOrdinal = isNullable(isOrdinal);
+const isMaybeCount = isNullable(isCount);
 const nonNull = <T>(value: T | null): value is T => value !== null;
 
 function trueFlags<K extends string>(
@@ -394,7 +397,7 @@ function mapRowOf(value: unknown): WordCommentMapRow | null {
     !isOrdinal(source.para) ||
     !isString(source.by) ||
     !isStatus(source.st) ||
-    !isCount(source.r) ||
+    !isMaybeCount(source.r) ||
     !isMaybeString(source.at)
   )
     return null;
@@ -405,7 +408,7 @@ function mapRowOf(value: unknown): WordCommentMapRow | null {
     ...(isString(source.q) ? { q: source.q } : {}),
     by: source.by,
     st: source.st,
-    r: source.r,
+    r: source.r ?? null,
     at: source.at ?? null,
     ...(isString(source.g) ? { g: source.g } : {}),
   };
@@ -489,6 +492,9 @@ export function parseWordCommentEnvelope(
     threads: listOf(source.threads, threadOf),
     index: listOf(source.index, mapRowOf),
     ...trueFlags(source, ["legacy"]),
+    ...(isString(source.cursor) && source.cursor !== ""
+      ? { cursor: source.cursor }
+      : {}),
   };
 }
 

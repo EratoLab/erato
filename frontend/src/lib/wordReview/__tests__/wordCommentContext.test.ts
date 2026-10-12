@@ -167,7 +167,7 @@ const rows: WordCommentMapRow[] = [
     para: 30,
     by: "Maya Krüger",
     st: "open",
-    r: 0,
+    r: null,
     at: null,
   },
 ];
@@ -215,6 +215,7 @@ const mapEnvelope = envelope({
   index: rows,
   coverage: coverage({ sent_full: 1, sent_index_only: 2, not_shown: 6 }),
   legacy: true,
+  cursor: "map:2",
 });
 const readEnvelope = envelope({
   scope: "read",
@@ -490,6 +491,18 @@ describe("parseWordCommentContext", () => {
       { ...inside, entries: [inside.entries[0]] },
     ]);
     expect(parsed?.index).toEqual([rows[0], rows[1]]);
+  });
+
+  it("reads an unknown reply count as null and drops a negative one", () => {
+    const { r: _r, ...uncounted } = rows[0];
+    const parsed = parseWordCommentEnvelope({
+      ...mapEnvelope,
+      index: [uncounted, { ...rows[1], r: -1 }],
+      cursor: "",
+    });
+
+    expect(parsed?.index).toEqual([{ ...rows[0], r: null }]);
+    expect(parsed).not.toHaveProperty("cursor");
   });
 
   it("reads an entry's missing time fields as unknown", () => {
