@@ -2188,7 +2188,15 @@ async fn joint_replay_case(pool: Pool<Postgres>, withdraw: bool) {
     assert_eq!(params.turn_consumption.tool_calls, 1);
     assert_eq!(
         params.turn_consumption.submission_attempts["submit_plan"],
-        2
+        if withdraw { 2 } else { 3 }
+    );
+    assert_eq!(
+        message.generation_metadata.as_ref().unwrap()["submission_outcome"]["reason"],
+        if withdraw {
+            "capability_unavailable"
+        } else {
+            "attempts_exhausted"
+        }
     );
     assert_eq!(
         message.raw_message["content"]
