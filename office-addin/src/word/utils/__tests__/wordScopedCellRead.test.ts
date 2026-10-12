@@ -4,13 +4,13 @@ import {
 } from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
+import { setWordWebImport } from "../../../test/mocks/word/applyPolicy";
 import {
   packageXml,
   paragraph,
   readySnapshot,
   W,
 } from "../../../test/mocks/word/authoringFixtures";
-import { setWordWebImport } from "../../../test/mocks/word/applyPolicy";
 import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
 import {
   captureRealisticSnapshot,
