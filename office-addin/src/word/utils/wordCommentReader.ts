@@ -55,8 +55,10 @@ export type WordCommentBudgetPhase = "anchors" | "replies" | "exact";
 export type WordCommentReadPhase =
   | "list"
   | "inventory"
+  | "selection"
   | WordCommentBudgetPhase
   | "order"
+  | "relations"
   | "legacy";
 
 export const WORD_COMMENT_READ_BUDGETS_MS: Readonly<
@@ -205,6 +207,19 @@ export interface WordCommentThreadRecord extends WordCommentEntryRecord {
   order: number;
   /** Only for the threads the exact request named. */
   placement?: WordCommentPlacement;
+  /**
+   * The anchor's compareLocationWith the user's selection, as Word names the relation; only for
+   * anchors around it, when the read was asked to relate them.
+   */
+  selection?: string;
+}
+
+/** Where the user's selection or caret was when the comments were read. */
+export interface WordCommentLiveSelection {
+  collapsed: boolean;
+  /** Review ordinals of its first and last paragraph; null outside the inventory, as in a header. */
+  first: number | null;
+  last: number | null;
 }
 
 export interface WordCommentPhaseTiming {
@@ -263,6 +278,8 @@ export type WordCommentReadResult =
       /** No commentsIds in the file: ids hold for this pane session only (F-2a, O-17). Null: unknown. */
       legacy: boolean | null;
       dateUtc: WordCommentDateUtc;
+      /** Null unless the read was asked to relate anchors to the selection, or it could not. */
+      selection: WordCommentLiveSelection | null;
       diagnostics: WordCommentReadDiagnostics;
     }
   | { ok: false; error: string; diagnostics: WordCommentReadDiagnostics };
@@ -288,7 +305,15 @@ export interface WordCommentReadOptions {
    * The threads to place exactly, most important first: selection threads, then picked or section
    * threads. Called once with every thread in document order, before replies are read.
    */
-  exact?: (threads: readonly WordCommentThreadRecord[]) => readonly string[];
+  exact?: (
+    threads: readonly WordCommentThreadRecord[],
+    selection: WordCommentLiveSelection | null,
+  ) => readonly string[];
+  /**
+   * Also read where the user's selection or caret is, and relate the anchors around it with
+   * compareLocationWith: a caret has no offset for coordinates to place it by.
+   */
+  selection?: boolean;
   /** "requested" reads replies only for the threads `exact` names (Word for Mac lists them slowly). */
   replies?: "all" | "requested";
   budgetsMs?: Partial<Record<WordCommentBudgetPhase, number>>;
@@ -537,17 +562,25 @@ async function readThreads(
       inventory: options.inventory ?? null,
       legacy: null,
       dateUtc: new PackageNotes().dateUtc(),
+      selection: null,
       diagnostics,
     };
 
   const inventory =
     options.inventory ?? (await readLightInventory(context, session));
   diagnostics.inventory = inventory.source;
+  const selection = options.selection
+    ? await readLiveSelection(context, session, inventory)
+    : null;
   await readAnchors(context, session, live, inventory, budgets.anchors);
   const sorted = await orderThreads(session, live);
+  if (selection) await relateSelection(session, sorted, selection);
   const records = sorted.map((thread) => thread.record);
 
-  const asked = requested(options.exact?.(records) ?? [], sorted);
+  const asked = requested(
+    options.exact?.(records, selection?.info ?? null) ?? [],
+    sorted,
+  );
   await readReplies(
     session,
     options.replies === "requested" ? asked : sorted,
@@ -570,8 +603,84 @@ async function readThreads(
     inventory,
     legacy,
     dateUtc: notes.dateUtc(),
+    selection: selection?.info ?? null,
     diagnostics,
   };
+}
+
+interface LiveSelection {
+  range: Word.Range;
+  info: WordCommentLiveSelection;
+}
+
+/** The selection's paragraphs by id; one in another story, such as a header, has no ordinal. */
+async function readLiveSelection(
+  context: Word.RequestContext,
+  session: Session,
+  inventory: WordCommentInventory,
+): Promise<LiveSelection | null> {
+  session.begin("selection", 1);
+  try {
+    const range = context.document.getSelection();
+    range.load("isEmpty");
+    const first = range.paragraphs.getFirst();
+    const last = range.paragraphs.getLast();
+    first.load("uniqueLocalId");
+    last.load("uniqueLocalId");
+    await session.sync();
+    const byId = idIndex(inventory);
+    const ordinalOf = (paragraph: Word.Paragraph) => {
+      const id = wordParagraphId(paragraph.uniqueLocalId);
+      return (id ? byId.get(id) : undefined) ?? null;
+    };
+    session.end(1);
+    return {
+      range,
+      info: {
+        collapsed: range.isEmpty,
+        first: ordinalOf(first),
+        last: ordinalOf(last),
+      },
+    };
+  } catch (error) {
+    session.note(error);
+    session.end(0);
+    return null;
+  }
+}
+
+/** Relations only for anchors that reach the selection's paragraphs; paragraphs decide the rest. */
+async function relateSelection(
+  session: Session,
+  sorted: readonly Live[],
+  selection: LiveSelection,
+) {
+  const { first, last } = selection.info;
+  if (first === null || last === null) return;
+  const around = sorted.filter(({ range, record }) => {
+    const from = record.anchor?.first.ordinal ?? null;
+    const to = record.anchor?.last.ordinal ?? from;
+    return (
+      !!range && (from === null || to === null || (from <= last && to >= first))
+    );
+  });
+  session.begin("relations", around.length);
+  let done = 0;
+  for (const batch of chunks(around, WORD_COMMENT_SYNC_THREADS)) {
+    const results = batch.map((thread) =>
+      thread.range!.compareLocationWith(selection.range),
+    );
+    try {
+      await session.sync();
+      batch.forEach((thread, i) => {
+        thread.record.selection = String(results[i].value);
+      });
+      done += batch.length;
+    } catch (error) {
+      session.note(error);
+    }
+  }
+  session.end(done);
 }
 
 function markRepeatedIds(live: readonly Live[], session: Session) {

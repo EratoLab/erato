@@ -168,6 +168,20 @@ export interface CommentHostOptions {
   errorMessage?: string;
   /** Fake milliseconds: per sync, per package read, per reply listed, per compareLocationWith. */
   costs?: Partial<Record<"sync" | "ooxml" | "reply" | "compare", number>>;
+  /**
+   * The user's selection, by paragraph tag and offset in that host's paragraph.text; a caret when it
+   * has no `to`. Without it the whole body is selected.
+   */
+  selection?: CommentHostSelection;
+}
+
+export interface CommentHostPoint {
+  tag: string;
+  offset: number;
+}
+
+export interface CommentHostSelection extends CommentHostPoint {
+  to?: CommentHostPoint;
 }
 
 export interface CommentHostSync {
@@ -691,6 +705,7 @@ export function installWordCommentHost(
               : between(span.first, span.last)
                   .map((i) => paragraphs[i].laid.rangeText)
                   .join("\r"),
+          isEmpty: () => span.s === span.e,
         },
         "range",
         () =>
@@ -811,9 +826,23 @@ export function installWordCommentHost(
       },
       getSelection() {
         callLog.push("document.getSelection");
-        const last = paragraphs.length - 1;
+        const chosen = options.selection;
+        if (!chosen) {
+          const last = paragraphs.length - 1;
+          return new MockRange(
+            { s: 0, e: paragraphs[last].base, first: 0, last },
+            null,
+          );
+        }
+        const point = ({ tag, offset }: CommentHostPoint) => {
+          const p = byTag.get(tag);
+          if (!p) throw new Error(`mock: no paragraph ${tag}`);
+          return { at: p.base + offset, index: p.index };
+        };
+        const from = point(chosen);
+        const to = chosen.to ? point(chosen.to) : from;
         return new MockRange(
-          { s: 0, e: paragraphs[last].base, first: 0, last },
+          { s: from.at, e: to.at, first: from.index, last: to.index },
           null,
         );
       },

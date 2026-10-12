@@ -609,6 +609,79 @@ describe("dateUtc from the packages read (F-4)", () => {
   });
 });
 
+describe("the user's selection", () => {
+  const relationOf = (
+    threads: readonly WordCommentThreadRecord[],
+    key: string,
+  ) => thread(threads, key).selection;
+
+  it.each(HOSTS)(
+    "relates only the anchors around a caret to it on %s",
+    async (h) => {
+      let seen: unknown = "not called";
+      const result = await read(
+        { host: h, selection: { tag: "T6P", offset: 20 } },
+        {
+          selection: true,
+          exact: (_threads, live) => {
+            seen = live;
+            return [];
+          },
+        },
+      );
+      const ordinal = host.ordinalOf("T6P");
+      expect(result.selection).toEqual({
+        collapsed: true,
+        first: ordinal,
+        last: ordinal,
+      });
+      expect(seen).toEqual(result.selection);
+      expect(relationOf(result.threads, "T6")).toBe("Contains");
+      expect(relationOf(result.threads, "T7")).toBe("Contains");
+      expect(relationOf(result.threads, "T7b")).toBe("After");
+      expect(relationOf(result.threads, "T1")).toBeUndefined();
+      expect(phase(result, "relations")).toMatchObject({ total: 3, done: 3 });
+      expect(host.calls()).not.toContain("range.getComments");
+    },
+  );
+
+  it("relates a selection across paragraphs to every anchor reaching them", async () => {
+    const result = await read(
+      {
+        selection: { tag: "T3A", offset: 0, to: { tag: "T3B", offset: 5 } },
+      },
+      { selection: true },
+    );
+    expect(result.selection).toEqual({
+      collapsed: false,
+      first: host.ordinalOf("T3A"),
+      last: host.ordinalOf("T3B"),
+    });
+    expect(relationOf(result.threads, "T3")).toBe("OverlapsAfter");
+    expect(relationOf(result.threads, "T2")).toBeUndefined();
+  });
+
+  it("relates nothing to a selection the inventory cannot place", async () => {
+    const result = await read(
+      { nullParagraphIds: true, selection: { tag: "T1P", offset: 25 } },
+      { selection: true },
+    );
+    expect(result.selection).toEqual({
+      collapsed: true,
+      first: null,
+      last: null,
+    });
+    expect(result.threads.some((t) => t.selection !== undefined)).toBe(false);
+    expect(phase(result, "relations")).toBeUndefined();
+  });
+
+  it("reads no selection unless asked", async () => {
+    const result = await read({ selection: { tag: "T1P", offset: 25 } });
+    expect(result.selection).toBeNull();
+    expect(host.calls()).not.toContain("document.getSelection");
+  });
+});
+
 describe("renderWordCommentReadReport", () => {
   it("lists phases with syncs and timings", async () => {
     const result = await read({}, { exact: askFor("T1") });

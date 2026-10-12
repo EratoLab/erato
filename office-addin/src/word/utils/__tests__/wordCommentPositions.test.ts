@@ -9,6 +9,7 @@ import {
   v3cRangeText,
 } from "../../../test/mocks/word/commentPackages";
 import {
+  wordCommentCaretCoordinates,
   wordCommentContainer,
   wordCommentCoordinates,
   wordCommentPositionInput,
@@ -230,6 +231,86 @@ describe("vs edges and partial overlaps", () => {
   });
 });
 
+describe("Word's relation to the selection, where offsets cannot decide", () => {
+  const related = (
+    ref: string,
+    coordinates: WordCommentCoordinates,
+    selection: string,
+  ): WordCommentPositionInput => ({
+    ...thread(ref, coordinates, 0),
+    selection,
+  });
+
+  it("places a caret known only by its paragraph", () => {
+    const caret = wordCommentCaretCoordinates(4);
+    expect(caret).toEqual({
+      first: 4,
+      last: 4,
+      start: null,
+      end: null,
+      caret: true,
+    });
+    const threads = [
+      related("tIn", at(4, 10, 4, 20), "Contains"),
+      related("tEdge", at(4, 20, 4, 25), "AdjacentAfter"),
+      related("tPoint", at(4, 20, 4, 20, true), "Equal"),
+      related("tNext", at(4, 30, 4, 40), "After"),
+      thread("tAbove", at(2, 0, 2, 5), 1),
+      thread("tSpan", at(3, 4, 6, 2), 2),
+      thread("tBare", at(4, 30, 4, 40), 3),
+    ];
+    const found = positions(threads, caret);
+    expect(found.tIn).toMatchObject({ vs: "at_caret", away: 0 });
+    expect(found.tEdge.vs).toBe("at_caret");
+    expect(found.tPoint.vs).toBe("at_caret");
+    expect(found.tNext.vs).toBe("after");
+    expect(found.tAbove).toMatchObject({ vs: "before", away: 2 });
+    expect(found.tSpan.vs).toBe("at_caret");
+    expect(found.tBare.vs).toBeUndefined();
+    expect(wordCommentSelection(caret)).toEqual({
+      para: [4, 4],
+      caret: true,
+    });
+  });
+
+  it.each([
+    ["Inside", "inside"],
+    ["InsideStart", "inside"],
+    ["Equal", "inside"],
+    ["Contains", "contains"],
+    ["ContainsEnd", "contains"],
+    ["OverlapsBefore", "overlaps_start"],
+    ["OverlapsAfter", "overlaps_end"],
+    ["AdjacentBefore", "before"],
+    ["After", "after"],
+  ])("maps %s to %s against a passage without offsets", (relation, vs) => {
+    const passage = { first: 4, last: 4, start: null, end: null };
+    expect(
+      positions([related("t1", at(4, 3, 4, 9), relation)], passage).t1.vs,
+    ).toBe(vs);
+  });
+
+  it("lets offsets win over the relation", () => {
+    expect(
+      positions([related("t1", at(4, 10, 4, 20), "After")], sel(4, 12, 4, 14))
+        .t1.vs,
+    ).toBe("contains");
+  });
+
+  it("takes the relation from the read's record", () => {
+    const record = {
+      id: "1",
+      order: 0,
+      anchor: null,
+      selection: "Contains",
+    } as unknown as WordCommentThreadRecord;
+    expect(wordCommentPositionInput(record, "t1").selection).toBe("Contains");
+    expect(
+      wordCommentPositionInput({ ...record, selection: undefined }, "t1"),
+    ).not.toHaveProperty("selection");
+  });
+});
+
 describe("pos", () => {
   it("ranks anchor starts densely, the shorter of two equal starts first", () => {
     const threads = [
@@ -373,6 +454,12 @@ describe("helpers", () => {
         paragraphs: [{ index: -1 }] as never,
       }),
     ).toBeNull();
+    expect(
+      wordCommentSelectionCoordinates({ ...capture, startOffset: -1 }),
+    ).toEqual({ first: 12, last: 14, start: null, end: null });
+    expect(
+      wordCommentSelection({ first: 12, last: 12, start: null, end: null }),
+    ).toEqual({ para: [12, 12], caret: false });
     expect(wordCommentSelection(sel(12, 4))).toEqual({
       para: [12, 12],
       caret: true,

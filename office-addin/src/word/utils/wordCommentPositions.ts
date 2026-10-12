@@ -42,14 +42,18 @@ export interface WordCommentPositionInput {
   in: WordCommentContainer;
   /** The read's document order, for what neither coordinates nor relations decide. */
   order: number;
+  /** The anchor's compareLocationWith the selection Word had at the read, for what offsets cannot decide. */
+  selection?: string;
 }
 
 /** The selection captured at Send, in the same coordinates. */
 export interface WordCommentSelectionCoordinates {
   first: number;
   last: number;
-  start: number;
-  end: number;
+  /** Null where only the paragraph is known, as for a caret, which the v2 capture does not read. */
+  start: number | null;
+  end: number | null;
+  caret?: true;
 }
 
 /** a.compareLocationWith(b) for two threads' anchors, as Word.LocationRelation names it. */
@@ -176,10 +180,14 @@ export function wordCommentPositionInput(
     at: wordCommentCoordinates(record),
     in: wordCommentContainer(record.anchor?.first),
     order: record.order,
+    ...(record.selection ? { selection: record.selection } : {}),
   };
 }
 
-/** The v2 capture's span as review coordinates; null outside the main body or when not placed. */
+/**
+ * The v2 capture's span as review coordinates; null outside the main body or when its paragraphs
+ * are not placed. A span whose offsets are unknown keeps its paragraphs.
+ */
 export function wordCommentSelectionCoordinates(
   selection: Pick<
     WordSelectionSnapshot,
@@ -189,24 +197,26 @@ export function wordCommentSelectionCoordinates(
   const { paragraphs } = selection;
   const first = paragraphs[0]?.index ?? -1;
   const last = paragraphs[paragraphs.length - 1]?.index ?? -1;
-  if (
-    selection.story !== "main" ||
-    first < 0 ||
-    last < first ||
-    selection.startOffset < 0 ||
-    selection.endOffset < 0
-  )
-    return null;
+  if (selection.story !== "main" || first < 0 || last < first) return null;
+  const placed = selection.startOffset >= 0 && selection.endOffset >= 0;
   return {
     first: first + 1,
     last: last + 1,
-    start: selection.startOffset,
-    end: selection.endOffset,
+    start: placed ? selection.startOffset : null,
+    end: placed ? selection.endOffset : null,
   };
 }
 
+/** A caret Word reported in one review paragraph, whose offset no read gives. */
+export function wordCommentCaretCoordinates(
+  para: number,
+): WordCommentSelectionCoordinates {
+  return { first: para, last: para, start: null, end: null, caret: true };
+}
+
 const isCaret = (s: WordCommentSelectionCoordinates) =>
-  s.first === s.last && s.start === s.end;
+  s.caret === true ||
+  (s.first === s.last && s.start !== null && s.start === s.end);
 
 export function wordCommentSelection(
   selection: WordCommentSelectionCoordinates,
@@ -251,6 +261,26 @@ function vsOf(
     : startsFirst
       ? "overlaps_start"
       : "overlaps_end";
+}
+
+/**
+ * Annex A's mapping from the anchor's LocationRelation to the selection. Against a caret, anything
+ * but Before and After touches it, as the coordinates count edges.
+ */
+function vsOfRelation(
+  relation: string,
+  caret: boolean,
+): WordCommentVs | undefined {
+  if (relation === "Before") return "before";
+  if (relation === "After") return "after";
+  if (caret) return "at_caret";
+  if (relation === "AdjacentBefore") return "before";
+  if (relation === "AdjacentAfter") return "after";
+  if (relation === "Equal" || relation.startsWith("Inside")) return "inside";
+  if (relation.startsWith("Contains")) return "contains";
+  if (relation === "OverlapsBefore") return "overlaps_start";
+  if (relation === "OverlapsAfter") return "overlaps_end";
+  return undefined;
 }
 
 /** Paragraphs from the anchor to the nearest selection edge; 0 when they share one. */
@@ -397,7 +427,13 @@ export function wordCommentPositions(
   const positions = new Map<string, WordCommentPosition>();
   for (const thread of threads) {
     const span = spanOf(thread.at);
-    const vs = span && selection ? vsOf(span, selection) : undefined;
+    const vs =
+      span && selection
+        ? (vsOf(span, selection) ??
+          (thread.selection
+            ? vsOfRelation(thread.selection, isCaret(selection))
+            : undefined))
+        : undefined;
     const away = span && selection ? awayOf(span, selection) : undefined;
     const others = overlaps.get(thread.ref);
     positions.set(thread.ref, {
