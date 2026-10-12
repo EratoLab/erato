@@ -115,6 +115,76 @@ function coordinatorWith(
 afterEach(resetClientToolRegistryForTests);
 
 describe("ClientOperationCoordinator handler registry", () => {
+  it.each(["ready", "continuing"] as const)(
+    "does not detach a %s continuation from another device or an unavailable executor",
+    async (state) => {
+      const request = operation();
+      const { api } = fakeApi(request);
+      api.list.mockResolvedValue({
+        enabled: true,
+        account_id: ACCOUNT,
+        operations: [{ request, state }],
+      });
+      const attach = vi.fn<NonNullable<ClientOperationApi["attach"]>>();
+      const { handler } = toolHandler();
+      const executor = vi.spyOn(handler, "executor");
+      const { coordinator } = coordinatorWith(
+        { ...api, attach },
+        [],
+        [handler],
+      );
+      try {
+        for (const current of [
+          undefined,
+          { ...binding, device_id: "another-device-0000" },
+          {
+            ...binding,
+            host_context: { kind: "outlook_mailbox", identity: "b".repeat(64) },
+          },
+        ]) {
+          executor.mockReturnValue(current);
+          await coordinator.reconcile();
+        }
+        expect(attach).not.toHaveBeenCalled();
+        expect(api.continue).not.toHaveBeenCalled();
+        expect(api.claim).not.toHaveBeenCalled();
+        executor.mockReturnValue(binding);
+        attach.mockResolvedValue(undefined);
+        await coordinator.reconcile();
+        expect(attach).toHaveBeenCalledOnce();
+      } finally {
+        coordinator.dispose();
+      }
+    },
+  );
+
+  it.each([
+    { consent: "ask" as const },
+    { consent: "native" as const, kind: "native.v1" },
+  ])("keeps $consent continuations detached", async (overrides) => {
+    const request = operation(overrides);
+    const { api } = fakeApi(request);
+    api.list.mockResolvedValue({
+      enabled: true,
+      account_id: ACCOUNT,
+      operations: [{ request, state: "ready" }],
+    });
+    const attach = vi.fn<NonNullable<ClientOperationApi["attach"]>>();
+    const handler: ClientOperationHandler = {
+      kind: request.kind,
+      executor: () => undefined,
+      execute: vi.fn(),
+    };
+    const { coordinator } = coordinatorWith({ ...api, attach }, [handler]);
+    try {
+      await coordinator.reconcile();
+      expect(api.continue).toHaveBeenCalledOnce();
+      expect(attach).not.toHaveBeenCalled();
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
   it("keeps sweeping other chats while attached continuations are open", async () => {
     const first = operation();
     const second = operation({

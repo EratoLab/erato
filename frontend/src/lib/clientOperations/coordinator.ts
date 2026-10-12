@@ -163,10 +163,13 @@ export class ClientOperationCoordinator {
     if (
       request.kind === "client_tool.v1" &&
       request.consent === "none" &&
-      executor &&
-      sameBinding(executor, request.binding) &&
       this.api.attach
     ) {
+      // An observer must not race the owning pane with a detached continuation.
+      if (!executor || !sameBinding(executor, request.binding)) {
+        handler.status?.(request, executor ? "another_device" : "unavailable");
+        return Promise.resolve();
+      }
       if (!this.#attached.has(request.attempt_id)) {
         this.#attached.add(request.attempt_id);
         void this.api
