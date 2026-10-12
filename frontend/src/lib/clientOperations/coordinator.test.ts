@@ -115,6 +115,47 @@ function coordinatorWith(
 afterEach(resetClientToolRegistryForTests);
 
 describe("ClientOperationCoordinator handler registry", () => {
+  it("keeps sweeping other chats while attached continuations are open", async () => {
+    const first = operation();
+    const second = operation({
+      attempt_id: "00000000-0000-4000-8000-0000000000a2",
+      chat_id: "00000000-0000-4000-8000-0000000000c2",
+    });
+    const { api } = fakeApi(first);
+    api.list.mockImplementation(async () => ({
+      enabled: true,
+      account_id: ACCOUNT,
+      operations: [first, second].map((request) => ({
+        request,
+        state: "ready" as const,
+      })),
+    }));
+    const attach = vi.fn<NonNullable<ClientOperationApi["attach"]>>(
+      (_request, signal) =>
+        new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        }),
+    );
+    const { coordinator } = coordinatorWith(
+      { ...api, attach },
+      [],
+      [toolHandler().handler],
+    );
+    try {
+      await coordinator.reconcile();
+      await coordinator.reconcile();
+      expect(attach.mock.calls.map(([request]) => request.attempt_id)).toEqual([
+        first.attempt_id,
+        second.attempt_id,
+      ]);
+      expect(api.continue).not.toHaveBeenCalled();
+      expect(api.claim).not.toHaveBeenCalled();
+    } finally {
+      coordinator.dispose();
+    }
+    expect(attach.mock.calls.every(([, signal]) => signal.aborted)).toBe(true);
+  });
+
   it("dispatches a kind to the handler whose operation id matches", async () => {
     const { api } = fakeApi();
     const { registry, coordinator } = coordinatorWith(api);
@@ -288,6 +329,10 @@ describe("ClientOperationCoordinator handler registry", () => {
           outcome: "succeeded",
           result: { type: "value", value: { busy: [] } },
         },
+      });
+      expect(calls[3].headers).toMatchObject({
+        Accept: "text/event-stream",
+        "X-Erato-Executor": JSON.stringify(binding),
       });
     } finally {
       coordinator.dispose();

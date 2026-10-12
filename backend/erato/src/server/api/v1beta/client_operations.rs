@@ -6,6 +6,7 @@ use crate::services::client_operations::{
     ExecutorBinding, OperationRequest, OperationResult, store,
 };
 use crate::{policy::engine::PolicyEngine, state::AppState};
+use axum::response::{IntoResponse, Response, Sse};
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
@@ -343,17 +344,18 @@ pub async fn cancel_client_operation(
 }
 
 #[utoipa::path(post, path = "/me/client-operations/{attempt_id}/continue", operation_id = "continueClientOperation",
-    params(("attempt_id" = Uuid, Path)), responses((status = OK, body = ClientOperationResponse), (status = CONFLICT)), security(("bearer_auth" = [])))]
+    params(("attempt_id" = Uuid, Path)), responses((status = OK, content((ClientOperationResponse = "application/json"), (super::message_streaming::MessageSubmitStreamingResponseMessage = "text/event-stream"))), (status = CONFLICT)), security(("bearer_auth" = [])))]
 pub async fn continue_client_operation(
     State(state): State<AppState>,
     Extension(policy): Extension<PolicyEngine>,
     Extension(me): Extension<MeProfile>,
     Path(id): Path<Uuid>,
-) -> Result<Json<ClientOperationResponse>, ApiError> {
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
     let account_id = account(&state, &me)?;
     let mut row = store::get(&state.db, account_id, id).await.map_err(error)?;
     if row.state == store::AttemptState::Completed {
-        return Ok(Json(ClientOperationResponse { state: row.state }));
+        return Ok(Json(ClientOperationResponse { state: row.state }).into_response());
     }
     if matches!(
         row.state,
@@ -374,7 +376,28 @@ pub async fn continue_client_operation(
             "Operation has no result to continue".into(),
         ));
     }
-    let (_events, task) = state
+    let attached = headers
+        .get("accept")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.contains("text/event-stream"));
+    let context = attached
+        .then(|| super::message_streaming::generation_request_context_from_headers(&headers));
+    let request: OperationRequest =
+        serde_json::from_value(row.request.clone()).map_err(|error| self::error(error.into()))?;
+    if let Some(context) = &context
+        && (request.consent != crate::services::client_operations::ConsentPolicy::None
+            || context.executor.as_ref() != Some(&request.binding)
+            || !context.registered_client_tools.iter().any(|tool| {
+                tool == &request.operation_id
+                    || Some(tool.as_str()) == request.operation_id.rsplit('/').next()
+            }))
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            "Attached continuation requires the original executor and client tool".into(),
+        ));
+    }
+    let (events, task) = state
         .background_tasks
         .try_start_task(
             row.chat_id,
@@ -384,13 +407,25 @@ pub async fn continue_client_operation(
         )
         .await
         .map_err(|_| (StatusCode::CONFLICT, "Generation is already running".into()))?;
+    let guard = attached.then(|| task.client_stream_guard());
+    if attached && let Err(error) = task.register_client_operation(request).await {
+        state
+            .background_tasks
+            .remove_task(
+                &row.chat_id,
+                task.generation_id,
+                crate::services::background_tasks::TaskOutcome::AwaitingApproval,
+            )
+            .await;
+        return Err(self::error(error));
+    }
     tokio::spawn(async move {
         let result = super::message_streaming::with_generation_task_lifecycle(
             &state.background_tasks,
             &task,
             row.chat_id,
             super::message_streaming::run_client_operation_continuation(
-                &task, &state, &policy, &me, id,
+                &task, &state, &policy, &me, id, context,
             ),
         )
         .await;
@@ -407,7 +442,24 @@ pub async fn continue_client_operation(
         )
         .await;
     });
-    Ok(Json(ClientOperationResponse {
-        state: store::AttemptState::Continuing,
-    }))
+    if let Some(guard) = guard {
+        let events = futures::StreamExt::filter_map(
+            tokio_stream::wrappers::BroadcastStream::new(events),
+            |event| futures::future::ready(event.ok().map(Ok)),
+        );
+        Ok(
+            Sse::new(super::message_streaming::owned_streaming_events_to_sse(
+                events, guard,
+            ))
+            .keep_alive(
+                axum::response::sse::KeepAlive::new().interval(std::time::Duration::from_secs(1)),
+            )
+            .into_response(),
+        )
+    } else {
+        Ok(Json(ClientOperationResponse {
+            state: store::AttemptState::Continuing,
+        })
+        .into_response())
+    }
 }

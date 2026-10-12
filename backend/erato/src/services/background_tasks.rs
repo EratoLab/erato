@@ -676,10 +676,23 @@ impl BackgroundTaskManager {
                                 .ok()
                                 .flatten()
                                 .unwrap_or(JsonValue::Null);
-                            let outcome = ClientToolOutcome::from_payload(&payload);
-                            let _ = task
-                                .deliver_client_tool_result(&tool_call_id, outcome)
-                                .await;
+                            let bound = match task.client_operation(&tool_call_id).await {
+                                Some(operation) => serde_json::from_value::<
+                                    crate::services::client_operations::ExecutorBinding,
+                                >(
+                                    payload["operation_executor"].clone()
+                                )
+                                .is_ok_and(|binding| binding == operation.binding)
+                                    && operation.consent
+                                        == crate::services::client_operations::ConsentPolicy::None,
+                                None => true,
+                            };
+                            if bound {
+                                let outcome = ClientToolOutcome::from_payload(&payload);
+                                let _ = task
+                                    .deliver_client_tool_result(&tool_call_id, outcome)
+                                    .await;
+                            }
                         }
 
                         let consume_statement = named_statement_from_sql_and_values(
@@ -1257,8 +1270,9 @@ pub struct StreamingTask {
     pending_client_tools: Arc<RwLock<HashMap<String, oneshot::Sender<ClientToolOutcome>>>>,
     client_operations:
         RwLock<HashMap<String, crate::services::client_operations::OperationRequest>>,
-    client_disconnected: AtomicBool,
-    client_disconnect_notify: Notify,
+    original_transport_id: Uuid,
+    original_transport_connected: AtomicBool,
+    shared_transport: AtomicBool,
 }
 
 impl std::fmt::Debug for StreamingTask {
@@ -1296,8 +1310,9 @@ impl StreamingTask {
             abort_notify: Arc::new(Notify::new()),
             pending_client_tools: Arc::new(RwLock::new(HashMap::new())),
             client_operations: RwLock::new(HashMap::new()),
-            client_disconnected: AtomicBool::new(false),
-            client_disconnect_notify: Notify::new(),
+            original_transport_id: Uuid::new_v4(),
+            original_transport_connected: AtomicBool::new(false),
+            shared_transport: AtomicBool::new(false),
         }
     }
 
@@ -1513,32 +1528,107 @@ impl StreamingTask {
     }
 
     pub fn client_stream_guard(self: &Arc<Self>) -> ClientStreamGuard {
-        ClientStreamGuard(Arc::downgrade(self))
-    }
-
-    pub fn mark_client_disconnected(&self) {
-        self.client_disconnected.store(true, Ordering::Release);
-        self.client_disconnect_notify.notify_waiters();
+        self.original_transport_connected
+            .store(true, Ordering::Release);
+        ClientStreamGuard::new(
+            self.db.clone(),
+            self.generation_id,
+            self.original_transport_id,
+            Some(Arc::downgrade(self)),
+        )
     }
 
     pub async fn wait_for_client_disconnect(&self) {
         loop {
-            let notified = self.client_disconnect_notify.notified();
-            if self.client_disconnected.load(Ordering::Acquire) {
+            let connected = if self.shared_transport.load(Ordering::Acquire) {
+                if let Some(db) = &self.db {
+                    matches!(
+                        crate::services::client_operations::transport::owner(
+                            db,
+                            self.generation_id
+                        )
+                        .await,
+                        Ok(Some(Some(_)))
+                    )
+                } else {
+                    self.original_transport_connected.load(Ordering::Acquire)
+                }
+            } else {
+                self.original_transport_connected.load(Ordering::Acquire)
+            };
+            if !connected {
                 return;
             }
-            notified.await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
+    }
+
+    pub fn uses_shared_client_transport(&self) -> bool {
+        self.shared_transport.load(Ordering::Acquire)
+    }
+
+    pub async fn original_transport_can_execute(&self) -> bool {
+        if !self.shared_transport.load(Ordering::Acquire) {
+            return true;
+        }
+        match &self.db {
+            Some(db) => matches!(
+                crate::services::client_operations::transport::owner(db, self.generation_id).await,
+                Ok(Some(Some(owner))) if owner == self.original_transport_id
+            ),
+            None => self.original_transport_connected.load(Ordering::Acquire),
+        }
+    }
+
+    pub async fn initialize_client_transport(
+        &self,
+        binding: &crate::services::client_operations::ExecutorBinding,
+        operation_id: &str,
+    ) -> Result<(), eyre::Report> {
+        if self.shared_transport.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        if let Some(db) = &self.db {
+            crate::services::client_operations::transport::initialize(
+                db,
+                self.chat_id,
+                self.generation_id,
+                binding,
+                operation_id,
+                self.original_transport_connected
+                    .load(Ordering::Acquire)
+                    .then_some(self.original_transport_id),
+            )
+            .await?;
+        }
+        self.shared_transport.store(true, Ordering::Release);
+        // A disconnect can race initialization before there was a row to release.
+        if !self.original_transport_connected.load(Ordering::Acquire)
+            && let Some(db) = &self.db
+        {
+            crate::services::client_operations::transport::release(
+                db,
+                self.generation_id,
+                self.original_transport_id,
+            )
+            .await?;
+        }
+        Ok(())
     }
 
     pub async fn register_client_operation(
         &self,
         request: crate::services::client_operations::OperationRequest,
-    ) {
+    ) -> Result<(), eyre::Report> {
+        if request.consent == crate::services::client_operations::ConsentPolicy::None {
+            self.initialize_client_transport(&request.binding, &request.operation_id)
+                .await?;
+        }
         self.client_operations
             .write()
             .await
             .insert(request.tool_call_id.clone(), request);
+        Ok(())
     }
 
     pub async fn client_operation(
@@ -1552,6 +1642,10 @@ impl StreamingTask {
     pub fn subscriber_count(&self) -> usize {
         self.event_tx.receiver_count()
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 /// Events that can be streamed during message generation
@@ -1625,6 +1719,10 @@ pub enum StreamingEvent {
         tool_name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         input: Option<JsonValue>,
+        // Kept in the shared log so a superseded stream cannot mistake an old
+        // owned call for a legacy call after its ownership row is replaced.
+        #[serde(default, skip_serializing_if = "is_false")]
+        requires_transport: bool,
     },
     /// Assistant message was completed
     #[serde(rename = "assistant_message_completed")]
@@ -1654,13 +1752,94 @@ pub enum ToolCallStatus {
     Error,
 }
 
-/// Dropping the originating SSE stream changes only durable eligibility. It
-/// never aborts execution, and legacy fast calls keep their existing behavior.
-pub struct ClientStreamGuard(std::sync::Weak<StreamingTask>);
+/// The lease belongs to a response body, never to the worker or its event log.
+pub struct ClientStreamGuard {
+    db: Option<DatabaseConnection>,
+    generation_id: Uuid,
+    transport_id: Uuid,
+    original: Option<std::sync::Weak<StreamingTask>>,
+    heartbeat: JoinHandle<()>,
+}
+
+impl ClientStreamGuard {
+    pub fn new(
+        db: Option<DatabaseConnection>,
+        generation_id: Uuid,
+        transport_id: Uuid,
+        original: Option<std::sync::Weak<StreamingTask>>,
+    ) -> Self {
+        let heartbeat_db = db.clone();
+        let task = original.clone();
+        let heartbeat = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(crate::services::client_operations::transport::HEARTBEAT).await;
+                if let Some(task) = task.as_ref().and_then(|task| task.upgrade()) {
+                    if task.is_completed() {
+                        break;
+                    }
+                    if !task.shared_transport.load(Ordering::Acquire) {
+                        continue;
+                    }
+                }
+                if let Some(db) = &heartbeat_db
+                    && let Err(error) = crate::services::client_operations::transport::renew(
+                        db,
+                        generation_id,
+                        transport_id,
+                    )
+                    .await
+                {
+                    tracing::warn!(%error, "Client transport heartbeat failed");
+                }
+            }
+        });
+        Self {
+            db,
+            generation_id,
+            transport_id,
+            original,
+            heartbeat,
+        }
+    }
+
+    pub async fn allows_client_call(&self, requires_transport: bool) -> bool {
+        if !requires_transport {
+            return true;
+        }
+        match &self.db {
+            Some(db) => matches!(
+                crate::services::client_operations::transport::owner(db, self.generation_id).await,
+                Ok(Some(Some(owner))) if owner == self.transport_id
+            ),
+            None => false,
+        }
+    }
+}
+
 impl Drop for ClientStreamGuard {
     fn drop(&mut self) {
-        if let Some(task) = self.0.upgrade() {
-            task.mark_client_disconnected();
+        self.heartbeat.abort();
+        if let Some(task) = self.original.as_ref().and_then(|task| task.upgrade()) {
+            task.original_transport_connected
+                .store(false, Ordering::Release);
+            if !task.shared_transport.load(Ordering::Acquire) {
+                return;
+            }
+        }
+        if let Some(db) = self.db.clone() {
+            let generation_id = self.generation_id;
+            let transport_id = self.transport_id;
+            tokio::spawn(async move {
+                if let Err(error) = crate::services::client_operations::transport::release(
+                    &db,
+                    generation_id,
+                    transport_id,
+                )
+                .await
+                {
+                    tracing::warn!(%error, "Client transport release failed");
+                }
+            });
         }
     }
 }

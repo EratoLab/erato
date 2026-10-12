@@ -1846,6 +1846,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             tool_call_id,
             tool_name,
             input,
+            ..
         } => {
             let data = serde_json::to_string(&serde_json::json!({
                 "message_type": "client_tool_call",
@@ -1902,8 +1903,8 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
     Ok(Event::default().event(event_name).data(data))
 }
 
-type SseEventStream = Pin<Box<dyn Stream<Item = Result<Event, Report>> + Send>>;
-type SseEventStreamWithKeepAlive = axum::response::sse::KeepAliveStream<SseEventStream>;
+pub(crate) type SseEventStream = Pin<Box<dyn Stream<Item = Result<Event, Report>> + Send>>;
+pub(crate) type SseEventStreamWithKeepAlive = axum::response::sse::KeepAliveStream<SseEventStream>;
 
 fn streaming_events_to_sse<S>(events: S) -> SseEventStream
 where
@@ -1917,6 +1918,29 @@ where
             },
             Err(error) => Some(Err(error)),
         })
+    }))
+}
+
+pub(crate) fn owned_streaming_events_to_sse<S>(
+    events: S,
+    guard: ClientStreamGuard,
+) -> SseEventStream
+where
+    S: Stream<Item = Result<StreamingEvent, Report>> + Send + 'static,
+{
+    let guard = Arc::new(guard);
+    streaming_events_to_sse(futures::StreamExt::filter_map(events, move |result| {
+        let guard = Arc::clone(&guard);
+        async move {
+            if let Ok(StreamingEvent::ClientToolCall {
+                requires_transport, ..
+            }) = &result
+                && !guard.allows_client_call(*requires_transport).await
+            {
+                return None;
+            }
+            Some(result)
+        }
     }))
 }
 
@@ -5701,12 +5725,45 @@ async fn stream_generate_chat_completion<'a>(
     let continuing_client_tools = resume
         .as_ref()
         .and_then(|resume| resume.continuing_client_tools.clone());
-    // Only an approval continuation has an answering device; an operation
-    // continuation is detached and keeps the turn's own binding.
+    // Approval on a different device keeps decision-gated calls on the legacy path.
+    // An attached operation continuation already checked its original binding.
     let approving_executor = resume
         .as_ref()
         .filter(|resume| resume.operation_attempt.is_none())
         .map(|resume| resume.continuing_executor.clone());
+    if app_state.config.client_tools.durable_operations_enabled
+        && let Some(task) = streaming_task
+    {
+        for offered in offered_client_tools.values() {
+            let Some(durable) = &offered.config.durable else {
+                continue;
+            };
+            let Some(binding) = &offered.executor else {
+                continue;
+            };
+            let Some(kind) = app_state
+                .client_operations
+                .for_operation(&offered.config.qualified_name())
+            else {
+                continue;
+            };
+            if kind.consent() == crate::services::client_operations::ConsentPolicy::None
+                && approving_executor
+                    .as_ref()
+                    .is_none_or(|executor| executor.as_ref() == Some(binding))
+                && binding.validate()
+                && binding.realm == kind.realm()
+                && binding
+                    .host_context
+                    .as_ref()
+                    .is_some_and(|host| host.kind == durable.host_context.as_str())
+            {
+                task.initialize_client_transport(binding, kind.operation_id())
+                    .await?;
+                break;
+            }
+        }
+    }
     let (mut unfinished_tool_calls, approved_task_call_ids): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
@@ -7300,7 +7357,7 @@ async fn stream_generate_chat_completion<'a>(
                     ));
                 }
                 if let Some(request) = &durable_request {
-                    task.register_client_operation(request.clone()).await;
+                    task.register_client_operation(request.clone()).await?;
                 }
                 let server_refused = validation_failure.is_some();
                 let outcome = if let Some(failure) = validation_failure {
@@ -7321,6 +7378,7 @@ async fn stream_generate_chat_completion<'a>(
                         send_background_event(
                             task,
                             StreamingEvent::ClientToolCall {
+                                requires_transport: task.uses_shared_client_transport(),
                                 message_id: assistant_message_id,
                                 content_index,
                                 tool_call_id: call_id.clone(),
@@ -7343,7 +7401,9 @@ async fn stream_generate_chat_completion<'a>(
                         // during the park, so a dropped SSE connection here must NOT
                         // abort the generation. The broadcast + resume history is the
                         // durable signal path.
-                        if let Err(error) = call_message.send_event_report(tx.clone()).await {
+                        if task.original_transport_can_execute().await
+                            && let Err(error) = call_message.send_event_report(tx.clone()).await
+                        {
                             warn_and_capture_error(
                                 "send best-effort client tool call SSE event",
                                 &error,
@@ -7376,7 +7436,6 @@ async fn stream_generate_chat_completion<'a>(
                             },
                             _ = task.wait_for_abort() => Park::Aborted,
                             _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
-                            _ = tx.closed(), if durable_request.is_some() => Park::TimedOut,
                             _ = tokio::time::sleep(tokio::time::Duration::from_millis(
                                 park_timeout_ms,
                             )) => Park::TimedOut,
@@ -13213,35 +13272,11 @@ pub async fn message_submit_sse(
     )
     .await?;
 
-    // Convert broadcast receiver to SSE stream
-    let event_stream = {
-        use futures::StreamExt;
-        let broadcast_stream = tokio_stream::wrappers::BroadcastStream::new(broadcast_rx);
-        futures::StreamExt::filter_map(broadcast_stream, |result| {
-            futures::future::ready(match result {
-                Ok(streaming_event) => {
-                    // Convert StreamingEvent to SSE Event
-                    match streaming_event_to_sse(&streaming_event) {
-                        Ok(sse_event) => Some(Ok(sse_event)),
-                        Err(e) => Some(Err(e)),
-                    }
-                }
-                Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
-                    tracing::warn!("Client lagged behind by {} events", n);
-                    None
-                }
-            })
-        })
-        .inspect(|event| {
-            if let Err(err) = event {
-                log_and_capture_error("submit SSE serialization", err);
-            }
-        })
-    };
-
-    let event_stream = futures::StreamExt::inspect(event_stream, move |_| {
-        let _ = &client_stream_guard;
-    });
+    let events = futures::StreamExt::filter_map(
+        tokio_stream::wrappers::BroadcastStream::new(broadcast_rx),
+        |event| futures::future::ready(event.ok().map(Ok)),
+    );
+    let event_stream = owned_streaming_events_to_sse(events, client_stream_guard);
     Ok(Sse::new(event_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
@@ -16361,6 +16396,12 @@ pub async fn client_tool_result(
             payload["result"] = result;
             payload["file_upload_ids"] = json!(file_ids);
         }
+        if app_state.config.client_tools.durable_operations_enabled {
+            payload["operation_executor"] = serde_json::to_value(
+                crate::services::client_operations::ExecutorBinding::from_headers(&headers),
+            )
+            .unwrap_or(JsonValue::Null);
+        }
         app_state
             .background_tasks
             .enqueue_client_tool_result(generation_id, &request.tool_call_id, payload)
@@ -17108,6 +17149,7 @@ fn resolve_submitted_decisions(
 pub(crate) struct StartedContinuation {
     pub chat_id: Uuid,
     pub events: tokio::sync::broadcast::Receiver<StreamingEvent>,
+    pub client_stream_guard: ClientStreamGuard,
 }
 
 /// Validate an approval decision, take the chat's lease and resume the parked
@@ -17237,6 +17279,8 @@ pub(crate) async fn start_continuation(
     let (events, task) =
         acquire_user_generation_lease(app_state, chat_id, request.message_id).await?;
 
+    let client_stream_guard = task.client_stream_guard();
+
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(
             app_state_for_worker.background_tasks.clone(),
@@ -17288,7 +17332,11 @@ pub(crate) async fn start_continuation(
         .await;
     });
 
-    Ok(StartedContinuation { chat_id, events })
+    Ok(StartedContinuation {
+        chat_id,
+        events,
+        client_stream_guard,
+    })
 }
 
 #[utoipa::path(
@@ -17321,8 +17369,13 @@ pub async fn continue_message_sse(
         .then(|| crate::services::client_tools::registered_client_tools(&headers));
     request.executor = crate::services::client_operations::ExecutorBinding::from_headers(&headers);
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
-    start_continuation(&app_state, &policy, &me_user, request, tx).await?;
-    let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+    let started = start_continuation(&app_state, &policy, &me_user, request, tx).await?;
+    let stream: SseEventStream = Box::pin(futures::StreamExt::inspect(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
+        move |_| {
+            let _ = &started.client_stream_guard;
+        },
+    ));
     Ok(Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
@@ -19448,10 +19501,8 @@ pub(crate) async fn run_client_operation_continuation(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     attempt_id: Uuid,
+    context: Option<GenerationRequestContext>,
 ) -> Result<(), Report> {
-    // This API starts a detached generation. Registered client calls use the
-    // account inbox immediately until an interactive transport owns a turn.
-    task.mark_client_disconnected();
     let account_id = Uuid::parse_str(&me_user.id)?;
     let row = crate::services::client_operations::store::begin_continuation(
         &app_state.db,
@@ -19577,8 +19628,10 @@ pub(crate) async fn run_client_operation_continuation(
         Vec::new(),
         pending_calls,
         Some(attempt_id),
-        None,
-        None,
+        context
+            .as_ref()
+            .map(|context| context.registered_client_tools.clone()),
+        context.and_then(|context| context.executor),
     )
     .await
 }
@@ -19601,6 +19654,7 @@ pub async fn resume_message_sse(
     State(app_state): State<AppState>,
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
+    headers: HeaderMap,
     Json(request): Json<ResumeStreamRequest>,
 ) -> Result<Sse<SseEventStreamWithKeepAlive>, (axum::http::StatusCode, String)> {
     // Verify user has access to this chat
@@ -19626,41 +19680,63 @@ pub async fn resume_message_sse(
     })?
     .0;
 
-    let event_stream: SseEventStream =
-        if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
-            // The owner pod can use its in-memory history and broadcast channel.
-            let event_history = task.get_event_history().await;
-            let broadcast_rx = task.subscribe();
-            use futures::stream;
-            let history_stream = stream::iter(event_history.into_iter().map(Ok::<_, eyre::Report>));
-            let broadcast_stream = tokio_stream::wrappers::BroadcastStream::new(broadcast_rx);
-            let live_stream = futures::StreamExt::filter_map(broadcast_stream, |result| {
-                futures::future::ready(match result {
-                    Ok(event) => Some(Ok(event)),
-                    Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
-                        tracing::warn!("Resume client lagged behind by {} events", n);
-                        None
-                    }
-                })
-            });
-            streaming_events_to_sse(futures::StreamExt::chain(history_stream, live_stream))
-        } else if let Some((generation_id, _message_id)) = app_state
-            .background_tasks
-            .get_shared_generation(&request.chat_id)
-            .await
-        {
-            // A request routed to another pod tails the shared event log instead of
-            // looking for a task in that pod's process-local map.
-            streaming_events_to_sse(shared_generation_event_stream(
-                app_state.background_tasks.clone(),
-                generation_id,
-            ))
-        } else {
-            return Err((
-                axum::http::StatusCode::NOT_FOUND,
-                "No active generation task found for this chat".to_string(),
-            ));
-        };
+    let local = app_state.background_tasks.get_task(&request.chat_id).await;
+    let generation_id = if let Some(task) = &local {
+        task.generation_id
+    } else if let Some((generation_id, _)) = app_state
+        .background_tasks
+        .get_shared_generation(&request.chat_id)
+        .await
+    {
+        generation_id
+    } else {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            "No active generation task found for this chat".to_string(),
+        ));
+    };
+    let transport_id = Uuid::new_v4();
+    let db = app_state
+        .config
+        .client_tools
+        .durable_operations_enabled
+        .then(|| app_state.db.clone());
+    if let Some(db) = &db
+        && let Some(binding) =
+            crate::services::client_operations::ExecutorBinding::from_headers(&headers)
+    {
+        crate::services::client_operations::transport::acquire(
+            db,
+            request.chat_id,
+            generation_id,
+            &binding,
+            &crate::services::client_tools::registered_client_tools(&headers),
+            transport_id,
+        )
+        .await
+        .map_err(|_| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Client transport acquisition failed".into(),
+            )
+        })?;
+    }
+    let guard = ClientStreamGuard::new(db, generation_id, transport_id, None);
+    let event_stream = if let Some(task) = local {
+        let event_history = task.get_event_history().await;
+        let broadcast_rx = task.subscribe();
+        let history = futures::stream::iter(event_history.into_iter().map(Ok::<_, Report>));
+        let live = futures::StreamExt::filter_map(
+            tokio_stream::wrappers::BroadcastStream::new(broadcast_rx),
+            |event| futures::future::ready(event.ok().map(Ok)),
+        );
+        owned_streaming_events_to_sse(futures::StreamExt::chain(history, live), guard)
+    } else {
+        owned_streaming_events_to_sse(
+            shared_generation_event_stream(app_state.background_tasks.clone(), generation_id),
+            guard,
+        )
+    };
 
     Ok(Sse::new(event_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
