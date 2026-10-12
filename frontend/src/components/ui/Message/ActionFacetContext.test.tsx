@@ -236,6 +236,34 @@ describe("ActionFacetContext with Word comments", () => {
     expect(screen.queryByTestId("word-comment-thread")).toBeNull();
   });
 
+  it("says when a sent thread's replies were not read", () => {
+    render(
+      <ActionFacetContext
+        actionFacetArgs={{
+          selected_text: "Lieferung binnen 14 Tagen.",
+          anchored_comments: json(
+            envelope({
+              threads: [
+                {
+                  ...inPassage,
+                  entries: [inPassage.entries[0]],
+                  omitted_replies: undefined,
+                  replies_unread: true,
+                },
+                resolvedPoint,
+              ],
+            }),
+          ),
+        }}
+      />,
+    );
+    showComments();
+
+    const [unread, listed] = screen.getAllByTestId("word-comment-thread");
+    expect(unread).toHaveTextContent("Its replies were not read.");
+    expect(listed).not.toHaveTextContent("Its replies were not read.");
+  });
+
   it.each([
     ["chosen", "Chosen by you"],
     ["cursor", "At your cursor"],

@@ -345,6 +345,7 @@ export function buildWordCommentModel(input: {
         ...(source.matchedByContent
           ? { matched_by_content: true as const }
           : {}),
+        ...(record.replies === null ? { replies_unread: true as const } : {}),
       },
     });
   });
@@ -406,6 +407,7 @@ const plural = (n: number, one: string, many = `${one}s`) =>
 function coverageLine(
   coverage: Omit<WordCommentCoverage, "line">,
   unplaced: number,
+  repliesUnread: number,
   nearest: { above: number | null; below: number | null } | null,
 ): string {
   const parts = [
@@ -416,6 +418,10 @@ function coverageLine(
   if (coverage.cut.texts > 0 || coverage.cut.replies > 0)
     parts.push(
       `Cut: ${plural(coverage.cut.texts, "text")} over ${WORD_COMMENT_TEXT_MAX_CHARS} characters, ${plural(coverage.cut.replies, "reply", "replies")} before the last ${WORD_COMMENT_KEPT_REPLIES} of a thread.`,
+    );
+  if (repliesUnread > 0)
+    parts.push(
+      `Replies not read for ${plural(repliesUnread, "thread")} sent with their text (replies_unread).`,
     );
   if (nearest)
     parts.push(
@@ -526,10 +532,12 @@ export function buildWordCommentEnvelope(
         replies: kept.reduce((n, t) => n + t.replies, 0),
       },
     };
+    const repliesUnread = kept.filter((t) => t.thread.replies_unread).length;
     const complete =
       counts.not_shown === 0 &&
       counts.cut.texts === 0 &&
       counts.cut.replies === 0 &&
+      repliesUnread === 0 &&
       !input.cursor;
     const coverage: WordCommentCoverage = {
       ...counts,
@@ -537,6 +545,7 @@ export function buildWordCommentEnvelope(
       line: coverageLine(
         { ...counts, complete },
         unplaced,
+        repliesUnread,
         input.selection ? nearestOf(model.threads) : null,
       ),
     };

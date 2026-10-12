@@ -433,6 +433,15 @@ describe("parseWordCommentContext", () => {
     expect(summary?.envelope).toEqual(threadEnvelope);
   });
 
+  it("keeps the flag of a thread whose replies were not read, and only as true", () => {
+    expect(
+      parseWordCommentThread({ ...inside, replies_unread: true }),
+    ).toMatchObject({ replies_unread: true });
+    expect(
+      parseWordCommentThread({ ...inside, replies_unread: "true" }),
+    ).not.toHaveProperty("replies_unread");
+  });
+
   it("drops a wrongly typed optional field and keeps its record", () => {
     const parsed = parseWordCommentThread({
       ...inside,

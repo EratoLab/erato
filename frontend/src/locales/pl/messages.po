@@ -2115,6 +2115,11 @@ msgstr "{count, plural, one {# odpowiedź} few {# odpowiedzi} many {# odpowiedzi
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.repliesUnread"
+msgstr "Odpowiedzi nie zostały odczytane."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
 msgid "chat.message.action_facet.comments.resolved"
 msgstr "Rozwiązany"
 

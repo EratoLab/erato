@@ -131,8 +131,6 @@ export type WordCommentReadThread = WordCommentThread & {
   /** The whole anchored text, in the section view. */
   passage?: string;
   passage_cut?: true;
-  /** Word's replies were not read for this thread, so only its comment is here. */
-  replies_unread?: true;
 };
 
 export type { WordCommentReadView };
@@ -1030,7 +1028,6 @@ export class WordCommentReadSession {
         if (passage.text) extras.passage = passage.text;
         if (passage.cut) extras.passage_cut = true;
       }
-      if (record.replies === null) extras.replies_unread = true;
       return extras;
     };
     const envelopeOf = (full: readonly string[], cursor?: string) =>

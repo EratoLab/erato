@@ -198,6 +198,14 @@ function ThreadView({ thread }: { thread: WordCommentThread }) {
         {replies.map((entry) => (
           <EntryView key={entry.n} entry={entry} />
         ))}
+        {thread.replies_unread && (
+          <li className={META_CLASS}>
+            {t({
+              id: "chat.message.action_facet.comments.repliesUnread",
+              message: "Its replies were not read.",
+            })}
+          </li>
+        )}
       </ol>
     </li>
   );

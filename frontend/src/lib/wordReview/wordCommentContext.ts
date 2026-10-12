@@ -126,6 +126,8 @@ export interface WordCommentThread {
   read_only?: true;
   matched_by_content?: true;
   omitted_replies?: number;
+  /** Word's replies were not read for this thread, so its entries may lack some. */
+  replies_unread?: true;
 }
 
 /** One comment-map row: a thread listed without its full text. */
@@ -391,7 +393,7 @@ function threadOf(value: unknown): WordCommentThread | null {
     first_at: source.first_at ?? null,
     last_at: source.last_at ?? null,
     entries,
-    ...trueFlags(source, ["read_only", "matched_by_content"]),
+    ...trueFlags(source, ["read_only", "matched_by_content", "replies_unread"]),
     ...(isOrdinal(source.omitted_replies)
       ? { omitted_replies: source.omitted_replies }
       : {}),

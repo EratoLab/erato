@@ -673,6 +673,47 @@ describe("the arguments a Send carries, from the ERMAIN-947 fixture", () => {
     expect(parseWordCommentEnvelope(atCaret.commentsJson)?.why).toBe("cursor");
   });
 
+  it("flags a thread whose replies were not read, and the coverage line says so", async () => {
+    host = installWordCommentHost({ selection: { tag: "T1P", offset: 25 } });
+    const result = await readWordComments({
+      selection: true,
+      replies: "requested",
+      exact: (threads, live) =>
+        wordCommentSendExact(threads, { passage: null, live, pickedId: null }),
+      budgetsMs: { replies: 0 },
+      now: host.now,
+    });
+    if (!result.ok) throw new Error(result.error);
+    const read = wordCommentSendRead({
+      result,
+      registry: createWordCommentRefRegistry("doc"),
+      passage: null,
+      people: { principalEmail: null },
+      now: NOW,
+      userTz: "Europe/Berlin",
+    });
+    const { threadJson, commentsJson } = wordCommentThreadArgs(
+      read,
+      refOf(read, "T1"),
+    );
+
+    const thread = parseWordCommentThread(threadJson);
+    expect(thread?.entries).toHaveLength(1);
+    expect(thread?.replies_unread).toBe(true);
+    const envelope = parseWordCommentEnvelope(commentsJson);
+    expect(envelope?.coverage.complete).toBe(false);
+    expect(envelope?.coverage.line).toContain(
+      "Replies not read for 1 thread sent with their text (replies_unread).",
+    );
+
+    const full = await sendRead({ tag: "T1P", offset: 25 });
+    const listed = parseWordCommentThread(
+      wordCommentThreadArgs(full, refOf(full, "T1")).threadJson,
+    );
+    expect(listed?.entries).toHaveLength(3);
+    expect(listed).not.toHaveProperty("replies_unread");
+  });
+
   it("Include open comments sends every open thread with an empty thread_json", async () => {
     const read = await sendRead({ tag: "END", offset: 0 });
     const { threadJson, commentsJson } = wordCommentThreadArgs(read, null);

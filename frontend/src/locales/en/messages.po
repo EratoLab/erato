@@ -2115,6 +2115,11 @@ msgstr "{count, plural, one {# reply} other {# replies}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.repliesUnread"
+msgstr "Its replies were not read."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
 msgid "chat.message.action_facet.comments.resolved"
 msgstr "Resolved"
 
