@@ -203,7 +203,18 @@ export interface CommentHost {
   /** String(Comment.id) of a comment key. */
   commentId(key: string): string;
   ordinalOf(tag: string): number;
+  /** What range.select() selected last, by paragraph tag and offset in paragraph.text. */
+  selected(): CommentHostSpan | null;
+  /** A thread's anchor in the same terms. */
+  anchorOf(key: string): CommentHostSpan;
   getFileAsync: Mock;
+}
+
+export interface CommentHostSpan {
+  first: string;
+  last: string;
+  from: number;
+  to: number;
 }
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -434,6 +445,8 @@ export function installWordCommentHost(
   };
 
   let queue: Command[] = [];
+  /** What range.select() selected last; getSelection() then returns it. */
+  let selected: Span | null = null;
   let syncs = 0;
   let clock = 0;
   const callLog: string[] = [];
@@ -753,6 +766,16 @@ export function installWordCommentHost(
       callLog.push("range.getComments");
       return new Collection<Loadable>("comments", () => []);
     }
+    select(_mode?: string) {
+      const span = { ...this.span };
+      enqueue({
+        call: "range.select",
+        cost: 0,
+        run: () => {
+          selected = span;
+        },
+      });
+    }
   }
 
   const entryProps = (key: string) => {
@@ -826,6 +849,7 @@ export function installWordCommentHost(
       },
       getSelection() {
         callLog.push("document.getSelection");
+        if (selected) return new MockRange(selected, null);
         const chosen = options.selection;
         if (!chosen) {
           const last = paragraphs.length - 1;
@@ -882,6 +906,29 @@ export function installWordCommentHost(
       const p = byTag.get(tag);
       if (!p) throw new Error(`mock: no paragraph ${tag}`);
       return p.index + 1;
+    },
+    selected: () => {
+      if (!selected) return null;
+      const first = paragraphs[selected.first];
+      const last = paragraphs[selected.last];
+      return {
+        first: first.tag,
+        last: last.tag,
+        from: selected.s - first.base,
+        to: selected.e - last.base,
+      };
+    },
+    anchorOf: (key) => {
+      const span = anchors.get(key);
+      if (!span) throw new Error(`mock: no anchor ${key}`);
+      const first = paragraphs[span.first];
+      const last = paragraphs[span.last];
+      return {
+        first: first.tag,
+        last: last.tag,
+        from: span.s - first.base,
+        to: span.e - last.base,
+      };
     },
     getFileAsync,
   };

@@ -316,6 +316,11 @@ export interface WordCommentReadOptions {
   selection?: boolean;
   /** "requested" reads replies only for the threads `exact` names (Word for Mac lists them slowly). */
   replies?: "all" | "requested";
+  /**
+   * False reads no OOXML package (about 0.7 s each on the web): `exact` then only names the threads
+   * whose replies to list, and `legacy` stays unknown, so refs stay those of the ids.
+   */
+  packages?: boolean;
   budgetsMs?: Partial<Record<WordCommentBudgetPhase, number>>;
   timeoutMs?: number;
   onProgress?: (
@@ -587,8 +592,10 @@ async function readThreads(
     budgets.replies,
   );
   const notes = new PackageNotes();
-  await placeExact(session, sorted, asked, budgets.exact, notes);
-  if (notes.legacy === null) await probeLegacy(session, sorted, notes);
+  if (options.packages !== false) {
+    await placeExact(session, sorted, asked, budgets.exact, notes);
+    if (notes.legacy === null) await probeLegacy(session, sorted, notes);
+  }
   const legacy = notes.legacy;
 
   diagnostics.legacy = legacy;

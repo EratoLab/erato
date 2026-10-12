@@ -259,6 +259,20 @@ describe("replies", () => {
     expect(phase(result, "replies")).toMatchObject({ total: 1, done: 1 });
   });
 
+  it("reads no package without packages: the requested threads get replies only", async () => {
+    const result = await read(
+      { host: "web" },
+      { replies: "requested", exact: askFor("T1", "T3"), packages: false },
+    );
+    expect(thread(result.threads, "T1").replies).toHaveLength(2);
+    expect(thread(result.threads, "T1").placement).toBeUndefined();
+    expect(thread(result.threads, "T2").replies).toBeNull();
+    expect(result.legacy).toBeNull();
+    expect(host.calls()).not.toContain("paragraph.getOoxml");
+    expect(host.calls()).not.toContain("range.getOoxml");
+    expect(phase(result, "exact")).toBeUndefined();
+  });
+
   it("stops at the replies budget and leaves the rest unread, not read-only", async () => {
     const result = await read(
       {
