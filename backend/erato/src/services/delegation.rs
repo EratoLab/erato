@@ -482,10 +482,14 @@ pub(crate) struct EffectiveTasksConfig {
 /// a cap rather than combining: the STRICTEST `mode` and the LOWEST
 /// `plan_min_tasks` win, so selecting a second facet can only ever make a turn
 /// ask more.
+///
+/// A planning action facet is merged by the same rules, after the selected
+/// facets: for the first-wins keys, the user's own selection speaks first.
 pub(crate) fn effective_tasks_config(
     global: &erato_config::config::DelegationTasksConfig,
     facets: &crate::config::FacetsConfig,
     planning_facet_ids: &[String],
+    planning_action_facet: Option<&erato_config::config::FacetDelegationOverrides>,
 ) -> EffectiveTasksConfig {
     let mut effective = EffectiveTasksConfig {
         max_tasks_per_turn: global.max_tasks_per_turn,
@@ -501,14 +505,13 @@ pub(crate) fn effective_tasks_config(
     };
     let mut persona_set = false;
     let mut scheduling_set = false;
-    for facet_id in planning_facet_ids {
-        let Some(overrides) = facets
+    let selected_overrides = planning_facet_ids.iter().filter_map(|facet_id| {
+        facets
             .facets
             .get(facet_id)
             .and_then(|facet| facet.delegation.as_ref())
-        else {
-            continue;
-        };
+    });
+    for overrides in selected_overrides.chain(planning_action_facet) {
         if let Some(value) = overrides.max_tasks_per_turn {
             effective.max_tasks_per_turn = effective.max_tasks_per_turn.min(value);
         }
@@ -3195,6 +3198,7 @@ mod tests {
             &tasks_config(),
             &facets,
             &["strict".to_string(), "generous".to_string()],
+            None,
         );
 
         // Caps: minimum wins in both directions.
@@ -3267,6 +3271,7 @@ mod tests {
             &global,
             &facets,
             &["lenient".to_string(), "strict".to_string()],
+            None,
         );
 
         assert_eq!(
@@ -3281,12 +3286,83 @@ mod tests {
             &global,
             &facets,
             &["strict".to_string(), "lenient".to_string()],
+            None,
         );
         assert_eq!(reversed.approval_mode, effective.approval_mode);
         assert_eq!(
             reversed.approval_plan_min_tasks,
             effective.approval_plan_min_tasks
         );
+    }
+
+    /// A Word turn plans under its action facet, so that facet's overrides
+    /// narrow and widen by the same rules as a selected facet's; it comes after
+    /// the selection, so a first-wins key is still the user's to set.
+    #[test]
+    fn a_planning_action_facet_merges_after_the_selected_facets() {
+        use erato_config::config::{
+            FacetDelegationApprovalOverrides, FacetDelegationOverrides, TaskApprovalMode,
+            TaskPersona, TaskRunMode, TaskScheduling,
+        };
+        let mut facets = crate::config::FacetsConfig::default();
+        facets.facets.insert(
+            "plan".to_string(),
+            planning_facet(
+                &["erato/delegate_task"],
+                Some(FacetDelegationOverrides {
+                    max_tasks_per_turn: Some(3),
+                    persona: Some(TaskPersona::Bare),
+                    child_facet_ids: Some(vec!["mail".to_string()]),
+                    approval: Some(FacetDelegationApprovalOverrides {
+                        mode: Some(TaskApprovalMode::Plan),
+                        plan_min_tasks: None,
+                    }),
+                    ..Default::default()
+                }),
+            ),
+        );
+        let word = FacetDelegationOverrides {
+            max_tasks_per_turn: Some(1),
+            persona: Some(TaskPersona::Inherit),
+            child_facet_ids: Some(vec!["files".to_string(), "mail".to_string()]),
+            run_modes: Some(vec![TaskRunMode::Async]),
+            scheduling: Some(TaskScheduling::Silent),
+            approval: Some(FacetDelegationApprovalOverrides {
+                mode: Some(TaskApprovalMode::Never),
+                plan_min_tasks: Some(2),
+            }),
+            ..Default::default()
+        };
+
+        let alone = effective_tasks_config(&tasks_config(), &facets, &[], Some(&word));
+        assert_eq!(alone.max_tasks_per_turn, 1);
+        assert_eq!(alone.max_parallel, 1);
+        assert_eq!(
+            alone.child_facet_ids,
+            vec![
+                "web_search".to_string(),
+                "files".to_string(),
+                "mail".to_string()
+            ]
+        );
+        assert_eq!(alone.run_modes, vec![TaskRunMode::Wait, TaskRunMode::Async]);
+        assert_eq!(alone.scheduling, TaskScheduling::Silent);
+        assert_eq!(alone.approval_mode, TaskApprovalMode::AsyncOnly);
+
+        let both =
+            effective_tasks_config(&tasks_config(), &facets, &["plan".to_string()], Some(&word));
+        assert_eq!(both.max_tasks_per_turn, 1);
+        assert_eq!(both.persona, TaskPersona::Bare);
+        assert_eq!(
+            both.child_facet_ids,
+            vec![
+                "web_search".to_string(),
+                "mail".to_string(),
+                "files".to_string()
+            ]
+        );
+        assert_eq!(both.approval_mode, TaskApprovalMode::Plan);
+        assert_eq!(both.approval_plan_min_tasks, 2);
     }
 
     fn task_batch(calls: &[(&str, Option<&str>)]) -> Vec<genai::chat::ToolCall> {
@@ -3434,7 +3510,7 @@ mod tests {
     #[test]
     fn with_no_planning_facet_overrides_the_global_config_stands() {
         let facets = crate::config::FacetsConfig::default();
-        let effective = effective_tasks_config(&tasks_config(), &facets, &[]);
+        let effective = effective_tasks_config(&tasks_config(), &facets, &[], None);
         assert_eq!(effective.max_tasks_per_turn, 5);
         assert_eq!(effective.max_server_tool_calls_per_task, 5);
         assert_eq!(effective.max_client_tool_calls_per_task, 30);
@@ -3540,6 +3616,7 @@ mod tests {
             &tasks_config(),
             &facets,
             &["async_only".to_string(), "wait_only".to_string()],
+            None,
         );
         assert_eq!(
             both.run_modes,
@@ -3557,7 +3634,7 @@ mod tests {
 
         // A facet that names only `async` still leaves `wait` available.
         let async_only =
-            effective_tasks_config(&tasks_config(), &facets, &["async_only".to_string()]);
+            effective_tasks_config(&tasks_config(), &facets, &["async_only".to_string()], None);
         assert!(
             async_only
                 .run_modes
@@ -3688,7 +3765,8 @@ mod tests {
                 }),
             ),
         );
-        let effective = effective_tasks_config(&tasks_config(), &facets, &["plan".to_string()]);
+        let effective =
+            effective_tasks_config(&tasks_config(), &facets, &["plan".to_string()], None);
         // Server work forbidden outright, client work untouched.
         assert_eq!(effective.max_server_tool_calls_per_task, 0);
         assert_eq!(effective.max_client_tool_calls_per_task, 30);
