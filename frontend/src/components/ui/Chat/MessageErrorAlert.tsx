@@ -6,6 +6,7 @@ import {
   type MessageErrorFilterDetails,
 } from "@/types/chat";
 
+import { SubmissionNotice } from "./SubmissionNotice";
 import { Alert } from "../Feedback/Alert";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import {
@@ -42,43 +43,52 @@ export const MessageErrorAlert = ({ message }: MessageErrorAlertProps) => {
   const errorReportConfig = useErrorReportFeature();
 
   if (!message.error) {
-    return null;
+    return <SubmissionNotice message={message} />;
   }
 
   return (
-    <Alert
-      type="error"
-      title={getErrorTitle(message.error.error_type)}
-      geometryVariant="message"
-      className="mb-3"
-      data-testid="chat-message-error"
-    >
-      <p>
-        {getErrorDescription(
+    <>
+      <SubmissionNotice message={message} />
+      <Alert
+        type="error"
+        title={getErrorTitle(message.error.error_type)}
+        geometryVariant="message"
+        className="mb-3"
+        data-testid="chat-message-error"
+      >
+        <p>
+          {getErrorDescription(
+            message.error.error_type,
+            message.error.filter_details,
+          )}
+        </p>
+        {getErrorCta(
+          message.error.error_type,
+          message.error.filter_details,
+        ) && (
+          <p className="mt-2">
+            {getErrorCta(
+              message.error.error_type,
+              message.error.filter_details,
+            )}
+          </p>
+        )}
+        {renderContentFilterDetails(
           message.error.error_type,
           message.error.filter_details,
         )}
-      </p>
-      {getErrorCta(message.error.error_type, message.error.filter_details) && (
-        <p className="mt-2">
-          {getErrorCta(message.error.error_type, message.error.filter_details)}
-        </p>
-      )}
-      {renderContentFilterDetails(
-        message.error.error_type,
-        message.error.filter_details,
-      )}
-      {renderVerboseErrorDescription(
-        message.error.error_type,
-        message.error.error_description,
-        errorReportConfig.showVerboseAssistantErrors,
-      )}
-      {errorReportConfig.showCopyErrorReport && message.error_report && (
-        <div className="mt-3">
-          <CopyErrorButton report={message.error_report} />
-        </div>
-      )}
-    </Alert>
+        {renderVerboseErrorDescription(
+          message.error.error_type,
+          message.error.error_description,
+          errorReportConfig.showVerboseAssistantErrors,
+        )}
+        {errorReportConfig.showCopyErrorReport && message.error_report && (
+          <div className="mt-3">
+            <CopyErrorButton report={message.error_report} />
+          </div>
+        )}
+      </Alert>
+    </>
   );
 };
 

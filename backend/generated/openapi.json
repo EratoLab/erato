@@ -6229,6 +6229,9 @@
             "type": "string",
             "description": "The unique ID of the sibling message, if any"
           },
+          "submission_outcome": {
+            "$ref": "#/components/schemas/SubmissionOutcome"
+          },
           "task_result": {
             "$ref": "#/components/schemas/TaskResultInput",
             "description": "Present on a user message the server appended to deliver a finished\ndelegated task's result. The client uses it to tell such a row apart\nfrom one a person wrote, and to decide whether it still needs a\nreaction."
@@ -6589,6 +6592,9 @@
                 "$ref": "#/components/schemas/ClientToolDraftReference"
               }
             ]
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/SubmissionRecovery"
           },
           "terminal": {
             "type": "boolean",
@@ -11322,6 +11328,73 @@
         "enum": [
           "user_pick",
           "audience_pin"
+        ]
+      },
+      "SubmissionOutcome": {
+        "type": "object",
+        "required": [
+          "status",
+          "attempts_used",
+          "max_attempts"
+        ],
+        "properties": {
+          "attempts_used": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "max_attempts": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SubmissionReason"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubmissionStatus"
+          }
+        }
+      },
+      "SubmissionReason": {
+        "type": "string",
+        "enum": [
+          "validation_failed",
+          "attempts_exhausted",
+          "model_stopped",
+          "recovery_reads_exhausted",
+          "terminal_validation",
+          "context_unavailable",
+          "capability_unavailable",
+          "provider_error",
+          "timeout",
+          "cancelled",
+          "user_requested_answer",
+          "user_stopped",
+          "work_limit_reached"
+        ]
+      },
+      "SubmissionRecovery": {
+        "type": "string",
+        "enum": [
+          "repair_arguments",
+          "read_current_context",
+          "cannot_continue"
+        ]
+      },
+      "SubmissionStatus": {
+        "type": "string",
+        "enum": [
+          "correcting",
+          "accepted",
+          "unresolved"
         ]
       },
       "TaskResultInput": {

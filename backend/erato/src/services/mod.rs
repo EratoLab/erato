@@ -8,6 +8,7 @@ pub mod configuration_reload_listener;
 pub mod delegation;
 pub mod delegation_trace;
 pub mod local_delegation;
+pub mod submission_correction;
 pub(crate) mod tool_arguments;
 pub(crate) mod tool_call_budget;
 pub mod tool_display;

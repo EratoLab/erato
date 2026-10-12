@@ -1652,6 +1652,22 @@ impl AppConfig {
                                 qualified
                             );
                         }
+                        if submission.max_recovery_reads > 128 {
+                            panic!(
+                                "Client tool '{}' submission.max_recovery_reads must be 0–128.",
+                                qualified
+                            );
+                        }
+                        for name in &submission.recovery_read_tools {
+                            if !config.client_tools.tools.values().any(|read| {
+                                read.qualified_name() == *name && read.submission.is_none()
+                            }) {
+                                panic!(
+                                    "Client tool '{}' recovery read '{}' must name a configured non-submission client tool.",
+                                    qualified, name
+                                );
+                            }
+                        }
                         if let Err(error) = crate::client_tool_schema::compile(&value) {
                             panic!(
                                 "Client tool '{}' has an invalid submission schema: {}",
@@ -5203,10 +5219,19 @@ pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet)]
 pub struct ClientToolSubmissionConfig {
-    /// Maximum submissions of this tool per generation, including the initial
-    /// attempt and schema/client failures. Must be 1–10. Default: 3.
+    /// Maximum attempts per logical editing step, including the initial
+    /// submission, schema/client failures and replies without progress.
+    /// Independent of ordinary tool budgets. Must be 1–10. Default: 3.
     #[serde(default = "default_submission_max_attempts")]
     pub max_attempts: u32,
+    /// Already-authorized client read tools eligible for correction recovery,
+    /// identified by their qualified names. Does not grant tool access.
+    #[serde(default)]
+    pub recovery_read_tools: Vec<String>,
+    /// Maximum recovery read calls per editing step, including pagination.
+    /// Must be 0–128. Default: 32.
+    #[serde(default = "default_submission_recovery_reads")]
+    pub max_recovery_reads: u32,
     /// Native enforcement supplements mandatory server and client validation.
     /// Auto uses it only for a compatible schema, adapter and explicitly capable
     /// model; off uses validation/feedback only; required rejects an unsupported
@@ -5219,10 +5244,16 @@ fn default_submission_max_attempts() -> u32 {
     3
 }
 
+fn default_submission_recovery_reads() -> u32 {
+    32
+}
+
 impl Default for ClientToolSubmissionConfig {
     fn default() -> Self {
         Self {
             max_attempts: default_submission_max_attempts(),
+            recovery_read_tools: Vec::new(),
+            max_recovery_reads: default_submission_recovery_reads(),
             native_schema: ClientToolNativeSchema::Auto,
         }
     }

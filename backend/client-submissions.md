@@ -9,13 +9,15 @@ This is infrastructure for hosts that need a typed artifact. It does not impleme
 1. The model calls the submission tool with an object matching its parameter schema. The artifact is the tool arguments themselves, not JSON encoded inside a string.
 2. The backend validates those arguments against the configured JSON Schema before dispatching to the client. Schemas compile offline; local `$defs`/`$ref` references are supported, external retrieval is disabled.
 3. The host validates domain rules using its authoritative parser: references, current state, supported operations, permissions, and so on. The executor may stage a draft but must not apply it.
-4. On failure, the tool result contains compact `validation_errors` and the remaining attempt count. Only a failed submission resumes inference. The default allows three attempts total (the initial attempt plus two corrections), configurable from one to ten. The existing generation-wide tool limit still applies.
+4. On failure, the tool result contains compact `validation_errors` and the remaining attempt count. Only a failed submission resumes inference. The default allows three attempts total (the initial attempt plus two corrections), configurable from one to ten. Submission attempts are reserved before ordinary tool-budget admission and do not consume that budget. Prose-only and unrelated-tool replies while correction is pending consume an unsuccessful attempt.
 5. On success, the host returns a small receipt such as `{ "draft_id": "draft-1" }`. The backend records the call and result, emits the normal tool update and message completion, and makes no further model request. It does not generate a confirmation or echo the artifact in the result.
 6. The host displays its review UI from the accepted call's arguments and receipt. Applying the draft is a separate user-confirmed action with the host's normal undo/recovery behavior.
 
 Executors remain idempotent by tool-call ID. A result POST may be retried after a transport failure. Cancellation and a client timeout terminate a submission without an automatic retry, because the host may still have staged it. Existing result ownership/message checks and cross-instance delivery are unchanged; structured diagnostics are preserved on both delivery paths.
 
-Submit a single draft in a model response, after other tools have completed. A submission mixed with other tool calls, or multiple parallel submissions, is rejected before its host executor runs. Ordinary sibling tools retain their existing behavior. Attempt counts belong to the offered tool's identity and the current generation; starting a new user turn resets them.
+Submit a single draft in a model response, after other tools have completed. A submission mixed with other tool calls, or multiple parallel submissions, is rejected before its host executor runs. Ordinary sibling tools retain their existing behavior. A server-owned editing step selects the first offered submission tool and shares one allowance across calls; switching tools, draft IDs or snapshots cannot reset it. Switching submission tools is rejected. Charges and correction state live in `TurnConsumption` and `ToolCallCharge`, survive approval continuation, and are unchanged by result redelivery or SSE reconnects. A mixed task/submission batch is charged before task approval and remains mixed after continuation.
+
+Starting a new user turn currently starts fresh accounting. Whether an unfinished editing step should cross that boundary remains an open policy question; this change does not decide it. Durable parking and backend-restart recovery are tracked separately in ERMAIN-944.
 
 ## Configuration
 
@@ -40,12 +42,16 @@ parameters = '''
 timeout_ms = 60000
 
 [client_tools.tools.submit_draft.submission]
-max_attempts = 3
+max_attempts = 5
+recovery_read_tools = ["editor/read_context"]
+max_recovery_reads = 32
 native_schema = "auto"
 
 [facets]
 tool_call_allowlist = ["editor/submit_draft"]
 ```
+
+The example's `editor/read_context` must be a separately configured non-submission client tool. Recovery names do not grant access: each read must still be offered and authorized in the current request. `max_recovery_reads` bounds calls, including pagination, separately from submission attempts (0–128; default 32). Ordinary tools and unrelated work retain their usual budgets.
 
 The same tool selection works in regular facets and action facets. `submission` is an optional table, not a new tool type or hardcoded name.
 
@@ -97,7 +103,9 @@ The shared frontend sends those issues as `validation_errors` to the existing re
 { "submission": { "status": "accepted", "attempts_remaining": 0 } }
 ```
 
-The other statuses are `retry` and `failed`. A failed or timed-out submission is retained as a failed tool result, never converted into a draft or an apply request. Hosts can restore review state from persisted accepted tool inputs/results after a reload; keeping the draft only in transient component state is insufficient.
+The other statuses are `retry` and `failed`. Rejection feedback may include `submission_feedback.recovery`: `repair_arguments` (default), `read_current_context`, or `cannot_continue`. Hosts classify recovery from their parser and current request authority; the backend never interprets diagnostic prose or domain error codes. Only `read_current_context` admits declared recovery reads against the separate allowance. A missing, consumed or revoked capture must produce `cannot_continue`, not permission to recapture.
+
+Tool updates also carry a typed `submission_outcome`; the final outcome is persisted in generation metadata and exposed on `ChatMessage`. Its status is `correcting`, `accepted`, or `unresolved`, with bounded attempt counts and a stable reason such as `attempts_exhausted`, `recovery_reads_exhausted`, `context_unavailable`, `timeout`, or `cancelled`. The shared message alert shows progress and terminal notices even with verbose errors disabled. Acceptance removes correction notices. “Generate answer now” and “Stop” on a budget prompt end a pending correction with `user_requested_answer` and `user_stopped` respectively, without another model request. A failed or timed-out submission is retained as a failed tool result, never converted into a draft or an apply request. Hosts can restore review state from persisted accepted tool inputs/results after a reload; keeping the draft only in transient component state is insufficient.
 
 ## Validation and token costs
 

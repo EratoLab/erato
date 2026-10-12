@@ -5164,6 +5164,7 @@ fn answer_metadata(
         mcp_servers_disabled_by_user: None,
         mcp_tools_disabled_by_user: None,
         continuation_in_flight: None,
+        submission_outcome: None,
     }
 }
 

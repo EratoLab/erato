@@ -304,6 +304,8 @@ pub struct TurnConsumption {
     pub server_tool_calls: u32,
     pub client_tool_calls: u32,
     pub submission_attempts: HashMap<String, u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submission_correction: Option<crate::services::submission_correction::SubmissionCorrection>,
     pub client_action_proposed: bool,
     /// Charges belong to logical call IDs, not executions of the recovery loop.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -314,6 +316,10 @@ pub struct TurnConsumption {
 pub struct ToolCallCharge {
     pub budget_refusal: Option<String>,
     pub submission_attempt: Option<u32>,
+    #[serde(default)]
+    pub submission_mixed_batch: bool,
+    #[serde(default)]
+    pub recovery_read: bool,
     pub operation_identity: Option<OperationIdentity>,
 }
 

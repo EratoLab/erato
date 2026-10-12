@@ -7,6 +7,7 @@ import type {
   GenerationInitiator,
   MentionedAssistant,
   TaskResultInput,
+  SubmissionOutcome,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export type ContentFilterCategory =
@@ -190,6 +191,7 @@ export interface Message {
   status?: "sending" | "complete" | "error";
   error?: MessageError;
   error_report?: string;
+  submission_outcome?: SubmissionOutcome;
   mcp_servers_unavailable?: string[];
   /**
    * MCP servers skipped for this generation only because the user has not

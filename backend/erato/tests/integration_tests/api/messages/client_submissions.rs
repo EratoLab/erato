@@ -6,6 +6,434 @@ use erato::services::background_tasks::StreamingEvent;
 use std::collections::HashSet;
 use std::time::Duration;
 
+fn submission(id: &'static str, title: Value) -> ModelStep {
+    ModelStep::Tools(vec![(id, "submit_draft", json!({"title":title}))])
+}
+
+fn rejected(recovery: &str) -> Value {
+    json!({"validation_errors":[{"path":"/title","code":"parser_rejection","message":"Correct the proposal"}],"submission_feedback":{"recovery":recovery}})
+}
+
+fn final_outcome(events: &[Value]) -> &Value {
+    &events
+        .iter()
+        .rev()
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .unwrap()["message"]["submission_outcome"]
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn exhausted_ordinary_budget_preserves_all_five_submission_attempts(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            ModelStep::Tools(vec![(
+                "call_854_work",
+                "unrelated_work",
+                json!({"title":"call_854_work"}),
+            )]),
+            submission("call_854_one", json!(1)),
+            submission("call_854_two", json!(2)),
+            submission("call_854_three", json!(3)),
+            submission("call_854_four", json!(4)),
+            submission("call_854_five", json!("valid")),
+        ],
+        vec![
+            json!({"result":{}}),
+            json!({"result":{"draft_id":"only-receipt"}}),
+        ],
+        ScenarioOptions {
+            ordinary_budget: 1,
+            duplicate_results: true,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 6);
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"accepted","attempts_used":5,"max_attempts":5})
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.to_string().contains("tool_call_limit"))
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn prose_during_correction_is_charged_and_cannot_silently_complete(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::Text("PROSE_WITHOUT_PROPOSAL"),
+            submission("call_854_corrected", json!("valid")),
+        ],
+        vec![json!({"result":{"draft_id":"call_854_corrected"}})],
+        ScenarioOptions::default(),
+    )
+    .await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(final_outcome(&events)["status"], "accepted");
+    assert_eq!(final_outcome(&events)["attempts_used"], 3);
+    assert!(
+        requests[2]
+            .to_string()
+            .contains("3 of 5 total attempts remain")
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn repeated_prose_ends_with_explicit_exhaustion(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::Text("FIRST_PROSE"),
+            ModelStep::Text("SECOND_PROSE"),
+            ModelStep::Text("THIRD_PROSE"),
+            ModelStep::Text("FOURTH_PROSE"),
+        ],
+        vec![],
+        ScenarioOptions::default(),
+    )
+    .await;
+    assert_eq!(requests.len(), 5);
+    assert_eq!(final_outcome(&events)["status"], "unresolved");
+    assert_eq!(final_outcome(&events)["reason"], "attempts_exhausted");
+    assert_eq!(final_outcome(&events)["attempts_used"], 5);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sixth_submission_never_dispatches_or_extends_inference(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        [
+            "call_854_one",
+            "call_854_two",
+            "call_854_three",
+            "call_854_four",
+            "call_854_five",
+            "call_854_six",
+        ]
+        .into_iter()
+        .map(|id| submission(id, json!(0)))
+        .collect(),
+        vec![],
+        ScenarioOptions::default(),
+    )
+    .await;
+    assert_eq!(requests.len(), 5);
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["message_type"] == "client_tool_call")
+    );
+    assert_eq!(final_outcome(&events)["reason"], "attempts_exhausted");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn large_document_rejection_allows_scoped_reads_then_scoped_edit(pool: Pool<Postgres>) {
+    let mut feedback = rejected("read_current_context");
+    feedback["validation_errors"][0]["code"] = json!("too-large");
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_whole_plan", json!("whole document")),
+            ModelStep::Tools(vec![(
+                "call_854_page_one",
+                "read_context",
+                json!({"title":"section page one"}),
+            )]),
+            ModelStep::Tools(vec![(
+                "call_854_page_two",
+                "read_context",
+                json!({"title":"section page two"}),
+            )]),
+            submission("call_854_scoped_edit", json!("scoped edit")),
+        ],
+        vec![
+            feedback,
+            json!({"result":{"readToken":"page-1"}}),
+            json!({"result":{"readToken":"scope-2"}}),
+            json!({"result":{"draft_id":"scoped"}}),
+        ],
+        ScenarioOptions {
+            ordinary_budget: 0,
+            duplicate_results: true,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 4);
+    assert_eq!(final_outcome(&events)["status"], "accepted");
+    assert_eq!(final_outcome(&events)["attempts_used"], 2);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn recovery_read_loop_has_an_independent_finite_limit(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!("draft")),
+            ModelStep::Tools(vec![(
+                "call_854_read_one",
+                "read_context",
+                json!({"title":"page"}),
+            )]),
+            ModelStep::Tools(vec![(
+                "call_854_read_two",
+                "read_context",
+                json!({"title":"page"}),
+            )]),
+        ],
+        vec![rejected("read_current_context"), json!({"result":{}})],
+        ScenarioOptions {
+            ordinary_budget: 0,
+            recovery_reads: 1,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["message_type"] == "client_tool_call")
+            .count(),
+        2
+    );
+    assert_eq!(final_outcome(&events)["reason"], "recovery_reads_exhausted");
+}
+
+async fn pending_budget_choice(pool: Pool<Postgres>, decision: &'static str, reason: &str) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::Tools(vec![(
+                "call_854_unrelated",
+                "unrelated_work",
+                json!({"title":"ordinary work"}),
+            )]),
+        ],
+        vec![],
+        ScenarioOptions {
+            ordinary_budget: 0,
+            budget_decision: Some(decision),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(
+        requests.len(),
+        2,
+        "terminal choices need no explanatory inference"
+    );
+    assert_eq!(final_outcome(&events)["status"], "unresolved");
+    assert_eq!(final_outcome(&events)["reason"], reason);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn generate_answer_now_persists_unresolved(pool: Pool<Postgres>) {
+    pending_budget_choice(pool, "reject", "user_requested_answer").await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn stop_at_budget_prompt_persists_unresolved(pool: Pool<Postgres>) {
+    pending_budget_choice(pool, "withdraw", "user_stopped").await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn changing_tools_and_parallel_ids_does_not_mint_attempts(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_initial", json!(1)),
+            ModelStep::Tools(vec![(
+                "call_854_switched",
+                "other_submission",
+                json!({"title":"new id"}),
+            )]),
+            ModelStep::Tools(vec![
+                ("call_854_a", "submit_draft", json!({"title":"call_854_a"})),
+                (
+                    "call_854_b",
+                    "other_submission",
+                    json!({"title":"call_854_b"}),
+                ),
+                ("call_854_c", "submit_draft", json!({"title":"call_854_c"})),
+                (
+                    "call_854_d",
+                    "other_submission",
+                    json!({"title":"call_854_d"}),
+                ),
+            ]),
+        ],
+        vec![],
+        ScenarioOptions::default(),
+    )
+    .await;
+    assert_eq!(requests.len(), 3);
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["message_type"] == "client_tool_call")
+    );
+    assert_eq!(final_outcome(&events)["attempts_used"], 5);
+    assert_eq!(final_outcome(&events)["reason"], "attempts_exhausted");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn correction_and_mixed_batch_charge_survive_task_approval(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_before_task", json!(1)),
+            ModelStep::Tools(vec![
+                (
+                    "call_854_task",
+                    "delegate_task",
+                    json!({"task":"Research context","facet_ids":["plan"]}),
+                ),
+                (
+                    "call_854_mixed",
+                    "submit_draft",
+                    json!({"title":"mixed batch"}),
+                ),
+            ]),
+            submission("call_854_after_task", json!("valid")),
+        ],
+        vec![json!({"result":{"draft_id":"after-approval"}})],
+        ScenarioOptions {
+            task_approval: true,
+            budget_decision: Some("reject"),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(final_outcome(&events)["status"], "accepted");
+    assert_eq!(final_outcome(&events)["attempts_used"], 3);
+    assert!(requests[2].to_string().contains("submission_must_be_alone"));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["message_type"] == "client_tool_call")
+            .count(),
+        1
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn unavailable_capture_is_terminal_without_using_remaining_attempts(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![submission("call_854_unavailable", json!("draft"))],
+        vec![rejected("cannot_continue")],
+        ScenarioOptions::default(),
+    )
+    .await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(final_outcome(&events)["reason"], "context_unavailable");
+    assert_eq!(final_outcome(&events)["attempts_used"], 1);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn empty_tool_list_during_correction_cannot_silently_complete(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::EmptyTools,
+        ],
+        vec![],
+        ScenarioOptions {
+            max_attempts: 2,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(final_outcome(&events)["reason"], "attempts_exhausted");
+    assert_eq!(final_outcome(&events)["attempts_used"], 2);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn unavailable_recovery_context_stops_without_another_submission(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_plan", json!("draft")),
+            ModelStep::Tools(vec![(
+                "call_854_read",
+                "read_context",
+                json!({"title":"scope"}),
+            )]),
+        ],
+        vec![
+            rejected("read_current_context"),
+            rejected("cannot_continue"),
+        ],
+        ScenarioOptions {
+            ordinary_budget: 0,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(final_outcome(&events)["reason"], "context_unavailable");
+    assert_eq!(final_outcome(&events)["attempts_used"], 1);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn lost_host_capability_retains_an_unresolved_reason(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            submission("call_854_repaired", json!("draft")),
+        ],
+        vec![json!({"error":"The host capability is unavailable"})],
+        ScenarioOptions::default(),
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(final_outcome(&events)["reason"], "capability_unavailable");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn provider_failure_during_correction_retains_an_unresolved_reason(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            ModelStep::ProviderFailure,
+        ],
+        vec![],
+        ScenarioOptions::default(),
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(final_outcome(&events)["reason"], "provider_error");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn cancellation_during_correction_retains_an_unresolved_reason(pool: Pool<Postgres>) {
+    let (_, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_invalid", json!(1)),
+            submission("call_854_repaired", json!("draft")),
+        ],
+        vec![json!({"abort_test_generation":true})],
+        ScenarioOptions::default(),
+    )
+    .await;
+    assert_eq!(final_outcome(&events)["reason"], "cancelled");
+}
+
 async fn run_submission(
     pool: Pool<Postgres>,
     attempts: Vec<Vec<(&'static str, Value)>>,
@@ -14,26 +442,113 @@ async fn run_submission(
     timeout_ms: u64,
     native: bool,
 ) -> (Vec<Value>, Vec<Value>) {
+    run_scenario(
+        pool,
+        attempts
+            .into_iter()
+            .map(|calls| {
+                ModelStep::Tools(
+                    calls
+                        .into_iter()
+                        .map(|(id, input)| (id, "submit_draft", input))
+                        .collect(),
+                )
+            })
+            .collect(),
+        client_results,
+        ScenarioOptions {
+            max_attempts,
+            timeout_ms,
+            native,
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+enum ModelStep {
+    Tools(Vec<(&'static str, &'static str, Value)>),
+    Text(&'static str),
+    EmptyTools,
+    ProviderFailure,
+}
+
+struct ScenarioOptions {
+    max_attempts: u32,
+    timeout_ms: u64,
+    native: bool,
+    ordinary_budget: u32,
+    recovery_reads: u32,
+    budget_decision: Option<&'static str>,
+    duplicate_results: bool,
+    task_approval: bool,
+}
+
+impl Default for ScenarioOptions {
+    fn default() -> Self {
+        Self {
+            max_attempts: 5,
+            timeout_ms: 5_000,
+            native: false,
+            ordinary_budget: 10,
+            recovery_reads: 4,
+            budget_decision: None,
+            duplicate_results: false,
+            task_approval: false,
+        }
+    }
+}
+
+async fn run_scenario(
+    pool: Pool<Postgres>,
+    steps: Vec<ModelStep>,
+    client_results: Vec<Value>,
+    options: ScenarioOptions,
+) -> (Vec<Value>, Vec<Value>) {
+    let ScenarioOptions {
+        max_attempts,
+        timeout_ms,
+        native,
+        ordinary_budget,
+        recovery_reads,
+        budget_decision,
+        duplicate_results,
+        task_approval,
+    } = options;
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     let mut previous_id = None;
-    for calls in attempts {
-        let first_id = calls[0].0;
+    for step in steps {
+        let marker = match &step {
+            ModelStep::Tools(calls) => calls[0].0,
+            ModelStep::Text(text) => *text,
+            ModelStep::EmptyTools => "EMPTY_TOOL_LIST",
+            ModelStep::ProviderFailure => "PROVIDER_FAILURE",
+        };
         let capture = recorder.clone();
         let previous = previous_id;
         mocks.mock(move |when, then| {
             let required = previous.into_iter().collect::<Vec<_>>();
             when.post()
                 .path("/v1/chat/completions")
-                .matcher(BodyContainsMatcher::new(&required, &[first_id]))
+                .matcher(BodyContainsMatcher::new(&required, &[marker]))
                 .matcher(capture);
-            let calls = calls
-                .into_iter()
-                .map(|(id, input)| (id, "submit_draft", input))
-                .collect::<Vec<_>>();
-            mock_llm_sse_response(then, build_openai_tool_calls_streaming_response(&calls));
+            match step {
+                ModelStep::Tools(calls) => {
+                    mock_llm_sse_response(then, build_openai_tool_calls_streaming_response(&calls));
+                }
+                ModelStep::Text(text) => {
+                    mock_llm_sse_response(then, build_openai_text_streaming_response(&[text]));
+                }
+                ModelStep::EmptyTools => {
+                    mock_llm_sse_response(then, build_openai_tool_calls_streaming_response(&[]));
+                }
+                ModelStep::ProviderFailure => {
+                    then.status(http::StatusCode::BAD_REQUEST).json(json!({"error":{"type":"invalid_request_error","message":"Context limit exceeded"}}));
+                }
+            }
         });
-        previous_id = Some(first_id);
+        previous_id = Some(marker);
     }
     let capture = recorder.clone();
     mocks.mock(move |when, then| {
@@ -61,20 +576,72 @@ async fn run_submission(
         description: "Validate and stage a draft for review. Call alone after reading.".into(),
         parameters: json!({"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}).to_string(),
         timeout_ms: Some(timeout_ms),
-        submission: (max_attempts > 0).then_some(ClientToolSubmissionConfig { max_attempts, ..Default::default() }),
+        submission: (max_attempts > 0).then_some(ClientToolSubmissionConfig { max_attempts, max_recovery_reads: recovery_reads, recovery_read_tools: vec!["client/read_context".into()], ..Default::default() }),
         ..Default::default()
     });
-    config.facets.tool_call_allowlist = vec!["client/submit_draft".into()];
+    for name in ["read_context", "unrelated_work", "other_submission"] {
+        let mut tool = config.client_tools.tools["draft"].clone();
+        tool.name = name.into();
+        if name != "other_submission" {
+            tool.submission = None;
+        }
+        config.client_tools.tools.insert(name.into(), tool);
+    }
+    config.generation.max_tool_calls_per_message = ordinary_budget;
+    config.facets.tool_call_allowlist = vec!["client/*".into()];
+    if task_approval {
+        config.delegation.tasks.enabled = true;
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Always;
+        config.facets.facets.insert(
+            "plan".into(),
+            erato::config::FacetConfig {
+                display_name: "Plan".into(),
+                icon: None,
+                additional_system_prompt: None,
+                tool_call_allowlist: vec!["erato/delegate_task".into(), "client/*".into()],
+                model_settings: Default::default(),
+                disable_facet_prompt_template: true,
+                hidden: false,
+                hidden_always_active_for_platform: None,
+                delegation: None,
+            },
+        );
+    }
     let state = test_app_state(config, pool).await;
     let chat_id = seed_origin_chat(&state.db).await;
     let server = app_server(state.clone());
-    let request_body = json!({"existing_chat_id":chat_id,"user_message":"Prepare a draft"});
+    let request_body = json!({"existing_chat_id":chat_id,"user_message":"Prepare a draft", "selected_facet_ids": if task_approval {vec!["plan"]} else {vec![]}});
     let submit = async {
-        server
+        let response = server
             .post("/api/v1beta/me/messages/submitstream")
             .with_bearer_token(TEST_JWT_TOKEN)
             .json(&request_body)
-            .await
+            .await;
+        response.assert_status_ok();
+        if let Some(decision) = budget_decision {
+            let rows = Messages::find()
+                .filter(erato::db::entity::messages::Column::ChatId.eq(chat_id))
+                .all(&state.db)
+                .await
+                .unwrap();
+            let row = rows
+                .iter()
+                .find(|row| {
+                    row.raw_message.to_string().contains(if task_approval {
+                        "tool_approval_request"
+                    } else {
+                        "tool_call_limit"
+                    })
+                })
+                .expect("budget approval");
+            server
+                .post("/api/v1beta/me/messages/continuestream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({"message_id":row.id,"decision":decision}))
+                .await
+        } else {
+            response
+        }
     };
     let client = async {
         let mut results = client_results.into_iter();
@@ -91,6 +658,15 @@ async fn run_submission(
                         && answered.insert(tool_call_id.clone())
                     {
                         let mut payload = next_result.take().expect("unexpected dispatch");
+                        if payload["abort_test_generation"] == true {
+                            server
+                                .post("/api/v1beta/me/messages/abortstream")
+                                .with_bearer_token(TEST_JWT_TOKEN)
+                                .json(&json!({"chat_id":chat_id}))
+                                .await
+                                .assert_status_ok();
+                            return;
+                        }
                         payload["chat_id"] = json!(chat_id);
                         payload["message_id"] = json!(message_id);
                         payload["tool_call_id"] = json!(tool_call_id);
@@ -101,6 +677,14 @@ async fn run_submission(
                             .await;
                         response.assert_status_ok();
                         assert_eq!(response.json::<Value>()["delivered"], true);
+                        if duplicate_results {
+                            server
+                                .post("/api/v1beta/me/messages/clienttoolresult")
+                                .with_bearer_token(TEST_JWT_TOKEN)
+                                .json(&payload)
+                                .await
+                                .assert_status_ok();
+                        }
                         next_result = results.next();
                     }
                 }
@@ -108,8 +692,23 @@ async fn run_submission(
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     };
-    let (response, ()) = tokio::time::timeout(Duration::from_secs(30), async {
-        tokio::join!(submit, client)
+    let reconnect = async {
+        if !duplicate_results {
+            return None;
+        }
+        while state.background_tasks.get_task(&chat_id).await.is_none() {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        Some(
+            server
+                .post("/api/v1beta/me/messages/resumestream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({"chat_id":chat_id}))
+                .await,
+        )
+    };
+    let (response, (), reconnected) = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::join!(submit, client, reconnect)
     })
     .await
     .expect("submission loop did not finish");
@@ -124,6 +723,21 @@ async fn run_submission(
             .any(|event| event["message_type"] == "assistant_message_completed"),
         "{events:?}"
     );
+    if let Some(reconnected) = reconnected {
+        reconnected.assert_status_ok();
+        let replay = parse_sse_events(&reconnected)
+            .into_iter()
+            .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+            .collect::<Vec<_>>();
+        assert_eq!(final_outcome(&replay), final_outcome(&events));
+        assert_eq!(
+            replay
+                .iter()
+                .filter(|event| event["output"]["submission"]["status"] == "accepted")
+                .count(),
+            1
+        );
+    }
     let rows = Messages::find()
         .filter(erato::db::entity::messages::Column::ChatId.eq(chat_id))
         .all(&state.db)
@@ -136,6 +750,31 @@ async fn run_submission(
             "submission result must persist"
         );
     }
+    let completion = events
+        .iter()
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .unwrap();
+    let message_id = completion["message_id"].as_str().unwrap();
+    let saved = rows
+        .iter()
+        .find(|row| row.id.to_string() == message_id)
+        .unwrap();
+    let saved_outcome =
+        &saved.generation_metadata.as_ref().unwrap_or(&Value::Null)["submission_outcome"];
+    assert_eq!(&completion["message"]["submission_outcome"], saved_outcome);
+    let history = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    history.assert_status_ok();
+    let history: Value = history.json();
+    let reloaded = history["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == message_id)
+        .unwrap();
+    assert_eq!(&reloaded["submission_outcome"], saved_outcome);
     (
         recorder
             .bodies()
@@ -161,7 +800,15 @@ async fn schema_then_parser_repair_stops_after_acceptance(pool: Pool<Postgres>) 
         json!({"result":{"draft_id":"draft-1"}}),
     ], 3, 5_000, true).await;
     assert_eq!(requests.len(), 3, "no fourth inference after acceptance");
-    assert_eq!(requests[0]["tools"][0]["function"]["strict"], true);
+    assert_eq!(
+        requests[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "submit_draft")
+            .unwrap()["function"]["strict"],
+        true
+    );
     assert!(requests[1].to_string().contains("validation_errors"));
     assert!(requests[2].to_string().contains("unknown_reference"));
     let calls = events
@@ -191,7 +838,15 @@ async fn local_validation_stops_at_attempt_limit(pool: Pool<Postgres>) {
     )
     .await;
     assert_eq!(requests.len(), 2);
-    assert_eq!(requests[0]["tools"][0]["function"]["strict"], false);
+    assert_eq!(
+        requests[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "submit_draft")
+            .unwrap()["function"]["strict"],
+        false
+    );
     assert!(
         !events
             .iter()
@@ -270,6 +925,7 @@ async fn timed_out_submission_finishes_without_retrying_the_host(pool: Pool<Post
     )
     .await;
     assert_eq!(requests.len(), 1);
+    assert_eq!(final_outcome(&events)["reason"], "timeout");
     assert!(
         events
             .iter()
@@ -294,7 +950,15 @@ async fn ordinary_client_tools_still_continue_after_success(pool: Pool<Postgres>
         2,
         "ordinary read tools still resume inference"
     );
-    assert_eq!(requests[0]["tools"][0]["function"]["strict"], false);
+    assert_eq!(
+        requests[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "submit_draft")
+            .unwrap()["function"]["strict"],
+        false
+    );
     assert!(
         !events
             .iter()

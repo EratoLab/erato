@@ -52,6 +52,12 @@ impl OfferedClientTool {
                 .clone()
                 .unwrap_or_else(|| saved_policy.clone());
             policy.max_attempts = policy.max_attempts.min(saved_policy.max_attempts);
+            policy.max_recovery_reads = policy
+                .max_recovery_reads
+                .min(saved_policy.max_recovery_reads);
+            policy
+                .recovery_read_tools
+                .retain(|name| saved_policy.recovery_read_tools.contains(name));
             restored.submission = Some(policy);
         }
         restored
@@ -104,6 +110,23 @@ pub struct ClientToolSubmissionFeedback {
     /// Ends an opt-in submission turn without accepting an artifact.
     #[serde(default)]
     pub terminal: bool,
+    #[serde(default, skip_serializing_if = "SubmissionRecovery::is_default")]
+    pub recovery: SubmissionRecovery,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SubmissionRecovery {
+    #[default]
+    RepairArguments,
+    ReadCurrentContext,
+    CannotContinue,
+}
+
+impl SubmissionRecovery {
+    fn is_default(&self) -> bool {
+        *self == Self::RepairArguments
+    }
 }
 
 const MAX_VALIDATION_ISSUES: usize = 16;

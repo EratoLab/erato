@@ -47,6 +47,36 @@ async function setup() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("structured Word submissions", () => {
+  it("classifies oversized full plans for scoped-read recovery", async () => {
+    const { snapshot, submit, plan } = await setup();
+    snapshot.completeReadIssue = "too-large";
+    expect(await submit(plan, context)).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "too-large" }],
+      submissionFeedback: { recovery: "read_current_context", terminal: false },
+    });
+  });
+
+  it("distinguishes stale tokens from a consumed capture", async () => {
+    const { snapshot, submit, plan } = await setup();
+    expect(await submit({ ...plan, snapshot: "stale" }, context)).toMatchObject(
+      {
+        ok: false,
+        submissionFeedback: {
+          recovery: "read_current_context",
+          terminal: false,
+        },
+      },
+    );
+    snapshot.used = true;
+    expect(
+      await submit(plan, { ...context, toolCallId: "used-capture" }),
+    ).toMatchObject({
+      ok: false,
+      submissionFeedback: { recovery: "cannot_continue", terminal: true },
+    });
+  });
+
   it("stages a deterministic receipt without entering the Word write host", async () => {
     const { submit, snapshot, plan } = await setup();
     const run = vi.fn(() => {
