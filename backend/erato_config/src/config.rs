@@ -3060,6 +3060,15 @@ pub struct McpServerConfig {
     // Wildcard patterns selecting tools to remove after `allow_tools` is applied.
     #[serde(default)]
     pub exclude_tools: Vec<String>,
+    /// Hints used when a tool omits the corresponding server-supplied hint.
+    #[serde(default)]
+    pub default_tool_annotations: McpToolAnnotationsConfig,
+    /// Hints that take precedence over server-supplied tool annotations.
+    #[serde(default)]
+    pub override_tool_annotations: McpToolAnnotationsConfig,
+    /// Annotation settings keyed by exact, case-sensitive MCP tool name.
+    #[serde(default)]
+    pub tools: HashMap<String, McpToolConfig>,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
     // this server unless the global setting is enabled.
@@ -3072,6 +3081,54 @@ pub struct McpServerConfig {
     // When omitted, the global `mcp_servers_global.max_session_idle_seconds` is used.
     #[serde(default)]
     pub max_session_idle_seconds: Option<u64>,
+}
+
+/// Optional operator assertions about MCP tool behavior. Missing hints inherit.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[serde(deny_unknown_fields)]
+pub struct McpToolAnnotationsConfig {
+    #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
+    pub read_only_hint: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
+    pub destructive_hint: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
+    pub idempotent_hint: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
+    pub open_world_hint: Option<bool>,
+}
+
+// The config crate's bool deserializer also coerces strings and numbers.
+// Hints affect approval and write visibility, so accept actual booleans only.
+fn deserialize_optional_mcp_hint<'de, D: de::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<bool>, D::Error> {
+    struct Hint(bool);
+    impl<'de> Deserialize<'de> for Hint {
+        fn deserialize<D: de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct Visitor;
+            impl de::Visitor<'_> for Visitor {
+                type Value = Hint;
+                fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    formatter.write_str("a boolean MCP tool hint")
+                }
+                fn visit_bool<E: de::Error>(self, value: bool) -> Result<Hint, E> {
+                    Ok(Hint(value))
+                }
+            }
+            deserializer.deserialize_any(Visitor)
+        }
+    }
+    Option::<Hint>::deserialize(deserializer).map(|hint| hint.map(|hint| hint.0))
+}
+
+/// Settings for one exact tool within its configured MCP server.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(deny_unknown_fields)]
+pub struct McpToolConfig {
+    #[serde(default)]
+    pub default_tool_annotations: McpToolAnnotationsConfig,
+    #[serde(default)]
+    pub override_tool_annotations: McpToolAnnotationsConfig,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, Default)]
@@ -3164,6 +3221,15 @@ fn default_mcp_fixed_auth_prefix() -> String {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServersGlobalConfig {
+    /// Fallback hints for tools across all configured MCP servers.
+    #[serde(default)]
+    pub default_tool_annotations: McpToolAnnotationsConfig,
+
+    /// Operator hints overriding server declarations across all MCP servers.
+    /// More specific server and tool overrides take precedence.
+    #[serde(default)]
+    pub override_tool_annotations: McpToolAnnotationsConfig,
+
     // Global default maximum idle time (in seconds) before MCP sessions are evicted.
     // Individual MCP servers can override this via `mcp_servers.<id>.max_session_idle_seconds`.
     // Defaults to 3600 seconds (1 hour) when not set.
@@ -3203,6 +3269,8 @@ pub struct McpServersGlobalConfig {
 impl Default for McpServersGlobalConfig {
     fn default() -> Self {
         Self {
+            default_tool_annotations: McpToolAnnotationsConfig::default(),
+            override_tool_annotations: McpToolAnnotationsConfig::default(),
             max_session_idle_seconds: None,
             show_frontend_tab: false,
             show_in_chat_input: None,

@@ -328,6 +328,9 @@ async fn test_approval_continuation_completes_in_teams(pool: Pool<Postgres>) {
             wait_tools: vec![],
             authentication: erato::config::McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.mcp_server_permissions.rules.insert(

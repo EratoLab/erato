@@ -44,6 +44,9 @@ fn mcp_server_config(
         wait_tools: vec![],
         authentication,
         max_session_idle_seconds: None,
+        default_tool_annotations: Default::default(),
+        override_tool_annotations: Default::default(),
+        tools: Default::default(),
     }
 }
 
@@ -185,7 +188,13 @@ async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgre
             "destructive_hint": false,
             "idempotent_hint": false,
             "open_world_hint": true,
-            "annotated": true
+            "annotated": true,
+            "sources": {
+                "read_only_hint": "server_supplied",
+                "destructive_hint": "server_supplied",
+                "idempotent_hint": "server_supplied",
+                "open_world_hint": "server_supplied"
+            }
         })
     );
     assert_eq!(dispatch["policy"], "ask");
@@ -206,6 +215,84 @@ async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgre
         .with_bearer_token(TEST_JWT_TOKEN)
         .await;
     missing.assert_status(http::StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_tool_listing_resolves_operator_hints_and_per_hint_sources(pool: Pool<Postgres>) {
+    let mock = Router::new().route("/mcp", post(|Json(request): Json<Value>| async move {
+        let result = match request["method"].as_str() {
+            Some("initialize") => json!({
+                "protocolVersion": request["params"]["protocolVersion"], "capabilities": {"tools": {}},
+                "serverInfo": {"name": "annotations", "version": "1"}
+            }),
+            Some("tools/list") => json!({"tools": [
+                {"name": "read_file", "title": "Read file", "inputSchema": {"type": "object"},
+                 "annotations": {"readOnlyHint": false, "idempotentHint": true}},
+                {"name": "unconfigured", "inputSchema": {"type": "object"}}
+            ]}),
+            _ => return (http::StatusCode::ACCEPTED, Json(Value::Null)),
+        };
+        (http::StatusCode::OK, Json(json!({"jsonrpc": "2.0", "id": request["id"], "result": result})))
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let mock = tokio::spawn(async move { axum::serve(listener, mock).await.unwrap() });
+    let (mut config, _llm) = setup_mock_llm_server(None).await;
+    let mut files = mcp_server_config(&url, "/mcp", McpServerAuthenticationConfig::None);
+    files.default_tool_annotations.read_only_hint = Some(true);
+    files.default_tool_annotations.open_world_hint = Some(false);
+    files.tools.insert(
+        "read_file".into(),
+        erato::config::McpToolConfig {
+            override_tool_annotations: erato::config::McpToolAnnotationsConfig {
+                read_only_hint: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    config.mcp_servers.insert("files".into(), files);
+    config
+        .mcp_servers_global
+        .override_tool_annotations
+        .destructive_hint = Some(false);
+    config
+        .mcp_servers_global
+        .default_tool_annotations
+        .open_world_hint = Some(true);
+    config.mcp_servers_global.approval.enabled = true;
+    config.mcp_servers_global.approval.preset = McpToolApprovalPreset::Restrictive;
+    let app_state = test_app_state(config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let server = create_test_server(app_state);
+    let response = server
+        .get("/api/v1beta/me/mcp_servers/files/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    let read = &body["tools"][0];
+    assert_eq!(read["name"], "read_file");
+    assert_eq!(read["title"], "Read file");
+    assert_eq!(read["policy"], "auto");
+    assert_eq!(
+        read["annotations"],
+        json!({
+            "read_only_hint": true, "destructive_hint": false, "idempotent_hint": true,
+            "open_world_hint": false, "annotated": true,
+            "sources": {
+                "read_only_hint": "tool_override", "destructive_hint": "global_override",
+                "idempotent_hint": "server_supplied", "open_world_hint": "server_default"
+            }
+        })
+    );
+    assert_eq!(
+        body["tools"][1]["annotations"]["sources"]["idempotent_hint"],
+        "protocol_default"
+    );
+    mock.abort();
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

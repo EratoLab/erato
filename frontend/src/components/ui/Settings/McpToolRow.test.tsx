@@ -17,6 +17,12 @@ const tool = (overrides: Partial<McpServerTool> = {}): McpServerTool => ({
     idempotent_hint: false,
     open_world_hint: true,
     annotated: true,
+    sources: {
+      read_only_hint: "server_supplied",
+      destructive_hint: "server_supplied",
+      idempotent_hint: "server_supplied",
+      open_world_hint: "server_supplied",
+    },
   },
   policy: "ask",
   user_decision: "none",

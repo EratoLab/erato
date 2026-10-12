@@ -278,6 +278,11 @@ async fn reloadable_state_applies_admin_mcp_overrides_after_backend_sources(pool
 transport_type = "streamable_http"
 url = "https://backend.example.test/mcp"
 
+[mcp_servers_global.default_tool_annotations]
+open_world_hint = true
+[mcp_servers.docs.default_tool_annotations]
+read_only_hint = true
+
 [mcp_server_permissions.rules.docs]
 rule_type = "allow-all"
 mcp_server_ids = ["docs"]
@@ -289,6 +294,8 @@ mcp_server_ids = ["docs"]
             r#"
 [mcp_servers.docs]
 url = "https://admin.example.test/mcp"
+[mcp_servers.docs.tools.read_file.override_tool_annotations]
+destructive_hint = false
 "#,
         )
         .unwrap();
@@ -326,4 +333,43 @@ url = "https://admin.example.test/mcp"
             .rules
             .contains_key("docs")
     );
+    assert_eq!(
+        reloaded
+            .mcp
+            .config
+            .mcp_servers_global
+            .default_tool_annotations
+            .open_world_hint,
+        Some(true)
+    );
+    assert_eq!(
+        reloaded.mcp.config.mcp_servers["docs"]
+            .default_tool_annotations
+            .read_only_hint,
+        Some(true)
+    );
+    assert_eq!(
+        reloaded.mcp.config.mcp_servers["docs"].tools["read_file"]
+            .override_tool_annotations
+            .destructive_hint,
+        Some(false)
+    );
+    let valid_config = reloaded.mcp.config.clone();
+    *app_state.reloadable.write().await = reloaded;
+
+    RuntimeConfiguration::update_many()
+        .filter(runtime_configuration::Column::SourceService.eq("erato_admin_panel"))
+        .col_expr(
+            runtime_configuration::Column::Config,
+            sea_orm::sea_query::Expr::value(
+                app_state
+                    .encrypt("[mcp_servers.docs.default_tool_annotations]\nreadOnlyHint = true\n")
+                    .unwrap(),
+            ),
+        )
+        .exec(&app_state.db)
+        .await
+        .unwrap();
+    assert!(ReloadableAppState::load(&app_state).await.is_err());
+    assert_eq!(app_state.mcp_state().await.config, valid_config);
 }

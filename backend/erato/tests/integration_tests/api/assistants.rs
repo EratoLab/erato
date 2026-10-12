@@ -262,6 +262,9 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
             wait_tools: vec![],
             authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.facets = FacetsConfig {
@@ -724,6 +727,9 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
             wait_tools: vec![],
             authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.mcp_servers.insert(
@@ -737,6 +743,9 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
             wait_tools: vec![],
             authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.facets = FacetsConfig {
@@ -892,6 +901,9 @@ async fn test_create_assistant_rejects_unauthorized_mcp_server(pool: Pool<Postgr
             wait_tools: vec![],
             authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.mcp_server_permissions.rules.insert(

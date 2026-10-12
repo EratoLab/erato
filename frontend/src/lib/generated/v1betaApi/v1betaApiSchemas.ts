@@ -2321,14 +2321,15 @@ export type McpServerTool = {
  */
 export type McpServerToolAnnotations = {
   /**
-   * Whether the server declared any hints at all. Defaults are the
-   * pessimistic reading, so an unannotated tool is not read-only.
+   * Whether effective annotations are present, from the server or operator
+   * configuration. This flag does not describe their source.
    */
   annotated: boolean;
   destructive_hint: boolean;
   idempotent_hint: boolean;
   open_world_hint: boolean;
   read_only_hint: boolean;
+  sources: McpToolAnnotationSources;
 };
 
 /**
@@ -2345,6 +2346,29 @@ export type McpServerToolUserDecision =
   | "always_allow"
   | "ask"
   | "denied";
+
+/**
+ * The winning declaration for one effective MCP tool hint.
+ */
+export type McpToolAnnotationSource =
+  | "tool_override"
+  | "server_override"
+  | "global_override"
+  | "server_supplied"
+  | "tool_default"
+  | "server_default"
+  | "global_default"
+  | "protocol_default";
+
+/**
+ * Sources are independent: a tool can inherit each hint from a different scope.
+ */
+export type McpToolAnnotationSources = {
+  destructive_hint: McpToolAnnotationSource;
+  idempotent_hint: McpToolAnnotationSource;
+  open_world_hint: McpToolAnnotationSource;
+  read_only_hint: McpToolAnnotationSource;
+};
 
 /**
  * What actually happens when the tool is called, once the user's stored

@@ -3696,6 +3696,321 @@ allow_tools = ["get_*"]
 exclude_tools = ["get_secret_*"]
 ```
 
+### MCP tool annotation defaults and overrides
+
+Tool annotations can be configured globally, per server, or per exact tool. All settings come from `erato.toml` sources. The backend resolves each hint independently in this order (highest priority first):
+
+1. Tool override
+2. Server override
+3. Global override
+4. Server-supplied hint
+5. Tool default
+6. Server default
+7. Global default
+8. MCP protocol fallback
+
+An explicit `false` participates in the merge. Omitted hints inherit from the next layer, including hints missing from partial, empty, or title-only server annotations. Server titles and unrelated metadata are preserved. Empty sections have no effect. Protocol fallbacks remain `read_only_hint = false`, `destructive_hint = true`, `idempotent_hint = false`, and `open_world_hint = true`.
+
+The same effective hints drive tool-call approval, the chat's write toggle, and tool enumeration. Annotation settings belong outside `mcp_servers_global.approval` because they also affect tools when approval is disabled. `destructive_hint = false` permits execution without an approval prompt under the permissive preset; it does not imply read-only behavior. `read_only_hint = true` permits a tool through the write-disabled filter, but restrictive approval still checks destructive and open-world hints separately. Idempotent hints do not change approval or retry behavior.
+
+Operator hints are assertions about tool behavior. Broad defaults and overrides also apply to newly discovered tools; prefer exact-tool settings or pair broad settings with an `allow_tools` allowlist when a server may gain write tools. Server declarations supersede defaults; use overrides when operator hints must win over server metadata. Overrides are metadata, not mandatory approval rules: existing honored “Always allow” decisions still apply. Access control and user denials remain in effect.
+
+Runtime reloads invalidate cached sessions for a changed server/tool, or across servers when global annotation hints change. Removed hints are resolved again from original server declarations. Deploy a supporting Erato build before relying on these sections: older builds can silently ignore unfamiliar keys.
+
+**Example:**
+
+```toml
+[mcp_servers_global.default_tool_annotations]
+open_world_hint = true
+
+[mcp_servers.company_search]
+transport_type = "streamable_http"
+url = "https://mcp.example.com/mcp"
+
+[mcp_servers.company_search.default_tool_annotations]
+read_only_hint = true
+destructive_hint = false
+
+[mcp_servers.company_search.tools.rebuild_index.override_tool_annotations]
+read_only_hint = false
+destructive_hint = true
+```
+
+#### `mcp_servers.<server-id>.tools`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name> */}
+
+**Type:** `object<string, object>`
+
+**Default:** `{}`
+
+Annotation settings keyed by exact, case-sensitive, original MCP tool name within that server. Wildcards are not supported for these entries. Quote TOML key segments when a name contains punctuation, for example `[mcp_servers.files.tools."Read.File".default_tool_annotations]`. Entries do not expose excluded tools or create new tools. A configured name may be absent from discovery, since tools can depend on authentication or change over time. Per-tool entries accept only `default_tool_annotations` and `override_tool_annotations`.
+
+#### `mcp_servers_global.default_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional fallback hints for missing server declarations. More specific defaults take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers_global.default_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers_global.default_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers_global.default_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers_global.default_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers_global.override_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional hints overriding server declarations and all defaults. More specific overrides take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers_global.override_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers_global.override_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers_global.override_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers_global.override_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers.<server-id>.default_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional fallback hints for missing server declarations. More specific defaults take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers.<server-id>.default_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.default_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.default_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.default_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers.<server-id>.override_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional hints overriding server declarations and all defaults. More specific overrides take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers.<server-id>.override_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.override_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.override_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.override_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional fallback hints for missing server declarations. More specific defaults take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional hints overriding server declarations and all defaults. More specific overrides take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
 #### `mcp_servers.<server-id>.wait_tools`
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.wait_tools.[] */}

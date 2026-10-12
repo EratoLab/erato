@@ -2361,6 +2361,9 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
             wait_tools: vec![],
             authentication: erato::config::McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.mcp_server_permissions.rules.insert(
@@ -6846,6 +6849,9 @@ async fn test_continued_turn_does_not_reoffer_the_delegation_tool(pool: Pool<Pos
             wait_tools: vec![],
             authentication: erato::config::McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.mcp_server_permissions.rules.insert(
@@ -7523,6 +7529,9 @@ fn gate_mock_mcp_tools_on_approval(config: &mut erato::config::AppConfig) {
             wait_tools: vec![],
             authentication: erato::config::McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     config.mcp_server_permissions.rules.insert(
@@ -8667,6 +8676,9 @@ async fn a_task_that_spends_its_server_budget_finishes_with_a_partial_answer(poo
                     wait_tools: vec![],
                     authentication: erato::config::McpServerAuthenticationConfig::None,
                     max_session_idle_seconds: None,
+                    default_tool_annotations: Default::default(),
+                    override_tool_annotations: Default::default(),
+                    tools: Default::default(),
                 },
             );
             config.mcp_server_permissions.rules.insert(
@@ -10030,6 +10042,9 @@ fn approval_fixture_server() -> erato::config::McpServerConfig {
         wait_tools: vec![],
         authentication: erato::config::McpServerAuthenticationConfig::None,
         max_session_idle_seconds: None,
+        default_tool_annotations: Default::default(),
+        override_tool_annotations: Default::default(),
+        tools: Default::default(),
     }
 }
 
