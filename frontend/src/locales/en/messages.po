@@ -8661,8 +8661,8 @@ msgid "The source context is no longer available for this request."
 msgstr "The source context is no longer available for this request."
 
 #: src/components/ui/Chat/SubmissionNotice.tsx
-msgid "The work limit was reached."
-msgstr "The work limit was reached."
+#~ msgid "The work limit was reached."
+#~ msgstr "The work limit was reached."
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
