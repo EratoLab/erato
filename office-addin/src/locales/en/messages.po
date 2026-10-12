@@ -2411,6 +2411,26 @@ msgid "officeAddin.word.authoring.compileFailed"
 msgstr "The proposed Word structure could not be prepared. No changes were made. Ask for a new rewrite."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.desktop"
+msgstr "Word can't replace this document because it contains content it can't edit. Nothing was changed. Copy the draft or ask for a smaller edit."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.interrupted"
+msgstr "Word stopped because this document contains content it can't edit, for example a date picker. The document may be partially changed. Your original is saved for recovery."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.restore"
+msgstr "Word can't restore this document because it contains content it can't edit, for example a date picker. Nothing was changed. Download the original document instead."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.web"
+msgstr "Word for the web can't replace this document because it contains content it can't edit, for example a date picker. Nothing was changed. Copy the draft, open the document in Word for Windows or Mac, or ask for a smaller edit."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.continuousSection"
 #~ msgstr "Continue on the same page"
@@ -2669,6 +2689,11 @@ msgstr "This action is unavailable under the current action settings."
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Word wrote changes, but the result could not be verified. Your original is saved for recovery."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.packageBlocked"
+msgstr "Word for the web didn't hand over the complete file, which happens for documents with a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

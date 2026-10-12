@@ -841,10 +841,11 @@ describe(
     });
 
     it("never turns a scoped edit into an import, even once confirmed", async () => {
-      window.WORD_FORCE_IMPORT_APPLY = true;
       const { host, snapshot } = await realistic();
+      const plan = await statusEdit(snapshot);
+      window.WORD_FORCE_IMPORT_APPLY = true;
       const result = await applyWordDocumentPlan(
-        await statusEdit(snapshot),
+        plan,
         snapshot,
         "message-A",
         undefined,
@@ -906,6 +907,98 @@ describe(
       expect(host.insert).not.toHaveBeenCalled();
       expect(mutations(host.events)).toEqual([]);
       expect(snapshot.used).toBe(false);
+    });
+
+    it("refuses a confirmed import Word rejects with NotAllowed, unchanged, and never retries it", async () => {
+      const { host, snapshot } = await realistic();
+      host.refuseImport();
+      const save = vi.fn();
+      const result = await applyWordDocumentPlan(
+        sectionChange(snapshot),
+        snapshot,
+        "message-A",
+        save,
+        undefined,
+        confirmed,
+      );
+      expect(result).toEqual({
+        status: "blocked",
+        diagnostic: {
+          stage: "write",
+          reason: "not-allowed",
+          officeCode: "NotAllowed",
+          officeLocation: "Document.insertFileFromBase64",
+          details: {
+            error: "Error",
+            route: "import",
+            routeReason: "sections",
+          },
+        },
+      });
+      expect(host.insert).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledOnce();
+      expect(snapshot.used).toBe(true);
+
+      host.resume();
+      const again = await applyWordDocumentPlan(
+        sectionChange(snapshot),
+        snapshot,
+        "message-A",
+        undefined,
+        undefined,
+        confirmed,
+      );
+      expect(again.diagnostic?.reason).toBe("expired");
+      expect(host.insert).toHaveBeenCalledOnce();
+    });
+
+    it("keeps an import that changed the document before NotAllowed interrupted", async () => {
+      const { host, snapshot } = await realistic();
+      host.failAfterWrite("Word refused part of the write.", "NotAllowed");
+      const result = await applyWordDocumentPlan(
+        sectionChange(snapshot),
+        snapshot,
+        "message-A",
+        undefined,
+        undefined,
+        confirmed,
+      );
+      expect(result.status).toBe("interrupted");
+      expect(result.diagnostic).toMatchObject({
+        stage: "write",
+        reason: "host-error",
+        officeCode: "NotAllowed",
+      });
+      expect(result.before).toBeDefined();
+      expect(result.afterFingerprint).toBeDefined();
+      expect(result.afterFingerprint).not.toBe(snapshot.fingerprint);
+    });
+
+    it("leaves Revert unretried when Word rejects the restore with NotAllowed", async () => {
+      const { host, snapshot } = await realistic();
+      const applied = await applyWordDocumentPlan(
+        sectionChange(snapshot),
+        snapshot,
+        "message-A",
+        undefined,
+        undefined,
+        confirmed,
+      );
+      expect(applied.status, report(applied)).toBe("applied");
+      host.refuseImport();
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted).toMatchObject({
+        status: "stale",
+        diagnostic: {
+          stage: "restore",
+          reason: "not-allowed",
+          officeCode: "NotAllowed",
+        },
+      });
+      expect(host.insert).toHaveBeenCalledTimes(2);
     });
 
     it("imports the same plans on Word PC without asking", async () => {

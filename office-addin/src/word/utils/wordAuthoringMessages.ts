@@ -1,5 +1,7 @@
 import { plural, t } from "@lingui/core/macro";
 
+import { wordApplyHost } from "./wordApplyPolicy";
+import { wordHostPlatform } from "./wordHostPlatform";
 import { wordRouteGroup } from "./wordInPlaceRoute";
 
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
@@ -58,6 +60,17 @@ export function wordDocumentDiagnosticText(
       message:
         "The proposed Word structure could not be prepared. No changes were made. Ask for a new rewrite.",
     });
+  if (diagnostic.reason === "not-allowed") return wordNotAllowedText(restoring);
+  if (
+    diagnostic.reason === "host-error" &&
+    diagnostic.officeCode === "NotAllowed" &&
+    ["write", "restore"].includes(diagnostic.stage)
+  )
+    return t({
+      id: "officeAddin.word.authoring.contentRefused.interrupted",
+      message:
+        "Word stopped because this document contains content it can't edit, for example a date picker. The document may be partially changed. Your original is saved for recovery.",
+    });
   if (diagnostic.reason === "host-error")
     return ["write", "verify", "restore"].includes(diagnostic.stage)
       ? t({
@@ -96,6 +109,27 @@ export function wordDocumentDiagnosticText(
   )
     return wordAuthoringIssueText("no-capture");
   return wordAuthoringIssueText(diagnostic.reason);
+}
+
+/** Word refused to replace the document and nothing changed; trying again would meet the same refusal. */
+function wordNotAllowedText(restoring: boolean): string {
+  if (restoring)
+    return t({
+      id: "officeAddin.word.authoring.contentRefused.restore",
+      message:
+        "Word can't restore this document because it contains content it can't edit, for example a date picker. Nothing was changed. Download the original document instead.",
+    });
+  return wordApplyHost(wordHostPlatform()) === "web"
+    ? t({
+        id: "officeAddin.word.authoring.contentRefused.web",
+        message:
+          "Word for the web can't replace this document because it contains content it can't edit, for example a date picker. Nothing was changed. Copy the draft, open the document in Word for Windows or Mac, or ask for a smaller edit.",
+      })
+    : t({
+        id: "officeAddin.word.authoring.contentRefused.desktop",
+        message:
+          "Word can't replace this document because it contains content it can't edit. Nothing was changed. Copy the draft or ask for a smaller edit.",
+      });
 }
 
 /** Before Apply, where the host's policy rules out replacing the whole document for this plan. */

@@ -2054,6 +2054,40 @@ describe("confirmed whole-document replacement on Word for the web", () => {
     expect(state.insert).toHaveBeenCalledOnce();
   });
 
+  it("says Word for the web refused the replacement and nothing changed, with Copy draft and nothing to retry", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    word.refuseImport();
+    fireEvent.click(confirmBox());
+    apply();
+    expect(
+      await screen.findByText(
+        "Word for the web can't replace this document because it contains content it can't edit, for example a date picker. Nothing was changed. Copy the draft, open the document in Word for Windows or Mac, or ask for a smaller edit.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("names the refusal when it stopped a replacement that had changed the document", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    word.failAfterWrite("Word refused part of the write.", "NotAllowed");
+    fireEvent.click(confirmBox());
+    apply();
+    expect(
+      await screen.findByText(
+        "Word stopped because this document contains content it can't edit, for example a date picker. The document may be partially changed. Your original is saved for recovery.",
+      ),
+    ).toBeVisible();
+  });
+
   it("keeps Apply and Always allow for the same import on Word PC", async () => {
     autoPrompt();
     const { word } = await mountRealistic(sectionsPlan);

@@ -11,13 +11,16 @@ import {
   wordReadScope,
 } from "@erato/frontend/word-review";
 
+import { wordApplyHost, wordApplyPolicy } from "./wordApplyPolicy";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "./wordDocumentXml";
+import { wordHostPlatform } from "./wordHostPlatform";
 import { wordInPlaceFallbacks } from "./wordInPlacePlan";
+import { routeWordDocumentPlan } from "./wordInPlaceRoute";
 import {
   isWordTrackingMode,
   wordInPlaceAvailability,
@@ -31,9 +34,15 @@ import type {
   ClientToolCallContext,
   ClientToolExecutionResult,
 } from "@erato/frontend/library";
-import type { WordPlanDiagnostics } from "@erato/frontend/word-review";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+  WordPlanDiagnostics,
+} from "@erato/frontend/word-review";
 
 export { WORD_SUBMIT_PLAN_ACTION, WORD_SUBMIT_PLAN_TOOL };
+
+type WordScopedSubmissionKind = "scoped_edit" | "table_cell";
 
 export function createWordDocumentSubmissionExecutor(
   session: WordDocumentReadSession,
@@ -109,16 +118,23 @@ export function createWordDocumentSubmissionExecutor(
           error: "A document plan has already been accepted for this request.",
         };
       const submitted = JSON.parse(serialized) as Record<string, unknown>;
-      const value =
+      const kind: WordScopedSubmissionKind | undefined =
         "scoped_edit" in submitted
-          ? expandWordScopedSubmission(submitted, snapshot)
+          ? "scoped_edit"
           : "table_cell" in submitted
+            ? "table_cell"
+            : undefined;
+      const value =
+        kind === "scoped_edit"
+          ? expandWordScopedSubmission(submitted, snapshot)
+          : kind === "table_cell"
             ? expandWordTableCellSubmission(submitted, snapshot)
             : session.drafts.materialize(submitted);
       const prepared = await prepareWordDocumentSubmission(
         value,
         context,
         session,
+        kind,
       );
       // The read session may have been cleared while preparation was pending.
       if (
@@ -198,6 +214,7 @@ async function prepareWordDocumentSubmission(
   input: unknown,
   context: ClientToolCallContext | undefined,
   session: WordDocumentReadSession,
+  kind?: WordScopedSubmissionKind,
 ): Promise<ClientToolExecutionResult> {
   if (!context || context.signal?.aborted)
     return {
@@ -279,6 +296,22 @@ async function prepareWordDocumentSubmission(
           ],
         };
     }
+    const wholeDocument =
+      kind && scopedWholeDocumentReasons(plan, snapshot, prepared);
+    if (wholeDocument) {
+      const web = wordApplyHost(wordHostPlatform()) === "web";
+      return {
+        ok: false,
+        error: "Scoped edit needs a full-document rewrite.",
+        validationErrors: [
+          {
+            path: "",
+            code: "web-needs-whole-document",
+            message: `${web ? "Word for the web" : "This Word host"} writes scoped edits and table-cell changes only in place, and this edit needs a full-document rewrite because of: ${wholeDocument.join(", ")}. Resubmit only edits that can be written in place, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that this change ${web ? "needs Word for Windows or Mac" : "can't be made in this version of Word"}.`,
+          },
+        ],
+      };
+    }
   } catch (error) {
     // Return schema paths and constraints, never document contents, in parser diagnostics.
     const hints: Record<string, string> = {
@@ -322,6 +355,39 @@ async function prepareWordDocumentSubmission(
       action: WORD_SUBMIT_PLAN_ACTION,
     },
   };
+}
+
+/**
+ * Apply never lets a scoped plan replace the whole document unless the host's policy allows that
+ * outright, so a scoped edit the in-place writer cannot take is refused here, where the model can
+ * still resubmit, rather than on the card.
+ */
+function scopedWholeDocumentReasons(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  prepared: WordAuthoringSnapshot,
+): string[] | undefined {
+  if (wordApplyPolicy().wholeDocumentImport === "allowed") return undefined;
+  const availability = wordInPlaceAvailability();
+  const caps = wordInPlaceCapabilitiesUnder(snapshot.trackingMode);
+  const route = routeWordDocumentPlan(
+    plan,
+    snapshot,
+    availability,
+    caps,
+    prepared,
+  );
+  if (route.route === "in-place") return undefined;
+  if (route.route === "body") return ["no-package"];
+  let reasons: string[] = [];
+  try {
+    reasons = availability.enabled
+      ? wordInPlaceFallbacks(plan, snapshot, caps, prepared)
+      : [availability.reason];
+  } catch {
+    // The route already read the classifier failure as program-mismatch.
+  }
+  return reasons.length ? reasons : [route.reason];
 }
 
 const object = (value: unknown): value is Record<string, unknown> =>

@@ -101,7 +101,9 @@ export interface WordDocumentDiagnostic {
     | "host-error"
     /** The host's policy asks before a whole-document write, and the user has not confirmed it. */
     | "import-needs-confirmation"
-    | WordWholeDocumentRefusal;
+    | WordWholeDocumentRefusal
+    /** Word refused the write (NotAllowed) and the document is verifiably unchanged. */
+    | "not-allowed";
   officeCode?: string;
   officeLocation?: string;
   details?: WordDiagnosticDetails;
@@ -153,6 +155,27 @@ function failedTier(
   return verification.reason === "output-mismatch"
     ? { verifyTier: "content" }
     : {};
+}
+
+/**
+ * Word for the web refuses a whole-document write over content it cannot edit, such as a date
+ * picker, which no API reports beforehand. Only a document observed unchanged afterwards makes that
+ * a refusal rather than an interrupted write.
+ */
+function refusedUnchanged(
+  error: unknown,
+  stage: WordDocumentDiagnostic["stage"],
+  observed: string | undefined,
+  before: string | undefined,
+): boolean {
+  return (
+    (stage === "write" || stage === "restore") &&
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "NotAllowed" &&
+    observed !== undefined &&
+    observed === before
+  );
 }
 
 /** Read a fresh context after a rejected batch; never retry the mutation. */
@@ -548,11 +571,15 @@ async function applyPlan(
       };
     });
   } catch (error) {
+    const afterFingerprint = writing ? await observeAfterFailure() : undefined;
+    if (refusedUnchanged(error, stage, afterFingerprint, snapshot?.fingerprint))
+      return {
+        status: "blocked",
+        diagnostic: diagnostic("write", "not-allowed", error),
+      };
     return {
       status: writing ? "interrupted" : "blocked",
-      ...(writing
-        ? { before, afterFingerprint: await observeAfterFailure() }
-        : {}),
+      ...(writing ? { before, afterFingerprint } : {}),
       diagnostic: diagnostic(
         stage,
         stage === "compile" ? "compile-failed" : "host-error",
@@ -671,12 +698,24 @@ async function revertPlan(
       };
     });
   } catch (error) {
+    const afterFingerprint = writing ? await observeAfterFailure() : undefined;
+    if (refusedUnchanged(error, stage, afterFingerprint, expectedAfter))
+      return notAllowedRevert(error);
     return {
       status: writing ? "interrupted" : "stale",
-      ...(writing ? { afterFingerprint: await observeAfterFailure() } : {}),
+      ...(writing ? { afterFingerprint } : {}),
       diagnostic: diagnostic(stage, "host-error", error),
     };
   }
+}
+
+/** Nothing was restored and running Revert again would meet the same refusal, so it is reported
+ * like a Revert the document's state ruled out. */
+function notAllowedRevert(error: unknown): WordDocumentRevertResult {
+  return {
+    status: "stale",
+    diagnostic: diagnostic("restore", "not-allowed", error),
+  };
 }
 
 async function applyFullDocument(
@@ -829,14 +868,17 @@ async function applyFullDocument(
       await restoreWordContentControlLocks(host, locks, {
         canRestore: () => currentWordDocumentUrl() === documentUrl,
       });
+    const afterFingerprint = writing
+      ? await observeAfterFailure(true, documentUrl)
+      : undefined;
+    if (refusedUnchanged(error, stage, afterFingerprint, snapshot.fingerprint))
+      return {
+        status: "blocked",
+        diagnostic: diagnostic("write", "not-allowed", error),
+      };
     return {
       status: writing ? "interrupted" : "blocked",
-      ...(writing
-        ? {
-            before,
-            afterFingerprint: await observeAfterFailure(true, documentUrl),
-          }
-        : {}),
+      ...(writing ? { before, afterFingerprint } : {}),
       diagnostic: diagnostic(
         stage,
         stage === "compile" ? "compile-failed" : "host-error",
@@ -973,11 +1015,14 @@ async function revertFullDocument(
       await restoreWordContentControlLocks(host, locks, {
         canRestore: () => currentWordDocumentUrl() === documentUrl,
       });
+    const afterFingerprint = writing
+      ? await observeAfterFailure(true, documentUrl)
+      : undefined;
+    if (refusedUnchanged(error, stage, afterFingerprint, expectedAfter))
+      return notAllowedRevert(error);
     return {
       status: writing ? "interrupted" : "stale",
-      ...(writing
-        ? { afterFingerprint: await observeAfterFailure(true, documentUrl) }
-        : {}),
+      ...(writing ? { afterFingerprint } : {}),
       diagnostic: diagnostic(stage, "host-error", error),
     };
   }

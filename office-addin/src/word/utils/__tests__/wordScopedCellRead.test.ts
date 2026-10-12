@@ -10,6 +10,11 @@ import {
   readySnapshot,
   W,
 } from "../../../test/mocks/word/authoringFixtures";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+} from "../../../test/mocks/word/realisticWordFixtures";
 import {
   resolveWordActionFacet,
   WORD_AUTHORING_FACET_ID,
@@ -22,6 +27,11 @@ import {
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
+import {
+  latchWordInPlace,
+  resetWordInPlaceLatchForTests,
+} from "../wordInPlaceSwitch";
+import { noteWordParagraphIds } from "../wordParagraphIds";
 
 import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
@@ -435,5 +445,76 @@ describe("bounded table-cell reads", () => {
       diagnostic: { reason: "source-changed" },
     });
     expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("table-cell edits where the whole-document import needs confirmation", () => {
+  afterEach(() => {
+    resetWordInPlaceLatchForTests();
+    noteWordParagraphIds([]);
+    window.WORD_IN_PLACE_APPLY = true;
+  });
+
+  async function cellEdit(profile?: "word-pc-16.0.20326") {
+    installWordOoxmlHost(realisticWordPackageXml(), { profile });
+    const snapshot = await captureRealisticSnapshot(context.messageId);
+    const session = new WordDocumentReadSession();
+    session.activate(snapshot, context);
+    const read = await session.execute(
+      {
+        snapshot: snapshot.token,
+        documentIdentity: snapshot.identity,
+        table_cell: { header: "budget", rowLabel: "north" },
+      },
+      context,
+    );
+    if (!read.ok) throw new Error(read.error);
+    const { readToken, target } = read.result as {
+      readToken: string;
+      target: Record<string, unknown>;
+    };
+    return () =>
+      createWordDocumentSubmissionExecutor(session)(
+        {
+          snapshot: snapshot.token,
+          readToken,
+          table_cell: { ...target, text: "43" },
+        },
+        { ...context, toolCallId: "submit" },
+      );
+  }
+
+  it("accepts a cell rewrite Word for the web writes in place", async () => {
+    const submit = await cellEdit();
+    expect((await submit()).ok).toBe(true);
+  });
+
+  it.each([
+    ["latched", () => latchWordInPlace("verify-mismatch")],
+    ["no-paragraph-ids", () => noteWordParagraphIds([null])],
+  ] as const)(
+    "refuses a cell rewrite on Word for the web once in-place writing is %s",
+    async (reason, disable) => {
+      const submit = await cellEdit();
+      disable();
+      const result = await submit();
+      expect(result).toEqual({
+        ok: false,
+        error: "Scoped edit needs a full-document rewrite.",
+        validationErrors: [
+          {
+            path: "",
+            code: "web-needs-whole-document",
+            message: expect.stringContaining(`because of: ${reason}.`),
+          },
+        ],
+      });
+    },
+  );
+
+  it("accepts it on Word PC with default settings, where it takes the import", async () => {
+    delete window.WORD_IN_PLACE_APPLY;
+    const submit = await cellEdit("word-pc-16.0.20326");
+    expect((await submit()).ok).toBe(true);
   });
 });

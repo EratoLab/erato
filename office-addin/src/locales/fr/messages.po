@@ -2411,6 +2411,26 @@ msgid "officeAddin.word.authoring.compileFailed"
 msgstr "La structure Word proposée n’a pas pu être préparée. Aucune modification n’a été effectuée. Demandez une nouvelle réécriture."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.desktop"
+msgstr "Word ne peut pas remplacer ce document, car il contient du contenu qu’il ne peut pas modifier. Rien n’a été modifié. Copiez le brouillon ou demandez une modification plus limitée."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.interrupted"
+msgstr "Word s’est arrêté, car ce document contient du contenu qu’il ne peut pas modifier, par exemple un sélecteur de date. Le document peut avoir été partiellement modifié. L’original est enregistré pour la récupération."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.restore"
+msgstr "Word ne peut pas restaurer ce document, car il contient du contenu qu’il ne peut pas modifier, par exemple un sélecteur de date. Rien n’a été modifié. Téléchargez plutôt le document d’origine."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.web"
+msgstr "Word pour le web ne peut pas remplacer ce document, car il contient du contenu qu’il ne peut pas modifier, par exemple un sélecteur de date. Rien n’a été modifié. Copiez le brouillon, ouvrez le document dans Word pour Windows ou Mac, ou demandez une modification plus limitée."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.continuousSection"
 #~ msgstr "Continuer sur la même page"
@@ -2669,6 +2689,11 @@ msgstr "Cette action n’est pas disponible avec les paramètres actuels."
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Word a effectué des modifications, mais le résultat n’a pas pu être vérifié. L’original est enregistré pour la récupération."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.packageBlocked"
+msgstr "Word pour le web n’a pas transmis le fichier complet, ce qui arrive pour les documents dotés d’une étiquette de confidentialité. Erato n’a lu que le corps du document : il ne peut donc pas modifier les en-têtes, les pieds de page ni la mise en page."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

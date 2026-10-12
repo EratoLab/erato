@@ -264,6 +264,24 @@ changes in Word, and the read contract says so while tracking is on.
   live in-place fallback that needs it turns the card back into this choice.
   Where the switch refuses, the card says why and offers Copy draft and "Ask
   again for in-place edits" instead of Apply.
+  Submission refuses a `scoped_edit` or `table_cell` whose route is not in place
+  unless the switch is `allowed` (`web-needs-whole-document`, with the fallback
+  codes, or `no-package` for a body-only capture), so the model resubmits an
+  in-place edit or tells the user; full plans are accepted and the card asks.
+- **Word refusing the write**: a whole-document import or body Replace that
+  Word rejects with `NotAllowed` (Word for the web over a content control it
+  cannot edit, such as a date picker, which no API reports beforehand) is
+  `blocked` with `not-allowed` when the document reads back unchanged: nothing
+  is retried, and the card offers Copy draft. A Revert refused that way is
+  reported `stale` and not offered again. If the document changed, the write
+  stays `interrupted` and the card names the cause.
+- **Labelled documents**: Word for the web withholds the file of a document
+  with a sensitivity label (office-js #6743), which surfaces as a failed
+  transfer. On the web only, the read then falls back to the body
+  (`fullDocument` false), and the chip notes that headers, footers and page
+  layout are out of reach; writes take the body route and its confirmation.
+  Elsewhere a failed transfer still leaves text only and retries at the next
+  send.
 - **Kill switch**: `window.WORD_FORCE_IMPORT_APPLY = true`, injected by the
   backend or set from `VITE_WORD_FORCE_IMPORT_APPLY=true` at build time. In-place
   writing is off on every host, and tracked captures are refused as before.

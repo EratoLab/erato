@@ -2411,6 +2411,26 @@ msgid "officeAddin.word.authoring.compileFailed"
 msgstr "Nie udało się przygotować proponowanej struktury dokumentu Word. Nie wprowadzono zmian. Poproś o nową wersję."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.desktop"
+msgstr "Program Word nie może zastąpić tego dokumentu, ponieważ zawiera on treść, której Word nie może edytować. Nic nie zostało zmienione. Skopiuj wersję roboczą lub poproś o mniejszą zmianę."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.interrupted"
+msgstr "Program Word przerwał operację, ponieważ ten dokument zawiera treść, której nie może edytować, na przykład selektor daty. Dokument może być częściowo zmieniony. Oryginał został zapisany do odzyskania."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.restore"
+msgstr "Program Word nie może przywrócić tego dokumentu, ponieważ zawiera on treść, której Word nie może edytować, na przykład selektor daty. Nic nie zostało zmienione. Zamiast tego pobierz oryginalny dokument."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.web"
+msgstr "Program Word dla sieci Web nie może zastąpić tego dokumentu, ponieważ zawiera on treść, której nie może edytować, na przykład selektor daty. Nic nie zostało zmienione. Skopiuj wersję roboczą, otwórz dokument w programie Word dla systemu Windows lub Mac albo poproś o mniejszą zmianę."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.continuousSection"
 #~ msgstr "Kontynuuj na tej samej stronie"
@@ -2669,6 +2689,11 @@ msgstr "Ta czynność jest niedostępna przy obecnych ustawieniach."
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Program Word zapisał zmiany, ale nie udało się zweryfikować wyniku. Oryginał został zapisany do odzyskania."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.packageBlocked"
+msgstr "Program Word dla sieci Web nie przekazał całego pliku, co zdarza się w przypadku dokumentów z etykietą poufności. Erato odczytał tylko treść główną dokumentu, więc nie może zmienić nagłówków, stopek ani układu strony."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

@@ -1,7 +1,10 @@
 import { parseWordDocumentPlan } from "@erato/frontend/word-review";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { setWordWebImport } from "../../../test/mocks/word/applyPolicy";
+import {
+  allowWordWebImport,
+  setWordWebImport,
+} from "../../../test/mocks/word/applyPolicy";
 import {
   examplePlan,
   packageXml,
@@ -22,7 +25,7 @@ import type { WordDocumentPlan } from "@erato/frontend/word-review";
 function word(ooxml: string, transform = (value: string) => value) {
   let current = ooxml;
   let pending: string | null = null;
-  let failWrite = false;
+  let failWrite: { code: string; lands: boolean } | undefined;
   let unreadable = false;
   const insert = vi.fn((value: string) => {
     pending = value;
@@ -43,11 +46,11 @@ function word(ooxml: string, transform = (value: string) => value) {
     document,
     sync: vi.fn(async () => {
       if (pending) {
-        current = transform(pending);
+        if (!failWrite || failWrite.lands) current = transform(pending);
         pending = null;
         if (failWrite)
           throw Object.assign(new Error("private document text"), {
-            code: "GeneralException",
+            code: failWrite.code,
             debugInfo: {
               errorLocation: "Body.insertOoxml",
               statement: "private document text",
@@ -67,14 +70,15 @@ function word(ooxml: string, transform = (value: string) => value) {
       current = value;
     },
     get: () => current,
-    fail: () => {
-      failWrite = true;
+    /** Word rejects the next write with `code`, after it landed or, with `lands` false, before. */
+    fail: (code = "GeneralException", lands = true) => {
+      failWrite = { code, lands };
     },
     failRead: () => {
       unreadable = true;
     },
     resume: () => {
-      failWrite = false;
+      failWrite = undefined;
       unreadable = false;
     },
   };
@@ -532,6 +536,98 @@ describe("whole-body writes on Word for the web", () => {
     expect(s.used).toBe(false);
   });
 
+  it("refuses a confirmed body replace Word rejects with NotAllowed, unchanged, and never retries it", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    host.fail("NotAllowed", false);
+    const confirmed = { importConfirmed: true };
+    const plan = JSON.stringify(examplePlan(s.token));
+    const result = await applyWordDocumentPlan(
+      plan,
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      confirmed,
+    );
+    expect(result).toEqual({
+      status: "blocked",
+      diagnostic: {
+        stage: "write",
+        reason: "not-allowed",
+        officeCode: "NotAllowed",
+        officeLocation: "Body.insertOoxml",
+        details: { error: "Error" },
+      },
+    });
+    expect(host.get()).toBe(s.ooxml);
+    host.resume();
+    expect(
+      (
+        await applyWordDocumentPlan(
+          plan,
+          s,
+          "message-A",
+          undefined,
+          undefined,
+          confirmed,
+        )
+      ).diagnostic?.reason,
+    ).toBe("expired");
+    expect(host.insert).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a body replace that changed the document before NotAllowed interrupted", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    host.fail("NotAllowed");
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(examplePlan(s.token)),
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(result).toMatchObject({
+      status: "interrupted",
+      before: s.ooxml,
+      diagnostic: {
+        stage: "write",
+        reason: "host-error",
+        officeCode: "NotAllowed",
+      },
+    });
+    expect(result.afterFingerprint).not.toBe(s.fingerprint);
+  });
+
+  it("leaves a body Revert unretried when Word rejects the restore with NotAllowed", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    const applied = await applyWordDocumentPlan(
+      JSON.stringify(examplePlan(s.token)),
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(applied.status).toBe("applied");
+    const after = host.get();
+    host.fail("NotAllowed", false);
+    expect(
+      await revertWordDocumentPlan(applied.before!, applied.afterFingerprint!),
+    ).toMatchObject({
+      status: "stale",
+      diagnostic: {
+        stage: "restore",
+        reason: "not-allowed",
+        officeCode: "NotAllowed",
+      },
+    });
+    expect(host.get()).toBe(after);
+  });
+
   it("never replaces the body for a scoped table-cell edit, even once confirmed", async () => {
     const cell = (text: string) => `<w:tc><w:tcPr/>${paragraph(text)}</w:tc>`;
     const s = readySnapshot(
@@ -557,10 +653,26 @@ describe("whole-body writes on Word for the web", () => {
       readToken: string;
       target: Record<string, unknown>;
     };
-    const submitted = await createWordDocumentSubmissionExecutor(session)(
-      { snapshot: s.token, readToken, table_cell: { ...target, text: "21" } },
-      { ...context, toolCallId: "submit" },
-    );
+    const submit = createWordDocumentSubmissionExecutor(session);
+    const edit = {
+      snapshot: s.token,
+      readToken,
+      table_cell: { ...target, text: "21" },
+    };
+    expect(
+      await submit(edit, { ...context, toolCallId: "submit" }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [
+        {
+          code: "web-needs-whole-document",
+          message: expect.stringContaining("because of: no-package."),
+        },
+      ],
+    });
+    const restore = allowWordWebImport();
+    const submitted = await submit(edit, { ...context, toolCallId: "allowed" });
+    restore();
     if (!submitted.ok) throw new Error(submitted.error);
     const plan = parseWordDocumentPlan(
       JSON.stringify((submitted.result as { plan: unknown }).plan),
