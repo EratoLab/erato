@@ -56,8 +56,8 @@ const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 
 export const WORD_SELECTION_SHOW_TIMEOUT_MS = 10_000;
 /**
- * Added to a run's timeout per comment whose anchor settleWordCommentAnchors compares. Word for the
- * web mapped 50 anchors in 33.6 s (ERMAIN-947 P-PERF).
+ * Added to a run's timeout per comment whose anchor wordParagraphsInsideCommentAnchors compares.
+ * Word for the web mapped 50 anchors in 33.6 s (ERMAIN-947 P-PERF).
  */
 export const WORD_COMMENT_ANCHOR_CHECK_MS = 1_000;
 
@@ -99,10 +99,13 @@ export interface WordParagraphSpanChecks {
    * around the paragraph; until then they count as a commentMark. Null when there are none, or
    * when a legacy package cannot tell which ones they are.
    */
-  commentsOutside: {
-    paragraph: Word.Paragraph;
-    comments: Word.Comment[];
-  } | null;
+  commentsOutside: WordCommentsOutside | null;
+}
+
+/** A paragraph and the comments getComments listed for it that its own OOXML does not hold. */
+export interface WordCommentsOutside {
+  paragraph: Word.Paragraph;
+  comments: Word.Comment[];
 }
 
 /**
@@ -145,11 +148,7 @@ export function queueParagraphSpanChecks(
       cell && !cell.isNullObject
         ? wordCellParagraphOoxml(ooxml.value, cell.cellIndex, paragraph.text)
         : ooxml.value;
-    const outside = wordCommentsOutsidePackage(
-      own,
-      comments.items.map((comment) => comment.id),
-    );
-    const missing = new Set(outside.missing);
+    const outside = wordListedCommentsOutside(paragraph, own, comments.items);
     return {
       ooxml: own,
       objectHazards: {
@@ -158,19 +157,11 @@ export function queueParagraphSpanChecks(
           : {}),
         ...(fields.items.length > 0 ? { field: true } : {}),
         ...(revisions.items.length > 0 ? { trackedChange: true } : {}),
-        ...(missing.size > 0 ? { commentMark: true } : {}),
+        ...(outside ? { commentMark: true } : {}),
       },
       bookmarks:
         bookmarks?.value.filter((name) => name !== WORD_BOOKMARK) ?? null,
-      commentsOutside:
-        missing.size > 0 && !outside.uncertain
-          ? {
-              paragraph,
-              comments: comments.items.filter((comment) =>
-                missing.has(String(comment.id)),
-              ),
-            }
-          : null,
+      commentsOutside: outside === "uncertain" ? null : outside,
     };
   };
 }
@@ -273,21 +264,43 @@ export function wordCommentsOutsidePackage(
 }
 
 /**
- * Lifts the commentMark the span checks gave a paragraph for comments its OOXML does not hold,
- * where the paragraph lies strictly inside each one's anchor, as the middle one of three does: its
- * rewrite moves no mark. A mark at or inside its edge, even an anchor's start at its first
- * character, would move or go (ERMAIN-955), so every other relation keeps it. One more sync, only
- * when a paragraph lacks a comment.
+ * The comments listed for `paragraph` that `ooxml`, its own package, does not hold: null when it
+ * holds them all, and "uncertain" when a legacy package lacks some but cannot tell which.
  */
-export async function settleWordCommentAnchors(
+export function wordListedCommentsOutside(
+  paragraph: Word.Paragraph,
+  ooxml: string,
+  listed: readonly Word.Comment[],
+): WordCommentsOutside | "uncertain" | null {
+  const { missing, uncertain } = wordCommentsOutsidePackage(
+    ooxml,
+    listed.map((comment) => comment.id),
+  );
+  if (missing.length === 0) return null;
+  if (uncertain) return "uncertain";
+  const ids = new Set(missing);
+  return {
+    paragraph,
+    comments: listed.filter((comment) => ids.has(String(comment.id))),
+  };
+}
+
+/**
+ * Per entry, whether its paragraph lies strictly inside the anchor of each of its comments, as the
+ * middle one of three does: a write of the paragraph's own OOXML moves no mark of theirs. A mark at
+ * or inside its edge, even an anchor's start at its first character, would move or go
+ * (ERMAIN-955), so every other relation fails, as does "uncertain"; a null entry passes. One sync,
+ * only when there is a comment to compare.
+ */
+export async function wordParagraphsInsideCommentAnchors(
   context: Word.RequestContext,
-  reads: readonly WordParagraphSpanChecks[],
+  outside: readonly (WordCommentsOutside | "uncertain" | null)[],
   guard?: Pick<WordRunGuard, "extendTimeout">,
-): Promise<WordParagraphSpanChecks[]> {
-  const relations = reads.map(({ commentsOutside }) => {
-    if (!commentsOutside) return null;
-    const whole = commentsOutside.paragraph.getRange("Whole");
-    return commentsOutside.comments.map((comment) =>
+): Promise<boolean[]> {
+  const relations = outside.map((each) => {
+    if (!each || each === "uncertain") return null;
+    const whole = each.paragraph.getRange("Whole");
+    return each.comments.map((comment) =>
       comment.getRange().compareLocationWith(whole),
     );
   });
@@ -295,15 +308,36 @@ export async function settleWordCommentAnchors(
     (sum, each) => sum + (each?.length ?? 0),
     0,
   );
-  if (compared === 0) return [...reads];
-  guard?.extendTimeout(compared * WORD_COMMENT_ANCHOR_CHECK_MS);
-  await context.sync();
+  if (compared > 0) {
+    guard?.extendTimeout(compared * WORD_COMMENT_ANCHOR_CHECK_MS);
+    await context.sync();
+  }
+  return outside.map(
+    (each, i) =>
+      each !== "uncertain" &&
+      (relations[i]?.every((relation) => relation.value === "Contains") ??
+        true),
+  );
+}
+
+/**
+ * Lifts the commentMark the span checks gave a paragraph for comments its OOXML does not hold,
+ * where it lies strictly inside each one's anchor (wordParagraphsInsideCommentAnchors).
+ */
+export async function settleWordCommentAnchors(
+  context: Word.RequestContext,
+  reads: readonly WordParagraphSpanChecks[],
+  guard?: Pick<WordRunGuard, "extendTimeout">,
+): Promise<WordParagraphSpanChecks[]> {
+  const inside = await wordParagraphsInsideCommentAnchors(
+    context,
+    reads.map((read) => read.commentsOutside),
+    guard,
+  );
   return reads.map((read, i) => {
-    const each = relations[i];
-    if (!each) return read;
+    if (!read.commentsOutside) return read;
     const objectHazards = { ...read.objectHazards };
-    if (each.every((relation) => relation.value === "Contains"))
-      delete objectHazards.commentMark;
+    if (inside[i]) delete objectHazards.commentMark;
     return { ...read, objectHazards, commentsOutside: null };
   });
 }

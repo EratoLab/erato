@@ -22,6 +22,7 @@ import {
   captureWordSelection,
   WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
 } from "../wordSelectionCapture";
+import { WORD_COMMENT_ANCHOR_CHECK_MS } from "../wordSelectionTarget";
 
 import type {
   MockParagraphState,
@@ -2047,6 +2048,212 @@ describe.each(HOSTS)(
       expect(merged()).toBe(true);
       expect(host.paragraphs()).toHaveLength(count);
       expect(texts(host)).toContain("CB2 Cell B2 text");
+    });
+  },
+);
+
+describe.each(HOSTS)(
+  "revertWordSelection of a paragraph with comments on %s",
+  (flavour) => {
+    const SHAPES = new Set<WordSelectionShape>(["paragraph", "inline"]);
+    const SC1 = "SC1 Rewritten separator words.";
+    const install = (options: { legacyComments?: boolean } = {}) =>
+      installWordSelectionHost(V3C_MULTI_DOCUMENT, {
+        host: flavour,
+        ...options,
+      });
+    const apply = async (
+      host: WordSelectionHost,
+      target: MockSelectionTarget,
+      fence: (sent: string) => string,
+    ) => {
+      host.select(target);
+      const read = await captureWordSelection("user", 15_000, SHAPES);
+      if (read.status !== "ok" || !read.value) throw new Error("no capture");
+      expect(read.value.role).toBe("rewrite");
+      const result = await replaceWordSelection({
+        capture: emptySelectionCapture("doc", read.value),
+        fenceContent: fence(read.value.selectedText),
+        enabledShapes: SHAPES,
+      });
+      if (result.status !== "applied" || !result.backups)
+        throw new Error("not applied");
+      return result;
+    };
+    const revert = (
+      result: Awaited<ReturnType<typeof apply>>,
+    ): ReturnType<typeof revertWordSelection> =>
+      revertWordSelection(result.backups!, result.written);
+    // insertOoxml gives each restored paragraph a new ID.
+    const documentOf = (host: WordSelectionHost) => ({
+      paragraphs: host.paragraphs().map(({ id: _, ...rest }) => rest),
+      comments: host.comments(),
+    });
+    const keptComment = (sent: string) =>
+      sent.replace("uniform victor", "uniform whiskey");
+
+    it.each([
+      ["A2", { p: "MA2" }, "MA2 Middle paragraph rewritten."],
+      ["A6", { p: "MA2", text: "charlie delta" }, "charlie echo"],
+      ["B2", { p: "MB2" }, "MB2 Middle paragraph rewritten."],
+      ["B6", { p: "MB2", text: "kilo lima" }, "kilo mike"],
+    ] as const)(
+      "restores %s, inside a comment's anchor, exactly, its comments included",
+      async (_, target, rewrite) => {
+        const host = install();
+        const before = documentOf(host);
+        const result = await apply(host, target, () => rewrite);
+        expect(documentOf(host)).not.toEqual(before);
+        const calls = host.calls().length;
+        expect(await revert(result)).toMatchObject({ status: "reverted" });
+        expect(documentOf(host)).toEqual(before);
+        // F-11: the web does not list the comment around a middle paragraph at all.
+        expect(host.calls().slice(calls).includes("Comment.getRange")).toBe(
+          flavour !== "web",
+        );
+      },
+    );
+
+    it("restores a paragraph that kept its comment, found in its backup, without comparing anchors", async () => {
+      const host = install();
+      const before = documentOf(host);
+      const result = await apply(host, { p: "MC1" }, keptComment);
+      const calls = host.calls().length;
+      expect(await revert(result)).toMatchObject({ status: "reverted" });
+      expect(documentOf(host)).toEqual(before);
+      expect(host.calls().slice(calls)).not.toContain("Comment.getRange");
+    });
+
+    it.each([
+      [
+        "starts",
+        { p: "SC1", text: "Rewritten", to: { p: "MC1", text: "MC1 Control" } },
+      ],
+      [
+        "ends",
+        {
+          p: "MB3",
+          text: "oscar papa.",
+          to: { p: "SC1", text: "SC1 Rewritten" },
+        },
+      ],
+      ["lies", { p: "SC1", text: "separator" }],
+    ] as const)(
+      "writes nothing back once a comment added since %s in the written paragraph",
+      async (_, comment) => {
+        const host = install();
+        const result = await apply(host, { p: "SC1" }, () => SC1);
+        host.addComment(comment);
+        const before = documentOf(host);
+        const writes = host.writeSyncs().length;
+        const calls = host.calls().length;
+        expect(await revert(result)).toMatchObject({ status: "stale" });
+        expect(host.writeSyncs()).toHaveLength(writes);
+        expect(
+          host
+            .calls()
+            .slice(calls)
+            .filter((call) => call.endsWith("Ooxml")),
+        ).toEqual([]);
+        expect(documentOf(host)).toEqual(before);
+      },
+    );
+
+    it("restores a written paragraph a comment added since lies around", async () => {
+      const host = install();
+      const separator = () =>
+        documentOf(host).paragraphs.find((p) => p.text.startsWith("SC1"));
+      const original = separator();
+      const result = await apply(host, { p: "SC1" }, () => SC1);
+      const id = host.addComment({
+        p: "MB3",
+        text: "oscar papa.",
+        to: { p: "MC1", text: "MC1 Control" },
+      });
+      expect(await revert(result)).toMatchObject({ status: "reverted" });
+      expect(separator()).toEqual(original);
+      expect(host.comments()).toContainEqual({
+        id,
+        anchor: "oscar papa.\rSC1 Separator before the control.\rMC1 Control",
+      });
+    });
+
+    it("gives the restore's anchor comparison its allowance per comment", async () => {
+      const COMMENT = {
+        p: "SC1",
+        text: "Rewritten",
+        to: { p: "MC1", text: "MC1 Control" },
+      } as const;
+      const measure = install();
+      const measured = await apply(measure, { p: "SC1" }, () => SC1);
+      measure.addComment(COMMENT);
+      const start = measure.syncCount();
+      await revert(measured);
+      const offset =
+        measure
+          .syncLog()
+          .find(
+            (entry) =>
+              entry.index > start &&
+              entry.commands.includes("Range.compareLocationWith"),
+          )!.index - start;
+      uninstallWordSelectionHost();
+
+      const host = install();
+      const result = await apply(host, { p: "SC1" }, () => SC1);
+      host.addComment(COMMENT);
+      const writes = host.writeSyncs().length;
+      vi.useFakeTimers();
+      const hang = host.hangSync({ at: host.syncCount() + offset });
+      let done = false;
+      const restore = revert(result).finally(() => {
+        done = true;
+      });
+      await hang.reached;
+      await vi.advanceTimersByTimeAsync(
+        WORD_REVERT_SELECTION_TIMEOUT_MS +
+          WORD_REVERT_SELECTION_MS_PER_PARAGRAPH,
+      );
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(WORD_COMMENT_ANCHOR_CHECK_MS);
+      expect(await restore).toMatchObject({ status: "failed", timedOut: true });
+      hang.release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.writeSyncs()).toHaveLength(writes);
+    });
+
+    describe("in a legacy file without commentsIds", () => {
+      it.each([
+        ["the middle of an anchor", { p: "MA2" }, () => "MA2 Rewritten."],
+        ["a kept comment", { p: "MC1" }, keptComment],
+      ] as const)(
+        "restores %s, its marks counted",
+        async (_, target, fence) => {
+          const host = install({ legacyComments: true });
+          const before = documentOf(host);
+          const result = await apply(host, target, fence);
+          expect(await revert(result)).toMatchObject({ status: "reverted" });
+          expect(documentOf(host).paragraphs).toEqual(before.paragraphs);
+          expect(documentOf(host).comments.map(({ anchor }) => anchor)).toEqual(
+            before.comments.map(({ anchor }) => anchor),
+          );
+        },
+      );
+
+      it("writes nothing back over more comments than its paragraph marks, without comparing anchors", async () => {
+        const host = install({ legacyComments: true });
+        const result = await apply(host, { p: "MC1" }, keptComment);
+        host.addComment({
+          p: "MC1",
+          text: "whiskey.",
+          to: { p: "CL1", text: "CL1 Closing" },
+        });
+        const before = documentOf(host);
+        const calls = host.calls().length;
+        expect(await revert(result)).toMatchObject({ status: "stale" });
+        expect(documentOf(host)).toEqual(before);
+        expect(host.calls().slice(calls)).not.toContain("Comment.getRange");
+      });
     });
   },
 );

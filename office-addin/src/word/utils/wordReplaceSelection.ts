@@ -37,7 +37,9 @@ import {
   readWordStory,
   sameCellTable,
   settleTargetVerification,
+  wordListedCommentsOutside,
   wordParagraphsEndingSection,
+  wordParagraphsInsideCommentAnchors,
   queueParagraphSpanChecks,
 } from "./wordSelectionTarget";
 
@@ -473,7 +475,7 @@ export async function replaceWordSelection(args: {
 
 export type WordSelectionRevertStatus =
   | "reverted"
-  /** The written text changed since, so restoring would overwrite later work. */
+  /** The written text or its comments changed since, so restoring would overwrite later work. */
   | "stale"
   | "tracking"
   | "failed"
@@ -489,7 +491,8 @@ export interface WordSelectionRevertResult {
 
 /**
  * Restores the paragraphs a Replace wrote from their OOXML before the write, only while every
- * covered paragraph still holds exactly the written text. All are restored in one sync, last to
+ * covered paragraph still holds exactly the written text, and every restored one lists no comment
+ * its backup lacks but one whose anchor lies around it. All are restored in one sync, last to
  * first, so Word's own Undo takes them back in one step too. The restore shows only in a later
  * Word.run on the web (PF4), so it is verified in one.
  */
@@ -534,11 +537,26 @@ export async function revertWordSelection(
         targets.map(({ paragraph }) => paragraph),
       );
       if (ends.some(Boolean)) return "stale";
+      const listed = targets.map(({ paragraph }) => {
+        const comments = paragraph.getComments();
+        comments.load("items/id");
+        return comments;
+      });
       const cells = targets.map(({ backup, paragraph }) =>
         backup.tableNestingLevel > 0 ? queueWordCellTable(paragraph) : null,
       );
-      if (cells.some(Boolean)) await context.sync();
+      await context.sync();
       const cellTables = cells.map((cell) => cell?.() ?? null);
+      // A backup holds the marks only of the comments that lay wholly in its paragraph before the
+      // write; restored over one that lists another, it would move or drop that comment's marks.
+      const inside = await wordParagraphsInsideCommentAnchors(
+        context,
+        targets.map(({ backup, paragraph }, i) =>
+          wordListedCommentsOutside(paragraph, backup.ooxml, listed[i].items),
+        ),
+        guard,
+      );
+      if (!inside.every(Boolean)) return "stale";
       guard.beforeWrite();
       for (const { backup, paragraph } of [...targets].reverse())
         paragraph.insertOoxml(backup.ooxml, "Replace");
