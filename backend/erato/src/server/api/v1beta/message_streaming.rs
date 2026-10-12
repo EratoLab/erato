@@ -7507,9 +7507,11 @@ async fn stream_generate_chat_completion<'a>(
 
                     match park {
                         Park::Delivered(outcome) => outcome,
-                        Park::TransportUnavailable => ClientToolOutcome::Cancelled {
-                            reason: "context_unavailable".into(),
-                        },
+                        Park::TransportUnavailable => {
+                            raced_in.unwrap_or_else(|| ClientToolOutcome::Cancelled {
+                                reason: "context_unavailable".into(),
+                            })
+                        }
                         Park::TimedOut if withdrawn => ClientToolOutcome::Cancelled {
                             reason: "withdrawn".to_string(),
                         },
