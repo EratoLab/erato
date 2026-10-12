@@ -7179,6 +7179,14 @@ async fn stream_generate_chat_completion<'a>(
                         Some(&response_text),
                     )
                     .await;
+                    if tool_charges.get(&call_id).is_some_and(|charge| {
+                        charge.submission_attempt.is_some() || charge.recovery_read
+                    }) && let Some(correction) = submission_correction.as_mut()
+                    {
+                        correction.stop(crate::services::submission_correction::SubmissionReason::CapabilityUnavailable);
+                        persist_correction!();
+                        exit_after_join = true;
+                    }
                     current_turn_tool_responses.push((
                         batch_position,
                         genai::chat::ToolResponse {
@@ -7187,6 +7195,9 @@ async fn stream_generate_chat_completion<'a>(
                             content: response_text,
                         },
                     ));
+                    if exit_after_join {
+                        break 'pop_calls;
+                    }
                     continue;
                 };
                 let submission = tool_policy.and_then(|policy| policy.submission.as_ref());

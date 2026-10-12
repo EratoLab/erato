@@ -595,6 +595,74 @@ async fn submission_withdrawn_at_approval_preserves_parked_generation_metadata(
     assert_eq!(final_outcome(&events)["reason"], "capability_unavailable");
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn denied_fifth_submission_stops_without_a_sixth_inference(pool: Pool<Postgres>) {
+    let mut last_rejection = rejected("repair_arguments");
+    last_rejection["deny_tool"] = json!("client/submit_draft");
+    let (requests, events) = run_scenario(
+        pool,
+        [
+            "call_854_one",
+            "call_854_two",
+            "call_854_three",
+            "call_854_four",
+            "call_854_five",
+        ]
+        .into_iter()
+        .map(|id| submission(id, json!(id)))
+        .collect(),
+        vec![
+            rejected("repair_arguments"),
+            rejected("repair_arguments"),
+            rejected("repair_arguments"),
+            last_rejection,
+        ],
+        ScenarioOptions {
+            ordinary_budget: 0,
+            check_metadata: true,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 5);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["message_type"] == "client_tool_call")
+            .count(),
+        4
+    );
+    assert_eq!(final_outcome(&events)["reason"], "capability_unavailable");
+    assert_eq!(final_outcome(&events)["attempts_used"], 5);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn denied_recovery_read_stops_correction_without_more_inference(pool: Pool<Postgres>) {
+    let mut feedback = rejected("read_current_context");
+    feedback["deny_tool"] = json!("client/read_context");
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_854_plan", json!("draft")),
+            ModelStep::Tools(vec![(
+                "call_854_read",
+                "read_context",
+                json!({"title":"page"}),
+            )]),
+        ],
+        vec![feedback],
+        ScenarioOptions {
+            ordinary_budget: 0,
+            check_metadata: true,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(final_outcome(&events)["reason"], "capability_unavailable");
+    assert_eq!(final_outcome(&events)["attempts_used"], 1);
+}
+
 async fn run_submission(
     pool: Pool<Postgres>,
     attempts: Vec<Vec<(&'static str, Value)>>,
@@ -881,6 +949,12 @@ async fn run_scenario(
                         && answered.insert(tool_call_id.clone())
                     {
                         let mut payload = next_result.take().expect("unexpected dispatch");
+                        if let Some(tool) = payload.as_object_mut().unwrap().remove("deny_tool") {
+                            server.put("/api/v1beta/me/profile/preferences")
+                                .with_bearer_token(TEST_JWT_TOKEN)
+                                .json(&json!({"client_tool_decisions":{tool.as_str().unwrap():"never_allow"}}))
+                                .await.assert_status_ok();
+                        }
                         if payload["abort_test_generation"] == true {
                             server
                                 .post("/api/v1beta/me/messages/abortstream")
