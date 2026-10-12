@@ -23,28 +23,64 @@ struct Setup {
 }
 
 async fn setup(pool: Pool<Postgres>, timeout_ms: u64, durable_flag: bool, opt_in: bool) -> Setup {
+    setup_reads(pool, timeout_ms, durable_flag, opt_in, 1).await
+}
+
+async fn setup_reads(
+    pool: Pool<Postgres>,
+    timeout_ms: u64,
+    durable_flag: bool,
+    opt_in: bool,
+    reads: usize,
+) -> Setup {
+    setup_tool_calls(pool, timeout_ms, durable_flag, opt_in, &vec![TOOL; reads]).await
+}
+
+async fn setup_tool_calls(
+    pool: Pool<Postgres>,
+    timeout_ms: u64,
+    durable_flag: bool,
+    opt_in: bool,
+    tools: &[&str],
+) -> Setup {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
+    let calls: Vec<String> = (0..tools.len())
+        .map(|i| {
+            if i == 0 {
+                CALL.into()
+            } else {
+                format!("{CALL}-{}", i + 1)
+            }
+        })
+        .collect();
+    for (index, call) in calls.iter().enumerate() {
+        let capture = recorder.clone();
+        let call = call.clone();
+        let tool = tools[index].to_owned();
+        let previous = index.checked_sub(1).map(|i| calls[i].clone());
+        mocks.mock(move |when, then| {
+            let included: Vec<&str> = previous.as_deref().into_iter().collect();
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&included, &[&call]))
+                .matcher(capture);
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[(
+                    &call,
+                    &tool,
+                    json!({"lookahead_days":7}),
+                )]),
+            );
+        });
+    }
+    let last = calls.last().unwrap().clone();
     let capture = recorder.clone();
     mocks.mock(move |when, then| {
         when.post()
             .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(&[], &[CALL]))
-            .matcher(capture);
-        mock_llm_sse_response(
-            then,
-            build_openai_tool_calls_streaming_response(&[(
-                CALL,
-                TOOL,
-                json!({"lookahead_days":7}),
-            )]),
-        );
-    });
-    let capture = recorder.clone();
-    mocks.mock(move |when, then| {
-        when.post()
-            .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(&[CALL], &[]))
+            .matcher(BodyContainsMatcher::new(&[&last], &[]))
             .matcher(capture);
         mock_llm_sse_response(then, build_openai_text_streaming_response(&[ANSWER]));
     });
@@ -69,6 +105,20 @@ async fn setup(pool: Pool<Postgres>, timeout_ms: u64, durable_flag: bool, opt_in
         },
     );
     config.facets.tool_call_allowlist = vec!["outlook/*".into()];
+    for tool in tools.iter().filter(|tool| **tool != TOOL) {
+        config.client_tools.tools.insert(
+            format!("outlook_{tool}"),
+            ClientToolConfig {
+                name: (*tool).into(),
+                namespace: Some("outlook".into()),
+                description: "Read live mailbox state".into(),
+                parameters:
+                    json!({"type":"object","properties":{"lookahead_days":{"type":"integer"}}})
+                        .to_string(),
+                ..Default::default()
+            },
+        );
+    }
     let state = test_app_state(config, pool).await;
     let chat_id = seed_origin_chat(&state.db).await;
     Setup {
@@ -1154,3 +1204,5 @@ async fn opted_in_tool_without_a_binding_keeps_the_legacy_path(pool: Pool<Postgr
     assert_eq!(answer.json::<Value>()["delivered"], true);
     assert!(chat_attempts(&setup.state, setup.chat_id).await.is_empty());
 }
+
+mod attached;

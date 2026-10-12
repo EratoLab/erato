@@ -2185,6 +2185,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ClientOperationResponse"
                 }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessage"
+                }
               }
             }
           },

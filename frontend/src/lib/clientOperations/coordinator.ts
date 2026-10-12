@@ -7,6 +7,7 @@ import {
   fetchCancelClientOperation,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { continueAttachedOperation } from "./attachedContinuation";
 import { clientOperationHandlerRegistry } from "./handlers";
 import { withClientCallLock } from "./operationLock";
 
@@ -37,6 +38,7 @@ export interface ClientOperationApi {
     signal: AbortSignal,
   ): Promise<unknown>;
   continue(id: string, signal: AbortSignal): Promise<unknown>;
+  attach?(request: OperationRequest, signal: AbortSignal): Promise<unknown>;
   cancel(id: string, signal: AbortSignal): Promise<unknown>;
 }
 function headers(request: OperationRequest): Record<string, string> {
@@ -68,6 +70,7 @@ export const clientOperationApi: ClientOperationApi = {
     ),
   continue: (id, signal) =>
     fetchContinueClientOperation({ pathParams: { attemptId: id } }, signal),
+  attach: continueAttachedOperation,
   cancel: (id, signal) =>
     fetchCancelClientOperation({ pathParams: { attemptId: id } }, signal),
 };
@@ -113,6 +116,7 @@ export class ClientOperationCoordinator {
   readonly #abort = new AbortController();
   readonly #operations = new Map<string, ClientOperationView>();
   readonly #claims = new Map<string, ClaimClientOperationResponse>();
+  readonly #attached = new Set<string>();
   readonly #builtIns: readonly ClientOperationHandler[];
   readonly #unsubscribe: () => void;
   #running: Promise<void> | undefined;
@@ -135,6 +139,7 @@ export class ClientOperationCoordinator {
     this.#unsubscribe();
     this.#operations.clear();
     this.#claims.clear();
+    this.#attached.clear();
     this.#builtIns.forEach((handler) => handler.dispose?.());
   }
   #handlers(): readonly ClientOperationHandler[] {
@@ -149,6 +154,34 @@ export class ClientOperationCoordinator {
   }
   #check(): void {
     this.#abort.signal.throwIfAborted();
+  }
+  #continue(
+    request: OperationRequest,
+    handler: ClientOperationHandler,
+  ): Promise<unknown> {
+    const executor = handler.executor();
+    if (
+      request.kind === "client_tool.v1" &&
+      request.consent === "none" &&
+      this.api.attach
+    ) {
+      // An observer must not race the owning pane with a detached continuation.
+      if (!executor || !sameBinding(executor, request.binding)) {
+        handler.status?.(request, executor ? "another_device" : "unavailable");
+        return Promise.resolve();
+      }
+      if (!this.#attached.has(request.attempt_id)) {
+        this.#attached.add(request.attempt_id);
+        void this.api
+          .attach(request, this.#abort.signal)
+          .catch(() => {
+            /* A lost connection returns to inbox recovery. */
+          })
+          .finally(() => this.#attached.delete(request.attempt_id));
+      }
+      return Promise.resolve();
+    }
+    return this.api.continue(request.attempt_id, this.#abort.signal);
   }
   reconcile(): Promise<void> {
     if (this.#abort.signal.aborted || !this.enabled) return Promise.resolve();
@@ -252,7 +285,7 @@ export class ClientOperationCoordinator {
           }
           this.#check();
           try {
-            await this.api.continue(request.attempt_id, this.#abort.signal);
+            await this.#continue(request, handler);
           } catch {
             /* Another view may own continuation. */
           }
@@ -312,7 +345,7 @@ export class ClientOperationCoordinator {
       }
       this.#check();
       handler.status?.(request, "continuing");
-      await this.api.continue(request.attempt_id, this.#abort.signal);
+      await this.#continue(request, handler);
     } catch {
       this.#claims.delete(
         request.attempt_id,

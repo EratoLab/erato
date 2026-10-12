@@ -34,8 +34,8 @@ message identify today's logical turn. Result payloads are `value`, `reference` 
 
 ## Lifecycle
 
-1. Dispatch assigns one attempt identity in memory. No new database round trip is
-   added to a successful fast call. Eligibility requires a registered kind and a
+1. Dispatch assigns one attempt identity in memory. Successful fast calls create
+   no attempt row. Eligibility requires a registered kind and a
    captured executor binding. For a configured kind, the #1268 per-tool decision
    gate runs first, and the binding must carry the kind's host family. Without one,
    the call keeps the in-memory path described under bindings below.
@@ -100,11 +100,42 @@ for another. The web app registers no `client_tool.v1` handler, so only the
 add-in continues these attempts; a continue-only fallback for other tabs would be
 a separate decision.
 
-After a durable park, continuation is detached. Further registered client calls
-enter the inbox immediately. Attached continuation (ERMAIN-912) is still required
-before this mechanism is suitable for Word-style sequences of fast client calls;
-the sidecar's single-operation leaf and single Outlook availability reads are the
-supported production shapes.
+An interactive executor continues a settled `consent: none` operation with
+`Accept: text/event-stream`, its `X-Erato-Executor` binding and current
+`X-Erato-Client-Tools`. The coordinator consumes this SSE response and answers
+later live calls even without an open chat view. Continuation uses the same
+assistant message, generation pipeline and saved consumption. Clients without
+the SSE Accept header retain detached JSON continuation; native/ask consent
+remains inbox-only.
+Expired pending/claimed operations use detached continuation even when the
+original executor is unavailable or the observing pane has a different binding;
+the server authors the expiry without executing the client tool. Ready/continuing
+operations still require the matching executor for attached continuation.
+
+`client_operation_transports` holds one logged ownership row per chat, fenced by
+the active generation and a server-assigned transport UUID. Eligible configured
+tools establish it before inference, so `resumestream` can acquire it on either
+replica before the first call. A matching device, realm, host context and tool
+registration may acquire a free or expired lease. The first successful claimant
+owns durable execution; competing streams receive output but no durable client-call
+events. Non-durable calls retain their existing delivery behavior.
+The original stream's closure does not displace a successor. Existing per-call
+Web Locks and attempt/result fences remain necessary.
+
+The response body renews ownership every five seconds, with a twenty-second
+expiry. Dropping it releases only its own token; replica loss expires the lease.
+An eligible observer retries acquisition every five seconds, so a reconnect that
+arrives before the previous stream releases ownership can still take over.
+Only acquired leases are renewed; ordinary streams do not arm a heartbeat timer.
+While waiting for an eligible durable call the worker checks shared ownership
+every 100 ms, and parks through the existing transaction if ownership is gone.
+An ownership read error is retried rather than treated as a disconnect. Ownership
+initialization still fails closed on a database error, since the write may have
+committed and another stream could acquire that row.
+Ownership adds one row initialization per eligible generation, heartbeat writes
+and ownership reads around client-call delivery/waits. Generations without an
+eligible durable tool retain their existing client-tool behavior. Word opt-in
+and its document/pane binding remain Part 2 of ERMAIN-912.
 
 A kind with `requires_binding()` (local evidence and compiled test kinds) makes a
 valid `X-Erato-Executor` binding mandatory when the flag is enabled; without one

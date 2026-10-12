@@ -2,6 +2,7 @@
 //! Model history remains on the message row; no composed request is stored here.
 pub mod client_tool;
 pub mod store;
+pub mod transport;
 
 use chrono::{DateTime, Utc};
 use sea_orm::prelude::Uuid;

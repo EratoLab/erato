@@ -240,15 +240,21 @@ async fn park(state: &erato::state::AppState, chat_id: Uuid) -> OperationRequest
 pub(super) async fn wait_completed(state: &erato::state::AppState, id: Uuid) {
     tokio::time::timeout(Duration::from_secs(20), async {
         loop {
-            if attempts::Entity::find_by_id(id)
+            let attempt = attempts::Entity::find_by_id(id)
                 .one(&state.db)
                 .await
                 .unwrap()
-                .unwrap()
-                .state
-                == AttemptState::Completed
-            {
-                return;
+                .unwrap();
+            if attempt.state == AttemptState::Completed {
+                // The attempt commits before the worker releases its generation lease.
+                let chat = chats::Entity::find_by_id(attempt.chat_id)
+                    .one(&state.db)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                if chat.generation_state.as_deref() != Some("running") {
+                    return;
+                }
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }

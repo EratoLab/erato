@@ -1437,6 +1437,7 @@ export function useChatMessaging(
         {
           method: "POST",
           headers: {
+            ...getClientToolHeaders(),
             [X_ERATO_PLATFORM_HEADER]: platform,
           },
           body: JSON.stringify({ chat_id: effectiveChatId }),
