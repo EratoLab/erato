@@ -62,7 +62,7 @@ For background on `_info` metrics, see [Prometheus Info Metrics](https://oneupti
 ### MCP metrics
 
 - `erato_mcp_active_sessions` (gauge)
-  - Current number of active MCP sessions for each configured MCP server
+  - Current number of retained legacy MCP sessions for each configured MCP server. Stateless HTTP pools, in-flight stateless calls and cached tool lists do not count as sessions.
   - Labels: `server_id`
 
 ### Cache metrics

@@ -253,11 +253,15 @@ async fn token(State(state): State<OAuthState>, Form(params): Form<Params>) -> R
 
 /// Build the same fixture for the standalone server and ephemeral regression-test listeners.
 pub fn router(config: OAuthConfig) -> Router {
+    router_with_protocol(config, super::MockProtocolMode::Legacy)
+}
+
+pub fn router_with_protocol(config: OAuthConfig, mode: super::MockProtocolMode) -> Router {
     let state = OAuthState {
         config,
         grants: Arc::default(),
     };
-    let service = super::create_streamable_http_service(|| Ok(super::FileServer::new()));
+    let service = super::create_streamable_http_service(mode, || Ok(super::FileServer::new()));
     Router::new()
         .route("/.well-known/oauth-authorization-server", get(metadata))
         .route("/.well-known/oauth-protected-resource", get(protected_metadata))

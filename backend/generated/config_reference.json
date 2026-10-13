@@ -1004,6 +1004,7 @@
   "mcp_servers.<server-id>.override_tool_annotations.idempotent_hint": {},
   "mcp_servers.<server-id>.override_tool_annotations.open_world_hint": {},
   "mcp_servers.<server-id>.override_tool_annotations.read_only_hint": {},
+  "mcp_servers.<server-id>.protocol_mode": {},
   "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.destructive_hint": {},
   "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.idempotent_hint": {},
   "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint": {},

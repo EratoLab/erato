@@ -35,7 +35,7 @@ fn apply_auth_header(
     Ok(())
 }
 
-async fn apply_auth_headers(
+pub(super) async fn apply_auth_headers(
     default_headers: &mut HeaderMap,
     server_id: &str,
     config: &McpServerConfig,
