@@ -69,6 +69,19 @@ const StubInput = ({
   <input {...(props as Record<string, never>)} />
 );
 
+// A native select, so a test can pick an option; the label names it as the field's <label> does.
+const StubSelect = ({
+  label,
+  description: _description,
+  error: _error,
+  ...props
+}: StubProps & {
+  label?: string;
+  description?: string;
+  error?: string;
+  ref?: unknown;
+}) => <select aria-label={label} {...(props as Record<string, never>)} />;
+
 const StubModalBase = ({
   children,
   isOpen,
@@ -157,7 +170,7 @@ export const DEFAULT_STUBS = {
     subscribe: () => noop,
   },
   useMcpBrowserAuthorization: () => noop,
-  Select: StubPassthrough,
+  Select: StubSelect,
   TextComparison: StubNothing,
   useThemedIcon: () => null,
   getChatUrl: () => "",

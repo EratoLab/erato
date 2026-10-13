@@ -1,37 +1,21 @@
 import { i18n } from "@lingui/core";
 import {
-  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  installWordCommentHost,
-  uninstallWordCommentHost,
-} from "../../../test/mocks/word/commentHost";
 import { NO_WORD_COMMENT_LIST } from "../../hooks/useWordComments";
-import { wordCommentGestureStore } from "../../hooks/wordCommentGestureStore";
-import { wordSelectionStore } from "../../hooks/wordSelectionStore";
-import {
-  forgetWordCommentRefs,
-  wordCommentRefRegistry,
-} from "../../utils/wordCommentRefs";
 import { resolveWordCommentSend } from "../../utils/wordCommentSend";
-import { WORD_SELECTION_ARG_KEYS } from "../../utils/wordSelectionArgs";
-import { WordChatInput } from "../WordChatInput";
 import { WordCommentChip, wordCommentChipView } from "../WordCommentChip";
 import {
   wordCommentCoverageInfo,
   wordCommentCoverageLines,
 } from "../WordCommentCoverage";
 
-import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
-import type { CommentHost } from "../../../test/mocks/word/commentHost";
 import type {
   WordCommentList,
   WordCommentListThread,
@@ -40,88 +24,15 @@ import type {
   WordCommentAdvertised,
   WordCommentSendInput,
 } from "../../utils/wordCommentSend";
-import type { WordSelectionSnapshot } from "../../utils/wordSelectionAnchor";
 import type {
   WordCommentChipProps,
   WordCommentChipView,
 } from "../WordCommentChip";
-import type { ReactNode } from "react";
-
-const host = vi.hoisted(() => ({
-  facets: [] as { id: string; allowed_args?: string[] }[],
-  includeDocument: false,
-  precedence: "selection",
-  captureSelection: vi.fn(),
-}));
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
-  return mock.createEratoLibraryMock({
-    useFacets: () => ({ data: { action_facets: host.facets } }),
-    Alert: ({ children }: { children: ReactNode }) => (
-      <div role="alert">{children}</div>
-    ),
-  });
+  return mock.createEratoLibraryMock();
 });
-
-vi.mock("../../../core/AddinChatInputCore", () => ({
-  AddinChatInputCore: ({
-    onSendMessage,
-  }: {
-    onSendMessage: (message: string) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="send"
-      onClick={() => onSendMessage("Fix this")}
-    >
-      send
-    </button>
-  ),
-}));
-
-vi.mock("../../hooks/useWordDocumentSource", () => ({
-  useWordDocumentSource: () => ({
-    preview: {
-      status: "included",
-      coverage: null,
-      changedSinceLastSend: false,
-      reading: false,
-    },
-    capture: vi.fn(),
-    captureExpectedSlow: () => false,
-    previousCapture: () => null,
-    markSent: () => {},
-  }),
-}));
-
-vi.mock("../../hooks/useWordSelection", () => ({
-  useWordSelection: () => {},
-}));
-
-vi.mock("../../utils/wordSelectionCapture", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  captureWordSelection: () => host.captureSelection(),
-}));
-
-vi.mock("../../utils/wordDocumentReadTool", () => ({
-  WORD_READ_TOOL: "read_document_blocks",
-  wordDocumentReadSession: { activate: vi.fn(), clear: vi.fn() },
-}));
-
-vi.mock("../../utils/wordDocumentReadRequest", () => ({
-  bindWordDocumentReadRequest: () => () => {},
-}));
-
-vi.mock("../../utils/wordDocumentSubmission", () => ({
-  WORD_SUBMIT_PLAN_TOOL: "submit_document_plan",
-  createWordDocumentSubmissionExecutor: () => vi.fn(),
-}));
-
-vi.mock("../../wordPreferences", () => ({
-  useWordIncludeDocumentByDefault: () => [host.includeDocument, () => {}],
-  useWordCommentPrecedence: () => [host.precedence, () => {}],
-}));
 
 const thread = (
   overrides: Partial<WordCommentListThread> = {},
@@ -565,281 +476,5 @@ describe("WordCommentChip", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Include comments" }));
     expect(chip.onWithComments).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("WordChatInput comment chips", () => {
-  const IDENTITY = "https://contoso.sharepoint.com/Shared%20Documents/a.docx";
-  const THREAD_FACET = {
-    id: "word_comment_thread",
-    allowed_args: [
-      "document_name",
-      "document_identity",
-      "thread_json",
-      "comments_json",
-    ],
-  };
-  let word: CommentHost;
-  let handedOver: Parameters<AddinChatInputRenderProps["onSendMessage"]>[];
-  const openSettings = vi.fn();
-
-  const passageOverT1 = (): WordSelectionSnapshot => ({
-    role: "rewrite",
-    reasonCode: null,
-    shape: "inline",
-    story: "main",
-    origin: "user",
-    selectedText: "alpha bravo",
-    truncated: false,
-    paragraphCount: 1,
-    paragraphs: [
-      {
-        id: "{0000-T1P}",
-        text: "T1P Thread one anchor alpha bravo charlie.",
-        rangeText: "T1P Thread one anchor alpha bravo charlie.",
-        index: word.ordinalOf("T1P") - 1,
-        styleName: "Normal",
-        tableNestingLevel: 0,
-      },
-    ],
-    startOffset: 22,
-    endOffset: 33,
-    occurrence: 0,
-    anchor: null,
-    contextBefore: "T1P Thread one anchor ",
-    contextAfter: " charlie.",
-  });
-  const publishSelection = (key: string, origin: "user" | "erato" = "user") =>
-    act(() =>
-      wordSelectionStore.publish({
-        preview: {
-          key,
-          text: "alpha bravo",
-          paragraphCount: 1,
-          shape: "inline",
-          story: "main",
-          truncated: false,
-          mayRewrite: true,
-        },
-        origin,
-        armed: origin === "user",
-        pending: false,
-      }),
-    );
-  const selectT1 = () => {
-    word = installWordCommentHost({
-      selection: { tag: "T1P", offset: 22, to: { tag: "T1P", offset: 33 } },
-    });
-    host.captureSelection.mockResolvedValue({
-      status: "ok",
-      value: passageOverT1(),
-    });
-    publishSelection("T1P:alpha bravo");
-  };
-  const renderInput = () =>
-    render(
-      <WordChatInput
-        chatInputProps={
-          {
-            chatId: "chat-1",
-            onSendMessage: (
-              ...args: Parameters<AddinChatInputRenderProps["onSendMessage"]>
-            ) => handedOver.push(args),
-          } as unknown as AddinChatInputRenderProps
-        }
-        documentIdentity={IDENTITY}
-        stagePendingCapture={() => {}}
-        onOpenWordSettings={openSettings}
-      />,
-    );
-  const prepared = async () => {
-    const prepare = handedOver.at(-1)?.[11];
-    if (!prepare) throw new Error("the send was not prepared");
-    let result = null as Awaited<ReturnType<typeof prepare.run>>;
-    await act(async () => {
-      result = await prepare.run(new AbortController().signal);
-    });
-    return result;
-  };
-
-  beforeEach(() => {
-    i18n.activate("en");
-    host.facets = [
-      { id: "word_selection", allowed_args: [...WORD_SELECTION_ARG_KEYS] },
-      THREAD_FACET,
-    ];
-    host.includeDocument = false;
-    host.precedence = "selection";
-    host.captureSelection.mockReset();
-    openSettings.mockReset();
-    handedOver = [];
-  });
-
-  afterEach(() => {
-    cleanup();
-    uninstallWordCommentHost();
-    wordSelectionStore.resetForTests();
-    wordCommentGestureStore.resetForTests();
-    forgetWordCommentRefs();
-  });
-
-  it("sends the passage without comments from the comment chip's ×, and keeps the passage", async () => {
-    selectT1();
-    renderInput();
-    expect(await screen.findByTestId("word-comment-chip")).toHaveTextContent(
-      "1 comment in selection",
-    );
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Send without comments" }),
-    );
-    expect(screen.getByTestId("word-selection-chip")).toBeInTheDocument();
-    expect(screen.getByTestId("word-comment-chip")).toHaveTextContent(
-      "This message is sent without comments.",
-    );
-    fireEvent.click(screen.getByTestId("send"));
-    const result = await prepared();
-
-    expect(result?.actionFacet?.id).toBe("word_selection");
-    expect(result?.actionFacet?.args?.selected_text).toBe("alpha bravo");
-    expect(result?.actionFacet?.args?.anchored_comments).toBe("");
-  });
-
-  it("keeps the comments when the selection's own × dismisses the passage", async () => {
-    selectT1();
-    renderInput();
-    await screen.findByTestId("word-comment-chip");
-
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss selection" }));
-    expect(screen.queryByTestId("word-selection-chip")).toBeNull();
-    expect(wordCommentGestureStore.getSnapshot().withoutComments).toBe(false);
-  });
-
-  it("opens the Word settings from Change default", async () => {
-    selectT1();
-    renderInput();
-    await screen.findByTestId("word-comment-why");
-
-    fireEvent.click(screen.getByRole("button", { name: "Change default" }));
-    expect(openSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it("switches the next message to the comment from the chip", async () => {
-    selectT1();
-    renderInput();
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Work on Maya Krüger's comment instead",
-      }),
-    );
-    expect(screen.getByTestId("word-selection-chip")).toHaveTextContent(
-      "The comment below is sent instead of this passage.",
-    );
-    expect(screen.getByTestId("word-comment-chip")).toHaveTextContent(
-      "Comment by Maya Krüger · 2 replies",
-    );
-    fireEvent.click(screen.getByTestId("send"));
-
-    expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
-  });
-
-  it("keeps a pick until another pick, its × or a new selection of the user's", async () => {
-    selectT1();
-    renderInput();
-    await screen.findByTestId("word-comment-chip");
-    const pick = (ref: string) =>
-      act(() =>
-        wordCommentGestureStore.pick({
-          kind: "pick",
-          ref,
-          selectionKey: "T1P:alpha bravo",
-        }),
-      );
-    const picked = () => wordCommentGestureStore.getSnapshot().pick?.ref;
-    const refOf = (key: string) =>
-      wordCommentRefRegistry(IDENTITY).refs.get(`id:${word.commentId(key)}`)!;
-    const [t5, t8, t9] = [refOf("T5"), refOf("T8"), refOf("T9")];
-
-    pick(t5);
-    fireEvent.click(screen.getByTestId("send"));
-    expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
-    expect(picked()).toBe(t5);
-
-    publishSelection("T1P:alpha bravo", "erato");
-    expect(picked()).toBe(t5);
-    publishSelection("T1P:alpha bravo");
-    expect(picked()).toBe(t5);
-
-    pick(t8);
-    expect(picked()).toBe(t8);
-    publishSelection("T8P:kilo");
-    expect(picked()).toBeUndefined();
-
-    pick(t9);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Remove the chosen comment" }),
-    );
-    expect(picked()).toBeUndefined();
-  });
-
-  it("lets the user choose the thread a waiting send goes with", async () => {
-    word = installWordCommentHost({ selection: { tag: "T6P", offset: 20 } });
-    host.facets = [THREAD_FACET];
-    renderInput();
-    fireEvent.click(screen.getByTestId("send"));
-    const prepare = handedOver.at(-1)?.[11];
-    let run!: Promise<unknown>;
-    act(() => {
-      run = prepare!.run(new AbortController().signal);
-    });
-
-    const block = await screen.findByTestId("word-comment-block");
-    fireEvent.click(
-      within(block).getByRole("button", { name: "Choose comment…" }),
-    );
-    const t7 = wordCommentRefRegistry(IDENTITY).refs.get(
-      `id:${word.commentId("T7")}`,
-    );
-    const row = await waitFor(() => {
-      const found = screen
-        .getAllByTestId("word-comment-picker-row")
-        .find((r) => r.getAttribute("data-ref") === t7);
-      if (!found) throw new Error("T7 is not listed yet");
-      return found;
-    });
-    expect(row).toHaveTextContent("In your selection");
-    fireEvent.click(within(row).getByText("Jonas Weber"));
-    let result: unknown;
-    await act(async () => {
-      result = await run;
-    });
-
-    expect(result).toMatchObject({
-      actionFacet: { id: "word_comment_thread" },
-    });
-    const args = (result as { actionFacet: { args: Record<string, string> } })
-      .actionFacet.args;
-    expect(JSON.parse(args.thread_json)).toMatchObject({ id: t7 });
-    expect(wordCommentGestureStore.getSnapshot().pick?.ref).toBe(t7);
-    expect(screen.queryByTestId("word-comment-picker")).toBeNull();
-  });
-
-  it("shows nothing about comments while nothing is advertised", async () => {
-    host.facets = [
-      {
-        id: "word_selection",
-        allowed_args: WORD_SELECTION_ARG_KEYS.filter(
-          (key) => key !== "anchored_comments",
-        ),
-      },
-    ];
-    selectT1();
-    renderInput();
-    await screen.findByTestId("word-selection-chip");
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    expect(screen.queryByTestId("word-comment-chip")).toBeNull();
-    expect(screen.queryByTestId("word-comment-options")).toBeNull();
-    expect(word.calls()).toEqual([]);
   });
 });

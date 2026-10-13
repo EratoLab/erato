@@ -302,6 +302,28 @@ describe("legacy files (O-17)", () => {
     ).toEqual(refs);
   });
 
+  it("numbers a repeat apart from a # in the comment's text", () => {
+    const twins = [record("1"), record("2")].map((t) => ({
+      ...t,
+      content: "see #3",
+      anchor: anchored("same"),
+    }));
+    const source = ["Maya Krüger", "2026-09-03T08:15", "see #3", "same"].join(
+      "\u001f",
+    );
+    const refs = refsOf(twins, true);
+    expect(refs).toEqual([
+      wordCommentRefFor(source),
+      wordCommentRefFor(`${source}#2`),
+    ]);
+    expect(
+      refsOf(
+        twins.map((t, i) => ({ ...t, id: `9${i}` })),
+        true,
+      ),
+    ).toEqual(refs);
+  });
+
   it("keeps a thread's ref by its id within the session after its content changes", () => {
     const registry = createWordCommentRefRegistry("doc");
     const [before] = refsOf(

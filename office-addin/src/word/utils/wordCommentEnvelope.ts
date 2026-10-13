@@ -251,7 +251,7 @@ function timingOf(
 }
 
 /** The threads of one read with their refs and positions, in the read's document order. */
-export function wordCommentSources(
+function wordCommentSources(
   threads: readonly WordCommentThreadRecord[],
   refs: WordCommentCaptureRefs,
   positions: ReadonlyMap<string, WordCommentPosition>,

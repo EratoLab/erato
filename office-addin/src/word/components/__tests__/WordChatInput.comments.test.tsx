@@ -9,6 +9,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,7 +27,10 @@ import { wordCommentGestureStore } from "../../hooks/wordCommentGestureStore";
 import { wordSelectionStore } from "../../hooks/wordSelectionStore";
 import { resolveWordSelectionFacet } from "../../utils/wordActionFacet";
 import { wordCommentReadSession } from "../../utils/wordCommentReadTool";
-import { forgetWordCommentRefs } from "../../utils/wordCommentRefs";
+import {
+  forgetWordCommentRefs,
+  wordCommentRefRegistry,
+} from "../../utils/wordCommentRefs";
 import { wordCommentRefsOf } from "../../utils/wordCommentSend";
 import { resolveWordDocumentName } from "../../utils/wordDocumentIdentity";
 import { WORD_SELECTION_ARG_KEYS } from "../../utils/wordSelectionArgs";
@@ -198,6 +202,7 @@ describe("WordChatInput comment context", () => {
   let word: CommentHost;
   let handedOver: SendCall[];
   let staged: (WordCommentsCapture | null)[];
+  const openSettings = vi.fn();
 
   const install = (options: CommentHostOptions = {}) => {
     word = installWordCommentHost(options);
@@ -213,6 +218,7 @@ describe("WordChatInput comment context", () => {
         chatInputProps={props()}
         documentIdentity={IDENTITY}
         stagePendingCapture={(capture) => staged.push(capture)}
+        onOpenWordSettings={openSettings}
       />,
     );
   const lastSend = () => {
@@ -284,6 +290,27 @@ describe("WordChatInput comment context", () => {
     contextAfter: " charlie.",
     ...over,
   });
+  const publishSelection = (
+    key: string,
+    origin: "user" | "erato" = "user",
+    shape: WordSelectionSnapshot["shape"] = "inline",
+  ) =>
+    act(() =>
+      wordSelectionStore.publish({
+        preview: {
+          key,
+          text: "alpha bravo",
+          paragraphCount: 1,
+          shape,
+          story: "main",
+          truncated: false,
+          mayRewrite: shape !== "table",
+        },
+        origin,
+        armed: origin === "user",
+        pending: false,
+      }),
+    );
   /** The chip's light read sees the passage's shape; Send's full read also finds `captured`. */
   const selectT1 = ({
     captured = {},
@@ -303,20 +330,7 @@ describe("WordChatInput comment context", () => {
       status: "ok",
       value: passageOverT1({ shape, ...captured }),
     });
-    wordSelectionStore.publish({
-      preview: {
-        key: "T1P:alpha bravo",
-        text: "alpha bravo",
-        paragraphCount: 1,
-        shape,
-        story: "main",
-        truncated: false,
-        mayRewrite: shape !== "table",
-      },
-      origin: "user",
-      armed: true,
-      pending: false,
-    });
+    publishSelection("T1P:alpha bravo", "user", shape);
   };
   const documentBuild = (authoring = false): WordDocumentBuild =>
     ({
@@ -353,6 +367,7 @@ describe("WordChatInput comment context", () => {
     host.captureSelection.mockReset();
     host.budget.mockReset().mockResolvedValue({ ok: true });
     host.previous = null;
+    openSettings.mockReset();
     handedOver = [];
     staged = [];
   });
@@ -730,6 +745,162 @@ describe("WordChatInput comment context", () => {
       expect(open.scope).toBe("document");
       expect(open).not.toHaveProperty("why");
       expect(open.threads.length + open.index.length).toBe(13);
+    });
+  });
+
+  describe("the chips", () => {
+    beforeEach(() => {
+      host.facets = [
+        facet("word_selection", WORD_SELECTION_ARG_KEYS),
+        THREAD_FACET,
+      ];
+    });
+    /** The ref the chip's read gave a thread; refOf waits for a Send's capture. */
+    const listedRef = (key: string) =>
+      wordCommentRefRegistry(IDENTITY).refs.get(`id:${word.commentId(key)}`);
+
+    it("sends the passage without comments from the comment chip's ×, and keeps the passage", async () => {
+      selectT1();
+      renderInput();
+      expect(await screen.findByTestId("word-comment-chip")).toHaveTextContent(
+        "1 comment in selection",
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send without comments" }),
+      );
+      expect(screen.getByTestId("word-selection-chip")).toBeInTheDocument();
+      expect(screen.getByTestId("word-comment-chip")).toHaveTextContent(
+        "This message is sent without comments.",
+      );
+      send();
+      const result = await prepared();
+
+      expect(result?.actionFacet?.id).toBe("word_selection");
+      expect(result?.actionFacet?.args?.selected_text).toBe("alpha bravo");
+      expect(result?.actionFacet?.args?.anchored_comments).toBe("");
+    });
+
+    it("keeps the comments when the selection's own × dismisses the passage", async () => {
+      selectT1();
+      renderInput();
+      await screen.findByTestId("word-comment-chip");
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Dismiss selection" }),
+      );
+      expect(screen.queryByTestId("word-selection-chip")).toBeNull();
+      expect(wordCommentGestureStore.getSnapshot().withoutComments).toBe(false);
+    });
+
+    it("opens the Word settings from Change default", async () => {
+      selectT1();
+      renderInput();
+      await screen.findByTestId("word-comment-why");
+
+      fireEvent.click(screen.getByRole("button", { name: "Change default" }));
+      expect(openSettings).toHaveBeenCalledTimes(1);
+    });
+
+    it("switches the next message to the comment from the chip", async () => {
+      selectT1();
+      renderInput();
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Work on Maya Krüger's comment instead",
+        }),
+      );
+      expect(screen.getByTestId("word-selection-chip")).toHaveTextContent(
+        "The comment below is sent instead of this passage.",
+      );
+      expect(screen.getByTestId("word-comment-chip")).toHaveTextContent(
+        "Comment by Maya Krüger · 2 replies",
+      );
+      send();
+
+      expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
+    });
+
+    it("keeps a pick until another pick, its × or a new selection of the user's", async () => {
+      selectT1();
+      renderInput();
+      await screen.findByTestId("word-comment-chip");
+      const pick = (ref: string) =>
+        act(() =>
+          wordCommentGestureStore.pick({
+            kind: "pick",
+            ref,
+            selectionKey: "T1P:alpha bravo",
+          }),
+        );
+      const picked = () => wordCommentGestureStore.getSnapshot().pick?.ref;
+      const [t5, t8, t9] = ["T5", "T8", "T9"].map((key) => listedRef(key)!);
+
+      pick(t5);
+      send();
+      expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
+      expect(picked()).toBe(t5);
+
+      publishSelection("T1P:alpha bravo", "erato");
+      expect(picked()).toBe(t5);
+      publishSelection("T1P:alpha bravo");
+      expect(picked()).toBe(t5);
+
+      pick(t8);
+      expect(picked()).toBe(t8);
+      publishSelection("T8P:kilo");
+      expect(picked()).toBeUndefined();
+
+      pick(t9);
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Remove the chosen comment",
+        }),
+      );
+      expect(picked()).toBeUndefined();
+    });
+
+    it("lets the user choose the thread a waiting send goes with", async () => {
+      install({ selection: { tag: "T6P", offset: 20 } });
+      host.facets = [THREAD_FACET];
+      renderInput();
+      send();
+      const run = start();
+
+      const block = await screen.findByTestId("word-comment-block");
+      fireEvent.click(
+        within(block).getByRole("button", { name: "Choose comment…" }),
+      );
+      const t7 = listedRef("T7");
+      const row = await waitFor(() => {
+        const found = screen
+          .getAllByTestId("word-comment-picker-row")
+          .find((r) => r.getAttribute("data-ref") === t7);
+        if (!found) throw new Error("T7 is not listed yet");
+        return found;
+      });
+      expect(row).toHaveTextContent("In your selection");
+      fireEvent.click(within(row).getByText("Jonas Weber"));
+      const result = await finish(run);
+
+      expect(result?.actionFacet?.id).toBe("word_comment_thread");
+      expect(
+        parseWordCommentThread(result?.actionFacet?.args?.thread_json)?.id,
+      ).toBe(t7);
+      expect(wordCommentGestureStore.getSnapshot().pick?.ref).toBe(t7);
+      expect(screen.queryByTestId("word-comment-picker")).toBeNull();
+    });
+
+    it("shows nothing about comments while nothing is advertised", async () => {
+      host.facets = [facet("word_selection", DARK_SELECTION_KEYS)];
+      selectT1();
+      renderInput();
+      await screen.findByTestId("word-selection-chip");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(screen.queryByTestId("word-comment-chip")).toBeNull();
+      expect(screen.queryByTestId("word-comment-options")).toBeNull();
+      expect(word.calls()).toEqual([]);
     });
   });
 

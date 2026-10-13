@@ -350,11 +350,12 @@ function containedThreads(tags: readonly string[]): Set<string> {
 export interface V3cPackageOptions {
   /**
    * A file without commentsExtended, commentsIds, commentsExtensible or people: Word's package then
-   * carries the session's ids in commentsIds, a commentsExtended without parents and people, but no
-   * commentsExtensible (gate F2 on v3c-comments-legacy.docx).
+   * carries commentsIds, a commentsExtended without parents and people, but no commentsExtensible
+   * (gate F2 on v3c-comments-legacy.docx). Its ids are the session's on desktop only; the web's
+   * differ from Comment.id.
    */
   legacy?: boolean;
-  /** The session's durableId (hex) per comment key in a legacy file; the fixture's otherwise. */
+  /** The durableId (hex) per comment key a legacy file's package carries; the fixture's otherwise. */
   sessionIds?: (key: string) => string;
   /** No commentsExtended, commentsIds, commentsExtensible or people part, as Word never writes. */
   idless?: boolean;

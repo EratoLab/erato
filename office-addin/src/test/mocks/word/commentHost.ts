@@ -156,11 +156,10 @@ export interface CommentHostOptions {
   document?: CommentHostDocument;
   /**
    * No commentsIds, commentsExtensible or dateUtc in the file: ids change per open (F-2a), and
-   * packages carry the session's ids (gate F2).
+   * packages carry the session's ids as desktop's do (gate F2); the web's carry other ids, which
+   * this host does not model.
    */
   legacy?: boolean;
-  /** Packages carry no comment parts but the comments, as no measured host wrote them. */
-  idless?: boolean;
   /** Which open of a legacy file this is: each open gives its comments other ids. */
   open?: number;
   nullParagraphIds?: boolean;
@@ -175,8 +174,6 @@ export interface CommentHostOptions {
   failList?: boolean;
   /** The message of injected Office errors, which may quote the document as hosts sometimes do. */
   errorMessage?: string;
-  /** Fake milliseconds: per sync, per package read, per reply listed, per compareLocationWith. */
-  costs?: Partial<Record<"sync" | "ooxml" | "reply" | "compare", number>>;
   /**
    * The user's selection, by paragraph tag and offset in that host's paragraph.text; a caret when it
    * has no `to`. Without it the whole body is selected.
@@ -387,23 +384,21 @@ export function installWordCommentHost(
   const flavour = options.host ?? "pc";
   const web = flavour === "web";
   const document = options.document ?? V3C_COMMENT_DOCUMENT;
+  // Fake milliseconds: per sync, per package read, per reply listed, per compareLocationWith.
   const costs = {
     sync: 10,
     ooxml: web ? 700 : 25,
     reply: flavour === "mac" ? 90 : 5,
     compare: 0,
-    ...options.costs,
   };
   const message = options.errorMessage ?? "The operation failed.";
-  const packageOptions: V3cPackageOptions = options.idless
-    ? { idless: true }
-    : options.legacy
-      ? {
-          legacy: true,
-          sessionIds: (key) =>
-            Number(idOf(key)).toString(16).toUpperCase().padStart(8, "0"),
-        }
-      : {};
+  const packageOptions: V3cPackageOptions = options.legacy
+    ? {
+        legacy: true,
+        sessionIds: (key) =>
+          Number(idOf(key)).toString(16).toUpperCase().padStart(8, "0"),
+      }
+    : {};
 
   const paragraphs: Para[] = [];
   let tables = 0;

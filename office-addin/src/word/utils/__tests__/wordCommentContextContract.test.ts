@@ -1,5 +1,5 @@
 import { wordCommentReadRows } from "@erato/frontend/word-review";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   parseWordCommentContext,
@@ -17,7 +17,6 @@ import {
   installWordCommentHost,
   uninstallWordCommentHost,
 } from "../../../test/mocks/word/commentHost";
-import { createWordReadRequestStore } from "../../../test/mocks/word/readRequestStore";
 import { WordCommentReadSession } from "../wordCommentReadTool";
 import { readWordComments } from "../wordCommentReader";
 import {
@@ -39,30 +38,14 @@ import type {
 } from "../../../test/mocks/word/commentHost";
 import type { WordCommentReadResultJson } from "../wordCommentReadTool";
 import type { WordCommentSendRead } from "../wordCommentSend";
-
-const mock = vi.hoisted(() => ({
-  store: undefined as ReturnType<typeof createWordReadRequestStore> | undefined,
-}));
-vi.mock("@erato/frontend/library", () => ({
-  useMessagingStore: {
-    getState: () => mock.store!.getState(),
-    subscribe: (
-      listener: Parameters<
-        ReturnType<typeof createWordReadRequestStore>["subscribe"]
-      >[0],
-    ) => mock.store!.subscribe(listener),
-  },
-}));
+import type { ContentPart } from "@erato/frontend/library";
 
 const NOW = new Date("2026-10-12T09:30:00Z");
 const REQUEST = { chatId: "chat-A", messageId: "message-A", toolCallId: "c" };
 
 let host: CommentHost;
 
-beforeEach(() => {
-  mock.store = createWordReadRequestStore();
-  forgetWordCommentRefs();
-});
+beforeEach(() => forgetWordCommentRefs());
 afterEach(() => uninstallWordCommentHost());
 
 async function sendRead(
@@ -202,7 +185,7 @@ describe("word_read_comments results read in the Erato web app", () => {
         status: "success",
         input,
         output: { status: "success", result },
-      } as never,
+      } as unknown as ContentPart,
     ]);
 
   it("parses a read as the shared envelope and shows it as one row", async () => {

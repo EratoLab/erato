@@ -328,7 +328,7 @@ describe("readWordCommentParagraphPackage", () => {
     });
   });
 
-  it("names a legacy file's comments by the session's ids, with no dateUtc and no parents (gate F2)", () => {
+  it("names a legacy file's comments by the ids its package carries, with no dateUtc and no parents (gate F2)", () => {
     const sessionIds = (key: string) =>
       ({ T1: "00000101", R1a: "00000102", R1b: "00000103" })[key] ?? "0";
     const read = readParagraph("T1P", "web", { legacy: true, sessionIds });

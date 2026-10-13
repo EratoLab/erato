@@ -209,16 +209,20 @@ function repeats() {
   return (key: string) => {
     const k = (seen.get(key) ?? 0) + 1;
     seen.set(key, k);
-    return k === 1 ? key : `${key}#${k}`;
+    return { key: k === 1 ? key : `${key}#${k}`, k };
   };
+}
+
+function idRepeats(threads: readonly Pick<WordCommentThreadRecord, "id">[]) {
+  const repeat = repeats();
+  return threads.map((record) => repeat(`${ID_KEY}${record.id}`));
 }
 
 /** The id keys issueWordCommentRefs gives a read's threads, so a coarse read can name them. */
 export function wordCommentIdKeys(
   threads: readonly Pick<WordCommentThreadRecord, "id">[],
 ): string[] {
-  const repeat = repeats();
-  return threads.map((record) => repeat(`${ID_KEY}${record.id}`));
+  return idRepeats(threads).map((id) => id.key);
 }
 
 /** Each ref's id key; after a legacy thread got a new id, the newest one. */
@@ -280,15 +284,15 @@ export function issueWordCommentRefs(
   const byContent = legacy === true;
   const refs: (string | null)[] = threads.map(() => null);
   const used = new Set<string>();
-  const idKeys = wordCommentIdKeys(threads);
+  const ids = idRepeats(threads);
   const repeat = repeats();
   const pending: Pending[] = [];
 
   threads.forEach((record, index) => {
-    const idKey = idKeys[index];
+    const id = ids[index];
     const source = byContent ? contentSource(record) : record.id;
-    const contentKey = byContent ? repeat(`content:${source}`) : null;
-    const keys = contentKey ? [idKey, contentKey] : [idKey];
+    const content = byContent ? repeat(`content:${source}`) : null;
+    const keys = content ? [id.key, content.key] : [id.key];
     const known = keys
       .map((key) => registry.refs.get(key))
       .find((ref) => ref !== undefined && !used.has(ref));
@@ -298,7 +302,7 @@ export function issueWordCommentRefs(
       for (const key of keys) registry.refs.set(key, known);
       return;
     }
-    const occurrence = Number((contentKey ?? idKey).split("#")[1] ?? 1);
+    const occurrence = (content ?? id).k;
     pending.push({
       index,
       source: occurrence > 1 ? `${source}#${occurrence}` : source,

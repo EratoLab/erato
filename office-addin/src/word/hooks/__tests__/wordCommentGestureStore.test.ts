@@ -68,3 +68,19 @@ describe("one-message gestures a Send spent", () => {
     });
   });
 });
+
+describe("leaving the chat or the document", () => {
+  it.each(["chat", "document"] as const)(
+    "drops the pick on another %s",
+    (scope) => {
+      store.set({ includeOpenComments: true });
+      store.pick({ kind: "pick", ref: "t1k", selectionKey: null });
+
+      store.leave(scope);
+      expect(store.getSnapshot()).toMatchObject({
+        pick: null,
+        includeOpenComments: scope === "document",
+      });
+    },
+  );
+});

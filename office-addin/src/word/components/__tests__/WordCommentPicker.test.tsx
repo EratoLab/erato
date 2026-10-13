@@ -22,13 +22,12 @@ import type {
   WordCommentListThread,
 } from "../../hooks/useWordComments";
 import type { WordCommentPickerProps } from "../WordCommentPicker";
-import type { ComponentProps, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
   return mock.createEratoLibraryMock({
     SpinnerIcon: () => <span>spinner</span>,
-    Select: (props: ComponentProps<"select">) => <select {...props} />,
     ModalBase: ({
       isOpen,
       title,
