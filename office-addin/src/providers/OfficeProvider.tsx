@@ -25,7 +25,7 @@ interface OfficeContextValue {
   host: string | null;
   platform: string | null;
   mailboxUser: MailboxUser | null;
-  /** Whether DevicePermissionService 1.1 is available in this Office host. */
+  /** Whether audio capture is enabled by the Office host policy. */
   supportsAudioCapture: boolean;
   /**
    * True when the task pane only follows mail navigation while pinned AND a
@@ -185,7 +185,7 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
           host: null,
           platform: null,
           mailboxUser: null,
-          supportsAudioCapture: false,
+          supportsAudioCapture: isOfficeAudioCaptureSupported(),
           itemTrackingRequiresPin: false,
         });
       });
