@@ -5,6 +5,11 @@ import {
   isOfficeAudioCaptureSupported,
 } from "../officeAudioAccess";
 
+// Keep coverage of the dormant permission flow for the upcoming rework.
+vi.mock("../officeAudioGate", () => ({
+  OFFICE_AUDIO_PERMISSION_GATE_ENABLED: true,
+}));
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

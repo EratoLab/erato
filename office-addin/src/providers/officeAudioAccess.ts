@@ -1,6 +1,10 @@
+import { OFFICE_AUDIO_PERMISSION_GATE_ENABLED } from "./officeAudioGate";
+
 import type { AudioCaptureAccessPolicy } from "@erato/frontend/library";
 
 export function isOfficeAudioCaptureSupported(): boolean {
+  if (!OFFICE_AUDIO_PERMISSION_GATE_ENABLED) return true;
+
   let supported = false;
   try {
     supported = Office.context.requirements.isSetSupported(
@@ -29,6 +33,13 @@ export function createOfficeAudioAccess({
   beforeReload: () => void;
   reload?: () => void;
 }): AudioCaptureAccessPolicy {
+  if (!OFFICE_AUDIO_PERMISSION_GATE_ENABLED) {
+    return {
+      canEnumerateDevices: () => true,
+      beforeCapture: async () => {},
+    };
+  }
+
   let permissionEffective = false;
   let reloadRequired = false;
   let pending: Promise<void> | null = null;

@@ -147,6 +147,7 @@ export const FacetSelector = ({
                 label: item.label,
                 description: item.description,
                 icon: item.icon,
+                truncateDescription: item.truncateDescription,
                 onClick: item.onSelect,
                 disabled: item.disabled,
                 closesImmediately: item.closesImmediately,

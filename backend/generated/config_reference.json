@@ -106,6 +106,7 @@
   "assistants.max_system_prompt_length": {},
   "assistants.show_recent_items": {},
   "assistants.show_recent_items_collapsible": {},
+  "assistants.tools_menu_description_display": {},
   "assistants.usage_view_enabled": {},
   "audio_conversational.chat_provider_id": {},
   "audio_conversational.chunk_duration_seconds": {},

@@ -30,6 +30,7 @@ import {
 import { AddinSelectionChip } from "../../core/selection/AddinSelectionChip";
 import { useConversationKey } from "../../core/selection/useConversationKey";
 import { useSelectionDismissal } from "../../core/selection/useSelectionDismissal";
+import { useWordClientOperations } from "../hooks/useWordClientOperations";
 import { useWordComments } from "../hooks/useWordComments";
 import { useWordDocumentSource } from "../hooks/useWordDocumentSource";
 import { useWordSelection } from "../hooks/useWordSelection";
@@ -191,6 +192,7 @@ export function WordChatInput({
   stagePendingCapture,
   onOpenWordSettings,
 }: WordChatInputProps) {
+  useWordClientOperations(documentIdentity);
   const { chatId } = chatInputProps;
   const availableFacetIds = useAvailableActionFacetIds();
   // An unadvertised facet would reject the entire send with HTTP 400.
@@ -471,6 +473,7 @@ export function WordChatInput({
       clearCommentSession();
     };
   }, [clearReadSession, clearCommentSession]);
+  useEffect(() => clearReadSession, [documentIdentity, clearReadSession]);
   useEffect(() => {
     if (!chipEnabled) {
       settleCaptureRef.current?.({ kind: "skipped" });

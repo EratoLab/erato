@@ -16,7 +16,10 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
-import type { DelegationTasksApprovalMode } from "@/app/env";
+import type {
+  AssistantToolsMenuDescriptionDisplay,
+  DelegationTasksApprovalMode,
+} from "@/app/env";
 import type { ReactNode } from "react";
 
 /**
@@ -122,6 +125,7 @@ interface AssistantsFeatureConfig {
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
   usageViewEnabled: boolean;
+  toolsMenuDescriptionDisplay: AssistantToolsMenuDescriptionDisplay;
   /** Whether recent assistants should be shown in the sidebar */
   showRecentItems: boolean;
   /** Whether the recent assistants sidebar section is rendered as a collapsible section */
@@ -320,6 +324,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     delegationTasksApprovalMode: "async_only",
     enableEditSharing: true,
     usageViewEnabled: false,
+    toolsMenuDescriptionDisplay: "truncated",
     showRecentItems: false,
     showRecentItemsCollapsible: false,
     contextWarningThreshold: 0.5,
@@ -452,6 +457,8 @@ function createFeatureConfig(
       delegationTasksApprovalMode: environment.delegationTasksApprovalMode,
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
       usageViewEnabled: environment.assistantsUsageViewEnabled ?? false,
+      toolsMenuDescriptionDisplay:
+        environment.assistantsToolsMenuDescriptionDisplay ?? "truncated",
       showRecentItems: environment.assistantsShowRecentItems,
       showRecentItemsCollapsible:
         environment.assistantsShowRecentItemsCollapsible,

@@ -54,6 +54,37 @@ const identity = {
 afterEach(resetClientToolRegistryForTests);
 
 describe("toOperationResult", () => {
+  it("carries Word read diagnostics and lost-capture feedback in a rejection", () => {
+    const word = {
+      ...request,
+      binding: {
+        ...binding,
+        host_context: { kind: "word_document", identity: "b".repeat(64) },
+      },
+    };
+    const issues = [
+      {
+        path: "/snapshot",
+        code: "capture-unavailable",
+        message: "Capture lost",
+      },
+    ];
+    const feedback = { terminal: true, recovery: "cannot_continue" as const };
+    expect(
+      toOperationResult(word, {
+        ok: false,
+        error: "Lost",
+        validationErrors: issues,
+        submissionFeedback: feedback,
+      }),
+    ).toEqual({
+      ...identity,
+      executor: word.binding,
+      outcome: "rejected",
+      error: { code: "validation_failed", validation: { issues, feedback } },
+    });
+  });
+
   it.each<[string, ClientToolExecutionResult, object]>([
     [
       "a value",

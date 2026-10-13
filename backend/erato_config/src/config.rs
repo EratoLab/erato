@@ -3704,8 +3704,24 @@ fn default_pinned_chats_limit() -> u64 {
     5
 }
 
+/// How assistant descriptions are displayed in the Tools menu.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum AssistantToolsMenuDescriptionDisplay {
+    None,
+    #[default]
+    Truncated,
+    Full,
+}
+
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
 pub struct AssistantsConfig {
+    /// Description display in the desktop Tools and mobile add menus.
+    /// Defaults to `truncated` (up to two lines with an ellipsis).
+    #[serde(default)]
+    pub tools_menu_description_display: AssistantToolsMenuDescriptionDisplay,
+
     /// Whether editors can access the assistants usage view. Defaults to false.
     #[serde(default)]
     pub usage_view_enabled: bool,
@@ -3764,6 +3780,7 @@ impl Default for AssistantsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            tools_menu_description_display: AssistantToolsMenuDescriptionDisplay::default(),
             enable_edit_sharing: default_assistants_enable_edit_sharing(),
             usage_view_enabled: false,
             show_recent_items: false,
@@ -5217,6 +5234,8 @@ fn default_durable_claim_lease_secs() -> u64 {
 pub enum ClientToolHostContext {
     /// The Outlook add-in's signed-in mailbox.
     OutlookMailbox,
+    /// A Word document and the pane instance holding its capture.
+    WordDocument,
 }
 
 impl ClientToolHostContext {
@@ -5224,6 +5243,7 @@ impl ClientToolHostContext {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::OutlookMailbox => "outlook_mailbox",
+            Self::WordDocument => "word_document",
         }
     }
 }

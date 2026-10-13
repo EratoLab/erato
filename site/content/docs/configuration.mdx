@@ -4521,6 +4521,27 @@ Whether assistants can be shared with edit access. When enabled, assistant owner
 enable_edit_sharing = true
 ```
 
+#### `assistants.tools_menu_description_display`
+
+{/* erato_toml_config_key: assistants.tools_menu_description_display */}
+
+Controls assistant descriptions in the desktop Tools menu and the mobile add menu.
+
+- `none`: Hide descriptions.
+- `truncated`: Show up to two lines, with an ellipsis when the description does not fit.
+- `full`: Show the full description, wrapping onto multiple lines.
+
+**Default value:** `"truncated"`
+
+**Type:** `"none" | "truncated" | "full"`
+
+**Example:**
+
+```toml
+[assistants]
+tools_menu_description_display = "truncated"
+```
+
 #### `assistants.show_recent_items`
 
 {/* erato_toml_config_key: assistants.show_recent_items */}

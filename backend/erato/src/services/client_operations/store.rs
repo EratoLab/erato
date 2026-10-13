@@ -365,6 +365,7 @@ async fn accept_result_in(
             refused.outcome = OperationOutcome::Rejected;
             refused.result = None;
             refused.error = Some(OperationError {
+                validation: None,
                 code: "invalid_operation_result".into(),
                 message: None,
             });
@@ -460,6 +461,7 @@ async fn settle_server_outcome(
         outcome: OperationOutcome::Rejected,
         result: None,
         error: Some(OperationError {
+            validation: None,
             code: code.into(),
             message: None,
         }),
@@ -535,12 +537,12 @@ pub async fn begin_continuation(
                 .clone()
                 .ok_or_else(|| eyre!("Operation result missing"))?,
         )?;
-        let parameters: crate::models::message::GenerationParameters = serde_json::from_value(
-            message
-                .generation_parameters
-                .clone()
-                .ok_or_else(|| eyre!("Missing generation parameters"))?,
-        )?;
+        let mut saved_parameters = message
+            .generation_parameters
+            .clone()
+            .ok_or_else(|| eyre!("Missing generation parameters"))?;
+        let mut parameters: crate::models::message::GenerationParameters =
+            serde_json::from_value(saved_parameters.clone())?;
         let request: OperationRequest = serde_json::from_value(row.request.clone())?;
         if let Some(saved) = parameters
             .client_tools
@@ -576,6 +578,27 @@ pub async fn begin_continuation(
                 submission.annotate(&mut validated.output, &outcome, count);
             }
         }
+        if parameters
+            .turn_consumption
+            .tool_charges
+            .get(&row.tool_call_id)
+            .is_some_and(|charge| charge.recovery_read)
+            && let Some(correction) = parameters.turn_consumption.submission_correction.as_mut()
+        {
+            let outcome = if validated.output["status"] == "cancelled" {
+                crate::services::client_tools::ClientToolOutcome::Cancelled {
+                    reason: validated.output["reason"]
+                        .as_str()
+                        .unwrap_or("cancelled")
+                        .into(),
+                }
+            } else {
+                crate::services::client_tools::ClientToolOutcome::from_payload(&validated.output)
+            };
+            correction.record_read(&outcome);
+            saved_parameters["turn_consumption"]["submission_correction"] =
+                serde_json::to_value(correction)?;
+        }
         let Some(tool) = parsed.content.iter_mut().find_map(|part| match part {
             ContentPart::ToolUse(tool) if tool.tool_call_id == row.tool_call_id => Some(tool),
             _ => None,
@@ -591,8 +614,12 @@ pub async fn begin_continuation(
         tool.ended_at = Some(Utc::now().to_rfc3339());
         tx.execute_raw(statement(
             "client_operations.continue",
-            "UPDATE messages SET raw_message = $2 WHERE id = $1",
-            vec![message.id.into(), serde_json::to_value(parsed)?.into()],
+            "UPDATE messages SET raw_message = $2, generation_parameters = $3 WHERE id = $1",
+            vec![
+                message.id.into(),
+                serde_json::to_value(parsed)?.into(),
+                saved_parameters.into(),
+            ],
         ))
         .await?;
     }

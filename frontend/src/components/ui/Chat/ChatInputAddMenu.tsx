@@ -45,6 +45,8 @@ export interface AddMenuItemBase {
  * choosing a cloud source. Tapping it runs `onSelect` and closes the menu.
  */
 export interface AddMenuActionItem extends AddMenuItemBase {
+  /** Clamp to two lines when true; wrap when false. Defaults to one line. */
+  truncateDescription?: boolean;
   /** Optional secondary line (e.g. file size, provider hint). */
   description?: React.ReactNode;
   /**
@@ -247,7 +249,16 @@ export function ChatInputAddMenu({
       <span className="min-w-0 flex-1">
         <span className="block truncate">{item.label}</span>
         {item.description && (
-          <span className="block truncate text-xs text-theme-fg-muted">
+          <span
+            className={clsx(
+              "text-xs text-theme-fg-muted",
+              item.truncateDescription === true
+                ? "line-clamp-2 whitespace-normal break-words"
+                : item.truncateDescription === false
+                  ? "block whitespace-normal break-words"
+                  : "block truncate",
+            )}
+          >
             {item.description}
           </span>
         )}

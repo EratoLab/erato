@@ -316,6 +316,29 @@ describe("WordChatInput prepared send", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("clears a prepared capture when the document identity changes", async () => {
+    host.capture.mockResolvedValue(authoringBuild());
+    const { rerender } = renderInput();
+    send();
+    await settle(startPreparation());
+    expect(host.session.activate).toHaveBeenCalledTimes(1);
+    host.session.clear.mockClear();
+    host.capture.mockClear();
+    host.session.activate.mockClear();
+
+    rerender(
+      <WordChatInput
+        chatInputProps={props("chat-1")}
+        documentIdentity="pane-session:another-document"
+        stagePendingCapture={(capture) => staged.push(capture)}
+      />,
+    );
+
+    expect(host.session.clear).toHaveBeenCalledTimes(1);
+    expect(host.capture).not.toHaveBeenCalled();
+    expect(host.session.activate).not.toHaveBeenCalled();
+  });
+
   it("drops the send when the document changes during preparation", async () => {
     const capture = deferred<WordDocumentBuild>();
     host.capture.mockReturnValue(capture.promise);
