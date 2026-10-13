@@ -820,18 +820,15 @@ async fn teams_app_package(
 }
 
 async fn favicon(State(app_state): State<AppState>, path: &'static str) -> Response {
-    for candidate in app_state
-        .distribution
-        .frontend_bundles
-        .main
-        .favicon_candidates(app_state.config.frontend.theme.as_deref(), path)
-    {
+    if let Ok(candidate) = app_state.distribution.branding.favicon_source(false, path) {
         match crate::latency::sync_span("frontend.read_favicon")
             .in_scope(|| std::fs::read(&candidate))
         {
             Ok(contents) => {
                 let content_type = match candidate.extension().and_then(OsStr::to_str) {
                     Some("svg") => "image/svg+xml",
+                    Some("png") => "image/png",
+                    Some("jpg" | "jpeg") => "image/jpeg",
                     _ => "image/x-icon",
                 };
                 return (
@@ -840,7 +837,7 @@ async fn favicon(State(app_state): State<AppState>, path: &'static str) -> Respo
                 )
                     .into_response();
             }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -1529,6 +1526,49 @@ mod tests {
         ));
         assert!(rendered.contains(r#"DefaultValue="Open Contoso""#));
         assert!(rendered.contains(r#"DefaultValue="Open Contoso&apos;s assistant""#));
+    }
+
+    #[test]
+    fn changing_branding_sources_preserves_every_office_manifest_url() {
+        let original = MsOfficeAddinConfig::default();
+        let mut branded = original.clone();
+        branded.favicon_path = Some("/public/common/custom-theme/acme/favicon.png".into());
+        branded.manifest.icon_source_path = Some("./color.png".into());
+        branded.manifest.high_resolution_icon_source_path = Some("./color.png".into());
+        branded.manifest.icon_16_source_path = Some("./ribbon-16.png".into());
+        branded.manifest.icon_32_source_path = Some("./ribbon-32.png".into());
+        branded.manifest.icon_80_source_path = Some("./ribbon-80.png".into());
+        for (name, template) in [
+            (
+                "manifest.xml",
+                include_str!("../../../../office-addin/manifests/manifest.xml"),
+            ),
+            (
+                "manifest-document.xml",
+                include_str!("../../../../office-addin/manifests/manifest-document.xml"),
+            ),
+            (
+                "manifest-exchange-server.xml",
+                include_str!("../../../../office-addin/manifests/manifest-exchange-server.xml"),
+            ),
+        ] {
+            assert_eq!(
+                render_office_addin_manifest(
+                    template,
+                    "https://app.example.com/base",
+                    &original,
+                    name,
+                    None
+                ),
+                render_office_addin_manifest(
+                    template,
+                    "https://app.example.com/base",
+                    &branded,
+                    name,
+                    None
+                )
+            );
+        }
     }
 
     #[test]

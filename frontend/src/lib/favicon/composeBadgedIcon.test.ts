@@ -25,6 +25,16 @@ describe("composeBadgedIcon", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete window.FAVICON_PATH;
+  });
+
+  it("fetches the configured favicon as the activity badge source", async () => {
+    window.FAVICON_PATH = "/public/common/custom-theme/acme/favicon.png";
+    const fetchMock = respondWith(new Uint8Array([1, 2, 3]), "image/png");
+    vi.stubGlobal("fetch", fetchMock);
+    const svg = decode((await composeBadgedIcon("ready")) ?? "");
+    expect(fetchMock).toHaveBeenCalledWith(window.FAVICON_PATH);
+    expect(svg).toContain("data:image/png;base64,");
   });
 
   it("nests the themed icon and stamps a toned dot", async () => {

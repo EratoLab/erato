@@ -12,6 +12,7 @@ vi.mock("@/app/env", () => ({
 }));
 
 import { env } from "@/app/env";
+import { Logo } from "@/components/ui/Logo";
 
 import {
   __resetThemeAssetProbeCache,
@@ -127,6 +128,179 @@ describe("ThemeProvider", () => {
     document.documentElement.removeAttribute("data-theme-name");
     document.documentElement.removeAttribute("data-text-size");
     document.documentElement.removeAttribute("style");
+  });
+
+  it.each([false, true])(
+    "resolves shared Office branding beside the loaded theme (declared: %s)",
+    async (declared) => {
+      const base = "/public/common/custom-theme/acme";
+      mockEnv.mockReturnValue(
+        createMockEnv({
+          frontendPlatform: "platform-office-addin",
+          frontendPublicBasePath: "/public/platform-office-addin",
+          themeCustomerName: "acme",
+        }),
+      );
+      const theme: CustomThemeConfig = {
+        ...mockTheme,
+        ...(declared
+          ? {
+              logo: { path: "./brand.svg", darkPath: "./brand-dark.svg" },
+              assets: {
+                assistantAvatar: {
+                  path: "avatar.svg",
+                  darkPath: "avatar-dark.svg",
+                },
+                sidebarLogo: {
+                  path: "sidebar.svg",
+                  darkPath: "sidebar-dark.svg",
+                },
+              },
+            }
+          : {}),
+        icons: { navigation: { chat: "./chat.svg" } },
+      };
+      const files = new Set(
+        [
+          "logo.svg",
+          "logo-dark.svg",
+          "assistant-avatar.svg",
+          "sidebar-logo.svg",
+          "sidebar-logo-dark.svg",
+        ].map((name) => `${base}/${name}`),
+      );
+      global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "HEAD")
+          return {
+            ok: files.has(url),
+            headers: new Headers({ "content-type": "image/svg+xml" }),
+          };
+        return { ok: url === `${base}/theme.json`, json: async () => theme };
+      }) as unknown as typeof fetch;
+      const Probe = () => {
+        const { assetPaths, iconMappings, setThemeMode } = useTheme();
+        return (
+          <>
+            <Logo alt="brand" />
+            <span data-testid="sidebar">{assetPaths.sidebarLogo}</span>
+            <span data-testid="avatar">{assetPaths.assistantAvatar}</span>
+            <span data-testid="chat-icon">
+              {iconMappings?.navigation?.chat}
+            </span>
+            <button onClick={() => setThemeMode("dark")}>dark</button>
+          </>
+        );
+      };
+      render(
+        <ThemeProvider>
+          <Probe />
+        </ThemeProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByAltText("brand")).toHaveAttribute(
+          "src",
+          `${base}/${declared ? "brand" : "logo"}.svg`,
+        );
+        expect(screen.getByTestId("sidebar")).toHaveTextContent(
+          `${base}/${declared ? "sidebar" : "sidebar-logo"}.svg`,
+        );
+        expect(screen.getByTestId("avatar")).toHaveTextContent(
+          `${base}/${declared ? "avatar" : "assistant-avatar"}.svg`,
+        );
+        expect(screen.getByTestId("chat-icon")).toHaveTextContent(
+          `${base}/chat.svg`,
+        );
+      });
+      fireEvent.click(screen.getByText("dark"));
+      await waitFor(() => {
+        expect(screen.getByAltText("brand")).toHaveAttribute(
+          "src",
+          `${base}/${declared ? "brand" : "logo"}-dark.svg`,
+        );
+        expect(screen.getByTestId("sidebar")).toHaveTextContent(
+          `${base}/${declared ? "sidebar" : "sidebar-logo"}-dark.svg`,
+        );
+        expect(screen.getByTestId("avatar")).toHaveTextContent(
+          `${base}/${declared ? "avatar-dark" : "assistant-avatar"}.svg`,
+        );
+      });
+    },
+  );
+
+  it("uses explicit logo overrides ahead of theme declarations in each mode", async () => {
+    mockEnv.mockReturnValue(
+      createMockEnv({
+        themeConfigPath: "/brand/theme.json",
+        themeLogoPath: "/override.svg",
+        themeLogoDarkPath: "/override-dark.svg",
+      }),
+    );
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ...mockTheme,
+        logo: { path: "./declared.svg" },
+        assets: { assistantAvatar: null, sidebarLogo: null },
+      }),
+    })) as unknown as typeof fetch;
+    const Probe = () => {
+      const { setThemeMode } = useTheme();
+      return (
+        <>
+          <Logo alt="brand" />
+          <button onClick={() => setThemeMode("dark")}>dark</button>
+        </>
+      );
+    };
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByAltText("brand")).toHaveAttribute(
+        "src",
+        "/override.svg",
+      ),
+    );
+    fireEvent.click(screen.getByText("dark"));
+    await waitFor(() =>
+      expect(screen.getByAltText("brand")).toHaveAttribute(
+        "src",
+        "/override-dark.svg",
+      ),
+    );
+  });
+
+  it("falls back from a missing platform convention file to the shared theme", async () => {
+    const platform = "/public/platform-office-addin/custom-theme/acme";
+    const common = "/public/common/custom-theme/acme";
+    mockEnv.mockReturnValue(
+      createMockEnv({
+        frontendPlatform: "platform-office-addin",
+        frontendPublicBasePath: "/public/platform-office-addin",
+        themeCustomerName: "acme",
+      }),
+    );
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) =>
+      init?.method === "HEAD"
+        ? {
+            ok: url === `${common}/logo.svg`,
+            headers: new Headers({ "content-type": "image/svg+xml" }),
+          }
+        : { ok: url === `${platform}/theme.json`, json: async () => mockTheme },
+    ) as unknown as typeof fetch;
+    render(
+      <ThemeProvider>
+        <Logo alt="brand" />
+      </ThemeProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByAltText("brand")).toHaveAttribute(
+        "src",
+        `${common}/logo.svg`,
+      ),
+    );
   });
 
   it("loads sibling fonts.css and theme.css beside the resolved theme.json path", async () => {

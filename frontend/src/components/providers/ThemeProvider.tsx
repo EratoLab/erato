@@ -13,6 +13,7 @@ import { env } from "@/app/env";
 import { defaultTheme, darkTheme } from "@/config/theme";
 import {
   defaultThemeConfig,
+  getConventionAssetCandidates,
   loadResolvedThemeConfig,
   resolveDeclaredAssetPath,
   resolveIconPaths,
@@ -78,6 +79,7 @@ type ThemeContextType = {
    * mode, so consumers can render the value directly.
    */
   assetPaths: ThemeAssetPaths;
+  logoPath: string | null;
 };
 
 /** Resolved location of each optional theme asset, or null when unavailable. */
@@ -132,15 +134,6 @@ const getAssetEnvOverride = (
   return isDark ? sidebarLogoDarkPath : sidebarLogoPath;
 };
 
-const getConventionAssetPath = (
-  key: ThemeAssetKey,
-  themeName: string | undefined,
-  isDark: boolean,
-): string | null =>
-  key === "assistantAvatar"
-    ? defaultThemeConfig.getAssistantAvatarPath(themeName)
-    : defaultThemeConfig.getSidebarLogoPath(themeName, isDark);
-
 /**
  * Works out where an optional asset lives, in precedence order:
  *
@@ -177,10 +170,18 @@ const resolveThemeAssetPath = async (
     return resolveDeclaredAssetPath(declaredPath, resolvedThemeConfigPath);
   }
 
-  const conventionPath = getConventionAssetPath(key, themeConfig?.name, isDark);
-  if (!conventionPath) return null;
-
-  if (await probeAssetOnce(conventionPath)) return conventionPath;
+  const filename =
+    key === "assistantAvatar"
+      ? "assistant-avatar.svg"
+      : `sidebar-logo${isDark ? "-dark" : ""}.svg`;
+  const candidates = getConventionAssetCandidates(
+    filename,
+    resolvedThemeConfigPath,
+  );
+  for (const path of candidates) {
+    if (await probeAssetOnce(path)) return path;
+  }
+  const conventionPath = candidates.join(", ");
 
   debugLog(
     "UI",
@@ -189,6 +190,35 @@ const resolveThemeAssetPath = async (
       `or "assets": { "${key}": null } to stop looking for it.`,
   );
   return null;
+};
+
+const resolveLogoPath = async (
+  themeConfig: CustomThemeConfig | null,
+  resolvedThemeConfigPath: string | null,
+  isDark: boolean,
+): Promise<string> => {
+  const { themeLogoPath, themeLogoDarkPath, commonPublicBasePath } = env();
+  const override = isDark ? themeLogoDarkPath : themeLogoPath;
+  if (override) return override;
+  if (themeConfig?.logo) {
+    return resolveDeclaredAssetPath(
+      isDark
+        ? (themeConfig.logo.darkPath ?? themeConfig.logo.path)
+        : themeConfig.logo.path,
+      resolvedThemeConfigPath,
+    );
+  }
+  for (const filename of isDark
+    ? ["logo-dark.svg", "logo.svg"]
+    : ["logo.svg"]) {
+    for (const path of getConventionAssetCandidates(
+      filename,
+      resolvedThemeConfigPath,
+    )) {
+      if (await probeAssetOnce(path)) return path;
+    }
+  }
+  return `${commonPublicBasePath}/custom-theme/logo${isDark ? "-dark" : ""}.svg`;
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -542,6 +572,7 @@ export function ThemeProvider({
   }>();
   const [assetPaths, setAssetPaths] =
     useState<ThemeAssetPaths>(EMPTY_ASSET_PATHS);
+  const [logoPath, setLogoPath] = useState<string | null>(null);
   // Optional assets must not be resolved until the theme load has settled:
   // before then `customThemeConfig` is still null, so a pack that declares an
   // asset as absent would be indistinguishable from one that declares nothing
@@ -581,7 +612,11 @@ export function ThemeProvider({
         // Resolve icon paths from theme config
         // Use undefined to let it fall back to env().themeCustomerName (e.g., "acme-test")
         // instead of themeConfig.name (e.g., "ACME Theme") which is the display name
-        const resolvedIcons = resolveIconPaths(themeConfig.icons, undefined);
+        const resolvedIcons = resolveIconPaths(
+          themeConfig.icons,
+          undefined,
+          themeConfigPath,
+        );
         setIconMappings(resolvedIcons);
         setIsThemeLoadSettled(true);
         return;
@@ -654,8 +689,14 @@ export function ThemeProvider({
         ),
       );
 
+      const resolvedLogo = await resolveLogoPath(
+        enableCustomTheme ? customThemeConfig : null,
+        resolvedThemeConfigPath,
+        isDark,
+      );
       if (!isMounted) return;
       setAssetPaths(Object.fromEntries(entries) as unknown as ThemeAssetPaths);
+      setLogoPath(resolvedLogo);
     };
 
     void resolveAll();
@@ -791,6 +832,7 @@ export function ThemeProvider({
     setSystemThemeOverride,
     iconMappings,
     assetPaths,
+    logoPath,
   };
 
   return (

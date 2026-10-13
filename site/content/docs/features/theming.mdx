@@ -36,6 +36,71 @@ public/custom-theme/my-company/
         └── messages.po
 ```
 
+## Shared branding across web, Office and Teams
+
+Mount a single theme directory at `<frontend.web_frontend_bundle_path>/custom-theme/acme` (in the standard container, `/app/public/custom-theme/acme`). The shared browser URL is `/public/common/custom-theme/acme`. No `THEME_PATH`, generic branding environment keys, or duplicate Office mount is needed.
+
+```toml
+[frontend]
+theme = "acme"
+# Optional deployment overrides; omit to use theme.json and conventional files:
+# logo_path = "/public/common/custom-theme/acme/logo.svg"
+# logo_dark_path = "/public/common/custom-theme/acme/logo-dark.svg"
+# sidebar_logo_path = "/public/common/custom-theme/acme/sidebar-logo.svg"
+# sidebar_logo_dark_path = "/public/common/custom-theme/acme/sidebar-logo-dark.svg"
+# assistant_avatar_path = "/public/common/custom-theme/acme/assistant-avatar.svg"
+favicon_path = "/public/common/custom-theme/acme/favicon.svg"
+
+[integrations.ms_office.addin]
+enabled = true
+msal_client_id = "00000000-0000-0000-0000-000000000000"
+# Omit to inherit frontend.favicon_path:
+favicon_path = "/public/common/custom-theme/acme/office-favicon.png"
+
+[integrations.ms_office.addin.manifest]
+# Source locations change served images, preserving existing manifest URLs:
+icon_source_path = "./teams-color.png"
+high_resolution_icon_source_path = "./teams-color.png"
+icon_16_source_path = "./ribbon-16.png"
+icon_32_source_path = "./ribbon-32.png"
+icon_80_source_path = "./ribbon-80.png"
+
+[integrations.ms_office.teams]
+enabled = true
+
+[integrations.ms_office.teams.manifest]
+# Existing package entry names stay unchanged:
+color_icon_source_path = "./teams-color.png"           # 192×192 PNG
+outline_icon_source_path = "./teams-outline.png"       # 32×32 PNG
+small_color_icon_source_path = "./teams-small.png"     # 32×32 PNG
+```
+
+The same directory can contain:
+
+```json
+{
+  "name": "Acme",
+  "theme": {},
+  "logo": { "path": "./logo.svg", "darkPath": "./logo-dark.svg" },
+  "assets": {
+    "sidebarLogo": {
+      "path": "./sidebar-logo.svg",
+      "darkPath": "./sidebar-logo-dark.svg"
+    },
+    "assistantAvatar": { "path": "./assistant-avatar.svg" }
+  },
+  "icons": { "navigation": { "chat": "./icons/chat.svg" } }
+}
+```
+
+Browser asset precedence is typed deployment URL override, legacy per-asset environment override, explicit theme declaration, existing conventional theme filename, then built-in defaults. Declarations resolve beside the successfully loaded `theme.json`; they are trusted without probing. An omitted declaration uses conventional filenames. `assets` entries set to `null` disable optional images; deployment overrides still win. Application logos without a declared dark variant use the light declaration. Conventional dark logos fall back to the light file before the built-in dark logo. Optional sidebar/avatar files that are missing remain absent.
+
+Office first tries its platform `theme.json`, then the shared theme. Conventional assets are checked beside the loaded theme, then in the named shared theme. A platform theme directory with no matching file cannot hide the shared asset. The legacy `THEME_PATH` remains a conventional directory override. Relative navigation icon declarations also follow the loaded theme directory. Root-relative browser URLs and absolute URLs remain unchanged.
+
+Server-side icon sources are distinct from browser URLs and ZIP names. Explicit source paths win, then existing files in the platform theme, shared theme and Office bundle. Sources accept paths relative to the named theme or local shared-public URLs; missing explicit sources fail, and remote sources and traversal are rejected. Conventional manifest icons may live under `assets/` inside the theme or directly beside `theme.json`. Existing Office icon URL settings and Teams bundle-relative package filenames retain their meaning.
+
+Office manifest icon URLs, task-pane/launch/runtime URLs, legacy routes, and Teams ZIP paths remain stable when source settings or themes change. Office icon requests at canonical and legacy URLs return the configured bytes. Teams clients cache installed package icons: changing the server's source updates newly downloaded ZIPs; showing those bytes in an already installed Teams app still requires installing an updated package with a higher version. Browser favicon badges use the configured favicon; touch/home-screen links use it when overridden.
+
 ## Theme Structure
 
 ### theme.json

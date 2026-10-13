@@ -16,6 +16,7 @@ const TEAMS_ROUTE: &str = "/office-addin/teams";
 pub struct TeamsAppDistribution {
     bundle_root: PathBuf,
     template: Value,
+    branding: Option<super::branding::BrandingAssets>,
 }
 
 impl TeamsAppDistribution {
@@ -37,7 +38,13 @@ impl TeamsAppDistribution {
         Ok(Self {
             bundle_root,
             template,
+            branding: None,
         })
+    }
+
+    pub fn with_branding(mut self, branding: super::branding::BrandingAssets) -> Self {
+        self.branding = Some(branding);
+        self
     }
 
     pub fn render_manifest(
@@ -135,7 +142,20 @@ impl TeamsAppDistribution {
                     .all(|part| matches!(part, Component::Normal(_))),
                 "unsafe Teams package asset path: {name}"
             );
-            let source = self.bundle_root.join(relative);
+            let configured_source = match key {
+                "color" => app.manifest.color_icon_source_path.as_deref(),
+                "outline" => app.manifest.outline_icon_source_path.as_deref(),
+                _ => app.manifest.small_color_icon_source_path.as_deref(),
+            };
+            let source = if let Some(branding) = &self.branding {
+                branding.icon_source(configured_source, name)?
+            } else {
+                ensure!(
+                    configured_source.is_none(),
+                    "branding sources require configured frontend bundles"
+                );
+                self.bundle_root.join(relative)
+            };
             ensure!(
                 source.is_file(),
                 "Teams package icon is missing: {}",
@@ -286,6 +306,7 @@ mod tests {
         TeamsAppDistribution {
             bundle_root: PathBuf::from("."),
             template: serde_json::from_str(TEMPLATE).expect("template parses"),
+            branding: None,
         }
     }
 
@@ -413,5 +434,70 @@ mod tests {
             .package(&serde_json::to_vec(&manifest).unwrap(), &app)
             .expect_err("a bot package without channel feature support must be rejected");
         assert!(error.to_string().contains("supportsChannelFeatures"));
+    }
+
+    #[test]
+    fn shared_sources_change_zip_bytes_without_changing_manifest_or_package_paths() {
+        use std::io::Read;
+        let dir = tempfile::tempdir().unwrap();
+        let theme = dir.path().join("web/custom-theme/acme");
+        std::fs::create_dir_all(&theme).unwrap();
+        std::fs::create_dir_all(dir.path().join("office/assets")).unwrap();
+        let mut config = crate::config::AppConfig::default();
+        config.frontend.theme = Some("acme".into());
+        config.frontend.web_frontend_bundle_path = dir.path().join("web").display().to_string();
+        config.integrations.ms_office.addin.frontend_bundle_path =
+            dir.path().join("office").display().to_string();
+        config.integrations.ms_office.addin.msal_client_id = addin().msal_client_id;
+        let app = &mut config.integrations.ms_office.teams;
+        let original_manifest = distribution()
+            .render_manifest("https://erato.example.com", app, &addin())
+            .unwrap();
+        app.manifest.color_icon_source_path = Some("./color.png".into());
+        app.manifest.outline_icon_source_path =
+            Some("/public/common/custom-theme/acme/outline.png".into());
+        app.manifest.small_color_icon_source_path = Some("./small.png".into());
+        for (name, width) in [("color.png", 192), ("outline.png", 32), ("small.png", 32)] {
+            image::RgbaImage::from_pixel(width, width, image::Rgba([12, 34, 56, 255]))
+                .save(theme.join(name))
+                .unwrap();
+        }
+        let dist = distribution()
+            .with_branding(super::super::branding::BrandingAssets::from_config(&config));
+        let app = &config.integrations.ms_office.teams;
+        let manifest = dist
+            .render_manifest("https://erato.example.com", app, &addin())
+            .unwrap();
+        assert_eq!(manifest, original_manifest);
+        let zip = dist.package(&manifest, app).unwrap();
+        let mut archive = zip::ZipArchive::new(Cursor::new(zip)).unwrap();
+        assert_eq!(archive.len(), 4);
+        for (entry, source) in [
+            (&app.manifest.color_icon, "color.png"),
+            (&app.manifest.outline_icon, "outline.png"),
+            (&app.manifest.small_color_icon, "small.png"),
+        ] {
+            let mut bytes = Vec::new();
+            archive
+                .by_name(entry)
+                .unwrap()
+                .read_to_end(&mut bytes)
+                .unwrap();
+            assert_eq!(bytes, std::fs::read(theme.join(source)).unwrap());
+        }
+        image::RgbaImage::new(32, 32)
+            .save(theme.join("color.png"))
+            .unwrap();
+        assert!(
+            dist.package(&manifest, app)
+                .unwrap_err()
+                .to_string()
+                .contains("192x192 PNG")
+        );
+        std::fs::write(theme.join("color.png"), b"not a PNG").unwrap();
+        assert!(dist.package(&manifest, app).is_err());
+        let mut unsafe_app = app.clone();
+        unsafe_app.manifest.color_icon_source_path = Some("../secret.png".into());
+        assert!(dist.package(&manifest, &unsafe_app).is_err());
     }
 }

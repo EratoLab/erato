@@ -419,6 +419,31 @@ export const resolveDeclaredAssetPath = (
   );
 };
 
+/** Conventional files follow the theme that loaded, then the shared pack.
+ * Legacy THEME_PATH remains an explicit directory override. Callers probe each
+ * candidate before choosing it; a platform URL alone does not prove existence.
+ */
+export const getConventionAssetCandidates = (
+  filename: string,
+  resolvedThemeConfigPath: string | null,
+): string[] => {
+  const { themePath, commonPublicBasePath, themeCustomerName } = env();
+  const candidates = [
+    themePath ? `${themePath}/${filename}` : null,
+    resolvedThemeConfigPath
+      ? resolveSiblingThemeFilePath(resolvedThemeConfigPath, filename)
+      : null,
+    buildCustomerThemeFilePath(
+      commonPublicBasePath,
+      themeCustomerName,
+      filename,
+    ),
+  ];
+  return [
+    ...new Set(candidates.filter((path): path is string => Boolean(path))),
+  ];
+};
+
 export interface LoadedThemeConfig {
   themeConfig: CustomThemeConfig;
   themeConfigPath: string;
@@ -547,6 +572,7 @@ export function resolveIconPaths(
       }
     | undefined,
   customerName: string | undefined,
+  resolvedThemeConfigPath?: string | null,
 ): {
   fileTypes?: Record<string, string>;
   status?: Record<string, string>;
@@ -579,7 +605,9 @@ export function resolveIconPaths(
     // If it starts with ./ it's a relative path that needs resolution
     if (iconValue.startsWith("./")) {
       // Remove the ./ prefix and prepend the base path
-      return `${basePath}/${iconValue.slice(2)}`;
+      return resolvedThemeConfigPath
+        ? resolveDeclaredAssetPath(iconValue, resolvedThemeConfigPath)
+        : `${basePath}/${iconValue.slice(2)}`;
     }
     // If it starts with / it's already an absolute path
     if (iconValue.startsWith("/")) {

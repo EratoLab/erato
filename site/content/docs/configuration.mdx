@@ -161,6 +161,14 @@ If not provided, the default bundled theme will be used.
 theme = "my-theme"
 ```
 
+#### `frontend.logo_path`, `frontend.logo_dark_path`, `frontend.assistant_avatar_path`
+
+{/* erato_toml_config_key: frontend.logo_path */}
+{/* erato_toml_config_key: frontend.logo_dark_path */}
+{/* erato_toml_config_key: frontend.assistant_avatar_path */}
+
+Optional browser URLs for the light/dark application logos and assistant avatar, shared by web, Office and Teams frontends. These typed settings override theme declarations and legacy `THEME_LOGO_PATH`, `THEME_LOGO_DARK_PATH` and `THEME_ASSISTANT_AVATAR_PATH` environment keys. When unset, declarations and conventional theme files apply. Light and dark logo overrides are independent. See [shared branding](./features/theming#shared-branding-across-web-office-and-teams) for a complete example and precedence.
+
 #### `frontend.favicon_path`
 
 {/* erato_toml_config_key: frontend.favicon_path */}
@@ -3024,6 +3032,12 @@ Stable GUID identifying the standalone Teams app. It must differ from the Outloo
 {/* erato_toml_config_key: integrations.ms_office.teams.manifest.outline_icon */}
 {/* erato_toml_config_key: integrations.ms_office.teams.manifest.small_color_icon */}
 
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.color_icon_source_path */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.outline_icon_source_path */}
+{/* erato_toml_config_key: integrations.ms_office.teams.manifest.small_color_icon_source_path */}
+
+Optional `color_icon_source_path`, `outline_icon_source_path` and `small_color_icon_source_path` select local files using the Office source rules below. Source settings leave `color_icon`, `outline_icon` and `small_color_icon` package filenames and all manifest-facing URLs unchanged. Only ZIP bytes change. The color icon must be a 192×192 PNG; the outline and small color icons must be 32×32 PNGs. Remote downloading is unsupported. Unset sources search platform theme, shared theme, then the existing Office bundle file.
+
 Branding strings and package icon paths for the Teams app. Icon paths must be safe paths relative to the Office add-in bundle. The website, privacy, and terms URLs must use HTTPS.
 
 Set `version` to a three-part numeric package version such as `1.0.1` when updating an installed Teams app's branding or capabilities. Keep `integrations.ms_office.teams.app_id` unchanged and increase the version for each update. Each component must be between 0 and 65535, without leading zeros. When omitted, the package uses the Erato application release version.
@@ -3199,6 +3213,14 @@ it.
 package_read = false
 ```
 
+##### `integrations.ms_office.addin.favicon_path`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.favicon_path */}
+
+Optional local image source for the Office favicon. Unset inherits `frontend.favicon_path`. With the default main favicon setting, conventional platform theme favicons take precedence over shared theme favicons, then the bundled main favicon. Office HTML references `/public/platform-office-addin/favicon.svg`; both SVG/ICO routes at that mount and the legacy `/office-addin` mount serve the selected image with its actual content type. Changing the source keeps these URLs stable.
+
+Sources use the local path rules described below for manifest icons. Example: `favicon_path = "/public/common/custom-theme/acme/office-favicon.png"`.
+
 ##### `integrations.ms_office.addin.manifest`
 
 {/* erato_toml_config_key: integrations.ms_office.addin.manifest.provider_name */}
@@ -3213,6 +3235,16 @@ package_read = false
 {/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_16_path */}
 {/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_32_path */}
 {/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_80_path */}
+
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_source_path */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.high_resolution_icon_source_path */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_16_source_path */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_32_source_path */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_80_source_path */}
+
+Optional `*_source_path` settings select the local image served at the corresponding existing `*_path` URL, including canonical and legacy Office routes. They never change manifest URLs. Use these to update deployed branding without regenerating Office manifests. Existing icon URL settings continue to support shared public paths and HTTP(S) URLs.
+
+Local sources accept `./icon.png` or `icon.png` relative to the selected theme, `/public/common/...` relative to the main bundle, or `/public/platform-office-addin/...` (also `/office-addin/...`) relative to the Office bundle. They reject traversal, encoded paths, filesystem absolute paths, remote URLs and symlinks escaping those roots. Explicit missing sources fail rather than silently displaying a different brand. With no source override, icon files are searched in the platform theme, then shared theme (the bundle-relative filename or its basename), then the Office bundle. When multiple settings address the same URL, explicit Office sources take precedence over explicit Teams sources; explicit sources take precedence over all conventional files.
 
 Branding values used when rendering the Office add-in manifest.
 

@@ -1,10 +1,8 @@
 // "use client"; // Removed
 
 import { t } from "@lingui/core/macro";
-import { useState, useEffect } from "react";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
-import { defaultThemeConfig } from "@/config/themeConfig";
 
 interface LogoProps {
   className?: string;
@@ -19,19 +17,7 @@ export function Logo({
   height = 40,
   alt = t`Logo`,
 }: LogoProps) {
-  const { effectiveTheme, customThemeName } = useTheme();
-  const [logoPath, setLogoPath] = useState<string>("");
-
-  useEffect(() => {
-    const isDark = effectiveTheme === "dark";
-
-    // Get logo path using the centralized logic
-    const currentLogoPath = defaultThemeConfig.getLogoPath(
-      customThemeName,
-      isDark,
-    );
-    setLogoPath(currentLogoPath);
-  }, [effectiveTheme, customThemeName]);
+  const { logoPath } = useTheme();
 
   if (!logoPath) {
     return null; // Don't render until we've determined the path
