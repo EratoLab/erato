@@ -403,6 +403,11 @@ fn build_frontend_environment(
         FRONTEND_ENV_KEY_ASSISTANTS_MAX_FILES.to_string(),
         Value::Number(config.assistants.max_files.into()),
     );
+    env.additional_environment.insert(
+        "ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY".to_string(),
+        serde_json::to_value(config.assistants.tools_menu_description_display)
+            .expect("assistant description display is serializable"),
+    );
     if let Some(max_length) = config.assistants.max_system_prompt_length {
         env.additional_environment.insert(
             FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH.to_string(),
@@ -1565,6 +1570,24 @@ mod tests {
                         .get(FRONTEND_ENV_KEY_DELEGATION_TASKS_ALLOW_ASYNC),
                     Some(&Value::Bool(expected)),
                     "enabled={tasks_enabled} offers_async={offers_async} on {frontend_kind:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn assistant_description_display_is_injected_for_both_frontends() {
+        for mode in ["none", "truncated", "full"] {
+            let mut config = AppConfig::default();
+            config.assistants.tools_menu_description_display =
+                serde_json::from_value(Value::String(mode.to_string())).unwrap();
+            for frontend_kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+                let environment = build_frontend_environment(&config, frontend_kind);
+                assert_eq!(
+                    environment
+                        .additional_environment
+                        .get("ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY"),
+                    Some(&Value::String(mode.to_string()))
                 );
             }
         }

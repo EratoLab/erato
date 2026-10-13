@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 
 import type { AddMenuSection } from "./ChatInputAddMenu";
+import type { AssistantToolsMenuDescriptionDisplay } from "@/app/env";
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
 
 export const ASSISTANT_MENTION_SECTION_ID = "assistant-mentions";
@@ -11,6 +12,7 @@ interface AssistantMentionSectionOptions {
   onSelect: (assistant: MentionableAssistant) => void;
   onBrowse: () => void;
   disabled?: boolean;
+  descriptionDisplay?: AssistantToolsMenuDescriptionDisplay;
 }
 
 /**
@@ -23,6 +25,7 @@ export function buildAssistantMentionSection({
   onSelect,
   onBrowse,
   disabled = false,
+  descriptionDisplay = "truncated",
 }: AssistantMentionSectionOptions): AddMenuSection {
   return {
     id: ASSISTANT_MENTION_SECTION_ID,
@@ -36,7 +39,9 @@ export function buildAssistantMentionSection({
       ...assistants.map((assistant) => ({
         id: assistant.id,
         label: assistant.name,
-        description: assistant.description,
+        description:
+          descriptionDisplay === "none" ? undefined : assistant.description,
+        truncateDescription: descriptionDisplay === "truncated",
         disabled,
         onSelect: () => onSelect(assistant),
       })),

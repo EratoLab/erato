@@ -15,6 +15,11 @@ export type DelegationTasksApprovalMode =
   | "plan"
   | "async_only";
 
+export type AssistantToolsMenuDescriptionDisplay =
+  | "none"
+  | "truncated"
+  | "full";
+
 export type Env = {
   apiRootUrl: string;
   frontendPlatform: "common" | "platform-office-addin";
@@ -40,6 +45,7 @@ export type Env = {
   delegationTasksApprovalMode: DelegationTasksApprovalMode;
   assistantsEnableEditSharing?: boolean;
   assistantsUsageViewEnabled?: boolean;
+  assistantsToolsMenuDescriptionDisplay?: AssistantToolsMenuDescriptionDisplay;
   assistantsShowRecentItems: boolean;
   assistantsShowRecentItemsCollapsible: boolean;
   assistantContextWarningThreshold: number;
@@ -116,6 +122,7 @@ declare global {
     DELEGATION_TASKS_APPROVAL_MODE?: string;
     ASSISTANTS_ENABLE_EDIT_SHARING?: boolean;
     ASSISTANTS_USAGE_VIEW_ENABLED?: boolean;
+    ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY?: string;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE?: boolean;
     ASSISTANTS_CONTEXT_WARNING_THRESHOLD?: number;
@@ -309,6 +316,13 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_ENABLE_EDIT_SHARING === "false"
       ? false
       : (window.ASSISTANTS_ENABLE_EDIT_SHARING ?? true);
+  const descriptionDisplay =
+    import.meta.env.VITE_ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY ??
+    window.ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY;
+  const assistantsToolsMenuDescriptionDisplay: AssistantToolsMenuDescriptionDisplay =
+    descriptionDisplay === "none" || descriptionDisplay === "full"
+      ? descriptionDisplay
+      : "truncated";
   const assistantsShowRecentItems =
     import.meta.env.VITE_ASSISTANTS_SHOW_RECENT_ITEMS === "true"
       ? true
@@ -526,6 +540,7 @@ export const env = (): Env => {
     delegationTasksApprovalMode,
     assistantsEnableEditSharing,
     assistantsUsageViewEnabled,
+    assistantsToolsMenuDescriptionDisplay,
     assistantsShowRecentItems,
     assistantsShowRecentItemsCollapsible,
     assistantContextWarningThreshold,

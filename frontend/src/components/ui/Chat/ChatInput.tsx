@@ -774,6 +774,7 @@ export const ChatInput = ({
   // `allow_background` gate there is no popover at all — offering a choice the
   // server would downgrade to "wait" is worse than not asking.
   const {
+    toolsMenuDescriptionDisplay,
     enabled: assistantsFeatureEnabled,
     delegationEnabled,
     delegationAllowBackground,
@@ -1920,6 +1921,7 @@ export const ChatInput = ({
       canMentionAssistants
         ? buildAssistantMentionSection({
             assistants: suggestedAssistants,
+            descriptionDisplay: toolsMenuDescriptionDisplay,
             onSelect: insertAssistantMention,
             onBrowse: () => setIsAssistantBrowserOpen(true),
             disabled: composeLocked,
@@ -1930,6 +1932,7 @@ export const ChatInput = ({
       composeLocked,
       insertAssistantMention,
       suggestedAssistants,
+      toolsMenuDescriptionDisplay,
     ],
   );
 
