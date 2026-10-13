@@ -6721,6 +6721,9 @@ pub struct MsOfficeAddinDefaultSettings {
     /// Whether new Word chats include the open document until the user changes it.
     #[serde(default = "default_ms_office_addin_word_include_document")]
     pub word_include_document: bool,
+    /// How Word document plans are applied on each host. Users cannot change these.
+    #[serde(default)]
+    pub word_apply: MsOfficeAddinWordApplySettings,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
@@ -6740,7 +6743,88 @@ impl Default for MsOfficeAddinDefaultSettings {
             mode: MsOfficeAddinSessionMode::default(),
             compose_inherits_from_read: default_ms_office_addin_compose_inherits_from_read(),
             word_include_document: default_ms_office_addin_word_include_document(),
+            word_apply: MsOfficeAddinWordApplySettings::default(),
         }
+    }
+}
+
+/// Unset keys keep that host's own default; read them through [`Self::pc_policy`],
+/// [`Self::mac_policy`] and [`Self::web_policy`].
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct MsOfficeAddinWordApplySettings {
+    #[serde(default)]
+    pub pc: MsOfficeAddinWordApplyHostSettings,
+    #[serde(default)]
+    pub mac: MsOfficeAddinWordApplyHostSettings,
+    #[serde(default)]
+    pub web: MsOfficeAddinWordApplyHostSettings,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct MsOfficeAddinWordApplyHostSettings {
+    /// Write plans through Word's object model where a probed mechanism applies.
+    pub in_place: Option<bool>,
+    /// Whether a plan may replace the whole document by import.
+    pub whole_document_import: Option<MsOfficeAddinWordWholeDocumentImport>,
+    /// Read the complete .docx file; off falls back to reading the document body.
+    pub package_read: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum MsOfficeAddinWordWholeDocumentImport {
+    Allowed,
+    /// Only after the user confirms the import for that plan.
+    Confirm,
+    Off,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct MsOfficeAddinWordApplyPolicy {
+    pub in_place: bool,
+    pub whole_document_import: MsOfficeAddinWordWholeDocumentImport,
+    pub package_read: bool,
+}
+
+impl MsOfficeAddinWordApplyHostSettings {
+    fn resolve(&self, defaults: MsOfficeAddinWordApplyPolicy) -> MsOfficeAddinWordApplyPolicy {
+        MsOfficeAddinWordApplyPolicy {
+            in_place: self.in_place.unwrap_or(defaults.in_place),
+            whole_document_import: self
+                .whole_document_import
+                .unwrap_or(defaults.whole_document_import),
+            package_read: self.package_read.unwrap_or(defaults.package_read),
+        }
+    }
+}
+
+impl MsOfficeAddinWordApplySettings {
+    // Word PC and Mac keep the import for every rewrite until their in-place probes are signed off.
+    const DESKTOP_DEFAULTS: MsOfficeAddinWordApplyPolicy = MsOfficeAddinWordApplyPolicy {
+        in_place: false,
+        whole_document_import: MsOfficeAddinWordWholeDocumentImport::Allowed,
+        package_read: true,
+    };
+    // On the web the import attributes its tracked changes to "Unknown", rewrites comment dates
+    // and resolved flags, and Word Undo cannot take it back (ERMAIN-960).
+    const WEB_DEFAULTS: MsOfficeAddinWordApplyPolicy = MsOfficeAddinWordApplyPolicy {
+        in_place: true,
+        whole_document_import: MsOfficeAddinWordWholeDocumentImport::Confirm,
+        package_read: true,
+    };
+
+    pub fn pc_policy(&self) -> MsOfficeAddinWordApplyPolicy {
+        self.pc.resolve(Self::DESKTOP_DEFAULTS)
+    }
+
+    pub fn mac_policy(&self) -> MsOfficeAddinWordApplyPolicy {
+        self.mac.resolve(Self::DESKTOP_DEFAULTS)
+    }
+
+    pub fn web_policy(&self) -> MsOfficeAddinWordApplyPolicy {
+        self.web.resolve(Self::WEB_DEFAULTS)
     }
 }
 

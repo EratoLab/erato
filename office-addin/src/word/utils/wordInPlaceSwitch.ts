@@ -1,3 +1,4 @@
+import { wordApplyPolicy } from "./wordApplyPolicy";
 import { supportsWordDocumentPackage } from "./wordDocumentPackage";
 import {
   wordInPlaceCapabilities,
@@ -50,8 +51,7 @@ export function writeWordCompatibilityMode(enabled: boolean): void {
 /** In-place writing needs the exact .docx backup (package support) and paragraph IDs, which WordApi
  * 1.6 hosts without a Microsoft 365 subscription leave null. */
 export function wordInPlaceAvailability(): WordInPlaceAvailability {
-  if (typeof window !== "undefined" && window.WORD_FORCE_IMPORT_APPLY === true)
-    return { enabled: false, reason: "disabled" };
+  if (!wordApplyPolicy().inPlace) return { enabled: false, reason: "disabled" };
   if (readWordCompatibilityMode()) return { enabled: false, reason: "setting" };
   if (latch) return { enabled: false, reason: "latched" };
   if (

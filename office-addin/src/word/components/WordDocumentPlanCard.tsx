@@ -2,6 +2,7 @@ import {
   Button,
   Alert,
   CopyErrorButton,
+  extractTextFromContent,
   useChatContext,
   useHostArtifact,
   useWordMessageLineage,
@@ -20,8 +21,9 @@ import {
   wordHistoryProposal,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { WordImportConfirm, WordImportRefusal } from "./WordImportConfirm";
 import {
   isAutomaticWordRun,
   WordApplyButton,
@@ -45,19 +47,25 @@ import {
 } from "../utils/wordApplyDiagnostics";
 import {
   revertWordDocumentPlan,
+  wordRevertImportRefusal,
   wordRevertMechanism,
 } from "../utils/wordApplyDocumentPlan";
+import { wordApplyHost, wordApplyPolicy } from "../utils/wordApplyPolicy";
 import {
   wordApplyAdjustmentText,
   wordAuthoringIssueText,
+  wordCoauthorsEditingText,
   wordDocumentDiagnosticText,
+  wordInPlaceRequestText,
   wordPartlyWrittenText,
   wordPlanAdjustedText,
+  wordRevertNeedsImportText,
   wordRoutePreviewText,
   wordTrackedApplyText,
   wordUnverifiedPassagesText,
 } from "../utils/wordAuthoringMessages";
 import { offerableWordClientActionsForFacet } from "../utils/wordClientActions";
+import { readWordCoauthoring } from "../utils/wordCoauthoring";
 import {
   decodeWordDocumentBackup,
   decodeWordInPlaceBackup,
@@ -69,10 +77,12 @@ import {
   wordPlanDraftText,
 } from "../utils/wordDocumentXml";
 import { WORD_VISIBLE_ADJUSTMENTS } from "../utils/wordFullDocumentComparison";
+import { wordHostPlatform } from "../utils/wordHostPlatform";
 import { wordInPlaceCapabilities } from "../utils/wordInPlaceCapabilities";
 import {
   routeWordDocumentPlan,
   wordPlanPassages,
+  wordWholeDocumentWrite,
 } from "../utils/wordInPlaceRoute";
 import { wordInPlaceAvailability } from "../utils/wordInPlaceSwitch";
 import {
@@ -85,8 +95,11 @@ import {
 } from "../utils/wordReviewLocation";
 import {
   EMPTY_WORD_REVIEW,
+  isWordWholeDocumentBlock,
   wordMismatchedPassages,
   wordPlanOutcomeState,
+  wordWholeDocumentBlockRoute,
+  wordWholeDocumentBlockWrite,
 } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
@@ -180,8 +193,10 @@ export function WordDocumentPlanCard({
     offered;
   const availability = wordInPlaceAvailability();
   const unavailable = availability.enabled ? undefined : availability.reason;
-  const routePreview = useMemo(() => {
-    if (!ready || !plan || !snapshot) return undefined;
+  // Kept while applying, so a confirmed Apply keeps its busy button in place.
+  const routable = ready || applying;
+  const routing = useMemo(() => {
+    if (!routable || !plan || !snapshot) return undefined;
     try {
       const compiled = captureWordAuthoringSnapshot(
         compileWordDocumentPlan(plan, snapshot),
@@ -191,107 +206,179 @@ export function WordDocumentPlanCard({
         "verify",
       );
       if (compiled.issue) return undefined;
-      return wordRoutePreviewText(
-        routeWordDocumentPlan(
-          plan,
-          snapshot,
-          unavailable
-            ? { enabled: false, reason: unavailable }
-            : { enabled: true },
-          wordInPlaceCapabilities(),
-          compiled,
-        ),
-        wordPlanPassages(plan),
+      const route = routeWordDocumentPlan(
+        plan,
+        snapshot,
+        unavailable
+          ? { enabled: false, reason: unavailable }
+          : { enabled: true },
+        wordInPlaceCapabilities(),
+        compiled,
       );
+      return {
+        route: route.route,
+        text: wordRoutePreviewText(route, wordPlanPassages(plan)),
+        write: wordWholeDocumentWrite(route, plan, snapshot, wordApplyPolicy()),
+      };
     } catch {
       return undefined;
     }
-  }, [ready, plan, snapshot, unavailable]);
-  const execute = useCallback(async () => {
-    if (!ready || !capture || !host.beginOperation()) return false;
-    host.updateReview(key, {
-      status: "applying",
-      applyStage: "checking",
-      capture,
-      documentPlanDiagnostic: undefined,
-      documentPlanOutcome: undefined,
-    });
-    try {
-      const run = await entry.execute({
-        fenceContent: content,
+  }, [routable, plan, snapshot, unavailable]);
+  const routePreview = routing?.text;
+  const block = review.wholeDocumentBlock;
+  const wholeDocument = block
+    ? wordWholeDocumentBlockWrite(block)
+    : routing?.write;
+  const confirmImport = offered && wholeDocument?.write === "confirm";
+  const refusal =
+    offered && wholeDocument?.write === "refuse"
+      ? wholeDocument.reason
+      : undefined;
+  const web = wordApplyHost(wordHostPlatform()) === "web";
+  const replacedRoute = block
+    ? wordWholeDocumentBlockRoute(block).route
+    : routing?.route;
+  const replaces =
+    replacedRoute === "import" || replacedRoute === "body"
+      ? replacedRoute
+      : undefined;
+  // Word for Mac reports Word.Coauthoring too, but its P-D-COAUTH run has not completed.
+  const checkCoauthors =
+    wordApplyHost(wordHostPlatform()) === "pc" && !!replaces;
+  const coauthorsRead = useRef(false);
+  const [coauthors, setCoauthors] = useState<"editing" | "pending">();
+  useEffect(() => {
+    if (!checkCoauthors || coauthorsRead.current) return;
+    coauthorsRead.current = true;
+    void readWordCoauthoring().then((state) =>
+      setCoauthors(
+        state?.othersEditing
+          ? "editing"
+          : state?.pendingUpdates
+            ? "pending"
+            : undefined,
+      ),
+    );
+  }, [checkCoauthors]);
+  const run = useCallback(
+    async (importConfirmed: boolean) => {
+      // Always allow and auto-prompt reach this too; only the card's own tick confirms.
+      if (
+        !ready ||
+        !capture ||
+        refusal ||
+        (confirmImport && !importConfirmed) ||
+        !host.beginOperation()
+      )
+        return false;
+      host.updateReview(key, {
+        status: "applying",
+        applyStage: "checking",
         capture,
-        messageId,
-        onStage: (applyStage) => host.updateReview(key, { applyStage }),
-        onBeforeDocumentWrite: (before) => {
-          if (messageId)
-            host.setRevertSlot({
-              messageId,
-              batchKey: key,
-              identity: capture.identity,
-              ooxml: before,
-            });
-        },
+        documentPlanDiagnostic: undefined,
+        documentPlanOutcome: undefined,
       });
-      const result = run.documentPlanResult;
-      if (result?.before) {
-        host.invalidateLocations();
-        host.setRevertSlot(
-          messageId
-            ? {
+      try {
+        const outcome = await entry.execute({
+          fenceContent: content,
+          capture,
+          messageId,
+          onStage: (applyStage) => host.updateReview(key, { applyStage }),
+          onBeforeDocumentWrite: (before) => {
+            if (messageId)
+              host.setRevertSlot({
                 messageId,
                 batchKey: key,
                 identity: capture.identity,
-                ooxml: result.before,
-                afterFingerprint: result.afterFingerprint,
-              }
-            : null,
-        );
+                ooxml: before,
+              });
+          },
+          importConfirmed,
+        });
+        const result = outcome.documentPlanResult;
+        if (
+          result?.status === "blocked" &&
+          isWordWholeDocumentBlock(result.diagnostic)
+        ) {
+          host.updateReview(key, {
+            applyStage: undefined,
+            status: "idle",
+            wholeDocumentBlock: result.diagnostic,
+          });
+          return false;
+        }
+        if (result?.before) {
+          host.invalidateLocations();
+          host.setRevertSlot(
+            messageId
+              ? {
+                  messageId,
+                  batchKey: key,
+                  identity: capture.identity,
+                  ooxml: result.before,
+                  afterFingerprint: result.afterFingerprint,
+                }
+              : null,
+          );
+        }
+        host.updateReview(key, {
+          applyStage: undefined,
+          status: outcome.ok
+            ? "done"
+            : result?.status === "interrupted"
+              ? "write-failed"
+              : "error",
+          documentPlanStatus: result?.status,
+          documentPlanDiagnostic: result?.diagnostic,
+          documentPlanOutcome: result?.outcome,
+          wholeDocumentBlock: undefined,
+          detailsExpanded: false,
+          automatic:
+            !importConfirmed &&
+            isAutomaticWordRun({
+              presentation: artifact?.clientActionPresentation,
+              decisions,
+              facetId,
+              action: entry.action,
+              enforcedAskActions,
+            }),
+        });
+        return outcome.ok;
+      } catch {
+        host.updateReview(key, {
+          applyStage: undefined,
+          status: "write-failed",
+          documentPlanStatus: "interrupted",
+          documentPlanDiagnostic: { stage: "write", reason: "host-error" },
+          wholeDocumentBlock: undefined,
+        });
+        return false;
+      } finally {
+        host.endOperation();
       }
-      host.updateReview(key, {
-        applyStage: undefined,
-        status: run.ok
-          ? "done"
-          : result?.status === "interrupted"
-            ? "write-failed"
-            : "error",
-        documentPlanStatus: result?.status,
-        documentPlanDiagnostic: result?.diagnostic,
-        documentPlanOutcome: result?.outcome,
-        detailsExpanded: false,
-        automatic: isAutomaticWordRun({
-          presentation: artifact?.clientActionPresentation,
-          decisions,
-          facetId,
-          action: entry.action,
-          enforcedAskActions,
-        }),
-      });
-      return run.ok;
-    } catch {
-      host.updateReview(key, {
-        applyStage: undefined,
-        status: "write-failed",
-        documentPlanStatus: "interrupted",
-        documentPlanDiagnostic: { stage: "write", reason: "host-error" },
-      });
-      return false;
-    } finally {
-      host.endOperation();
-    }
-  }, [
-    ready,
-    capture,
-    host,
-    key,
-    entry,
-    content,
-    messageId,
-    artifact,
-    decisions,
-    facetId,
-    enforcedAskActions,
-  ]);
-  const buildSummary = useCallback(() => (ready ? plan : null), [ready, plan]);
+    },
+    [
+      ready,
+      capture,
+      refusal,
+      confirmImport,
+      host,
+      key,
+      entry,
+      content,
+      messageId,
+      artifact,
+      decisions,
+      facetId,
+      enforcedAskActions,
+    ],
+  );
+  const execute = useCallback(() => run(false), [run]);
+  // The refusal offers no Apply, so a consent card behind it could never be answered.
+  const buildSummary = useCallback(
+    () => (ready && !refusal ? plan : null),
+    [ready, refusal, plan],
+  );
   const { confirmCard, isConfirmPending, allowCard, denyCard } =
     useClientActionConfirmFlow<WordDocumentPlan, WordClientAction>({
       promptScope: entry.promptScope,
@@ -311,6 +398,9 @@ export function WordDocumentPlanCard({
       expectedItemIdentity: artifact?.itemIdentity,
       currentItemIdentity: host.documentIdentity,
     });
+  useEffect(() => {
+    if (refusal && confirmCard) denyCard(confirmCard);
+  }, [refusal, confirmCard, denyCard]);
   const recoverySlot =
     host.revertSlot?.batchKey === key &&
     host.revertSlot.identity === host.documentIdentity
@@ -339,10 +429,19 @@ export function WordDocumentPlanCard({
     : [];
   // After a stale revert the slot is kept only for download: retrying would
   // hit the same later edits, so the undo line would promise too much.
-  const canRevert =
+  const revertable =
     ["done", "write-failed", "revert-failed"].includes(review.status) &&
     review.documentPlanStatus !== "revert-stale" &&
     !!recoverySlot?.afterFingerprint;
+  // Decoding the backup is costly, so it is not redone on every render.
+  const revertRefused = useMemo(
+    () =>
+      revertable &&
+      !!slotOoxml &&
+      !!wordRevertImportRefusal(slotOoxml, slotAfter),
+    [revertable, slotOoxml, slotAfter],
+  );
+  const canRevert = revertable && !revertRefused;
   const revert = async () => {
     const slot = host.revertSlot;
     if (!canRevert || !slot?.afterFingerprint || !host.beginOperation()) return;
@@ -456,6 +555,27 @@ export function WordDocumentPlanCard({
       failed();
     }
   };
+  const askAgainInPlace = () => {
+    if (confirmCard) denyCard(confirmCard);
+    const message = messageId ? messages[messageId] : undefined;
+    const request = message?.previous_message_id
+      ? extractTextFromContent(messages[message.previous_message_id]?.content)
+      : "";
+    host.restoreRequest(
+      [request, wordInPlaceRequestText()].filter(Boolean).join("\n\n"),
+    );
+    setCopyNote(
+      t({
+        id: "officeAddin.word.importConfirm.askAgainNote",
+        message:
+          "Your request is back in the message box, asking for in-place edits only. Review it, then send.",
+      }),
+    );
+  };
+  const deny = () => {
+    if (confirmCard) denyCard(confirmCard);
+    host.updateReview(key, { status: "denied", capture });
+  };
   const completed = ["done", "denied", "reverted"].includes(review.status);
   const collapsed = completed && !review.detailsExpanded;
   const outcomeState = wordPlanOutcomeState(review);
@@ -551,6 +671,16 @@ export function WordDocumentPlanCard({
   if (!plan || !planReview)
     return <Alert type="error">{wordAuthoringIssueText("invalid")}</Alert>;
   const applyLabel = wordPlanApplyLabel(planReview);
+  const coauthorsNotice = coauthors && replaces && (
+    <Alert
+      type="warning"
+      role="status"
+      className="[overflow-wrap:anywhere]"
+      data-testid="word-plan-coauthors"
+    >
+      {wordCoauthorsEditingText(replaces, coauthors)}
+    </Alert>
+  );
   const planTitle = wordPlanTitleText(planReview.title);
   const blockedText = issue
     ? wordAuthoringIssueText(issue, snapshot?.issueDetails)
@@ -586,13 +716,44 @@ export function WordDocumentPlanCard({
                   else cannotLocate();
                 }
               : undefined,
-        apply: (
+        apply: refusal ? (
+          idle && (
+            <WordImportRefusal reason={refusal} onAskAgain={askAgainInPlace} />
+          )
+        ) : confirmImport && (idle || applying) ? (
+          <WordImportConfirm
+            key={key}
+            routeText={
+              block
+                ? wordRoutePreviewText(
+                    wordWholeDocumentBlockRoute(block),
+                    wordPlanPassages(plan),
+                  )
+                : routePreview
+            }
+            web={web}
+            notice={coauthorsNotice}
+            applyLabel={applyLabel}
+            canApply={ready && !host.operationInProgress}
+            applying={applying}
+            applyStage={review.applyStage}
+            onApply={() =>
+              void run(true).then(() => {
+                // The tick is this plan's consent, so a pending consent card is settled with it.
+                if (confirmCard) denyCard(confirmCard);
+              })
+            }
+            onAskAgain={askAgainInPlace}
+            onCancel={deny}
+          />
+        ) : (
           <>
             {routePreview && idle && offered && (
               <p className="word-review__hint" data-testid="word-plan-route">
                 {routePreview}
               </p>
             )}
+            {(idle || applying) && offered && coauthorsNotice}
             {(idle || applying) && offered && !confirmCard && (
               <WordApplyButton
                 applying={applying}
@@ -763,7 +924,14 @@ export function WordDocumentPlanCard({
               )}
           </>
         ),
-        revert: (
+        revert: revertRefused ? (
+          <p
+            className="word-review__hint"
+            data-testid="word-plan-revert-refused"
+          >
+            {wordRevertNeedsImportText()}
+          </p>
+        ) : (
           <WordUndoLine
             canRevert={canRevert}
             label={

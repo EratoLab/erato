@@ -688,6 +688,39 @@ describe("WordChatInput prepared send", () => {
     );
   });
 
+  const PACKAGE_BLOCKED =
+    "Word for the web didn't hand over the complete file, for example because the document has a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout, and any change replaces the whole body instead of editing passages in place.";
+  const readNote = () => screen.queryByTestId("word-document-read-note");
+
+  it("says before sending that Erato reads only the body of a labelled document", () => {
+    host.preview = { ...host.readyPreview, authoringNote: "package-blocked" };
+    renderInput();
+
+    expect(readNote()).toHaveTextContent(PACKAGE_BLOCKED);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps saying so after a send that carried the body read on authoring", async () => {
+    const build = authoringBuild({ fullDocument: false });
+    build.readNote = "package-blocked";
+    host.capture.mockResolvedValue(build);
+    renderInput();
+    send();
+
+    const prepared = await settle(startPreparation());
+
+    expect(prepared?.actionFacet?.id).toBe("word_document_authoring");
+    expect(readNote()).toHaveTextContent(PACKAGE_BLOCKED);
+  });
+
+  it("drops the note where authoring is not offered", () => {
+    host.advertised = ["word_document_review"];
+    host.preview = { ...host.readyPreview, authoringNote: "package-blocked" };
+    renderInput();
+
+    expect(readNote()).toBeNull();
+  });
+
   it("keeps a document that is only too large for a complete read on authoring, budget-checked", async () => {
     host.fileIds = ["image-1"];
     host.images.mockResolvedValue({

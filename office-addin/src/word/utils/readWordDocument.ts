@@ -6,6 +6,7 @@ import {
   supportsWordDocumentPackage,
 } from "./wordDocumentPackage";
 import { WordDocumentTooLargeError } from "./wordDocumentPackageCodec";
+import { wordHostPlatform } from "./wordHostPlatform";
 import { noteWordParagraphIds, wordParagraphId } from "./wordParagraphIds";
 import { withWordTimeout } from "./wordTimeout";
 
@@ -23,9 +24,20 @@ export type WordDocumentReadResult =
       };
       /** The full package failed; the paragraphs still stand. */
       authoringUnavailable?: WordAuthoringUnavailable;
+      /** Authoring works, but from less than the complete file. */
+      note?: WordDocumentReadNote;
     }
   /** `error` names the failed step with our own or Office's generic message, never document text. */
   | { ok: false; error?: string };
+
+/** Word for the web refused to open the file, as it does by design for a sensitivity-labelled
+ * document (office-js #5297), so authoring falls back to the body. */
+export type WordDocumentReadNote = "package-blocked";
+
+/** getFileAsync's "Network Problem", which Word for the web returns by design for a document whose
+ * sensitivity label withholds the file (office-js #5297). Other refusals, such as 11000 while both
+ * of Office's file handles are held, can clear, so they leave text only and retry at the next send. */
+const OFFICE_FILE_WITHHELD = 11001;
 
 export interface WordAuthoringUnavailable {
   issue: "too-large" | "unavailable";
@@ -112,7 +124,9 @@ export async function readWordDocument(
     if (packaged && result.authoring) {
       step = "full-document capture";
       // A failed full capture must not degrade into a partial rewrite or clear, so authoring is
-      // dropped and only the paragraph text remains.
+      // dropped and only the paragraph text remains. Only a file Word for the web withholds falls
+      // back to the body route, whose capture says it is not the whole document; any other failed
+      // transfer, or a document that changes during capture, is retried at the next send.
       try {
         const full = await withWordTimeout(
           captureWordDocumentPackage(),
@@ -129,6 +143,19 @@ export async function readWordDocument(
           },
         };
       } catch (error) {
+        const body =
+          error instanceof WordDocumentTransferError &&
+          error.refused &&
+          error.officeCode === OFFICE_FILE_WITHHELD &&
+          wordHostPlatform() === "OfficeOnline"
+            ? await readWordBody(word)
+            : undefined;
+        if (body)
+          return {
+            ...result,
+            authoring: { ...body, fullDocument: false },
+            note: "package-blocked",
+          };
         return {
           ok: true,
           paragraphs: result.paragraphs,
@@ -139,6 +166,29 @@ export async function readWordDocument(
     return result;
   } catch (error) {
     return { ok: false, error: `${step}: ${wordErrorText(error)}` };
+  }
+}
+
+/** The body route's authoring read, in a run of its own; undefined when Word fails it too. */
+async function readWordBody(
+  word: WordGlobal,
+): Promise<{ ooxml: string; tracking: string } | undefined> {
+  try {
+    return await withWordTimeout(
+      word.run(async (context) => {
+        const body = context.document.body.getOoxml();
+        context.document.load("changeTrackingMode");
+        await context.sync();
+        return {
+          ooxml: body.value,
+          tracking: String(context.document.changeTrackingMode),
+        };
+      }),
+      WORD_PARAGRAPH_READ_TIMEOUT_MS,
+      () => new Error(`timed out after ${WORD_PARAGRAPH_READ_TIMEOUT_MS} ms`),
+    );
+  } catch {
+    return undefined;
   }
 }
 

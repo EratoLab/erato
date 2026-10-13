@@ -1,6 +1,10 @@
 import { expandWordTableCellSubmission } from "@erato/frontend/word-review";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
+import {
+  allowWordWebImport,
+  setWordWebImport,
+} from "../../../test/mocks/word/applyPolicy";
 import {
   editWordPackage,
   installWordOoxmlHost,
@@ -34,6 +38,7 @@ import { predictWordBodyParagraphs } from "../wordLiveParagraphs";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type {
+  WordDocumentApplyOptions,
   WordDocumentApplyResult,
   WordDocumentRevertResult,
 } from "../wordApplyDocumentPlan";
@@ -118,12 +123,15 @@ const apply = (
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,
   onBeforeWrite?: (before: string) => void,
+  options?: WordDocumentApplyOptions,
 ) =>
   applyWordDocumentPlan(
     JSON.stringify(plan),
     snapshot,
     snapshot.ownerMessageId,
     onBeforeWrite,
+    undefined,
+    options,
   );
 const report = (
   result: WordDocumentApplyResult | WordDocumentRevertResult,
@@ -394,6 +402,8 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     const result = await apply(
       rewrite(snapshot, [[STATUS, { text: "Status: imported." }]]),
       snapshot,
+      undefined,
+      { importConfirmed: true },
     );
     expect(result.status, report(result)).toBe("applied");
     expect(result.outcome?.route).toBe("import");
@@ -461,7 +471,7 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     expect(reverted.status, report(reverted, "revert")).toBe("stale");
   });
 
-  it("falls back to the import before saving anything when body.paragraphs differs from the package", async () => {
+  it("falls back to the import before saving anything when body.paragraphs differs from the package, on the web only once confirmed", async () => {
     const xml = inPlaceFixture((doc) => {
       const body = doc.getElementsByTagNameNS(W, "body")[0];
       const holder = new DOMParser().parseFromString(
@@ -478,11 +488,27 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     expect(snapshot.issue).toBeUndefined();
     const save = vi.fn();
     const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
-    const result = await apply(
-      rewrite(snapshot, [[STATUS, { text: "Status: imported." }]]),
-      snapshot,
-      save,
-    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const plan = rewrite(snapshot, [[STATUS, { text: "Status: imported." }]]);
+    const unconfirmed = await apply(plan, snapshot, save);
+    expect(unconfirmed.status).toBe("blocked");
+    expect(unconfirmed.diagnostic).toMatchObject({
+      stage: "validate",
+      reason: "import-needs-confirmation",
+      details: {
+        route: "import",
+        routeReason: "alignment",
+        fallbackReasons: ["alignment"],
+      },
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(mutations(host.events)).toEqual([]);
+    expect(snapshot.used).toBe(false);
+
+    const result = await apply(plan, snapshot, save, {
+      importConfirmed: true,
+    });
     expect(result.status, report(result)).toBe("applied");
     expect(result.outcome?.route).toBe("import");
     expect(save).toHaveBeenCalledOnce();
@@ -839,6 +865,7 @@ describe(
   { timeout: 30_000 },
   () => {
     it("restores the exact original package after Word dropped run properties", async () => {
+      onTestFinished(allowWordWebImport());
       const host = install({
         profile: "word-web",
         replaceDropsRunProperties: true,
@@ -939,7 +966,92 @@ describe(
       expect(host.insert).not.toHaveBeenCalled();
     });
 
+    it("undoes the written paragraphs in place where the web asks before an import", async () => {
+      const boldStatus = inPlaceFixture((doc) => {
+        const run = Array.from(doc.getElementsByTagNameNS(W, "t")).find((t) =>
+          t.textContent?.startsWith(STATUS),
+        )!.parentElement!;
+        const props = doc.createElementNS(W, "w:rPr");
+        props.append(
+          doc.createElementNS(W, "w:b"),
+          doc.createElementNS(W, "w:bCs"),
+        );
+        run.prepend(props);
+      });
+      const host = install(
+        { profile: "word-web", replaceDropsRunProperties: true },
+        boldStatus,
+      );
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const original = wordDocumentFingerprint(host.ooxml());
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await apply(
+        rewrite(snapshot, [
+          [
+            STATUS,
+            {
+              text: "Status: rewritten.",
+              runs: [{ text: "Status: rewritten.", bold: true }],
+            },
+          ],
+        ]),
+        snapshot,
+      );
+      expect(applied.status).toBe("interrupted");
+      expect(
+        decodeWordInPlaceBackup(applied.before!).inPlace?.scopedFallback,
+      ).toBe(true);
+      host.setReplaceFault(undefined);
+      const reverted = await revertWordDocumentPlan(
+        applied.before!,
+        applied.afterFingerprint!,
+      );
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(reverted.outcome?.route).toBe("in-place");
+      expect(host.insert).not.toHaveBeenCalled();
+      expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+    });
+
+    it.each([
+      ["confirm", "import-needs-confirmation"],
+      ["off", "import-disabled"],
+    ] as const)(
+      "never imports to undo Word changing another paragraph on the web under %s",
+      async (policy, reason) => {
+        onTestFinished(setWordWebImport(policy));
+        const host = install({ profile: "word-web" });
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const snapshot = await captureRealisticSnapshot();
+        host.setReplaceFault("edits-next");
+        const applied = await apply(
+          rewrite(snapshot, [[STATUS, { text: "Status: rewritten." }]]),
+          snapshot,
+        );
+        expect(applied.status).toBe("interrupted");
+        host.setReplaceFault(undefined);
+        const written = host.ooxml();
+        host.events.length = 0;
+        expect(
+          await revertWordDocumentPlan(
+            applied.before!,
+            applied.afterFingerprint!,
+          ),
+        ).toEqual({
+          status: "stale",
+          diagnostic: {
+            stage: "preflight",
+            reason,
+            details: { route: "in-place" },
+          },
+        });
+        expect(host.insert).not.toHaveBeenCalled();
+        expect(mutations(host.events)).toEqual([]);
+        expect(host.ooxml()).toBe(written);
+      },
+    );
+
     it("restores the exact package after Word changed a paragraph it was not asked to", async () => {
+      onTestFinished(allowWordWebImport());
       const host = install({ profile: "word-web" });
       vi.spyOn(console, "warn").mockImplementation(() => {});
       const original = wordDocumentFingerprint(host.ooxml());

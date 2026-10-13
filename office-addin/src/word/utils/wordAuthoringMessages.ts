@@ -1,11 +1,17 @@
 import { plural, t } from "@lingui/core/macro";
 
+import { wordApplyHost } from "./wordApplyPolicy";
+import { wordHostPlatform } from "./wordHostPlatform";
 import { wordRouteGroup } from "./wordInPlaceRoute";
 
 import type { WordDocumentDiagnostic } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
 import type { WordApplyAdjustment } from "./wordFullDocumentComparison";
-import type { WordPlanRoute, WordRouteGroup } from "./wordInPlaceRoute";
+import type {
+  WordPlanRoute,
+  WordRouteGroup,
+  WordWholeDocumentRefusal,
+} from "./wordInPlaceRoute";
 import type { WordPlanIssue } from "@erato/frontend/word-review";
 
 export function wordDocumentDiagnosticText(
@@ -54,6 +60,17 @@ export function wordDocumentDiagnosticText(
       message:
         "The proposed Word structure could not be prepared. No changes were made. Ask for a new rewrite.",
     });
+  if (diagnostic.reason === "not-allowed") return wordNotAllowedText(restoring);
+  if (
+    diagnostic.reason === "host-error" &&
+    diagnostic.officeCode === "NotAllowed" &&
+    ["write", "restore"].includes(diagnostic.stage)
+  )
+    return t({
+      id: "officeAddin.word.authoring.contentRefused.interrupted",
+      message:
+        "Word stopped because this document contains content it can't edit, for example a date picker. The document may be partially changed. Your original is saved for recovery.",
+    });
   if (diagnostic.reason === "host-error")
     return ["write", "verify", "restore"].includes(diagnostic.stage)
       ? t({
@@ -69,11 +86,121 @@ export function wordDocumentDiagnosticText(
   if (diagnostic.reason === "tracking" && diagnostic.details?.fallbackReasons)
     return wordTrackingNeedsImportText();
   if (
+    restoring &&
+    (diagnostic.reason === "import-needs-confirmation" ||
+      diagnostic.reason === "import-disabled")
+  )
+    return wordRevertNeedsImportText();
+  if (diagnostic.reason === "import-needs-confirmation")
+    return t({
+      id: "officeAddin.word.authoring.importNeedsConfirmation",
+      message:
+        "This change replaces the whole document, which needs your confirmation first. Nothing was applied.",
+    });
+  if (diagnostic.reason === "import-disabled")
+    return t({
+      id: "officeAddin.word.authoring.importDisabled",
+      message:
+        "This change needs a full-document rewrite, which is turned off for this version of Word. Nothing was applied. Ask for a smaller edit that can be written in place.",
+    });
+  if (diagnostic.reason === "scoped-needs-in-place")
+    return t({
+      id: "officeAddin.word.authoring.scopedNeedsInPlace",
+      message:
+        "This targeted edit can't be written in place, and a targeted edit never replaces the whole document. Nothing was applied.",
+    });
+  if (
     diagnostic.reason === "host-unavailable" ||
     diagnostic.reason === "wrong-request"
   )
     return wordAuthoringIssueText("no-capture");
   return wordAuthoringIssueText(diagnostic.reason);
+}
+
+/** In place of Revert for an unverified in-place write whose only full restore is an unconfirmed import. */
+export function wordRevertNeedsImportText(): string {
+  return t({
+    id: "officeAddin.word.authoring.revertNeedsImport",
+    message:
+      "Erato can't undo this change here without replacing the whole document. Use Word's Undo to reverse it, or download the original document.",
+  });
+}
+
+/** Word refused to replace the document and nothing changed; trying again would meet the same refusal. */
+function wordNotAllowedText(restoring: boolean): string {
+  if (restoring)
+    return t({
+      id: "officeAddin.word.authoring.contentRefused.restore",
+      message:
+        "Word can't restore this document because it contains content it can't edit, for example a date picker. Nothing was changed. Download the original document instead.",
+    });
+  return wordApplyHost(wordHostPlatform()) === "web"
+    ? t({
+        id: "officeAddin.word.authoring.contentRefused.web",
+        message:
+          "Word for the web can't replace this document because it contains content it can't edit, for example a date picker. Nothing was changed. Copy the draft, open the document in Word for Windows or Mac, or ask for a smaller edit.",
+      })
+    : t({
+        id: "officeAddin.word.authoring.contentRefused.desktop",
+        message:
+          "Word can't replace this document because it contains content it can't edit. Nothing was changed. Copy the draft or ask for a smaller edit.",
+      });
+}
+
+/** Before Apply, where the host's policy rules out replacing the whole document for this plan. */
+export function wordWholeDocumentRefusalText(
+  reason: WordWholeDocumentRefusal,
+): string {
+  return reason === "scoped-needs-in-place"
+    ? t({
+        id: "officeAddin.word.importRefusal.scoped",
+        message:
+          "This targeted edit can't be written in place in this version of Word, and a targeted edit never replaces the whole document.",
+      })
+    : t({
+        id: "officeAddin.word.importRefusal.disabled",
+        message:
+          "This change needs a full-document rewrite, which your organization has turned off for this version of Word.",
+      });
+}
+
+/** Appended to the restored request when the user asks again for edits that keep the document. */
+export function wordInPlaceRequestText(): string {
+  return t({
+    id: "officeAddin.word.importConfirm.inPlaceRequest",
+    message:
+      "Please make only changes that can be edited in place, without replacing the whole document.",
+  });
+}
+
+/** Before Apply on Word for Windows, when Word lists another author or holds their changes unmerged. */
+export function wordCoauthorsEditingText(
+  route: "import" | "body",
+  state: "editing" | "pending",
+): string {
+  if (state === "pending")
+    return route === "body"
+      ? t({
+          id: "officeAddin.word.coauthors.pendingBody",
+          message:
+            "Word holds co-authors' changes that are not merged into your copy yet; replacing the document body can discard them.",
+        })
+      : t({
+          id: "officeAddin.word.coauthors.pendingImport",
+          message:
+            "Word holds co-authors' changes that are not merged into your copy yet; replacing the whole document can discard them.",
+        });
+  return route === "body"
+    ? t({
+        id: "officeAddin.word.coauthors.editingBody",
+        message:
+          "Someone else is editing this document. Replacing the document body can discard the changes they make while it runs.",
+      })
+    : t({
+        id: "officeAddin.word.coauthors.editingImport",
+        message:
+          "Someone else is editing this document. Replacing the whole document can discard the changes they make while it runs, and their cursor moves to the start.",
+      });
 }
 
 function wordTrackingNeedsImportText(): string {

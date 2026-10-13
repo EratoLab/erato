@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { allowWordWebImport } from "../../../test/mocks/word/applyPolicy";
 import {
   editWordPackage,
   installWordOoxmlHost,
@@ -119,6 +120,7 @@ describe("apply diagnostics privacy", { timeout: 30_000 }, () => {
   beforeEach(() => {
     window.WORD_FORCE_IMPORT_APPLY = true;
   });
+  beforeEach(allowWordWebImport);
   afterEach(() => {
     delete window.WORD_FORCE_IMPORT_APPLY;
   });

@@ -8,6 +8,12 @@ import {
   readySnapshot,
   examplePlan,
 } from "../../../test/mocks/word/authoringFixtures";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+  statusRewritePlan,
+} from "../../../test/mocks/word/realisticWordFixtures";
 import { buildWordArtifact } from "../buildWordArtifact";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
@@ -100,6 +106,48 @@ describe("structured Word submissions", () => {
     expect(
       await submit(plan, { ...context, toolCallId: "after-apply" }),
     ).toMatchObject({ ok: false });
+  });
+
+  it("accepts full plans on Word for the web unchanged, leaving the confirmation to the card", async () => {
+    installWordOoxmlHost(realisticWordPackageXml());
+    const snapshot = await captureRealisticSnapshot(context.messageId);
+    const session = new WordDocumentReadSession();
+    session.activate(snapshot, context);
+    expect(
+      (
+        await session.execute(
+          { snapshot: snapshot.token },
+          { ...context, toolCallId: "read-A" },
+        )
+      ).ok,
+    ).toBe(true);
+    const plan = {
+      ...statusRewritePlan(snapshot, "Status: revised."),
+      readToken: snapshot.readToken!,
+      sections: [
+        {
+          id: "final",
+          source: "section-1",
+          layout: { orientation: "landscape" as const },
+        },
+      ],
+    };
+    expect(
+      await createWordDocumentSubmissionExecutor(session)(plan, context),
+    ).toEqual({
+      ok: true,
+      result: {
+        draft_id: "submit-A",
+        snapshot: snapshot.token,
+        action: "word.apply_document_plan",
+      },
+    });
+
+    vi.stubGlobal("Office", {
+      context: { diagnostics: { platform: "OfficeOnline" } },
+    });
+    const body = await setup();
+    expect((await body.submit(body.plan, context)).ok).toBe(true);
   });
 
   it("corrects a bad style using the parser's path, then accepts the same draft", async () => {

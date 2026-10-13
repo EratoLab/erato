@@ -1,6 +1,12 @@
 import { ConversationMessagesProvider } from "@erato/frontend/library";
+import {
+  canonicalWordPlan,
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+} from "@erato/frontend/word-review";
 import { i18n } from "@lingui/core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -9,10 +15,22 @@ import {
   within,
 } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
+import {
+  allowWordWebImport,
+  setWordWebImport,
+} from "../../../test/mocks/word/applyPolicy";
 import {
   examplePlan,
   packageXml,
@@ -33,6 +51,7 @@ import {
 } from "../../../test/mocks/word/realisticWordFixtures";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { buildWordArtifact } from "../../utils/buildWordArtifact";
+import { WORD_CLIENT_ACTIONS } from "../../utils/wordClientActions";
 import { WordDocumentReadSession } from "../../utils/wordDocumentReadTool";
 import {
   createWordDocumentSubmissionExecutor,
@@ -46,6 +65,7 @@ import {
 } from "../../utils/wordInPlaceCapabilities";
 import {
   WORD_COMPATIBILITY_MODE_KEY,
+  latchWordInPlace,
   resetWordInPlaceLatchForTests,
 } from "../../utils/wordInPlaceSwitch";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
@@ -62,12 +82,21 @@ import type { ReactNode } from "react";
 
 const mock = vi.hoisted(() => {
   const artifact: Record<string, unknown> = {};
+  /** Consent cards holding the chat's queued messages, as `${chatId}:${id}`. */
+  const pendingConfirmations = new Set<string>();
   return {
     artifact,
     decisions: {},
     setDecisions: vi.fn(),
     messageStatus: "completed",
     content: [] as unknown[],
+    request: "",
+    restoreRequest: vi.fn(),
+    pendingConfirmations,
+    registerConfirmation: (chatId: string, id: string) =>
+      void pendingConfirmations.add(`${chatId}:${id}`),
+    unregisterConfirmation: (chatId: string, id: string) =>
+      void pendingConfirmations.delete(`${chatId}:${id}`),
   };
 });
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
@@ -76,20 +105,27 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
   useHostArtifact: () => mock.artifact,
   useChatContext: () => ({
     messages: {
+      request: {
+        id: "request",
+        role: "user",
+        content: [{ content_type: "text", text: mock.request }],
+      },
       [String(mock.artifact.messageId)]: {
         id: String(mock.artifact.messageId),
         status: mock.messageStatus,
         role: "assistant",
         content: mock.content,
+        previous_message_id: "request",
       },
     },
     messageOrder: [String(mock.artifact.messageId)],
+    currentChatId: "chat-A",
   }),
   usePersistedState: () => [mock.decisions, mock.setDecisions],
   useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
     select({
-      registerConfirmation: () => {},
-      unregisterConfirmation: () => {},
+      registerConfirmation: mock.registerConfirmation,
+      unregisterConfirmation: mock.unregisterConfirmation,
     }),
   ActionConfirmationCard: ({
     onAllowOnce,
@@ -199,6 +235,7 @@ function setup(
       <WordWriteProvider
         documentIdentity="doc-A"
         capturesByAssistantMessageId={new Map([[messageId, capture]])}
+        restoreRequest={mock.restoreRequest}
       >
         <WordHostCardRenderer
           language="erato-word-document-plan"
@@ -305,18 +342,21 @@ function renderRealisticCard(
     renderedOrdinals: new Set(),
     partialOrdinal: null,
   };
-  return render(
+  const captures = new Map([[messageId, capture]]);
+  const card = () => (
     <WordWriteProvider
       documentIdentity="doc-A"
-      capturesByAssistantMessageId={new Map([[messageId, capture]])}
+      capturesByAssistantMessageId={captures}
+      restoreRequest={mock.restoreRequest}
     >
       <WordHostCardRenderer
         language="erato-word-document-plan"
         content={content}
       />
-    </WordWriteProvider>,
-    { wrapper: TestTheme },
+    </WordWriteProvider>
   );
+  const view = render(card(), { wrapper: TestTheme });
+  return { ...view, refresh: () => view.rerender(card()) };
 }
 beforeEach(() => {
   i18n.load("en", frontendMessages);
@@ -325,6 +365,9 @@ beforeEach(() => {
   mock.setDecisions.mockClear();
   mock.messageStatus = "completed";
   mock.content = [];
+  mock.request = "";
+  mock.restoreRequest.mockClear();
+  mock.pendingConfirmations.clear();
   mock.artifact = {
     facetId: "word_document_authoring",
     messageId: globalThis.crypto.randomUUID(),
@@ -1271,24 +1314,58 @@ function replaceBlock(
 
 async function mountRealistic(
   makePlan: (snapshot: WordAuthoringSnapshot) => WordDocumentPlan,
-  options: WordOoxmlHostOptions & { tracking?: string; xml?: string } = {},
+  options: WordOoxmlHostOptions & {
+    tracking?: string;
+    xml?: string;
+    /** Everyone Word.Coauthoring lists, the user included; the host has no such object otherwise. */
+    coauthors?: number;
+    pendingUpdates?: boolean;
+    platform?: "Mac";
+  } = {},
 ) {
   const {
     tracking = "Off",
     xml = realisticWordPackageXml(),
+    coauthors,
+    pendingUpdates = false,
+    platform,
     ...host
   } = options;
   const word = installWordOoxmlHost(xml, {
     profile: "word-pc-16.0.20326",
     ...host,
   });
+  if (platform)
+    (
+      globalThis as unknown as {
+        Office: { context: { diagnostics: { platform: string } } };
+      }
+    ).Office.context.diagnostics.platform = platform;
+  const coauthoringRead = vi.fn();
+  if (coauthors !== undefined)
+    Object.defineProperty(word.document, "coauthoring", {
+      configurable: true,
+      value: {
+        pendingUpdates,
+        load: coauthoringRead,
+        authors: {
+          items: Array.from({ length: coauthors }, (_, i) => ({
+            id: `author-${i}`,
+          })),
+          load: () => {},
+        },
+      },
+    });
   if (tracking !== "Off") word.setTrackingMode(tracking);
   const snapshot = await captureRealisticSnapshot(
     String(mock.artifact.messageId),
     tracking,
   );
-  renderRealisticCard(snapshot, JSON.stringify(makePlan(snapshot)));
-  return { word, snapshot };
+  const { refresh } = renderRealisticCard(
+    snapshot,
+    JSON.stringify(makePlan(snapshot)),
+  );
+  return { word, snapshot, coauthoringRead, refresh };
 }
 
 const routeText = () => screen.getByTestId("word-plan-route").textContent;
@@ -1461,6 +1538,7 @@ describe("route preview", () => {
   });
 
   it("says compatibility mode makes every rewrite a full replacement, and Apply follows it", async () => {
+    onTestFinished(allowWordWebImport());
     localStorage.setItem(WORD_COMPATIBILITY_MODE_KEY, "1");
     const { word } = await mountRealistic(
       (s) => statusRewritePlan(s, "Status: revised."),
@@ -1645,6 +1723,30 @@ describe("apply outcomes", () => {
     );
   });
 
+  it("unverified on Word for the web: points to Word's Undo instead of an unconfirmed whole-document restore", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      { profile: "word-web" },
+    );
+    expect(routeText()).toBe("Edits 1 passage in place.");
+    word.setReplaceFault("edits-next");
+    apply();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your original is saved for recovery.",
+    );
+    expect(screen.getByTestId("word-plan-revert-refused")).toHaveTextContent(
+      "Erato can't undo this change here without replacing the whole document. Use Word's Undo to reverse it, or download the original document.",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Restore original document" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Download original document" }),
+    ).toBeInTheDocument();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
   it("partly written: counts changes, not regions, when Word stops inside one region", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const rewrites: Record<string, string> = {
@@ -1766,5 +1868,467 @@ describe("apply outcomes", () => {
         word.events.filter((e) => e.startsWith("select:paragraphs:")),
       ).toHaveLength(1),
     );
+  });
+});
+
+const sectionsPlan = (s: WordAuthoringSnapshot): WordDocumentPlan => ({
+  ...statusRewritePlan(s, "Status: revised."),
+  sections: [
+    { id: "final", source: "section-1", layout: { orientation: "landscape" } },
+  ],
+});
+const SECTIONS_ROUTE =
+  "Replaces the whole document because it changes sections or page layout.";
+const WEB_IMPORT_STATEMENTS = [
+  "Word's Undo can't reverse this change. Erato can't verify the result on Word for the web, and its Restore may not bring back the exact original, which stays available to download.",
+  "People editing at the same time may lose their latest changes.",
+  "Comment dates and resolved flags may change.",
+];
+const confirmBox = () =>
+  screen.getByRole("checkbox", {
+    name: "I understand. Replace the whole document.",
+  });
+const applyButton = () => screen.getByRole("button", { name: APPLY_LABEL });
+const spyOnApply = () =>
+  vi.spyOn(WORD_CLIENT_ACTIONS.get("word.apply_document_plan")!, "execute");
+const autoPrompt = (decision?: "always") => {
+  mock.artifact.clientActionPresentation = "auto_prompt";
+  mock.artifact.proposedClientAction = "word.apply_document_plan";
+  if (decision)
+    mock.decisions = {
+      "word_document_authoring/word.apply_document_plan": decision,
+    };
+};
+
+/** The status rewrite submitted under a scoped read of that paragraph alone. */
+function scopedStatusPlan(s: WordAuthoringSnapshot): WordDocumentPlan {
+  const plan = {
+    ...statusRewritePlan(s, "Status: revised."),
+    readToken: "scope-1",
+  };
+  const status = s.blocks.find((b) => b.text.startsWith("Status"))!;
+  const normalized = normalizeWordDocumentPlan(
+    parseWordDocumentPlan(JSON.stringify(plan))!,
+    s,
+  );
+  s.readScopes = new Map([
+    [
+      "scope-1",
+      {
+        kind: "objects",
+        snapshot: s.token,
+        identity: s.identity,
+        fingerprint: s.fingerprint,
+        targets: [
+          {
+            ref: status.ref,
+            kind: "paragraph",
+            text: "",
+            bodyRef: status.ref,
+            detail: {},
+          },
+        ],
+        plans: new Set([canonicalWordPlan(normalized)]),
+      },
+    ],
+  ]);
+  return plan;
+}
+
+/** body.paragraphs on the web also lists this text box's paragraph, so in place falls back live. */
+function textBoxPackageXml(): string {
+  return editWordPackage(realisticWordPackageXml(), (doc) => {
+    const body = doc.getElementsByTagNameNS(W, "body")[0];
+    const holder = new DOMParser().parseFromString(
+      `<w:p xmlns:w="${W}"><w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>`,
+      "application/xml",
+    ).documentElement;
+    body.insertBefore(doc.importNode(holder, true), body.firstChild);
+  });
+}
+
+describe("confirmed whole-document replacement on Word for the web", () => {
+  afterEach(() => {
+    delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+  });
+
+  it("replaces Apply with an unticked confirmation naming the costs, then imports once ticked", async () => {
+    mock.decisions = {
+      "word_document_authoring/word.apply_document_plan": "always",
+    };
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    expect(routeText()).toBe(SECTIONS_ROUTE);
+    for (const statement of WEB_IMPORT_STATEMENTS)
+      expect(screen.getByText(statement)).toBeVisible();
+    expect(confirmBox()).not.toBeChecked();
+    expect(applyButton()).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    fireEvent.click(applyButton());
+    expect(execute).not.toHaveBeenCalled();
+
+    fireEvent.click(confirmBox());
+    expect(applyButton()).toBeEnabled();
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(execute.mock.calls[0][0]).toMatchObject({ importConfirmed: true });
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("never imports automatically under Always allow, and asks for the tick instead", async () => {
+    autoPrompt("always");
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    await act(async () => {});
+    expect(execute).not.toHaveBeenCalled();
+    expect(word.insert).not.toHaveBeenCalled();
+    expect(confirmBox()).not.toBeChecked();
+    expect(applyButton()).toBeDisabled();
+
+    fireEvent.click(confirmBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(execute.mock.calls).toEqual([
+      [expect.objectContaining({ importConfirmed: true })],
+    ]);
+    expect(
+      screen.queryByText("Automatic action under your Always allow setting."),
+    ).toBeNull();
+  });
+
+  it("stands in for the consent card, and Cancel declines the plan", async () => {
+    autoPrompt();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    expect(confirmBox()).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      await screen.findByText("Proposal declined. Nothing was written."),
+    ).toBeVisible();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("asks again for in-place edits with the previous request, and copies the draft", async () => {
+    mock.request = "Make the last section landscape.";
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    );
+    expect(mock.restoreRequest).toHaveBeenCalledWith(
+      "Make the last section landscape.\n\nPlease make only changes that can be edited in place, without replacing the whole document.",
+    );
+    expect(
+      screen.getByText(
+        "Your request is back in the message box, asking for in-place edits only. Review it, then send.",
+      ),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy draft" }));
+    await screen.findByText("Draft copied.");
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(writeText.mock.calls[0][0]).toContain("Status: revised.");
+    expect(confirmBox()).not.toBeChecked();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("turns a live fallback to the import back into the confirmation, not an error", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      {
+        profile: "word-web",
+        includeTextBoxParagraphs: true,
+        xml: textBoxPackageXml(),
+      },
+    );
+    expect(routeText()).toBe("Edits 1 passage in place.");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    apply();
+    expect(await screen.findByRole("checkbox")).not.toBeChecked();
+    expect(routeText()).toBe(
+      "Replaces the whole document because this change can't be written in place.",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(applyButton()).toBeDisabled();
+    expect(word.insert).not.toHaveBeenCalled();
+
+    fireEvent.click(confirmBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(
+      execute.mock.calls.map(([context]) => context.importConfirmed),
+    ).toEqual([false, true]);
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a scoped edit that would need the import, with Copy draft and Ask again but no Apply", async () => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    const execute = spyOnApply();
+    await mountRealistic(scopedStatusPlan, { profile: "word-web" });
+    expect(
+      screen.getByText(
+        "This targeted edit can't be written in place in this version of Word, and a targeted edit never replaces the whole document.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByTestId("word-plan-route")).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    ).toBeVisible();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("opens no consent card behind a refusal, so the chat's queued messages are not held", async () => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    autoPrompt();
+    await mountRealistic(scopedStatusPlan, { profile: "word-web" });
+    await act(async () => {});
+    expect(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(mock.pendingConfirmations.size).toBe(0);
+  });
+
+  it("releases a consent card once a refusal takes its place", async () => {
+    autoPrompt();
+    const { refresh } = await mountRealistic(scopedStatusPlan, {
+      profile: "word-web",
+    });
+    expect(
+      await screen.findByRole("button", { name: "Allow once" }),
+    ).toBeVisible();
+    expect(mock.pendingConfirmations.size).toBe(1);
+
+    latchWordInPlace("verify-mismatch");
+    refresh();
+    expect(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    ).toBeVisible();
+    expect(mock.pendingConfirmations.size).toBe(0);
+  });
+
+  it("releases the consent card the confirmation stands in for when the user asks again", async () => {
+    autoPrompt();
+    await mountRealistic(sectionsPlan, { profile: "word-web" });
+    await act(async () => {});
+    expect(confirmBox()).not.toBeChecked();
+    expect(mock.pendingConfirmations.size).toBe(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    );
+    expect(mock.pendingConfirmations.size).toBe(0);
+    expect(confirmBox()).not.toBeChecked();
+  });
+
+  it("offers no Apply where the deployment turned the import off", async () => {
+    onTestFinished(setWordWebImport("off"));
+    autoPrompt("always");
+    const execute = spyOnApply();
+    await mountRealistic(sectionsPlan, { profile: "word-web" });
+    await act(async () => {});
+    expect(
+      screen.getByText(
+        "This change needs a full-document rewrite, which your organization has turned off for this version of Word.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("needs the tick for the body route as well", async () => {
+    const state = setup();
+    vi.stubGlobal("Office", {
+      context: { diagnostics: { platform: "OfficeOnline" } },
+    });
+    state.mount();
+    expect(routeText()).toBe("Replaces the document body.");
+    expect(applyButton()).toBeDisabled();
+    fireEvent.click(confirmBox());
+    apply();
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledOnce();
+  });
+
+  it("says Word for the web refused the replacement and nothing changed, with Copy draft and nothing to retry", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    word.refuseImport();
+    fireEvent.click(confirmBox());
+    apply();
+    expect(
+      await screen.findByText(
+        "Word for the web can't replace this document because it contains content it can't edit, for example a date picker. Nothing was changed. Copy the draft, open the document in Word for Windows or Mac, or ask for a smaller edit.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("names the refusal when it stopped a replacement that had changed the document", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    word.failAfterWrite("Word refused part of the write.", "NotAllowed");
+    fireEvent.click(confirmBox());
+    apply();
+    expect(
+      await screen.findByText(
+        "Word stopped because this document contains content it can't edit, for example a date picker. The document may be partially changed. Your original is saved for recovery.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("keeps Apply and Always allow for the same import on Word PC", async () => {
+    autoPrompt();
+    const { word } = await mountRealistic(sectionsPlan);
+    expect(routeText()).toBe(SECTIONS_ROUTE);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Always allow" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+});
+
+describe("co-author warning on Word for Windows", () => {
+  const COAUTHORS_WARNING =
+    "Someone else is editing this document. Replacing the whole document can discard the changes they make while it runs, and their cursor moves to the start.";
+
+  it("warns before Apply when Word lists another author, and Apply still replaces the document", async () => {
+    const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 2,
+    });
+    expect(routeText()).toBe(SECTIONS_ROUTE);
+    expect(await screen.findByTestId("word-plan-coauthors")).toHaveTextContent(
+      COAUTHORS_WARNING,
+    );
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(applyButton()).toBeEnabled();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+    expect(coauthoringRead).toHaveBeenCalledOnce();
+  });
+
+  it("warns above the consent card as well", async () => {
+    autoPrompt();
+    await mountRealistic(sectionsPlan, { coauthors: 2 });
+    expect(await screen.findByTestId("word-plan-coauthors")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Allow once" })).toBeEnabled();
+  });
+
+  it("warns inside the confirmation where the deployment asks first on Word PC", async () => {
+    window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
+      word_apply: { pc: { whole_document_import: "confirm" } },
+    };
+    onTestFinished(() => {
+      delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+    });
+    await mountRealistic(sectionsPlan, { coauthors: 2 });
+    const group = screen.getByRole("group", {
+      name: "Confirm replacing the whole document",
+    });
+    expect(
+      await within(group).findByTestId("word-plan-coauthors"),
+    ).toBeVisible();
+    expect(confirmBox()).not.toBeChecked();
+  });
+
+  it("stays as today when the user is the only author", async () => {
+    const { coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 1,
+    });
+    await waitFor(() => expect(coauthoringRead).toHaveBeenCalledOnce());
+    await act(async () => {});
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    expect(applyButton()).toBeEnabled();
+  });
+
+  it("says only that changes wait to merge when Word lists no other author", async () => {
+    await mountRealistic(sectionsPlan, { coauthors: 1, pendingUpdates: true });
+    expect(await screen.findByTestId("word-plan-coauthors")).toHaveTextContent(
+      "Word holds co-authors' changes that are not merged into your copy yet; replacing the whole document can discard them.",
+    );
+    expect(applyButton()).toBeEnabled();
+  });
+
+  it("leaves Word for Mac as today until its co-author probe has run", async () => {
+    const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 2,
+      platform: "Mac",
+    });
+    await act(async () => {});
+    expect(coauthoringRead).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("stays as today where Word cannot report co-authors", async () => {
+    const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 2,
+      isSetSupported: (name, version) =>
+        !(name === "WordApiDesktop" && version === "1.4"),
+    });
+    await act(async () => {});
+    expect(coauthoringRead).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  it("does not ask Word for a plan written in place", async () => {
+    const { coauthoringRead } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      { coauthors: 2 },
+    );
+    await act(async () => {});
+    expect(routeText()).toBe("Edits 1 passage in place.");
+    expect(coauthoringRead).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+  });
+
+  it("leaves Word for the web to its confirmation", async () => {
+    const { coauthoringRead } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+      coauthors: 2,
+    });
+    await act(async () => {});
+    expect(coauthoringRead).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    expect(confirmBox()).not.toBeChecked();
   });
 });

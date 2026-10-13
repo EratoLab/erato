@@ -5,7 +5,7 @@ import {
 
 import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
-import { wordDocumentFingerprint } from "./wordDocumentXml";
+import { wordBodyFingerprint } from "./wordDocumentXml";
 import {
   resolveWordParagraphs,
   wordParagraphAnchor,
@@ -38,9 +38,9 @@ export interface WordApplyResult {
 }
 
 /** A body Word returns as something other than a package is compared verbatim. */
-function wordBodyFingerprint(ooxml: string): string {
+function bodyFingerprintOrRaw(ooxml: string): string {
   try {
-    return wordDocumentFingerprint(ooxml);
+    return wordBodyFingerprint(ooxml);
   } catch {
     return `raw:${ooxml}`;
   }
@@ -54,7 +54,7 @@ async function observeWordBody(
     return await word.run(async (context) => {
       const body = context.document.body.getOoxml();
       await context.sync();
-      return wordBodyFingerprint(body.value);
+      return bodyFingerprintOrRaw(body.value);
     });
   } catch {
     return undefined;
@@ -224,7 +224,7 @@ async function applyEdits(
       try {
         const after = context.document.body.getOoxml();
         await context.sync();
-        afterFingerprint = wordBodyFingerprint(after.value);
+        afterFingerprint = bodyFingerprintOrRaw(after.value);
       } catch {
         // Without the post-write body, Revert stays unavailable rather than unguarded.
       }
@@ -327,7 +327,7 @@ export async function revertWordEdits(
       const live = context.document.body.getOoxml();
       await context.sync();
       if (context.document.changeTrackingMode !== "Off") return "tracking";
-      if (wordBodyFingerprint(live.value) !== expectedAfter) return "stale";
+      if (bodyFingerprintOrRaw(live.value) !== expectedAfter) return "stale";
       context.document.body.insertOoxml(snapshotOoxml, "Replace");
       await context.sync();
       return "reverted";

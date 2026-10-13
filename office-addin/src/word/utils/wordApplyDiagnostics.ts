@@ -1,11 +1,17 @@
 import { createWordXmlComparison } from "@erato/frontend/word-review";
 
+import {
+  wordApplyHost,
+  wordApplyPolicy,
+  wordInPlaceOverride,
+} from "./wordApplyPolicy";
 import { parseWordXml } from "./wordDocumentPackageCodec";
 import {
   WORD_APPLY_ADJUSTMENTS,
   wordFullDocumentDifferences,
   wordPackageCounts,
 } from "./wordFullDocumentComparison";
+import { wordHostPlatform } from "./wordHostPlatform";
 import { WORD_IN_PLACE_FALLBACKS } from "./wordInPlacePlan";
 import { wordInPlaceAvailability } from "./wordInPlaceSwitch";
 
@@ -17,6 +23,7 @@ import type {
   WordApplyAdjustment,
   WordVerifyTier,
 } from "./wordFullDocumentComparison";
+import type { WordReadScope } from "@erato/frontend/word-review";
 
 export const WORD_APPLY_ROUTES = ["import", "body", "in-place"] as const;
 /** Closed list: why a plan did not run in place. */
@@ -66,8 +73,10 @@ export interface WordDiagnosticDetails {
   partial?: { applied: number; untouched: number };
   /** Blocks changed elsewhere since the capture, which an in-place write leaves untouched. */
   outsideChanges?: number;
-  /** Why a plan needs the full-document import, which Track Changes rules out. */
+  /** Why a plan needs the full-document import, which Track Changes or the host's policy rules out. */
   fallbackReasons?: WordRouteReason[];
+  /** The kind of scoped read a refused plan was submitted under. */
+  readScope?: WordReadScope["kind"];
   error?: string;
 }
 
@@ -210,14 +219,22 @@ function hostLine(): string {
     return value === undefined ? "?" : value ? "yes" : "no";
   };
   const inPlace = wordInPlaceAvailability();
+  const platform = wordHostPlatform();
+  const policy = wordApplyPolicy(platform);
+  const onOff = (value: boolean) => (value ? "on" : "off");
   return [
     `${String(d?.host ?? "?")} ${String(d?.platform ?? "?")} ${d?.version ?? "?"}`,
     `WordApi 1.6: ${supported("1.6")}`,
     `WordApi 1.7: ${supported("1.7")}`,
     `saved document: ${office?.document?.url ? "yes" : "no"}`,
+    `Policy ${wordApplyHost(platform)}: in-place ${onOff(policy.inPlace)}${
+      wordInPlaceOverride() === undefined ? "" : " (override)"
+    }, import ${policy.wholeDocumentImport}, package read ${onOff(policy.packageRead)}`,
     `In-place: ${inPlace.enabled ? "on" : `off (${inPlace.reason})`}`,
   ].join(" · ");
 }
+
+const READ_SCOPES: readonly WordReadScope["kind"][] = ["objects", "table-cell"];
 
 const isCount = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -278,6 +295,9 @@ export function renderWordDiagnosticReport(
             .filter((code) => WORD_ROUTE_REASONS.includes(code))
             .join(", ")}`,
         ]
+      : []),
+    ...(details?.readScope && READ_SCOPES.includes(details.readScope)
+      ? [`Read scope: ${details.readScope}`]
       : []),
     ...(isCount(details?.inPlaceOps)
       ? [`In-place changes: ${details.inPlaceOps}`]

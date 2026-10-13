@@ -206,6 +206,51 @@ describe("Word apply diagnostics", () => {
     }
   });
 
+  it("reports a refused whole-document write with its route, reasons and read scope, and the web policy", () => {
+    vi.stubGlobal("Office", {
+      context: {
+        diagnostics: {
+          host: "Word",
+          platform: "OfficeOnline",
+          version: "16.0.0.0",
+        },
+        requirements: { isSetSupported: () => true },
+        document: { url: "https://contoso/report.docx" },
+      },
+    });
+    const lines = renderWordDiagnosticReport("apply", "blocked", {
+      stage: "validate",
+      reason: "scoped-needs-in-place",
+      details: {
+        route: "import",
+        routeReason: "alignment",
+        fallbackReasons: ["alignment"],
+        readScope: "table-cell",
+      },
+    }).split("\n");
+    expect(lines).toEqual([
+      "Word add-in apply failed",
+      "Status: blocked",
+      "Stage: validate",
+      "Reason: scoped-needs-in-place",
+      "Route: import (alignment)",
+      "Needs full rewrite: alignment",
+      "Read scope: table-cell",
+      expect.stringMatching(/^Host: .*· Policy web: .*, import confirm, /),
+    ]);
+    expect(
+      renderWordDiagnosticReport("apply", "blocked", {
+        stage: "validate",
+        reason: "import-needs-confirmation",
+        details: {
+          route: "body",
+          fallbackReasons: [],
+          readScope: "<private>" as never,
+        },
+      }),
+    ).toMatch(/^Reason: import-needs-confirmation\nRoute: body\nHost: /m);
+  });
+
   it("shows compatibility mode on the host line", () => {
     vi.stubGlobal("Office", {
       context: {

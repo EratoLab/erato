@@ -1,6 +1,6 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
-use crate::config::{AppConfig, TranslationPoCompilationMode};
+use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy, TranslationPoCompilationMode};
 use crate::distribution::Distribution;
 use crate::distribution::component_kits::ComponentKit;
 use crate::distribution::frontend_bundles::{
@@ -663,12 +663,25 @@ fn build_frontend_environment(
             Value::String(config.integrations.ms_office.addin.msal_authority.clone()),
         );
         let default_settings = &config.integrations.ms_office.addin.default_settings;
+        let word_apply = &default_settings.word_apply;
+        let word_apply_host = |policy: MsOfficeAddinWordApplyPolicy| {
+            serde_json::json!({
+                "in_place": policy.in_place,
+                "whole_document_import": policy.whole_document_import,
+                "package_read": policy.package_read,
+            })
+        };
         env.additional_environment.insert(
             FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS.to_string(),
             serde_json::json!({
                 "mode": default_settings.mode,
                 "compose_inherits_from_read": default_settings.compose_inherits_from_read,
                 "word_include_document": default_settings.word_include_document,
+                "word_apply": {
+                    "pc": word_apply_host(word_apply.pc_policy()),
+                    "mac": word_apply_host(word_apply.mac_policy()),
+                    "web": word_apply_host(word_apply.web_policy()),
+                },
             }),
         );
     }
@@ -1320,6 +1333,11 @@ mod tests {
                 "mode": "resume",
                 "compose_inherits_from_read": true,
                 "word_include_document": true,
+                "word_apply": {
+                    "pc": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
+                    "mac": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
+                    "web": {"in_place": true, "whole_document_import": "confirm", "package_read": true},
+                },
             }))
         );
 
@@ -1327,6 +1345,10 @@ mod tests {
         default_settings.mode = crate::config::MsOfficeAddinSessionMode::Ask;
         default_settings.compose_inherits_from_read = false;
         default_settings.word_include_document = false;
+        default_settings.word_apply.mac.in_place = Some(true);
+        default_settings.word_apply.web.whole_document_import =
+            Some(crate::config::MsOfficeAddinWordWholeDocumentImport::Off);
+        default_settings.word_apply.web.package_read = Some(false);
         assert_eq!(
             build_frontend_environment(&config, FrontendKind::OfficeAddin)
                 .additional_environment
@@ -1335,6 +1357,11 @@ mod tests {
                 "mode": "ask",
                 "compose_inherits_from_read": false,
                 "word_include_document": false,
+                "word_apply": {
+                    "pc": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
+                    "mac": {"in_place": true, "whole_document_import": "allowed", "package_read": true},
+                    "web": {"in_place": true, "whole_document_import": "off", "package_read": false},
+                },
             }))
         );
         assert!(
