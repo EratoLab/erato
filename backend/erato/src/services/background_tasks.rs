@@ -34,6 +34,8 @@ use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 const MAX_EVENT_HISTORY: usize = 10_000;
 const SHARED_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const DRAIN_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const CLIENT_TRANSPORT_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const LIVE_SUBMISSION_RECONNECT_GRACE: Duration = Duration::from_secs(15);
 
 pub(crate) fn owner_pod() -> String {
     std::env::var("POD_NAME")
@@ -1571,6 +1573,23 @@ impl StreamingTask {
         }
     }
 
+    pub async fn wait_for_client_transport_loss(&self) {
+        let mut disconnected_since = None;
+        loop {
+            if self.client_transport_connected().await {
+                disconnected_since = None;
+            } else if disconnected_since
+                .get_or_insert_with(tokio::time::Instant::now)
+                .elapsed()
+                >= LIVE_SUBMISSION_RECONNECT_GRACE
+            {
+                return;
+            }
+            // A running submission can still POST its result while SSE reconnects.
+            tokio::time::sleep(CLIENT_TRANSPORT_POLL_INTERVAL).await;
+        }
+    }
+
     pub fn uses_shared_client_transport(&self) -> bool {
         self.shared_transport.load(Ordering::Acquire)
     }
@@ -1866,7 +1885,12 @@ impl ClientStreamGuard {
                 owned.store(true, Ordering::Release);
             }
             loop {
-                tokio::time::sleep(crate::services::client_operations::transport::HEARTBEAT).await;
+                let interval = if owned.load(Ordering::Acquire) {
+                    crate::services::client_operations::transport::HEARTBEAT
+                } else {
+                    CLIENT_TRANSPORT_POLL_INTERVAL
+                };
+                tokio::time::sleep(interval).await;
                 if original
                     .as_ref()
                     .is_some_and(|task| task.upgrade().is_none_or(|task| task.is_completed()))

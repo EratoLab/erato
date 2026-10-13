@@ -124,7 +124,7 @@ Web Locks and attempt/result fences remain necessary.
 
 The response body renews ownership every five seconds, with a twenty-second
 expiry. Dropping it releases only its own token; replica loss expires the lease.
-An eligible observer retries acquisition every five seconds, so a reconnect that
+An eligible observer retries acquisition every second, so a reconnect that
 arrives before the previous stream releases ownership can still take over.
 Only acquired leases are renewed; ordinary streams do not arm a heartbeat timer.
 While waiting for an eligible durable call the worker checks shared ownership
@@ -134,11 +134,16 @@ initialization still fails closed on a database error, since the write may have
 committed and another stream could acquire that row.
 Ownership adds one row initialization per eligible generation, heartbeat writes
 and ownership reads around client-call delivery/waits. Generations without an
-eligible durable tool retain their existing client-tool behavior. Word reads can use the same ownership with a `word_document` binding. A live-only
-validated submission in a generation using shared ownership is delivered only to
-the owner; no owner at dispatch or ownership loss while waiting ends it immediately
-with an unresolved `context_unavailable` submission outcome. Other non-durable
-calls retain their existing delivery and timeout behavior.
+eligible durable tool retain their existing client-tool behavior. Word reads can
+use the same ownership with a `word_document` binding. A live-only validated
+submission in a generation using shared ownership is delivered only to the owner.
+If no owner exists at dispatch, it ends immediately with an unresolved
+`context_unavailable` outcome; prior validation refusals keep their own outcome.
+Once dispatched, the result waiter survives a reconnect: ownership is checked
+every second, and only fifteen seconds of continuously observed absence ends it
+as `context_unavailable`. A recovered owner resets this grace period; result
+delivery, explicit abort and the tool's original timeout remain effective during
+it. Other non-durable calls retain their existing delivery and timeout behavior.
 
 A kind with `requires_binding()` (local evidence and compiled test kinds) makes a
 valid `X-Erato-Executor` binding mandatory when the flag is enabled; without one
@@ -194,6 +199,8 @@ optional `feedback`, using the existing client validation parser: at most 16 iss
 512 characters per path/message and 64 per code. The diagnostic envelope is capped
 at 64 KiB. Lost-capture `cannot_continue` feedback on a parked recovery read stops
 correction before any further inference; successful reads preserve its counters.
+An expired recovery read stops correction with the same `timeout` reason as an
+inline read timeout.
 Continuation resolves original tool identities against current configuration and
 re-prepares their schemas/timeouts. It retains consumed counters and never raises
 the original submission limit or removes submission semantics during that turn.

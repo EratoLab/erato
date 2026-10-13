@@ -178,7 +178,7 @@ impl SubmissionCorrection {
                 self.stop(SubmissionReason::ContextUnavailable)
             }
             ClientToolOutcome::Cancelled { reason } => self.stop(match reason.as_str() {
-                "timeout" => SubmissionReason::Timeout,
+                "timeout" | "expired" => SubmissionReason::Timeout,
                 "context_unavailable" => SubmissionReason::ContextUnavailable,
                 _ => SubmissionReason::Cancelled,
             }),

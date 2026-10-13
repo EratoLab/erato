@@ -380,7 +380,9 @@ pub fn from_fast_result(
                     .binding
                     .host_context
                     .as_ref()
-                    .filter(|host| host.kind == "word_document")
+                    .filter(|host| {
+                        host.kind == crate::config::ClientToolHostContext::WordDocument.as_str()
+                    })
                     .map(|_| OperationValidation { issues, feedback }),
             }),
         ),

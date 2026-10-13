@@ -1,5 +1,7 @@
 use super::attached::{next_call, serve, wait_park};
 use super::*;
+use erato::services::client_operations::transport;
+use sea_orm::ConnectionTrait;
 
 const READ: &str = "read_document_blocks";
 const SUBMIT: &str = "submit_document_plan";
@@ -222,7 +224,7 @@ async fn live_submission_without_owner_fails_before_dispatch(pool: Pool<Postgres
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn owner_lost_while_live_submission_waits_fails_immediately(pool: Pool<Postgres>) {
+async fn owner_lost_while_live_submission_waits_fails_after_reconnect_grace(pool: Pool<Postgres>) {
     let setup = setup_word(pool, &[READ, SUBMIT]).await;
     let (base, server) = serve(&setup.state).await;
     let mut stream = start(&setup, &base).await;
@@ -234,8 +236,16 @@ async fn owner_lost_while_live_submission_waits_fails_immediately(pool: Pool<Pos
     let call = next_call(&mut stream).await;
     assert!(call.1.ends_with("word-call-1"));
     drop(stream);
+    assert!(
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            wait_completed(&setup.state, request.attempt_id),
+        )
+        .await
+        .is_err()
+    );
     tokio::time::timeout(
-        Duration::from_secs(5),
+        Duration::from_secs(20),
         wait_completed(&setup.state, request.attempt_id),
     )
     .await
@@ -244,6 +254,204 @@ async fn owner_lost_while_live_submission_waits_fails_immediately(pool: Pool<Pos
         assistant_message(&setup).await.generation_metadata.unwrap()["submission_outcome"].clone();
     assert_eq!(outcome["status"], "unresolved");
     assert_eq!(outcome["reason"], "context_unavailable");
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn live_submission_survives_reconnect_after_owner_release(pool: Pool<Postgres>) {
+    reconnect_live_submission(pool, false).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn live_submission_survives_reconnect_before_owner_release(pool: Pool<Postgres>) {
+    reconnect_live_submission(pool, true).await;
+}
+
+async fn reconnect_live_submission(pool: Pool<Postgres>, resume_first: bool) {
+    let setup = setup_word(pool.clone(), &[READ, SUBMIT]).await;
+    let replica = test_app_state(setup.state.config.clone(), pool).await;
+    let (base, server) = serve(&setup.state).await;
+    let (remote, remote_server) = serve(&replica).await;
+    let mut stream = start(&setup, &base).await;
+    next_call(&mut stream).await;
+    drop(stream);
+    let request = wait_park(&setup, 1).await;
+    settle_read(&setup, &request).await;
+    let mut stream = attach(&base, &request).await;
+    let call = next_call(&mut stream).await;
+    let task = setup
+        .state
+        .background_tasks
+        .get_task(&setup.chat_id)
+        .await
+        .unwrap();
+    let old_owner = transport::owner(&setup.state.db, task.generation_id)
+        .await
+        .unwrap();
+    let resume = || {
+        interactive(&remote, "/me/messages/resumestream")
+            .json(&json!({"chat_id": setup.chat_id}))
+            .send()
+    };
+    let mut resumed = None;
+    if resume_first {
+        resumed = Some(
+            resume()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .bytes_stream(),
+        );
+        assert_eq!(
+            transport::owner(&setup.state.db, task.generation_id)
+                .await
+                .unwrap(),
+            old_owner
+        );
+    }
+    drop(stream);
+    if !resume_first {
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while transport::owner(&setup.state.db, task.generation_id)
+                .await
+                .unwrap()
+                != Some(None)
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        // The previous 100 ms disconnect poll would have discarded the waiter.
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        assert!(!task.is_completed());
+        resumed = Some(
+            resume()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .bytes_stream(),
+        );
+    }
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let owner = transport::owner(&setup.state.db, task.generation_id)
+                .await
+                .unwrap();
+            if matches!(owner, Some(Some(_))) && owner != old_owner {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("resume promptly takes the released lease");
+    let response = post_live(
+        &replica,
+        setup.chat_id,
+        &call,
+        json!({"result":{"draft_id":"original-draft"}}),
+        Some(&binding()),
+    )
+    .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["delivered"], true);
+    wait_completed(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    assert_eq!(
+        message.generation_metadata.unwrap()["submission_outcome"]["status"],
+        "accepted"
+    );
+    assert!(message.raw_message.to_string().contains("original-draft"));
+    assert_eq!(
+        message.generation_parameters.unwrap()["turn_consumption"]["tool_charges"]
+            .as_object()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(chat_attempts(&setup.state, setup.chat_id).await.len(), 1);
+    assert_eq!(turn_requests(&setup.recorder).len(), 2);
+    drop(resumed);
+    server.abort();
+    remote_server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn missing_owner_does_not_overwrite_submission_schema_refusal(pool: Pool<Postgres>) {
+    let mut setup = setup_word(pool, &[READ, SUBMIT, SUBMIT, SUBMIT, SUBMIT, SUBMIT]).await;
+    setup.state.config.client_tools.tools.get_mut(SUBMIT).unwrap().parameters =
+        json!({"type":"object","properties":{"snapshot":{"type":"integer"}},"required":["snapshot"],"additionalProperties":false}).to_string();
+    let (base, server) = serve(&setup.state).await;
+    let mut stream = start(&setup, &base).await;
+    next_call(&mut stream).await;
+    drop(stream);
+    let request = wait_park(&setup, 1).await;
+    settle_read(&setup, &request).await;
+    app_server(setup.state.clone())
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/continue",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    wait_completed(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    let outcome = &message.generation_metadata.unwrap()["submission_outcome"];
+    assert_eq!(outcome["reason"], "attempts_exhausted");
+    assert_eq!(outcome["attempts_used"], 5);
+    assert!(
+        message
+            .raw_message
+            .to_string()
+            .contains("validation_errors")
+    );
+    assert!(
+        !message
+            .raw_message
+            .to_string()
+            .contains("context_unavailable")
+    );
+    assert_eq!(turn_requests(&setup.recorder).len(), 6);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn expired_recovery_read_reports_timeout(pool: Pool<Postgres>) {
+    let setup = setup_word(pool, &[SUBMIT, READ, SUBMIT]).await;
+    let (base, server) = serve(&setup.state).await;
+    let mut stream = start(&setup, &base).await;
+    let first = next_call(&mut stream).await;
+    settle(&setup, &first, json!({"validation_errors":[{"path":"/snapshot","code":"repair","message":"Read again"}],"submission_feedback":{"recovery":"read_current_context"}})).await;
+    next_call(&mut stream).await;
+    drop(stream);
+    let request = wait_park(&setup, 1).await;
+    setup
+        .state
+        .db
+        .execute_unprepared(
+            "UPDATE client_operation_attempts SET expires_at = now() - interval '1 second'",
+        )
+        .await
+        .unwrap();
+    app_server(setup.state.clone())
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/continue",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    wait_completed(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    assert_eq!(
+        message.generation_metadata.unwrap()["submission_outcome"]["reason"],
+        "timeout"
+    );
+    assert_eq!(turn_requests(&setup.recorder).len(), 2);
     server.abort();
 }
 

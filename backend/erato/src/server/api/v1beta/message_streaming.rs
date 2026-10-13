@@ -7382,7 +7382,10 @@ async fn stream_generate_chat_completion<'a>(
                 let live_submission = submission.is_some()
                     && durable_request.is_none()
                     && task.uses_shared_client_transport();
-                if live_submission && !task.client_transport_connected().await {
+                if validation_failure.is_none()
+                    && live_submission
+                    && !task.client_transport_connected().await
+                {
                     validation_failure = Some(ClientToolOutcome::Cancelled {
                         reason: "context_unavailable".into(),
                     });
@@ -7466,9 +7469,8 @@ async fn stream_generate_chat_completion<'a>(
                                 Err(_) => Park::TimedOut,
                             },
                             _ = task.wait_for_abort() => Park::Aborted,
-                            _ = task.wait_for_client_disconnect(), if durable_request.is_some() || live_submission => {
-                                if live_submission { Park::TransportUnavailable } else { Park::TimedOut }
-                            },
+                            _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
+                            _ = task.wait_for_client_transport_loss(), if live_submission => Park::TransportUnavailable,
                             _ = tokio::time::sleep(tokio::time::Duration::from_millis(
                                 park_timeout_ms,
                             )) => Park::TimedOut,
