@@ -13,8 +13,7 @@ import {
 } from "./wordActionFacet";
 import {
   buildWordCommentEnvelope,
-  buildWordCommentModel,
-  wordCommentSources,
+  wordCommentModelOf,
 } from "./wordCommentEnvelope";
 import {
   buildWordCommentMap,
@@ -23,11 +22,8 @@ import {
 } from "./wordCommentMap";
 import {
   wordCommentCaretCoordinates,
-  wordCommentPositionInput,
-  wordCommentPositions,
   wordCommentSelection,
 } from "./wordCommentPositions";
-import { issueWordCommentRefs } from "./wordCommentRefs";
 
 import type {
   WordCommentModel,
@@ -374,27 +370,12 @@ export function wordCommentSendRead(input: {
     (live?.collapsed && live.first !== null
       ? wordCommentCaretCoordinates(live.first)
       : null);
-  const refs = issueWordCommentRefs(
-    input.registry,
-    result.threads,
-    result.legacy,
-  );
-  const positions = wordCommentPositions(
-    result.threads.map((record, i) =>
-      wordCommentPositionInput(record, refs.threads[i].ref),
-    ),
-    { selection },
-  );
-  const model = buildWordCommentModel({
-    sources: wordCommentSources(result.threads, refs, positions),
-    clock: {
-      now: input.now,
-      userTz: input.userTz,
-      host: result.diagnostics.host,
-      dateUtc: result.dateUtc,
-    },
+  const { refs, model } = wordCommentModelOf(result, {
+    registry: input.registry,
+    selection,
     people: input.people,
-    legacy: result.legacy,
+    now: input.now,
+    userTz: input.userTz,
   });
   const atSelection = selection
     ? model.threads

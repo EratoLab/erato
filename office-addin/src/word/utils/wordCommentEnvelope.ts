@@ -7,16 +7,28 @@ import {
 } from "@erato/frontend/word-review";
 
 import { wordCommentMapRow } from "./wordCommentMap";
-import { wordCommentWhere } from "./wordCommentPositions";
+import {
+  wordCommentPositionInput,
+  wordCommentPositions,
+  wordCommentWhere,
+} from "./wordCommentPositions";
+import { issueWordCommentRefs } from "./wordCommentRefs";
 
 import type { WordCommentSections } from "./wordCommentMap";
-import type { WordCommentPosition } from "./wordCommentPositions";
+import type {
+  WordCommentPosition,
+  WordCommentSelectionCoordinates,
+} from "./wordCommentPositions";
 import type {
   WordCommentDateUtc,
   WordCommentEntryRecord,
+  WordCommentReadResult,
   WordCommentThreadRecord,
 } from "./wordCommentReader";
-import type { WordCommentCaptureRefs } from "./wordCommentRefs";
+import type {
+  WordCommentCaptureRefs,
+  WordCommentRefRegistry,
+} from "./wordCommentRefs";
 import type { WordHostPlatform } from "./wordHostPlatform";
 import type {
   WordCommentCoverage,
@@ -355,6 +367,47 @@ export function buildWordCommentModel(input: {
     unplaced,
     legacy: input.legacy === true,
   };
+}
+
+/** A read's threads with refs issued, placed against `selection` and ready to send. */
+export function wordCommentModelOf(
+  result: Extract<WordCommentReadResult, { ok: true }>,
+  input: {
+    registry: WordCommentRefRegistry;
+    selection: WordCommentSelectionCoordinates | null;
+    people: WordCommentPeople;
+    now: Date;
+    userTz: string;
+  },
+): {
+  refs: WordCommentCaptureRefs;
+  sources: WordCommentSource[];
+  model: WordCommentModel;
+} {
+  const refs = issueWordCommentRefs(
+    input.registry,
+    result.threads,
+    result.legacy,
+  );
+  const positions = wordCommentPositions(
+    result.threads.map((record, i) =>
+      wordCommentPositionInput(record, refs.threads[i].ref),
+    ),
+    { selection: input.selection },
+  );
+  const sources = wordCommentSources(result.threads, refs, positions);
+  const model = buildWordCommentModel({
+    sources,
+    clock: {
+      now: input.now,
+      userTz: input.userTz,
+      host: result.diagnostics.host,
+      dateUtc: result.dateUtc,
+    },
+    people: input.people,
+    legacy: result.legacy,
+  });
+  return { refs, sources, model };
 }
 
 function cutText(text: string): { text: string; cut: boolean } {

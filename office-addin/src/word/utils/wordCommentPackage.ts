@@ -39,18 +39,13 @@ export interface WordPackageComment {
   /** Package-local: Word numbers a package's comments afresh. */
   wId: string;
   /**
-   * String(Comment.id); null without a commentsIds entry. Word fills commentsIds with the session's
-   * ids even for a file that has none (gate F2), so this is null only in packages Word did not write.
+   * String(Comment.id); null without a commentsIds entry. Word fills commentsIds even for a file
+   * that has none (gate F2), so this is null only in packages Word did not write; those ids are the
+   * session's on desktop, but not Comment.id on the web.
    */
   commentId: string | null;
   /** The w:id of the comment this one replies to (commentsExtended). */
   parentWId: string | null;
-  /** commentsExtended's done; null when the package has no entry. */
-  done: boolean | null;
-  author: string;
-  initials: string;
-  /** w:date: the author's local time with a fake Z. */
-  date: string | null;
   /** commentsExtensible's dateUtc; null when the file has none for this comment. */
   dateUtc: string | null;
   /** Plain text, paragraphs joined by "\n". */
@@ -77,8 +72,6 @@ export interface WordCommentSpan {
   end: WordCommentEdge | null;
   /** The balloon anchor, where the web shows U+0005. */
   reference: WordCommentEdge | null;
-  /** No visible text of its own: a collapsed range, or a reference alone. */
-  point: boolean;
   /** Starts and ends in different table cells. */
   multiCell: boolean;
 }
@@ -508,16 +501,13 @@ function packageComments(doc: Document): WordPackageComment[] {
     const durableId = hexId(entry.getAttributeNS(W16CID, "durableId"));
     if (paraId && durableId) durableByParaId.set(paraId, durableId);
   }
-  const extended = new Map<string, { parent: string | null; done: boolean }>();
+  const parents = new Map<string, string | null>();
   for (const entry of Array.from(
     doc.getElementsByTagNameNS(W15, "commentEx"),
   )) {
     const paraId = hexId(entry.getAttributeNS(W15, "paraId"));
     if (paraId)
-      extended.set(paraId, {
-        parent: hexId(entry.getAttributeNS(W15, "paraIdParent")),
-        done: entry.getAttributeNS(W15, "done") === "1",
-      });
+      parents.set(paraId, hexId(entry.getAttributeNS(W15, "paraIdParent")));
   }
   const dateUtc = new Map<string, string>();
   for (const entry of Array.from(
@@ -544,17 +534,11 @@ function packageComments(doc: Document): WordPackageComment[] {
   const comments = elements.map((comment, i): WordPackageComment => {
     const paraId = paraIds[i];
     const durableId = paraId ? durableByParaId.get(paraId) : undefined;
-    const thread = paraId ? extended.get(paraId) : undefined;
+    const parent = paraId ? parents.get(paraId) : undefined;
     return {
       wId: attr(comment, "id") ?? "",
       commentId: durableId ? String(parseInt(durableId, 16)) : null,
-      parentWId: thread?.parent
-        ? (wIdByParaId.get(thread.parent) ?? null)
-        : null,
-      done: thread ? thread.done : null,
-      author: attr(comment, "author") ?? "",
-      initials: attr(comment, "initials") ?? "",
-      date: attr(comment, "date"),
+      parentWId: parent ? (wIdByParaId.get(parent) ?? null) : null,
       dateUtc: (durableId && dateUtc.get(durableId)) || null,
       content: commentText(comment),
     };
@@ -574,22 +558,9 @@ function spansOf(
   comments: readonly WordPackageComment[],
 ): WordCommentSpan[] {
   const byWId = new Map(comments.map((comment) => [comment.wId, comment]));
-  const spans = new Map<
-    string,
-    WordCommentSpan & { contentAtStart: number; contentAtEnd: number }
-  >();
-  let content = 0;
+  const spans = new Map<string, WordCommentSpan>();
   placed.forEach(({ paragraph, aligned, view }, index) => {
     paragraph.atoms.forEach((atom, i) => {
-      if (atom.type === "text" || atom.type === "opaque") {
-        if (
-          !atom.hidden &&
-          !atom.deleted &&
-          (atom.type === "opaque" || atom.text.length > 0)
-        )
-          content += 1;
-        return;
-      }
       if (atom.type !== "mark") return;
       const range = aligned ? aligned.at[i] : null;
       const edge: WordCommentEdge = {
@@ -607,41 +578,24 @@ function spansOf(
           start: null,
           end: null,
           reference: null,
-          point: false,
           multiCell: false,
-          contentAtStart: -1,
-          contentAtEnd: -1,
         };
         spans.set(atom.wId, span);
       }
-      if (atom.mark === "start" && !span.start) {
-        span.start = edge;
-        span.contentAtStart = content;
-      } else if (atom.mark === "end" && !span.end) {
-        span.end = edge;
-        span.contentAtEnd = content;
-      } else if (atom.mark === "reference" && !span.reference) {
+      if (atom.mark === "start" && !span.start) span.start = edge;
+      else if (atom.mark === "end" && !span.end) span.end = edge;
+      else if (atom.mark === "reference" && !span.reference)
         span.reference = edge;
-        if (!span.end) span.contentAtEnd = content;
-      }
     });
   });
-  return Array.from(spans.values(), (found) => {
-    const { contentAtStart, contentAtEnd, ...span } = found;
+  return Array.from(spans.values(), (span) => {
     // A reference alone anchors the comment at one point; a start without an end in the same
     // package ends at its reference, or after the package when that is missing too.
     if (!span.start && !span.end && span.reference) {
       span.start = span.reference;
       span.end = span.reference;
-      span.point = true;
-    } else {
-      if (span.start && !span.end && span.reference) span.end = span.reference;
-      span.point =
-        !!span.start &&
-        !!span.end &&
-        span.start.paragraph === span.end.paragraph &&
-        contentAtStart === contentAtEnd;
-    }
+    } else if (span.start && !span.end && span.reference)
+      span.end = span.reference;
     if (span.start && span.end) {
       const first = placed[span.start.paragraph].paragraph.cell;
       const last = placed[span.end.paragraph].paragraph.cell;
@@ -921,22 +875,26 @@ const quoteOf = (text: string) =>
 /** At most `limit` characters from the start, without a cut word at the end when one fits. */
 function head(text: string, limit: number): string {
   if (text.length <= limit) return text;
-  const cut = text.slice(0, limit);
+  let end = limit;
+  const code = text.charCodeAt(end - 1);
+  if (code >= 0xd800 && code <= 0xdbff) end -= 1;
+  const cut = text.slice(0, end);
   const space = cut.search(/\s\S*$/);
   return (
-    /\s/.test(text[limit]) || space <= 0 ? cut : cut.slice(0, space)
+    /\s/.test(text[end]) || space <= 0 ? cut : cut.slice(0, space)
   ).trimEnd();
 }
 
 /** At most `limit` characters from the end, without a cut word at the start when one fits. */
 function tail(text: string, limit: number): string {
   if (text.length <= limit) return text;
-  const cut = text.slice(-limit);
+  let start = text.length - limit;
+  const code = text.charCodeAt(start);
+  if (code >= 0xdc00 && code <= 0xdfff) start += 1;
+  const cut = text.slice(start);
   const space = cut.search(/\s/);
   return (
-    /\s/.test(text[text.length - limit - 1]) ||
-    space < 0 ||
-    space === cut.length - 1
+    /\s/.test(text[start - 1]) || space < 0 || space === cut.length - 1
       ? cut
       : cut.slice(space + 1)
   ).trimStart();
@@ -1019,68 +977,30 @@ export function wordCommentAnchorText(
   return count > 1 ? { quote, occurrence: ours } : { quote };
 }
 
-/** The anchor source of a span the package placed, or an unplaced one from its range text. */
-export function wordCommentSpanSource(
-  read: WordCommentPackageRead,
-  span: WordCommentSpan,
-  rangeText = "",
-): WordCommentAnchorSource {
-  const { start, end } = span;
-  const first = start && read.views[start.paragraph];
-  const last = end && read.views[end.paragraph];
-  if (
-    !start ||
-    !end ||
-    !first ||
-    !last ||
-    start.visible === null ||
-    end.visible === null
-  )
-    return { kind: "unplaced", rangeText };
-  return start.paragraph === end.paragraph
-    ? {
-        kind: "paragraph",
-        visible: first.visibleText,
-        start: start.visible,
-        end: end.visible,
-      }
-    : {
-        kind: "paragraphs",
-        first: first.visibleText,
-        start: start.visible,
-        last: last.visibleText,
-        end: end.visible,
-        ...(span.multiCell ? { multiCell: true } : {}),
-      };
-}
+export type WordCommentPlacedSource = Exclude<
+  WordCommentAnchorSource,
+  { kind: "unplaced" }
+>;
 
 /**
- * The text route in one step (web, and the fallback everywhere): Comment.getRange().text against
- * the first and last paragraph's views. `last` is absent for an anchor inside one paragraph.
+ * The anchor source from a visible offset in the first paragraph to one in the last; `last` is
+ * absent for an anchor inside one paragraph.
  */
-export function wordCommentTextSource(
-  rangeText: string,
-  first: WordParagraphView | null,
-  last?: WordParagraphView | null,
+export function wordCommentSourceBetween(
+  first: WordParagraphView,
+  start: number,
+  last: WordParagraphView | undefined,
+  end: number,
   multiCell = false,
-): WordCommentAnchorSource {
-  const unplaced = { kind: "unplaced", rangeText } as const;
-  if (!first || last === null) return unplaced;
-  const span = wordCommentTextSpan(rangeText, first.rangeText, last?.rangeText);
-  if (!span) return unplaced;
-  if (!last)
-    return {
-      kind: "paragraph",
-      visible: first.visibleText,
-      start: first.visibleAt[span.start],
-      end: first.visibleAt[span.end],
-    };
-  return {
-    kind: "paragraphs",
-    first: first.visibleText,
-    start: first.visibleAt[span.start],
-    last: last.visibleText,
-    end: last.visibleAt[span.end],
-    ...(multiCell ? { multiCell: true } : {}),
-  };
+): WordCommentPlacedSource {
+  return last
+    ? {
+        kind: "paragraphs",
+        first: first.visibleText,
+        start,
+        last: last.visibleText,
+        end,
+        ...(multiCell ? { multiCell: true } : {}),
+      }
+    : { kind: "paragraph", visible: first.visibleText, start, end };
 }

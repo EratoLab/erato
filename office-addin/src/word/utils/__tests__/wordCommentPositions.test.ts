@@ -66,13 +66,6 @@ function positions(
   return Object.fromEntries(wordCommentPositions(threads, { selection }));
 }
 
-const relation =
-  (
-    table: Record<string, string>,
-  ): ((a: string, b: string) => string | undefined) =>
-  (a, b) =>
-    table[`${a}|${b}`];
-
 describe("Annex A position cases", () => {
   // ¶5 "Zahlungsziel 30 Tage" t2p, [sel] ¶12 "Lieferung binnen 14 Tagen", ¶18 t4c.
   const t1 = [
@@ -336,23 +329,6 @@ describe("pos", () => {
     expect([found.x.pos, found.y.pos, found.z.pos]).toEqual([1, 1, 2]);
   });
 
-  it("takes Word's relation where one paragraph's offsets are missing", () => {
-    const threads = [
-      thread("p", at(3, null), 0),
-      thread("q", at(3, null), 1),
-      thread("r", at(3, null), 2),
-    ];
-    const relations = relation({
-      "p|q": "Before",
-      "r|q": "OverlapsBefore",
-      "p|r": "Equal",
-    });
-    const found = Object.fromEntries(
-      wordCommentPositions(threads, { relations }),
-    );
-    expect([found.r.pos, found.p.pos, found.q.pos]).toEqual([1, 1, 2]);
-  });
-
   it("falls back to the read's order, and puts threads without a paragraph last", () => {
     const threads = [
       thread(
@@ -395,13 +371,9 @@ describe("overlaps", () => {
     expect(found.edge.overlaps).toBeUndefined();
   });
 
-  it("asks Word's relation when offsets cannot tell", () => {
+  it("leaves overlaps out when offsets cannot tell", () => {
     const threads = [thread("a", at(3, null), 0), thread("b", at(3, null), 1)];
     expect(positions(threads).a.overlaps).toBeUndefined();
-    const together = wordCommentPositions(threads, {
-      relations: relation({ "b|a": "InsideStart" }),
-    });
-    expect(together.get("a")?.overlaps).toEqual(["b"]);
   });
 });
 

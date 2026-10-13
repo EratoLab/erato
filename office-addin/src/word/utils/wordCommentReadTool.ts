@@ -11,8 +11,7 @@ import {
 import { normalizeParagraphText } from "./buildWordDocumentArgs";
 import {
   buildWordCommentEnvelope,
-  buildWordCommentModel,
-  wordCommentSources,
+  wordCommentModelOf,
   wordCommentUserTimeZone,
 } from "./wordCommentEnvelope";
 import {
@@ -28,10 +27,7 @@ import {
   wordCommentSelection,
 } from "./wordCommentPositions";
 import { readWordComments } from "./wordCommentReader";
-import {
-  issueWordCommentRefs,
-  wordCommentRefRegistry,
-} from "./wordCommentRefs";
+import { wordCommentRefRegistry } from "./wordCommentRefs";
 import { wordHostPlatform } from "./wordHostPlatform";
 
 import type { WordCommentPeople } from "./wordCommentEnvelope";
@@ -121,7 +117,7 @@ export type WordCommentReadRequest = Pick<
 export interface WordCommentReadSessionOptions {
   now?: () => Date;
   userTimeZone?: () => string;
-  readOptions?: Pick<WordCommentReadOptions, "now" | "budgetsMs" | "timeoutMs">;
+  readOptions?: Pick<WordCommentReadOptions, "now">;
 }
 
 /** A thread as a read returns it: the envelope's thread plus what this read added. */
@@ -808,30 +804,14 @@ export class WordCommentReadSession {
     session: Session,
     result: Extract<WordCommentReadResult, { ok: true }>,
   ) {
-    const refs = issueWordCommentRefs(
-      session.registry,
-      result.threads,
-      result.legacy,
-    );
-    const positions = wordCommentPositions(
-      result.threads.map((record, i) =>
-        wordCommentPositionInput(record, refs.threads[i].ref),
-      ),
-      { selection: session.activation.selection ?? null },
-    );
-    const sources = wordCommentSources(result.threads, refs, positions);
     const now = this.options.now?.() ?? new Date();
     const userTz = this.options.userTimeZone?.() ?? wordCommentUserTimeZone();
-    const model = buildWordCommentModel({
-      sources,
-      clock: {
-        now,
-        userTz,
-        host: result.diagnostics.host,
-        dateUtc: result.dateUtc,
-      },
+    const { sources, model } = wordCommentModelOf(result, {
+      registry: session.registry,
+      selection: session.activation.selection ?? null,
       people: session.activation.people ?? { principalEmail: null },
-      legacy: result.legacy,
+      now,
+      userTz,
     });
     return {
       model,

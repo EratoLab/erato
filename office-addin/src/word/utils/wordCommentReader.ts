@@ -4,8 +4,7 @@ import {
   readWordCommentParagraphPackage,
   readWordCommentRangePackage,
   wordCommentAnchorText,
-  wordCommentSpanSource,
-  wordCommentTextSource,
+  wordCommentSourceBetween,
   wordCommentTextSpan,
   wordParagraphViewFromText,
 } from "./wordCommentPackage";
@@ -15,12 +14,12 @@ import { WORD_SELECTION_TEXT_OPTIONS } from "./wordReviewLocation";
 import { withWordTimeout } from "./wordTimeout";
 import { wordWriteHost } from "./wordWriteHost";
 
-import type { WordParagraphRead } from "./buildWordDocumentArgs";
 import type {
   WordCommentAnchorSource,
   WordCommentAnchorText,
   WordCommentJoin,
   WordCommentPackageRead,
+  WordCommentPlacedSource,
   WordCommentSpan,
   WordParagraphTexts,
   WordParagraphView,
@@ -115,21 +114,6 @@ export function wordCommentInventoryFromCapture(
   };
 }
 
-/** The capture's paragraph reads, which also name the headings for section paths. */
-export function wordCommentInventoryFromParagraphs(
-  paragraphs: readonly WordParagraphRead[],
-): WordCommentInventory {
-  return {
-    source: "capture",
-    paragraphs: paragraphs.map((p) => ({
-      ordinal: p.ordinal,
-      id: p.uniqueLocalId,
-      text: p.text,
-      heading: resolveHeadingLevel(p),
-    })),
-  };
-}
-
 /** A thread's comment or one of its replies, as Office.js lists it. */
 export interface WordCommentEntryRecord {
   /** String(id): the decimal durableId, which the web returns as a number (F-2). */
@@ -182,7 +166,7 @@ export interface WordCommentOffsets {
 export type WordCommentPlacement =
   | {
       status: "placed";
-      /** "content" is the legacy fallback the card names "matched by content" (O-17). */
+      /** "content" is the legacy fallback (O-17); it feeds counts.matchedByContent. */
       joinedBy: WordCommentJoin | "text";
       anchor: WordCommentAnchorText;
       /** For a different quote length: wordCommentAnchorText(source, { edgeChars }). */
@@ -369,7 +353,6 @@ export interface WordCommentReadOptions {
    */
   legacy?: boolean | null;
   budgetsMs?: Partial<Record<WordCommentBudgetPhase, number>>;
-  timeoutMs?: number;
   onProgress?: (
     done: number,
     total: number,
@@ -508,12 +491,12 @@ class Session {
     const timing = this.timing;
     if (!timing) return;
     timing.done = done;
-    if (
-      timing.phase === "anchors" ||
-      timing.phase === "replies" ||
-      timing.phase === "exact"
-    )
-      this.onProgress?.(done, timing.total, timing.phase);
+    // Only the anchors, replies and exact phases advance.
+    this.onProgress?.(
+      done,
+      timing.total,
+      timing.phase as WordCommentBudgetPhase,
+    );
   }
 
   end(done?: number) {
@@ -546,14 +529,13 @@ export async function readWordComments(
   if (!word)
     return { ok: false, error: "list: Word is not available", diagnostics };
   const started = now();
-  const timeoutMs = options.timeoutMs ?? WORD_COMMENT_READ_TIMEOUT_MS;
   try {
     const result = await withWordTimeout(
       word.run((context) => {
         session.attach(context);
         return readThreads(context, session, options);
       }),
-      timeoutMs,
+      WORD_COMMENT_READ_TIMEOUT_MS,
       () => new WordCommentReadTimeout(),
     );
     diagnostics.totalMs = Math.round(now() - started);
@@ -625,15 +607,12 @@ async function readThreads(
   const generation = anchors?.cache.generation ?? 0;
   const ids = live.map(({ record }) => record.id);
   if (live.length === 0)
-    return {
-      ok: true,
-      threads: [],
+    return resultOf(diagnostics, [], {
       inventory: options.inventory ?? null,
       legacy: null,
       dateUtc: new PackageNotes().dateUtc(),
       selection: null,
-      diagnostics,
-    };
+    });
 
   const kept =
     anchors?.reuse && options.legacy != null && !options.inventory
@@ -665,14 +644,12 @@ async function readThreads(
   if (selection) await relateSelection(session, sorted, selection);
   const records = sorted.map((thread) => thread.record);
 
-  const asked = requested(
-    options.exact?.(records, selection?.info ?? null) ?? [],
-    sorted,
-  );
-  await readReplies(
+  const asked = await readAskedReplies(
     session,
-    options.replies === "requested" ? asked : sorted,
-    budgets.replies,
+    options,
+    sorted,
+    records,
+    selection?.info ?? null,
   );
   if (options.packages !== false)
     await placeExact(session, sorted, asked, budgets.exact, notes, desktop);
@@ -685,12 +662,6 @@ async function readThreads(
     }
   }
 
-  diagnostics.legacy = legacy;
-  diagnostics.replies = records.reduce(
-    (sum, record) => sum + (record.replies?.length ?? 0),
-    0,
-  );
-  countOutcomes(diagnostics.counts, records);
   const dateUtc = notes.dateUtc();
   if (
     anchors &&
@@ -709,13 +680,53 @@ async function readThreads(
       })),
       dateUtc,
     };
-  return {
-    ok: true,
-    threads: records,
+  return resultOf(diagnostics, records, {
     inventory,
     legacy,
     dateUtc,
     selection: selection?.info ?? null,
+  });
+}
+
+/** Replies for every thread, or only for those `exact` names; returns the threads it names. */
+async function readAskedReplies(
+  session: Session,
+  options: WordCommentReadOptions,
+  sorted: readonly Live[],
+  records: readonly WordCommentThreadRecord[],
+  selection: WordCommentLiveSelection | null,
+): Promise<Live[]> {
+  const budgets = { ...WORD_COMMENT_READ_BUDGETS_MS, ...options.budgetsMs };
+  const asked = requested(options.exact?.(records, selection) ?? [], sorted);
+  await readReplies(
+    session,
+    options.replies === "requested" ? asked : sorted,
+    budgets.replies,
+  );
+  return asked;
+}
+
+function resultOf(
+  diagnostics: WordCommentReadDiagnostics,
+  records: WordCommentThreadRecord[],
+  read: Pick<
+    Extract<WordCommentReadResult, { ok: true }>,
+    "inventory" | "legacy" | "dateUtc" | "selection"
+  >,
+): WordCommentReadResult {
+  diagnostics.legacy = read.legacy;
+  diagnostics.replies = records.reduce(
+    (sum, record) => sum + (record.replies?.length ?? 0),
+    0,
+  );
+  countOutcomes(diagnostics.counts, records);
+  return {
+    ok: true,
+    threads: records,
+    inventory: read.inventory,
+    legacy: read.legacy,
+    dateUtc: read.dateUtc,
+    selection: read.selection,
     diagnostics,
   };
 }
@@ -770,7 +781,6 @@ async function readFromKept(
   kept: WordCommentAnchorSnapshot,
 ): Promise<WordCommentReadResult> {
   const { diagnostics } = session;
-  const budgets = { ...WORD_COMMENT_READ_BUDGETS_MS, ...options.budgetsMs };
   const { inventory } = kept;
   diagnostics.inventory = inventory.source;
   live.forEach(({ record }, i) => {
@@ -804,39 +814,28 @@ async function readFromKept(
     await relateSelection(session, sorted, selection);
   }
   const records = sorted.map((thread) => thread.record);
-  const asked = requested(
-    options.exact?.(records, selection?.info ?? null) ?? [],
-    sorted,
-  );
-  await readReplies(
+  await readAskedReplies(
     session,
-    options.replies === "requested" ? asked : sorted,
-    budgets.replies,
+    options,
+    sorted,
+    records,
+    selection?.info ?? null,
   );
-  const legacy = options.legacy ?? null;
-  diagnostics.legacy = legacy;
-  diagnostics.replies = records.reduce(
-    (sum, record) => sum + (record.replies?.length ?? 0),
-    0,
-  );
-  countOutcomes(diagnostics.counts, records);
-  return {
-    ok: true,
-    threads: records,
+  return resultOf(diagnostics, records, {
     inventory,
-    legacy,
+    legacy: options.legacy ?? null,
     dateUtc: kept.dateUtc,
     selection: selection?.info ?? null,
-    diagnostics,
-  };
+  });
 }
 
 /**
  * A file without commentsIds has no stable ids (F-2a), yet every host's paragraph package carries
- * commentsIds with the session's ids (gate F2), so their absence never shows. A file without
- * commentsIds has no commentsExtensible either, as dateUtc is keyed by durableId, and Word invents
- * no dateUtc: a file without any is taken as legacy. A modern file whose comments all lack one, as
- * older Word versions write them, is taken as legacy too, and its threads are named by content.
+ * commentsIds (gate F2), so their absence never shows: the session's ids on desktop, ids other than
+ * Comment.id on the web. A file without commentsIds has no commentsExtensible either, as dateUtc
+ * is keyed by durableId, and Word invents no dateUtc: a file without any is taken as legacy. A
+ * modern file whose comments all lack one, as older Word versions write them, is taken as legacy
+ * too, and its threads are named by content.
  */
 function wordCommentLegacy(dated: {
   withUtc: number;
@@ -1673,11 +1672,10 @@ function notPlaced(
 }
 
 function placedFrom(
-  source: WordCommentAnchorSource,
+  source: WordCommentPlacedSource,
   offsets: WordCommentOffsets,
   joinedBy: WordCommentJoin | "text",
-): WordCommentPlacement | null {
-  if (source.kind === "unplaced") return null;
+): WordCommentPlacement {
   return {
     status: "placed",
     joinedBy,
@@ -1696,11 +1694,14 @@ function placeBySpan(
 ): WordCommentPlacement | null {
   const span = spans.find((s) => s.commentId === thread.record.id);
   const { start, end } = span ?? {};
+  const first = start && read?.views[start.paragraph];
+  const last = end && read?.views[end.paragraph];
   if (
-    !read ||
     !span ||
     !start ||
     !end ||
+    !first ||
+    !last ||
     start.range === null ||
     start.visible === null ||
     end.range === null ||
@@ -1708,7 +1709,13 @@ function placeBySpan(
   )
     return null;
   return placedFrom(
-    wordCommentSpanSource(read, span, thread.record.anchor?.rangeText),
+    wordCommentSourceBetween(
+      first,
+      start.visible,
+      start.paragraph === end.paragraph ? undefined : last,
+      end.visible,
+      span.multiCell,
+    ),
     {
       start: { range: start.range, visible: start.visible },
       end: { range: end.range, visible: end.visible },
@@ -1742,12 +1749,13 @@ function placeByText(
     last?.rangeText,
   );
   if (!span) return null;
-  const end = last ?? first;
+  const start = first.visibleAt[span.start];
+  const end = (last ?? first).visibleAt[span.end];
   return placedFrom(
-    wordCommentTextSource(anchor.rangeText, first, last, multiCell(anchor)),
+    wordCommentSourceBetween(first, start, last, end, multiCell(anchor)),
     {
-      start: { range: span.start, visible: first.visibleAt[span.start] },
-      end: { range: span.end, visible: end.visibleAt[span.end] },
+      start: { range: span.start, visible: start },
+      end: { range: span.end, visible: end },
     },
     "text",
   );

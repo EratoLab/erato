@@ -40,7 +40,7 @@ export interface WordCommentPositionInput {
   ref: string;
   at: WordCommentCoordinates;
   in: WordCommentContainer;
-  /** The read's document order, for what neither coordinates nor relations decide. */
+  /** The read's document order, for what the coordinates do not decide. */
   order: number;
   /** The anchor's compareLocationWith the selection Word had at the read, for what offsets cannot decide. */
   selection?: string;
@@ -56,9 +56,6 @@ export interface WordCommentSelectionCoordinates {
   caret?: true;
 }
 
-/** a.compareLocationWith(b) for two threads' anchors, as Word.LocationRelation names it. */
-export type WordCommentRelations = (a: string, b: string) => string | undefined;
-
 export interface WordCommentPosition {
   /** Dense and 1-based; threads whose anchors start at the same place share it. */
   pos: number;
@@ -67,40 +64,6 @@ export interface WordCommentPosition {
   in: WordCommentContainer;
   overlaps?: string[];
 }
-
-const BEFORE: ReadonlySet<string> = new Set([
-  "Before",
-  "AdjacentBefore",
-  "OverlapsBefore",
-  "Contains",
-  "ContainsEnd",
-  "InsideStart",
-]);
-const AFTER: ReadonlySet<string> = new Set([
-  "After",
-  "AdjacentAfter",
-  "OverlapsAfter",
-  "Inside",
-  "InsideEnd",
-  "ContainsStart",
-]);
-const APART: ReadonlySet<string> = new Set([
-  "Before",
-  "After",
-  "AdjacentBefore",
-  "AdjacentAfter",
-]);
-const TOGETHER: ReadonlySet<string> = new Set([
-  "Equal",
-  "Contains",
-  "ContainsStart",
-  "ContainsEnd",
-  "Inside",
-  "InsideStart",
-  "InsideEnd",
-  "OverlapsBefore",
-  "OverlapsAfter",
-]);
 
 interface Point {
   para: number;
@@ -292,42 +255,13 @@ function awayOf(anchor: Span, selection: WordCommentSelectionCoordinates) {
   return 0;
 }
 
-function relationOf(
-  relations: WordCommentRelations | undefined,
-  a: string,
-  b: string,
-): string | undefined {
-  const forward = relations?.(a, b);
-  if (forward !== undefined) return forward;
-  const backward = relations?.(b, a);
-  if (backward === undefined) return undefined;
-  const mirror: Record<string, string> = {
-    Before: "After",
-    After: "Before",
-    AdjacentBefore: "AdjacentAfter",
-    AdjacentAfter: "AdjacentBefore",
-    OverlapsBefore: "OverlapsAfter",
-    OverlapsAfter: "OverlapsBefore",
-    Contains: "Inside",
-    Inside: "Contains",
-    ContainsStart: "InsideStart",
-    InsideStart: "ContainsStart",
-    ContainsEnd: "InsideEnd",
-    InsideEnd: "ContainsEnd",
-    Equal: "Equal",
-  };
-  return mirror[backward];
-}
-
 /**
- * Document order of anchor starts: paragraph, then offset; where one paragraph's offsets are
- * missing or equal, Word's relation between the two anchors; then the shorter anchor first. Zero
+ * Document order of anchor starts: paragraph, then offset, then the shorter anchor first. Zero
  * means the same place. Only what none of these decide falls back to the read's order.
  */
 function compareStarts(
   a: WordCommentPositionInput,
   b: WordCommentPositionInput,
-  relations: WordCommentRelations | undefined,
 ): number {
   const x = a.at;
   const y = b.at;
@@ -337,12 +271,6 @@ function compareStarts(
     return x.first - y.first;
   const placed = x.first !== null && x.start !== null && y.start !== null;
   if (placed && x.start !== y.start) return x.start! - y.start!;
-  const relation = relationOf(relations, a.ref, b.ref);
-  if (relation !== undefined) {
-    if (relation === "Equal") return 0;
-    if (BEFORE.has(relation)) return -1;
-    if (AFTER.has(relation)) return 1;
-  }
   const xs = spanOf(x);
   const ys = spanOf(y);
   if (placed && xs && ys) {
@@ -364,7 +292,6 @@ function overlap(a: Span, b: Span): boolean | undefined {
 
 function overlapsOf(
   threads: readonly WordCommentPositionInput[],
-  relations: WordCommentRelations | undefined,
 ): Map<string, string[]> {
   const spans = threads
     .map((thread) => ({ ref: thread.ref, span: spanOf(thread.at) }))
@@ -381,16 +308,7 @@ function overlapsOf(
     ) {
       const a = spans[i];
       const b = spans[j];
-      let together = overlap(a.span, b.span);
-      if (together === undefined) {
-        const relation = relationOf(relations, a.ref, b.ref);
-        together =
-          relation === undefined
-            ? undefined
-            : TOGETHER.has(relation) ||
-              (APART.has(relation) ? false : undefined);
-      }
-      if (!together) continue;
+      if (!overlap(a.span, b.span)) continue;
       add(a.ref, b.ref);
       add(b.ref, a.ref);
     }
@@ -398,19 +316,16 @@ function overlapsOf(
 }
 
 /**
- * Positions for every thread of the document. `relations` decide what offsets cannot, such as two
- * anchors in one paragraph without exact offsets; without them the read's order does.
+ * Positions for every thread of the document. What offsets cannot decide, such as two anchors in
+ * one paragraph without exact offsets, the read's order does.
  */
 export function wordCommentPositions(
   threads: readonly WordCommentPositionInput[],
-  options: {
-    selection?: WordCommentSelectionCoordinates | null;
-    relations?: WordCommentRelations;
-  } = {},
+  options: { selection?: WordCommentSelectionCoordinates | null } = {},
 ): Map<string, WordCommentPosition> {
-  const { selection, relations } = options;
+  const { selection } = options;
   const sorted = [...threads].sort(
-    (a, b) => compareStarts(a, b, relations) || a.order - b.order,
+    (a, b) => compareStarts(a, b) || a.order - b.order,
   );
   const ranks = new Map<string, number>();
   sorted.forEach((thread, i) => {
@@ -418,10 +333,10 @@ export function wordCommentPositions(
     const rank = !previous
       ? 1
       : ranks.get(previous.ref)! +
-        (compareStarts(previous, thread, relations) === 0 ? 0 : 1);
+        (compareStarts(previous, thread) === 0 ? 0 : 1);
     ranks.set(thread.ref, rank);
   });
-  const overlaps = overlapsOf(threads, relations);
+  const overlaps = overlapsOf(threads);
   for (const refs of overlaps.values())
     refs.sort((a, b) => ranks.get(a)! - ranks.get(b)!);
   const positions = new Map<string, WordCommentPosition>();

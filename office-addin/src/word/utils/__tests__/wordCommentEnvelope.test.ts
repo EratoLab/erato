@@ -14,19 +14,12 @@ import {
   WORD_COMMENT_DAY_UNCERTAIN_HOURS,
   buildWordCommentEnvelope,
   buildWordCommentModel,
-  wordCommentSources,
+  wordCommentModelOf,
   wordCommentUtcTime,
 } from "../wordCommentEnvelope";
-import {
-  wordCommentPositionInput,
-  wordCommentPositions,
-  wordCommentSelection,
-} from "../wordCommentPositions";
+import { wordCommentSelection } from "../wordCommentPositions";
 import { readWordComments } from "../wordCommentReader";
-import {
-  createWordCommentRefRegistry,
-  issueWordCommentRefs,
-} from "../wordCommentRefs";
+import { createWordCommentRefRegistry } from "../wordCommentRefs";
 
 import type { CommentHostFlavour } from "../../../test/mocks/word/commentHost";
 import type {
@@ -571,30 +564,15 @@ describe("the ERMAIN-947 fixture end to end", () => {
       exact: () => [host.commentId("T1"), host.commentId("T5")],
     });
     if (!result.ok) throw new Error(result.error);
-    const refs = issueWordCommentRefs(
-      createWordCommentRefRegistry("doc"),
-      result.threads,
-      result.legacy,
-    );
-    const positions = wordCommentPositions(
-      result.threads.map((t, i) =>
-        wordCommentPositionInput(t, refs.threads[i].ref),
-      ),
-      { selection: coordinates },
-    );
-    const built = buildWordCommentModel({
-      sources: wordCommentSources(result.threads, refs, positions),
-      clock: {
-        now: NOW,
-        userTz: BERLIN,
-        host: flavour === "web" ? "OfficeOnline" : "PC",
-        dateUtc: result.dateUtc,
-      },
+    const { refs, model: built } = wordCommentModelOf(result, {
+      registry: createWordCommentRefRegistry("doc"),
+      selection: coordinates,
       people: {
         principalEmail: "maya.kruger@contoso.test",
         label: "Erato AI:",
       },
-      legacy: result.legacy,
+      now: NOW,
+      userTz: BERLIN,
     });
     const refOf = (key: string) =>
       refs.threads.find((t) => t.commentId === host.commentId(key))!.ref;

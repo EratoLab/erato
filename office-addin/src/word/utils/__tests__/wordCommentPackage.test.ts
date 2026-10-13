@@ -15,8 +15,7 @@ import {
   readWordCommentParagraphPackage,
   readWordCommentRangePackage,
   wordCommentAnchorText,
-  wordCommentSpanSource,
-  wordCommentTextSource,
+  wordCommentSourceBetween,
   wordCommentTextSpan,
   wordParagraphViewFromText,
 } from "../wordCommentPackage";
@@ -28,6 +27,7 @@ import type {
 import type {
   WordCommentPackageRead,
   WordCommentSpan,
+  WordParagraphView,
 } from "../wordCommentPackage";
 
 const HOSTS: readonly V3cHost[] = ["desktop", "web"];
@@ -67,8 +67,22 @@ const truth = (key: string) => ({
   end: V3C_ANCHORS[key].end,
 });
 
-const anchorOf = (read: WordCommentPackageRead, key: string) =>
-  wordCommentAnchorText(wordCommentSpanSource(read, spanOf(read, key)));
+function anchorOf(read: WordCommentPackageRead, key: string) {
+  const { start, end, multiCell } = spanOf(read, key);
+  const first = start && read.views[start.paragraph];
+  const last = end && read.views[end.paragraph];
+  if (!first || !last || start.visible === null || end.visible === null)
+    throw new Error(`${key} has no visible offsets`);
+  return wordCommentAnchorText(
+    wordCommentSourceBetween(
+      first,
+      start.visible,
+      start.paragraph === end.paragraph ? undefined : last,
+      end.visible,
+      multiCell,
+    ),
+  );
+}
 
 describe("readWordCommentParagraphPackage", () => {
   it.each(HOSTS)(
@@ -91,17 +105,13 @@ describe("readWordCommentParagraphPackage", () => {
     },
   );
 
-  it("names the comments' authors, dates, threads and done flags", () => {
+  it("names the comments' threads and UTC dates", () => {
     const read = readParagraph("T1P", "web");
     expect(read.comments).toEqual([
       {
         wId: "0",
         commentId: "1332042173",
         parentWId: null,
-        done: false,
-        author: "Maya Krüger",
-        initials: "MK",
-        date: "2026-09-03T10:15:30Z",
         dateUtc: "2026-09-03T08:15:30Z",
         content: "T1 root: please check the alpha bravo wording.",
       },
@@ -119,11 +129,11 @@ describe("readWordCommentParagraphPackage", () => {
     ]);
   });
 
-  it("reads a resolved thread's done flags (T2)", () => {
+  it("places a resolved thread (T2)", () => {
     const read = readParagraph("T2P", "desktop");
-    expect(read.comments.map((c) => [c.commentId, c.done])).toEqual([
-      [v3cCommentId("T2"), true],
-      [v3cCommentId("R2a"), true],
+    expect(read.comments.map((c) => c.commentId)).toEqual([
+      v3cCommentId("T2"),
+      v3cCommentId("R2a"),
     ]);
     expect(visible(spanOf(read, "T2"))).toEqual(truth("T2"));
   });
@@ -149,7 +159,6 @@ describe("readWordCommentParagraphPackage", () => {
       (collapsedPoints) => {
         const read = readParagraph("T5P", host, { collapsedPoints });
         const span = spanOf(read, "T5");
-        expect(span.point).toBe(true);
         expect(visible(span)).toEqual(truth("T5"));
         expect(span.reference?.visible).toBe(28);
         expect(read.comments[0].dateUtc).toBeNull();
@@ -166,10 +175,8 @@ describe("readWordCommentParagraphPackage", () => {
       expect(read.spans.map((s) => s.commentId)).toEqual(
         ["T6", "T7", "T7b"].map(v3cCommentId),
       );
-      for (const key of ["T6", "T7", "T7b"]) {
+      for (const key of ["T6", "T7", "T7b"])
         expect(visible(spanOf(read, key))).toEqual(truth(key));
-        expect(spanOf(read, key).point).toBe(false);
-      }
       expect(anchorOf(read, "T6")).toEqual({
         quote: "lima mike november oscar",
       });
@@ -214,11 +221,7 @@ describe("readWordCommentParagraphPackage", () => {
         "T3",
       );
       expect(first.start).toEqual({ paragraph: 0, range: 25, visible: 25 });
-      expect([first.end, first.reference, first.point]).toEqual([
-        null,
-        null,
-        false,
-      ]);
+      expect([first.end, first.reference]).toEqual([null, null]);
       const last = spanOf(
         readParagraph("T3C", host, { openMarks: true }),
         "T3",
@@ -301,20 +304,13 @@ describe("readWordCommentParagraphPackage", () => {
   });
 
   describe("when the views cannot be mapped", () => {
-    it("keeps the join but no offsets, and the anchor is position unknown", () => {
+    it("keeps the join but no offsets", () => {
       const read = readWordCommentParagraphPackage(v3cParagraphPackage("T1P"), {
         rangeText: "T1P Thread one anchor alpha bravo charlie, edited.",
       });
       expect(read?.views).toEqual([null]);
       const span = read && spanOf(read, "T1");
       expect(span?.start).toEqual({ paragraph: 0, range: null, visible: null });
-      expect(
-        read &&
-          span &&
-          wordCommentAnchorText(
-            wordCommentSpanSource(read, span, "alpha bravo\u0005"),
-          ),
-      ).toEqual({ quote: "alpha bravo", position: "unknown" });
     });
 
     it("refuses a visible view that does not spell the identity text", () => {
@@ -441,7 +437,6 @@ describe("readWordCommentRangePackage", () => {
     expect(span).toMatchObject({
       start: { paragraph: 0, range: 25, visible: 25 },
       end: { paragraph: 2, range: 13, visible: 13 },
-      point: false,
       multiCell: false,
     });
     expect(read && anchorOf(read, "T3")).toEqual({
@@ -544,12 +539,34 @@ describe("wordCommentTextSpan", () => {
   });
 });
 
-describe("wordCommentTextSource", () => {
+describe("the text route", () => {
   const view = (tag: string, host: V3cHost) =>
     wordParagraphViewFromText(texts(tag, host));
 
+  function textSource(
+    rangeText: string,
+    first: WordParagraphView | null,
+    last?: WordParagraphView | null,
+    multiCell = false,
+  ) {
+    if (!first || last === null) throw new Error("no view");
+    const span = wordCommentTextSpan(
+      rangeText,
+      first.rangeText,
+      last?.rangeText,
+    );
+    if (!span) throw new Error("no text span");
+    return wordCommentSourceBetween(
+      first,
+      first.visibleAt[span.start],
+      last,
+      (last ?? first).visibleAt[span.end],
+      multiCell,
+    );
+  }
+
   it("places T3 on the web from text alone", () => {
-    const source = wordCommentTextSource(
+    const source = textSource(
       "foxtrot.\rT3B Middle span paragraph golf.\rT3C Last span\u0005",
       view("T3A", "web"),
       view("T3C", "web"),
@@ -561,7 +578,7 @@ describe("wordCommentTextSource", () => {
   });
 
   it("places T14 across cells on the web", () => {
-    const source = wordCommentTextSource(
+    const source = textSource(
       "start sigma\rXC2 Cross cell end\u0005",
       view("XC1", "web"),
       view("XC2", "web"),
@@ -575,16 +592,13 @@ describe("wordCommentTextSource", () => {
 
   it("places a single-paragraph anchor in visible offsets", () => {
     expect(
-      wordCommentTextSource(
-        "oscar\u0005 papa quebec\u0005",
-        view("T6P", "web"),
-      ),
+      textSource("oscar\u0005 papa quebec\u0005", view("T6P", "web")),
     ).toMatchObject({ kind: "paragraph", start: 31, end: 48 });
   });
 
   it("counts offsets in UTF-16 units past an emoji", () => {
     const rangeText = "Ok \u{1F44D} alpha bravo\u0005 end.";
-    const source = wordCommentTextSource(
+    const source = textSource(
       "alpha bravo\u0005",
       wordParagraphViewFromText({
         rangeText,
@@ -595,16 +609,8 @@ describe("wordCommentTextSource", () => {
     expect(wordCommentAnchorText(source)).toEqual({ quote: "alpha bravo" });
   });
 
-  it("is unplaced where text alone cannot map a paragraph's views (T9)", () => {
+  it("cannot map a paragraph's views from text alone past a tracked deletion (T9)", () => {
     expect(view("T9P", "desktop")).toBeNull();
-    const source = wordCommentTextSource(
-      "uniform victor",
-      view("T9P", "desktop"),
-    );
-    expect(wordCommentAnchorText(source)).toEqual({
-      quote: "uniform victor",
-      position: "unknown",
-    });
   });
 });
 
@@ -685,6 +691,29 @@ describe("wordCommentAnchorText", () => {
         { edgeChars: 20 },
       ),
     ).toEqual({ quote: "Die Lieferfrist…Frist von 14 Tagen." });
+  });
+
+  it("never leaves half an emoji at a cut end", () => {
+    expect(
+      wordCommentAnchorText(
+        {
+          kind: "paragraphs",
+          first: "ab\u{1F44D}cd",
+          start: 0,
+          last: "wx\u{1F44D}yz",
+          end: 6,
+        },
+        { edgeChars: 3 },
+      ),
+    ).toEqual({ quote: "ab…yz" });
+    expect(
+      wordCommentAnchorText({
+        kind: "paragraph",
+        visible: `ab\u{1F44D}${"y".repeat(19)} end.`,
+        start: 23,
+        end: 23,
+      }),
+    ).toEqual({ quote: "", point: true, after: "y".repeat(19) });
   });
 
   it("quotes an unplaced multi-paragraph range by its first and last line", () => {

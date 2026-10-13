@@ -11,10 +11,7 @@ import {
   uninstallWordCommentHost,
 } from "../../../test/mocks/word/commentHost";
 import { buildWordDocumentArgs } from "../buildWordDocumentArgs";
-import {
-  buildWordCommentModel,
-  wordCommentSources,
-} from "../wordCommentEnvelope";
+import { wordCommentModelOf } from "../wordCommentEnvelope";
 import {
   WORD_COMMENT_MAP_PAGE_ROWS,
   WORD_COMMENT_MAP_SECTION_CHARS,
@@ -28,15 +25,8 @@ import {
   wordCommentMapRow,
   wordCommentSections,
 } from "../wordCommentMap";
-import {
-  wordCommentPositionInput,
-  wordCommentPositions,
-} from "../wordCommentPositions";
 import { readWordComments } from "../wordCommentReader";
-import {
-  createWordCommentRefRegistry,
-  issueWordCommentRefs,
-} from "../wordCommentRefs";
+import { createWordCommentRefRegistry } from "../wordCommentRefs";
 
 import type { CommentHostFlavour } from "../../../test/mocks/word/commentHost";
 import type {
@@ -323,27 +313,12 @@ describe("the ERMAIN-947 fixture's map", () => {
     });
     const result = await readWordComments({ ...options, now: host.now });
     if (!result.ok) throw new Error(result.error);
-    const refs = issueWordCommentRefs(
-      createWordCommentRefRegistry("doc"),
-      result.threads,
-      result.legacy,
-    );
-    const positions = wordCommentPositions(
-      result.threads.map((t, i) =>
-        wordCommentPositionInput(t, refs.threads[i].ref),
-      ),
-    );
-    const model = buildWordCommentModel({
-      sources: wordCommentSources(result.threads, refs, positions),
-      clock: {
-        now: NOW,
-        userTz: "Europe/Berlin",
-        host:
-          flavour === "web" ? "OfficeOnline" : flavour === "mac" ? "Mac" : "PC",
-        dateUtc: result.dateUtc,
-      },
+    const { refs, model } = wordCommentModelOf(result, {
+      registry: createWordCommentRefRegistry("doc"),
+      selection: null,
       people: { principalEmail: null },
-      legacy: result.legacy,
+      now: NOW,
+      userTz: "Europe/Berlin",
     });
     const map = buildWordCommentMap({
       model,
