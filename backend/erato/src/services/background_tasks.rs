@@ -34,6 +34,8 @@ use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 const MAX_EVENT_HISTORY: usize = 10_000;
 const SHARED_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const DRAIN_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const CLIENT_TRANSPORT_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const LIVE_SUBMISSION_RECONNECT_GRACE: Duration = Duration::from_secs(15);
 
 pub(crate) fn owner_pod() -> String {
     std::env::var("POD_NAME")
@@ -1545,32 +1547,46 @@ impl StreamingTask {
         )
     }
 
-    pub async fn wait_for_client_disconnect(&self) {
-        loop {
-            let connected = if self.shared_transport.load(Ordering::Acquire) {
-                if let Some(db) = &self.db {
-                    match crate::services::client_operations::transport::owner(
-                        db,
-                        self.generation_id,
-                    )
-                    .await
-                    {
-                        Ok(owner) => matches!(owner, Some(Some(_))),
-                        Err(error) => {
-                            tracing::warn!(%error, "Cannot determine client transport connectivity");
-                            true
-                        }
-                    }
-                } else {
-                    self.original_transport_connected.load(Ordering::Acquire)
+    pub async fn client_transport_connected(&self) -> bool {
+        if self.shared_transport.load(Ordering::Acquire)
+            && let Some(db) = &self.db
+        {
+            return match crate::services::client_operations::transport::owner(
+                db,
+                self.generation_id,
+            )
+            .await
+            {
+                Ok(owner) => matches!(owner, Some(Some(_))),
+                Err(error) => {
+                    tracing::warn!(%error, "Cannot determine client transport connectivity");
+                    true
                 }
-            } else {
-                self.original_transport_connected.load(Ordering::Acquire)
             };
-            if !connected {
+        }
+        self.original_transport_connected.load(Ordering::Acquire)
+    }
+
+    pub async fn wait_for_client_disconnect(&self) {
+        while self.client_transport_connected().await {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    pub async fn wait_for_client_transport_loss(&self) {
+        let mut disconnected_since = None;
+        loop {
+            if self.client_transport_connected().await {
+                disconnected_since = None;
+            } else if disconnected_since
+                .get_or_insert_with(tokio::time::Instant::now)
+                .elapsed()
+                >= LIVE_SUBMISSION_RECONNECT_GRACE
+            {
                 return;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            // A running submission can still POST its result while SSE reconnects.
+            tokio::time::sleep(CLIENT_TRANSPORT_POLL_INTERVAL).await;
         }
     }
 
@@ -1869,7 +1885,12 @@ impl ClientStreamGuard {
                 owned.store(true, Ordering::Release);
             }
             loop {
-                tokio::time::sleep(crate::services::client_operations::transport::HEARTBEAT).await;
+                let interval = if owned.load(Ordering::Acquire) {
+                    crate::services::client_operations::transport::HEARTBEAT
+                } else {
+                    CLIENT_TRANSPORT_POLL_INTERVAL
+                };
+                tokio::time::sleep(interval).await;
                 if original
                     .as_ref()
                     .is_some_and(|task| task.upgrade().is_none_or(|task| task.is_completed()))

@@ -5217,6 +5217,8 @@ fn default_durable_claim_lease_secs() -> u64 {
 pub enum ClientToolHostContext {
     /// The Outlook add-in's signed-in mailbox.
     OutlookMailbox,
+    /// A Word document and the pane instance holding its capture.
+    WordDocument,
 }
 
 impl ClientToolHostContext {
@@ -5224,6 +5226,7 @@ impl ClientToolHostContext {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::OutlookMailbox => "outlook_mailbox",
+            Self::WordDocument => "word_document",
         }
     }
 }

@@ -2,7 +2,7 @@ use super::*;
 use futures::StreamExt;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 
-async fn serve(state: &erato::state::AppState) -> (String, tokio::task::JoinHandle<()>) {
+pub(super) async fn serve(state: &erato::state::AppState) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}/api/v1beta", listener.local_addr().unwrap());
     let app = router(state.clone())
@@ -29,7 +29,7 @@ fn interactive(base: &str, path: &str) -> reqwest::RequestBuilder {
         )
 }
 
-async fn next_call<S, B>(stream: &mut S) -> (Uuid, String)
+pub(super) async fn next_call<S, B>(stream: &mut S) -> (Uuid, String)
 where
     S: futures::Stream<Item = Result<B, reqwest::Error>> + Unpin,
     B: AsRef<[u8]>,
@@ -56,7 +56,7 @@ where
     .expect("live client call")
 }
 
-async fn wait_park(setup: &Setup, count: usize) -> OperationRequest {
+pub(super) async fn wait_park(setup: &Setup, count: usize) -> OperationRequest {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let rows = chat_attempts(&setup.state, setup.chat_id).await;

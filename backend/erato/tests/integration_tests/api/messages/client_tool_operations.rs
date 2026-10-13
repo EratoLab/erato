@@ -185,6 +185,7 @@ fn failed_result(request: &OperationRequest, message: &str) -> OperationResult {
         outcome: OperationOutcome::Failed,
         result: None,
         error: Some(OperationError {
+            validation: None,
             code: "execution_failed".into(),
             message: Some(message.into()),
         }),
@@ -1206,3 +1207,5 @@ async fn opted_in_tool_without_a_binding_keeps_the_legacy_path(pool: Pool<Postgr
 }
 
 mod attached;
+
+mod word;

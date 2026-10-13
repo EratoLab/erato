@@ -29,6 +29,33 @@ const page = (result: ClientToolExecutionResult): Page => {
   return result.result as Page;
 };
 describe("bounded body read session", () => {
+  it("rejects a read when its capture is lost during asynchronous work without recapturing", async () => {
+    const snapshot = captureWordAuthoringSnapshot(
+      packageXml(paragraph("Private")),
+      "doc",
+      "Off",
+    );
+    const session = new WordDocumentReadSession();
+    let finish!: () => void;
+    const budget = new Promise<undefined>((resolve) => {
+      finish = () => resolve(undefined);
+    });
+    session.activate(snapshot, context, () => budget);
+    const pending = session.execute({ snapshot: snapshot.token }, context);
+    session.clear();
+    finish();
+    const result = await pending;
+    expect(result).toMatchObject({
+      ok: false,
+      submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+    });
+    expect(JSON.stringify(result)).not.toContain("Private");
+    expect(session.snapshotForSubmission(context)).toBeUndefined();
+    expect(
+      await session.execute({ snapshot: snapshot.token }, context),
+    ).toMatchObject({ ok: false });
+  });
+
   it.each([undefined, null, ""])(
     "recovers a stale first-page token with cursor %s inside the bound request",
     async (cursor) => {
