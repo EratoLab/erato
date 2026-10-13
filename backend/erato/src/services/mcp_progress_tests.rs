@@ -210,6 +210,7 @@ async fn progress_arrives_before_results_over_both_transports() {
         ("http-b", "streamable_http", "mcp"),
     ] {
         let mut entry = super::tests::server_config(None, vec![]);
+        entry.protocol_mode = crate::config::McpProtocolMode::Legacy;
         entry.transport_type = transport.to_owned();
         entry.url = format!("http://{address}/{path}");
         config.mcp_servers.insert(id.to_owned(), entry);
@@ -315,6 +316,7 @@ async fn serve(app: Router) -> (std::net::SocketAddr, tokio::task::JoinHandle<()
 
 fn streamable(address: std::net::SocketAddr, path: &str) -> McpServerConfig {
     let mut entry = super::tests::server_config(None, vec![]);
+    entry.protocol_mode = crate::config::McpProtocolMode::Legacy;
     entry.transport_type = "streamable_http".to_owned();
     entry.url = format!("http://{address}/{path}");
     entry

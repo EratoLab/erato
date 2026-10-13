@@ -320,6 +320,7 @@ async fn test_approval_continuation_completes_in_teams(pool: Pool<Postgres>) {
     app_config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
         erato::config::McpServerConfig {
+            protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
             http_headers: None,
