@@ -445,6 +445,13 @@ describe("helpers", () => {
     expect(short).toMatch(/^alpha alpha alpha.*….*omega$/);
     expect(wordCommentShortQuote("short", 20)).toBe("short");
   });
+
+  it("never cuts a quote's ends inside an emoji", () => {
+    const quote = `${"a".repeat(19)}😀${"b".repeat(30)}😀${"c".repeat(19)}`;
+    expect(wordCommentShortQuote(quote, 20)).toBe(
+      `${"a".repeat(19)}…${"c".repeat(19)}`,
+    );
+  });
 });
 
 describe("the ERMAIN-947 fixture through the reader", () => {

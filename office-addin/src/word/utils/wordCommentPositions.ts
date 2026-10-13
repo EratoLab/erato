@@ -365,8 +365,14 @@ export function wordCommentPositions(
 /** At most `edge` characters at each end, cut at a space when one is near. */
 export function wordCommentShortQuote(quote: string, edge: number): string {
   if (quote.length <= edge * 2 + 1) return quote;
-  const head = quote.slice(0, edge);
-  const tail = quote.slice(-edge);
+  let end = edge;
+  const last = quote.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  let start = quote.length - edge;
+  const first = quote.charCodeAt(start);
+  if (first >= 0xdc00 && first <= 0xdfff) start += 1;
+  const head = quote.slice(0, end);
+  const tail = quote.slice(start);
   const headCut = head.lastIndexOf(" ");
   const tailCut = tail.indexOf(" ");
   return `${headCut > edge / 2 ? head.slice(0, headCut) : head}…${

@@ -272,7 +272,6 @@ describe("legacy files (O-17)", () => {
       true,
     );
     expect(refs.threads.every((t) => t.matchedBy === "content")).toBe(true);
-    expect(refs.legacy).toBe(true);
   });
 
   it("tells two threads with equal content apart in document order", () => {
@@ -346,13 +345,6 @@ describe("fingerprints and the capture's refs", () => {
     expect(
       wordCommentFingerprint(record("5", { replies: null, anchor: null })),
     ).toMatchObject({ replyIds: null, replies: null, anchor: null });
-  });
-
-  it("keeps the latest fingerprint per ref in pane memory", () => {
-    const registry = createWordCommentRefRegistry("doc");
-    const [ref] = refsOf([t7], false, registry);
-    refsOf([{ ...t7, resolved: false }], false, registry);
-    expect(registry.fingerprints.get(ref)?.resolved).toBe(false);
   });
 
   it("resolves thread and entry refs against the capture only", () => {

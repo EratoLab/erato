@@ -70,6 +70,13 @@ let session: WordCommentReadSession;
 /** The installed document when a test generates one; the probe fixture otherwise. */
 let currentDocument: CommentHostDocument | undefined;
 
+const newSession = () =>
+  new WordCommentReadSession({
+    now: () => NOW,
+    userTimeZone: () => "Europe/Berlin",
+    readOptions: { now: () => host.now() },
+  });
+
 function install(options: CommentHostOptions = {}) {
   host = installWordCommentHost(options);
   return host;
@@ -156,11 +163,7 @@ beforeEach(() => {
   mock.store = createWordReadRequestStore();
   forgetWordCommentRefs();
   currentDocument = undefined;
-  session = new WordCommentReadSession({
-    now: () => NOW,
-    userTimeZone: () => "Europe/Berlin",
-    readOptions: { now: () => host.now() },
-  });
+  session = newSession();
 });
 
 afterEach(() => {
@@ -783,14 +786,20 @@ describe("unavailable reads", () => {
     expect(result.error).toContain(WORD_COMMENTS_ASK_AGAIN);
   });
 
-  it("ask again with the current comments after a pane teardown", async () => {
+  it("ask again with the current comments after a pane teardown, then give the same refs", async () => {
     install();
     activate({ selection: ON_T8 });
-    await read({ near: { selection: true } });
+    const before = await read({ near: { selection: true } });
     forgetWordCommentRefs();
+    session = newSession();
     const result = await refused({ near: { selection: true } });
     expect(result).toMatchObject({ code: "comments-unavailable" });
     expect(result.error).toContain(WORD_COMMENTS_ASK_AGAIN);
+    activate({ selection: ON_T8 });
+    const after = await read({ near: { selection: true } });
+    expect(after.threads.map((t) => t.id)).toEqual(
+      before.threads.map((t) => t.id),
+    );
   });
 
   it("ask again after the session is cleared", async () => {

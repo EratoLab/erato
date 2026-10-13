@@ -11,6 +11,8 @@ import {
 import { normalizeParagraphText } from "./buildWordDocumentArgs";
 import {
   buildWordCommentEnvelope,
+  headOf,
+  normalizedEmail,
   wordCommentModelOf,
   wordCommentUserTimeZone,
 } from "./wordCommentEnvelope";
@@ -26,9 +28,14 @@ import {
   wordCommentPositions,
   wordCommentSelection,
 } from "./wordCommentPositions";
-import { readWordComments } from "./wordCommentReader";
-import { wordCommentRefRegistry } from "./wordCommentRefs";
+import { plural, readWordComments } from "./wordCommentReader";
+import {
+  wordCommentIdKeys,
+  wordCommentIdKeysByRef,
+  wordCommentRefRegistry,
+} from "./wordCommentRefs";
 import { wordHostPlatform } from "./wordHostPlatform";
+import { utf8ByteLength } from "../../core/clientActions/actionFacetArgs";
 
 import type { WordCommentPeople } from "./wordCommentEnvelope";
 import type { WordCommentHeading } from "./wordCommentMap";
@@ -129,8 +136,6 @@ export type WordCommentReadThread = WordCommentThread & {
   passage_cut?: true;
 };
 
-export type { WordCommentReadView };
-
 export type WordCommentReadResultJson = Omit<
   WordCommentEnvelope,
   "threads" | "cursor"
@@ -206,9 +211,7 @@ type Plan =
   | { ok: true; ordered: Facts[]; outside: number }
   | { ok: false; code: "unknown-ref" | "outside" };
 
-const encoder = new TextEncoder();
-const utf8 = (text: string) => encoder.encode(text).length;
-const jsonBytes = (value: unknown) => utf8(JSON.stringify(value));
+const jsonBytes = (value: unknown) => utf8ByteLength(JSON.stringify(value));
 
 const MARKS = /[\u0002\u0005]/g;
 const LINES = /[\r\n\u0007\u000B]+/;
@@ -254,9 +257,6 @@ const objectOf = (value: unknown) =>
 const fold = (text: string) =>
   text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 
-const normalizedEmail = (email: string | null | undefined) =>
-  email?.trim().toLowerCase() || null;
-
 /** The anchored text as Comment.getRange() gives it, without marks, one line per paragraph. */
 function rangeLines(record: WordCommentThreadRecord): string[] {
   return (record.anchor?.rangeText ?? "")
@@ -266,9 +266,6 @@ function rangeLines(record: WordCommentThreadRecord): string[] {
     .filter(Boolean);
 }
 
-const plural = (n: number, one: string, many = `${one}s`) =>
-  `${n} ${n === 1 ? one : many}`;
-
 /** Keeps the end of a text, the part next to the anchor, at a code point boundary. */
 function tailOf(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -276,14 +273,6 @@ function tailOf(text: string, max: number): string {
   const code = text.charCodeAt(start);
   if (code >= 0xdc00 && code <= 0xdfff) start += 1;
   return `…${text.slice(start)}`;
-}
-
-function headOf(text: string, max: number): { text: string; cut: boolean } {
-  if (text.length <= max) return { text, cut: false };
-  let end = max - 1;
-  const code = text.charCodeAt(end - 1);
-  if (code >= 0xd800 && code <= 0xdbff) end -= 1;
-  return { text: `${text.slice(0, end)}…`, cut: true };
 }
 
 type ParseResult =
@@ -424,25 +413,6 @@ const sideOf = (
           : IN_SELECTION.has(vs)
             ? "in"
             : "unknown";
-
-/** The keys issueWordCommentRefs gives a read's threads, so a coarse read can name them. */
-function idKeysOf(records: readonly WordCommentThreadRecord[]): string[] {
-  const seen = new Map<string, number>();
-  return records.map((record) => {
-    const key = `id:${record.id}`;
-    const k = (seen.get(key) ?? 0) + 1;
-    seen.set(key, k);
-    return k === 1 ? key : `${key}#${k}`;
-  });
-}
-
-/** Each ref's id key; after a legacy thread got a new id, the newest one. */
-function idKeysOfRefs(registry: WordCommentRefRegistry): Map<string, string> {
-  const keys = new Map<string, string>();
-  for (const [key, ref] of registry.refs)
-    if (key.startsWith("id:")) keys.set(ref, key);
-  return keys;
-}
 
 const atSelection = (f: Facts) => f.side === "in" || f.side === "unknown";
 const byRank = (a: Facts, b: Facts) => a.rank - b.rank;
@@ -700,12 +670,7 @@ export class WordCommentReadSession {
 
   execute: ClientToolExecutor = async (input, context) => {
     const session = this.session;
-    // A pane teardown forgets every ref (#6958); refs this request saw would name nothing.
-    if (
-      !session ||
-      wordCommentRefRegistry(session.activation.identity) !== session.registry
-    )
-      return unavailable();
+    if (!session) return unavailable();
     if (!context || context.signal?.aborted)
       return fail("read-stopped", "The comment read was stopped.");
     if (
@@ -907,8 +872,8 @@ export class WordCommentReadSession {
     const sent = continuation?.sent ?? 0;
 
     const exact = (records: readonly WordCommentThreadRecord[]) => {
-      const refKeys = idKeysOfRefs(session.registry);
-      const keys = idKeysOf(records);
+      const refKeys = wordCommentIdKeysByRef(session.registry);
+      const keys = wordCommentIdKeys(records);
       const recordOf = new Map<string, WordCommentThreadRecord>();
       const placed = records.flatMap((record, i) =>
         record.anchor?.first.ordinal == null ? [] : [{ record, key: keys[i] }],

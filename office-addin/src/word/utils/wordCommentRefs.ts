@@ -60,8 +60,6 @@ export interface WordCommentRefEntry {
 
 /** The refs frozen with the Send capture; actions resolve refs against these only. */
 export interface WordCommentCaptureRefs {
-  identity: string;
-  legacy: boolean | null;
   /** One per thread read, in the order read (document order). */
   threads: readonly WordCommentRefEntry[];
   byRef: ReadonlyMap<string, WordCommentRefEntry>;
@@ -73,8 +71,6 @@ export interface WordCommentRefRegistry {
   readonly refs: Map<string, string>;
   /** Every ref issued in this pane session, with the key it was issued for. */
   readonly issued: Map<string, string>;
-  /** The latest fingerprint per ref. */
-  readonly fingerprints: Map<string, WordCommentFingerprint>;
   /**
    * Whether a read found the file legacy; later reads pass it on, so no read issues id refs for a
    * legacy file before one knows (O-17).
@@ -99,7 +95,6 @@ export function createWordCommentRefRegistry(
     identity,
     refs: new Map(),
     issued: new Map(),
-    fingerprints: new Map(),
     legacy: null,
   };
 }
@@ -206,6 +201,45 @@ function contentSource(record: WordCommentThreadRecord): string {
   ].join("\u001f");
 }
 
+const ID_KEY = "id:";
+
+/** "#k" marks the k-th repeat of a key within one read. */
+function repeats() {
+  const seen = new Map<string, number>();
+  return (key: string) => {
+    const k = (seen.get(key) ?? 0) + 1;
+    seen.set(key, k);
+    return k === 1 ? key : `${key}#${k}`;
+  };
+}
+
+/** The id keys issueWordCommentRefs gives a read's threads, so a coarse read can name them. */
+export function wordCommentIdKeys(
+  threads: readonly Pick<WordCommentThreadRecord, "id">[],
+): string[] {
+  const repeat = repeats();
+  return threads.map((record) => repeat(`${ID_KEY}${record.id}`));
+}
+
+/** Each ref's id key; after a legacy thread got a new id, the newest one. */
+export function wordCommentIdKeysByRef(
+  registry: WordCommentRefRegistry,
+): Map<string, string> {
+  const keys = new Map<string, string>();
+  for (const [key, ref] of registry.refs)
+    if (key.startsWith(ID_KEY)) keys.set(ref, key);
+  return keys;
+}
+
+/** The comment id a ref was issued for in this pane session; null for a ref it never issued. */
+export function wordCommentIdOfRef(
+  registry: WordCommentRefRegistry,
+  ref: string,
+): string | null {
+  const key = wordCommentIdKeysByRef(registry).get(ref);
+  return key === undefined ? null : key.slice(ID_KEY.length).split("#")[0];
+}
+
 interface Pending {
   index: number;
   source: string;
@@ -246,16 +280,12 @@ export function issueWordCommentRefs(
   const byContent = legacy === true;
   const refs: (string | null)[] = threads.map(() => null);
   const used = new Set<string>();
-  const seen = new Map<string, number>();
-  const repeat = (key: string) => {
-    const k = (seen.get(key) ?? 0) + 1;
-    seen.set(key, k);
-    return k === 1 ? key : `${key}#${k}`;
-  };
+  const idKeys = wordCommentIdKeys(threads);
+  const repeat = repeats();
   const pending: Pending[] = [];
 
   threads.forEach((record, index) => {
-    const idKey = repeat(`id:${record.id}`);
+    const idKey = idKeys[index];
     const source = byContent ? contentSource(record) : record.id;
     const contentKey = byContent ? repeat(`content:${source}`) : null;
     const keys = contentKey ? [idKey, contentKey] : [idKey];
@@ -289,20 +319,15 @@ export function issueWordCommentRefs(
     refs[index] = ref;
   }
 
-  const entries = threads.map((record, index): WordCommentRefEntry => {
-    const ref = refs[index]!;
-    const fingerprint = wordCommentFingerprint(record);
-    registry.fingerprints.set(ref, fingerprint);
-    return {
-      ref,
+  const entries = threads.map(
+    (record, index): WordCommentRefEntry => ({
+      ref: refs[index]!,
       commentId: record.id,
       matchedBy: byContent ? "content" : "id",
-      fingerprint,
-    };
-  });
+      fingerprint: wordCommentFingerprint(record),
+    }),
+  );
   return {
-    identity: registry.identity,
-    legacy,
     threads: entries,
     byRef: new Map(entries.map((entry) => [entry.ref, entry])),
   };

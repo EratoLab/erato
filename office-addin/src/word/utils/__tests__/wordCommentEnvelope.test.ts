@@ -429,10 +429,16 @@ describe("coverage", () => {
   ];
 
   it("counts what was sent, listed and not shown, with the nearest commented paragraphs", () => {
-    const { envelope: sent } = envelope(model(sources), {
-      full: ["t3c"],
-      listed: ["t2b"],
+    const built = model(sources);
+    const input: Partial<WordCommentEnvelopeInput> = {
+      full: ["t3c", "t2b"],
+      essential: ["t3c"],
       selection: { para: [12, 12], caret: false },
+    };
+    const whole = envelope(built, input);
+    const { envelope: sent } = envelope(built, {
+      ...input,
+      targetBytes: whole.bytes - 1,
     });
     expect(sent.threads.map((t) => t.id)).toEqual(["t3c"]);
     expect(sent.index.map((row) => row.id)).toEqual(["t2b"]);
@@ -503,10 +509,11 @@ describe("budgets", () => {
     const built = model(big(40));
     const refs = built.threads.map((t) => t.thread.id);
     const result = envelope(built, { full: refs, essential: refs.slice(0, 2) });
+    const sent = result.envelope.threads.map((t) => t.id);
     expect(result.bytes).toBeLessThanOrEqual(WORD_COMMENT_ARG_TARGET_BYTES);
-    expect(result.full.slice(0, 2)).toEqual(refs.slice(0, 2));
-    expect(result.full.length).toBeLessThan(refs.length);
-    expect(result.listed.length).toBeGreaterThan(0);
+    expect(sent.slice(0, 2)).toEqual(refs.slice(0, 2));
+    expect(sent.length).toBeLessThan(refs.length);
+    expect(result.envelope.index.length).toBeGreaterThan(0);
     const { coverage } = result.envelope;
     expect(
       coverage.sent_full + coverage.sent_index_only + coverage.not_shown,
@@ -522,21 +529,19 @@ describe("budgets", () => {
       essential: refs.slice(0, 12),
     });
     expect(some.bytes).toBeGreaterThan(WORD_COMMENT_ARG_TARGET_BYTES);
-    expect(some.full).toEqual(refs.slice(0, 12));
+    expect(some.envelope.threads.map((t) => t.id)).toEqual(refs.slice(0, 12));
     const all = envelope(built, { full: refs, essential: refs });
+    const sent = all.envelope.threads.length;
     expect(all.bytes).toBeLessThanOrEqual(WORD_COMMENT_ARG_MAX_BYTES);
-    expect(all.full.length).toBeLessThan(60);
+    expect(sent).toBeLessThan(60);
     expect(
       all.envelope.coverage.not_shown + all.envelope.coverage.sent_index_only,
-    ).toBe(60 - all.full.length);
+    ).toBe(60 - sent);
   });
 
   it("ignores refs it does not know", () => {
     const built = model([source("t1a", 1)]);
-    const { envelope: sent } = envelope(built, {
-      full: ["t1a", "tzz"],
-      listed: ["tyy"],
-    });
+    const { envelope: sent } = envelope(built, { full: ["t1a", "tzz"] });
     expect(sent.threads.map((t) => t.id)).toEqual(["t1a"]);
     expect(sent.index).toEqual([]);
   });

@@ -6,6 +6,7 @@ import {
 } from "@erato/frontend/word-review";
 
 import { normalizeParagraphText } from "./buildWordDocumentArgs";
+import { utf8ByteLength } from "../../core/clientActions/actionFacetArgs";
 
 import type {
   WordCommentModel,
@@ -41,9 +42,6 @@ export const wordCommentMapListed = (placed: number) =>
   Math.min(placed, WORD_COMMENT_MAP_PAGE_ROWS);
 const CURSOR = /^map:(0|[1-9]\d{0,6})$/;
 
-const encoder = new TextEncoder();
-const utf8 = (text: string) => encoder.encode(text).length;
-
 export interface WordCommentHeading {
   ordinal: number;
   /** 1 to 9; Title counts as 1. */
@@ -54,19 +52,20 @@ export interface WordCommentHeading {
 /** The heading chain a paragraph is in, outermost first; undefined before the first heading. */
 export type WordCommentSections = (para: number) => string | undefined;
 
-/** At most `limit` characters, cut at a space when one is near, with an ellipsis. */
 export function wordCommentGist(
   text: string,
   limit = WORD_COMMENT_GIST_CHARS,
 ): string {
   const flat = text.replace(/\s+/g, " ").trim();
   if (flat.length <= limit) return flat;
-  const cut = flat.slice(0, limit - 1);
+  let end = limit - 1;
+  const code = flat.charCodeAt(end - 1);
+  if (code >= 0xd800 && code <= 0xdbff) end -= 1;
+  const cut = flat.slice(0, end);
   const space = cut.lastIndexOf(" ");
   return `${(space > limit * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-/** Headings from the capture's paragraphs or the reader's light inventory. */
 export function wordCommentHeadingsFromInventory(
   paragraphs: readonly WordCommentInventoryParagraph[],
 ): WordCommentHeading[] {
@@ -77,7 +76,6 @@ export function wordCommentHeadingsFromInventory(
   );
 }
 
-/** Headings from WordDocumentBuild.headings. */
 export function wordCommentHeadingsFromBuild(
   headings: ReadonlyMap<number, { level: number; text: string }>,
 ): WordCommentHeading[] {
@@ -181,7 +179,17 @@ export interface WordCommentMap {
 
 export interface WordCommentMapPageOptions {
   maxBytes?: number;
-  maxRows?: number;
+}
+
+/** Threads of each status, the ones without a paragraph included. */
+export function wordCommentTotals(model: WordCommentModel): {
+  open: number;
+  resolved: number;
+} {
+  const count = (status: "open" | "resolved") =>
+    model.threads.filter((t) => t.thread.status === status).length +
+    model.unplaced[status];
+  return { open: count("open"), resolved: count("resolved") };
 }
 
 export function buildWordCommentMap(input: {
@@ -194,11 +202,7 @@ export function buildWordCommentMap(input: {
   const rows = model.threads.map((thread) =>
     wordCommentMapRow(thread, input.sections?.(thread.thread.where.para)),
   );
-  const count = (status: "open" | "resolved") =>
-    model.threads.filter((t) => t.thread.status === status).length +
-    model.unplaced[status];
-  const open = count("open");
-  const resolved = count("resolved");
+  const { open, resolved } = wordCommentTotals(model);
   return {
     rows,
     threadsTotal: open + resolved,
@@ -243,7 +247,6 @@ export function wordCommentMapPage(
   if (!Number.isSafeInteger(start) || start < 0) return null;
   if (start > 0 && start >= map.rows.length) return null;
   const maxBytes = options.maxBytes ?? WORD_COMMENT_ARG_TARGET_BYTES;
-  const maxRows = options.maxRows ?? WORD_COMMENT_MAP_PAGE_ROWS;
   const envelopeOf = (count: number): WordCommentEnvelope => {
     const end = start + count;
     const next = end < map.rows.length ? end : null;
@@ -270,18 +273,18 @@ export function wordCommentMapPage(
       ...(next !== null ? { cursor: wordCommentMapCursor(next) } : {}),
     };
   };
-  let count = Math.min(maxRows, map.rows.length - start);
-  const base = utf8(JSON.stringify(envelopeOf(0)));
+  let count = Math.min(WORD_COMMENT_MAP_PAGE_ROWS, map.rows.length - start);
+  const base = utf8ByteLength(JSON.stringify(envelopeOf(0)));
   let used = base;
   for (let i = 0; i < count; i += 1) {
-    used += utf8(JSON.stringify(map.rows[start + i])) + 1;
+    used += utf8ByteLength(JSON.stringify(map.rows[start + i])) + 1;
     if (used > maxBytes) {
       count = i;
       break;
     }
   }
   let page = envelopeOf(count);
-  while (count > 0 && utf8(JSON.stringify(page)) > maxBytes)
+  while (count > 0 && utf8ByteLength(JSON.stringify(page)) > maxBytes)
     page = envelopeOf((count -= 1));
   return page;
 }

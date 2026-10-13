@@ -24,6 +24,7 @@ import {
   wordCommentCaretCoordinates,
   wordCommentSelection,
 } from "./wordCommentPositions";
+import { wordCommentIdOfRef } from "./wordCommentRefs";
 
 import type {
   WordCommentModel,
@@ -58,6 +59,8 @@ import type {
  * Nothing here reads Word; the composer reads comments at every Send, and only when something is
  * advertised.
  */
+
+export { wordCommentIdOfRef };
 
 /** The "Word behavior" setting: what a rewrite-eligible selection over one thread works on. */
 export type WordCommentPrecedence = "selection" | "comment";
@@ -296,18 +299,6 @@ export function nextWordCommentPick(
     case "send":
       return pick;
   }
-}
-
-/** The comment id a ref was issued for in this pane session; null for a ref it never issued. */
-export function wordCommentIdOfRef(
-  registry: WordCommentRefRegistry,
-  ref: string,
-): string | null {
-  let found: string | null = null;
-  for (const [key, issued] of registry.refs)
-    if (issued === ref && key.startsWith("id:"))
-      found = key.slice(3).split("#")[0];
-  return found;
 }
 
 /**

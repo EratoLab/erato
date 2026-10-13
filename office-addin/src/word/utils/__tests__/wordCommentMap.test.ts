@@ -137,6 +137,12 @@ describe("rows", () => {
     expect(wordCommentGist("x".repeat(150))).toBe(`${"x".repeat(99)}…`);
   });
 
+  it("never cuts the gist inside an emoji", () => {
+    expect(wordCommentGist(`${"x".repeat(98)}😀${"y".repeat(10)}`)).toBe(
+      `${"x".repeat(98)}…`,
+    );
+  });
+
   it("gives a null reply count when the replies were not read", () => {
     expect(wordCommentMapRow(modelThread(1, {}, null)).r).toBeNull();
   });

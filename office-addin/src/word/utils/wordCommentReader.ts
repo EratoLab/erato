@@ -2140,7 +2140,7 @@ async function probeLegacy(
   session.end(done);
 }
 
-const plural = (n: number, one: string, many = `${one}s`) =>
+export const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`;
 
 /** The copyable report and the native gate's record: counts, timings and error names only. */

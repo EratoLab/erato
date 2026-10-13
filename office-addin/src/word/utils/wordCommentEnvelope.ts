@@ -6,15 +6,16 @@ import {
   WORD_COMMENT_TEXT_MAX_CHARS,
 } from "@erato/frontend/word-review";
 
-import { wordCommentMapRow } from "./wordCommentMap";
+import { wordCommentMapRow, wordCommentTotals } from "./wordCommentMap";
 import {
   wordCommentPositionInput,
   wordCommentPositions,
   wordCommentWhere,
 } from "./wordCommentPositions";
+import { plural } from "./wordCommentReader";
 import { issueWordCommentRefs } from "./wordCommentRefs";
+import { utf8ByteLength } from "../../core/clientActions/actionFacetArgs";
 
-import type { WordCommentSections } from "./wordCommentMap";
 import type {
   WordCommentPosition,
   WordCommentSelectionCoordinates,
@@ -66,9 +67,6 @@ export const WORD_COMMENT_AI_AUTHOR_TEMPLATES: readonly string[] = [
  * wrote it on their own wall clock, and co-authors are often a few zones apart.
  */
 export const WORD_COMMENT_DAY_UNCERTAIN_HOURS = 3;
-
-const encoder = new TextEncoder();
-const utf8 = (text: string) => encoder.encode(text).length;
 
 export interface WordCommentPeople {
   /** The signed-in Erato principal's email; `me` compares it with each entry's authorEmail. */
@@ -143,7 +141,6 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   return formatter;
 }
 
-/** The wall clock of a moment in a zone. */
 function wallClock(date: Date, timeZone: string) {
   const parts = formatterFor(timeZone).formatToParts(date);
   const part = (type: Intl.DateTimeFormatPartTypes) =>
@@ -166,7 +163,7 @@ export function wordCommentUtcTime(date: Date, seconds = false): string {
 
 const minuteKey = (date: Date) => Math.floor(date.getTime() / 60_000);
 
-const normalizedEmail = (email: string | null | undefined) =>
+export const normalizedEmail = (email: string | null | undefined) =>
   email?.trim().toLowerCase() || null;
 
 const escapeRegExp = (text: string) =>
@@ -261,14 +258,12 @@ export function wordCommentSources(
 ): WordCommentSource[] {
   return threads.map((record, i) => {
     const entry = refs.threads[i];
-    if (!entry || entry.commentId !== record.id)
-      throw new Error("The comment refs are not the refs of this read");
-    const position = positions.get(entry.ref);
+    const position = positions.get(entry.ref)!;
     return {
       ref: entry.ref,
       record,
-      where: position ? wordCommentWhere(record, position) : null,
-      pos: position?.pos ?? Number.MAX_SAFE_INTEGER,
+      where: wordCommentWhere(record, position),
+      pos: position.pos,
       matchedByContent: entry.matchedBy === "content",
     };
   });
@@ -410,9 +405,12 @@ export function wordCommentModelOf(
   return { refs, sources, model };
 }
 
-function cutText(text: string): { text: string; cut: boolean } {
-  if (text.length <= WORD_COMMENT_TEXT_MAX_CHARS) return { text, cut: false };
-  let end = WORD_COMMENT_TEXT_MAX_CHARS - 1;
+export function headOf(
+  text: string,
+  max: number,
+): { text: string; cut: boolean } {
+  if (text.length <= max) return { text, cut: false };
+  let end = max - 1;
   const code = text.charCodeAt(end - 1);
   if (code >= 0xd800 && code <= 0xdbff) end -= 1;
   return { text: `${text.slice(0, end)}…`, cut: true };
@@ -434,7 +432,7 @@ function trimmed(
   const omitted = replies.length - kept.length;
   let texts = 0;
   const entries = [root, ...kept].map((entry) => {
-    const { text, cut } = cutText(entry.text);
+    const { text, cut } = headOf(entry.text, WORD_COMMENT_TEXT_MAX_CHARS);
     if (!cut) return entry;
     texts += 1;
     return { ...entry, text, cut: true as const };
@@ -452,9 +450,6 @@ function trimmed(
     replies: omitted,
   };
 }
-
-const plural = (n: number, one: string, many = `${one}s`) =>
-  `${n} ${n === 1 ? one : many}`;
 
 /** What was sent, listed and left out, with paragraph numbers only: no names, no text. */
 function coverageLine(
@@ -501,12 +496,9 @@ export interface WordCommentEnvelopeInput {
   userTz: string;
   /** Refs sent with their text, most important first. */
   full: readonly string[];
-  /** Refs listed without text, most important first. */
-  listed?: readonly string[];
   /** Of `full`, the threads that keep their text up to the cap; the others give way at the target. */
   essential?: readonly string[];
   selection?: WordCommentSelection;
-  sections?: WordCommentSections;
   why?: WordCommentWhy;
   cursor?: string;
   targetBytes?: number;
@@ -517,9 +509,6 @@ export interface WordCommentEnvelopeBuild {
   envelope: WordCommentEnvelope;
   json: string;
   bytes: number;
-  /** Refs sent with their text and refs listed, in document order. */
-  full: string[];
-  listed: string[];
 }
 
 /**
@@ -538,17 +527,13 @@ export function buildWordCommentEnvelope(
     ...new Set((refs ?? []).filter((ref) => byRef.has(ref))),
   ];
   let full = known(input.full);
-  let listed = known(input.listed).filter((ref) => !full.includes(ref));
+  let listed: string[] = [];
   const essential = new Set(known(input.essential));
   const rows = new Map<string, WordCommentMapRow>();
   const rowOf = (ref: string) => {
     let row = rows.get(ref);
     if (!row) {
-      const thread = byRef.get(ref)!;
-      row = wordCommentMapRow(
-        thread,
-        input.sections?.(thread.thread.where.para),
-      );
+      row = wordCommentMapRow(byRef.get(ref)!);
       rows.set(ref, row);
     }
     return row;
@@ -556,14 +541,7 @@ export function buildWordCommentEnvelope(
   const order = new Map(model.threads.map((t, i) => [t.thread.id, i]));
   const inOrder = (refs: readonly string[]) =>
     [...refs].sort((a, b) => order.get(a)! - order.get(b)!);
-  const totals = {
-    open:
-      model.threads.filter((t) => t.thread.status === "open").length +
-      model.unplaced.open,
-    resolved:
-      model.threads.filter((t) => t.thread.status === "resolved").length +
-      model.unplaced.resolved,
-  };
+  const totals = wordCommentTotals(model);
   const unplaced = model.unplaced.open + model.unplaced.resolved;
 
   const build = (): WordCommentEnvelopeBuild => {
@@ -616,13 +594,7 @@ export function buildWordCommentEnvelope(
       ...(input.cursor ? { cursor: input.cursor } : {}),
     };
     const json = JSON.stringify(envelope);
-    return {
-      envelope,
-      json,
-      bytes: utf8(json),
-      full: inOrder(full),
-      listed: inOrder(listed),
-    };
+    return { envelope, json, bytes: utf8ByteLength(json) };
   };
 
   const everyRef = new Set(model.threads.map((t) => t.thread.id));
@@ -631,12 +603,13 @@ export function buildWordCommentEnvelope(
     let size = threadBytes.get(ref);
     if (size === undefined) {
       const { thread } = trimmed(byRef.get(ref)!.thread, everyRef);
-      size = utf8(JSON.stringify(thread)) + 1;
+      size = utf8ByteLength(JSON.stringify(thread)) + 1;
       threadBytes.set(ref, size);
     }
     return size;
   };
-  const sizeOfRow = (ref: string) => utf8(JSON.stringify(rowOf(ref))) + 1;
+  const sizeOfRow = (ref: string) =>
+    utf8ByteLength(JSON.stringify(rowOf(ref))) + 1;
   /** Demotes the least important threads to rows, then drops rows, until the size fits. */
   const shrink = (limit: number, mayDemote: (ref: string) => boolean) => {
     let built = build();
