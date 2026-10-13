@@ -3665,6 +3665,25 @@ show_in_assistant_editor = true
 
 To show chat connectors while hiding preferences, set `show_frontend_tab = false` and `show_in_chat_input = true`. An omitted `show_in_assistant_editor` still inherits `false`.
 
+#### `mcp_servers.<server-id>.protocol_mode`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.protocol_mode */}
+
+Selects the MCP lifecycle independently of the HTTP transport.
+
+**Type:** `"auto" | "legacy" | "stateless"`
+
+**Default value:** `"auto"`
+
+For Streamable HTTP, `auto` prefers stateless protocol version `2026-07-28` and
+falls back to initialization for legacy servers. `legacy` forces the existing
+initialization/session lifecycle. `stateless` requires the modern protocol and
+retains no idle MCP services. The legacy SSE transport accepts `auto` or `legacy`.
+
+Stateless tool lists default to 30 seconds of freshness when the server omits a
+TTL; explicit TTLs and public/private cache scope are honored. See
+[protocol selection and caching](./features/mcp_servers#protocol-selection-and-caching).
+
 #### `mcp_servers.<server-id>.transport_type`
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.transport_type */}

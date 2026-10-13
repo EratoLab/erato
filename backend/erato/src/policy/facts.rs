@@ -846,6 +846,9 @@ mod tests {
     // SQLx needs the database URL before its test harness creates each test database.
     #[ctor::ctor]
     fn set_test_db_url() {
+        if std::env::var_os("DATABASE_URL").is_some() {
+            return;
+        }
         unsafe {
             std::env::set_var(
                 "DATABASE_URL",
