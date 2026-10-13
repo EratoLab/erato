@@ -44,6 +44,8 @@ export interface DropdownMenuItem {
   testId?: string;
   /** Optional secondary muted line under the label. */
   description?: React.ReactNode;
+  /** Limit the description to two lines with an ellipsis. */
+  truncateDescription?: boolean;
   /**
    * Skip the close delay. Required of any row that opens a dialog: the delayed
    * close returns focus to the trigger *after* the dialog has focused itself,
@@ -137,13 +139,18 @@ const MenuItem = memo(
         ) : undefined
       }
     >
-      <span className={clsx("flex-1", noWrap && "whitespace-nowrap")}>
+      <span className={clsx("min-w-0 flex-1", noWrap && "whitespace-nowrap")}>
         {item.description ? (
           <>
             <span className="block">{item.label}</span>
-            {/* A description is a sentence, so it wraps even in a no-wrap
-                menu; the cap keeps a wordy one from widening every row. */}
-            <span className="block max-w-[36ch] whitespace-normal text-xs font-normal text-theme-fg-muted">
+            {/* Descriptions wrap by default; callers can request a two-line limit.
+                The cap keeps a wordy description from widening every row. */}
+            <span
+              className={clsx(
+                "max-w-[36ch] whitespace-normal break-words text-xs font-normal text-theme-fg-muted",
+                item.truncateDescription ? "line-clamp-2" : "block",
+              )}
+            >
               {item.description}
             </span>
           </>
