@@ -163,6 +163,7 @@ pub struct ServedFrontend {
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
     translations: TranslationDistribution,
+    branding: crate::distribution::branding::BrandingAssets,
 }
 
 impl FrontendRegistry {
@@ -258,6 +259,7 @@ pub fn build_frontend_registry(
     FrontendRegistry {
         frontends,
         translations: distribution.translations.clone(),
+        branding: distribution.branding.clone(),
     }
 }
 
@@ -349,7 +351,10 @@ fn build_frontend_environment(
     // Inject frontend configuration flags
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_FAVICON_PATH.to_string(),
-        Value::String(config.frontend.favicon_path.clone()),
+        Value::String(match frontend_kind {
+            FrontendKind::Web => config.frontend.favicon_path.clone(),
+            FrontendKind::OfficeAddin => format!("{OFFICE_ADDIN_MOUNT_PATH}/favicon.svg"),
+        }),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_DISABLE_UPLOAD.to_string(),
@@ -656,6 +661,25 @@ fn build_frontend_environment(
             .insert(key.clone(), value.clone());
     }
 
+    for (key, path) in [
+        ("THEME_LOGO_PATH", &config.frontend.logo_path),
+        ("THEME_LOGO_DARK_PATH", &config.frontend.logo_dark_path),
+        (
+            "THEME_ASSISTANT_AVATAR_PATH",
+            &config.frontend.assistant_avatar_path,
+        ),
+        ("SIDEBAR_LOGO_PATH", &config.frontend.sidebar_logo_path),
+        (
+            "SIDEBAR_LOGO_DARK_PATH",
+            &config.frontend.sidebar_logo_dark_path,
+        ),
+    ] {
+        if let Some(path) = path {
+            env.additional_environment
+                .insert(key.to_string(), Value::String(path.clone()));
+        }
+    }
+
     if frontend_kind == FrontendKind::OfficeAddin {
         if let Some(msal_client_id) = &config.integrations.ms_office.addin.msal_client_id {
             env.additional_environment.insert(
@@ -833,19 +857,22 @@ pub fn inject_environment_script_tag(
                     }
                     Ok(())
                 }),
-                element!("link[rel~=\"icon\"]", |el| {
-                    if let Some(path) = frontend_env
-                        .additional_environment
-                        .get(FRONTEND_ENV_KEY_FAVICON_PATH)
-                        .and_then(Value::as_str)
-                        .filter(|path| *path != "/favicon.svg")
-                    {
-                        el.set_attribute("href", path)?;
-                        el.remove_attribute("type");
-                        el.remove_attribute("sizes");
+                element!(
+                    "link[rel~=\"icon\"], link[rel=\"apple-touch-icon\"]",
+                    |el| {
+                        if let Some(path) = frontend_env
+                            .additional_environment
+                            .get(FRONTEND_ENV_KEY_FAVICON_PATH)
+                            .and_then(Value::as_str)
+                            .filter(|path| *path != "/favicon.svg")
+                        {
+                            el.set_attribute("href", path)?;
+                            el.remove_attribute("type");
+                            el.remove_attribute("sizes");
+                        }
+                        Ok(())
                     }
-                    Ok(())
-                }),
+                ),
                 element!("link[rel=\"modulepreload\"][href]", |el| {
                     // Vite emits the runtime entry as a preload because the app imports it too.
                     if let Some(href) = el.get_attribute("href")
@@ -1052,6 +1079,45 @@ pub mod axum {
             return Ok(not_found_response());
         };
 
+        if request_path.starts_with("/public/common/custom-theme/")
+            && TranslationDistribution::is_messages_json_path(&request_path)
+            && let Ok(source) = frontend_registry.branding.resolve_source(
+                &request_path.replace("/messages.json", "/messages.po"),
+                false,
+            )
+            && let Some(compiled) = frontend_registry
+                .translations
+                .compile_messages_json_source(&source)
+        {
+            let Ok(body) = compiled else {
+                return Ok(internal_server_error_response());
+            };
+            return Ok(Response::builder()
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .header(http::header::CACHE_CONTROL, "no-cache")
+                .body(full_body(Bytes::from(body)))
+                .unwrap());
+        }
+
+        if let Some(source) = frontend_registry.branding.served_source(&request_path) {
+            let Ok(source) = source else {
+                return Ok(not_found_response());
+            };
+            let mut response = ServeFile::new(source)
+                .try_call(req)
+                .await
+                .unwrap()
+                .map(|body| {
+                    body.map_err(|error| -> BoxError { Box::new(error) })
+                        .boxed_unsync()
+                });
+            response.headers_mut().insert(
+                http::header::CACHE_CONTROL,
+                HeaderValue::from_static("no-cache"),
+            );
+            return Ok(response);
+        }
+
         let frontend_environment = frontend.environment.clone();
         let component_kits = frontend.component_kits.clone();
         let import_map_json = frontend.import_map_json.clone();
@@ -1236,6 +1302,139 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    #[tokio::test]
+    async fn office_branding_is_served_at_stable_urls_with_actual_content_types() {
+        use ::axum::{Extension, body::Body, http::Request};
+        use http_body_util::BodyExt;
+        let dir = tempfile::tempdir().unwrap();
+        let theme = dir.path().join("web/custom-theme/acme");
+        std::fs::create_dir_all(&theme).unwrap();
+        std::fs::create_dir_all(dir.path().join("office")).unwrap();
+        std::fs::write(theme.join("icon.png"), b"theme-png").unwrap();
+        std::fs::write(theme.join("theme.json"), br#"{"name":"Acme","theme":{}}"#).unwrap();
+        std::fs::create_dir_all(theme.join("locales/en")).unwrap();
+        std::fs::write(theme.join("locales/en/messages.po"), "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"branding.assistant_name\"\nmsgstr \"Acme\"\n").unwrap();
+        let mut config = AppConfig::default();
+        config.frontend.theme = Some("acme".into());
+        config.frontend.web_frontend_bundle_path = dir.path().join("web").display().to_string();
+        config.frontend.favicon_path = "/public/common/custom-theme/acme/icon.png".into();
+        config.frontend.translation_po_compilation_mode =
+            crate::config::TranslationPoCompilationMode::JustInTime;
+        config.integrations.ms_office.addin.enabled = true;
+        config.integrations.ms_office.addin.frontend_bundle_path =
+            dir.path().join("office").display().to_string();
+        config
+            .integrations
+            .ms_office
+            .addin
+            .manifest
+            .icon_source_path = Some("./icon.png".into());
+        let distribution = Distribution::load(&config);
+        let registry = std::sync::Arc::new(build_frontend_registry(&config, &distribution));
+        for (asset, content_type, expected) in [
+            ("theme.json", "application/json", "Acme"),
+            ("locales/en/messages.json", "application/json", "Acme"),
+        ] {
+            let response = serve_files_with_script(
+                Extension(registry.clone()),
+                Extension(DeploymentVersion(None, "test".into())),
+                Request::builder()
+                    .uri(format!("/public/common/custom-theme/acme/{asset}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(response.status(), 200);
+            assert_eq!(response.headers()["content-type"], content_type);
+            assert!(
+                String::from_utf8(
+                    response
+                        .into_body()
+                        .collect()
+                        .await
+                        .unwrap()
+                        .to_bytes()
+                        .to_vec()
+                )
+                .unwrap()
+                .contains(expected)
+            );
+        }
+        for mount in [OFFICE_ADDIN_MOUNT_PATH, OFFICE_ADDIN_LEGACY_MOUNT_PATH] {
+            for asset in [
+                "favicon.svg",
+                "favicon.ico",
+                "assets/color-icon-192x192.png",
+            ] {
+                let response = serve_files_with_script(
+                    Extension(registry.clone()),
+                    Extension(DeploymentVersion(None, "test".into())),
+                    Request::builder()
+                        .uri(format!("{mount}/{asset}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+                assert_eq!(response.status(), 200);
+                assert_eq!(response.headers()["content-type"], "image/png");
+                assert_eq!(response.headers()["cache-control"], "no-cache");
+                assert_eq!(
+                    response
+                        .into_body()
+                        .collect()
+                        .await
+                        .unwrap()
+                        .to_bytes()
+                        .as_ref(),
+                    b"theme-png"
+                );
+            }
+        }
+        let environment = build_frontend_environment(&config, FrontendKind::OfficeAddin);
+        let input = br#"<html><head><link rel="icon" href="/old.ico"></head></html>"#;
+        let mut output = Vec::new();
+        inject_environment_script_tag(input, &mut output, &environment, &[], None).unwrap();
+        assert!(
+            String::from_utf8(output)
+                .unwrap()
+                .contains(r#"href="/public/platform-office-addin/favicon.svg""#)
+        );
+    }
+
+    #[test]
+    fn typed_branding_overrides_legacy_values_on_every_frontend() {
+        let mut config = AppConfig::default();
+        config.frontend.logo_path = Some("/typed.svg".into());
+        config.frontend.logo_dark_path = Some("/typed-dark.svg".into());
+        config.frontend.assistant_avatar_path = Some("/typed-avatar.svg".into());
+        for (key, expected) in [
+            ("THEME_LOGO_PATH", "/typed.svg"),
+            ("THEME_LOGO_DARK_PATH", "/typed-dark.svg"),
+            ("THEME_ASSISTANT_AVATAR_PATH", "/typed-avatar.svg"),
+        ] {
+            config
+                .frontend
+                .additional_environment
+                .insert(key.into(), Value::String("/legacy.svg".into()));
+            for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+                let mut output = Vec::new();
+                inject_environment_script_tag(
+                    b"<html><head></head></html>",
+                    &mut output,
+                    &build_frontend_environment(&config, kind),
+                    &[],
+                    None,
+                )
+                .unwrap();
+                let output = String::from_utf8(output).unwrap();
+                assert!(output.contains(&format!("window.{key} = \"{expected}\";")));
+                assert!(!output.contains(&format!("window.{key} = \"/legacy.svg\";")));
+            }
+        }
+    }
+
     #[test]
     fn favicon_path_is_injected_into_frontend_environment() {
         let mut config = AppConfig::default();
@@ -1256,11 +1455,13 @@ mod tests {
                 assert!(output.contains(r#"href="/favicon.ico" sizes="any""#));
                 assert!(output.contains(r#"href="/favicon.svg" type="image/svg+xml""#));
             } else {
-                assert_eq!(output.matches(&format!("href=\"{path}\"")).count(), 2);
+                assert_eq!(output.matches(&format!("href=\"{path}\"")).count(), 3);
                 assert!(!output.contains("image/svg+xml"));
                 assert!(!output.contains("sizes="));
             }
-            assert!(output.contains(r#"rel="apple-touch-icon" href="/apple.png""#));
+            if path == "/favicon.svg" {
+                assert!(output.contains(r#"rel="apple-touch-icon" href="/apple.png""#));
+            }
         }
     }
 
@@ -1758,6 +1959,9 @@ mod tests {
                 served_frontend("/", true),
             ],
             translations: distribution.translations,
+            branding: crate::distribution::branding::BrandingAssets::from_config(
+                &AppConfig::default(),
+            ),
         };
 
         let frontend = registry
@@ -1775,6 +1979,9 @@ mod tests {
                 served_frontend("/", true),
             ],
             translations: distribution.translations,
+            branding: crate::distribution::branding::BrandingAssets::from_config(
+                &AppConfig::default(),
+            ),
         };
 
         assert!(registry.resolve("/office-addin").is_none());

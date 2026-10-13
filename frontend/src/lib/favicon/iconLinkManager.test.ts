@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { applyIconHref, restoreIconLinks } from "./iconLinkManager";
+import {
+  applyIconHref,
+  configureIconLinks,
+  restoreIconLinks,
+} from "./iconLinkManager";
 
 const seedOriginalLinks = () => {
   document.head.innerHTML =
@@ -53,5 +57,22 @@ describe("iconLinkManager", () => {
     restoreIconLinks();
 
     expect(iconLinks()).toHaveLength(2);
+  });
+
+  it("updates touch icons and restores the configured favicon after badging", () => {
+    document.head.insertAdjacentHTML(
+      "beforeend",
+      '<link rel="apple-touch-icon" href="/apple.png">',
+    );
+    configureIconLinks("/brand/icon.png");
+    applyIconHref("data:image/svg+xml,badge");
+    expect(
+      document.querySelector('link[rel="apple-touch-icon"]'),
+    ).toHaveAttribute("href", "/brand/icon.png");
+    restoreIconLinks();
+    expect(iconLinks().map((link) => link.getAttribute("href"))).toEqual([
+      "/brand/icon.png",
+      "/brand/icon.png",
+    ]);
   });
 });

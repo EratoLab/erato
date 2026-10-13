@@ -114,9 +114,19 @@ impl TranslationDistribution {
             return None;
         }
         let po_path = translation_po_path_for_messages_json(bundle_root, request_path)?;
-        let compiled = crate::latency::sync_span("translation.compile_messages_json")
-            .in_scope(|| self.cache.compile_messages_json(&po_path));
+        let compiled = self.compile_messages_json_source(&po_path)?;
         Some((po_path, compiled))
+    }
+
+    /// Compile an already resolved local source, including a runtime theme
+    /// mounted outside Vite's packaged public layout.
+    pub fn compile_messages_json_source(&self, po_path: &Path) -> Option<io::Result<Vec<u8>>> {
+        if self.compilation_mode != TranslationPoCompilationMode::JustInTime {
+            return None;
+        }
+        let compiled = crate::latency::sync_span("translation.compile_messages_json")
+            .in_scope(|| self.cache.compile_messages_json(po_path));
+        Some(compiled)
     }
 
     #[must_use]

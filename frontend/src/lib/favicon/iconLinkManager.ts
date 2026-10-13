@@ -9,7 +9,7 @@ const managedLink = (): HTMLLinkElement | null =>
 export const configureIconLinks = (href: string): void => {
   restoreIconLinks();
   for (const link of document.querySelectorAll<HTMLLinkElement>(
-    'link[rel~="icon"]',
+    'link[rel~="icon"], link[rel="apple-touch-icon"]',
   )) {
     link.setAttribute("href", href);
     // The configured image can have a different format and size.

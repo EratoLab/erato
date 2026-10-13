@@ -3377,6 +3377,11 @@ pub struct FrontendConfig {
     #[serde(default = "default_favicon_path")]
     pub favicon_path: String,
 
+    /// Browser URL overrides for application logos and the assistant avatar.
+    pub logo_path: Option<String>,
+    pub logo_dark_path: Option<String>,
+    pub assistant_avatar_path: Option<String>,
+
     // Additional values to inject into the frontend environment as global variables.
     // This is a dictionary where each value can be a string or a map (string key, string value).
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
@@ -3512,6 +3517,9 @@ impl Default for FrontendConfig {
             translation_po_compilation_mode: Default::default(),
             theme: None,
             favicon_path: default_favicon_path(),
+            logo_path: None,
+            logo_dark_path: None,
+            assistant_avatar_path: None,
             additional_environment: HashMap::new(),
             component_kits: Default::default(),
             error_report: Default::default(),
@@ -6436,11 +6444,20 @@ pub struct MsOfficeTeamsManifestConfig {
     pub outline_icon: String,
     #[serde(default = "default_ms_office_teams_small_color_icon")]
     pub small_color_icon: String,
+    /// Local source override; leaves the manifest URL or ZIP entry unchanged.
+    pub color_icon_source_path: Option<String>,
+    /// Local source override; leaves the manifest URL or ZIP entry unchanged.
+    pub outline_icon_source_path: Option<String>,
+    /// Local source override; leaves the manifest URL or ZIP entry unchanged.
+    pub small_color_icon_source_path: Option<String>,
 }
 
 impl Default for MsOfficeTeamsManifestConfig {
     fn default() -> Self {
         Self {
+            color_icon_source_path: None,
+            outline_icon_source_path: None,
+            small_color_icon_source_path: None,
             version: None,
             developer_name: default_ms_office_teams_developer_name(),
             website_url: default_ms_office_teams_website_url(),
@@ -6727,6 +6744,8 @@ pub struct MsOfficeAddinConfig {
     pub serve_bundle_legacy_path: bool,
     #[serde(default = "default_ms_office_addin_frontend_bundle_path")]
     pub frontend_bundle_path: String,
+    /// Local browser image source; inherits frontend.favicon_path when unset.
+    pub favicon_path: Option<String>,
     #[serde(default)]
     pub manifest: MsOfficeAddinManifestConfig,
 
@@ -6875,6 +6894,7 @@ impl Default for MsOfficeAddinConfig {
             msal_authority: default_ms_office_addin_msal_authority(),
             serve_bundle_legacy_path: default_ms_office_addin_serve_bundle_legacy_path(),
             frontend_bundle_path: default_ms_office_addin_frontend_bundle_path(),
+            favicon_path: None,
             manifest: MsOfficeAddinManifestConfig::default(),
             document: MsOfficeAddinDocumentConfig::default(),
             default_settings: MsOfficeAddinDefaultSettings::default(),
@@ -7069,11 +7089,26 @@ pub struct MsOfficeAddinManifestConfig {
     // 80px ribbon icon path.
     #[serde(default = "default_ms_office_addin_manifest_icon_80_path")]
     pub icon_80_path: String,
+    /// Local source override; leaves the manifest URL or ZIP entry unchanged.
+    pub icon_source_path: Option<String>,
+    /// Local source override; leaves the manifest URL or ZIP entry unchanged.
+    pub high_resolution_icon_source_path: Option<String>,
+    /// Local source override; leaves the manifest URL or ZIP entry unchanged.
+    pub icon_16_source_path: Option<String>,
+    /// Local source override; leaves the manifest URL or ZIP entry unchanged.
+    pub icon_32_source_path: Option<String>,
+    /// Local source override; leaves the manifest URL or ZIP entry unchanged.
+    pub icon_80_source_path: Option<String>,
 }
 
 impl Default for MsOfficeAddinManifestConfig {
     fn default() -> Self {
         Self {
+            icon_source_path: None,
+            high_resolution_icon_source_path: None,
+            icon_16_source_path: None,
+            icon_32_source_path: None,
+            icon_80_source_path: None,
             provider_name: default_ms_office_addin_manifest_provider_name(),
             display_name: default_ms_office_addin_manifest_display_name(),
             description: default_ms_office_addin_manifest_description(),

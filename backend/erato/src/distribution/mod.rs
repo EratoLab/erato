@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::config::AppConfig;
 
+pub mod branding;
 pub mod component_kits;
 pub mod desktop_sidecar;
 pub mod experience_policy;
@@ -25,6 +26,7 @@ use translations::TranslationDistribution;
 /// The complete set of artifacts available to one Erato process.
 #[derive(Clone, Debug)]
 pub struct Distribution {
+    pub branding: branding::BrandingAssets,
     pub frontend_bundles: FrontendBundles,
     pub component_kits: ComponentKitDistribution,
     pub translations: TranslationDistribution,
@@ -44,6 +46,7 @@ impl Distribution {
         let teams_app = load_teams_app(config);
 
         Self {
+            branding: branding::BrandingAssets::from_config(config),
             frontend_bundles,
             component_kits,
             translations,
@@ -58,7 +61,9 @@ fn load_teams_app(config: &AppConfig) -> Option<Arc<TeamsAppDistribution>> {
         return None;
     }
     match TeamsAppDistribution::load(&config.integrations.ms_office.addin.frontend_bundle_path) {
-        Ok(distribution) => Some(Arc::new(distribution)),
+        Ok(distribution) => Some(Arc::new(
+            distribution.with_branding(branding::BrandingAssets::from_config(config)),
+        )),
         Err(error) => {
             tracing::error!(%error, "Teams app distribution is enabled but could not be loaded");
             None
