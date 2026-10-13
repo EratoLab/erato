@@ -3084,6 +3084,303 @@ msgid "officeAddin.word.coauthors.pendingImport"
 msgstr "Word przechowuje zmiany współautorów, które nie zostały jeszcze scalone z Twoją kopią; zastąpienie całego dokumentu może je odrzucić."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.atCursorMany"
+msgstr "{count, plural, one {Kursor znajduje się w # komentarzu} few {Kursor znajduje się w # komentarzach} many {Kursor znajduje się w # komentarzach} other {Kursor znajduje się w # komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.comments.blocked.chooseComment"
+msgstr "Kursor znajduje się w więcej niż jednym komentarzu, więc Erato nie wie, o który chodzi."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.blocked.pickedGone"
+msgstr "Wybranego komentarza nie ma już w dokumencie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.blocked.readFailed"
+msgstr "Erato nie mógł odczytać komentarzy w programie Word."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.changeDefault"
+msgstr "Zmień ustawienie domyślne"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.choose"
+msgstr "Wybierz komentarz…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.emails"
+msgstr "Adresy e-mail autorów komentarzy nigdy nie są wysyłane."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.nearbyDocument"
+msgstr "Jeśli twoje pytanie tego wymaga, Erato może przeczytać pozostałe komentarze w dokumencie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.nearbyNear"
+msgstr "Jeśli twoje pytanie tego wymaga, Erato może przeczytać do {limit} komentarzy powyżej i {limit} poniżej zaznaczenia."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.resolved"
+msgstr "Rozwiązane komentarze są wysyłane tylko wtedy, gdy są w zaznaczeniu albo gdy o nie poprosisz."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.resolvedMap"
+msgstr "Lista obejmuje też rozwiązane komentarze, każdy z jego początkiem."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.rest"
+msgstr "{rest, plural, one {# inny komentarz nie jest wysyłany.} few {# inne komentarze nie są wysyłane.} many {# innych komentarzy nie jest wysyłanych.} other {# innego komentarza nie wysłano.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.sentMap"
+msgstr "{threads, plural, one {Lista komentarza w dokumencie: autor, miejsce, stan i początek.} few {Lista # komentarzy w dokumencie: autor, miejsce, stan i początek każdego.} many {Lista # komentarzy w dokumencie: autor, miejsce, stan i początek każdego.} other {Lista # komentarza w dokumencie: autor, miejsce, stan i początek każdego.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.sentOpen"
+msgstr "{threads, plural, one {Otwarty komentarz w dokumencie wraz z odpowiedziami.} few {# otwarte komentarze w dokumencie wraz z odpowiedziami.} many {# otwartych komentarzy w dokumencie wraz z odpowiedziami.} other {# otwartego komentarza w dokumencie wraz z odpowiedziami.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.sentSelection"
+msgstr "{threads, plural, one {Komentarz w zaznaczeniu wraz z odpowiedziami.} few {# komentarze w zaznaczeniu wraz z odpowiedziami.} many {# komentarzy w zaznaczeniu wraz z odpowiedziami.} other {# komentarza w zaznaczeniu wraz z odpowiedziami.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.sentThread"
+msgstr "Komentarz autorstwa {author} wraz z odpowiedziami."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentCoverage.tsx
+msgid "officeAddin.word.comments.coverage.trigger"
+msgstr "Co jest wysyłane"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.dismissPick"
+msgstr "Usuń wybrany komentarz"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.comments.includeOpen"
+msgstr "Uwzględnij otwarte komentarze"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.inSelection"
+msgstr "{count, plural, one {# komentarz w zaznaczeniu} few {# komentarze w zaznaczeniu} many {# komentarzy w zaznaczeniu} other {# komentarza w zaznaczeniu}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.mapListed"
+msgstr "{threads, plural, one {# komentarz jest wymieniony razem z dokumentem} few {# komentarze są wymienione razem z dokumentem} many {# komentarzy jest wymienionych razem z dokumentem} other {# komentarza wymieniono razem z dokumentem}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.coverage"
+msgstr "{total, plural, =0 {Brak komentarzy w tym dokumencie.} one {# komentarz w tym dokumencie: otwarte: {open}, rozwiązane: {resolved}.} few {# komentarze w tym dokumencie: otwarte: {open}, rozwiązane: {resolved}.} many {# komentarzy w tym dokumencie: otwarte: {open}, rozwiązane: {resolved}.} other {# komentarza w tym dokumencie: otwarte: {open}, rozwiązane: {resolved}.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.filter"
+msgstr "Pokaż komentarze"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.filterAll"
+msgstr "Wszystkie ({total})"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.filterOpen"
+msgstr "Otwarte ({open})"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.filterResolved"
+msgstr "Rozwiązane ({resolved})"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.inSelection"
+msgstr "W zaznaczeniu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.list"
+msgstr "Komentarze"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.noMatch"
+msgstr "Żaden komentarz nie pasuje do wyszukiwania."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.none"
+msgstr "Ten dokument nie ma komentarzy."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.noneOpen"
+msgstr "Brak otwartych komentarzy."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.noneResolved"
+msgstr "Brak rozwiązanych komentarzy."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.refresh"
+msgstr "Odśwież"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.replies"
+msgstr "{replies, plural, =0 {brak odpowiedzi} one {# odpowiedź} few {# odpowiedzi} many {# odpowiedzi} other {# odpowiedzi}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.search"
+msgstr "Szukaj komentarzy"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.searchPlaceholder"
+msgstr "Szukaj według autora lub tekstu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.sort"
+msgstr "Sortuj"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.sortActivity"
+msgstr "Ostatnia aktywność"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.sortDocument"
+msgstr "Kolejność w dokumencie"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.statusOpen"
+msgstr "Otwarty"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.statusResolved"
+msgstr "Rozwiązany"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.timeUnknown"
+msgstr "czas nieznany"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.title"
+msgstr "Wybierz komentarz"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.unplaced"
+msgstr "{unplaced, plural, one {Word nie podał miejsca # kolejnego komentarza, więc nie jest wymieniony.} few {Word nie podał miejsca # kolejnych komentarzy, więc nie są wymienione.} many {Word nie podał miejsca # kolejnych komentarzy, więc nie są wymienione.} other {Word nie podał miejsca # kolejnego komentarza, więc nie jest wymieniony.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.webHint"
+msgstr "W Wordzie dla sieci Web kliknięcie komentarza w dokumencie nie wybiera go tutaj. Wybierz go z tej listy."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.readingProgress"
+msgstr "Odczytywanie komentarzy… {done} z {total}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.sendWithout"
+msgstr "Wyślij bez komentarzy"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.switchToComment"
+msgstr "Pracuj zamiast tego nad komentarzem autorstwa {author}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.switchToPassage"
+msgstr "Użyj zamiast tego zaznaczonego fragmentu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.on"
+msgstr "do „{shown}”"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.point"
+msgstr "w miejscu bez zaznaczonego tekstu"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.title"
+msgstr "Komentarz autorstwa {author}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.titleWithReplies"
+msgstr "{replies, plural, =0 {Komentarz autorstwa {author}} one {Komentarz autorstwa {author} · # odpowiedź} few {Komentarz autorstwa {author} · # odpowiedzi} many {Komentarz autorstwa {author} · # odpowiedzi} other {Komentarz autorstwa {author} · # odpowiedzi}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.thread.unknown"
+msgstr "Wybrany komentarz"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.why.chosen"
+msgstr "Wybrany przez ciebie"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.why.cursor"
+msgstr "Przy kursorze"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.why.default"
+msgstr "Twoje ustawienie domyślne"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.withAgain"
+msgstr "Uwzględnij komentarze"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChip.tsx
+msgid "officeAddin.word.comments.without"
+msgstr "Ta wiadomość zostanie wysłana bez komentarzy."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.askAgain"
 msgstr "Zapytaj ponownie o edycję bezpośrednią"
@@ -4247,6 +4544,11 @@ msgid "officeAddin.word.selection.askAgainNote"
 msgstr "Twoja prośba jest z powrotem w polu wiadomości. Zaznacz fragment, o który chodzi, a następnie wyślij."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.selection.commentInstead"
+msgstr "Zamiast tego fragmentu wysyłany jest komentarz poniżej."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
 msgid "officeAddin.word.selection.comparisonLabel"
 msgstr "Zaznaczenie w chwili prośby → proponowane zastąpienie"
@@ -4708,6 +5010,12 @@ msgstr "Odczytywanie dokumentu trwało zbyt długo, więc Erato użył wcześnie
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.send.readingComments"
+msgstr "Odczytywanie komentarzy…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.readingDocument"
 msgstr "Odczytywanie dokumentu…"
 
@@ -4740,6 +5048,31 @@ msgstr "Stosuje pełną nową wersję bez pytania, tylko jeśli dokument nadal o
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysReplaceSelection"
 msgstr "Zastępuje zaznaczony fragment bez pytania, tylko jeśli nie zmienił się od twojej prośby. Cofnięcie jest dostępne, dopóki śledzenie zmian jest wyłączone."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.comment"
+msgstr "Pracować nad komentarzem"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.comment.helper"
+msgstr "Erato nie zaproponuje zastąpienia tekstu."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.legend"
+msgstr "Gdy zaznaczony tekst ma komentarze, Erato ma:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.selection"
+msgstr "Pracować nad zaznaczonym tekstem (domyślnie)"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentPrecedence.selection.helper"
+msgstr "Komentarze są wysyłane razem z nim, a Erato może zaproponować zastąpienie tekstu."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

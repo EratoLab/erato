@@ -6,7 +6,6 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
-  escapeXml,
   packageXml,
   paragraph,
   readySnapshot,
@@ -15,6 +14,7 @@ import {
   realisticSnapshot,
   realisticWordPackageXml,
 } from "../../../test/mocks/word/realisticWordFixtures";
+import { escapeXml } from "../../../utils/escapeXml";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {

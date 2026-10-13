@@ -13,7 +13,12 @@ import { useId, useMemo, useState, type ReactNode } from "react";
 
 import { UserSettingsTabContent } from "./UserSettingsTabContent";
 
-type SettingsTab = "appearance" | "user" | "audio" | "serversTools" | "host";
+export type AddinSettingsTab =
+  | "appearance"
+  | "user"
+  | "audio"
+  | "serversTools"
+  | "host";
 
 export interface AddinSettingsHostContribution {
   /** Tool-only contributions need no host tab; content controls tab visibility. */
@@ -35,6 +40,8 @@ export interface AddinSettingsDialogCoreProps {
   onClose: () => void;
   hostContribution?: AddinSettingsHostContribution;
   audioInputSupported?: boolean;
+  /** The tab the dialog shows each time it opens; the first tab when unset. */
+  openTab?: AddinSettingsTab;
 }
 
 /** Shared settings surface; host tabs and host-specific copy are opt-in. */
@@ -43,6 +50,7 @@ export function AddinSettingsDialogCore({
   onClose,
   hostContribution,
   audioInputSupported = true,
+  openTab,
 }: AddinSettingsDialogCoreProps) {
   const featureConfig = useFeatureConfig();
   const authorizeInBrowser = useMcpBrowserAuthorization();
@@ -58,9 +66,16 @@ export function AddinSettingsDialogCore({
     hostContribution?.serversToolsEntities != null ||
     desktopSidecarEnabled ||
     mcpServersEnabled;
-  const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
+  const [activeTab, setActiveTab] = useState<AddinSettingsTab>(
+    () => (isOpen && openTab) || "appearance",
+  );
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    if (isOpen && openTab) setActiveTab(openTab);
+  }
 
-  const tabOrder = useMemo<SettingsTab[]>(
+  const tabOrder = useMemo<AddinSettingsTab[]>(
     () => [
       "appearance",
       "user",
@@ -71,7 +86,7 @@ export function AddinSettingsDialogCore({
     [audioSettingsEnabled, serversToolsTabEnabled, hostContribution],
   );
 
-  const tabLabels: Record<SettingsTab, string> = {
+  const tabLabels: Record<AddinSettingsTab, string> = {
     appearance: t({
       id: "officeAddin.settings.tabs.appearance",
       message: "Appearance",
@@ -93,7 +108,7 @@ export function AddinSettingsDialogCore({
 
   const tabGroupId = useId();
 
-  const tabIds: Record<SettingsTab, string> = {
+  const tabIds: Record<AddinSettingsTab, string> = {
     appearance: `${tabGroupId}-tab-appearance`,
     user: `${tabGroupId}-tab-user`,
     audio: `${tabGroupId}-tab-audio`,
@@ -101,7 +116,7 @@ export function AddinSettingsDialogCore({
     host: `${tabGroupId}-tab-host`,
   };
 
-  const panelIds: Record<SettingsTab, string> = {
+  const panelIds: Record<AddinSettingsTab, string> = {
     appearance: `${tabGroupId}-panel-appearance`,
     user: `${tabGroupId}-panel-user`,
     audio: `${tabGroupId}-panel-audio`,

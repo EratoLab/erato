@@ -239,6 +239,33 @@ describe("buildWordDocumentArgs", () => {
     }
   });
 
+  it("keeps every heading's level and text by ordinal for section paths", () => {
+    const build = buildWordDocumentArgs([
+      paragraph(1, "The Annual Report", { styleBuiltIn: "Title" }),
+      paragraph(2, "Body"),
+      paragraph(3, "Over\u000Bview ", { styleBuiltIn: "Heading2" }),
+      paragraph(4, "  ", { styleBuiltIn: "Heading3" }),
+      paragraph(5, "Costs", { styleBuiltIn: "Other", outlineLevel: 3 }),
+    ]);
+    expect([...build.headings]).toEqual([
+      [1, { level: 1, text: "The Annual Report" }],
+      [3, { level: 2, text: "Over view" }],
+      [5, { level: 3, text: "Costs" }],
+    ]);
+  });
+
+  it("keeps the headings past the window too", () => {
+    const filler = "z".repeat(1_000);
+    const build = buildWordDocumentArgs([
+      ...Array.from({ length: 70 }, (_unused, index) =>
+        paragraph(index + 1, filler),
+      ),
+      paragraph(71, "Appendix", { styleBuiltIn: "Heading1" }),
+    ]);
+    expect(build.coverage.truncated).toBe(true);
+    expect(build.headings.get(71)).toEqual({ level: 1, text: "Appendix" });
+  });
+
   it("leaves the outline empty when nothing was truncated", () => {
     const build = buildWordDocumentArgs([
       paragraph(1, "Title", { styleBuiltIn: "Heading1" }),

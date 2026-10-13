@@ -2,6 +2,7 @@ import PostalMime from "postal-mime";
 
 import { buildEmlFile } from "./fetchOutlookMessageGraph";
 import { checkOauth2ProxySession } from "../../core/auth/oauth2ProxySession";
+import { escapeXml } from "../../utils/escapeXml";
 import { callOfficeAsync } from "../../utils/officeAsync";
 
 import type {
@@ -530,17 +531,6 @@ export function buildSoapEnvelope(body: string): string {
     `<soap:Body>${body}</soap:Body>` +
     "</soap:Envelope>"
   );
-}
-
-/** Escape the five XML-significant characters for safe interpolation into
- * attribute values and element text. */
-export function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
 }
 
 // --- SOAP body builders (one per operation) --------------------------------

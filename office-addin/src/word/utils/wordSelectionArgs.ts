@@ -28,6 +28,7 @@ export const WORD_SELECTION_ARG_KEYS = [
   "context_after",
   "truncated",
   "kept_items",
+  "anchored_comments",
 ] as const;
 
 export type WordSelectionArgKey = (typeof WORD_SELECTION_ARG_KEYS)[number];
@@ -63,6 +64,8 @@ export interface WordSelectionArgsInput {
   documentName: string;
   documentIdentity: string;
   selection: WordSelectionSnapshot;
+  /** The comment envelope of the passage's threads (wordCommentSend.ts); empty without one. */
+  anchoredComments?: string;
 }
 
 /**
@@ -91,6 +94,7 @@ export function wordSelectionFacetArgs(
     context_after: selection.contextAfter,
     truncated: String(selection.truncated || selected.truncated),
     kept_items: wordKeptItemsArg(selection),
+    anchored_comments: input.anchoredComments ?? "",
   };
   return advertisedFacetArgs(args, allowedArgs);
 }

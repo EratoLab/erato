@@ -28,18 +28,30 @@ vi.mock("../../../core/AddinSettingsDialogCore", () => ({
 
 let mockIncludeDocument = true;
 const mockSetIncludeDocument = vi.fn();
+let mockCommentPrecedence = "selection";
+const mockSetCommentPrecedence = vi.fn();
 
 vi.mock("../../wordPreferences", () => ({
   useWordIncludeDocumentByDefault: () => [
     mockIncludeDocument,
     mockSetIncludeDocument,
   ],
+  useWordCommentPrecedence: () => [
+    mockCommentPrecedence,
+    mockSetCommentPrecedence,
+  ],
 }));
 
 const mockUseActionFacetClientActions = vi.fn();
+const mockFacets = {
+  ids: new Set<string>(),
+  args: new Map<string, Set<string>>(),
+};
 
 vi.mock("../../../core/clientActions/useAvailableActionFacets", () => ({
   useActionFacetClientActions: () => mockUseActionFacetClientActions(),
+  useAvailableActionFacetIds: () => mockFacets.ids,
+  useAvailableActionFacetArgs: () => mockFacets.args,
 }));
 
 vi.mock("@erato/frontend/library", () => ({
@@ -56,11 +68,32 @@ vi.mock("@erato/frontend/library", () => ({
       {children}
     </div>
   ),
-  RadioCard: ({ label, helper }: { label: string; helper: string }) => (
-    <div>
+  RadioCard: ({
+    label,
+    helper,
+    name,
+    value,
+    checked,
+    onChange,
+  }: {
+    label: string;
+    helper: string;
+    name: string;
+    value: string;
+    checked: boolean;
+    onChange: () => void;
+  }) => (
+    <label>
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={onChange}
+      />
       <span>{label}</span>
       <span>{helper}</span>
-    </div>
+    </label>
   ),
   usePersistedState: () => [{}, vi.fn()],
 }));
@@ -72,6 +105,10 @@ describe("WordSettingsDialog", () => {
     contribution = undefined;
     mockIncludeDocument = true;
     mockSetIncludeDocument.mockReset();
+    mockCommentPrecedence = "selection";
+    mockSetCommentPrecedence.mockReset();
+    mockFacets.ids = new Set();
+    mockFacets.args = new Map();
     mockUseActionFacetClientActions.mockReturnValue(
       new Map([
         [
@@ -129,6 +166,60 @@ describe("WordSettingsDialog", () => {
         fireEvent.click(toggle());
         expect(mockSetIncludeDocument).toHaveBeenCalledExactlyOnceWith(
           !current,
+        );
+      },
+    );
+  });
+
+  describe("comment precedence", () => {
+    const advertise = (facets: Record<string, string[]>) => {
+      mockFacets.ids = new Set(Object.keys(facets));
+      mockFacets.args = new Map(
+        Object.entries(facets).map(([id, args]) => [id, new Set(args)]),
+      );
+    };
+    const radio = (name: RegExp) =>
+      screen.getByRole<HTMLInputElement>("radio", { name });
+    const group = () => screen.queryByTestId("word-comment-precedence");
+
+    it("is hidden while no comment thread can be sent on its own", () => {
+      render(<WordSettingsDialog isOpen onClose={() => {}} />);
+      expect(group()).toBeNull();
+
+      cleanup();
+      advertise({
+        word_selection: ["selected_text", "anchored_comments"],
+        word_document_review: ["document_text", "comment_map"],
+        word_comment_thread: ["thread_json"],
+      });
+      render(<WordSettingsDialog isOpen onClose={() => {}} />);
+      expect(group()).toBeNull();
+    });
+
+    it.each(["selection", "comment"])(
+      "sits in Word behavior once advertised, shows %s and saves the choice",
+      (current) => {
+        mockCommentPrecedence = current;
+        advertise({ word_comment_thread: ["thread_json", "comments_json"] });
+        render(<WordSettingsDialog isOpen onClose={() => {}} />);
+
+        expect(group()).toHaveTextContent(
+          "When the text you select has comments, Erato should:",
+        );
+        const selected = radio(/Work on the selected text \(default\)/);
+        const comment = radio(/Work on the comment/);
+        expect(selected.checked).toBe(current === "selection");
+        expect(comment.checked).toBe(current === "comment");
+        expect(selected).toHaveAccessibleName(
+          /Comments are sent along, and Erato can offer to replace the text\./,
+        );
+        expect(comment).toHaveAccessibleName(
+          /Erato does not offer to replace the text\./,
+        );
+
+        fireEvent.click(current === "selection" ? comment : selected);
+        expect(mockSetCommentPrecedence).toHaveBeenCalledExactlyOnceWith(
+          current === "selection" ? "comment" : "selection",
         );
       },
     );

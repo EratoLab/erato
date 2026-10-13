@@ -1,5 +1,7 @@
 import { vi } from "vitest";
 
+import { escapeXml } from "../../../utils/escapeXml";
+
 import type { Mock } from "vitest";
 
 /**
@@ -933,13 +935,6 @@ function relation(a: Bounds, b: Bounds): string {
   return s1 < s2 ? "OverlapsBefore" : "OverlapsAfter";
 }
 
-const esc = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-
 const childW = (parent: Element | undefined | null, name: string) =>
   parent
     ? Array.from(parent.children).find(
@@ -1763,7 +1758,7 @@ export function installWordSelectionHost(
   };
 
   const revisionAttrs = (r: Revision) =>
-    ` w:id="${r.id}" w:author="${esc(r.author)}" w:date="${r.date}"`;
+    ` w:id="${r.id}" w:author="${escapeXml(r.author)}" w:date="${r.date}"`;
   const onOff = (name: string, value: boolean | undefined) =>
     value === undefined
       ? ""
@@ -1772,10 +1767,11 @@ export function installWordSelectionHost(
         : `<w:${name} w:val="0"/>`;
   const rPrContent = (font: MockSelectionFont, rStyle?: string) => {
     const parts: string[] = [];
-    if (rStyle) parts.push(`<w:rStyle w:val="${esc(styleIdOf(rStyle))}"/>`);
+    if (rStyle)
+      parts.push(`<w:rStyle w:val="${escapeXml(styleIdOf(rStyle))}"/>`);
     if (font.name !== undefined || font.nameBidirectional !== undefined)
       parts.push(
-        `<w:rFonts${font.name !== undefined ? ` w:ascii="${esc(font.name)}" w:hAnsi="${esc(font.name)}"` : ""}${font.nameBidirectional !== undefined ? ` w:cs="${esc(font.nameBidirectional)}"` : ""}/>`,
+        `<w:rFonts${font.name !== undefined ? ` w:ascii="${escapeXml(font.name)}" w:hAnsi="${escapeXml(font.name)}"` : ""}${font.nameBidirectional !== undefined ? ` w:cs="${escapeXml(font.nameBidirectional)}"` : ""}/>`,
       );
     parts.push(
       onOff("b", font.bold),
@@ -1786,14 +1782,16 @@ export function installWordSelectionHost(
       onOff("vanish", font.hidden),
     );
     if (font.color !== undefined)
-      parts.push(`<w:color w:val="${esc(font.color.replace(/^#/, ""))}"/>`);
+      parts.push(
+        `<w:color w:val="${escapeXml(font.color.replace(/^#/, ""))}"/>`,
+      );
     if (font.size !== undefined)
       parts.push(`<w:sz w:val="${Math.round(font.size * 2)}"/>`);
     if (font.sizeBidirectional !== undefined)
       parts.push(`<w:szCs w:val="${Math.round(font.sizeBidirectional * 2)}"/>`);
     if (font.highlightColor !== undefined)
       parts.push(
-        `<w:highlight w:val="${esc(font.highlightColor ?? "none")}"/>`,
+        `<w:highlight w:val="${escapeXml(font.highlightColor ?? "none")}"/>`,
       );
     if (font.underline !== undefined)
       parts.push(
@@ -1833,7 +1831,7 @@ export function installWordSelectionHost(
       .map(
         (part) =>
           BREAK_XML[part] ??
-          `<w:${deleted ? "delText" : "t"} xml:space="preserve">${esc(part)}</w:${deleted ? "delText" : "t"}>`,
+          `<w:${deleted ? "delText" : "t"} xml:space="preserve">${escapeXml(part)}</w:${deleted ? "delText" : "t"}>`,
       )
       .join("");
   const runKey = (t: Token) =>
@@ -1908,7 +1906,7 @@ export function installWordSelectionHost(
       for (const starting of next)
         if (!bookmarks.includes(starting) && !options.ooxmlOmitsBookmarks)
           out.push(
-            `<w:bookmarkStart w:id="${starting.id}" w:name="${esc(starting.name)}"/>`,
+            `<w:bookmarkStart w:id="${starting.id}" w:name="${escapeXml(starting.name)}"/>`,
           );
       bookmarks = next;
     };
@@ -1951,7 +1949,7 @@ export function installWordSelectionHost(
       if (!sdt && tSdt) {
         sdt = tSdt;
         out.push(
-          `<w:sdt><w:sdtPr><w:tag w:val="${esc(sdt.tag)}"/></w:sdtPr><w:sdtContent>`,
+          `<w:sdt><w:sdtPr><w:tag w:val="${escapeXml(sdt.tag)}"/></w:sdtPr><w:sdtContent>`,
         );
       }
       if (!link && tLink) {
@@ -1970,7 +1968,7 @@ export function installWordSelectionHost(
       if (!field && tField) {
         field = tField;
         out.push(
-          `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${esc(field.code)} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`,
+          `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${escapeXml(field.code)} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`,
         );
       }
       const props = runProperties(t.run);
@@ -2038,7 +2036,7 @@ export function installWordSelectionHost(
     const para = paraOf(markTokenAt);
     const pPr: string[] = [];
     if (para.style !== "Normal")
-      pPr.push(`<w:pStyle w:val="${esc(styleIdOf(para.style))}"/>`);
+      pPr.push(`<w:pStyle w:val="${escapeXml(styleIdOf(para.style))}"/>`);
     if (para.list)
       pPr.push(`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>`);
     const markRev = markTokenAt.run.ins ?? markTokenAt.run.del;
@@ -2055,7 +2053,7 @@ export function installWordSelectionHost(
     })}</w:rPr></w:rPrDefault></w:docDefaults>${[...styleTable.values()]
       .map((def) => {
         const rPr = rPrContent(def.font);
-        return `<w:style w:type="${def.type}"${def.name === "Normal" ? ' w:default="1"' : ""} w:styleId="${esc(def.id)}"><w:name w:val="${esc(def.ooxmlName)}"/>${def.basedOn ? `<w:basedOn w:val="${esc(styleIdOf(def.basedOn))}"/>` : ""}${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}</w:style>`;
+        return `<w:style w:type="${def.type}"${def.name === "Normal" ? ' w:default="1"' : ""} w:styleId="${escapeXml(def.id)}"><w:name w:val="${escapeXml(def.ooxmlName)}"/>${def.basedOn ? `<w:basedOn w:val="${escapeXml(styleIdOf(def.basedOn))}"/>` : ""}${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}</w:style>`;
       })
       .join("")}</w:styles>`;
   const pkgPart = (name: string, type: string, xml: string) =>
@@ -2178,7 +2176,7 @@ export function installWordSelectionHost(
     const rels = [...links]
       .map(
         ([link, id]) =>
-          `<Relationship Id="${id}" Type="${R}/hyperlink" Target="${esc(link.url)}" TargetMode="External"/>`,
+          `<Relationship Id="${id}" Type="${R}/hyperlink" Target="${escapeXml(link.url)}" TargetMode="External"/>`,
       )
       .join("");
     return [

@@ -1,7 +1,9 @@
+import { WORD_COMMENT_THREAD_FACET_ID } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
   resolveWordActionFacet,
+  resolveWordCommentThreadFacet,
   resolveWordSelectionFacet,
   WORD_COMPOSE_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
@@ -136,6 +138,60 @@ describe("resolveWordActionFacet", () => {
     }
   });
 
+  it("adds comment_map only to a document facet that advertises it", () => {
+    const map = '{"v":1,"scope":"document"}';
+    const withMap = (facetId: string) =>
+      new Map([
+        [facetId, new Set([...(ALLOWED_ARGS[facetId] ?? []), "comment_map"])],
+      ]);
+    expect(
+      resolveWordActionFacet(
+        input({
+          commentMap: map,
+          availableFacetArgs: withMap(WORD_DOCUMENT_REVIEW_FACET_ID),
+        }),
+      )?.args?.comment_map,
+    ).toBe(map);
+    expect(
+      resolveWordActionFacet(
+        input({
+          availableFacetArgs: withMap(WORD_DOCUMENT_REVIEW_FACET_ID),
+        }),
+      )?.args?.comment_map,
+    ).toBe("");
+    expect(
+      resolveWordActionFacet(input({ commentMap: map }))?.args,
+    ).not.toHaveProperty("comment_map");
+    expect(
+      resolveWordActionFacet(
+        input({
+          commentMap: map,
+          availableFacetArgs: withMap(WORD_COMPOSE_FACET_ID),
+        }),
+      )?.args,
+    ).not.toHaveProperty("comment_map");
+    expect(
+      resolveWordActionFacet(
+        input({
+          commentMap: map,
+          authoring: { token: "snapshot-1" } as WordAuthoringSnapshot,
+          availableFacetIds: new Set([WORD_AUTHORING_FACET_ID]),
+          availableFacetArgs: withMap(WORD_AUTHORING_FACET_ID),
+        }),
+      )?.args?.comment_map,
+    ).toBe(map);
+    expect(
+      resolveWordActionFacet(
+        input({
+          commentMap: map,
+          authoring: { token: "snapshot-1" } as WordAuthoringSnapshot,
+          availableFacetIds: new Set([WORD_AUTHORING_FACET_ID]),
+          availableFacetArgs: withMap(WORD_DOCUMENT_REVIEW_FACET_ID),
+        }),
+      )?.args,
+    ).not.toHaveProperty("comment_map");
+  });
+
   it("carries the document on every send, with no fingerprint de-dup", () => {
     const first = resolveWordActionFacet(input());
     const second = resolveWordActionFacet(input());
@@ -216,6 +272,7 @@ describe("word_selection", () => {
         context_after: ".",
         truncated: "false",
         kept_items: "",
+        anchored_comments: "",
       },
     });
     expect(
@@ -232,6 +289,49 @@ describe("word_selection", () => {
 
   it("is not sent when the server does not advertise it", () => {
     expect(resolve({ availableFacetIds: new Set() })).toBeUndefined();
+  });
+});
+
+describe("word_comment_thread", () => {
+  const resolve = (allowed: string[], ids = [WORD_COMMENT_THREAD_FACET_ID]) =>
+    resolveWordCommentThreadFacet({
+      documentName: "Plan.docx",
+      documentIdentity: "doc-1",
+      threadJson: '{"id":"t7k"}',
+      commentsJson: '{"v":1}',
+      availableFacetIds: new Set(ids),
+      availableFacetArgs: new Map([
+        [WORD_COMMENT_THREAD_FACET_ID, new Set(allowed)],
+      ]),
+    });
+
+  it("carries the thread and its envelope, with advertised keys only", () => {
+    expect(
+      resolve([
+        "document_name",
+        "document_identity",
+        "thread_json",
+        "comments_json",
+      ]),
+    ).toEqual({
+      id: WORD_COMMENT_THREAD_FACET_ID,
+      args: {
+        document_name: "Plan.docx",
+        document_identity: "doc-1",
+        thread_json: '{"id":"t7k"}',
+        comments_json: '{"v":1}',
+      },
+    });
+    expect(resolve(["thread_json", "comments_json"])?.args).toEqual({
+      thread_json: '{"id":"t7k"}',
+      comments_json: '{"v":1}',
+    });
+  });
+
+  it("is not sent unless the facet takes both thread_json and comments_json", () => {
+    expect(resolve(["thread_json"])).toBeUndefined();
+    expect(resolve(["comments_json"])).toBeUndefined();
+    expect(resolve(["thread_json", "comments_json"], [])).toBeUndefined();
   });
 });
 

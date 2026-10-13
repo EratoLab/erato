@@ -80,15 +80,19 @@ vi.mock("../../hooks/useWordDocumentSource", () => ({
 
 vi.mock("../../wordPreferences", () => ({
   useWordIncludeDocumentByDefault: () => [host.includeDocument, () => {}],
+  useWordCommentPrecedence: () => ["selection", () => {}],
 }));
 
 type SendCall = Parameters<AddinChatInputRenderProps["onSendMessage"]>;
 type Prepared = Awaited<ReturnType<NonNullable<SendCall[11]>["run"]>>;
 
 const IDENTITY = "https://contoso.sharepoint.com/Shared%20Documents/a.docx";
+// As deployed before ERMAIN-951 advertises comments.
 const SELECTION_FACET = {
   id: "word_selection",
-  allowed_args: [...WORD_SELECTION_ARG_KEYS],
+  allowed_args: WORD_SELECTION_ARG_KEYS.filter(
+    (key) => key !== "anchored_comments",
+  ),
 };
 const REVIEW_FACET = { id: "word_document_review" };
 
@@ -103,6 +107,7 @@ const documentBuild = (): WordDocumentBuild =>
     },
     coverage: { hasContent: true, paragraphsSent: 1 },
     ordinalMap: new Map(),
+    headings: new Map(),
     renderedOrdinals: new Set([1]),
     partialOrdinal: null,
   }) as unknown as WordDocumentBuild;

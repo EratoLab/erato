@@ -1,6 +1,8 @@
 // Pure Word review model: no React, lingui or Office.js behind it.
 export * from "./wordBlockFormatting";
 export * from "./wordBuiltInStyles";
+export * from "./wordCommentContext";
+export * from "./wordCommentReads";
 export * from "./wordDocumentCapture";
 export * from "./wordDocumentPlan";
 export * from "./wordEditPlan";

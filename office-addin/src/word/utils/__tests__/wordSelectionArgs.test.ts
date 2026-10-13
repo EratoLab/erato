@@ -78,6 +78,7 @@ describe("wordSelectionFacetArgs", () => {
       "context_after",
       "truncated",
       "kept_items",
+      "anchored_comments",
     ]);
   });
 
@@ -96,10 +97,31 @@ describe("wordSelectionFacetArgs", () => {
       context_after: "\nOutro",
       truncated: "false",
       kept_items: "",
+      anchored_comments: "",
     });
     expect(
       args(SELECTION, new Set([...WORD_SELECTION_ARG_KEYS, "text_version"])),
     ).not.toHaveProperty("text_version");
+  });
+
+  it("carries the passage's comment envelope only where anchored_comments is advertised", () => {
+    const envelope = '{"v":1,"scope":"selection"}';
+    const withComments = (allowed: ReadonlySet<string>) =>
+      wordSelectionFacetArgs(
+        {
+          documentName: "Report.docx",
+          documentIdentity: "doc-1",
+          selection: SELECTION,
+          anchoredComments: envelope,
+        },
+        allowed,
+      );
+    expect(withComments(ALL).anchored_comments).toBe(envelope);
+    const dark = new Set(
+      WORD_SELECTION_ARG_KEYS.filter((key) => key !== "anchored_comments"),
+    );
+    expect(withComments(dark)).not.toHaveProperty("anchored_comments");
+    expect(withComments(dark)).toEqual(args(SELECTION, dark));
   });
 
   it("sends the reason of a context-only selection", () => {

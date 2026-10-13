@@ -2054,6 +2054,116 @@ msgstr "Nie udało się cofnąć archiwizacji czatu"
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.count"
+msgstr "{count, plural, one {# komentarz} few {# komentarze} many {# komentarzy} other {# komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.hide"
+msgstr "Ukryj komentarze"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.map"
+msgstr "Mapa komentarzy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.matchedByContent"
+msgstr "dopasowany po treści"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.notShown"
+msgstr "{count, plural, one {# niewyświetlony} few {# niewyświetlone} many {# niewyświetlonych} other {# niewyświetlonego}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.omittedReplies"
+msgstr "{omitted, plural, one {# wcześniejsza odpowiedź nie została wysłana} few {# wcześniejsze odpowiedzi nie zostały wysłane} many {# wcześniejszych odpowiedzi nie zostało wysłanych} other {# wcześniejszej odpowiedzi nie wysłano}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.on"
+msgstr "do „{quote}”"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.open"
+msgstr "Otwarte komentarze"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.openStatus"
+msgstr "Otwarty"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.passage"
+msgstr "Zaznaczony fragment"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.point"
+msgstr "w miejscu bez zaznaczonego tekstu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.replies"
+msgstr "{count, plural, one {# odpowiedź} few {# odpowiedzi} many {# odpowiedzi} other {# odpowiedzi}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.repliesUnread"
+msgstr "Odpowiedzi nie zostały odczytane."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.resolved"
+msgstr "Rozwiązany"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.sentContext"
+msgstr "Wysłany kontekst: {summary}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.show"
+msgstr "Pokaż komentarze"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.thread"
+msgstr "Komentarz autorstwa {author}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.threads"
+msgstr "{listed, plural, one {# wątek} few {# wątki} many {# wątków} other {# wątku}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.timeUnknown"
+msgstr "czas nieznany"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.chosen"
+msgstr "Wybrany przez ciebie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.cursor"
+msgstr "Przy kursorze"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.default"
+msgstr "Twoje ustawienie domyślne"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ActionFacetContext.tsx
 msgid "chat.message.action_facet.selection_label"
 msgstr "Zaznaczenie"
@@ -2344,6 +2454,46 @@ msgstr "Model zmieniono z {fromModel} na {toModel}"
 #: src/components/ui/Message/ModelSwitchMarker.tsx
 #~ msgid "chat.message.modelSwitched"
 #~ msgstr "Model został zmieniony. Kontynuowanie tej rozmowy z innym modelem może wpłynąć na jej kontekst."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.all"
+msgstr "{count, plural, one {Przeczytano # komentarz} few {Przeczytano # komentarze} many {Przeczytano # komentarzy} other {Przeczytano # komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.failed"
+msgstr "Komentarze nie zostały przeczytane"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.map"
+msgstr "{count, plural, one {Przeczytano mapę komentarzy: # wątek} few {Przeczytano mapę komentarzy: # wątki} many {Przeczytano mapę komentarzy: # wątków} other {Przeczytano mapę komentarzy: # wątku}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.near"
+msgstr "{count, plural, one {Przeczytano # pobliski komentarz} few {Przeczytano # pobliskie komentarze} many {Przeczytano # pobliskich komentarzy} other {Przeczytano # pobliskiego komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.notShown"
+msgstr "{notShown, plural, one {# niewyświetlony} few {# niewyświetlone} many {# niewyświetlonych} other {# niewyświetlonego}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.open"
+msgstr "{count, plural, one {Przeczytano # otwarty komentarz} few {Przeczytano # otwarte komentarze} many {Przeczytano # otwartych komentarzy} other {Przeczytano # otwartego komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.resolved"
+msgstr "{count, plural, one {Przeczytano # rozwiązany komentarz} few {Przeczytano # rozwiązane komentarze} many {Przeczytano # rozwiązanych komentarzy} other {Przeczytano # rozwiązanego komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.section"
+msgstr "{count, plural, one {Przeczytano # komentarz z sekcji} few {Przeczytano # komentarze z sekcji} many {Przeczytano # komentarzy z sekcji} other {Przeczytano # komentarza z sekcji}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/MessageList/MessageEditor.tsx

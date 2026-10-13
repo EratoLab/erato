@@ -5,10 +5,23 @@ import {
   DocumentIcon,
   SpinnerIcon,
   registerClientToolExecutor,
+  useProfile,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  WORD_COMMENT_LINK_CLASS,
+  WordCommentChip,
+  wordCommentChipView,
+  wordCommentChooseText,
+  wordCommentSendWithoutText,
+} from "./WordCommentChip";
+import {
+  WordCommentCoverage,
+  wordCommentCoverageInfo,
+} from "./WordCommentCoverage";
+import { WordCommentPicker, wordCommentReadingText } from "./WordCommentPicker";
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
 import {
   useAvailableActionFacetArgs,
@@ -18,14 +31,17 @@ import { AddinSelectionChip } from "../../core/selection/AddinSelectionChip";
 import { useConversationKey } from "../../core/selection/useConversationKey";
 import { useSelectionDismissal } from "../../core/selection/useSelectionDismissal";
 import { useWordClientOperations } from "../hooks/useWordClientOperations";
+import { useWordComments } from "../hooks/useWordComments";
 import { useWordDocumentSource } from "../hooks/useWordDocumentSource";
 import { useWordSelection } from "../hooks/useWordSelection";
+import { wordCommentGestureStore } from "../hooks/wordCommentGestureStore";
 import {
   armWordSelection,
   wordSelectionStore,
 } from "../hooks/wordSelectionStore";
 import {
   resolveWordActionFacet,
+  resolveWordCommentThreadFacet,
   resolveWordSelectionFacet,
   WORD_COMPOSE_FACET_ID,
   WORD_AUTHORING_FACET_ID,
@@ -38,6 +54,36 @@ import {
 import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
 import { checkWordAuthoringBudget } from "../utils/wordAuthoringBudget";
 import { wordAuthoringIssueText } from "../utils/wordAuthoringMessages";
+import { wordCommentUserTimeZone } from "../utils/wordCommentEnvelope";
+import { wordCommentHeadingsFromBuild } from "../utils/wordCommentMap";
+import { wordCommentSelectionCoordinates } from "../utils/wordCommentPositions";
+import {
+  wordCommentReadSession,
+  WORD_READ_COMMENTS_TOOL,
+} from "../utils/wordCommentReadTool";
+import {
+  readWordComments,
+  wordCommentInventoryFromCapture,
+} from "../utils/wordCommentReader";
+import {
+  wordCommentIdOfRef,
+  wordCommentRefRegistry,
+} from "../utils/wordCommentRefs";
+import {
+  resolveWordCommentSend,
+  withWordCommentRefs,
+  wordAnchoredCommentsArg,
+  wordCommentAdvertised,
+  wordCommentsAdvertised,
+  wordCommentMapArg,
+  wordCommentSendExact,
+  wordCommentSendable,
+  wordCommentSendRead,
+  wordCommentSendSelection,
+  wordCommentsDue,
+  wordCommentThreadArgs,
+} from "../utils/wordCommentSend";
+import { showWordComment } from "../utils/wordCommentShow";
 import { resolveWordDocumentName } from "../utils/wordDocumentIdentity";
 import { bindWordDocumentReadRequest } from "../utils/wordDocumentReadRequest";
 import {
@@ -48,11 +94,19 @@ import {
   createWordDocumentSubmissionExecutor,
   WORD_SUBMIT_PLAN_TOOL,
 } from "../utils/wordDocumentSubmission";
+import { wordHostPlatform } from "../utils/wordHostPlatform";
 import { captureWordImageAssets } from "../utils/wordImageAssets";
 import { emptySelectionCapture } from "../utils/wordSelectionAnchor";
-import { captureWordSelection } from "../utils/wordSelectionCapture";
+import {
+  captureWordSelection,
+  wordSelectionMayRewrite,
+} from "../utils/wordSelectionCapture";
+import { currentWordSelectionSupport } from "../utils/wordSelectionSupport";
 import { markWordSend } from "../utils/wordSendTiming";
-import { useWordIncludeDocumentByDefault } from "../wordPreferences";
+import {
+  useWordCommentPrecedence,
+  useWordIncludeDocumentByDefault,
+} from "../wordPreferences";
 
 import type {
   AddinChatInputRenderProps,
@@ -61,12 +115,28 @@ import type {
 import type { AddinChatInputCoreProps } from "../../core/AddinChatInputCore";
 import type { WordDocumentPreview } from "../hooks/useWordDocumentSource";
 import type { WordDocumentBuild } from "../utils/buildWordDocumentArgs";
+import type { WordCommentSelectionCoordinates } from "../utils/wordCommentPositions";
+import type {
+  WordCommentReadActivation,
+  WordCommentReadGestures,
+} from "../utils/wordCommentReadTool";
+import type { WordCommentInventory } from "../utils/wordCommentReader";
+import type {
+  WordCommentBlock,
+  WordCommentDecision,
+  WordCommentSendInput,
+  WordCommentSendPlan,
+  WordCommentSendRead,
+  WordCommentSendSelection,
+} from "../utils/wordCommentSend";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export interface WordChatInputProps {
   chatInputProps: AddinChatInputRenderProps;
   documentIdentity: string;
   stagePendingCapture: (capture: WordDocumentCapture | null) => void;
+  /** Opens the settings on the Word tab, where the comment default lives. */
+  onOpenWordSettings?: () => void;
 }
 
 export const WORD_SEND_SKIP_OFFER_MS = 8_000;
@@ -120,6 +190,7 @@ export function WordChatInput({
   chatInputProps,
   documentIdentity,
   stagePendingCapture,
+  onOpenWordSettings,
 }: WordChatInputProps) {
   useWordClientOperations(documentIdentity);
   const { chatId } = chatInputProps;
@@ -140,6 +211,20 @@ export function WordChatInput({
   const settleCaptureRef = useRef<((outcome: CaptureOutcome) => void) | null>(
     null,
   );
+  const [commentPrecedence] = useWordCommentPrecedence();
+  const {
+    pick: commentPick,
+    override: commentOverride,
+    withoutComments,
+    includeOpenComments,
+  } = wordCommentGestureStore.useSnapshot();
+  const [commentBlock, setCommentBlock] = useState<WordCommentBlock | null>(
+    null,
+  );
+  const decideCommentsRef = useRef<
+    ((decision: WordCommentDecision) => void) | null
+  >(null);
+  const leftCommentsRef = useRef<"chat" | "document" | null>(null);
   const lastChatIdRef = useRef(chatId);
   if (chatId !== lastChatIdRef.current) {
     // Receiving an ID for a new chat is continuation, not a switch to another conversation.
@@ -152,6 +237,7 @@ export function WordChatInput({
       // The send waiting in the chat being left is dropped now, so it cannot hold up this one.
       const settle = settleCaptureRef.current;
       if (settle) globalThis.queueMicrotask(() => settle({ kind: "aborted" }));
+      leftCommentsRef.current = "chat";
     }
   }
   const lastIdentityRef = useRef(documentIdentity);
@@ -159,19 +245,40 @@ export function WordChatInput({
     lastIdentityRef.current = documentIdentity;
     setChatDefault(includeByDefault);
     setInclusionOverride(null);
+    leftCommentsRef.current ??= "document";
   }
+  // The gestures belong to the chat and the document left; a Send waiting on them is dropped.
+  useEffect(() => {
+    const left = leftCommentsRef.current;
+    if (!left) return;
+    leftCommentsRef.current = null;
+    wordCommentGestureStore.leave(left);
+    decideCommentsRef.current?.({ kind: "abort" });
+  }, [chatId, documentIdentity]);
 
   const isDocumentIncluded =
     inclusionOverride ?? (chatId === null ? includeByDefault : chatDefault);
   const chipEnabled = isDocumentIncluded && chipAvailable;
 
   const availableFacetArgs = useAvailableActionFacetArgs();
+  const commentAdvertised = useMemo(
+    () => wordCommentAdvertised(availableFacetIds, availableFacetArgs),
+    [availableFacetIds, availableFacetArgs],
+  );
   const selectionAvailable = wordSelectionFacetAvailable(
     availableFacetIds,
     availableFacetArgs,
   );
   useWordSelection(documentIdentity, selectionAvailable);
   const liveSelection = wordSelectionStore.useSnapshot();
+  // A passage Erato selected, as Show in Word does, is no new selection of the user's.
+  const armedSelectionKey = liveSelection.armed
+    ? (liveSelection.preview?.key ?? null)
+    : null;
+  useEffect(() => {
+    wordCommentGestureStore.pick({ kind: "selection", key: armedSelectionKey });
+    wordCommentGestureStore.set({ override: null, withoutComments: false });
+  }, [armedSelectionKey]);
   const selectionDismissal = useSelectionDismissal(
     liveSelection.preview?.key ?? "",
     useConversationKey(chatId, documentIdentity),
@@ -198,6 +305,76 @@ export function WordChatInput({
       liveSelection.pending);
   const selectionReplacesDocument =
     chipEnabled && selectionShown && liveSelection.armed;
+
+  const commentsShown = wordCommentsAdvertised(commentAdvertised);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [commentProgress, setCommentProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const pickRef = commentPick?.ref ?? null;
+  const { list: commentList, refresh: refreshComments } = useWordComments({
+    documentIdentity,
+    enabled: commentsShown,
+    detailed: pickerOpen,
+    picked: pickRef,
+  });
+  const passageGoes = selectionShown && liveSelection.armed;
+  const liveCommentSelection: WordCommentSendSelection = passageGoes
+    ? {
+        kind: "passage",
+        threads:
+          commentList.selection.kind === "passage"
+            ? commentList.selection.threads
+            : [],
+        rewritable: liveSelection.preview?.mayRewrite ?? false,
+      }
+    : commentList.selection.kind === "caret"
+      ? { kind: "caret", threads: commentList.selection.threads }
+      : { kind: "none" };
+  // What Send would resolve now; Send reads Word again and decides for itself.
+  const livePlan = resolveWordCommentSend({
+    advertised: commentAdvertised,
+    selection: liveCommentSelection,
+    precedence: commentPrecedence,
+    pick: pickRef,
+    pickFound:
+      pickRef === null ||
+      commentList.status !== "ready" ||
+      commentList.threads.some((thread) => thread.ref === pickRef),
+    override: commentOverride,
+    withoutComments: false,
+    documentIncluded: chipEnabled,
+    includeOpenComments,
+    readFailed: false,
+  });
+  const commentView = wordCommentChipView({
+    plan: livePlan,
+    list: commentList,
+    passage: passageGoes,
+    pick: pickRef,
+    withoutComments,
+  });
+  const commentCoverage = wordCommentCoverageInfo(livePlan, commentList, {
+    // A passage or a thread goes instead of the document, and reads follow what went.
+    document: chipEnabled && !passageGoes && livePlan.carrier.kind !== "thread",
+    picked: pickRef !== null,
+    openComments: includeOpenComments,
+  });
+  const chipOffersChoose =
+    commentView.kind === "choose" ||
+    commentView.kind === "picked-gone" ||
+    (commentView.kind === "passage" && commentView.offerChoose);
+  const pickComment = (ref: string) => {
+    wordCommentGestureStore.pick({
+      kind: "pick",
+      ref,
+      selectionKey: armedSelectionKey,
+    });
+    if (commentBlock === "choose-comment" || commentBlock === "picked-gone")
+      decideCommentsRef.current?.({ kind: "pick", ref });
+    setPickerOpen(false);
+  };
   const [selectionReadFailed, setSelectionReadFailed] = useState(false);
   const { preview, capture, captureExpectedSlow, previousCapture, markSent } =
     useWordDocumentSource({
@@ -226,13 +403,51 @@ export function WordChatInput({
   sendingContextRef.current = { chatId, documentIdentity };
   const readEnabledRef = useRef(chipEnabled);
   readEnabledRef.current = chipEnabled;
+  const { profile } = useProfile();
+  const principalEmail = profile?.email ?? null;
   const stopRequestBindingRef = useRef<(() => void) | undefined>(undefined);
   const clearReadSession = useCallback(() => {
     stopRequestBindingRef.current?.();
     stopRequestBindingRef.current = undefined;
     wordDocumentReadSession.clear();
   }, []);
+  // Comment reads also serve a selection sent without the document, so inclusion does not clear them.
+  const stopCommentBindingRef = useRef<(() => void) | undefined>(undefined);
+  const clearCommentSession = useCallback(() => {
+    stopCommentBindingRef.current?.();
+    stopCommentBindingRef.current = undefined;
+    wordCommentReadSession.clear();
+  }, []);
+  /** A blocked Send waits here, with its message pending, until the user decides or stops it. */
+  const waitForCommentDecision = useCallback(
+    (block: WordCommentBlock, signal: AbortSignal) =>
+      new Promise<WordCommentDecision>((resolve) => {
+        let settled = false;
+        const finish = (decision: WordCommentDecision) => {
+          if (settled) return;
+          settled = true;
+          signal.removeEventListener("abort", abort);
+          if (decideCommentsRef.current === finish)
+            decideCommentsRef.current = null;
+          setCommentBlock(null);
+          resolve(decision);
+        };
+        const abort = () => finish({ kind: "abort" });
+        if (signal.aborted) {
+          resolve({ kind: "abort" });
+          return;
+        }
+        signal.addEventListener("abort", abort, { once: true });
+        decideCommentsRef.current = finish;
+        setCommentBlock(block);
+      }),
+    [],
+  );
   useEffect(() => {
+    const unregisterComments = registerClientToolExecutor(
+      WORD_READ_COMMENTS_TOOL,
+      wordCommentReadSession.execute,
+    );
     const submit = createWordDocumentSubmissionExecutor(
       wordDocumentReadSession,
     );
@@ -253,9 +468,11 @@ export function WordChatInput({
     return () => {
       unregister();
       unregisterSubmit();
+      unregisterComments();
       clearReadSession();
+      clearCommentSession();
     };
-  }, [clearReadSession]);
+  }, [clearReadSession, clearCommentSession]);
   useEffect(() => clearReadSession, [documentIdentity, clearReadSession]);
   useEffect(() => {
     if (!chipEnabled) {
@@ -282,6 +499,7 @@ export function WordChatInput({
     ) => {
       if (preparingRef.current) return;
       clearReadSession();
+      clearCommentSession();
       setSelectionReadFailed(false);
       setCaptureNotice(null);
       const send = (
@@ -305,7 +523,15 @@ export function WordChatInput({
         );
       };
 
-      if (!chipEnabled && !selectionDue) {
+      // Nothing advertised means no comment API call at all.
+      const commentsDue = wordCommentsDue({
+        advertised: commentAdvertised,
+        withoutComments,
+        selectionDue,
+        documentIncluded: chipEnabled,
+      });
+      const spentGestures = wordCommentGestureStore.sent();
+      if (!chipEnabled && !selectionDue && !commentsDue) {
         stagePendingCapture(null);
         send(undefined, null);
         return;
@@ -316,16 +542,202 @@ export function WordChatInput({
         sendingContextRef.current.documentIdentity !== documentIdentity;
       const resolvedModelId =
         modelId ?? chatInputProps.controlledSelectedModel?.chat_provider_id;
+      const activateCommentReads = (
+        activation: Pick<
+          WordCommentReadActivation,
+          "gestures" | "selection" | "inventory" | "headings" | "withheld"
+        >,
+      ) => {
+        const token = wordCommentReadSession.activate({
+          ...activation,
+          identity: documentIdentity,
+          people: { principalEmail },
+          documentIncluded: () => readEnabledRef.current,
+        });
+        stopCommentBindingRef.current = bindWordDocumentReadRequest(
+          wordCommentReadSession,
+          token,
+          chatId,
+        );
+      };
+      const pickRef = commentPick?.ref ?? null;
+      /** The document gesture holds only when the document went: a passage or a thread replaces it. */
+      const gesturesFor = (
+        picked: string | null,
+        document: boolean,
+      ): WordCommentReadGestures => ({
+        document,
+        picked,
+        openComments: includeOpenComments,
+      });
+      /** Fresh at every Send: paragraph events do not cover comments, so the capture never stands in. */
+      const readSendComments = async (
+        passage: WordCommentSelectionCoordinates | null,
+        options: {
+          inventory?: WordCommentInventory;
+          replies: "all" | "requested";
+        },
+      ): Promise<WordCommentSendRead | null> => {
+        const registry = wordCommentRefRegistry(documentIdentity);
+        const pickedId = pickRef && wordCommentIdOfRef(registry, pickRef);
+        const result = await readWordComments({
+          ...options,
+          legacy: registry.legacy,
+          selection: true,
+          exact: (records, live) =>
+            wordCommentSendExact(records, { passage, live, pickedId }),
+          onProgress: (done, total) => setCommentProgress({ done, total }),
+        });
+        setCommentProgress(null);
+        return result.ok
+          ? wordCommentSendRead({
+              result,
+              registry,
+              passage,
+              people: { principalEmail },
+              now: new Date(),
+              userTz: wordCommentUserTimeZone(),
+            })
+          : null;
+      };
+      /** §8 for this message; a block waits for the user, then decides again. */
+      const decideComments = async (
+        read: WordCommentSendRead | null,
+        passage: { rewritable: boolean } | null,
+        signal: AbortSignal,
+        sent: { document: boolean; due: boolean },
+      ): Promise<{
+        plan: WordCommentSendPlan;
+        pick: string | null;
+        withheld: boolean;
+      } | null> => {
+        let input: WordCommentSendInput = {
+          advertised: commentAdvertised,
+          selection: wordCommentSendSelection(read, passage),
+          precedence: commentPrecedence,
+          pick: pickRef,
+          pickFound: !!pickRef && wordCommentSendable(read, pickRef),
+          override: commentOverride,
+          withoutComments,
+          documentIncluded: sent.document,
+          includeOpenComments,
+          readFailed: sent.due && !read,
+        };
+        for (;;) {
+          const plan = resolveWordCommentSend(input);
+          if (!plan.block)
+            return {
+              plan,
+              pick: input.pick,
+              withheld: input.withoutComments,
+            };
+          const decision = await waitForCommentDecision(plan.block, signal);
+          if (decision.kind === "abort" || signal.aborted || contextChanged())
+            return null;
+          input =
+            decision.kind === "without"
+              ? { ...input, withoutComments: true }
+              : {
+                  ...input,
+                  pick: decision.ref,
+                  pickFound: wordCommentSendable(read, decision.ref),
+                };
+        }
+      };
+      /** A thread facet replaces the passage and the document: one facet per message. */
+      const sendThread = (
+        read: WordCommentSendRead | null,
+        decided: { plan: WordCommentSendPlan; pick: string | null },
+        inventory?: WordCommentInventory,
+      ) => {
+        const { carrier } = decided.plan;
+        if (
+          !read ||
+          (carrier.kind !== "thread" && carrier.kind !== "open-comments")
+        )
+          return null;
+        const { threadJson, commentsJson } = wordCommentThreadArgs(
+          read,
+          carrier.kind === "thread" ? carrier.ref : null,
+          decided.plan.why,
+        );
+        const actionFacet = resolveWordCommentThreadFacet({
+          documentName: resolveWordDocumentName(),
+          documentIdentity,
+          threadJson,
+          commentsJson,
+          availableFacetIds,
+          availableFacetArgs,
+        });
+        if (!actionFacet) return null;
+        stagePendingCapture(
+          withWordCommentRefs(
+            {
+              identity: documentIdentity,
+              ordinalMap: new Map(),
+              paragraphsSent: 0,
+              renderedOrdinals: new Set(),
+              partialOrdinal: null,
+            },
+            read,
+          ),
+        );
+        activateCommentReads({
+          gestures: gesturesFor(decided.pick, false),
+          selection: read.selection,
+          // Later reads number paragraphs as thread_json does.
+          ...(inventory ? { inventory } : {}),
+          withheld: false,
+        });
+        return { actionFacet, hostContextIdentity: documentIdentity };
+      };
       const finishPreparing = () => {
         preparingRef.current = false;
+        setCommentProgress(null);
         settleCaptureRef.current = null;
         setSlowCapture(false);
       };
+      /**
+       * Neither a passage nor the document: only a pick, the caret's thread or the open threads. A
+       * document send that ends up without the document comes here too, so it keeps the pick.
+       */
+      const prepareComments: AddinSendPreparation["run"] = async (signal) => {
+        const comments = await readSendComments(null, {
+          replies: includeOpenComments && !pickRef ? "all" : "requested",
+        });
+        if (signal.aborted || contextChanged()) return null;
+        const decided = await decideComments(comments, null, signal, {
+          document: false,
+          due: true,
+        });
+        if (!decided) return null;
+        const thread = sendThread(comments, decided);
+        if (thread) return thread;
+        stagePendingCapture(null);
+        return { actionFacet: undefined, hostContextIdentity: null };
+      };
+      /** The document did not go after all; the comments go as they would without it. */
+      const withoutDocument = (
+        signal: AbortSignal,
+        withheld = false,
+      ): ReturnType<AddinSendPreparation["run"]> => {
+        if (
+          !withheld &&
+          wordCommentsDue({
+            advertised: commentAdvertised,
+            withoutComments,
+            selectionDue: false,
+            documentIncluded: false,
+          })
+        )
+          return prepareComments(signal);
+        stagePendingCapture(null);
+        return Promise.resolve({
+          actionFacet: undefined,
+          hostContextIdentity: null,
+        });
+      };
       const prepareDocument: AddinSendPreparation["run"] = async (signal) => {
-        const withoutDocument = () => {
-          stagePendingCapture(null);
-          return { actionFacet: undefined, hostContextIdentity: null };
-        };
         // Neither depends on the document read, so both start alongside it.
         const images =
           authoringAvailable && inputFileIds?.length
@@ -360,12 +772,39 @@ export function WordChatInput({
           if (outcome.kind === "aborted" || signal.aborted) return null;
           if (contextChanged()) return null;
           let build: WordDocumentBuild | null;
-          if (outcome.kind === "skipped") return withoutDocument();
+          if (outcome.kind === "skipped") return await withoutDocument(signal);
           if (outcome.kind === "timeout") {
             build = previousCapture();
             setCaptureNotice(build ? "previous-capture" : "not-included");
-            if (!build) return withoutDocument();
+            if (!build) return await withoutDocument(signal);
           } else build = outcome.build;
+          if (!readEnabledRef.current) {
+            clearReadSession();
+            return await withoutDocument(signal);
+          }
+          // The capture this message sends numbers the anchors, an earlier one after a timeout too:
+          // an anchor its paragraph ids no longer place is counted, never numbered another way.
+          const inventory = build
+            ? wordCommentInventoryFromCapture(build.ordinalMap)
+            : undefined;
+          // Read while the images and the budget call are still out; a thread sent instead needs neither.
+          const comments = commentsDue
+            ? await readSendComments(null, {
+                inventory,
+                replies:
+                  commentAdvertised.map.size > 0 && wordHostPlatform() !== "Mac"
+                    ? "all"
+                    : "requested",
+              })
+            : null;
+          if (signal.aborted || contextChanged()) return null;
+          const decided = await decideComments(comments, null, signal, {
+            document: true,
+            due: commentsDue,
+          });
+          if (!decided) return null;
+          const thread = sendThread(comments, decided, inventory);
+          if (thread) return thread;
           const captured = images && (await images);
           if (build?.authoring && !build.authoring.issue && captured) {
             build.authoring.assets = captured.assets;
@@ -383,7 +822,7 @@ export function WordChatInput({
           if (signal.aborted || contextChanged()) return null;
           if (!readEnabledRef.current) {
             clearReadSession();
-            return withoutDocument();
+            return await withoutDocument(signal, decided.withheld);
           }
           const capturedIssue = build?.authoring?.issue;
           const capturedDetails = build?.authoring?.issueDetails;
@@ -425,25 +864,37 @@ export function WordChatInput({
             hasContent: build?.coverage.hasContent ?? false,
             authoring: build?.authoring,
             availableFacetIds,
+            availableFacetArgs,
+            ...(comments && build && decided.plan.carrier.kind === "map"
+              ? {
+                  commentMap: wordCommentMapArg(
+                    comments,
+                    wordCommentHeadingsFromBuild(build.headings),
+                  ),
+                }
+              : {}),
           });
           if (actionFacet) markSent(build);
           else clearReadSession();
           stagePendingCapture(
             actionFacet
-              ? {
-                  identity: documentIdentity,
-                  authoring: build?.authoring,
-                  ordinalMap: build?.ordinalMap ?? new Map(),
-                  paragraphsSent: build?.authoring
-                    ? 0
-                    : (build?.coverage.paragraphsSent ?? 0),
-                  renderedOrdinals: build?.authoring
-                    ? new Set()
-                    : (build?.renderedOrdinals ?? new Set()),
-                  partialOrdinal: build?.authoring
-                    ? null
-                    : (build?.partialOrdinal ?? null),
-                }
+              ? withWordCommentRefs(
+                  {
+                    identity: documentIdentity,
+                    authoring: build?.authoring,
+                    ordinalMap: build?.ordinalMap ?? new Map(),
+                    paragraphsSent: build?.authoring
+                      ? 0
+                      : (build?.coverage.paragraphsSent ?? 0),
+                    renderedOrdinals: build?.authoring
+                      ? new Set()
+                      : (build?.renderedOrdinals ?? new Set()),
+                    partialOrdinal: build?.authoring
+                      ? null
+                      : (build?.partialOrdinal ?? null),
+                  },
+                  comments,
+                )
               : null,
           );
           if (actionFacet && build?.authoring) {
@@ -453,6 +904,14 @@ export function WordChatInput({
               chatId,
             );
           }
+          if (actionFacet && build)
+            activateCommentReads({
+              gestures: gesturesFor(decided.pick, true),
+              selection: comments?.selection ?? null,
+              inventory,
+              headings: wordCommentHeadingsFromBuild(build.headings),
+              withheld: decided.withheld,
+            });
           return {
             actionFacet,
             hostContextIdentity: actionFacet ? documentIdentity : null,
@@ -473,22 +932,62 @@ export function WordChatInput({
         }
         const selection =
           read.value && wordSelectionForFacets(read.value, availableFacetArgs);
-        const actionFacet = selection
-          ? resolveWordSelectionFacet({
-              selection,
-              documentName: resolveWordDocumentName(),
-              documentIdentity,
-              availableFacetIds,
-              availableFacetArgs,
-            })
-          : undefined;
-        if (selection && actionFacet) {
-          stagePendingCapture(
-            emptySelectionCapture(documentIdentity, selection),
+        const passageFacet = (anchoredComments?: string) =>
+          selection
+            ? resolveWordSelectionFacet({
+                selection,
+                documentName: resolveWordDocumentName(),
+                documentIdentity,
+                availableFacetIds,
+                availableFacetArgs,
+                anchoredComments,
+              })
+            : undefined;
+        if (selection && passageFacet()) {
+          const passage = wordCommentSelectionCoordinates(selection);
+          const comments = commentsDue
+            ? await readSendComments(passage, { replies: "requested" })
+            : null;
+          if (signal.aborted || contextChanged()) return null;
+          // The setting is judged as the chip judged it: a hazard in the passage found only now
+          // rules out its Replace, not the comment the chip showed.
+          const decided = await decideComments(
+            comments,
+            {
+              rewritable:
+                selection.role === "rewrite" ||
+                wordSelectionMayRewrite(
+                  selection,
+                  currentWordSelectionSupport(),
+                ),
+            },
+            signal,
+            { document: false, due: commentsDue },
           );
+          if (!decided) return null;
+          const thread = sendThread(comments, decided);
+          if (thread) return thread;
+          const { carrier } = decided.plan;
+          const actionFacet = passageFacet(
+            comments && carrier.kind === "selection"
+              ? wordAnchoredCommentsArg(comments, carrier.threads)
+              : undefined,
+          );
+          stagePendingCapture(
+            withWordCommentRefs(
+              emptySelectionCapture(documentIdentity, selection),
+              comments,
+            ),
+          );
+          activateCommentReads({
+            gestures: gesturesFor(decided.pick, false),
+            selection: passage,
+            withheld: decided.withheld,
+          });
           return { actionFacet, hostContextIdentity: documentIdentity };
         }
         if (chipEnabled) return prepareDocument(signal);
+        if (commentsDue) return prepareComments(signal);
         stagePendingCapture(null);
         return { actionFacet: undefined, hostContextIdentity: null };
       };
@@ -500,25 +999,35 @@ export function WordChatInput({
               id: "officeAddin.word.send.readingSelection",
               message: "Reading selection…",
             })
-          : captureExpectedSlow()
+          : chipEnabled && captureExpectedSlow()
             ? t({
                 id: "officeAddin.word.send.readingDocument",
                 message: "Reading document…",
               })
-            : undefined,
+            : commentsDue
+              ? t({
+                  id: "officeAddin.word.send.readingComments",
+                  message: "Reading comments…",
+                })
+              : undefined,
         run: async (signal) => {
           markWordSend("prepare-start");
           try {
             return await (selectionDue
               ? prepareSelection(signal)
-              : prepareDocument(signal));
+              : chipEnabled
+                ? prepareDocument(signal)
+                : prepareComments(signal));
           } finally {
             markWordSend("prepare-end");
             finishPreparing();
           }
         },
         onAbandoned: () => {
+          wordCommentGestureStore.unspend(spentGestures);
+          decideCommentsRef.current?.({ kind: "abort" });
           clearReadSession();
+          clearCommentSession();
           stagePendingCapture(null);
           finishPreparing();
         },
@@ -533,10 +1042,19 @@ export function WordChatInput({
       captureExpectedSlow,
       chatInputProps,
       chipEnabled,
+      clearCommentSession,
       clearReadSession,
+      commentAdvertised,
+      commentOverride,
+      commentPick,
+      commentPrecedence,
       documentIdentity,
+      includeOpenComments,
       markSent,
       previousCapture,
+      principalEmail,
+      waitForCommentDecision,
+      withoutComments,
       selectionDue,
       stagePendingCapture,
     ],
@@ -585,23 +1103,48 @@ export function WordChatInput({
           preview={liveSelection.preview.text}
           metaLabel={selectionMetaLabel(liveSelection.preview.paragraphCount)}
           note={
-            liveSelection.preview.truncated
+            passageGoes && livePlan.carrier.kind === "thread"
               ? t({
-                  id: "officeAddin.word.selection.truncated",
-                  message:
-                    "Too long to send in full. Only the beginning is sent.",
+                  id: "officeAddin.word.selection.commentInstead",
+                  message: "The comment below is sent instead of this passage.",
                 })
-              : chipEnabled && liveSelection.armed
+              : liveSelection.preview.truncated
                 ? t({
-                    id: "officeAddin.word.selection.sentInsteadOfDocument",
-                    message: "Sent instead of the document.",
+                    id: "officeAddin.word.selection.truncated",
+                    message:
+                      "Too long to send in full. Only the beginning is sent.",
                   })
-                : undefined
+                : chipEnabled && liveSelection.armed
+                  ? t({
+                      id: "officeAddin.word.selection.sentInsteadOfDocument",
+                      message: "Sent instead of the document.",
+                    })
+                  : undefined
           }
           armed={liveSelection.armed}
           onUse={armWordSelection}
           onDismiss={selectionDismissal.dismiss}
           testId="word-selection-chip"
+        />
+      )}
+      {commentsShown && (
+        <WordCommentChip
+          view={commentView}
+          coverage={commentCoverage}
+          canChangeDefault={commentAdvertised.thread && !!onOpenWordSettings}
+          onWithoutComments={() =>
+            wordCommentGestureStore.set({ withoutComments: true })
+          }
+          onWithComments={() =>
+            wordCommentGestureStore.set({ withoutComments: false })
+          }
+          onSwitch={(override) => wordCommentGestureStore.set({ override })}
+          onDismissPick={() =>
+            wordCommentGestureStore.pick({ kind: "dismiss" })
+          }
+          onChoose={() => setPickerOpen(true)}
+          onChangeDefault={() => onOpenWordSettings?.()}
+          onShowInWord={showWordComment}
         />
       )}
       {selectionReadFailed && (
@@ -612,6 +1155,38 @@ export function WordChatInput({
               message:
                 "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
             })}
+          </Alert>
+        </div>
+      )}
+      {commentBlock && (
+        <div
+          className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4"
+          data-testid="word-comment-block"
+        >
+          <Alert type="warning">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1">
+                {commentBlockText(commentBlock)}
+              </span>
+              {commentBlock !== "read-failed" && commentAdvertised.thread && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  {wordCommentChooseText()}
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => decideCommentsRef.current?.({ kind: "without" })}
+              >
+                {wordCommentSendWithoutText()}
+              </Button>
+            </div>
           </Alert>
         </div>
       )}
@@ -762,6 +1337,69 @@ export function WordChatInput({
         </div>
       )}
 
+      {commentsShown &&
+        commentAdvertised.thread &&
+        commentList.threads.length > 0 && (
+          <div
+            className="mx-auto flex w-full max-w-[var(--theme-layout-chat-input-max-width)] flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-1 text-xs text-theme-fg-secondary sm:px-4"
+            data-testid="word-comment-options"
+          >
+            {!chipEnabled && (
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={includeOpenComments}
+                  onChange={(event) =>
+                    wordCommentGestureStore.set({
+                      includeOpenComments: event.target.checked,
+                    })
+                  }
+                  className="size-3.5 accent-[var(--theme-fg-accent)]"
+                />
+                <span>
+                  {t({
+                    id: "officeAddin.word.comments.includeOpen",
+                    message: "Include open comments",
+                  })}
+                </span>
+              </label>
+            )}
+            {livePlan.carrier.kind === "open-comments" &&
+              !withoutComments &&
+              commentCoverage && <WordCommentCoverage info={commentCoverage} />}
+            {!chipOffersChoose && (
+              <button
+                type="button"
+                className={WORD_COMMENT_LINK_CLASS}
+                onClick={() => setPickerOpen(true)}
+              >
+                {wordCommentChooseText()}
+              </button>
+            )}
+          </div>
+        )}
+      {commentProgress && (
+        <p
+          className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 text-xs text-theme-fg-secondary sm:px-4"
+          role="status"
+          data-testid="word-comment-progress"
+        >
+          {wordCommentReadingText(commentProgress)}
+        </p>
+      )}
+      {commentAdvertised.thread && (
+        <WordCommentPicker
+          isOpen={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          list={commentList}
+          onRefresh={refreshComments}
+          onPick={pickComment}
+          onShowInWord={showWordComment}
+          picked={pickRef}
+          web={wordHostPlatform() === "OfficeOnline"}
+        />
+      )}
+
       <AddinChatInputCore
         {...chatInputProps}
         pausesHostActionsWhenWritesOff
@@ -778,6 +1416,25 @@ function selectionMetaLabel(paragraphCount: number): string {
       one: "Selected passage · # paragraph",
       other: "Selected passage · # paragraphs",
     }),
+  });
+}
+
+/** Your message waits until you choose; stopping the reply drops it. */
+function commentBlockText(block: WordCommentBlock): string {
+  if (block === "choose-comment")
+    return t({
+      id: "officeAddin.word.comments.blocked.chooseComment",
+      message:
+        "Your cursor is in more than one comment, so Erato does not know which one you mean.",
+    });
+  if (block === "picked-gone")
+    return t({
+      id: "officeAddin.word.comments.blocked.pickedGone",
+      message: "The comment you chose is no longer in the document.",
+    });
+  return t({
+    id: "officeAddin.word.comments.blocked.readFailed",
+    message: "Erato could not read the comments in Word.",
   });
 }
 

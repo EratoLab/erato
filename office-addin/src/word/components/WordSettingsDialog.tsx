@@ -1,23 +1,33 @@
-import { DocumentIcon, EntityRow } from "@erato/frontend/library";
+import { DocumentIcon, EntityRow, RadioCard } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import {
   AddinSettingsDialogCore,
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
 import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import {
+  useAvailableActionFacetArgs,
+  useAvailableActionFacetIds,
+} from "../../core/clientActions/useAvailableActionFacets";
 import { useOffice } from "../../providers/OfficeProvider";
 import { wordClientActionDecisionStore } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
   offerableWordClientActions,
 } from "../utils/wordClientActions";
+import { wordCommentAdvertised } from "../utils/wordCommentSend";
 import {
   readWordCompatibilityMode,
   writeWordCompatibilityMode,
 } from "../utils/wordInPlaceSwitch";
-import { useWordIncludeDocumentByDefault } from "../wordPreferences";
+import {
+  useWordCommentPrecedence,
+  useWordIncludeDocumentByDefault,
+} from "../wordPreferences";
+
+import type { WordCommentPrecedence } from "../utils/wordCommentSend";
 
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
@@ -38,7 +48,12 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
           id: "officeAddin.word.settings.description",
           message: "Choose how new chats use the open document.",
         }),
-        content: <WordIncludeDocumentSetting />,
+        content: (
+          <div className="space-y-5">
+            <WordIncludeDocumentSetting />
+            <WordCommentPrecedenceSetting />
+          </div>
+        ),
         systemDescription: t({
           id: "officeAddin.settings.appearance.system.description.word",
           message: "Follow your Word theme.",
@@ -129,6 +144,69 @@ function WordIncludeDocumentSetting() {
         })}
       </p>
     </div>
+  );
+}
+
+/** Only where a selection's comment can be sent as its own thread, the one thing it changes. */
+function WordCommentPrecedenceSetting() {
+  const name = useId();
+  const facetIds = useAvailableActionFacetIds();
+  const facetArgs = useAvailableActionFacetArgs();
+  const advertised = useMemo(
+    () => wordCommentAdvertised(facetIds, facetArgs),
+    [facetIds, facetArgs],
+  );
+  const [precedence, setPrecedence] = useWordCommentPrecedence();
+  if (!advertised.thread) return null;
+  const options: {
+    value: WordCommentPrecedence;
+    label: string;
+    helper: string;
+  }[] = [
+    {
+      value: "selection",
+      label: t({
+        id: "officeAddin.word.settings.commentPrecedence.selection",
+        message: "Work on the selected text (default)",
+      }),
+      helper: t({
+        id: "officeAddin.word.settings.commentPrecedence.selection.helper",
+        message:
+          "Comments are sent along, and Erato can offer to replace the text.",
+      }),
+    },
+    {
+      value: "comment",
+      label: t({
+        id: "officeAddin.word.settings.commentPrecedence.comment",
+        message: "Work on the comment",
+      }),
+      helper: t({
+        id: "officeAddin.word.settings.commentPrecedence.comment.helper",
+        message: "Erato does not offer to replace the text.",
+      }),
+    },
+  ];
+  return (
+    <fieldset className="space-y-2" data-testid="word-comment-precedence">
+      <legend className="text-sm font-medium text-theme-fg-primary">
+        {t({
+          id: "officeAddin.word.settings.commentPrecedence.legend",
+          message: "When the text you select has comments, Erato should:",
+        })}
+      </legend>
+      {options.map((option) => (
+        <RadioCard
+          key={option.value}
+          name={name}
+          value={option.value}
+          checked={precedence === option.value}
+          onChange={() => setPrecedence(option.value)}
+          label={option.label}
+          helper={option.helper}
+        />
+      ))}
+    </fieldset>
   );
 }
 

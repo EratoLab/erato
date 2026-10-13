@@ -2054,6 +2054,116 @@ msgstr "No se pudo desarchivar el chat"
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.count"
+msgstr "{count, plural, one {# comentario} other {# comentarios}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.hide"
+msgstr "Ocultar comentarios"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.map"
+msgstr "Mapa de comentarios"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.matchedByContent"
+msgstr "asociado por su contenido"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.notShown"
+msgstr "{count, plural, one {# no mostrado} other {# no mostrados}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.omittedReplies"
+msgstr "{omitted, plural, one {No se envió # respuesta anterior} other {No se enviaron # respuestas anteriores}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.on"
+msgstr "sobre «{quote}»"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.open"
+msgstr "Comentarios abiertos"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.openStatus"
+msgstr "Abierto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.passage"
+msgstr "Pasaje seleccionado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.point"
+msgstr "en un punto sin texto resaltado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.replies"
+msgstr "{count, plural, one {# respuesta} other {# respuestas}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.repliesUnread"
+msgstr "Sus respuestas no se leyeron."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.resolved"
+msgstr "Resuelto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.sentContext"
+msgstr "Contexto enviado: {summary}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.show"
+msgstr "Mostrar comentarios"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.thread"
+msgstr "Comentario de {author}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.threads"
+msgstr "{listed, plural, one {# hilo} other {# hilos}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.timeUnknown"
+msgstr "hora desconocida"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.chosen"
+msgstr "Elegido por ti"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.cursor"
+msgstr "En tu cursor"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentContextView.tsx
+msgid "chat.message.action_facet.comments.why.default"
+msgstr "Tu opción predeterminada"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ActionFacetContext.tsx
 msgid "chat.message.action_facet.selection_label"
 msgstr "Selección"
@@ -2344,6 +2454,46 @@ msgstr "Modelo cambiado de {fromModel} a {toModel}"
 #: src/components/ui/Message/ModelSwitchMarker.tsx
 #~ msgid "chat.message.modelSwitched"
 #~ msgstr "Se cambió el modelo. Continuar esta conversación con un modelo diferente puede afectar a su contexto."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.all"
+msgstr "{count, plural, one {Se leyó # comentario} other {Se leyeron # comentarios}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.failed"
+msgstr "No se leyeron los comentarios"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.map"
+msgstr "{count, plural, one {Se leyó el mapa de comentarios: # hilo} other {Se leyó el mapa de comentarios: # hilos}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.near"
+msgstr "{count, plural, one {Se leyó # comentario cercano} other {Se leyeron # comentarios cercanos}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.notShown"
+msgstr "{notShown, plural, one {# no mostrado} other {# no mostrados}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.open"
+msgstr "{count, plural, one {Se leyó # comentario abierto} other {Se leyeron # comentarios abiertos}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.resolved"
+msgstr "{count, plural, one {Se leyó # comentario resuelto} other {Se leyeron # comentarios resueltos}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordCommentReadNotice.tsx
+msgid "chat.message.wordCommentRead.section"
+msgstr "{count, plural, one {Se leyó # comentario de una sección} other {Se leyeron # comentarios de una sección}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/MessageList/MessageEditor.tsx

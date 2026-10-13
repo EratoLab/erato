@@ -148,6 +148,7 @@ const authoringBuild = (
     args: { document_text: "[1] Text" },
     coverage: { hasContent: true, paragraphsSent: 1 },
     ordinalMap: new Map(),
+    headings: new Map(),
     renderedOrdinals: new Set([1]),
     partialOrdinal: null,
     authoring: { token: "snapshot-1", ...authoring },

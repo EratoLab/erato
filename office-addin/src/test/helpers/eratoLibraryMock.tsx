@@ -40,6 +40,48 @@ const StubButton = ({
   <button {...(props as Record<string, never>)} />
 );
 
+/** Opens and closes through its trigger, with the panel inline instead of in a portal. */
+const StubAnchoredPopover = ({
+  isOpen,
+  onOpenChange,
+  trigger,
+  children,
+}: {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  trigger: (props: Record<string, unknown>) => ReactNode;
+  children?: ReactNode;
+}) => (
+  <>
+    {trigger({
+      type: "button",
+      onClick: () => onOpenChange(!isOpen),
+      "aria-expanded": isOpen,
+    })}
+    {isOpen ? children : null}
+  </>
+);
+
+const StubInput = ({
+  error: _error,
+  ...props
+}: StubProps & { error?: unknown; ref?: unknown }) => (
+  <input {...(props as Record<string, never>)} />
+);
+
+// A native select, so a test can pick an option; the label names it as the field's <label> does.
+const StubSelect = ({
+  label,
+  description: _description,
+  error: _error,
+  ...props
+}: StubProps & {
+  label?: string;
+  description?: string;
+  error?: string;
+  ref?: unknown;
+}) => <select aria-label={label} {...(props as Record<string, never>)} />;
+
 const StubModalBase = ({
   children,
   isOpen,
@@ -128,7 +170,7 @@ export const DEFAULT_STUBS = {
     subscribe: () => noop,
   },
   useMcpBrowserAuthorization: () => noop,
-  Select: StubPassthrough,
+  Select: StubSelect,
   TextComparison: StubNothing,
   useThemedIcon: () => null,
   getChatUrl: () => "",
@@ -142,6 +184,7 @@ export const DEFAULT_STUBS = {
   // The declared kit surface. Covered wholesale so a name pinned by
   // `kit-surface.ts` can never be the one missing entry that breaks linking.
   Alert: StubNothing,
+  AnchoredPopover: StubAnchoredPopover,
   ArchivedChatPill: StubNothing,
   ArchiveIcon: StubNothing,
   AttachmentNotice: StubNothing,
@@ -166,6 +209,7 @@ export const DEFAULT_STUBS = {
     status: "chat-generation-status",
   },
   ChatAttentionStatusDot: StubNothing,
+  ChatBubbleIcon: StubNothing,
   ChatHistoryListSkeleton: StubNothing,
   ChevronDownIcon: StubNothing,
   ChevronRightIcon: StubNothing,
@@ -184,6 +228,7 @@ export const DEFAULT_STUBS = {
   FileUploadLoading: StubNothing,
   ImageLightbox: StubNothing,
   InfoIcon: StubNothing,
+  Input: StubInput,
   InteractiveContainer: StubPassthrough,
   JsonDisplay: StubNothing,
   LoadingIndicator: StubNothing,
@@ -197,6 +242,7 @@ export const DEFAULT_STUBS = {
   MoreVertical: StubNothing,
   MultiplePagesIcon: StubNothing,
   MusicNoteIcon: StubNothing,
+  OpenNewWindowIcon: StubNothing,
   PageHeader: StubPassthrough,
   PageIcon: StubNothing,
   PinIcon: StubNothing,
@@ -339,6 +385,7 @@ export const DEFAULT_STUBS = {
   setWordLiveCards: noop,
   toast: { info: noop, success: noop, warning: noop, error: noop },
   transformEmailFencesForCopy: (value: string) => value,
+  wordShowInWordLabel: () => "Show in Word",
   UploadUnknownError: class extends Error {},
 
   // Hooks. Shapes match what the host returns; a test that asserts on one

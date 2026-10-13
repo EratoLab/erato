@@ -1,3 +1,5 @@
+import { WORD_COMMENT_THREAD_FACET_ID } from "./wordCommentContext";
+
 export const WORD_READ_TOOL = "read_document_blocks";
 export const WORD_SUBMIT_PLAN_TOOL = "submit_document_plan";
 export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";
@@ -14,4 +16,5 @@ export const WORD_ACTION_FACET_IDS: ReadonlySet<string> = new Set([
   "word_document_ooxml",
   "word_ooxml_experiment",
   "word_selection",
+  WORD_COMMENT_THREAD_FACET_ID,
 ]);

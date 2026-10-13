@@ -27,12 +27,20 @@ export interface WordDocumentCoverage {
   hasContent: boolean;
 }
 
+export interface WordDocumentHeading {
+  /** 1 to 9; Title counts as 1. */
+  level: number;
+  text: string;
+}
+
 export interface WordDocumentBuild {
   authoring?: WordAuthoringSnapshot;
   readNote?: WordDocumentReadNote;
   args: WordDocumentArgs;
   coverage: WordDocumentCoverage;
   ordinalMap: Map<number, { uniqueLocalId: string | null; text: string }>;
+  /** Every heading with text, by ordinal, sent or not: comment threads' section paths. */
+  headings: ReadonlyMap<number, WordDocumentHeading>;
   /** Only rendered, complete paragraphs are writable; the capture also contains blank or omitted paragraphs. */
   renderedOrdinals: ReadonlySet<number>;
   /** A truncated paragraph is known but not writable: replacing it would delete its unseen tail. */
@@ -106,11 +114,16 @@ export function buildWordDocumentArgs(
     number,
     { uniqueLocalId: string | null; text: string }
   >();
+  const headings = new Map<number, WordDocumentHeading>();
   for (const paragraph of paragraphs) {
     ordinalMap.set(paragraph.ordinal, {
       uniqueLocalId: paragraph.uniqueLocalId,
       text: paragraph.text,
     });
+    const level = resolveHeadingLevel(paragraph);
+    const text = normalizeParagraphText(paragraph.text);
+    if (level !== null && text)
+      headings.set(paragraph.ordinal, { level, text });
   }
 
   const lines: string[] = [];
@@ -182,6 +195,7 @@ export function buildWordDocumentArgs(
       hasContent,
     },
     ordinalMap,
+    headings,
     renderedOrdinals,
     partialOrdinal,
   };

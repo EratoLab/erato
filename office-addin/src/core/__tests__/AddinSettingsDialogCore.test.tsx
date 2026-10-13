@@ -108,6 +108,35 @@ describe("AddinSettingsDialogCore", () => {
     ).toBeNull();
   });
 
+  it("opens on the tab it is asked to open on", () => {
+    const hostContribution = {
+      tabLabel: "Word",
+      content: <div data-testid="host-settings" />,
+    };
+    const { rerender } = render(
+      <AddinSettingsDialogCore
+        isOpen={false}
+        onClose={() => {}}
+        hostContribution={hostContribution}
+        openTab="host"
+      />,
+    );
+    rerender(
+      <AddinSettingsDialogCore
+        isOpen
+        onClose={() => {}}
+        hostContribution={hostContribution}
+        openTab="host"
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Word" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("host-settings")).toBeVisible();
+  });
+
   it("hands the selected server to the shared browser authorization controller", () => {
     featureFlags.mcpServers = true;
     render(<AddinSettingsDialogCore isOpen={true} onClose={() => {}} />);

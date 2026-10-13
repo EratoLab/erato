@@ -14,7 +14,6 @@ import {
   assertResponseOk,
   buildAdditionalPropertiesXml,
   buildSoapEnvelope,
-  escapeXml,
   ewsHostFetch,
   firstMessagesEl,
   firstTypesEl,
@@ -23,6 +22,7 @@ import {
   typesText,
 } from "./fetchOutlookMessageEws";
 import { toIanaStrict } from "./windowsZones";
+import { escapeXml } from "../../utils/escapeXml";
 
 import type { CalendarRange } from "./calendarLegs";
 import type {

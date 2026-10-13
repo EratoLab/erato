@@ -37,8 +37,14 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
   controller.hostCallbacksRef.current = captures.hostCallbacks;
 
   const clientActionsByFacetId = useActionFacetClientActions();
-  const { messages, messageOrder } = controller;
+  const { messages, messageOrder, setIsSettingsOpen } = controller;
   const { setDraftMessage } = controller.chatInputControls;
+  // The composer's "Change default" opens the Word tab; the drawer keeps the first tab.
+  const [settingsTab, setSettingsTab] = useState<"host" | undefined>();
+  const openWordSettings = useCallback(() => {
+    setSettingsTab("host");
+    setIsSettingsOpen(true);
+  }, [setIsSettingsOpen]);
   const restoreRequest = useCallback(
     (message: string) => setDraftMessage(message, { focus: true }),
     [setDraftMessage],
@@ -93,9 +99,19 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
             chatInputProps={props}
             documentIdentity={documentIdentity}
             stagePendingCapture={captures.stagePendingCapture}
+            onOpenWordSettings={openWordSettings}
           />
         )}
-        renderSettings={(props) => <WordSettingsDialog {...props} />}
+        renderSettings={(props) => (
+          <WordSettingsDialog
+            {...props}
+            openTab={settingsTab}
+            onClose={() => {
+              setSettingsTab(undefined);
+              props.onClose();
+            }}
+          />
+        )}
       />
     </WordWriteProvider>
   );
