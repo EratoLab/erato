@@ -26,13 +26,14 @@ describe("wordDocumentDiagnosticText", () => {
     ).toBe(
       "Word did not put the original paragraph style back, so Revert is incomplete. Check that paragraph's style in Word. Your saved original is still available for recovery.",
     );
-    expect(
-      wordDocumentDiagnosticText(
-        mismatch(["/word/document.xml body block 6: signature"]),
-        true,
-      ),
-    ).toBe(
-      "Word could not verify the restored document. Your saved original is still available for recovery.",
-    );
+    for (const location of ["signature", "list"])
+      expect(
+        wordDocumentDiagnosticText(
+          mismatch([`/word/document.xml body block 6: ${location}`]),
+          true,
+        ),
+      ).toBe(
+        "Word could not verify the restored document. Your saved original is still available for recovery.",
+      );
   });
 });

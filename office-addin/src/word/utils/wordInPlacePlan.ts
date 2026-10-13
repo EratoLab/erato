@@ -297,7 +297,7 @@ export const effectiveWordStyle = (
     (s) =>
       s.id === styleRef &&
       (!s.type || s.type === "paragraph") &&
-      s.name.toLowerCase() === "normal",
+      wordBuiltInParagraphStyle(s.id, s.name) === "Normal",
   )
     ? "Normal"
     : styleRef;

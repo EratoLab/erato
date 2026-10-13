@@ -33,7 +33,7 @@ export function wordDocumentDiagnosticText(
   if (
     diagnostic.reason === "output-mismatch" &&
     restoring &&
-    diagnostic.details?.locations?.some((l) => /: (style|list)$/.test(l))
+    diagnostic.details?.locations?.some((l) => l.endsWith(": style"))
   )
     return t({
       id: "officeAddin.word.authoring.restoreStyleUnverified",

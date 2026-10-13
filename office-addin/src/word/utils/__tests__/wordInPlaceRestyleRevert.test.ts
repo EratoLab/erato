@@ -14,6 +14,7 @@ import {
   applyWordDocumentPlan,
   revertWordDocumentPlan,
 } from "../wordApplyDocumentPlan";
+import { decodeWordInPlaceBackup } from "../wordDocumentPackage";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
@@ -21,6 +22,8 @@ import {
 } from "../wordInPlaceCapabilities";
 import { wordParagraphStateIssue } from "../wordInPlaceExecutor";
 import { resetWordInPlaceLatchForTests } from "../wordInPlaceSwitch";
+import { wordInPlaceMismatchedParagraphs } from "../wordReviewLocation";
+import { wordMismatchedPassages } from "../wordReviewState";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type {
@@ -249,6 +252,73 @@ describe("Revert of an in-place restyle where Paragraph.getOoxml shows no style"
   });
 });
 
+describe("tracked restyle where Paragraph.getOoxml shows no style", () => {
+  it("rejects the formatting revision on Revert", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    const host = install({ trackChanges: true });
+    host.setTrackingMode("TrackAll");
+    const snapshot = await captureRealisticSnapshot("message-A", "TrackAll");
+    const applied = await apply(
+      restyle(snapshot, QUESTIONS, { type: "heading", level: 2 }),
+      snapshot,
+    );
+    expect(applied.status, report(applied)).toBe("applied");
+    expect(host.ooxml()).toContain("pPrChange");
+    const reverted = await revert(applied);
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(block(host, QUESTIONS)).toMatchObject({ type: "paragraph" });
+    expect(host.ooxml()).not.toContain("pPrChange");
+  });
+});
+
+describe("Revert after an Apply that stopped between its text and style writes", () => {
+  const NEW_TEXT = "Open questions, revised, follow.";
+  const reworded = (snapshot: WordAuthoringSnapshot) => {
+    const plan = restyle(snapshot, QUESTIONS, { type: "heading", level: 2 });
+    plan.entries = plan.entries.map((entry) =>
+      entry.kind === "replace"
+        ? { ...entry, blocks: [{ ...entry.blocks[0], text: NEW_TEXT }] }
+        : entry,
+    );
+    return plan;
+  };
+
+  it.each([
+    ["Word for the web", { profile: "word-web" as const }, WEB],
+    [
+      "Word PC",
+      {
+        profile: "word-pc-16.0.20326" as const,
+        paragraphOoxmlOmitsProperties: false,
+      },
+      ALL_WORD_IN_PLACE_CAPABILITIES,
+    ],
+  ])("puts the text back on %s", async (_host, options, caps) => {
+    setWordInPlaceCapabilitiesForTests(caps);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    let host = install(options);
+    let snapshot = await captureRealisticSnapshot();
+    host.events.length = 0;
+    expect((await apply(reworded(snapshot), snapshot)).status).toBe("applied");
+    const styleWrite =
+      mutations(host.events).findIndex((e) => e === "mutation:styleBuiltIn") +
+      1;
+    expect(styleWrite).toBeGreaterThan(1);
+    resetWordInPlaceLatchForTests();
+    host = install(options);
+    snapshot = await captureRealisticSnapshot();
+    host.failAtCommand(styleWrite);
+    const applied = await apply(reworded(snapshot), snapshot);
+    expect(applied.status).toBe("interrupted");
+    expect(block(host, NEW_TEXT)).toMatchObject({ type: "paragraph" });
+    resetWordInPlaceLatchForTests();
+    const reverted = await revert(applied);
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(block(host, QUESTIONS)).toMatchObject({ type: "paragraph" });
+    expect(block(host, NEW_TEXT)).toBeUndefined();
+  });
+});
+
 describe("in-place restyle verification", () => {
   it("reports a forward restyle whose style does not stick as unverified", async () => {
     const host = install();
@@ -266,6 +336,49 @@ describe("in-place restyle verification", () => {
       reason: "output-mismatch",
       details: { locations: [`${at}: style`, `${at}: type`] },
     });
+  });
+
+  it("lists every unverified paragraph, from both checks, for the card to locate", async () => {
+    const CLOSING = "Closing paragraph.";
+    const host = install(
+      { replaceDropsRunProperties: true },
+      editWordPackage(realisticWordPackageXml(), (doc) => {
+        const run = Array.from(doc.getElementsByTagNameNS(W, "t")).find(
+          (t) => t.textContent === CLOSING,
+        )!.parentElement!;
+        const props = doc.createElementNS(W, "w:rPr");
+        const lang = doc.createElementNS(W, "w:lang");
+        lang.setAttributeNS(W, "w:val", "en-GB");
+        props.append(lang);
+        run.prepend(props);
+      }),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const snapshot = await captureRealisticSnapshot();
+    const plan = restyle(snapshot, QUESTIONS, { type: "heading", level: 2 });
+    plan.entries = plan.entries.map((entry) =>
+      entry.kind === "keep" &&
+      snapshot.blocks.find((b) => b.ref === entry.source[0])?.text === CLOSING
+        ? {
+            kind: "replace",
+            source: entry.source,
+            blocks: [
+              {
+                id: "c",
+                type: "paragraph",
+                text: "Bye.",
+                runs: [{ text: "Bye.", language: "en-GB" }],
+              },
+            ],
+          }
+        : entry,
+    );
+    host.ignoreStyleWrites();
+    const applied = await apply(plan, snapshot);
+    expect(applied.status).toBe("interrupted");
+    const record = decodeWordInPlaceBackup(applied.before!).inPlace!;
+    expect(wordMismatchedPassages(applied.diagnostic)).toBe(2);
+    expect(wordInPlaceMismatchedParagraphs(record)).toHaveLength(2);
   });
 
   it("accepts Normal written by the document's own ID for it, and restores the heading", async () => {

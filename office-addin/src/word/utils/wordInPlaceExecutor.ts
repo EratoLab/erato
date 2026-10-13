@@ -208,13 +208,14 @@ const stateBefore = (op: WordInPlaceOp) =>
     : op.kind === "text"
       ? op.restyle?.from
       : undefined;
-/** The state the write gave an op's paragraph, when it set its style. */
-const stateAfter = (op: WordInPlaceOp) =>
+/** The states an op's paragraph may hold once written, when the write set its style. A restyle sets
+ * the style in a batch after the text, so a write stopped in between leaves the original style. */
+const statesAfter = (op: WordInPlaceOp): WordInPlaceState[] =>
   op.kind === "insert"
-    ? op.state
-    : op.kind === "text"
-      ? op.restyle?.to
-      : undefined;
+    ? [op.state]
+    : op.kind === "text" && op.restyle
+      ? [op.restyle.to, op.restyle.from]
+      : [];
 
 interface StateWrite {
   paragraph: Word.Paragraph;
@@ -228,10 +229,11 @@ interface StateWrite {
  * drops a list item's numbering when its style is set: so leave the list, set the style, then join.
  * A style is set only when it differs from the one the paragraph has by then: on Word PC, giving a
  * paragraph the Normal style un-hides Default Paragraph Font in styles.xml even when it had it.
- * Returns, per write, what a fresh read of the paragraph's state lacks of its target. */
+ * With `readBack`, returns per write what a fresh read of the paragraph's state lacks of its target. */
 async function writeStates(
   context: Word.RequestContext,
   writes: readonly StateWrite[],
+  readBack = false,
 ): Promise<("style" | "list" | undefined)[]> {
   const lists = writes.map(({ current, target, listId, relist = true }) => {
     const id = relist ? listId : (listId ?? current.listId);
@@ -255,12 +257,13 @@ async function writeStates(
       if (now.styleBuiltIn !== target.style.builtIn)
         paragraph.styleBuiltIn = target.style
           .builtIn as Word.Paragraph["styleBuiltIn"];
-    } else if (now.style !== target.style.name)
+    } else if (now.style.toLowerCase() !== target.style.name.toLowerCase())
       paragraph.style = target.style.name;
     if (target.type === "list-item")
       paragraph.attachToList(lists[i]!, target.level ?? 0);
   });
   await context.sync();
+  if (!readBack) return [];
   const after = writes.map(({ paragraph }) => loadParagraphState(paragraph));
   await context.sync();
   return writes.map(({ target }, i) =>
@@ -1001,28 +1004,32 @@ export async function applyWordPlanInPlace(
       if (states.size) {
         await context.sync();
         const order = [...made.keys(), ...restyled.map(({ i }) => i)];
-        const issues = await writeStates(context, [
-          ...[...made].map(([i, paragraph]) => {
-            const op = ops[i] as Extract<WordInPlaceOp, { kind: "insert" }>;
-            return {
+        const issues = await writeStates(
+          context,
+          [
+            ...[...made].map(([i, paragraph]) => {
+              const op = ops[i] as Extract<WordInPlaceOp, { kind: "insert" }>;
+              return {
+                paragraph,
+                current: states.get(i)!(),
+                target: op.state,
+                listId: op.state.listRef
+                  ? listIds.get(op.state.listRef)
+                  : undefined,
+              };
+            }),
+            ...restyled.map(({ i, paragraph, restyle }) => ({
               paragraph,
               current: states.get(i)!(),
-              target: op.state,
-              listId: op.state.listRef
-                ? listIds.get(op.state.listRef)
+              target: restyle.to,
+              listId: restyle.to.listRef
+                ? listIds.get(restyle.to.listRef)
                 : undefined,
-            };
-          }),
-          ...restyled.map(({ i, paragraph, restyle }) => ({
-            paragraph,
-            current: states.get(i)!(),
-            target: restyle.to,
-            listId: restyle.to.listRef
-              ? listIds.get(restyle.to.listRef)
-              : undefined,
-            relist: relisted(restyle.from, restyle.to),
-          })),
-        ]);
+              relist: relisted(restyle.from, restyle.to),
+            })),
+          ],
+          true,
+        );
         issues.forEach((issue, n) => {
           if (issue) stateIssues.push({ op: order[n], issue });
         });
@@ -1283,14 +1290,17 @@ export async function applyWordPlanInPlace(
         }),
       ];
       const verification = issues.length
-        ? failed(
-            [
-              ...new Set([
-                ...issues,
-                ...(verified.ok ? [] : verified.locations),
-              ]),
-            ].slice(0, MAX_LOCATIONS),
-          )
+        ? {
+            ...failed(
+              [
+                ...new Set([
+                  ...issues,
+                  ...(verified.ok ? [] : verified.locations),
+                ]),
+              ].slice(0, MAX_LOCATIONS),
+            ),
+            blocks: verified.ok ? [] : verified.blocks,
+          }
         : verified;
       if (!verification.ok) {
         latchWordInPlace("verify-mismatch");
@@ -1690,7 +1700,7 @@ export async function revertWordPlanInPlace(
       );
       const styled = (id: string) => {
         const op = opOf.get(id);
-        return !!op && (!!stateBefore(op) || !!stateAfter(op));
+        return !!op && (!!stateBefore(op) || statesAfter(op).length > 0);
       };
       const liveStates = new Map(
         located.flatMap((r) =>
@@ -1753,14 +1763,16 @@ export async function revertWordPlanInPlace(
           const live = wordParagraphSignature(reads[i][k].value);
           const op = opOf.get(id);
           const state = liveStates.get(id)?.();
-          const holds = (target: WordInPlaceState | undefined) =>
-            !target || !state || !wordParagraphStateIssue(state, target);
+          const holds = (...targets: (WordInPlaceState | undefined)[]) =>
+            !state ||
+            targets.every((t) => !t) ||
+            targets.some((t) => t && !wordParagraphStateIssue(state, t));
           if (live === original.get(id) && holds(op && stateBefore(op)))
             continue;
           // A reviewer who accepted or rejected one of these revisions already decided it.
           if (
             live !== afterSignatures.get(id) ||
-            !holds(op && stateAfter(op)) ||
+            !holds(...(op ? statesAfter(op) : [])) ||
             (changes &&
               !sameRevisions(changes[i][k].items, record.revisions?.[id]))
           )
@@ -1867,12 +1879,17 @@ export async function revertWordPlanInPlace(
           const original = new Map(
             r.region.before.map((k) => [ops[k].id!, ops[k].originalSignature!]),
           );
-          for (let k = r.interior.length - 1; k >= 0; k--)
+          for (let k = r.interior.length - 1; k >= 0; k--) {
+            const id = r.interior[k];
+            const op = opOf.get(id);
+            const state = liveStates.get(id)?.();
+            const from = op && stateBefore(op);
             if (
-              original.get(r.interior[k]) !==
-              wordParagraphSignature(reads[i][k].value)
+              original.get(id) !== wordParagraphSignature(reads[i][k].value) ||
+              (from && state && wordParagraphStateIssue(state, from))
             )
               changes[i][k].rejectAll();
+          }
         }
       for (const i of storyPending) {
         const { op, paragraph } = storyTargets[i];
@@ -2035,15 +2052,6 @@ export async function revertWordPlanInPlace(
             ? [paragraphLocation(moved, "id")]
             : []),
         ...pending.flatMap((r, i) =>
-          r.region.before
-            .filter(
-              (k, at) =>
-                wordParagraphSignature(restoredReads[i][at].value) !==
-                ops[k].originalSignature,
-            )
-            .map((k) => blockLocation(ops[k].ref, "signature")),
-        ),
-        ...pending.flatMap((r, i) =>
           r.region.before.flatMap((k, at) => {
             const read = restoredStates[i][at];
             const op = ops[k];
@@ -2056,6 +2064,15 @@ export async function revertWordPlanInPlace(
               );
             return issue ? [blockLocation(op.ref, issue)] : [];
           }),
+        ),
+        ...pending.flatMap((r, i) =>
+          r.region.before
+            .filter(
+              (k, at) =>
+                wordParagraphSignature(restoredReads[i][at].value) !==
+                ops[k].originalSignature,
+            )
+            .map((k) => blockLocation(ops[k].ref, "signature")),
         ),
         ...boundaries
           .filter(
