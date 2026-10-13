@@ -2772,6 +2772,11 @@ msgstr "Word añadió datos duplicados del documento al restaurar. El original g
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restoreStyleUnverified"
+msgstr "Word no restableció el estilo de párrafo original, así que la reversión está incompleta. Revisa el estilo de ese párrafo en Word. El original guardado sigue disponible para recuperarlo."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.restoreUnverified"
 msgstr "Word no pudo verificar el documento restaurado. El original guardado sigue disponible para recuperarlo."
 

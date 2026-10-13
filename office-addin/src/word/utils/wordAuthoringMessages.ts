@@ -30,6 +30,16 @@ export function wordDocumentDiagnosticText(
           message:
             "The document changed. Nothing was applied. Send a new request to refresh the plan.",
         });
+  if (
+    diagnostic.reason === "output-mismatch" &&
+    restoring &&
+    diagnostic.details?.locations?.some((l) => /: (style|list)$/.test(l))
+  )
+    return t({
+      id: "officeAddin.word.authoring.restoreStyleUnverified",
+      message:
+        "Word did not put the original paragraph style back, so Revert is incomplete. Check that paragraph's style in Word. Your saved original is still available for recovery.",
+    });
   if (diagnostic.reason === "output-mismatch")
     return restoring
       ? t({

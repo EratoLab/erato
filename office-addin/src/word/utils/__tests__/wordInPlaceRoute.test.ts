@@ -16,7 +16,9 @@ import {
 } from "../wordDocumentXml";
 import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
+  WORD_IN_PLACE_MECHANISMS,
   wordInPlaceCapabilities,
+  wordInPlaceMechanismsFromGates,
 } from "../wordInPlaceCapabilities";
 import {
   routeWordDocumentPlan,
@@ -177,6 +179,43 @@ describe("wordInPlaceCapabilities", () => {
       "split",
       "restyle",
     ]);
+  });
+});
+
+describe("in-place mechanism evidence", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps a mechanism off until its Revert has passed a native probe too", () => {
+    const pc = WORD_IN_PLACE_MECHANISMS.PC;
+    expect(
+      wordInPlaceMechanismsFromGates({
+        ...pc,
+        restyle: { pending: "P7", forward: "P7" },
+      }).restyle,
+    ).toBe(false);
+    expect(
+      wordInPlaceMechanismsFromGates({
+        ...pc,
+        restyle: { forward: "P7", revert: "P7" },
+      }).restyle,
+    ).toBe(true);
+  });
+
+  it("names forward and Revert evidence for every mechanism it turns on", () => {
+    vi.stubGlobal("Office", {
+      context: { requirements: { isSetSupported: () => true } },
+    });
+    for (const [platform, gates] of Object.entries(WORD_IN_PLACE_MECHANISMS))
+      for (const [mechanism, on] of Object.entries(
+        wordInPlaceCapabilities(platform as WordHostPlatform),
+      ))
+        if (on)
+          expect(gates[mechanism as keyof typeof gates]).toEqual({
+            forward: expect.any(String),
+            revert: expect.any(String),
+          });
   });
 });
 

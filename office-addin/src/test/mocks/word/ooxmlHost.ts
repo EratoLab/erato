@@ -56,6 +56,12 @@ export interface WordOoxmlHostOptions {
   /** Localized Word: Paragraph.style finds built-in styles only by their localized UI names, which
    * the package does not carry, so only custom style names resolve. */
   localizedStyleNames?: boolean;
+  /** Word for the web (ERMAIN-967): Paragraph.getOoxml leaves out the paragraph's w:pPr, so a
+   * style or list change does not show in it. */
+  paragraphOoxmlOmitsProperties?: boolean;
+  /** Word for the web (ERMAIN-967): setting the default paragraph style writes its w:pStyle, by the
+   * document's own ID for it (e.g. "Standard"), instead of leaving it out. */
+  explicitDefaultStyle?: boolean;
   /** The "tracked" profile: while changeTrackingMode is not Off, object-model writes become tracked
    * revisions by a synthetic author, as Word records them for the signed-in user. */
   trackChanges?: boolean;
@@ -1047,6 +1053,7 @@ export function installWordOoxmlHost(
   let replaceFault: WordReplaceFault | undefined =
     settings.replaceDropsRunProperties ? "drops-rpr" : undefined;
   let paragraphOoxmlFault: string | undefined;
+  let styleWritesIgnored: (value: string) => boolean = () => false;
   type Command = { write: boolean; name: string; run: () => void };
   const queue: Command[] = [];
   let failAt: number | undefined;
@@ -1406,7 +1413,11 @@ export function installWordOoxmlHost(
     const fallback = styles.some((s) => s.getAttributeNS(W, "default") === "1")
       ? undefined
       : styles.find((s) => styleName(s) === "Normal");
-    if (style.getAttributeNS(W, "default") === "1" || style === fallback) {
+    if (
+      (style.getAttributeNS(W, "default") === "1" &&
+        !settings.explicitDefaultStyle) ||
+      style === fallback
+    ) {
       setParagraphProperty(paragraph, "pStyle", null);
       return;
     }
@@ -1544,7 +1555,9 @@ export function installWordOoxmlHost(
         : "";
     const wrapper = parse(`<w:document xmlns:w="${W}"><w:body/></w:document>`);
     const body = elements(wrapper, W, "body")[0];
-    body.append(wrapper.importNode(p, true));
+    const copy = wrapper.importNode(p, true);
+    if (settings.paragraphOoxmlOmitsProperties) child(copy, "pPr")?.remove();
+    body.append(copy);
     body.append(wrapper.createElementNS(W, "w:sectPr"));
     return `<pkg:package xmlns:pkg="${PKG}">${packagePart(
       "/word/document.xml",
@@ -1695,6 +1708,7 @@ export function installWordOoxmlHost(
       },
       set styleBuiltIn(value: string) {
         enqueue(true, "styleBuiltIn", () => {
+          if (styleWritesIgnored(value)) return;
           const style = builtInStyle(value);
           unhideOnNormal(style);
           applyStyle(target(), style);
@@ -1703,6 +1717,7 @@ export function installWordOoxmlHost(
       },
       set style(value: string) {
         enqueue(true, "style", () => {
+          if (styleWritesIgnored(value)) return;
           const style = paragraphStyles().find(
             (s) =>
               styleName(s).toLowerCase() === value.toLowerCase() &&
@@ -2662,6 +2677,13 @@ export function installWordOoxmlHost(
     /** Every Paragraph.getOoxml read fails with `message` until resume(). */
     failParagraphOoxml: (message = "Word could not read the paragraph.") => {
       paragraphOoxmlFault = message;
+    },
+    /** Adversarial: Paragraph.style and styleBuiltIn are accepted but the paragraph keeps its style,
+     * for every value or those `ignore` picks. */
+    ignoreStyleWrites: (
+      ignore: boolean | ((value: string) => boolean) = true,
+    ) => {
+      styleWritesIgnored = typeof ignore === "function" ? ignore : () => ignore;
     },
     paragraphIds: () => bodyParagraphs(live()).map(idOf),
     resume: () => {

@@ -179,6 +179,43 @@ function loadParagraphState(paragraph: Word.Paragraph) {
   });
 }
 
+/** What a paragraph's live state lacks of `target`. Word for the web leaves w:pPr out of
+ * Paragraph.getOoxml, so only these reads show a style or list change there (ERMAIN-967). */
+export function wordParagraphStateIssue(
+  live: ParagraphState,
+  target: WordInPlaceState,
+  listId?: number,
+): "style" | "list" | undefined {
+  const style =
+    "builtIn" in target.style
+      ? live.styleBuiltIn === target.style.builtIn
+      : live.style.toLowerCase() === target.style.name.toLowerCase();
+  if (!style) return "style";
+  if (live.isListItem !== (target.type === "list-item")) return "list";
+  if (
+    target.type === "list-item" &&
+    listId !== undefined &&
+    live.listId !== listId
+  )
+    return "list";
+  return undefined;
+}
+
+/** The state an op's paragraph had before the write, when the write set its style. */
+const stateBefore = (op: WordInPlaceOp) =>
+  op.kind === "delete"
+    ? op.state
+    : op.kind === "text"
+      ? op.restyle?.from
+      : undefined;
+/** The state the write gave an op's paragraph, when it set its style. */
+const stateAfter = (op: WordInPlaceOp) =>
+  op.kind === "insert"
+    ? op.state
+    : op.kind === "text"
+      ? op.restyle?.to
+      : undefined;
+
 interface StateWrite {
   paragraph: Word.Paragraph;
   current: ParagraphState;
@@ -190,11 +227,12 @@ interface StateWrite {
 /** Word PC (probe P6) applies List Paragraph when attaching, clears the style when detaching and
  * drops a list item's numbering when its style is set: so leave the list, set the style, then join.
  * A style is set only when it differs from the one the paragraph has by then: on Word PC, giving a
- * paragraph the Normal style un-hides Default Paragraph Font in styles.xml even when it had it. */
+ * paragraph the Normal style un-hides Default Paragraph Font in styles.xml even when it had it.
+ * Returns, per write, what a fresh read of the paragraph's state lacks of its target. */
 async function writeStates(
   context: Word.RequestContext,
   writes: readonly StateWrite[],
-): Promise<void> {
+): Promise<("style" | "list" | undefined)[]> {
   const lists = writes.map(({ current, target, listId, relist = true }) => {
     const id = relist ? listId : (listId ?? current.listId);
     if (target.type === "list-item" && id === undefined)
@@ -223,6 +261,11 @@ async function writeStates(
       paragraph.attachToList(lists[i]!, target.level ?? 0);
   });
   await context.sync();
+  const after = writes.map(({ paragraph }) => loadParagraphState(paragraph));
+  await context.sync();
+  return writes.map(({ target }, i) =>
+    wordParagraphStateIssue(after[i](), target, lists[i]),
+  );
 }
 
 /** Where a TrackedChange may lie relative to the paragraphs the write touched. */
@@ -953,9 +996,12 @@ export async function applyWordPlanInPlace(
         states.set(i, loadParagraphState(paragraph));
       for (const { i, paragraph } of restyled)
         states.set(i, loadParagraphState(paragraph));
+      // Ops whose paragraph does not read back with the style and list the write gave it.
+      const stateIssues: { op: number; issue: "style" | "list" }[] = [];
       if (states.size) {
         await context.sync();
-        await writeStates(context, [
+        const order = [...made.keys(), ...restyled.map(({ i }) => i)];
+        const issues = await writeStates(context, [
           ...[...made].map(([i, paragraph]) => {
             const op = ops[i] as Extract<WordInPlaceOp, { kind: "insert" }>;
             return {
@@ -977,6 +1023,9 @@ export async function applyWordPlanInPlace(
             relist: relisted(restyle.from, restyle.to),
           })),
         ]);
+        issues.forEach((issue, n) => {
+          if (issue) stateIssues.push({ op: order[n], issue });
+        });
       }
       stage = "verify";
       progress.stage("verifying");
@@ -1221,23 +1270,38 @@ export async function applyWordPlanInPlace(
                   compiledIndex,
                   after: actual,
                 });
-      const verification = trackedIssues.length
+      const issues = [
+        ...trackedIssues,
+        ...stateIssues.map(({ op, issue }) => {
+          const at =
+            liveSlots?.findIndex(
+              (slot) => slot.kind === "op" && slot.op === ops[op],
+            ) ?? -1;
+          return at >= 0
+            ? `/word/document.xml body block ${at + 1}: ${issue}`
+            : blockLocation(ops[op].ref, issue);
+        }),
+      ];
+      const verification = issues.length
         ? failed(
             [
-              ...trackedIssues,
-              ...(verified.ok ? [] : verified.locations),
+              ...new Set([
+                ...issues,
+                ...(verified.ok ? [] : verified.locations),
+              ]),
             ].slice(0, MAX_LOCATIONS),
           )
         : verified;
       if (!verification.ok) {
         latchWordInPlace("verify-mismatch");
         const mismatched = [
-          ...new Set(
-            verification.blocks.flatMap((i) => {
+          ...new Set([
+            ...stateIssues.map((issue) => issue.op),
+            ...verification.blocks.flatMap((i) => {
               const slot = liveSlots?.[i];
               return slot?.kind === "op" ? [ops.indexOf(slot.op)] : [];
             }),
-          ),
+          ]),
         ].filter((i) => i >= 0);
         // Restore must not rely on the mechanism that just misbehaved, nor miss a change outside
         // the written paragraphs: it is the exact package restore, guarded by this package. A
@@ -1621,6 +1685,23 @@ export async function revertWordPlanInPlace(
       const reads = located.map((r) =>
         r.interior.map((id) => items[position.get(id)!].getOoxml()),
       );
+      const opOf = new Map(
+        ops.flatMap((op) => (op.id ? [[op.id, op] as const] : [])),
+      );
+      const styled = (id: string) => {
+        const op = opOf.get(id);
+        return !!op && (!!stateBefore(op) || !!stateAfter(op));
+      };
+      const liveStates = new Map(
+        located.flatMap((r) =>
+          r.interior
+            .filter(styled)
+            .map(
+              (id) =>
+                [id, loadParagraphState(items[position.get(id)!])] as const,
+            ),
+        ),
+      );
       const changes = record.tracked
         ? located.map((r) =>
             r.interior.map((id) => {
@@ -1670,10 +1751,16 @@ export async function revertWordPlanInPlace(
         let changed = r.interior.length !== r.region.before.length;
         for (const [k, id] of r.interior.entries()) {
           const live = wordParagraphSignature(reads[i][k].value);
-          if (live === original.get(id)) continue;
+          const op = opOf.get(id);
+          const state = liveStates.get(id)?.();
+          const holds = (target: WordInPlaceState | undefined) =>
+            !target || !state || !wordParagraphStateIssue(state, target);
+          if (live === original.get(id) && holds(op && stateBefore(op)))
+            continue;
           // A reviewer who accepted or rejected one of these revisions already decided it.
           if (
             live !== afterSignatures.get(id) ||
+            !holds(op && stateAfter(op)) ||
             (changes &&
               !sameRevisions(changes[i][k].items, record.revisions?.[id]))
           )
@@ -1812,15 +1899,21 @@ export async function revertWordPlanInPlace(
           const op = ops[k];
           const at = r.interior.indexOf(op.id!);
           if (at < 0 || op.kind === "insert" || op.kind === "delete") continue;
-          const live = wordParagraphSignature(reads[i][at].value);
-          if (live === op.originalSignature) continue;
+          const textBack =
+            wordParagraphSignature(reads[i][at].value) === op.originalSignature;
+          const state = liveStates.get(op.id!)?.();
+          const from = stateBefore(op);
+          const styleBack =
+            !from || (!!state && !wordParagraphStateIssue(state, from));
+          if (textBack && styleBack) continue;
           const paragraph = items[position.get(op.id!)!];
-          queueWrite(
-            paragraph,
-            op,
-            wordFirstRunMarks(reads[i][at].value),
-            "revert",
-          );
+          if (!textBack)
+            queueWrite(
+              paragraph,
+              op,
+              wordFirstRunMarks(reads[i][at].value),
+              "revert",
+            );
           if (op.kind === "text" && op.restyle) restyle.push({ k, paragraph });
         }
         // Re-create deleted paragraphs in order, next to the paragraph before them or the one after.
@@ -1903,6 +1996,11 @@ export async function revertWordPlanInPlace(
       const restoredReads = restored.map((list) =>
         list.map((paragraph) => paragraph.getOoxml()),
       );
+      const restoredStates = pending.map((r, i) =>
+        r.region.before.map((k, at) =>
+          stateBefore(ops[k]) ? loadParagraphState(restored[i][at]) : undefined,
+        ),
+      );
       const boundariesAfter = boundaries.map((at) => items[at].getOoxml());
       const storyRestored = storyPending.map((i) =>
         storyTargets[i].paragraph.getOoxml(),
@@ -1944,6 +2042,20 @@ export async function revertWordPlanInPlace(
                 ops[k].originalSignature,
             )
             .map((k) => blockLocation(ops[k].ref, "signature")),
+        ),
+        ...pending.flatMap((r, i) =>
+          r.region.before.flatMap((k, at) => {
+            const read = restoredStates[i][at];
+            const op = ops[k];
+            const issue =
+              read &&
+              wordParagraphStateIssue(
+                read(),
+                stateBefore(op)!,
+                op.listAnchor ? listIds.get(op.listAnchor) : undefined,
+              );
+            return issue ? [blockLocation(op.ref, issue)] : [];
+          }),
         ),
         ...boundaries
           .filter(

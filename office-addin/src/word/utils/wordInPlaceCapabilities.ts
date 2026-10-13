@@ -34,51 +34,85 @@ export type WordInPlaceProbeId =
   | "P11"
   | "P12"
   | "P13";
-type WordInPlaceGate = true | { probe: WordInPlaceProbeId };
+/** The production targeted-edit path, which writes text and cell rewrites with insertText. */
+type WordInPlaceEvidence = WordInPlaceProbeId | "targeted-edit";
+/** A mechanism is on for a platform only when its forward write and its Revert each passed a
+ * native probe there; otherwise the gate names the probe still to pass. */
+export type WordInPlaceGate =
+  | { forward: WordInPlaceEvidence; revert: WordInPlaceEvidence }
+  | { pending: WordInPlaceProbeId; forward?: WordInPlaceEvidence };
 
+const TARGETED_EDIT = {
+  forward: "targeted-edit",
+  revert: "targeted-edit",
+} as const;
 const PENDING: Record<
   Exclude<WordInPlaceMechanism, "text" | "cell">,
-  { probe: WordInPlaceProbeId }
+  WordInPlaceGate
 > = {
-  marks: { probe: "P4" },
-  delete: { probe: "P8" },
-  insert: { probe: "P5" },
-  split: { probe: "P5" },
-  restyle: { probe: "P7" },
-  list: { probe: "P6" },
-  span: { probe: "P10" },
-  tracked: { probe: "P9" },
-  trackedStructure: { probe: "P13" },
-  storyText: { probe: "P11" },
-  scriptText: { probe: "P2" },
+  marks: { pending: "P4" },
+  delete: { pending: "P8" },
+  insert: { pending: "P5" },
+  split: { pending: "P5" },
+  restyle: { pending: "P7" },
+  list: { pending: "P6" },
+  span: { pending: "P10" },
+  tracked: { pending: "P9" },
+  trackedStructure: { pending: "P13" },
+  storyText: { pending: "P11" },
+  scriptText: { pending: "P2" },
 };
 
 /**
- * A mechanism is enabled on a platform only after its native probe passed there. text and cell
- * use the insertText primitives the targeted-edit path already runs in production. Whether a host
- * writes in place at all is the deployment's call (wordApplyPolicy).
+ * Per platform, the native evidence for each mechanism. text and cell use the insertText primitives
+ * the targeted-edit path already runs in production, both ways. Whether a host writes in place at
+ * all is the deployment's call (wordApplyPolicy).
  */
 export const WORD_IN_PLACE_MECHANISMS: Record<
   WordHostPlatform,
   Record<WordInPlaceMechanism, WordInPlaceGate>
 > = {
-  // Word PC 16.0.20326: P4 (marks), P5 (insert, split), P7 (restyle) and P8 (delete) passed; P2
-  // showed East Asian text and emoji written in font-association runs (scriptText).
+  // Word PC 16.0.20326: P4 (marks), P5 (insert, split), P7 (restyle) and P8 (delete, and the Revert
+  // of an insert or split) passed both ways; its Paragraph.getOoxml carries w:pPr, so P7's inverse
+  // saw the style. P2 showed East Asian text and emoji written in font-association runs (scriptText).
   PC: {
-    text: true,
-    cell: true,
+    text: TARGETED_EDIT,
+    cell: TARGETED_EDIT,
     ...PENDING,
-    marks: true,
-    insert: true,
-    split: true,
-    restyle: true,
-    delete: true,
+    marks: { forward: "P4", revert: "P4" },
+    insert: { forward: "P5", revert: "P8" },
+    split: { forward: "P5", revert: "P8" },
+    restyle: { forward: "P7", revert: "P7" },
+    delete: { forward: "P8", revert: "P8" },
   },
-  Mac: { text: true, cell: true, ...PENDING },
-  // Word for the web, P-W-INPLACE run of 2026-10-12 (runs a and c1): only P7 (restyle) passed.
-  OfficeOnline: { text: true, cell: true, ...PENDING, restyle: true },
-  unknown: { text: true, cell: true, ...PENDING },
+  Mac: { text: TARGETED_EDIT, cell: TARGETED_EDIT, ...PENDING },
+  // Word for the web: P7 passed forward (ERMAIN-961, 2026-10-12) and, read back through the
+  // paragraph's properties and the exported package, back (ERMAIN-967, 2026-10-13). Its
+  // Paragraph.getOoxml carries no w:pPr, so the signature alone could not show either.
+  OfficeOnline: {
+    text: TARGETED_EDIT,
+    cell: TARGETED_EDIT,
+    ...PENDING,
+    restyle: { forward: "P7", revert: "P7" },
+  },
+  unknown: { text: TARGETED_EDIT, cell: TARGETED_EDIT, ...PENDING },
 };
+
+/** On only with native evidence for both the forward write and its Revert. */
+export function wordInPlaceMechanismsFromGates(
+  gates: Record<WordInPlaceMechanism, WordInPlaceGate>,
+): WordInPlaceCapabilities {
+  return Object.fromEntries(
+    WORD_IN_PLACE_MECHANISMS_LIST.map((mechanism) => {
+      const gate = gates[mechanism];
+      return [
+        mechanism,
+        "revert" in gate &&
+          (mechanism !== "marks" || wordComplexScriptMarkSetters()),
+      ];
+    }),
+  ) as WordInPlaceCapabilities;
+}
 
 /** Word PC's bold/italic setters write no complex-script twin (probe P2), while Word's own formatting
  * writes both; only the bidirectional setters can restore such a run exactly. */
@@ -95,14 +129,7 @@ export function wordInPlaceCapabilities(
   platform: WordHostPlatform = wordHostPlatform(),
 ): WordInPlaceCapabilities {
   if (override) return { ...override };
-  const gates = WORD_IN_PLACE_MECHANISMS[platform];
-  return Object.fromEntries(
-    WORD_IN_PLACE_MECHANISMS_LIST.map((mechanism) => [
-      mechanism,
-      gates[mechanism] === true &&
-        (mechanism !== "marks" || wordComplexScriptMarkSetters()),
-    ]),
-  ) as WordInPlaceCapabilities;
+  return wordInPlaceMechanismsFromGates(WORD_IN_PLACE_MECHANISMS[platform]);
 }
 
 /** Every mechanism on, as the native probes would confirm them. */

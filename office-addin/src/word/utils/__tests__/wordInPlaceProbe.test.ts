@@ -129,7 +129,10 @@ describe("in-place native probe", { timeout: 30_000 }, () => {
       headingTyped: true,
       numberingUnchanged: true,
       stylesAdded: 1,
+      paragraphOoxmlShowsStyle: true,
       inverseExact: true,
+      inverseStyle: true,
+      inversePackage: true,
     });
     // The mock keeps the final paragraph mark as Word does: the tail is emptied, not removed.
     expect(result.probes.P8).toEqual({
@@ -153,6 +156,26 @@ describe("in-place native probe", { timeout: 30_000 }, () => {
     for (const id of ["P9", "P11", "P12", "P13"] as const)
       expect(result.probes[id]).toEqual({ result: "not-run" });
     expect(JSON.stringify(result)).not.toContain("Probe");
+  });
+
+  it("fails P7's inverse that Paragraph.getOoxml cannot show, through the properties and the package", async () => {
+    const options = { paragraphOoxmlOmitsProperties: true };
+    installWordOoxmlHost(packageXml(paragraph("")), options);
+    expect((await runWordInPlaceProbe({ idleMs: 0 })).probes.P7).toMatchObject({
+      headingTyped: true,
+      paragraphOoxmlShowsStyle: false,
+      inverseExact: true,
+      inverseStyle: true,
+      inversePackage: true,
+    });
+    const host = installWordOoxmlHost(packageXml(paragraph("")), options);
+    host.ignoreStyleWrites((value) => value === "Normal");
+    expect((await runWordInPlaceProbe({ idleMs: 0 })).probes.P7).toMatchObject({
+      headingTyped: true,
+      inverseExact: true,
+      inverseStyle: false,
+      inversePackage: false,
+    });
   });
 
   it("measures tracked writes under the developer's own mode and reads an existing header", async () => {

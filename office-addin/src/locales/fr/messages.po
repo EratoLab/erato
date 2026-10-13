@@ -2772,6 +2772,11 @@ msgstr "Word a ajouté des données de document en double lors de la restauratio
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restoreStyleUnverified"
+msgstr "Word n’a pas rétabli le style de paragraphe d’origine, le rétablissement est donc incomplet. Vérifiez le style de ce paragraphe dans Word. L’original enregistré reste disponible pour la récupération."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.restoreUnverified"
 msgstr "Word n’a pas pu vérifier le document restauré. L’original enregistré reste disponible pour la récupération."
 

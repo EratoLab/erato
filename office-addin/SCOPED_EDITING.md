@@ -166,8 +166,9 @@ nothing has been saved or written; the plan then takes the import. Once the
 backup is saved there is no fallback and no retry.
 
 Each mechanism is switched on per platform in `WORD_IN_PLACE_MECHANISMS`
-(`wordInPlaceCapabilities.ts`) only after its native probe passed there. `text`
-and `cell` are on everywhere. Word PC 16.0.20326 also passed `marks` (P4),
+(`wordInPlaceCapabilities.ts`) only after its forward write and its Revert each
+passed a native probe there; the table names both. `text` and `cell` are on
+everywhere. Word PC 16.0.20326 also passed `marks` (P4),
 `insert` and `split` (P5), `restyle` (P7) and `delete` (P8), with Track Changes
 off:
 
@@ -200,9 +201,19 @@ in place. Word for the web adds `restyle`: in its P-W-INPLACE run (ERMAIN-961,
 confirmed import or, for a scoped edit, is refused. `marks` also needs
 WordApiDesktop 1.3, which the web lacks. On the web, reloading
 `body.paragraphs` inside one `Word.run` returns the cached collection, so P1
-and P8 need a fresh count before `insert` or `delete` can be decided there. `window.eratoWordInPlaceProbe()` runs the probes in
-development builds, on an empty scratch document only; a failed probe reports
-the step it reached.
+and P8 need a fresh count before `insert` or `delete` can be decided there.
+
+On the web `Paragraph.getOoxml` leaves out the paragraph's `w:pPr` (style and
+numbering), so a paragraph signature cannot show a restyle there (ERMAIN-967).
+Every paragraph whose style or list the writer sets, forward or in Revert, is
+therefore also read back through `style`, `styleBuiltIn`, `isListItem` and its
+list, and P7 checks its inverse the same way and in the exported package. The
+web ignores the `w:pStyle` of a package written with `Paragraph.insertOoxml`,
+and writes Normal as an explicit `w:pStyle` (the document's own ID for it, e.g.
+`Standard`), which verification reads as Normal.
+
+`window.eratoWordInPlaceProbe()` runs the probes in development builds, on an
+empty scratch document only; a failed probe reports the step it reached.
 
 ### Verification tiers
 
